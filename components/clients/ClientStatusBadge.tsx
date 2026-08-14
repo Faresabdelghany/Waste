@@ -12,8 +12,8 @@ function statusLabel(status: ClientStatus): string {
 export function ClientStatusBadge({ status }: { status: ClientStatus }) {
     const label = statusLabel(status)
 
-    let badgeClasses = "bg-muted text-muted-foreground border-transparent dark:bg-muted/30 dark:text-muted-foreground"
-    let dotClasses = "bg-zinc-900 dark:bg-zinc-300"
+    let badgeClasses = "border-transparent bg-muted text-muted-foreground"
+    let dotClasses = "bg-foreground"
 
     if (status === "active") {
         badgeClasses = "bg-teal-50 text-teal-700 border-transparent dark:bg-teal-500/15 dark:text-teal-100"
@@ -25,8 +25,8 @@ export function ClientStatusBadge({ status }: { status: ClientStatus }) {
         badgeClasses = "bg-blue-50 text-blue-700 border-transparent dark:bg-blue-500/15 dark:text-blue-100"
         dotClasses = "bg-blue-600 dark:bg-blue-300"
     } else if (status === "archived") {
-        badgeClasses = "bg-slate-100 text-slate-600 border-transparent dark:bg-slate-600/30 dark:text-slate-200"
-        dotClasses = "bg-slate-500 dark:bg-slate-300"
+        badgeClasses = "border-transparent bg-muted text-muted-foreground"
+        dotClasses = "bg-muted-foreground"
     }
 
     return (

@@ -89,7 +89,7 @@ export function StepReview({ data, onEditStep }: StepReviewProps) {
               {getIntentIcon()}
             </div>
             <div className="flex-1">
-              <p className="text-xs text-muted-foreground pb-1">Project intent</p>
+              <p className="text-xs text-muted-foreground pb-1">Route purpose</p>
               <p className="text-sm font-semibold">
                 {data.intent === 'delivery' && 'Delivery'}
                 {data.intent === 'experiment' && 'Experiment'}
@@ -206,4 +206,3 @@ export function StepReview({ data, onEditStep }: StepReviewProps) {
     </div>
   );
 }
-

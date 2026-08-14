@@ -226,13 +226,13 @@ export function StepOwnership({ data, updateData }: StepOwnershipProps) {
   return (
     <div className="flex flex-col space-y-1.5 bg-muted p-2 rounded-lg">
       <p className="text-sm px-3 py-2 text-muted-foreground">
-        Define who owns, contributes to, and follows this project.
+        Define the customer, route owner, contributors, and followers.
       </p>
 
       <div className="space-y-2">
-        {/* Client selection */}
+        {/* Customer selection */}
         <div className="px-3 flex flex-col space-y-2">
-          <Label className="text-sm text-muted-foreground">Client</Label>
+          <Label className="text-sm text-muted-foreground">Customer</Label>
           <Select
             value={data.clientId ?? "__none"}
             onValueChange={(val) => {
@@ -244,11 +244,11 @@ export function StepOwnership({ data, updateData }: StepOwnershipProps) {
             }}
           >
             <SelectTrigger className="h-8 w-full text-xs">
-              <SelectValue placeholder="Select client" />
+              <SelectValue placeholder="Select customer" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__none">
-                <span className="text-xs text-muted-foreground">No client</span>
+                <span className="text-xs text-muted-foreground">No customer</span>
               </SelectItem>
               <SelectSeparator />
               {clients.map((c) => (
@@ -307,7 +307,7 @@ export function StepOwnership({ data, updateData }: StepOwnershipProps) {
         {/* Owner - Required */}
         <div className="px-3 flex flex-col space-y-3">
           <Label className="text-sm text-muted-foreground">
-            Project Owner
+            Route Owner
           </Label>
           <div className="flex items-center justify-between rounded-lg border-border bg-muted/40">
             <div className="flex items-center gap-3">
@@ -321,7 +321,7 @@ export function StepOwnership({ data, updateData }: StepOwnershipProps) {
               </Avatar>
               <div className="flex flex-col text-left">
                 <span className="text-sm font-medium">
-                  {ownerAccount?.name ?? "Project owner"}
+                  {ownerAccount?.name ?? "Route owner"}
                 </span>
               </div>
             </div>
@@ -349,7 +349,7 @@ export function StepOwnership({ data, updateData }: StepOwnershipProps) {
           <div className="space-y-2">
             {contributorOwnerships.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Add people who will help execute this project.
+                Add people who will help execute this route.
               </p>
             ) : (
               contributorOwnerships.map((entry) => {
@@ -434,7 +434,7 @@ export function StepOwnership({ data, updateData }: StepOwnershipProps) {
           <div className="space-y-2">
             {stakeholderOwnerships.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Add people who should stay informed about this project.
+                Add people who should stay informed about this route.
               </p>
             ) : (
               stakeholderOwnerships.map((entry) => {

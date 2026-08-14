@@ -169,12 +169,13 @@ export function TaskWeekBoardView({ tasks, onAddTask, onToggleTask, onChangeTag,
     }
 
     // Move to different day: update local order and bubble new date up
-    const targetColumn = weekColumns.find((col) => getDayKey(col.date) === overDay)
+    const targetDay = overDay
+    const targetColumn = weekColumns.find((col) => getDayKey(col.date) === targetDay)
     if (!targetColumn) return
 
     setColumnOrder((prev) => {
       const source = prev[activeDay] ?? []
-      const target = prev[overDay] ?? []
+      const target = prev[targetDay] ?? []
 
       const nextSource = source.filter((id) => id !== activeId)
       const nextTarget = target.includes(activeId) ? target : [...target, activeId]
@@ -182,7 +183,7 @@ export function TaskWeekBoardView({ tasks, onAddTask, onToggleTask, onChangeTag,
       return {
         ...prev,
         [activeDay]: nextSource,
-        [overDay!]: nextTarget,
+        [targetDay]: nextTarget,
       }
     })
 

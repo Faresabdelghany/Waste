@@ -29,8 +29,8 @@ function statusConfig(status: Project["status"]) {
     case "planned":
       return {
         label: "Planned",
-        dot: "bg-zinc-900 dark:bg-zinc-200",
-        pill: "text-zinc-900 border-zinc-200 bg-zinc-50 dark:text-zinc-50 dark:border-zinc-600/60 dark:bg-zinc-600/20",
+        dot: "bg-foreground",
+        pill: "border-border bg-muted text-foreground",
       }
     case "backlog":
       return {
@@ -53,8 +53,8 @@ function statusConfig(status: Project["status"]) {
     default:
       return {
         label: status,
-        dot: "bg-zinc-400 dark:bg-zinc-300",
-        pill: "text-zinc-700 border-zinc-200 bg-zinc-50 dark:text-zinc-100 dark:border-zinc-600/60 dark:bg-zinc-600/20",
+        dot: "bg-muted-foreground",
+        pill: "border-border bg-muted text-muted-foreground",
       }
   }
 }
@@ -121,7 +121,7 @@ export function ProjectCard({ project, actions, variant = "list" }: ProjectCardP
     <div
       role="button"
       tabIndex={0}
-      aria-label={`Open project ${project.name}`}
+      aria-label={`Open route ${project.name}`}
       onClick={() => {
         if (isBoard && draggingRef.current) {
           draggingRef.current = false

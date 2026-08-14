@@ -57,7 +57,7 @@ export function ProjectProgress({ project, className, size = 18, showTaskSummary
         {showTaskSummary && totalTasks > 0 && (
           <span className="flex items-center gap-1 text-sm">
             <ListChecks className="h-4 w-4" />
-            {doneTasks} / {totalTasks} Tasks
+            {doneTasks} / {totalTasks} Stops
           </span>
         )}
       </div>

@@ -15,6 +15,7 @@ import {
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -28,38 +29,41 @@ import { ProgressCircle } from "@/components/progress-circle"
 import {
   MagnifyingGlass,
   Tray,
-  CheckSquare,
-  Folder,
+  CalendarBlank,
   Users,
   ChartBar,
+  CreditCard,
   Gear,
   Layout,
-  Question,
+  MapTrifold,
+  Truck,
+  Buildings,
   SignOut,
   CaretRight,
-  CaretUpDown,
 } from "@phosphor-icons/react/dist/ssr"
-import { activeProjects, footerItems, navItems, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
-import { SettingsDialog } from "@/components/settings/SettingsDialog"
+import { activeRoutes, footerItems, navItems, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
 import { AuthDialog, type AuthMode } from "@/components/auth/AuthDialog"
 
 const navItemIcons: Record<NavItemId, React.ComponentType<{ className?: string }>> = {
-  inbox: Tray,
-  "my-tasks": CheckSquare,
-  projects: Folder,
-  clients: Users,
-  performance: ChartBar,
+  operate: Tray,
+  plan: CalendarBlank,
+  "route-studio": MapTrifold,
+  fleet: Truck,
+  customers: Users,
+  resources: Layout,
+  contractors: Buildings,
+  commercial: CreditCard,
+  improve: ChartBar,
 }
 
 const footerItemIcons: Record<SidebarFooterItemId, React.ComponentType<{ className?: string }>> = {
   settings: Gear,
   templates: Layout,
-  help: Question,
 }
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const { setOpenMobile } = useSidebar()
   const [isAuthOpen, setIsAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<AuthMode>("sign-in")
 
@@ -68,72 +72,70 @@ export function AppSidebar() {
     setIsAuthOpen(true)
   }
 
-  const getHrefForNavItem = (id: NavItemId): string => {
-    if (id === "my-tasks") return "/tasks"
-    if (id === "projects") return "/"
-    if (id === "inbox") return "/inbox"
-    if (id === "clients") return "/clients"
-    if (id === "performance") return "/performance"
-    return "#"
-  }
-
   const isItemActive = (id: NavItemId): boolean => {
-    if (id === "projects") {
-      return pathname === "/" || pathname.startsWith("/projects")
-    }
-    if (id === "my-tasks") {
-      return pathname.startsWith("/tasks")
-    }
-    if (id === "inbox") {
-      return pathname.startsWith("/inbox")
-    }
-    if (id === "clients") {
-      return pathname.startsWith("/clients")
-    }
-    if (id === "performance") {
-      return pathname.startsWith("/performance")
-    }
+    if (id === "operate")
+      return (
+        pathname === "/" ||
+        pathname.startsWith("/operate") ||
+        pathname.startsWith("/projects") ||
+        pathname.startsWith("/tasks") ||
+        pathname.startsWith("/tickets") ||
+        pathname.startsWith("/inbox")
+      )
+    if (id === "plan") return pathname.startsWith("/plan") || pathname.startsWith("/approvals")
+    if (id === "route-studio")
+      return pathname.startsWith("/route-studio") || pathname.startsWith("/routes")
+    if (id === "fleet") return pathname.startsWith("/fleet")
+    if (id === "customers")
+      return (
+        pathname.startsWith("/customers") ||
+        pathname.startsWith("/clients") ||
+        pathname.startsWith("/portal")
+      )
+    if (id === "resources") return pathname.startsWith("/resources")
+    if (id === "contractors")
+      return pathname.startsWith("/contractors") || pathname.startsWith("/contractor-workspace")
+    if (id === "commercial")
+      return pathname.startsWith("/commercial")
+    if (id === "improve") return pathname.startsWith("/improve") || pathname.startsWith("/performance")
     return false
   }
 
   return (
-    <Sidebar className="border-border/40 border-r-0 shadow-none border-none">
-      <SidebarHeader className="p-4">
-        <div className="flex items-center justify-between">
+    <>
+      <Sidebar className="border-none shadow-none">
+      <SidebarHeader className="px-3 pb-2 pt-3">
+        <div className="flex items-center">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-800 text-primary-foreground shadow-[inset_0_-5px_6.6px_0_rgba(0,0,0,0.25)]">
-              <img src="/logo-wrapper.png" alt="Logo" className="h-4 w-4" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
+              <img src="/logo-wrapper.png" alt="WasteHero" className="h-4 w-4" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-semibold">Workspace</span>
-              <span className="text-xs text-muted-foreground">Pro plan</span>
+              <span className="text-sm font-semibold">WasteHero</span>
+              <span className="text-xs text-sidebar-foreground/60">Copenhagen Central</span>
             </div>
           </div>
-          <button className="rounded-md p-1 hover:bg-accent">
-            <CaretUpDown className="h-4 w-4 text-muted-foreground" />
-          </button>
         </div>
       </SidebarHeader>
 
       <SidebarContent className="px-0 gap-0">
-        <SidebarGroup>
+        <SidebarGroup className="px-2 py-1.5">
           <div className="relative px-0 py-0">
-            <MagnifyingGlass className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <MagnifyingGlass className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-sidebar-foreground/55" />
             <Input
               placeholder="Search"
-              className="h-9 rounded-lg bg-muted/50 pl-8 text-sm placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-primary/20 border-border border shadow-none"
+              className="h-9 rounded-md border-sidebar-border bg-sidebar-accent/45 pl-8 text-sm text-sidebar-foreground shadow-none placeholder:text-sidebar-foreground/50 focus-visible:border-sidebar-ring focus-visible:ring-1 focus-visible:ring-sidebar-ring/25"
             />
-            <kbd className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
+            <kbd className="pointer-events-none absolute right-4 top-1/2 hidden h-5 -translate-y-1/2 select-none items-center gap-1 rounded border border-sidebar-border bg-sidebar-accent px-1.5 font-mono text-[10px] font-medium text-sidebar-foreground/60 sm:flex">
               <span className="text-xs">⌘</span>K
             </kbd>
           </div>
         </SidebarGroup>
 
-        <SidebarGroup>
+        <SidebarGroup className="px-2 py-1">
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-0.5">
               {navItems.map((item) => {
-                const href = getHrefForNavItem(item.id)
                 const active = isItemActive(item.id)
 
                 return (
@@ -141,18 +143,18 @@ export function AppSidebar() {
                     <SidebarMenuButton
                       asChild
                       isActive={active}
-                      className="h-9 rounded-lg px-3 font-normal text-muted-foreground"
+                      className="h-7 rounded-md px-2.5 font-normal text-sidebar-foreground/70"
                     >
-                      <Link href={href}>
+                      <Link href={item.href} onClick={() => setOpenMobile(false)}>
                         {(() => {
                           const Icon = navItemIcons[item.id]
-                          return Icon ? <Icon className="h-[18px] w-[18px]" /> : null
+                          return Icon ? <Icon className="h-4 w-4" /> : null
                         })()}
                         <span>{item.label}</span>
                       </Link>
                     </SidebarMenuButton>
                     {item.badge && (
-                      <SidebarMenuBadge className="bg-muted text-muted-foreground rounded-full px-2">
+                      <SidebarMenuBadge className="rounded-full bg-sidebar-accent px-2 text-sidebar-foreground/65">
                         {item.badge}
                       </SidebarMenuBadge>
                     )}
@@ -163,20 +165,22 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="px-3 text-xs font-medium text-muted-foreground">
-            Active Projects
+        <SidebarGroup className="px-2 pb-1 pt-2">
+          <SidebarGroupLabel className="h-6 px-2.5 text-[11px] font-medium text-sidebar-foreground/55">
+            Active Routes
           </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {activeProjects.map((project) => (
-                <SidebarMenuItem key={project.name}>
-                  <SidebarMenuButton className="h-9 rounded-lg px-3 group">
-                    <ProgressCircle progress={project.progress} color={project.color} size={18} />
-                    <span className="flex-1 truncate text-sm">{project.name}</span>
-                    <span className="opacity-0 group-hover:opacity-100 rounded p-0.5 hover:bg-accent">
-                      <span className="text-muted-foreground text-lg">···</span>
-                    </span>
+            <SidebarMenu className="gap-0.5">
+              {activeRoutes.map((route) => (
+                <SidebarMenuItem key={route.name}>
+                  <SidebarMenuButton asChild className="h-7 rounded-md px-2.5 group">
+                    <Link href={route.href} onClick={() => setOpenMobile(false)}>
+                      <ProgressCircle progress={route.progress} color={route.color} size={16} />
+                      <span className="flex-1 truncate text-sm">{route.name}</span>
+                      <span className="rounded p-0.5 opacity-0 hover:bg-sidebar-accent group-hover:opacity-100">
+                        <span className="text-lg text-sidebar-foreground/55">···</span>
+                      </span>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -185,43 +189,46 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-border/40 p-2">
-        <SidebarMenu>
-          {footerItems.map((item) => (
-            <SidebarMenuItem key={item.label}>
-              <SidebarMenuButton
-                className="h-9 rounded-lg px-3 text-muted-foreground"
-                onClick={() => {
-                  if (item.id === "settings") {
-                    setIsSettingsOpen(true)
-                  }
-                }}
-              >
-                {(() => {
-                  const Icon = footerItemIcons[item.id]
-                  return Icon ? <Icon className="h-[18px] w-[18px]" /> : null
-                })()}
-                <span>{item.label}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
+      <SidebarFooter className="border-t border-sidebar-border p-2">
+        <SidebarMenu className="gap-0.5">
+          {footerItems.map((item) => {
+            const pane = item.id === "settings" ? "account" : "ticket-comms"
+            const href = `/settings?pane=${pane}&from=${encodeURIComponent(pathname)}`
+
+            return (
+              <SidebarMenuItem key={item.label}>
+                <SidebarMenuButton
+                  asChild
+                  className="h-7 rounded-md px-2.5 text-sidebar-foreground/70"
+                >
+                  <Link href={href} onClick={() => setOpenMobile(false)}>
+                    {(() => {
+                      const Icon = footerItemIcons[item.id]
+                      return Icon ? <Icon className="h-4 w-4" /> : null
+                    })()}
+                    <span>{item.label}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )
+          })}
         </SidebarMenu>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="mt-2 flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-accent cursor-pointer"
+              className="mt-1.5 flex w-full cursor-pointer items-center gap-2.5 rounded-md p-1.5 text-left hover:bg-sidebar-accent"
             >
               <Avatar className="h-8 w-8">
                 <AvatarImage src="/avatar-profile.jpg" />
-                <AvatarFallback>JD</AvatarFallback>
+                <AvatarFallback>OL</AvatarFallback>
               </Avatar>
               <div className="flex flex-1 flex-col">
-                <span className="text-sm font-medium">Jason D</span>
-                <span className="text-xs text-muted-foreground">jason.duong@mail.com</span>
+                <span className="text-sm font-medium">Olivia Larsen</span>
+                <span className="text-xs text-sidebar-foreground/60">Operations manager</span>
               </div>
-              <CaretRight className="h-4 w-4 text-muted-foreground" />
+              <CaretRight className="h-4 w-4 text-sidebar-foreground/55" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="right" align="end" className="w-40">
@@ -236,13 +243,13 @@ export function AppSidebar() {
         </DropdownMenu>
       </SidebarFooter>
 
-      <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
+      </Sidebar>
       <AuthDialog
         open={isAuthOpen}
         onOpenChange={setIsAuthOpen}
         mode={authMode}
         onModeChange={setAuthMode}
       />
-    </Sidebar>
+    </>
   )
 }

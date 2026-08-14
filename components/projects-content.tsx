@@ -114,7 +114,7 @@ export function ProjectsContent() {
   }, [filters, viewOptions, projects])
 
   return (
-    <div className="flex flex-1 flex-col bg-background mx-2 my-2 border border-border rounded-lg min-w-0">
+    <div className="flex flex-1 flex-col bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
       <ProjectHeader
         filters={filters}
         onRemoveFilter={removeFilter}

@@ -144,7 +144,7 @@ export function ProjectBoardView({ projects, loading = false, onAddProject }: Pr
   const total = items.length
   if (total === 0) {
     return (
-      <div className="p-8 text-center text-sm text-muted-foreground">No projects found</div>
+      <div className="p-8 text-center text-sm text-muted-foreground">No routes found</div>
     )
   }
 
@@ -195,7 +195,7 @@ export function ProjectBoardView({ projects, loading = false, onAddProject }: Pr
                 onClick={onAddProject}
               >
                 <Plus className="mr-1 h-4 w-4" />
-                Add project
+                Add route
               </Button>
             </div>
           </div>

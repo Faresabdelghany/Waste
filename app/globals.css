@@ -76,8 +76,92 @@
   --shadow-workstream: 0 0 4px 3px oklch(1 0 0 / 0.1) inset, 0 88px 58.5px 0 oklch(0 0 0 / 0.03);
 }
 
+:root[data-app-theme="ash"] {
+  --theme-canvas: #ffffff;
+  --theme-sidebar: #f1f2f5;
+  --theme-raised: #f7f7f9;
+  --theme-hover: #f0f0f3;
+  --theme-border: #e4e3e7;
+  --theme-muted-foreground: #818287;
+}
+
+:root[data-app-theme="midnight"] {
+  --theme-canvas: #121215;
+  --theme-sidebar: #1b1b1e;
+  --theme-raised: #1d1d20;
+  --theme-hover: #252528;
+  --theme-border: #28282b;
+  --theme-muted-foreground: #a9a9ae;
+}
+
+:root[data-app-theme="dawn"] {
+  --theme-canvas: #372d3a;
+  --theme-sidebar: #463a4c;
+  --theme-raised: #403746;
+  --theme-hover: #49404f;
+  --theme-border: #4d4453;
+  --theme-muted-foreground: #b5aeba;
+}
+
+:root[data-app-theme="pale"] {
+  --theme-canvas: #373c4f;
+  --theme-sidebar: #373c4f;
+  --theme-raised: #404459;
+  --theme-hover: #474b61;
+  --theme-border: #4b4f63;
+  --theme-muted-foreground: #b1b5c3;
+}
+
+:root[data-app-theme="custom"] {
+  --theme-canvas: var(--custom-background);
+  --theme-sidebar: var(--custom-surface);
+  --theme-raised: color-mix(in srgb, var(--custom-background) 94%, var(--custom-foreground));
+  --theme-hover: color-mix(in srgb, var(--custom-background) 89%, var(--custom-foreground));
+  --theme-border: color-mix(in srgb, var(--custom-foreground) 12%, var(--custom-background));
+  --theme-muted-foreground: color-mix(in srgb, var(--custom-foreground) 62%, var(--custom-background));
+}
+
+:root:is(
+  [data-app-theme="ash"],
+  [data-app-theme="midnight"],
+  [data-app-theme="dawn"],
+  [data-app-theme="pale"],
+  [data-app-theme="custom"]
+) {
+  --background: var(--theme-canvas);
+  --foreground: var(--custom-foreground);
+  --card: var(--theme-raised);
+  --card-foreground: var(--custom-foreground);
+  --popover: var(--theme-raised);
+  --popover-foreground: var(--custom-foreground);
+  --primary: var(--custom-accent);
+  --primary-foreground: var(--custom-accent-foreground);
+  --secondary: var(--theme-raised);
+  --secondary-foreground: var(--custom-foreground);
+  --muted: var(--theme-raised);
+  --muted-foreground: var(--theme-muted-foreground);
+  --accent: var(--theme-hover);
+  --accent-foreground: var(--custom-foreground);
+  --border: var(--theme-border);
+  --input: color-mix(in srgb, var(--theme-border) 72%, var(--custom-foreground));
+  --ring: var(--custom-accent);
+  --chart-1: var(--custom-accent);
+  --chart-2: color-mix(in srgb, var(--custom-accent) 68%, var(--custom-foreground));
+  --radius: 0.5rem;
+  --sidebar: var(--theme-sidebar);
+  --sidebar-foreground: var(--custom-surface-foreground);
+  --sidebar-primary: var(--custom-accent);
+  --sidebar-primary-foreground: var(--custom-accent-foreground);
+  --sidebar-accent: color-mix(in srgb, var(--theme-sidebar) 91%, var(--custom-surface-foreground));
+  --sidebar-accent-foreground: var(--custom-surface-foreground);
+  --sidebar-border: color-mix(in srgb, var(--custom-surface-foreground) 11%, var(--theme-sidebar));
+  --sidebar-ring: var(--custom-accent);
+  --shadow-workstream: 0 1px 0 color-mix(in srgb, var(--custom-foreground) 8%, transparent);
+}
+
 @theme inline {
-  /* optional: --font-sans, --font-serif, --font-mono if they are applied in the layout.tsx */
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

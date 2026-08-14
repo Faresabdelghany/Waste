@@ -59,7 +59,7 @@ const STATUS_OPTIONS: StatusOption[] = [
 ]
 
 const ASSIGNEE_OPTIONS: AssigneeOption[] = [
-  { id: 'jason-duong', name: 'Jason Duong' },
+  { id: 'olivia-larsen', name: 'Olivia Larsen' },
   { id: 'hp', name: 'HP' },
   { id: 'qa', name: 'QA' },
   { id: 'pm', name: 'PM' },
@@ -212,7 +212,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
 
       const updatedTask: ProjectTask = {
         ...editingTask,
-        name: title.trim() || 'Untitled task',
+        name: title.trim() || 'Untitled ticket',
         status: status.id,
         dueLabel: targetDate ? format(targetDate, 'dd/MM/yyyy') : editingTask.dueLabel,
         assignee: toUser(assignee),
@@ -227,7 +227,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
       }
 
       onTaskUpdated?.(updatedTask)
-      toast.success("Task updated successfully")
+      toast.success("Ticket updated successfully")
       onClose()
       return
     }
@@ -240,7 +240,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
 
     const newTask: ProjectTask = {
       id: `${effectiveProjectId}-task-${Date.now()}`,
-      name: title.trim() || 'Untitled task',
+      name: title.trim() || 'Untitled ticket',
       status: status.id,
       dueLabel: targetDate ? format(targetDate, 'dd/MM/yyyy') : undefined,
       assignee: toUser(assignee),
@@ -251,13 +251,13 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
       projectId: effectiveProjectId,
       projectName: project.name,
       workstreamId: workstreamId ?? `${effectiveProjectId}-ws`,
-      workstreamName: workstreamName ?? 'General',
+      workstreamName: workstreamName ?? 'General operations',
     }
 
     onTaskCreated?.(newTask)
 
     if (createMore) {
-      toast.success("Task created! Ready for another.")
+      toast.success("Ticket created! Ready for another.")
       setTitle('')
       setDescription(undefined)
       setStatus(STATUS_OPTIONS[0])
@@ -265,7 +265,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
       return
     }
 
-    toast.success("Task created successfully")
+    toast.success("Ticket created successfully")
     onClose()
   }
 
@@ -285,7 +285,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
             items={projectOptions}
             selectedId={projectId}
             onSelect={(item) => setProjectId(item.id)}
-            placeholder="Choose project..."
+            placeholder="Choose route..."
             renderItem={(item) => (
               <div className="flex items-center justify-between w-full gap-2">
                 <span>{item.label}</span>
@@ -297,7 +297,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
               >
                 <Folder className="size-4 text-muted-foreground" />
                 <span className="truncate max-w-[160px] font-medium text-foreground">
-                  {projectLabel ?? 'Choose project'}
+                  {projectLabel ?? 'Choose route'}
                 </span>
               </button>
             }
@@ -312,7 +312,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
                   setWorkstreamId(item.id)
                   setWorkstreamName(item.label)
                 }}
-                placeholder="Choose workstream..."
+                placeholder="Choose category..."
                 renderItem={(item) => (
                   <div className="flex items-center justify-between w-full gap-2">
                     <span>{item.label}</span>
@@ -324,7 +324,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
                   >
                     <Rows className="size-4 text-muted-foreground" />
                     <span className="truncate max-w-[160px] font-medium text-foreground">
-                      {workstreamName ?? 'Choose workstream'}
+                      {workstreamName ?? 'Choose category'}
                     </span>
                   </button>
                 }
@@ -352,7 +352,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Task title"
+            placeholder="Ticket title"
             className="w-full font-normal leading-7 text-foreground placeholder:text-muted-foreground text-xl outline-none bg-transparent border-none p-0"
             autoComplete="off"
           />
@@ -364,7 +364,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
         value={description}
         onChange={setDescription}
         onExpandChange={setIsDescriptionExpanded}
-        placeholder="Briefly describe the goal or details of this task..."
+        placeholder="Briefly describe the operational issue or required action..."
         showTemplates={false}
       />
 
@@ -422,7 +422,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
             </div>
           )}
           trigger={
-            <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-black/5 transition-colors">
+            <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
               <UserCircle className="size-4 text-muted-foreground" />
               <span className="font-medium text-foreground text-sm leading-5">
                 {status.label}
@@ -436,7 +436,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
           date={targetDate}
           onSelect={setTargetDate}
           trigger={
-            <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-black/5 transition-colors">
+            <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
               <CalendarBlank className="size-4 text-muted-foreground" />
               <span className="font-medium text-foreground text-sm leading-5">
                 {targetDate ? format(targetDate, 'dd/MM/yyyy') : 'Target'}
@@ -457,7 +457,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
             </div>
           )}
           trigger={
-            <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-black/5 transition-colors">
+            <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
               <ChartBar className="size-4 text-muted-foreground" />
               <span className="font-medium text-foreground text-sm leading-5">
                 {priority?.label ?? 'Priority'}
@@ -478,7 +478,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
             </div>
           )}
           trigger={
-            <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-black/5 transition-colors">
+            <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
               <TagIcon className="size-4 text-muted-foreground" />
               <span className="font-medium text-foreground text-sm leading-5">
                 {selectedTag?.label ?? 'Tag'}
@@ -511,7 +511,7 @@ export function TaskQuickCreateModal({ open, onClose, context, onTaskCreated, ed
           )}
 
           <Button type="button" onClick={handleSubmit} className="h-10 px-4 rounded-xl">
-            {editingTask ? 'Save changes' : 'Create Task'}
+            {editingTask ? 'Save changes' : 'Create Ticket'}
           </Button>
         </div>
       </div>

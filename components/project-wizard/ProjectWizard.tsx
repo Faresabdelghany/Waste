@@ -91,19 +91,19 @@ export function ProjectWizard({ onClose, onCreate }: ProjectWizardProps) {
 
   // Define steps for the stepper (excluding Mode selection)
   const steps = [
-    "Project intent",
-    "Outcome & success",
+    "Route purpose",
+    "Service outcome",
     "Ownership",
-    "Work structure",
+    "Execution structure",
     "Review & create"
   ];
 
   const stepTitles: Record<number, string> = {
-    1: "What is this project mainly about?",
-    2: "How do you define success?",
-    3: "Who is responsible for this project?",
-    4: "How should this project be structured?",
-    5: "Review project setup",
+    1: "What is this route mainly for?",
+    2: "How do you define successful service?",
+    3: "Who is responsible for this route?",
+    4: "How should this route be structured?",
+    5: "Review route setup",
   };
 
   return (
@@ -135,7 +135,7 @@ export function ProjectWizard({ onClose, onCreate }: ProjectWizardProps) {
                 onClose={handleClose} 
                 onCreate={() => {
                   onCreate?.();
-                  toast.success("Project created successfully");
+                  toast.success("Route created successfully");
                   onClose();
                 }} 
                 onExpandChange={setIsQuickCreateExpanded}
@@ -145,7 +145,7 @@ export function ProjectWizard({ onClose, onCreate }: ProjectWizardProps) {
                 {/* Left Sidebar (Stepper) */}
                 <div className="hidden w-64 border-r border-border bg-background px-6 py-7 md:flex md:flex-col md:gap-7">
                   <div>
-                    <p className="text-sm font-semibold text-foreground">New Project</p>
+                    <p className="text-sm font-semibold text-foreground">New Route</p>
                   </div>
                   <Stepper 
                     currentStep={step - 1} 
@@ -222,11 +222,11 @@ export function ProjectWizard({ onClose, onCreate }: ProjectWizardProps) {
                                     <Button
                                       onClick={() => {
                                         onCreate?.();
-                                        toast.success("Project created successfully");
+                                        toast.success("Route created successfully");
                                         onClose();
                                       }}
                                     >
-                                      Create project
+                                      Create route
                                     </Button>
                                 </>
                             ) : (

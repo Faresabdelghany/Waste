@@ -1,17 +1,26 @@
-import { Suspense } from "react"
-import { AppSidebar } from "@/components/app-sidebar"
-import { ProjectsContent } from "@/components/projects-content"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { redirect } from "next/navigation"
 
-export default function Page() {
-  return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset>
-        <Suspense fallback={null}>
-          <ProjectsContent />
-        </Suspense>
-      </SidebarInset>
-    </SidebarProvider>
-  )
+type PageProps = {
+  searchParams: Promise<{
+    module?: string | string[]
+    record?: string | string[]
+  }>
+}
+
+export default async function Page({ searchParams }: PageProps) {
+  const params = await searchParams
+  const recordId = typeof params.record === "string" ? params.record : undefined
+
+  if (params.module === "driver-app") {
+    redirect("/tickets")
+  }
+  if (params.module === "live") {
+    redirect(
+      recordId
+        ? `/route-studio?module=live&record=${encodeURIComponent(recordId)}`
+        : "/route-studio?module=live",
+    )
+  }
+
+  redirect("/performance")
 }

@@ -35,8 +35,8 @@ function statusLabel(status: ClientStatus): string {
 function ClientStatusBadge({ status }: { status: ClientStatus }) {
   const label = statusLabel(status)
 
-  let badgeClasses = "bg-muted text-muted-foreground border-transparent dark:bg-muted/30 dark:text-muted-foreground"
-  let dotClasses = "bg-zinc-900 dark:bg-zinc-300"
+  let badgeClasses = "border-transparent bg-muted text-muted-foreground"
+  let dotClasses = "bg-foreground"
 
   if (status === "active") {
     badgeClasses = "bg-teal-50 text-teal-700 border-transparent dark:bg-teal-500/15 dark:text-teal-100"
@@ -45,8 +45,8 @@ function ClientStatusBadge({ status }: { status: ClientStatus }) {
     badgeClasses = "bg-amber-50 text-amber-700 border-transparent dark:bg-amber-500/15 dark:text-amber-100"
     dotClasses = "bg-amber-600 dark:bg-amber-300"
   } else if (status === "archived") {
-    badgeClasses = "bg-slate-100 text-slate-600 border-transparent dark:bg-slate-600/30 dark:text-slate-200"
-    dotClasses = "bg-slate-500 dark:bg-slate-300"
+    badgeClasses = "border-transparent bg-muted text-muted-foreground"
+    dotClasses = "bg-muted-foreground"
   }
 
   return (
@@ -73,21 +73,21 @@ function ClientProjectsBadge({
     {
       key: "active",
       count: active,
-      label: "active projects",
+      label: "active routes",
       iconClass: "text-teal-600",
       wrapperClass: "text-muted-foreground",
     },
     {
       key: "planned",
       count: planned,
-      label: "planned projects",
+      label: "planned routes",
       iconClass: "text-amber-600",
       wrapperClass: "text-muted-foreground",
     },
     {
       key: "completed",
       count: completed,
-      label: "completed projects",
+      label: "completed routes",
       iconClass: "text-muted-foreground/80",
       wrapperClass: "text-muted-foreground/70",
     },
@@ -211,7 +211,7 @@ export function ClientsContent() {
 
   const handleArchiveSelected = () => {
     if (!selectedIds.size) return
-    toast.success(`Archived ${selectedIds.size} client${selectedIds.size > 1 ? "s" : ""} (mock)`)
+    toast.success(`Archived ${selectedIds.size} customer${selectedIds.size > 1 ? "s" : ""} (mock)`)
     clearSelection()
   }
 
@@ -236,17 +236,17 @@ export function ClientsContent() {
   })()
 
   return (
-    <div className="flex flex-1 flex-col bg-background mx-2 my-2 border border-border rounded-lg min-w-0">
+    <div className="flex flex-1 flex-col bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
       <header className="flex flex-col border-b border-border/40">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="flex items-center gap-3">
             <SidebarTrigger className="h-8 w-8 rounded-lg hover:bg-accent text-muted-foreground" />
-            <p className="text-base font-medium text-foreground">Clients</p>
+            <p className="text-base font-medium text-foreground">Customers</p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => setIsWizardOpen(true)}>
               <Plus className="h-4 w-4" weight="bold" />
-              New client
+              New customer
             </Button>
           </div>
         </div>
@@ -291,7 +291,7 @@ export function ClientsContent() {
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search clients or contacts"
+                placeholder="Search customers or contacts"
                 className="h-9 rounded-lg bg-muted/50 text-sm placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-primary/20 border-border border shadow-none pl-9"
               />
             </div>
@@ -303,11 +303,11 @@ export function ClientsContent() {
         <div className="w-full">
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed border-border/60 rounded-lg bg-muted/30">
-              <p className="text-sm font-medium text-foreground">No clients found</p>
-              <p className="mt-1 text-xs text-muted-foreground">Try adjusting your search or add a new client.</p>
+              <p className="text-sm font-medium text-foreground">No customers found</p>
+              <p className="mt-1 text-xs text-muted-foreground">Try adjusting your search or add a new customer.</p>
               <Button className="mt-4 h-8 px-3 text-xs rounded-lg" onClick={() => setIsWizardOpen(true)}>
                 <Plus className="mr-1 h-3 w-3" weight="bold" />
-                New client
+                New customer
               </Button>
             </div>
           ) : (
@@ -317,7 +317,7 @@ export function ClientsContent() {
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="w-[32px] text-xs font-medium text-muted-foreground">
                       <Checkbox
-                        aria-label="Select all clients"
+                        aria-label="Select all customers"
                         checked={isAllSelected ? true : isIndeterminate ? "indeterminate" : false}
                         onCheckedChange={toggleSelectAll}
                       />
@@ -328,7 +328,7 @@ export function ClientsContent() {
                         className="flex items-center gap-1 hover:text-foreground"
                         onClick={() => toggleSort("name")}
                       >
-                        <span>Client</span>
+                        <span>Customer</span>
                         {sortKey === "name" ? (
                           sortDirection === "asc" ? (
                             <ArrowUp className="h-3 w-3" />
@@ -349,7 +349,7 @@ export function ClientsContent() {
                         className="inline-flex items-center gap-1 hover:text-foreground"
                         onClick={() => toggleSort("projects")}
                       >
-                        <span>Projects</span>
+                        <span>Routes</span>
                         {sortKey === "projects" ? (
                           sortDirection === "asc" ? (
                             <ArrowUp className="h-3 w-3" />
@@ -463,10 +463,10 @@ export function ClientsContent() {
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => {
-                                  toast.info("Edit client opens modal (mock)")
+                                  toast.info("Edit customer opens modal (mock)")
                                 }}
                               >
-                                Edit client
+                                Edit customer
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem asChild>

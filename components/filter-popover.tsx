@@ -97,16 +97,16 @@ export function FilterPopover({ initialChips, onApply, onClear, counts }: Filter
 
   const memberOptions = [
     { id: "no-member", label: "No member", avatar: undefined },
-    { id: "current", label: "Current member", avatar: undefined, hint: "1 projects" },
-    { id: "jason", label: "jason duong", avatar: "/placeholder-user.jpg", hint: "3 projects" },
+    { id: "current", label: "Current member", avatar: undefined, hint: "9 routes" },
+    { id: "olivia", label: "Olivia Larsen", avatar: "/placeholder-user.jpg", hint: "9 routes" },
   ]
 
   const tagOptions = [
-    { id: "frontend", label: "frontend" },
-    { id: "backend", label: "backend" },
-    { id: "bug", label: "bug" },
-    { id: "feature", label: "feature" },
-    { id: "urgent", label: "urgent" },
+    { id: "residual", label: "residual" },
+    { id: "organic", label: "organic" },
+    { id: "paper", label: "paper" },
+    { id: "glass", label: "glass" },
+    { id: "exception", label: "exception" },
   ]
 
   const filteredCategories = useMemo(() => {

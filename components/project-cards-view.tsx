@@ -27,14 +27,14 @@ export function ProjectCardsView({ projects, loading = false, onCreateProject }:
           <div className="p-3 bg-muted rounded-md mb-4">
             <FolderOpen className="h-6 w-6 text-foreground" />
           </div>
-          <h3 className="mb-2 text-lg font-semibold text-foreground">No projects yet</h3>
-          <p className="mb-6 text-sm text-muted-foreground">Create your first project to get started</p>
+          <h3 className="mb-2 text-lg font-semibold text-foreground">No routes yet</h3>
+          <p className="mb-6 text-sm text-muted-foreground">Create your first route to get started</p>
           <button
             className="rounded-lg border border-border bg-background px-4 py-2 text-sm hover:bg-accent transition-colors cursor-pointer"
             onClick={onCreateProject}
           >
             <Plus className="mr-2 inline h-4 w-4" />
-            Create new project
+            Create new route
           </button>
         </div>
       ) : (
@@ -47,7 +47,7 @@ export function ProjectCardsView({ projects, loading = false, onCreateProject }:
             onClick={onCreateProject}
           >
             <Plus className="mb-2 h-5 w-5" />
-            Create new project
+            Create new route
           </button>
         </div>
       )}

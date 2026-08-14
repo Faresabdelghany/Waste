@@ -19,7 +19,7 @@ export function ClientCard({ client }: ClientCardProps) {
   return (
     <div className="rounded-lg border border-border bg-card/80 p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-medium text-muted-foreground">Client</p>
+        <p className="text-xs font-medium text-muted-foreground">Customer</p>
         <Badge variant="outline" className="rounded-full px-2 py-0.5 text-[11px] font-medium capitalize">
           {statusLabel(client.status)}
         </Badge>

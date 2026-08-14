@@ -133,10 +133,10 @@ export function DraggableBar({
         >
             {/* Resize handles */}
             <div
-                className="absolute left-0 top-0 bottom-0 w-2 cursor-col-resize opacity-0 group-hover:opacity-100 bg-white/30 rounded-l-md"
+                className="absolute left-0 top-0 bottom-0 w-2 cursor-col-resize opacity-0 group-hover:opacity-100 bg-foreground/25 rounded-l-md"
             />
             <div
-                className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize opacity-0 group-hover:opacity-100 bg-white/30 rounded-r-md"
+                className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize opacity-0 group-hover:opacity-100 bg-foreground/25 rounded-r-md"
             />
 
             {variant === "task" && <div className="w-0.5 h-4 bg-current/50 rounded-full shrink-0" />}

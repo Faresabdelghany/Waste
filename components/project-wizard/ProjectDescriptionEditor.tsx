@@ -49,7 +49,7 @@ import { Plus, StarFour, ArrowsOutSimple } from "@phosphor-icons/react/dist/ssr"
   }, [isExpanded, onExpandChange]);
 
   const defaultPlaceholder =
-    placeholder ?? "Briefly describe the goal of this project/sprint...";
+    placeholder ?? "Briefly describe the goal and service scope of this route...";
 
   const editor = useEditor({
     extensions: [

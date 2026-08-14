@@ -5,24 +5,33 @@ import type { TimelineTask } from "@/lib/data/project-details"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { CaretLeft, CaretRight, CalendarBlank, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr"
+import { cn } from "@/lib/utils"
 
 type TimelineGanttProps = {
   tasks: TimelineTask[]
+  title?: string
+  emptyLabel?: string
+  onTaskSelect?: (taskId: string) => void
 }
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
 
-export function TimelineGantt({ tasks }: TimelineGanttProps) {
+export function TimelineGantt({
+  tasks,
+  title = "Expected Timeline",
+  emptyLabel = "No tasks scheduled",
+  onTaskSelect,
+}: TimelineGanttProps) {
   const [rangeStart, setRangeStart] = useState<Date | null>(null)
 
   if (tasks.length === 0) {
     return (
       <section>
-        <h2 className="text-base font-semibold text-foreground">Expected Timeline</h2>
+        <h2 className="text-base font-semibold text-foreground">{title}</h2>
         <div className="mt-4 rounded-lg border border-dashed border-border/70 p-6 text-sm text-muted-foreground">
-          No tasks scheduled
+          {emptyLabel}
         </div>
       </section>
     )
@@ -87,7 +96,7 @@ export function TimelineGantt({ tasks }: TimelineGanttProps) {
   return (
     <section>
       <div className="flex items-center justify-between gap-4">
-        <h2 className="text-base font-semibold text-foreground">Expected Timeline</h2>
+        <h2 className="text-base font-semibold text-foreground">{title}</h2>
       </div>
 
       <div className="mt-4 overflow-x-auto rounded-lg border border-border">
@@ -189,9 +198,19 @@ export function TimelineGantt({ tasks }: TimelineGanttProps) {
 
               return (
                 <div key={t.id} className="grid grid-cols-[240px_1fr]">
-                  <div className="px-4 py-2 text-sm text-foreground border-r border-border truncate">
-                    {t.name}
-                  </div>
+                  {onTaskSelect ? (
+                    <button
+                      type="button"
+                      className="cursor-pointer truncate border-r border-border bg-transparent px-4 py-2 text-left text-sm text-foreground hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                      onClick={() => onTaskSelect(t.id)}
+                    >
+                      {t.name}
+                    </button>
+                  ) : (
+                    <div className="truncate border-r border-border px-4 py-2 text-sm text-foreground">
+                      {t.name}
+                    </div>
+                  )}
                   <div className="relative px-4 py-0">
                     <div className="grid gap-0" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(3rem, 1fr))` }}>
                       {Array.from({ length: days.length }).map((_, i) => (
@@ -199,7 +218,24 @@ export function TimelineGantt({ tasks }: TimelineGanttProps) {
                       ))}
                     </div>
                     <div
-                      className="absolute top-1/2 -translate-y-1/2 h-7 rounded-md bg-muted border border-border px-2 flex items-center"
+                      role={onTaskSelect ? "button" : undefined}
+                      tabIndex={onTaskSelect ? 0 : undefined}
+                      onClick={() => onTaskSelect?.(t.id)}
+                      onKeyDown={(event) => {
+                        if (onTaskSelect && (event.key === "Enter" || event.key === " ")) {
+                          event.preventDefault()
+                          onTaskSelect(t.id)
+                        }
+                      }}
+                      className={cn(
+                        "absolute top-1/2 flex h-7 -translate-y-1/2 items-center rounded-md border px-2",
+                        t.status === "done"
+                          ? "border-emerald-500/30 bg-emerald-500/10"
+                          : t.status === "in-progress"
+                            ? "border-amber-500/30 bg-amber-500/10"
+                            : "border-border bg-muted",
+                        onTaskSelect && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                      )}
                       style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
                       title={t.name}
                     >

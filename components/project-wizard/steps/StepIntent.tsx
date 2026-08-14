@@ -11,20 +11,20 @@ export function StepIntent({ selected, onSelect }: StepIntentProps) {
   const options: { id: ProjectIntent; title: string; desc: string; icon: React.ReactNode }[] = [
     {
       id: 'delivery',
-      title: 'Delivery',
-      desc: 'Shipping a feature, product, or marketing campaign.',
+      title: 'Scheduled collection',
+      desc: 'A recurring or one-time customer collection route.',
       icon: <Rocket className="h-6 w-6" />,
     },
     {
       id: 'experiment',
-      title: 'Experiment',
-      desc: 'Testing a hypothesis, research, or prototyping.',
+      title: 'Recovery',
+      desc: 'Recollections and service recovery for failed stops.',
       icon: <Flask className="h-6 w-6" />,
     },
     {
       id: 'internal',
-      title: 'Internal',
-      desc: 'Operational work, team processes, or documentation.',
+      title: 'Internal movement',
+      desc: 'Container deployment, transfers, or warehouse movements.',
       icon: <Briefcase className="h-6 w-6" />,
     },
   ];

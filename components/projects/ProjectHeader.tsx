@@ -18,7 +18,7 @@ export function ProjectHeader({ project, onEditProject }: ProjectHeaderProps) {
     { label: "ID", value: `#${project.id}`, icon: null },
     { label: "", value: <PriorityBadge level={project.meta.priorityLabel.toLowerCase() as PriorityLevel} appearance="inline" size="sm" />, icon: null },
     { label: "", value: project.meta.locationLabel, icon: <Globe className="h-4 w-4" /> },
-    { label: "Sprints", value: project.meta.sprintLabel, icon: <Timer className="h-4 w-4" /> },
+    { label: "Schedule", value: project.meta.sprintLabel, icon: <Timer className="h-4 w-4" /> },
     { label: "Last sync", value: project.meta.lastSyncLabel, icon: <ArrowsClockwise className="h-4 w-4" /> },
   ]
 
@@ -50,7 +50,7 @@ export function ProjectHeader({ project, onEditProject }: ProjectHeaderProps) {
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label="Edit project"
+            aria-label="Edit route"
             className="rounded-lg text-muted-foreground hover:text-foreground"
             onClick={onEditProject}
           >

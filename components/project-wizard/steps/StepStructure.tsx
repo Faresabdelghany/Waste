@@ -119,9 +119,9 @@ export function StepStructure({ data, updateData }: StepStructureProps) {
 
       <div className="flex items-center justify-between rounded-lg">
         <div className="space-y-0.5">
-            <Label className="text-base">Add starter tasks</Label>
+            <Label className="text-base">Add starter stops</Label>
             <p className="text-sm text-muted-foreground">
-                Automatically add default tasks based on your selection.
+                Automatically add default stops based on your route type.
             </p>
         </div>
         <SimpleToggle 

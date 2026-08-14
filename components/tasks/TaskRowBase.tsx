@@ -14,6 +14,7 @@ export type TaskRowBaseProps = {
   meta?: ReactNode
   className?: string
   subtitle?: ReactNode
+  onClick?: () => void
 }
 
 export function TaskRowBase({
@@ -25,11 +26,22 @@ export function TaskRowBase({
   meta,
   className,
   subtitle,
+  onClick,
 }: TaskRowBaseProps) {
   return (
     <div
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (onClick && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault()
+          onClick()
+        }
+      }}
       className={cn(
         "flex items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-muted/60",
+        onClick && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
         className,
       )}
     >

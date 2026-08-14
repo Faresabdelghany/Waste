@@ -26,7 +26,7 @@ export function ProjectHeader({ filters, onRemoveFilter, onFiltersChange, counts
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-3">
           <SidebarTrigger className="h-8 w-8 rounded-lg hover:bg-accent text-muted-foreground" />
-          <p className="text-base font-medium text-foreground">Projects</p>
+          <p className="text-base font-medium text-foreground">Routes</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
@@ -34,7 +34,7 @@ export function ProjectHeader({ filters, onRemoveFilter, onFiltersChange, counts
           </Button>
           <Button variant="ghost" size="sm" onClick={onAddProject}>
             <Plus className="h-4 w-4" weight="bold" />
-            Add Project
+            Add Route
           </Button>
         </div>
       </div>

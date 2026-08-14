@@ -8,9 +8,9 @@ export type PriorityLevel = "urgent" | "high" | "medium" | "low"
 function BarsGlyph({ level, className }: { level: Exclude<PriorityLevel, "urgent">; className?: string }) {
   // Match Figma design: stroked bars with varying heights and colors
   const bars = [
-    { x: 4, y1: 13.333, y2: level === "low" ? 13.333 : level === "medium" ? 13.333 : 13.333, color: "currentColor" },
-    { x: 8, y1: 6.667, y2: 13.333, color: level === "low" ? "rgb(228, 228, 231)" : "currentColor" },
-    { x: 12, y1: level === "high" ? 2.667 : level === "medium" ? 6.667 : 6.667, y2: 13.333, color: level === "high" ? "currentColor" : "rgb(228, 228, 231)" },
+    { x: 4, y1: 13.333, y2: 13.333, muted: false },
+    { x: 8, y1: 6.667, y2: 13.333, muted: level === "low" },
+    { x: 12, y1: level === "high" ? 2.667 : 6.667, y2: 13.333, muted: level !== "high" },
   ]
 
   return (
@@ -19,7 +19,8 @@ function BarsGlyph({ level, className }: { level: Exclude<PriorityLevel, "urgent
         <path
           key={i}
           d={`M${bar.x} ${bar.y2}V${bar.y1}`}
-          stroke={bar.color}
+          stroke="currentColor"
+          strokeOpacity={bar.muted ? 0.3 : 1}
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -79,8 +80,8 @@ export function PriorityBadge({ level, appearance = "badge", size = "md", classN
 
   // appearance: badge
   const colorClass = isUrgent
-    ? "text-foreground/80 border-zinc-200 bg-zinc-50"
-    : "text-foreground/80 border-zinc-200 bg-zinc-50"
+    ? "border-border bg-muted text-foreground/80"
+    : "border-border bg-muted text-foreground/80"
 
   return (
     <span

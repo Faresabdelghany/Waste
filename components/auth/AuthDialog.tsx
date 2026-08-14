@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import { ArrowRight, Eye, EyeOff } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -37,6 +38,7 @@ const isValidEmail = (value: string) => {
 }
 
 export function AuthDialog({ open, onOpenChange, mode, onModeChange }: AuthDialogProps) {
+    const router = useRouter()
     const [signInStep, setSignInStep] = useState<SignInStep>("email")
     const [lastUsedProvider, setLastUsedProvider] = useState<string | null>(null)
     const [email, setEmail] = useState("")
@@ -86,6 +88,10 @@ export function AuthDialog({ open, onOpenChange, mode, onModeChange }: AuthDialo
         }
 
         onOpenChange(false)
+
+        if (isSignIn) {
+            router.replace("/performance")
+        }
     }
 
     const headerTitle = isSignIn ? "Sign in to PM Tools" : "Create your account"
@@ -98,7 +104,7 @@ export function AuthDialog({ open, onOpenChange, mode, onModeChange }: AuthDialo
             <DialogContent className="sm:max-w-[460px] p-0 gap-0 rounded-3xl border border-border shadow-2xl">
                 <div className="px-6 pt-7 pb-6">
                     <DialogHeader className="items-center text-center">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-800 text-primary-foreground shadow-[inset_0_-5px_6.6px_0_rgba(0,0,0,0.25)]">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
                             <img src="/logo-wrapper.png" alt="PM Tools" className="h-6 w-6" />
                         </div>
                         <DialogTitle className="text-xl">{headerTitle}</DialogTitle>
