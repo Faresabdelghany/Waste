@@ -455,7 +455,6 @@ export const commercialImproveBusinessFormSchemas = [
     submitLabel: "Create contract area",
     nameField: "areaName",
     contextFieldIds: ["areaCode", "contractorId", "projectId", "validFrom", "validTo"],
-    ownerField: "owner",
     sections: [
       {
         id: "identity",
@@ -487,12 +486,6 @@ export const commercialImproveBusinessFormSchemas = [
             required: true,
             relation: { workspaceId: "configure", moduleId: "organization" },
           },
-          {
-            id: "owner",
-            label: "Contract owner",
-            type: "text",
-            required: true,
-          },
         ],
       },
       {
@@ -508,8 +501,31 @@ export const commercialImproveBusinessFormSchemas = [
           {
             id: "serviceResponsibilities",
             label: "Service responsibilities",
-            type: "textarea",
+            type: "multiselect",
             required: true,
+            options: [
+              { value: "residual-waste-collection", label: "Residual waste collection" },
+              { value: "organic-waste-collection", label: "Organic waste collection" },
+              { value: "paper-collection", label: "Paper collection" },
+              { value: "cardboard-collection", label: "Cardboard collection" },
+              { value: "glass-collection", label: "Glass collection" },
+              { value: "plastic-collection", label: "Plastic collection" },
+              { value: "bulky-waste-collection", label: "Bulky waste collection" },
+              { value: "container-maintenance", label: "Container maintenance" },
+              { value: "container-washing", label: "Container washing" },
+            ],
+          },
+          {
+            id: "productIds",
+            label: "Products",
+            type: "multiselect",
+            relation: { workspaceId: "commercial", moduleId: "products" },
+          },
+          {
+            id: "zoneIds",
+            label: "Zones",
+            type: "multiselect",
+            relation: { workspaceId: "plan", moduleId: "areas" },
           },
           {
             id: "validFrom",
@@ -522,11 +538,6 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Ends",
             type: "date",
             required: true,
-          },
-          {
-            id: "exceptions",
-            label: "Zones and exceptions",
-            type: "textarea",
           },
         ],
       },

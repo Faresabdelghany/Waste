@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   CheckCircle,
 } from "@phosphor-icons/react/dist/ssr"
+import { ChevronDown } from "lucide-react"
 
 import type {
   BusinessFieldCondition,
@@ -25,8 +26,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import {
   Select,
   SelectContent,
@@ -84,6 +98,14 @@ function hasValue(value: BusinessFormValue | undefined) {
   return value === true || (typeof value === "string" && value.trim().length > 0)
 }
 
+function splitMultiValue(value: BusinessFormValue | undefined): string[] {
+  if (typeof value !== "string") return []
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
 function conditionMatches(
   condition: BusinessFieldCondition | undefined,
   values: BusinessFormValues,
@@ -119,7 +141,102 @@ function displayValue(
 ) {
   if (typeof value === "boolean") return value ? "Yes" : "No"
   if (!value) return "Not provided"
+  if (field.type === "multiselect") {
+    return splitMultiValue(value)
+      .map(
+        (item) =>
+          options.find((option) => option.value === item)?.label ?? item,
+      )
+      .join(", ")
+  }
   return options.find((option) => option.value === value)?.label ?? value
+}
+
+function MultiSelectField({
+  field,
+  options,
+  value,
+  error,
+  onChange,
+}: {
+  field: BusinessFormField
+  options: readonly BusinessFormOption[]
+  value: BusinessFormValue | undefined
+  error?: string
+  onChange: (next: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const selected = splitMultiValue(value)
+
+  const toggle = (optionValue: string) => {
+    const next = selected.includes(optionValue)
+      ? selected.filter((item) => item !== optionValue)
+      : [...selected, optionValue]
+    onChange(next.join(", "))
+  }
+
+  const summary = selected
+    .map(
+      (item) => options.find((option) => option.value === item)?.label ?? item,
+    )
+    .join(", ")
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          id={`business-form-${field.id}`}
+          aria-invalid={Boolean(error)}
+          disabled={field.readOnly}
+          className="h-9 w-full justify-between px-3 font-normal hover:bg-transparent"
+        >
+          <span
+            className={cn(
+              "truncate",
+              selected.length === 0 && "text-muted-foreground",
+            )}
+          >
+            {selected.length > 0
+              ? summary
+              : options.length > 0
+                ? field.placeholder ?? `Select ${field.label.toLowerCase()}`
+                : "No permitted options"}
+          </span>
+          <ChevronDown className="size-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-[var(--radix-popover-trigger-width)] p-0"
+      >
+        <Command>
+          <CommandInput placeholder={`Search ${field.label.toLowerCase()}`} />
+          <CommandList>
+            <CommandEmpty>No matching options.</CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => (
+                <CommandItem
+                  key={option.value}
+                  value={option.label}
+                  onSelect={() => toggle(option.value)}
+                >
+                  <Checkbox
+                    checked={selected.includes(option.value)}
+                    className="pointer-events-none"
+                  />
+                  <span className="truncate">{option.label}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 function completionLabel(schema: BusinessFormSchema) {
@@ -211,6 +328,16 @@ export function BusinessRecordFormDialog({
         !options.some((option) => option.value === value)
       ) {
         errors[field.id] = "The selected record is no longer permitted."
+      }
+
+      if (
+        field.type === "multiselect" &&
+        options.length > 0 &&
+        splitMultiValue(value).some(
+          (item) => !options.some((option) => option.value === item),
+        )
+      ) {
+        errors[field.id] = "A selected record is no longer permitted."
       }
     }
 
@@ -435,6 +562,16 @@ export function BusinessRecordFormDialog({
                                 ))}
                               </SelectContent>
                             </Select>
+                          ) : field.type === "multiselect" ? (
+                            <MultiSelectField
+                              field={field}
+                              options={options}
+                              value={value}
+                              error={error}
+                              onChange={(nextValue) =>
+                                updateValue(field.id, nextValue)
+                              }
+                            />
                           ) : field.type === "textarea" ? (
                             <Textarea
                               id={`business-form-${field.id}`}

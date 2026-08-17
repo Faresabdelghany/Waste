@@ -10,6 +10,7 @@ export type BusinessFormFieldType =
   | "date"
   | "datetime"
   | "select"
+  | "multiselect"
   | "checkbox"
 
 export type BusinessFormOption = {

@@ -1901,11 +1901,25 @@ export function BusinessWorkspace({
     const relationRefs: NonNullable<BusinessRecord["relationRefs"]> = []
     const facts: Record<string, string> = {}
 
+    const splitMultiValue = (value: string) =>
+      value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+
     const displayFormValue = (field: BusinessFormField, value: string | boolean) => {
       if (typeof value === "boolean") return value ? "Yes" : "No"
       const options = field.relation
         ? getFormRelationOptions(field, values)
         : field.options ?? []
+      if (field.type === "multiselect") {
+        return splitMultiValue(value)
+          .map(
+            (item) =>
+              options.find((option) => option.value === item)?.label ?? item,
+          )
+          .join(" · ")
+      }
       return options.find((option) => option.value === value)?.label ?? value
     }
 
@@ -1920,13 +1934,20 @@ export function BusinessWorkspace({
           field.relation.workspaceId,
           field.relation.moduleId,
         )
-        relationRefs.push({
-          fieldId: field.id,
-          workspaceId: relationTarget?.workspaceId ?? field.relation.workspaceId,
-          moduleId: relationTarget?.module.id ?? field.relation.moduleId,
-          recordId: value,
-          label: displayValue,
-        })
+        const relationOptions = getFormRelationOptions(field, values)
+        const relationRecordIds =
+          field.type === "multiselect" ? splitMultiValue(value) : [value]
+        for (const recordId of relationRecordIds) {
+          relationRefs.push({
+            fieldId: field.id,
+            workspaceId: relationTarget?.workspaceId ?? field.relation.workspaceId,
+            moduleId: relationTarget?.module.id ?? field.relation.moduleId,
+            recordId,
+            label:
+              relationOptions.find((option) => option.value === recordId)
+                ?.label ?? recordId,
+          })
+        }
       }
     }
 

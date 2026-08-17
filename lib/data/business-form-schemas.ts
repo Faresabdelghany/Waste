@@ -614,7 +614,7 @@ const schemaIntegrityIssues = businessFormSchemas.flatMap((schema) => {
 
   for (const field of fields) {
     if (
-      field.type === "select" &&
+      (field.type === "select" || field.type === "multiselect") &&
       !field.relation &&
       (!field.options || field.options.length === 0)
     ) {
