@@ -20,6 +20,7 @@ import {
   Info,
   MagnifyingGlass,
   Plus,
+  PushPin,
   ShieldCheck,
 } from "@phosphor-icons/react/dist/ssr"
 
@@ -504,11 +505,18 @@ function companionLabel(module: ModuleDefinition, action: string, record: Busine
 
 const queueModuleIds = new Set(["exceptions", "tickets", "approvals"])
 
+// Modules that get the richer record views introduced for Routes: table with
+// configurable fact columns and grouping, list/board/timeline layouts, and
+// row-level edit/delete actions. The value is the module's default fact columns.
+const richViewFactColumnDefaults: Record<string, readonly string[]> = {
+  routes: ["Vehicle", "Driver"],
+  schemes: ["Version", "Effective", "Vehicle"],
+  pickups: ["Address", "Container ID", "Container Type", "Waste fraction", "Weight"],
+  weights: ["Gross", "Tare", "Difference"],
+}
+
 // Governance facts are shown in record details, never offered as table columns.
-// Project and Area are excluded because they have dedicated table columns.
 const excludedColumnFacts = new Set([
-  "Project",
-  "Area",
   "Scope",
   "Record kind",
   "Execution policy",
@@ -521,6 +529,10 @@ const excludedColumnFacts = new Set([
   "Deletion reason",
   "Deleted by",
 ])
+
+// Routes render Project and Area as dedicated table columns, so they are not
+// offered as fact columns there.
+const routesExcludedColumnFacts = new Set(["Project", "Area"])
 
 const primaryModuleIdsByWorkspace: Partial<Record<WorkspaceId, readonly string[]>> = {
   operate: ["tickets", "exceptions"],
@@ -1104,34 +1116,48 @@ export function BusinessWorkspace({
   }, [businessFilters, fixedProjectScope, projectScope])
   const isQueueView = queueModuleIds.has(activeModule.id)
   const isRoutesView = activeModule.id === "routes"
-  const moduleViewTypes: readonly BusinessViewType[] = isRoutesView
+  const isRichRecordView = activeModule.id in richViewFactColumnDefaults
+  const moduleViewTypes: readonly BusinessViewType[] = isRichRecordView
     ? ["table", "list", "board", "timeline"]
     : ["table"]
-  const activeViewType: BusinessViewType = isRoutesView
+  const activeViewType: BusinessViewType = isRichRecordView
     ? viewOptions.viewType
     : "table"
   const canCreateFromView =
     showPrimaryAction && canOpenBusinessForm && Boolean(formSchema)
-  const routeColumnOptions = useMemo(() => {
-    if (!isRoutesView) return []
+  const canEditRecords =
+    isRichRecordView && Boolean(activeModuleFormSchema?.execution)
+  const canDeleteRecords = isRichRecordView
+  const factColumnOptions = useMemo(() => {
+    if (!isRichRecordView) return []
     const labels: string[] = []
     for (const record of visibleScopedRecords) {
       for (const label of Object.keys(record.facts)) {
         if (excludedColumnFacts.has(label)) continue
+        if (isRoutesView && routesExcludedColumnFacts.has(label)) continue
         if (!labels.includes(label)) labels.push(label)
       }
     }
     return labels
-  }, [isRoutesView, visibleScopedRecords])
-  const activeRouteColumns = useMemo(
+  }, [isRichRecordView, isRoutesView, visibleScopedRecords])
+  const activeStaticColumns = useMemo(
     () =>
-      viewOptions.routeColumns.filter((column) =>
-        routeColumnOptions.includes(column),
+      viewOptions.staticColumns.filter((column) =>
+        factColumnOptions.includes(column),
       ),
-    [routeColumnOptions, viewOptions.routeColumns],
+    [factColumnOptions, viewOptions.staticColumns],
   )
-  const routeGroupOptions = useMemo<BusinessGroupOption[]>(() => {
-    if (!isRoutesView) return []
+  const activeFactColumns = useMemo(
+    () =>
+      viewOptions.factColumns.filter(
+        (column) =>
+          factColumnOptions.includes(column) &&
+          !activeStaticColumns.includes(column),
+      ),
+    [activeStaticColumns, factColumnOptions, viewOptions.factColumns],
+  )
+  const recordGroupOptions = useMemo<BusinessGroupOption[]>(() => {
+    if (!isRichRecordView) return []
     const distinctCount = (
       getValue: (record: BusinessRecord) => string,
       noun: string,
@@ -1148,7 +1174,7 @@ export function BusinessWorkspace({
         label: "Status",
         count: distinctCount((record) => record.status, "state"),
       },
-      ...["Project", "Area"].map((label) => ({
+      ...(isRoutesView ? ["Project", "Area"] : []).map((label) => ({
         value: label,
         label,
         count: distinctCount(
@@ -1156,7 +1182,7 @@ export function BusinessWorkspace({
           "value",
         ),
       })),
-      ...routeColumnOptions.map((label) => ({
+      ...factColumnOptions.map((label) => ({
         value: label,
         label,
         count: distinctCount(
@@ -1165,7 +1191,7 @@ export function BusinessWorkspace({
         ),
       })),
     ]
-  }, [isRoutesView, routeColumnOptions, visibleScopedRecords])
+  }, [isRichRecordView, isRoutesView, factColumnOptions, visibleScopedRecords])
   const visibleTableColumnCount = isContainersAssetsView
     ? 2 +
       Number(viewOptions.showContainerType) +
@@ -1174,12 +1200,14 @@ export function BusinessWorkspace({
       Number(viewOptions.showFillLevel) +
       Number(viewOptions.showNextCollection) +
       Number(viewOptions.showProject)
-    : isRoutesView
+    : isRichRecordView
       ? 3 +
-        Number(viewOptions.showProject) +
-        Number(viewOptions.showArea) +
+        (isRoutesView
+          ? Number(viewOptions.showProject) + Number(viewOptions.showArea)
+          : Number(viewOptions.showContext)) +
         Number(viewOptions.showUpdated) +
-        activeRouteColumns.length +
+        activeStaticColumns.length +
+        activeFactColumns.length +
         1
       : 3 +
         Number(viewOptions.showContext) +
@@ -1209,7 +1237,7 @@ export function BusinessWorkspace({
   const tableRecordGroups = useMemo<
     Array<{ label: string | null; records: BusinessRecord[] }>
   >(() => {
-    const groupBy = isRoutesView ? viewOptions.groupBy : "none"
+    const groupBy = isRichRecordView ? viewOptions.groupBy : "none"
     if (groupBy === "none") return [{ label: null, records: filteredRecords }]
     const groups = new Map<string, BusinessRecord[]>()
     for (const record of filteredRecords) {
@@ -1225,11 +1253,26 @@ export function BusinessWorkspace({
       label,
       records,
     }))
-  }, [filteredRecords, isRoutesView, viewOptions.groupBy])
+  }, [filteredRecords, isRichRecordView, viewOptions.groupBy])
 
   useEffect(() => {
     const activeTab = tabsScrollRef.current?.querySelector<HTMLElement>('[data-state="active"]')
     activeTab?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" })
+  }, [activeModuleId])
+
+  // Layout, grouping, and fact columns are module-specific choices; reseed them
+  // with the module's defaults whenever the active module changes.
+  useEffect(() => {
+    setViewOptions((current) => ({
+      ...current,
+      viewType: "table",
+      groupBy: "none",
+      factColumns: [
+        ...(richViewFactColumnDefaults[activeModuleId] ??
+          defaultBusinessViewOptions.factColumns),
+      ],
+      staticColumns: [],
+    }))
   }, [activeModuleId])
 
   const removeFilterChip = (key: string, value: string) => {
@@ -1646,6 +1689,15 @@ export function BusinessWorkspace({
     const fields = activeModuleFormSchema.sections.flatMap(
       (section) => section.fields,
     )
+    const nameField = activeModuleFormSchema.nameField
+      ? fields.find((field) => field.id === activeModuleFormSchema.nameField)
+      : undefined
+    if (
+      nameField?.type === "text" &&
+      !(typeof values[nameField.id] === "string" && values[nameField.id])
+    ) {
+      values[nameField.id] = editingRecord.name
+    }
     for (const field of fields) {
       if (typeof values[field.id] === "string" && values[field.id]) continue
       const factValue = editingRecord.facts[field.label]?.trim()
@@ -2141,6 +2193,12 @@ export function BusinessWorkspace({
     if (editingRecord) {
       const updatedRecord: BusinessRecord = {
         ...editingRecord,
+        // Only user-named records can be renamed; system-issued and
+        // action-derived names stay untouched.
+        name:
+          nameField?.type === "text" && submittedNameValue
+            ? submittedNameValue
+            : editingRecord.name,
         context: contextValues.join(" · ") || editingRecord.context,
         updated: "Now",
         freshness: "Now",
@@ -2532,13 +2590,25 @@ export function BusinessWorkspace({
                   variant={
                     isContainersAssetsView
                       ? "containers"
-                      : isRoutesView
-                        ? "routes"
+                      : isRichRecordView
+                        ? "records"
                         : "default"
                   }
                   allowedViewTypes={moduleViewTypes}
-                  columnOptions={routeColumnOptions}
-                  groupOptions={routeGroupOptions}
+                  columnOptions={factColumnOptions}
+                  groupOptions={recordGroupOptions}
+                  columnsStyle={
+                    activeModule.id === "pickups" ? "display" : "chips"
+                  }
+                  builtinColumnChips={
+                    isRichRecordView && !isRoutesView
+                      ? [
+                          { key: "showDescription", label: "Description" },
+                          { key: "showContext", label: activeModule.contextLabel },
+                          { key: "showUpdated", label: "Updated" },
+                        ]
+                      : undefined
+                  }
                 />
               </div>
 
@@ -2686,8 +2756,8 @@ export function BusinessWorkspace({
                 onCreateRecord={
                   canCreateFromView ? () => setIsCreateOpen(true) : undefined
                 }
-                onEditRecord={isRoutesView ? openEditRecord : undefined}
-                onDeleteRecord={isRoutesView ? requestRecordDelete : undefined}
+                onEditRecord={canEditRecords ? openEditRecord : undefined}
+                onDeleteRecord={canDeleteRecords ? requestRecordDelete : undefined}
               />
             ) : activeViewType === "board" ? (
               <BusinessRecordBoardView
@@ -2698,8 +2768,8 @@ export function BusinessWorkspace({
                 onCreateRecord={
                   canCreateFromView ? () => setIsCreateOpen(true) : undefined
                 }
-                onEditRecord={isRoutesView ? openEditRecord : undefined}
-                onDeleteRecord={isRoutesView ? requestRecordDelete : undefined}
+                onEditRecord={canEditRecords ? openEditRecord : undefined}
+                onDeleteRecord={canDeleteRecords ? requestRecordDelete : undefined}
               />
             ) : activeViewType === "timeline" ? (
               <BusinessRecordDayTimeline
@@ -2737,6 +2807,21 @@ export function BusinessWorkspace({
                           <TableHead>
                             {isRoutesView ? "Route ID" : activeModule.entityLabel}
                           </TableHead>
+                          {isRichRecordView &&
+                            activeStaticColumns.map((column, index) => (
+                              <TableHead
+                                key={column}
+                                className={cn(
+                                  index === activeStaticColumns.length - 1 &&
+                                    "border-r border-border/60",
+                                )}
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  <PushPin className="h-3.5 w-3.5 text-muted-foreground" />
+                                  {column}
+                                </span>
+                              </TableHead>
+                            ))}
                           {isRoutesView ? (
                             <>
                               {viewOptions.showProject && (
@@ -2751,12 +2836,12 @@ export function BusinessWorkspace({
                           )}
                           <TableHead>Status</TableHead>
                           <TableHead>{activeModule.valueLabel}</TableHead>
-                          {isRoutesView &&
-                            activeRouteColumns.map((column) => (
+                          {isRichRecordView &&
+                            activeFactColumns.map((column) => (
                               <TableHead key={column}>{column}</TableHead>
                             ))}
                           {viewOptions.showUpdated && <TableHead>Updated</TableHead>}
-                          {isRoutesView && (
+                          {isRichRecordView && (
                             <TableHead className="w-10">
                               <span className="sr-only">Actions</span>
                             </TableHead>
@@ -2918,6 +3003,19 @@ export function BusinessWorkspace({
                                   )}
                                 </div>
                               </TableCell>
+                              {isRichRecordView &&
+                                activeStaticColumns.map((column, index) => (
+                                  <TableCell
+                                    key={column}
+                                    className={cn(
+                                      "min-w-[140px] whitespace-nowrap text-sm text-muted-foreground",
+                                      index === activeStaticColumns.length - 1 &&
+                                        "border-r border-border/60",
+                                    )}
+                                  >
+                                    {recordFactValue(record, column)}
+                                  </TableCell>
+                                ))}
                               {isRoutesView ? (
                                 <>
                                   {viewOptions.showProject && (
@@ -2952,8 +3050,8 @@ export function BusinessWorkspace({
                               <TableCell className="min-w-[150px]">
                                 <RecordValue record={record} />
                               </TableCell>
-                              {isRoutesView &&
-                                activeRouteColumns.map((column) => (
+                              {isRichRecordView &&
+                                activeFactColumns.map((column) => (
                                   <TableCell
                                     key={column}
                                     className="min-w-[130px] whitespace-nowrap text-sm text-muted-foreground"
@@ -2966,12 +3064,12 @@ export function BusinessWorkspace({
                                   {record.updated}
                                 </TableCell>
                               )}
-                              {isRoutesView && (
+                              {isRichRecordView && (
                                 <TableCell className="w-10 pr-3 text-right">
                                   <RecordActionsMenu
                                     record={record}
                                     entityLabel={activeModule.entityLabel}
-                                    onEdit={openEditRecord}
+                                    onEdit={canEditRecords ? openEditRecord : undefined}
                                     onDelete={requestRecordDelete}
                                   />
                                 </TableCell>
@@ -3009,6 +3107,8 @@ export function BusinessWorkspace({
           onClose={closeRecord}
           onAction={requestRecordAction}
           showDeepLinks={showDeepLinks}
+          onEdit={canEditRecords ? openEditRecord : undefined}
+          onDelete={canDeleteRecords ? requestRecordDelete : undefined}
         />
       )}
         </>
@@ -3081,12 +3181,16 @@ function RecordDetailsDialog({
   onClose,
   onAction,
   showDeepLinks,
+  onEdit,
+  onDelete,
 }: {
   module: ModuleDefinition
   record: BusinessRecord | null
   onClose: () => void
   onAction: (action: string) => void
   showDeepLinks: boolean
+  onEdit?: (record: BusinessRecord) => void
+  onDelete?: (record: BusinessRecord) => void
 }) {
   return (
     <Sheet open={Boolean(record)} onOpenChange={(open) => !open && onClose()}>
@@ -3104,6 +3208,13 @@ function RecordDetailsDialog({
                 <Badge variant="outline" className="rounded-full text-[11px] font-normal">
                   {record.id}
                 </Badge>
+                <RecordActionsMenu
+                  record={record}
+                  entityLabel={module.entityLabel}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                  className="ml-auto"
+                />
               </div>
               <SheetTitle className="pt-1 text-xl">{record.name}</SheetTitle>
               <SheetDescription>{record.description}</SheetDescription>

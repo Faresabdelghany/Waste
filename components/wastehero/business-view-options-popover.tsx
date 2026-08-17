@@ -7,6 +7,7 @@ import {
   CaretUpDown,
   ChartBar,
   Clock,
+  DotsSixVertical,
   Garage,
   Globe,
   Kanban,
@@ -22,6 +23,7 @@ import {
   TextT,
   Truck,
   User,
+  X,
 } from "@phosphor-icons/react/dist/ssr"
 
 import { Button } from "@/components/ui/button"
@@ -47,7 +49,8 @@ export type BusinessViewOptions = {
   density: "compact" | "comfortable"
   ordering: "updated" | "name" | "status"
   groupBy: string
-  routeColumns: string[]
+  factColumns: string[]
+  staticColumns: string[]
   showDescription: boolean
   showContext: boolean
   showUpdated: boolean
@@ -65,7 +68,8 @@ export const defaultBusinessViewOptions: BusinessViewOptions = {
   density: "comfortable",
   ordering: "updated",
   groupBy: "none",
-  routeColumns: ["Vehicle", "Driver"],
+  factColumns: ["Vehicle", "Driver"],
+  staticColumns: [],
   showDescription: true,
   showContext: true,
   showUpdated: true,
@@ -80,13 +84,18 @@ export const defaultBusinessViewOptions: BusinessViewOptions = {
 
 type BooleanViewOption = Exclude<
   keyof BusinessViewOptions,
-  "viewType" | "density" | "ordering" | "groupBy" | "routeColumns"
+  "viewType" | "density" | "ordering" | "groupBy" | "factColumns" | "staticColumns"
 >
 
 export type BusinessGroupOption = {
   value: string
   label: string
   count?: string
+}
+
+export type BusinessColumnChip = {
+  key: BooleanViewOption
+  label: string
 }
 
 const viewTypeTabs: Array<{
@@ -145,13 +154,21 @@ export function BusinessViewOptionsPopover({
   allowedViewTypes,
   columnOptions = [],
   groupOptions = [],
+  builtinColumnChips,
+  columnsStyle = "chips",
 }: {
   value: BusinessViewOptions
   onChange: (options: BusinessViewOptions) => void
-  variant?: "default" | "containers" | "routes"
+  variant?: "default" | "containers" | "records"
   allowedViewTypes?: readonly BusinessViewType[]
   columnOptions?: readonly string[]
   groupOptions?: readonly BusinessGroupOption[]
+  builtinColumnChips?: readonly BusinessColumnChip[]
+  /**
+   * "chips": toggle chips with an add-column picker. "display": the
+   * Display-columns panel with a Static Columns drop zone and Other Columns.
+   */
+  columnsStyle?: "chips" | "display"
 }) {
   const [groupByOpen, setGroupByOpen] = useState(false)
   const [addColumnOpen, setAddColumnOpen] = useState(false)
@@ -160,13 +177,18 @@ export function BusinessViewOptionsPopover({
     (tab) => allowedViewTypes?.includes(tab.id) ?? tab.id === "table",
   )
   const showViewTypeTabs = viewTypes.length > 1
-  const isRoutesVariant = variant === "routes"
+  const isRecordsVariant = variant === "records"
 
-  const activeRouteColumns = value.routeColumns.filter((column) =>
+  const activeFactColumns = value.factColumns.filter((column) =>
+    columnOptions.includes(column),
+  )
+  const activeStaticColumns = value.staticColumns.filter((column) =>
     columnOptions.includes(column),
   )
   const addableColumns = columnOptions.filter(
-    (column) => !activeRouteColumns.includes(column),
+    (column) =>
+      !activeFactColumns.includes(column) &&
+      !activeStaticColumns.includes(column),
   )
   const resolvedGroupOptions: readonly BusinessGroupOption[] =
     groupOptions.length > 0 ? groupOptions : [{ value: "none", label: "None" }]
@@ -174,20 +196,41 @@ export function BusinessViewOptionsPopover({
     resolvedGroupOptions.find((option) => option.value === value.groupBy) ??
     resolvedGroupOptions[0]
 
-  const toggleRouteColumn = (column: string) => {
-    const isActive = activeRouteColumns.includes(column)
+  const toggleFactColumn = (column: string) => {
+    const isActive = activeFactColumns.includes(column)
     onChange({
       ...value,
-      routeColumns: isActive
-        ? value.routeColumns.filter((candidate) => candidate !== column)
-        : [...value.routeColumns, column],
+      factColumns: isActive
+        ? value.factColumns.filter((candidate) => candidate !== column)
+        : [...value.factColumns, column],
     })
   }
 
-  const builtinChips: Array<{
-    key: BooleanViewOption
-    label: string
-  }> = [
+  const pinColumn = (column: string) =>
+    onChange({
+      ...value,
+      staticColumns: [
+        ...value.staticColumns.filter((candidate) => candidate !== column),
+        column,
+      ],
+      factColumns: value.factColumns.filter((candidate) => candidate !== column),
+    })
+
+  const unpinColumn = (column: string) => {
+    if (!value.staticColumns.includes(column)) return
+    onChange({
+      ...value,
+      staticColumns: value.staticColumns.filter(
+        (candidate) => candidate !== column,
+      ),
+      // An unpinned column stays visible as a regular column.
+      factColumns: value.factColumns.includes(column)
+        ? value.factColumns
+        : [...value.factColumns, column],
+    })
+  }
+
+  const builtinChips: readonly BusinessColumnChip[] = builtinColumnChips ?? [
     { key: "showDescription", label: "Description" },
     { key: "showProject", label: "Project" },
     { key: "showArea", label: "Area" },
@@ -228,7 +271,7 @@ export function BusinessViewOptionsPopover({
               ))}
             </div>
           )}
-          {!isRoutesVariant && (
+          {!isRecordsVariant && (
             <div>
               <p className="text-sm font-semibold">
                 {showViewTypeTabs ? "View options" : "Table view"}
@@ -281,7 +324,7 @@ export function BusinessViewOptionsPopover({
               </Select>
             </div>
 
-            {isRoutesVariant && (
+            {isRecordsVariant && (
               <div className="flex items-center justify-between gap-4">
                 <span className="text-xs font-medium">Group by</span>
                 <Popover open={groupByOpen} onOpenChange={setGroupByOpen}>
@@ -337,11 +380,157 @@ export function BusinessViewOptionsPopover({
             )}
           </div>
 
-          {isRoutesVariant ? (
+          {isRecordsVariant && columnsStyle === "display" ? (
+            <div>
+              <span className="text-sm font-medium">Display columns</span>
+              <div className="mt-2 space-y-3">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Static Columns
+                  </p>
+                  <div
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault()
+                      const column = event.dataTransfer.getData("text/column")
+                      if (column) pinColumn(column)
+                    }}
+                    className="mt-1.5 rounded-lg border border-dashed border-border/70"
+                  >
+                    {activeStaticColumns.length === 0 ? (
+                      <p className="px-3 py-3 text-xs text-muted-foreground">
+                        Drag a column here to make it static in the table.
+                      </p>
+                    ) : (
+                      <div className="p-1">
+                        {activeStaticColumns.map((column) => {
+                          const Icon = columnIcon(column)
+                          return (
+                            <div
+                              key={column}
+                              draggable
+                              onDragStart={(event) =>
+                                event.dataTransfer.setData("text/column", column)
+                              }
+                              className="flex cursor-grab items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+                            >
+                              <DotsSixVertical className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              <span className="flex-1 truncate">{column}</span>
+                              <button
+                                type="button"
+                                aria-label={`Remove ${column} from static columns`}
+                                onClick={() => unpinColumn(column)}
+                                className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Other Columns
+                  </p>
+                  <div
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault()
+                      const column = event.dataTransfer.getData("text/column")
+                      if (column) unpinColumn(column)
+                    }}
+                    className="mt-1.5 flex flex-wrap gap-2"
+                  >
+                    {builtinChips.map((chip) => {
+                      const Icon = columnIcon(chip.label)
+                      const isActive = value[chip.key]
+                      return (
+                        <button
+                          key={chip.key}
+                          type="button"
+                          onClick={() =>
+                            onChange({ ...value, [chip.key]: !isActive })
+                          }
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs transition-colors",
+                            isActive
+                              ? "border-border bg-background text-foreground"
+                              : "border-border text-muted-foreground hover:bg-accent",
+                          )}
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                          {chip.label}
+                        </button>
+                      )
+                    })}
+                    {activeFactColumns.map((column) => {
+                      const Icon = columnIcon(column)
+                      return (
+                        <button
+                          key={column}
+                          type="button"
+                          draggable
+                          onDragStart={(event) =>
+                            event.dataTransfer.setData("text/column", column)
+                          }
+                          onClick={() => toggleFactColumn(column)}
+                          className="flex cursor-grab items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-accent"
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                          {column}
+                        </button>
+                      )
+                    })}
+                    <Popover open={addColumnOpen} onOpenChange={setAddColumnOpen}>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          disabled={addableColumns.length === 0}
+                          aria-label="Add column"
+                          className="flex items-center justify-center gap-1 rounded-md border border-dashed border-border/60 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-52 rounded-xl p-1" align="start">
+                        {addableColumns.length === 0 ? (
+                          <p className="px-3 py-2 text-xs text-muted-foreground">
+                            All available columns are visible.
+                          </p>
+                        ) : (
+                          addableColumns.map((column) => {
+                            const Icon = columnIcon(column)
+                            return (
+                              <button
+                                key={column}
+                                type="button"
+                                onClick={() => {
+                                  toggleFactColumn(column)
+                                  setAddColumnOpen(false)
+                                }}
+                                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent"
+                              >
+                                <Icon className="h-4 w-4" />
+                                {column}
+                              </button>
+                            )
+                          })
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : isRecordsVariant ? (
             <div>
               <span className="text-sm font-medium">Columns</span>
               <p className="mt-1 text-xs text-muted-foreground">
-                Toggle visible columns or add more from the route data.
+                Toggle visible columns or add more from the record data.
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {builtinChips.map((chip) => {
@@ -366,13 +555,13 @@ export function BusinessViewOptionsPopover({
                     </button>
                   )
                 })}
-                {activeRouteColumns.map((column) => {
+                {activeFactColumns.map((column) => {
                   const Icon = columnIcon(column)
                   return (
                     <button
                       key={column}
                       type="button"
-                      onClick={() => toggleRouteColumn(column)}
+                      onClick={() => toggleFactColumn(column)}
                       className="flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-accent"
                     >
                       <Icon className="h-3.5 w-3.5" />
@@ -394,7 +583,7 @@ export function BusinessViewOptionsPopover({
                   <PopoverContent className="w-52 rounded-xl p-1" align="start">
                     {addableColumns.length === 0 ? (
                       <p className="px-3 py-2 text-xs text-muted-foreground">
-                        All route columns are visible.
+                        All available columns are visible.
                       </p>
                     ) : (
                       addableColumns.map((column) => {
@@ -404,7 +593,7 @@ export function BusinessViewOptionsPopover({
                             key={column}
                             type="button"
                             onClick={() => {
-                              toggleRouteColumn(column)
+                              toggleFactColumn(column)
                               setAddColumnOpen(false)
                             }}
                             className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent"
@@ -436,7 +625,7 @@ export function BusinessViewOptionsPopover({
             </div>
           )}
 
-          {isRoutesVariant && (
+          {isRecordsVariant && (
             <div className="flex items-center justify-between border-t border-border/40 pt-3">
               <button
                 type="button"
