@@ -20,12 +20,6 @@ import {
 import { publicWorkspaceDomains } from "@/lib/data/business-domain"
 
 const actionExecutions: Record<string, BusinessFormExecution> = {
-  "route-studio.live": {
-    kind: "append-event",
-    sourceField: "routeId",
-    reviewBeforeSubmit: true,
-    completionMessage: "The dispatch action and its evidence were appended to the route.",
-  },
   "route-studio.routes": {
     kind: "create-record",
     initialStatus: "Planned",

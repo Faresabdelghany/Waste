@@ -545,71 +545,13 @@ export const commercialImproveBusinessFormSchemas = [
   },
   {
     key: "contractors.activities",
-    mode: "create",
+    mode: "disabled",
     recordKind: "Contractor activity",
-    title: "Log contractor activity",
-    description: "Record an operational, proposal, compliance, or coordination activity.",
-    submitLabel: "Log activity",
-    nameField: "activityTitle",
-    contextFieldIds: ["contractorId", "contractAreaId", "activityType", "occurredAt"],
-    ownerField: "owner",
-    sections: [
-      {
-        id: "activity",
-        title: "Activity",
-        fields: [
-          {
-            id: "activityTitle",
-            label: "Title",
-            type: "text",
-            required: true,
-          },
-          {
-            id: "contractorId",
-            label: "Contractor",
-            type: "select",
-            required: true,
-            relation: { workspaceId: "contractors", moduleId: "contractors" },
-          },
-          {
-            id: "contractAreaId",
-            label: "Contract area",
-            type: "select",
-            relation: { workspaceId: "contractors", moduleId: "contract-areas" },
-          },
-          {
-            id: "activityType",
-            label: "Activity type",
-            type: "select",
-            required: true,
-            options: [
-              { value: "route-assignment", label: "Route assignment" },
-              { value: "proposal", label: "Proposal" },
-              { value: "compliance", label: "Compliance" },
-              { value: "incident", label: "Incident" },
-              { value: "coordination", label: "Coordination" },
-            ],
-          },
-          {
-            id: "occurredAt",
-            label: "Date and time",
-            type: "datetime",
-            required: true,
-          },
-          {
-            id: "owner",
-            label: "Owner",
-            type: "text",
-            required: true,
-          },
-          {
-            id: "notes",
-            label: "Notes",
-            type: "textarea",
-          },
-        ],
-      },
-    ],
+    title: "Activities come from operational workflows",
+    description:
+      "Route assignments, proposals, compliance follow-ups, and coordination entries appear here from their owning workflows.",
+    submitLabel: "Open contractor",
+    sections: [],
   },
   {
     key: "contractors.contractor-workspace",
