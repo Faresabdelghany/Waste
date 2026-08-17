@@ -85,7 +85,7 @@ export const blueprintModuleCatalog: Record<
   M10: {
     id: "M10",
     name: "Route Studio",
-    primaryHref: "/plan?module=studio",
+    primaryHref: "/route-studio",
   },
   M11: {
     id: "M11",
@@ -212,10 +212,17 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
   {
     workspaceId: "plan",
     canonicalPurpose:
-      "Maintain recurring service, compare tactical alternatives, approve material changes, and promote safely.",
-    blueprintModules: ["M09", "M10", "M23"],
-    personas: ["Route planner", "Operations administrator", "Approver"],
-    moduleIds: ["studio", "calendars", "areas", "approvals"],
+      "Maintain recurring service through pickup settings, collection calendar days, week rotations, and governed deviations.",
+    blueprintModules: ["M09", "M23"],
+    personas: ["Route planner", "Operations administrator"],
+    moduleIds: [
+      "pickup-settings",
+      "calendar-days",
+      "collection-weeks",
+      "collection-deviations",
+      "calendars",
+      "areas",
+    ],
     boundaryNote:
       "Plan owns operational planning areas; Commercial owns contractor Contract Areas and their awards.",
   },
@@ -450,17 +457,56 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
       "The driver application is a restricted mobile shell and must not expose the office Operate navigation.",
   },
   {
-    key: "plan.studio",
+    key: "plan.pickup-settings",
     workspaceId: "plan",
-    moduleId: "studio",
-    primaryBlueprintModule: "M10",
-    supportingBlueprintModules: ["M09", "M23"],
-    canonicalOwner: "Plan · Route Studio",
-    personas: ["Route planner", "Operations manager", "Approver"],
-    upstream: ["M02", "M03", "M05", "M06", "M08", "M09", "M15", "M18", "M20"],
-    downstream: ["M09", "M11", "M15", "M17", "M18", "M19", "M23"],
+    moduleId: "pickup-settings",
+    primaryBlueprintModule: "M09",
+    supportingBlueprintModules: ["M05", "M23"],
+    canonicalOwner: "Plan · Pickup Settings",
+    personas: ["Route planner", "Operations administrator"],
+    upstream: ["M02", "M03", "M04", "M05", "M06"],
+    downstream: ["M09", "M11", "M12", "M17", "M22", "M23"],
     boundaryNote:
-      "Import Case, Scenario, Simulation, immutable Plan, Approval, and Promotion are different record types, not one lifecycle.",
+      "A Pickup Setting defines frequency, collection days, and week rotation; Route Schemes remain the source of generated Routes.",
+  },
+  {
+    key: "plan.calendar-days",
+    workspaceId: "plan",
+    moduleId: "calendar-days",
+    primaryBlueprintModule: "M09",
+    supportingBlueprintModules: ["M02", "M23"],
+    canonicalOwner: "Plan · Collection Calendar Days",
+    personas: ["Route planner", "Operations administrator"],
+    upstream: ["M02", "M03", "M05"],
+    downstream: ["M09", "M11", "M17", "M21", "M23"],
+    boundaryNote:
+      "Settings owns working-day defaults; Plan owns the effective calendar days that anchor pickup generation.",
+  },
+  {
+    key: "plan.collection-weeks",
+    workspaceId: "plan",
+    moduleId: "collection-weeks",
+    primaryBlueprintModule: "M09",
+    supportingBlueprintModules: ["M02", "M23"],
+    canonicalOwner: "Plan · Collection Weeks",
+    personas: ["Route planner", "Operations administrator"],
+    upstream: ["M02", "M05"],
+    downstream: ["M09", "M11", "M17", "M23"],
+    boundaryNote:
+      "A Collection Week maps a rotation label to ISO weeks; Pickup Settings and Route Schemes reference the label, never raw dates.",
+  },
+  {
+    key: "plan.collection-deviations",
+    workspaceId: "plan",
+    moduleId: "collection-deviations",
+    primaryBlueprintModule: "M09",
+    supportingBlueprintModules: ["M17", "M21", "M23"],
+    canonicalOwner: "Plan · Collection Deviations",
+    personas: ["Route planner", "Operations administrator", "Customer-service agent"],
+    upstream: ["M02", "M03", "M09"],
+    downstream: ["M09", "M11", "M17", "M21", "M23"],
+    boundaryNote:
+      "A deviation preserves the original service promise and its replacement date; executed Routes are never rescheduled.",
   },
   {
     key: "route-studio.schemes",
@@ -500,19 +546,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     downstream: ["M09", "M10", "M11", "M12", "M15", "M17", "M18"],
     boundaryNote:
       "Plan owns operational planning and notification geography. Commercial owns awarded contractor Contract Areas.",
-  },
-  {
-    key: "plan.approvals",
-    workspaceId: "plan",
-    moduleId: "approvals",
-    primaryBlueprintModule: "M10",
-    supportingBlueprintModules: ["M14", "M15", "M23"],
-    canonicalOwner: "Plan · Promotion & Approval Queue",
-    personas: ["Approver", "Operations manager", "Contract manager", "Process owner"],
-    upstream: ["M01", "M10", "M14", "M15", "M19", "M23"],
-    downstream: ["M09", "M10", "M11", "M14", "M15", "M17", "M23"],
-    boundaryNote:
-      "This queue owns planning and promotion decisions. A future global approval inbox may aggregate other domains without moving their source records.",
   },
   {
     key: "fleet.vehicles",

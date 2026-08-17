@@ -43,11 +43,6 @@ const actionExecutions: Record<string, BusinessFormExecution> = {
     reviewBeforeSubmit: true,
     completionMessage: "The calendar deviation was recorded with its original date preserved.",
   },
-  "plan.approvals": {
-    kind: "append-event",
-    sourceField: "approvalId",
-    completionMessage: "The approval decision and evidence were recorded.",
-  },
   "fleet.vehicle-planning": {
     kind: "append-event",
     sourceField: "existingAllocationId",
@@ -459,15 +454,6 @@ function enhanceField(
     }
   }
 
-  if (fieldKey === "plan.approvals.approvalId" && enhanced.relation) {
-    enhanced = {
-      ...enhanced,
-      relation: {
-        ...enhanced.relation,
-        allowedStatuses: ["Pending"],
-      },
-    }
-  }
 
   return enhanced
 }

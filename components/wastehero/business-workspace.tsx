@@ -483,9 +483,6 @@ function createsCorrection(action: string): boolean {
 function createsImmutableCompanion(module: ModuleDefinition, action: string): boolean {
   const normalized = action.toLowerCase()
   if (createsCorrection(action)) return true
-  if (module.id === "studio" && (normalized.includes("generate plan") || normalized.includes("promote"))) {
-    return true
-  }
   if (
     (module.id === "inventory" || module.id === "warehouses") &&
     ["receive", "transfer", "reserve", "adjust", "release", "issue"].some((verb) =>
@@ -500,15 +497,13 @@ function createsImmutableCompanion(module: ModuleDefinition, action: string): bo
 function companionLabel(module: ModuleDefinition, action: string, record: BusinessRecord): string {
   const normalized = action.toLowerCase()
   if (createsCorrection(action)) return `Correction for ${record.name}`
-  if (module.id === "studio" && normalized.includes("promote")) return `Promotion · ${record.name}`
-  if (module.id === "studio" && normalized.includes("generate plan")) return `Immutable plan · ${record.name}`
   if (module.id === "inventory" || module.id === "warehouses") {
     return `${action} ledger entry · ${record.name}`
   }
   return `${action.replace(/^Create\s+/i, "")} · ${record.name}`
 }
 
-const queueModuleIds = new Set(["exceptions", "tickets", "approvals"])
+const queueModuleIds = new Set(["exceptions", "tickets"])
 
 // Modules that get the richer record views introduced for Routes: table with
 // configurable fact columns and grouping, list/board/timeline layouts, and
@@ -541,7 +536,14 @@ const routesExcludedColumnFacts = new Set(["Project", "Area"])
 
 const primaryModuleIdsByWorkspace: Partial<Record<WorkspaceId, readonly string[]>> = {
   operate: ["tickets", "exceptions"],
-  plan: ["studio", "calendars", "areas", "approvals"],
+  plan: [
+    "pickup-settings",
+    "calendar-days",
+    "collection-weeks",
+    "collection-deviations",
+    "calendars",
+    "areas",
+  ],
   "route-studio": ["live", "schemes", "routes", "pickups", "weights"],
   customers: ["properties", "groups", "shared", "agreements"],
   resources: ["containers", "inventory", "warehouses", "depots"],
@@ -1455,9 +1457,7 @@ export function BusinessWorkspace({
           "Effective date": effectiveDate || "Immediate after validation",
           Integrity: isCorrection
             ? "Original document preserved"
-            : activeModule.id === "studio"
-              ? "Scenario and immutable plan remain separate"
-              : "Append-only movement or child record",
+            : "Append-only movement or child record",
         },
         related: [record.name, `Audit ${event.id}`],
         source: "Controlled workflow",
@@ -1660,7 +1660,7 @@ export function BusinessWorkspace({
         })
         .map((record) => ({
           value: record.id,
-          label: `${record.name} · ${record.context} · ${record.status}`,
+          label: record.name,
         }))
     },
     [formSchema?.recordKind, getRecords, projectScope],

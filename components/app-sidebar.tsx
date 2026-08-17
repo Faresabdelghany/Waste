@@ -82,7 +82,7 @@ export function AppSidebar() {
         pathname.startsWith("/tickets") ||
         pathname.startsWith("/inbox")
       )
-    if (id === "plan") return pathname.startsWith("/plan") || pathname.startsWith("/approvals")
+    if (id === "plan") return pathname.startsWith("/plan")
     if (id === "route-studio")
       return pathname.startsWith("/route-studio") || pathname.startsWith("/routes")
     if (id === "fleet") return pathname.startsWith("/fleet")
