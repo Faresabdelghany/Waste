@@ -486,7 +486,7 @@ const operate: WorkspaceDefinition = {
       description: "Prepare, assign, sequence, execute, review, and close the daily workload.",
       entityLabel: "Route",
       contextLabel: "Project · area",
-      valueLabel: "Planned service",
+      valueLabel: "Stops",
       primaryAction: "Create route",
       metrics: [
         { label: "Planned today", value: "12", helper: "329 service stops" },
@@ -538,7 +538,7 @@ const operate: WorkspaceDefinition = {
           "Copenhagen Central · Nørrebro",
           "Completed",
           "Mads Jensen",
-          "42/42 stops · 8.2 t",
+          "42/42 stops",
           "Yesterday",
           "Completed route awaiting weight and collection approval before billing readiness.",
           { Project: "Copenhagen Central", Area: "Nørrebro", Vehicle: "WH-24", Driver: "Mads Jensen", Depot: "Nordhavn", Unloading: "ARC Amager" },
