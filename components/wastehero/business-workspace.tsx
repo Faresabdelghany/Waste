@@ -118,8 +118,10 @@ import {
   statusClasses,
 } from "@/components/wastehero/business-record-views"
 import { BusinessRecordFormDialog } from "@/components/wastehero/business-record-form-dialog"
-// PROTOTYPE — throwaway import, remove with route-create-flow-prototype.tsx
-import { RouteCreateEntryPrototype } from "@/components/wastehero/route-create-flow-prototype"
+import {
+  RouteCreateEntry,
+  type GuidedRouteData,
+} from "@/components/wastehero/route-create-flow"
 import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
 import {
   useAssetManagementStore,
@@ -829,9 +831,8 @@ export function BusinessWorkspace({
   const canOpenBusinessForm =
     Boolean(activeModuleFormSchema?.execution) &&
     activeModuleFormSchema?.mode !== "disabled"
-  // PROTOTYPE — throwaway. Route create flow variants, dev builds only.
-  const isRouteCreatePrototypeActive =
-    process.env.NODE_ENV !== "production" &&
+  // Routes get a chooser between Quick create and the Guided Setup wizard.
+  const isRouteCreateFlow =
     activeModuleFormSchema?.key === "route-studio.routes"
   const activeRecords = useMemo(
     () =>
@@ -2334,6 +2335,154 @@ export function BusinessWorkspace({
     )
   }
 
+  const handleGuidedRouteCreate = (data: GuidedRouteData) => {
+    const now = Date.now()
+    const relationRefs: NonNullable<BusinessRecord["relationRefs"]> = []
+    const linkRecord = (
+      fieldId: string,
+      workspaceId: WorkspaceId,
+      moduleId: string,
+      recordId?: string,
+    ) => {
+      if (!recordId) return undefined
+      const resolved = resolveFormModule(workspaceId, moduleId)
+      if (!resolved) return undefined
+      const record = getRecords(
+        resolved.workspaceId,
+        resolved.module.id,
+        resolved.module.records,
+      ).find((candidate) => candidate.id === recordId)
+      if (!record) return undefined
+      relationRefs.push({
+        fieldId,
+        workspaceId: resolved.workspaceId,
+        moduleId: resolved.module.id,
+        recordId,
+        label: record.name,
+      })
+      return record
+    }
+
+    const project = linkRecord("projectId", "configure", "organization", data.projectId)
+    const contractor = linkRecord(
+      "contractorId",
+      "contractors",
+      "contractors",
+      data.contractorId,
+    )
+    const vehicle = linkRecord("vehicleId", "fleet", "vehicles", data.vehicleId)
+    const driver = linkRecord("driverId", "fleet", "drivers", data.driverId)
+    const containerRecords = data.containerIds
+      .map((containerId) =>
+        linkRecord("containerIds", "resources", "containers", containerId),
+      )
+      .filter((record): record is BusinessRecord => Boolean(record))
+
+    const projectIds = selectedProjectIds(projectScope, {
+      projectId: data.projectId ?? "",
+    })
+    // Vehicle names carry the registration plate; facts show the callsign.
+    const vehicleName = vehicle?.name.split(" · ")[0]
+    const facts: Record<string, string> = {
+      Scope: projectScopeLabel(projectIds),
+      "Record kind": "Route",
+      "Execution policy": "create record",
+      "Submitted by": "Olivia Larsen",
+      ...(project ? { Project: project.name } : {}),
+      ...(data.date ? { Date: data.date } : {}),
+      ...(contractor ? { Contractor: contractor.name } : {}),
+      ...(data.homeDepot ? { "Home depot": data.homeDepot } : {}),
+      ...(data.wasteStation ? { "Waste station": data.wasteStation } : {}),
+      Vehicle: vehicleName ?? "Unassigned",
+      Driver: driver?.name ?? "Unassigned",
+      ...(data.wasteFraction ? { "Waste fraction": data.wasteFraction } : {}),
+      ...(data.containerType ? { "Container type": data.containerType } : {}),
+      ...(containerRecords.length
+        ? {
+            Containers: containerRecords
+              .map((record) => record.name)
+              .join(" · "),
+          }
+        : {}),
+    }
+
+    const newRecord: BusinessRecord = {
+      id: `${activeModule.id}-route-${now}`,
+      // Routes carry no user-entered name; the system issues the Route ID.
+      name: `RC-${String(now).slice(-4)}`,
+      context:
+        [project?.name, data.date, contractor?.name].filter(Boolean).join(" · ") ||
+        projectScopeLabel(projectIds),
+      status:
+        activeModuleFormSchema?.execution?.initialStatus ??
+        activeModule.lifecycle[0] ??
+        "Planned",
+      owner: "Olivia Larsen",
+      value:
+        activeModuleFormSchema?.execution?.resultValue ??
+        "Stops pending generation",
+      updated: "Now",
+      description:
+        "Created with Guided Setup covering project, date, responsibility, fleet, locations, and containers.",
+      facts,
+      related: [
+        ...relationRefs.map((relation) => relation.label),
+        "Audit history created",
+      ],
+      source: "Office workspace",
+      freshness: "Now",
+      allowedTransitions: activeModule.lifecycle.slice(1, 3),
+      companyId: FIXTURE_COMPANY_ID,
+      projectIds,
+      contractorId: data.contractorId,
+      recordKind: "Route",
+      submittedValues: {
+        projectId: data.projectId ?? "",
+        operatingDate: data.date ?? "",
+        contractorId: data.contractorId ?? "",
+        homeDepot: data.homeDepot ?? "",
+        wasteStation: data.wasteStation ?? "",
+        vehicleId: data.vehicleId ?? "",
+        driverId: data.driverId ?? "",
+        wasteFraction: data.wasteFraction ?? "",
+        containerType: data.containerType ?? "",
+        containerIds: data.containerIds.join(","),
+      },
+      relationRefs,
+    }
+    const creationEvent: AuditEvent = {
+      id: `audit-guided-route-${now}`,
+      action: "Create route · Guided Setup",
+      actor: "Olivia Larsen",
+      at: "Now",
+      reason: "Guided Setup",
+      before: "Absent",
+      after: newRecord.status,
+      evidence: `${relationRefs.length} linked records · ${projectScopeLabel(
+        projectIds,
+      )} scope validated`,
+    }
+
+    upsertRecord(workspace.id, activeModule.id, newRecord)
+    setAuditEvents((current) => ({
+      ...current,
+      [newRecord.id]: [creationEvent],
+    }))
+    setSelectedRecord(newRecord)
+    router.push(
+      getWorkspaceNavigationHref(
+        navigationBasePath,
+        workspace.id,
+        activeModule.id,
+        newRecord.id,
+      ),
+      { scroll: false },
+    )
+    toast.success("Route created", {
+      description: `${newRecord.name} was created with Guided Setup.`,
+    })
+  }
+
   const requestContractorRelatedCreate = (
     target: "user" | "vehicle" | "driver" | "contract-area",
   ) => {
@@ -2516,10 +2665,11 @@ export function BusinessWorkspace({
                 </Button>
               )}
               {showPrimaryAction && canOpenBusinessForm && formSchema && (
-                isRouteCreatePrototypeActive ? (
-                  <RouteCreateEntryPrototype
+                isRouteCreateFlow ? (
+                  <RouteCreateEntry
                     submitLabel={formSchema.submitLabel}
                     onQuickCreate={() => setIsCreateOpen(true)}
+                    onGuidedCreate={handleGuidedRouteCreate}
                   />
                 ) : (
                   <Button size="sm" onClick={() => setIsCreateOpen(true)}>

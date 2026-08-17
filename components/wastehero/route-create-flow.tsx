@@ -1,24 +1,12 @@
 "use client"
 
-// ============================================================================
-// PROTOTYPE — THROWAWAY CODE. Do not ship or build on top of this.
-//
-// Route create flow, iterating inside the winning variant (A — mode chooser):
-// "Create route" opens a Quick create / Guided Setup chooser. Quick create
-// opens the real Create Route dialog (via onQuickCreate). Guided Setup walks
-// route-specific steps:
-//   1. Project & date
-//   2. Responsibility — contractor list
-//   3. Fleet & locations — Home depot, Waste station, Vehicle, Driver
-//   4. Containers — waste fraction, container type, add existing containers
-//      (filter by property, search by container ID or address)
-//   5. Review & create
-// Guided completion is a stub toast — no record is written.
-// Dropdowns read fixture records straight from the business-modules registry.
-// ============================================================================
+// Route create flow for the Routes module. "Create route" opens a chooser
+// between Quick create (the schema-driven Create Route dialog, opened via
+// onQuickCreate) and Guided Setup (a stepper wizard covering project & date,
+// responsibility, fleet & locations, and containers). Guided completion hands
+// the collected values to onGuidedCreate, which owns record creation.
 
 import { useMemo, useState } from "react"
-import { toast } from "sonner"
 import {
   CaretLeft,
   CaretRight,
@@ -41,6 +29,7 @@ import {
 import { Stepper } from "@/components/project-wizard/Stepper"
 import { StepMode } from "@/components/project-wizard/steps/StepMode"
 import type { ProjectMode } from "@/components/project-wizard/types"
+import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
 import {
   businessWorkspaces,
   type BusinessRecord,
@@ -48,11 +37,13 @@ import {
 } from "@/lib/data/business-modules"
 import { cn } from "@/lib/utils"
 
-function fixtureRecords(workspaceId: WorkspaceId, moduleId: string): BusinessRecord[] {
-  const module = businessWorkspaces[workspaceId]?.modules.find(
-    (candidate) => candidate.id === moduleId,
-  )
-  return module?.records ?? []
+function useModuleRecords(workspaceId: WorkspaceId, moduleId: string) {
+  const { getRecords } = useBusinessRecordStore()
+  const fixtureRecords =
+    businessWorkspaces[workspaceId]?.modules.find(
+      (candidate) => candidate.id === moduleId,
+    )?.records ?? []
+  return getRecords(workspaceId, moduleId, fixtureRecords)
 }
 
 const HOME_DEPOT_OPTIONS = [
@@ -84,7 +75,7 @@ const CONTAINER_TYPE_OPTIONS = [
   "Underground container",
 ]
 
-interface GuidedRouteData {
+export interface GuidedRouteData {
   projectId?: string
   date?: string
   contractorId?: string
@@ -97,15 +88,17 @@ interface GuidedRouteData {
   containerIds: string[]
 }
 
-interface RouteCreateEntryPrototypeProps {
+interface RouteCreateEntryProps {
   submitLabel: string
   onQuickCreate: () => void
+  onGuidedCreate: (data: GuidedRouteData) => void
 }
 
-export function RouteCreateEntryPrototype({
+export function RouteCreateEntry({
   submitLabel,
   onQuickCreate,
-}: RouteCreateEntryPrototypeProps) {
+  onGuidedCreate,
+}: RouteCreateEntryProps) {
   const [isChooserOpen, setIsChooserOpen] = useState(false)
   const [isGuidedOpen, setIsGuidedOpen] = useState(false)
 
@@ -131,13 +124,17 @@ export function RouteCreateEntryPrototype({
         />
       )}
       {isGuidedOpen && (
-        <GuidedRouteWizardOverlay onClose={() => setIsGuidedOpen(false)} />
+        <GuidedRouteWizardOverlay
+          onClose={() => setIsGuidedOpen(false)}
+          onCreate={(data) => {
+            setIsGuidedOpen(false)
+            onGuidedCreate(data)
+          }}
+        />
       )}
     </>
   )
 }
-
-// --- Mode chooser (reuses the project wizard's StepMode) ---
 
 function ModeChooserOverlay({
   onClose,
@@ -168,8 +165,6 @@ function ModeChooserOverlay({
   )
 }
 
-// --- Guided route wizard: 5 route-specific steps ---
-
 const GUIDED_STEPS = [
   "Project & date",
   "Responsibility",
@@ -186,7 +181,13 @@ const GUIDED_STEP_TITLES: Record<number, string> = {
   5: "Review route setup",
 }
 
-function GuidedRouteWizardOverlay({ onClose }: { onClose: () => void }) {
+function GuidedRouteWizardOverlay({
+  onClose,
+  onCreate,
+}: {
+  onClose: () => void
+  onCreate: (data: GuidedRouteData) => void
+}) {
   const [step, setStep] = useState(1)
   const [maxStepReached, setMaxStepReached] = useState(1)
   const [data, setData] = useState<GuidedRouteData>({ containerIds: [] })
@@ -245,16 +246,7 @@ function GuidedRouteWizardOverlay({ onClose }: { onClose: () => void }) {
               {step === 1 ? "Cancel" : "Back"}
             </Button>
             {step === 5 ? (
-              <Button
-                onClick={() => {
-                  toast.success("Route created successfully", {
-                    description: "Prototype stub — no record was saved.",
-                  })
-                  onClose()
-                }}
-              >
-                Create route
-              </Button>
+              <Button onClick={() => onCreate(data)}>Create route</Button>
             ) : (
               <Button onClick={() => goToStep(step + 1)}>
                 Next
@@ -276,7 +268,7 @@ interface GuidedStepProps {
 // Step 1 — Project & date
 
 function StepProjectDate({ data, updateData }: GuidedStepProps) {
-  const projects = fixtureRecords("configure", "organization")
+  const projects = useModuleRecords("configure", "organization")
 
   return (
     <div className="max-w-md space-y-6">
@@ -316,7 +308,7 @@ function StepProjectDate({ data, updateData }: GuidedStepProps) {
 // Step 2 — Responsibility (contractor list)
 
 function StepResponsibility({ data, updateData }: GuidedStepProps) {
-  const contractors = fixtureRecords("contractors", "contractors")
+  const contractors = useModuleRecords("contractors", "contractors")
 
   return (
     <div className="space-y-4">
@@ -363,8 +355,8 @@ function StepResponsibility({ data, updateData }: GuidedStepProps) {
 // Step 3 — Fleet & locations
 
 function StepFleetLocations({ data, updateData }: GuidedStepProps) {
-  const vehicles = fixtureRecords("fleet", "vehicles")
-  const drivers = fixtureRecords("fleet", "drivers")
+  const vehicles = useModuleRecords("fleet", "vehicles")
+  const drivers = useModuleRecords("fleet", "drivers")
 
   return (
     <div className="max-w-md space-y-6">
@@ -450,7 +442,7 @@ function StepFleetLocations({ data, updateData }: GuidedStepProps) {
 // Step 4 — Containers
 
 function StepContainers({ data, updateData }: GuidedStepProps) {
-  const containers = fixtureRecords("resources", "containers")
+  const containers = useModuleRecords("resources", "containers")
   const [propertyFilter, setPropertyFilter] = useState("all")
   const [search, setSearch] = useState("")
 
@@ -633,11 +625,11 @@ function StepRouteReview({
   data: GuidedRouteData
   onEditStep: (step: number) => void
 }) {
-  const projects = fixtureRecords("configure", "organization")
-  const contractors = fixtureRecords("contractors", "contractors")
-  const vehicles = fixtureRecords("fleet", "vehicles")
-  const drivers = fixtureRecords("fleet", "drivers")
-  const containers = fixtureRecords("resources", "containers")
+  const projects = useModuleRecords("configure", "organization")
+  const contractors = useModuleRecords("contractors", "contractors")
+  const vehicles = useModuleRecords("fleet", "vehicles")
+  const drivers = useModuleRecords("fleet", "drivers")
+  const containers = useModuleRecords("resources", "containers")
 
   const nameOf = (records: BusinessRecord[], id?: string) =>
     records.find((record) => record.id === id)?.name ?? "Not specified"
@@ -681,9 +673,7 @@ function StepRouteReview({
         {
           label: "Containers",
           value: data.containerIds.length
-            ? data.containerIds
-                .map((id) => nameOf(containers, id))
-                .join(", ")
+            ? data.containerIds.map((id) => nameOf(containers, id)).join(", ")
             : "None added",
         },
       ],
