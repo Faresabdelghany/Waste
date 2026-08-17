@@ -28,6 +28,7 @@ import {
 } from "recharts"
 
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -478,7 +479,7 @@ export function PerformanceControlRoom() {
           <div className="flex min-w-0 items-center gap-3">
             <SidebarTrigger className="h-8 w-8 shrink-0 rounded-md text-muted-foreground hover:bg-accent" />
             <div className="min-w-0">
-              <h1 className="truncate text-base font-semibold text-foreground">Route performance</h1>
+              <Breadcrumbs items={[{ label: "Route performance" }]} />
               <p className="hidden text-[11px] text-muted-foreground sm:block">Operational delivery and service health</p>
             </div>
           </div>

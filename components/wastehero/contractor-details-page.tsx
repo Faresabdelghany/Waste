@@ -2,7 +2,6 @@
 
 import Link from "next/link"
 import {
-  ArrowLeft,
   Buildings,
   Plus,
 } from "@phosphor-icons/react/dist/ssr"
@@ -16,6 +15,7 @@ import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import {
   Table,
   TableBody,
@@ -270,18 +270,14 @@ export function ContractorDetailsPage({
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex min-w-0 items-center gap-2">
             <SidebarTrigger className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-accent" />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              aria-label="Back to Contractors"
-              onClick={onBack}
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="truncate text-base font-semibold">{record.name}</h1>
+                <Breadcrumbs
+                  items={[
+                    { label: "Contractors", onClick: onBack },
+                    { label: record.name },
+                  ]}
+                />
                 <Badge
                   variant="outline"
                   className={cn(

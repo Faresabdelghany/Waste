@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -59,7 +60,12 @@ export function ClientDetailsPage({ clientId }: ClientDetailsPageProps) {
             </Avatar>
             <div className="flex flex-col gap-0.5 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-base font-medium text-foreground truncate">{displayName}</p>
+                <Breadcrumbs
+                  items={[
+                    { label: "Customers", href: "/clients" },
+                    { label: displayName },
+                  ]}
+                />
                 <ClientStatusBadge status={client.status} />
               </div>
               {email && (

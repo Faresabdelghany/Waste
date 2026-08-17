@@ -48,6 +48,7 @@ import {
 import type { TimelineTask } from "@/lib/data/project-details"
 import { cn } from "@/lib/utils"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -117,6 +118,8 @@ import {
   statusClasses,
 } from "@/components/wastehero/business-record-views"
 import { BusinessRecordFormDialog } from "@/components/wastehero/business-record-form-dialog"
+// PROTOTYPE — throwaway import, remove with route-create-flow-prototype.tsx
+import { RouteCreateEntryPrototype } from "@/components/wastehero/route-create-flow-prototype"
 import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
 import {
   useAssetManagementStore,
@@ -826,6 +829,10 @@ export function BusinessWorkspace({
   const canOpenBusinessForm =
     Boolean(activeModuleFormSchema?.execution) &&
     activeModuleFormSchema?.mode !== "disabled"
+  // PROTOTYPE — throwaway. Route create flow variants, dev builds only.
+  const isRouteCreatePrototypeActive =
+    process.env.NODE_ENV !== "production" &&
+    activeModuleFormSchema?.key === "route-studio.routes"
   const activeRecords = useMemo(
     () =>
       getRecords(
@@ -2465,9 +2472,21 @@ export function BusinessWorkspace({
           <div className="flex items-center gap-3 min-w-0">
             <SidebarTrigger className="h-8 w-8 rounded-lg hover:bg-accent text-muted-foreground" />
             <div className="min-w-0">
-              <p className="text-base font-medium text-foreground">
-                {workspaceLabel ?? workspace.label}
-              </p>
+              <Breadcrumbs
+                items={
+                  workspace.modules.length > 1 &&
+                  activeModule.label !== (workspaceLabel ?? workspace.label)
+                    ? [
+                        {
+                          label: workspaceLabel ?? workspace.label,
+                          onClick: () =>
+                            handleModuleChange(workspace.modules[0].id),
+                        },
+                        { label: activeModule.label },
+                      ]
+                    : [{ label: workspaceLabel ?? workspace.label }]
+                }
+              />
             </div>
           </div>
           {(isContainersAssetsView ||
@@ -2497,11 +2516,18 @@ export function BusinessWorkspace({
                 </Button>
               )}
               {showPrimaryAction && canOpenBusinessForm && formSchema && (
-                <Button size="sm" onClick={() => setIsCreateOpen(true)}>
-                  <Plus className="h-4 w-4" weight="bold" />
-                  <span className="hidden sm:inline">{formSchema.submitLabel}</span>
-                  <span className="sm:hidden">Action</span>
-                </Button>
+                isRouteCreatePrototypeActive ? (
+                  <RouteCreateEntryPrototype
+                    submitLabel={formSchema.submitLabel}
+                    onQuickCreate={() => setIsCreateOpen(true)}
+                  />
+                ) : (
+                  <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+                    <Plus className="h-4 w-4" weight="bold" />
+                    <span className="hidden sm:inline">{formSchema.submitLabel}</span>
+                    <span className="sm:hidden">Action</span>
+                  </Button>
+                )
               )}
             </div>
           )}

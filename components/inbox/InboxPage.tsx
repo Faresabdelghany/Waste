@@ -5,6 +5,7 @@ import { formatDistanceToNow } from "date-fns"
 import { Bell, ChatCircleDots, CheckCircle, EnvelopeSimple } from "@phosphor-icons/react/dist/ssr"
 
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -192,7 +193,7 @@ export function InboxPage() {
                 <div className="flex items-center justify-between px-4 py-3 border-b border-border/70">
                     <div className="flex items-center gap-3">
                         <SidebarTrigger className="h-8 w-8 rounded-lg hover:bg-accent text-muted-foreground" />
-                        <p className="text-base font-medium text-foreground">Service Inbox</p>
+                        <Breadcrumbs items={[{ label: "Service Inbox" }]} />
                     </div>
                     <div className="flex items-center gap-2">
                         <Button size="sm" variant="ghost" onClick={markAllAsRead}>

@@ -5,7 +5,6 @@ import Link from "next/link"
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
 import {
-  ArrowLeft,
   ArrowsClockwise,
   CaretDown,
   CaretRight,
@@ -48,6 +47,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { StatRow } from "@/components/projects/StatRow"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import {
   Table,
   TableBody,
@@ -1064,18 +1064,14 @@ export function RouteDetailsPage({
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex min-w-0 items-center gap-2">
             <SidebarTrigger className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-accent" />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              aria-label="Back to Routes"
-              onClick={onBack}
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="truncate text-base font-semibold">{record.name}</h1>
+                <Breadcrumbs
+                  items={[
+                    { label: module.label, onClick: onBack },
+                    { label: record.name },
+                  ]}
+                />
                 <Badge
                   variant="outline"
                   className={cn(
