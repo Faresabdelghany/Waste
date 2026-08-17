@@ -16,6 +16,7 @@ import {
   Funnel,
   MagnifyingGlass,
   MapTrifold,
+  PencilSimple,
   Play,
   Plus,
   Ticket,
@@ -275,9 +276,11 @@ function RouteInformation({
 function OverviewTab({
   record,
   onAction,
+  onDelete,
 }: {
   record: BusinessRecord
   onAction: (action: string) => void
+  onDelete?: () => void
 }) {
   const [stops, setStops] = useState<RouteStop[]>(initialStops)
   const [search, setSearch] = useState("")
@@ -495,7 +498,7 @@ function OverviewTab({
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
-                  onSelect={() => onAction("Cancel")}
+                  onSelect={() => (onDelete ? onDelete() : onAction("Cancel"))}
                 >
                   <Trash className="h-4 w-4" />
                   Delete route
@@ -1036,6 +1039,8 @@ export function RouteDetailsPage({
   sessions,
   onBack,
   onAction,
+  onEdit,
+  onDelete,
 }: {
   module: ModuleDefinition
   record: BusinessRecord
@@ -1043,6 +1048,8 @@ export function RouteDetailsPage({
   sessions: readonly BusinessRecord[]
   onBack: () => void
   onAction: (action: string) => void
+  onEdit?: () => void
+  onDelete?: () => void
 }) {
   const primaryAction =
     record.status === "Active"
@@ -1107,6 +1114,12 @@ export function RouteDetailsPage({
                   ),
                 )}
                 <DropdownMenuSeparator />
+                {onEdit && (
+                  <DropdownMenuItem onSelect={onEdit}>
+                    <PencilSimple className="h-4 w-4" />
+                    Edit route
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
                   onSelect={() =>
                     toast.success("Route export prepared", {
@@ -1117,6 +1130,18 @@ export function RouteDetailsPage({
                   <DownloadSimple className="h-4 w-4" />
                   Export route
                 </DropdownMenuItem>
+                {onDelete && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onSelect={onDelete}
+                    >
+                      <Trash className="h-4 w-4" />
+                      Delete route
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -1155,7 +1180,7 @@ export function RouteDetailsPage({
           </div>
         </div>
         <TabsContent value="overview" className="mt-0 min-h-0 flex-1">
-          <OverviewTab record={record} onAction={onAction} />
+          <OverviewTab record={record} onAction={onAction} onDelete={onDelete} />
         </TabsContent>
         <TabsContent value="tickets" className="mt-0 min-h-0 flex-1">
           <TicketsTab tickets={tickets} />

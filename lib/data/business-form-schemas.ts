@@ -23,6 +23,7 @@ const actionExecutions: Record<string, BusinessFormExecution> = {
   "route-studio.routes": {
     kind: "create-record",
     initialStatus: "Planned",
+    resultValue: "Stops pending generation",
     completionMessage: "The route was created and linked to its selected resources.",
   },
   "route-studio.weights": {

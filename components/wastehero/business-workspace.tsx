@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import {
+  Fragment,
   Suspense,
   useCallback,
   useEffect,
@@ -102,8 +103,18 @@ import {
 import {
   BusinessViewOptionsPopover,
   defaultBusinessViewOptions,
+  type BusinessGroupOption,
   type BusinessViewOptions,
+  type BusinessViewType,
 } from "@/components/wastehero/business-view-options-popover"
+import {
+  BusinessRecordBoardView,
+  BusinessRecordCardsView,
+  BusinessRecordDayTimeline,
+  RecordActionsMenu,
+  recordProgress,
+  statusClasses,
+} from "@/components/wastehero/business-record-views"
 import { BusinessRecordFormDialog } from "@/components/wastehero/business-record-form-dialog"
 import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
 import {
@@ -491,74 +502,25 @@ function companionLabel(module: ModuleDefinition, action: string, record: Busine
   return `${action.replace(/^Create\s+/i, "")} · ${record.name}`
 }
 
-function statusClasses(status: string): string {
-  const normalized = status.toLowerCase()
-
-  if (
-    normalized.includes("inactive") ||
-    normalized.includes("deactivated") ||
-    normalized.includes("disabled") ||
-    normalized.includes("unavailable")
-  ) {
-    return "border-transparent bg-muted text-muted-foreground"
-  }
-
-  if (
-    normalized.includes("active") ||
-    normalized.includes("ready") ||
-    normalized.includes("completed") ||
-    normalized.includes("approved") ||
-    normalized.includes("healthy") ||
-    normalized.includes("certified") ||
-    normalized.includes("published") ||
-    normalized.includes("open")
-  ) {
-    return "bg-teal-50 text-teal-700 border-transparent dark:bg-teal-500/15 dark:text-teal-100"
-  }
-
-  if (
-    normalized.includes("critical") ||
-    normalized.includes("failed") ||
-    normalized.includes("blocked") ||
-    normalized.includes("conflict") ||
-    normalized.includes("out of stock") ||
-    normalized.includes("expired") ||
-    normalized.includes("issue")
-  ) {
-    return "bg-rose-50 text-rose-700 border-transparent dark:bg-rose-500/15 dark:text-rose-100"
-  }
-
-  if (
-    normalized.includes("warning") ||
-    normalized.includes("pending") ||
-    normalized.includes("review") ||
-    normalized.includes("delayed") ||
-    normalized.includes("stale") ||
-    normalized.includes("draft") ||
-    normalized.includes("scheduled") ||
-    normalized.includes("low") ||
-    normalized.includes("expiring") ||
-    normalized.includes("partial") ||
-    normalized.includes("attention")
-  ) {
-    return "bg-amber-50 text-amber-700 border-transparent dark:bg-amber-500/15 dark:text-amber-100"
-  }
-
-  return "border-transparent bg-muted text-muted-foreground"
-}
-
-function recordProgress(record: BusinessRecord): number | null {
-  const percentage = record.value.match(/(\d+)%/)
-  if (percentage) return Math.min(100, Number(percentage[1]))
-  const fraction = record.value.match(/(\d+)\s*\/\s*(\d+)/)
-  if (fraction && Number(fraction[2]) > 0) {
-    return Math.min(100, Math.round((Number(fraction[1]) / Number(fraction[2])) * 100))
-  }
-  if (record.status.toLowerCase().includes("completed")) return 100
-  return null
-}
-
 const queueModuleIds = new Set(["exceptions", "tickets", "approvals"])
+
+// Governance facts are shown in record details, never offered as table columns.
+// Project and Area are excluded because they have dedicated table columns.
+const excludedColumnFacts = new Set([
+  "Project",
+  "Area",
+  "Scope",
+  "Record kind",
+  "Execution policy",
+  "Submitted by",
+  "Last controlled action",
+  "Action reason",
+  "Action actor",
+  "Effective date",
+  "Registry visibility",
+  "Deletion reason",
+  "Deleted by",
+])
 
 const primaryModuleIdsByWorkspace: Partial<Record<WorkspaceId, readonly string[]>> = {
   operate: ["tickets", "exceptions"],
@@ -778,6 +740,7 @@ export function BusinessWorkspace({
     useState<ProjectScope>("copenhagen")
   const projectScope = fixedProjectScope ?? selectedProjectScope
   const [selectedRecord, setSelectedRecord] = useState<BusinessRecord | null>(null)
+  const [editingRecord, setEditingRecord] = useState<BusinessRecord | null>(null)
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [relatedCreateTarget, setRelatedCreateTarget] =
@@ -1140,6 +1103,69 @@ export function BusinessWorkspace({
     return chips
   }, [businessFilters, fixedProjectScope, projectScope])
   const isQueueView = queueModuleIds.has(activeModule.id)
+  const isRoutesView = activeModule.id === "routes"
+  const moduleViewTypes: readonly BusinessViewType[] = isRoutesView
+    ? ["table", "list", "board", "timeline"]
+    : ["table"]
+  const activeViewType: BusinessViewType = isRoutesView
+    ? viewOptions.viewType
+    : "table"
+  const canCreateFromView =
+    showPrimaryAction && canOpenBusinessForm && Boolean(formSchema)
+  const routeColumnOptions = useMemo(() => {
+    if (!isRoutesView) return []
+    const labels: string[] = []
+    for (const record of visibleScopedRecords) {
+      for (const label of Object.keys(record.facts)) {
+        if (excludedColumnFacts.has(label)) continue
+        if (!labels.includes(label)) labels.push(label)
+      }
+    }
+    return labels
+  }, [isRoutesView, visibleScopedRecords])
+  const activeRouteColumns = useMemo(
+    () =>
+      viewOptions.routeColumns.filter((column) =>
+        routeColumnOptions.includes(column),
+      ),
+    [routeColumnOptions, viewOptions.routeColumns],
+  )
+  const routeGroupOptions = useMemo<BusinessGroupOption[]>(() => {
+    if (!isRoutesView) return []
+    const distinctCount = (
+      getValue: (record: BusinessRecord) => string,
+      noun: string,
+    ) => {
+      const count = new Set(
+        visibleScopedRecords.map(getValue).filter((value) => Boolean(value)),
+      ).size
+      return `${count} ${count === 1 ? noun : `${noun}s`}`
+    }
+    return [
+      { value: "none", label: "None" },
+      {
+        value: "status",
+        label: "Status",
+        count: distinctCount((record) => record.status, "state"),
+      },
+      ...["Project", "Area"].map((label) => ({
+        value: label,
+        label,
+        count: distinctCount(
+          (record) => record.facts[label]?.trim() ?? "",
+          "value",
+        ),
+      })),
+      ...routeColumnOptions.map((label) => ({
+        value: label,
+        label,
+        count: distinctCount(
+          (record) => record.facts[label]?.trim() ?? "",
+          "value",
+        ),
+      })),
+    ]
+  }, [isRoutesView, routeColumnOptions, visibleScopedRecords])
   const visibleTableColumnCount = isContainersAssetsView
     ? 2 +
       Number(viewOptions.showContainerType) +
@@ -1148,9 +1174,16 @@ export function BusinessWorkspace({
       Number(viewOptions.showFillLevel) +
       Number(viewOptions.showNextCollection) +
       Number(viewOptions.showProject)
-    : 3 +
-      Number(viewOptions.showContext) +
-      Number(viewOptions.showUpdated)
+    : isRoutesView
+      ? 3 +
+        Number(viewOptions.showProject) +
+        Number(viewOptions.showArea) +
+        Number(viewOptions.showUpdated) +
+        activeRouteColumns.length +
+        1
+      : 3 +
+        Number(viewOptions.showContext) +
+        Number(viewOptions.showUpdated)
   const isFleetPlanningView =
     workspace.id === "fleet" && activeModule.id === "vehicle-planning"
   const fleetPlanningTasks = useMemo<TimelineTask[]>(
@@ -1173,6 +1206,26 @@ export function BusinessWorkspace({
         : [],
     [filteredRecords, isFleetPlanningView],
   )
+  const tableRecordGroups = useMemo<
+    Array<{ label: string | null; records: BusinessRecord[] }>
+  >(() => {
+    const groupBy = isRoutesView ? viewOptions.groupBy : "none"
+    if (groupBy === "none") return [{ label: null, records: filteredRecords }]
+    const groups = new Map<string, BusinessRecord[]>()
+    for (const record of filteredRecords) {
+      const label =
+        groupBy === "status"
+          ? record.status
+          : record.facts[groupBy]?.trim() || `No ${groupBy.toLowerCase()}`
+      const group = groups.get(label)
+      if (group) group.push(record)
+      else groups.set(label, [record])
+    }
+    return Array.from(groups.entries()).map(([label, records]) => ({
+      label,
+      records,
+    }))
+  }, [filteredRecords, isRoutesView, viewOptions.groupBy])
 
   useEffect(() => {
     const activeTab = tabsScrollRef.current?.querySelector<HTMLElement>('[data-state="active"]')
@@ -1259,6 +1312,20 @@ export function BusinessWorkspace({
     setPendingAction({ record: selectedRecord, action })
   }
 
+  const openEditRecord = useCallback((record: BusinessRecord) => {
+    setEditingRecord(record)
+  }, [])
+
+  const requestRecordDelete = useCallback(
+    (record: BusinessRecord) => {
+      setPendingAction({
+        record,
+        action: `Delete ${activeModule.entityLabel.toLowerCase()}`,
+      })
+    },
+    [activeModule.entityLabel],
+  )
+
   const commitRecordAction = ({
     reason,
     effectiveDate,
@@ -1289,11 +1356,7 @@ export function BusinessWorkspace({
       [record.id]: [event, ...(current[record.id] ?? [])],
     }))
 
-    if (
-      workspace.id === "resources" &&
-      activeModule.id === "containers" &&
-      action.toLowerCase().includes("delete")
-    ) {
+    if (action.toLowerCase().includes("delete")) {
       upsertRecord(workspace.id, activeModule.id, {
         ...record,
         updated: "Now",
@@ -1568,6 +1631,83 @@ export function BusinessWorkspace({
     [projectScope, relatedCreateTarget],
   )
 
+  const editInitialValues = useMemo<BusinessFormValues>(() => {
+    if (!editingRecord || !activeModuleFormSchema) return formInitialValues
+    if (editingRecord.submittedValues) {
+      return { ...formInitialValues, ...editingRecord.submittedValues }
+    }
+
+    // Fixture records carry display facts only, so map them back onto the
+    // form's fields by matching each fact against the permitted options.
+    const values: BusinessFormValues = { ...formInitialValues }
+    if (editingRecord.projectIds?.length === 1) {
+      values.projectId = editingRecord.projectIds[0]
+    }
+    const fields = activeModuleFormSchema.sections.flatMap(
+      (section) => section.fields,
+    )
+    for (const field of fields) {
+      if (typeof values[field.id] === "string" && values[field.id]) continue
+      const factValue = editingRecord.facts[field.label]?.trim()
+
+      if (field.type === "date") {
+        values[field.id] =
+          factValue && /^\d{4}-\d{2}-\d{2}$/.test(factValue)
+            ? factValue
+            : localDateInputValue()
+        continue
+      }
+
+      if (!field.relation) {
+        if (factValue) values[field.id] = factValue
+        continue
+      }
+
+      const candidate =
+        factValue ??
+        (field.id === "schemeId"
+          ? editingRecord.source.replace(/^route scheme\s*/i, "").trim()
+          : undefined)
+      if (!candidate || /^(unassigned|none|—)$/i.test(candidate)) continue
+
+      const normalized = candidate.toLowerCase()
+      const options = getFormRelationOptions(field, values)
+      const match =
+        options.find((option) =>
+          option.label.toLowerCase().includes(normalized),
+        ) ??
+        options.find((option) => {
+          const head = option.label.split("·")[0]?.trim().toLowerCase() ?? ""
+          return (
+            head.length > 0 &&
+            (normalized.startsWith(head) || head.startsWith(normalized))
+          )
+        })
+      if (match) values[field.id] = match.value
+    }
+    return values
+  }, [
+    activeModuleFormSchema,
+    editingRecord,
+    formInitialValues,
+    getFormRelationOptions,
+  ])
+
+  const editFormSchema = useMemo<BusinessFormSchema | undefined>(() => {
+    if (!editingRecord || !activeModuleFormSchema?.execution) return undefined
+    const entity = activeModule.entityLabel
+    return {
+      ...activeModuleFormSchema,
+      title: `Edit ${entity.toLowerCase()}`,
+      description: `Update the linked records and details of ${editingRecord.name}. Changes are recorded with audit history.`,
+      submitLabel: "Save changes",
+      execution: {
+        ...activeModuleFormSchema.execution,
+        completionMessage: `The ${entity.toLowerCase()} was updated and its audit history extended.`,
+      },
+    }
+  }, [activeModule.entityLabel, activeModuleFormSchema, editingRecord])
+
   const validateFormValues = useCallback(
     (values: BusinessFormValues) => {
       if (!formSchema) return {}
@@ -1585,6 +1725,7 @@ export function BusinessWorkspace({
         if (typeof value !== "string" || !value.trim()) continue
         const normalizedValue = value.trim().toLowerCase()
         const duplicate = formTargetRecords.some((record) => {
+          if (record.id === editingRecord?.id) return false
           const submittedValue = record.submittedValues?.[field.id]
           if (
             typeof submittedValue === "string" &&
@@ -1694,6 +1835,7 @@ export function BusinessWorkspace({
     },
     [
       containerTypes,
+      editingRecord?.id,
       formSchema,
       formTargetRecords,
       measurementSettings,
@@ -1893,20 +2035,40 @@ export function BusinessWorkspace({
         .map((item) => item.trim())
         .filter(Boolean)
 
+    // Stored facts and context show the linked record's name, not the full
+    // "name · context · status" option label used inside the dropdowns.
+    const relationRecordName = (field: BusinessFormField, recordId: string) => {
+      if (!field.relation) return undefined
+      const resolved = resolveFormModule(
+        field.relation.workspaceId,
+        field.relation.moduleId,
+      )
+      if (!resolved) return undefined
+      const name = getRecords(
+        resolved.workspaceId,
+        resolved.module.id,
+        resolved.module.records,
+      ).find((candidate) => candidate.id === recordId)?.name
+      if (!name) return undefined
+      // Vehicle names carry the registration plate; facts show the callsign.
+      return resolved.workspaceId === "fleet" && resolved.module.id === "vehicles"
+        ? name.split(" · ")[0]
+        : name
+    }
+
     const displayFormValue = (field: BusinessFormField, value: string | boolean) => {
       if (typeof value === "boolean") return value ? "Yes" : "No"
       const options = field.relation
         ? getFormRelationOptions(field, values)
         : field.options ?? []
+      const optionLabel = (item: string) =>
+        options.find((option) => option.value === item)?.label ?? item
       if (field.type === "multiselect") {
         return splitMultiValue(value)
-          .map(
-            (item) =>
-              options.find((option) => option.value === item)?.label ?? item,
-          )
+          .map((item) => relationRecordName(field, item) ?? optionLabel(item))
           .join(" · ")
       }
-      return options.find((option) => option.value === value)?.label ?? value
+      return relationRecordName(field, value) ?? optionLabel(value)
     }
 
     for (const field of fields) {
@@ -1930,8 +2092,10 @@ export function BusinessWorkspace({
             moduleId: relationTarget?.module.id ?? field.relation.moduleId,
             recordId,
             label:
+              relationRecordName(field, recordId) ??
               relationOptions.find((option) => option.value === recordId)
-                ?.label ?? recordId,
+                ?.label ??
+              recordId,
           })
         }
       }
@@ -1957,17 +2121,10 @@ export function BusinessWorkspace({
     ) {
       facts[nameField.label] = nameValue
     }
-    const routeSchemeField =
-      formSchema.key === "route-studio.routes" ? fieldById.get("schemeId") : undefined
-    const routeSchemeName =
-      routeSchemeField && values.schemeId !== undefined
-        ? displayFormValue(routeSchemeField, values.schemeId)
-        : ""
-    const routeDate =
-      typeof values.operatingDate === "string" ? values.operatingDate : ""
     const recordName =
       formSchema.key === "route-studio.routes"
-        ? `${routeSchemeName || "Route"} · ${routeDate || "scheduled"}`
+        ? // Routes carry no user-entered name; the system issues the Route ID.
+          `RC-${String(now).slice(-4)}`
         : formSchema.mode === "action"
         ? `${formSchema.recordKind} · ${nameValue || "submitted"}`
         : nameValue || `${formSchema.recordKind} · ${Date.now()}`
@@ -1980,6 +2137,50 @@ export function BusinessWorkspace({
       })
       .filter(Boolean)
     const projectIds = selectedProjectIds(projectScope, values)
+
+    if (editingRecord) {
+      const updatedRecord: BusinessRecord = {
+        ...editingRecord,
+        context: contextValues.join(" · ") || editingRecord.context,
+        updated: "Now",
+        freshness: "Now",
+        facts: { ...editingRecord.facts, ...facts },
+        submittedValues: { ...editingRecord.submittedValues, ...values },
+        relationRefs,
+        projectIds,
+      }
+      const editEvent: AuditEvent = {
+        id: `audit-edit-${now}`,
+        action: `Edit ${activeModule.entityLabel.toLowerCase()}`,
+        actor: "Olivia Larsen",
+        at: "Now",
+        reason: preferredReason(values),
+        before: editingRecord.status,
+        after: updatedRecord.status,
+        evidence: `${relationRefs.length} linked records · ${projectScopeLabel(
+          projectIds,
+        )} scope validated`,
+      }
+
+      upsertRecord(
+        resolvedTarget.workspaceId,
+        resolvedTarget.module.id,
+        updatedRecord,
+      )
+      setAuditEvents((current) => ({
+        ...current,
+        [updatedRecord.id]: [editEvent, ...(current[updatedRecord.id] ?? [])],
+      }))
+      if (selectedRecord?.id === updatedRecord.id) {
+        setSelectedRecord(updatedRecord)
+      }
+      setEditingRecord(null)
+      toast.success(`${formSchema.recordKind} updated`, {
+        description: `${updatedRecord.name} was updated and its audit history extended.`,
+      })
+      return
+    }
+
     const newRecord: BusinessRecord = {
       id: `${resolvedTarget.module.id}-${formSchema.recordKind
         .toLowerCase()
@@ -2186,6 +2387,8 @@ export function BusinessWorkspace({
           sessions={relatedRouteSessions}
           onBack={closeRecord}
           onAction={requestRecordAction}
+          onEdit={() => openEditRecord(selectedRecord)}
+          onDelete={() => requestRecordDelete(selectedRecord)}
         />
       ) : isContractorDetails && selectedRecord ? (
         <ContractorDetailsPage
@@ -2326,7 +2529,16 @@ export function BusinessWorkspace({
                 <BusinessViewOptionsPopover
                   value={viewOptions}
                   onChange={setViewOptions}
-                  variant={isContainersAssetsView ? "containers" : "default"}
+                  variant={
+                    isContainersAssetsView
+                      ? "containers"
+                      : isRoutesView
+                        ? "routes"
+                        : "default"
+                  }
+                  allowedViewTypes={moduleViewTypes}
+                  columnOptions={routeColumnOptions}
+                  groupOptions={routeGroupOptions}
                 />
               </div>
 
@@ -2466,6 +2678,34 @@ export function BusinessWorkspace({
                   ))
                 )}
               </div>
+            ) : activeViewType === "list" ? (
+              <BusinessRecordCardsView
+                records={filteredRecords}
+                entityLabel={activeModule.entityLabel}
+                onOpenRecord={openRecord}
+                onCreateRecord={
+                  canCreateFromView ? () => setIsCreateOpen(true) : undefined
+                }
+                onEditRecord={isRoutesView ? openEditRecord : undefined}
+                onDeleteRecord={isRoutesView ? requestRecordDelete : undefined}
+              />
+            ) : activeViewType === "board" ? (
+              <BusinessRecordBoardView
+                records={filteredRecords}
+                lifecycle={activeModule.lifecycle}
+                entityLabel={activeModule.entityLabel}
+                onOpenRecord={openRecord}
+                onCreateRecord={
+                  canCreateFromView ? () => setIsCreateOpen(true) : undefined
+                }
+                onEditRecord={isRoutesView ? openEditRecord : undefined}
+                onDeleteRecord={isRoutesView ? requestRecordDelete : undefined}
+              />
+            ) : activeViewType === "timeline" ? (
+              <BusinessRecordDayTimeline
+                records={filteredRecords}
+                onOpenRecord={openRecord}
+              />
             ) : (
               <div className="overflow-x-auto">
                 <Table>
@@ -2494,13 +2734,33 @@ export function BusinessWorkspace({
                         </>
                       ) : (
                         <>
-                          <TableHead>{activeModule.entityLabel}</TableHead>
-                          {viewOptions.showContext && (
-                            <TableHead>{activeModule.contextLabel}</TableHead>
+                          <TableHead>
+                            {isRoutesView ? "Route ID" : activeModule.entityLabel}
+                          </TableHead>
+                          {isRoutesView ? (
+                            <>
+                              {viewOptions.showProject && (
+                                <TableHead>Project</TableHead>
+                              )}
+                              {viewOptions.showArea && <TableHead>Area</TableHead>}
+                            </>
+                          ) : (
+                            viewOptions.showContext && (
+                              <TableHead>{activeModule.contextLabel}</TableHead>
+                            )
                           )}
                           <TableHead>Status</TableHead>
                           <TableHead>{activeModule.valueLabel}</TableHead>
+                          {isRoutesView &&
+                            activeRouteColumns.map((column) => (
+                              <TableHead key={column}>{column}</TableHead>
+                            ))}
                           {viewOptions.showUpdated && <TableHead>Updated</TableHead>}
+                          {isRoutesView && (
+                            <TableHead className="w-10">
+                              <span className="sr-only">Actions</span>
+                            </TableHead>
+                          )}
                         </>
                       )}
                     </TableRow>
@@ -2522,7 +2782,41 @@ export function BusinessWorkspace({
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredRecords.map((record) => (
+                      tableRecordGroups.map((group) => (
+                        <Fragment key={group.label ?? "all-records"}>
+                          {group.label !== null && (
+                            <TableRow className="bg-muted/30 hover:bg-muted/30">
+                              <TableCell
+                                colSpan={visibleTableColumnCount}
+                                className="py-2"
+                              >
+                                <div className="flex items-center gap-2">
+                                  {viewOptions.groupBy === "status" ? (
+                                    <Badge
+                                      variant="outline"
+                                      className={cn(
+                                        "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                                        statusClasses(group.label),
+                                      )}
+                                    >
+                                      {group.label}
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-xs font-semibold text-foreground">
+                                      {group.label}
+                                    </span>
+                                  )}
+                                  <span className="text-xs text-muted-foreground">
+                                    {group.records.length}{" "}
+                                    {group.records.length === 1
+                                      ? activeModule.entityLabel.toLowerCase()
+                                      : `${activeModule.entityLabel.toLowerCase()}s`}
+                                  </span>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          {group.records.map((record) => (
                         <TableRow
                           key={record.id}
                           role="button"
@@ -2624,10 +2918,25 @@ export function BusinessWorkspace({
                                   )}
                                 </div>
                               </TableCell>
-                              {viewOptions.showContext && (
-                                <TableCell className="min-w-[220px] text-sm text-muted-foreground">
-                                  {record.context}
-                                </TableCell>
+                              {isRoutesView ? (
+                                <>
+                                  {viewOptions.showProject && (
+                                    <TableCell className="min-w-[160px] whitespace-nowrap text-sm text-muted-foreground">
+                                      {recordFactValue(record, "Project")}
+                                    </TableCell>
+                                  )}
+                                  {viewOptions.showArea && (
+                                    <TableCell className="min-w-[120px] whitespace-nowrap text-sm text-muted-foreground">
+                                      {recordFactValue(record, "Area")}
+                                    </TableCell>
+                                  )}
+                                </>
+                              ) : (
+                                viewOptions.showContext && (
+                                  <TableCell className="min-w-[220px] text-sm text-muted-foreground">
+                                    {record.context}
+                                  </TableCell>
+                                )
                               )}
                               <TableCell>
                                 <Badge
@@ -2643,14 +2952,35 @@ export function BusinessWorkspace({
                               <TableCell className="min-w-[150px]">
                                 <RecordValue record={record} />
                               </TableCell>
+                              {isRoutesView &&
+                                activeRouteColumns.map((column) => (
+                                  <TableCell
+                                    key={column}
+                                    className="min-w-[130px] whitespace-nowrap text-sm text-muted-foreground"
+                                  >
+                                    {recordFactValue(record, column)}
+                                  </TableCell>
+                                ))}
                               {viewOptions.showUpdated && (
                                 <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                                   {record.updated}
                                 </TableCell>
                               )}
+                              {isRoutesView && (
+                                <TableCell className="w-10 pr-3 text-right">
+                                  <RecordActionsMenu
+                                    record={record}
+                                    entityLabel={activeModule.entityLabel}
+                                    onEdit={openEditRecord}
+                                    onDelete={requestRecordDelete}
+                                  />
+                                </TableCell>
+                              )}
                             </>
                           )}
                         </TableRow>
+                          ))}
+                        </Fragment>
                       ))
                     )}
                   </TableBody>
@@ -2719,6 +3049,20 @@ export function BusinessWorkspace({
             reviewSummary={getFormReviewSummary}
           />
         )}
+      {editingRecord && editFormSchema && (
+        <BusinessRecordFormDialog
+          schema={editFormSchema}
+          open
+          onOpenChange={(open) => {
+            if (!open) setEditingRecord(null)
+          }}
+          onSubmit={handleFormSubmit}
+          relationOptions={getFormRelationOptions}
+          initialValueOverrides={editInitialValues}
+          validateValues={validateFormValues}
+          reviewSummary={getFormReviewSummary}
+        />
+      )}
       <Suspense fallback={null}>
         <WorkspaceQuerySync
           workspace={workspace}
@@ -2967,7 +3311,7 @@ function ActionDecisionDialog({
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Containers are soft-deleted and the category, explanation, actor, and time are written to the central deletion log.
+                    Records are soft-deleted and the category, explanation, actor, and time are written to the central deletion log.
                   </p>
                 </div>
               )}
