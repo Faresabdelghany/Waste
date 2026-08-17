@@ -18,8 +18,8 @@ type NotesTabProps = {
 }
 
 const defaultUser: User = {
-    id: "jason-d",
-    name: "JasonD",
+    id: "olivia-larsen",
+    name: "Olivia Larsen",
     avatarUrl: undefined,
 }
 

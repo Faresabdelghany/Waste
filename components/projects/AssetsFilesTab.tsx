@@ -13,8 +13,8 @@ type AssetsFilesTabProps = {
 }
 
 const defaultUser: User = {
-    id: "jason-d",
-    name: "JasonD",
+    id: "olivia-larsen",
+    name: "Olivia Larsen",
 }
 
 export function AssetsFilesTab({ files, currentUser = defaultUser }: AssetsFilesTabProps) {

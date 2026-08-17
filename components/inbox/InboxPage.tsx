@@ -28,87 +28,87 @@ type InboxItem = {
 const MOCK_INBOX_ITEMS: InboxItem[] = [
     {
         id: "1",
-        title: "New comment on Homepage redesign",
+        title: "Blocked access reported at stop 18",
         preview:
-            "Sarah left a new comment on the hero section copy.\n\nSummary\n- The value proposition feels a bit dense on first read.\n- The free trial is not visible enough above the fold.\n- The primary CTA copy sounds generic compared to competitors.\n\nSuggested next steps\n- Try a shorter, more direct headline focused on the outcome.\n- Move the free trial mention into the subheading.\n- Test a more action-oriented CTA label in the next experiment.",
+            "The driver could not access the organic-waste containers at Parkvej 18.\n\nEvidence\n- Gate was locked at 08:42.\n- Driver attached one photo and a location stamp.\n- The stop was marked failed with reason: blocked access.\n\nSuggested next steps\n- Contact the property manager.\n- Approve a recollection for the afternoon recovery route.",
         createdAt: new Date(Date.now() - 1000 * 60 * 10),
         type: "comment",
         unread: true,
-        client: "Acme Corp",
-        project: "Website redesign",
+        client: "Østerbro Housing",
+        project: "RC-1048 · Østerbro Organic",
     },
     {
         id: "2",
-        title: "You were assigned a new task",
+        title: "You were assigned a new ticket",
         preview:
-            "You have been assigned a new task to design the end-to-end onboarding flow.\n\nScope\n- Welcome screen with a friendly intro and brand context.\n- Progress indicator across the first three key steps.\n- Educational tooltips for advanced features (analytics, integrations).\n\nExpectations\n- First clickable prototype ready for internal review by Wednesday.\n- Include at least two alternative flows for the progress indicator.",
+            "A service ticket has been assigned to you for a reported container overflow.\n\nScope\n- Review the customer photo and service history.\n- Confirm whether the scheduled collection was completed.\n- Decide between a recollection or a container-capacity adjustment.\n\nResponse target\n- First customer update is due within two hours.",
         createdAt: new Date(Date.now() - 1000 * 60 * 45),
         type: "task",
         unread: true,
-        client: "Fintech Co",
-        project: "Mobile app",
+        client: "Amager District",
+        project: "RC-1051 · Amager Glass",
     },
     {
         id: "3",
-        title: "Client status updated to Active",
+        title: "Customer agreement moved to Active",
         preview:
-            "Acme Corp moved from Prospect to Active after signing the initial three-month engagement.\n\nWhat this means\n- All planned workstreams for growth, retention, and internal tooling are now in scope.\n- Budgets and timelines should be updated to reflect the new contract.\n- Reporting for this client should move from \"pipeline\" to \"active accounts\".",
+            "The Copenhagen Central service agreement is now active.\n\nWhat this enables\n- Covered properties can be added to published route schemes.\n- Included waste fractions and service frequencies are billable.\n- Exceptions can now be tracked against the agreement SLA.",
         createdAt: new Date(Date.now() - 1000 * 60 * 60 * 3),
         type: "client",
         unread: false,
-        client: "Acme Corp",
+        client: "Copenhagen Central",
     },
     {
         id: "4",
-        title: "Project milestone completed",
+        title: "Route completed with all proof captured",
         preview:
-            "Phase 1 for the AI Learning Platform has been marked as completed.\n\nIncluded in this phase\n- Delivery of the core learning paths for the first cohort.\n- Initial analytics dashboards for engagement and completion rates.\n- Baseline experiment tracking for content performance.\n\nNext focus\n- Personalization of learning paths based on behavior.\n- Additional experiments on notification timing and content.",
+            "RC-1044 has been completed and closed.\n\nCompletion summary\n- 42 of 42 planned stops were serviced.\n- Disposal weight was recorded at the transfer station.\n- Required proof was captured for every exception.\n\nThe route is ready for billing review.",
         createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6),
         type: "project",
         unread: false,
-        project: "AI Learning Platform",
+        project: "RC-1044 · Nørrebro Mixed",
     },
     {
         id: "5",
-        title: "Weekly summary is ready",
+        title: "Daily operations summary is ready",
         preview:
-            "Your weekly workspace summary is ready.\n\nProjects\n- 3 projects moved forward to a new stage.\n- 1 project is currently blocked and needs review.\n\nTasks\n- 18 tasks were completed.\n- 6 tasks are overdue and should be re-prioritized.\n\nSuggested focus for next week\n- Unblock the Healthcare booking app project.\n- Reduce the number of overdue tasks in the Mobile app roadmap.",
+            "Your Copenhagen operations summary is ready.\n\nRoutes\n- 4 routes are currently in progress.\n- 1 route is delayed by more than 20 minutes.\n- 87% of planned stops are complete.\n\nExceptions\n- 3 failed stops require review.\n- 1 recollection needs approval.\n\nSuggested focus\n- Resolve blocked-access tickets before the afternoon dispatch.",
         createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24),
         type: "system",
         unread: true,
     },
     {
         id: "6",
-        title: "New project added for Acme Corp",
+        title: "New contract route is ready for planning",
         preview:
-            "A new project called \"Growth experimentation\" has been created for Acme Corp.\n\nInitial roadmap\n- Onboarding experiments to improve activation.\n- Pricing tests across the self-serve flow.\n- Retention-focused cohorts to validate over the next quarter.\n\nOwner\n- Primary owner: Growth team.\n- Support: Product analytics and Design.",
+            "Harbor Commercial Cardboard has been created from a draft customer agreement.\n\nPlanning checklist\n- Confirm service points and access instructions.\n- Allocate containers from warehouse stock.\n- Assign a suitable vehicle and driver.\n- Publish the first collection date after commercial approval.",
         createdAt: new Date(Date.now() - 1000 * 60 * 60 * 30),
         type: "project",
         unread: true,
-        client: "Acme Corp",
-        project: "Growth experimentation",
+        client: "Harbor Offices ApS",
+        project: "Harbor Commercial Cardboard",
     },
     {
         id: "7",
-        title: "Deadline approaching for Mobile app",
+        title: "Vehicle capacity warning on Amager route",
         preview:
-            "The design hand-off for sprint 3 of the Mobile app project is due tomorrow.\n\nBefore hand-off\n- Link all key flows inside the main Figma file.\n- Ensure annotations for edge cases are complete.\n- Double-check component usage against the latest design system.\n\nFor the engineering team\n- Attach a short checklist in the hand-off comment.\n- Highlight any known trade-offs or open questions.",
+            "The estimated glass volume is above the assigned vehicle's safe capacity.\n\nBefore dispatch\n- Review historical weights for the route.\n- Reassign a larger vehicle or add an unloading trip.\n- Confirm that the receiving facility remains within its opening window.",
         createdAt: new Date(Date.now() - 1000 * 60 * 60 * 40),
         type: "task",
         unread: false,
-        client: "Fintech Co",
-        project: "Mobile app",
+        client: "Amager District",
+        project: "RC-1051 · Amager Glass",
     },
     {
         id: "8",
-        title: "New stakeholder added to Healthcare App",
+        title: "New property contact added",
         preview:
-            "Dr. Lee has been added as a collaborator on the Healthcare booking app project.\n\nRole\n- Medical advisor for the appointment booking flow.\n- Reviewer for patient intake forms and consent screens.\n\nSuggested preparation\n- Prepare a short walkthrough of the current flow.\n- Collect any open questions from the team ahead of the next review.",
+            "Mikkel Sørensen has been added as the service contact for Parkvej 18.\n\nContact scope\n- Access-window coordination.\n- Locked-gate and container-location issues.\n- Approval of urgent recollections.\n\nThe contact is now available from the customer and property views.",
         createdAt: new Date(Date.now() - 1000 * 60 * 60 * 60),
         type: "client",
         unread: false,
-        client: "Healthcare Inc",
-        project: "Healthcare booking app",
+        client: "Østerbro Housing",
+        project: "RC-1048 · Østerbro Organic",
     },
 ]
 
@@ -127,9 +127,9 @@ function getTypeIcon(type: InboxItemType) {
 
 function getTypeLabel(type: InboxItemType): string {
     if (type === "comment") return "Comment"
-    if (type === "task") return "Task"
-    if (type === "client") return "Client"
-    if (type === "project") return "Project"
+    if (type === "task") return "Ticket"
+    if (type === "client") return "Customer"
+    if (type === "project") return "Route"
     return "Update"
 }
 
@@ -187,12 +187,12 @@ export function InboxPage() {
     }
 
     return (
-        <div className="flex flex-1 flex-col min-h-0 bg-background mx-2 my-2 border border-border rounded-lg min-w-0">
+        <div className="flex flex-1 flex-col min-h-0 bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
             <header className="flex flex-col border-b border-border/40">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-border/70">
                     <div className="flex items-center gap-3">
                         <SidebarTrigger className="h-8 w-8 rounded-lg hover:bg-accent text-muted-foreground" />
-                        <p className="text-base font-medium text-foreground">Inbox</p>
+                        <p className="text-base font-medium text-foreground">Service Inbox</p>
                     </div>
                     <div className="flex items-center gap-2">
                         <Button size="sm" variant="ghost" onClick={markAllAsRead}>

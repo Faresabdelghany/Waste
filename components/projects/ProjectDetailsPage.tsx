@@ -71,8 +71,8 @@ export function ProjectDetailsPage({ projectId }: ProjectDetailsPageProps) {
 
   const breadcrumbs = useMemo(
     () => [
-      { label: "Projects", href: "/" },
-      { label: state.status === "ready" ? state.project.name : "Project Details" },
+      { label: "Routes", href: "/routes" },
+      { label: state.status === "ready" ? state.project.name : "Route Details" },
     ],
     [state.status, state.status === "ready" ? state.project.name : null]
   )
@@ -136,10 +136,10 @@ export function ProjectDetailsPage({ projectId }: ProjectDetailsPageProps) {
                 <Tabs defaultValue="overview">
                   <TabsList className="w-full gap-6">
                     <TabsTrigger value="overview">Overview</TabsTrigger>
-                    <TabsTrigger value="workstream">Workstream</TabsTrigger>
-                    <TabsTrigger value="tasks">Tasks</TabsTrigger>
+                    <TabsTrigger value="workstream">Execution</TabsTrigger>
+                    <TabsTrigger value="tasks">Stops</TabsTrigger>
                     <TabsTrigger value="notes">Notes</TabsTrigger>
-                    <TabsTrigger value="assets">Assets &amp; Files</TabsTrigger>
+                    <TabsTrigger value="assets">Proof &amp; Files</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="overview">
@@ -200,7 +200,7 @@ export function ProjectDetailsPage({ projectId }: ProjectDetailsPageProps) {
 
 function ProjectDetailsSkeleton() {
   return (
-    <div className="flex flex-1 flex-col bg-background mx-2 my-2 border border-border rounded-lg min-w-0">
+    <div className="flex flex-1 flex-col bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
       <div className="p-6">
         <div className="flex items-center gap-2">
           <Skeleton className="h-4 w-24" />

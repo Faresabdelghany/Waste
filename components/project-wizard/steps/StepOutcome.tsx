@@ -334,7 +334,7 @@ export function StepOutcome({ data, updateData }: StepOutcomeProps) {
           value={data.description}
           onChange={(html) => updateData({ description: html })}
           onFocusChange={setEditorFocused}
-          placeholder="Briefly describe the goal, scope, and key outcomes for this project..."
+          placeholder="Describe the service goal, covered stops, constraints, and expected route outcome..."
         />
       </div>
 

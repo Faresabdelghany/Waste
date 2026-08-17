@@ -4,15 +4,25 @@ import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { Toaster } from "@/components/ui/sonner"
 import { ThemeProvider } from "@/components/theme-provider"
+import { AppThemeProvider } from "@/components/app-theme-provider"
+import { ThemeBootstrapScript } from "@/components/theme-bootstrap-script"
+import { BusinessRecordStoreProvider } from "@/components/wastehero/business-record-store"
+import { OrganizationStoreProvider } from "@/components/settings/organization-store"
+import { AssetManagementStoreProvider } from "@/components/settings/asset-management-store"
 import "./globals.css"
 
-const _geist = Geist({ subsets: ["latin"] })
-const _geistMono = Geist_Mono({ subsets: ["latin"] })
+const geist = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist-sans",
+})
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
+})
 
 export const metadata: Metadata = {
-  title: "PM Tools - Project Management",
-  description: "Modern project and task management tool with timeline view",
-  generator: "v0.app",
+  title: "WasteHero Operations",
+  description: "Plan, deliver, monitor, and improve waste and recycling services.",
   icons: {
     icon: "/icon.png",
     apple: "/apple-touch-icon.png",
@@ -20,7 +30,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: "#3b82f6",
+  colorScheme: "light dark",
 }
 
 export default function RootLayout({
@@ -30,11 +40,24 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`font-sans antialiased`}>
+      <head>
+        <ThemeBootstrapScript />
+      </head>
+      <body
+        className={`${geist.variable} ${geistMono.variable} font-sans antialiased`}
+      >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          {children}
-          <Analytics />
-          <Toaster richColors closeButton />
+          <AppThemeProvider>
+            <OrganizationStoreProvider>
+              <AssetManagementStoreProvider>
+                <BusinessRecordStoreProvider>
+                  {children}
+                  <Analytics />
+                  <Toaster richColors closeButton />
+                </BusinessRecordStoreProvider>
+              </AssetManagementStoreProvider>
+            </OrganizationStoreProvider>
+          </AppThemeProvider>
         </ThemeProvider>
       </body>
     </html>

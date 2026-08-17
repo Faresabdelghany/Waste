@@ -84,9 +84,9 @@ function getStatusLabel(status: string) {
 function getStatusBadgeClass(status: string) {
   if (status === "active") return "bg-teal-50 text-teal-700 border-transparent"
   if (status === "planned") return "bg-amber-50 text-amber-700 border-transparent"
-  if (status === "backlog") return "bg-slate-100 text-slate-600 border-transparent"
+  if (status === "backlog") return "bg-muted text-muted-foreground border-transparent"
   if (status === "completed") return "bg-emerald-50 text-emerald-700 border-transparent"
-  if (status === "cancelled") return "bg-slate-200 text-slate-600 border-transparent"
+  if (status === "cancelled") return "bg-muted text-muted-foreground border-transparent"
   return "bg-muted text-muted-foreground border-transparent"
 }
 
@@ -94,7 +94,7 @@ function getHealthBadgeClass(tone: HealthTone) {
   if (tone === "positive") return "bg-emerald-50 text-emerald-700 border-transparent"
   if (tone === "warning") return "bg-amber-50 text-amber-700 border-transparent"
   if (tone === "danger") return "bg-rose-50 text-rose-700 border-transparent"
-  if (tone === "muted") return "bg-slate-100 text-slate-600 border-transparent"
+  if (tone === "muted") return "bg-muted text-muted-foreground border-transparent"
   return "bg-blue-50 text-blue-700 border-transparent"
 }
 
@@ -245,7 +245,7 @@ function PerformanceFilterPopover({
                   active === "project" && "bg-accent",
                 )}
               >
-                <span>Project</span>
+                <span>Route</span>
                 <span className="text-xs text-muted-foreground">{projects.length}</span>
               </button>
               <button
@@ -264,7 +264,7 @@ function PerformanceFilterPopover({
           <div className="p-3">
             {active === "project" && (
               <>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Project</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Route</p>
                 <div className="mt-2 space-y-1">
                   <button
                     type="button"
@@ -274,7 +274,7 @@ function PerformanceFilterPopover({
                       tempProjectId === "all" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent",
                     )}
                   >
-                    <span>All projects</span>
+                    <span>All routes</span>
                     {tempProjectId === "all" && <CheckCircle className="h-4 w-4 text-primary" weight="fill" />}
                   </button>
                   {projects.map((project) => (
@@ -383,7 +383,7 @@ export function PerformanceContent() {
   const filterChips = useMemo(() => {
     const chips: { key: string; value: string }[] = []
     if (selectedProject && selectedProjectId !== "all") {
-      chips.push({ key: "Project", value: selectedProject.name })
+      chips.push({ key: "Route", value: selectedProject.name })
     }
     if (selectedMember !== "all") {
       chips.push({ key: "Member", value: selectedMember })
@@ -392,7 +392,7 @@ export function PerformanceContent() {
   }, [selectedMember, selectedProject, selectedProjectId])
 
   const handleRemoveChip = (key: string, _value: string) => {
-    if (key.toLowerCase() === "project") {
+    if (key.toLowerCase() === "route") {
       setSelectedProjectId("all")
     }
     if (key.toLowerCase() === "member") {
@@ -587,18 +587,18 @@ export function PerformanceContent() {
 
     const kpis = [
       {
-        title: "On-track projects",
+        title: "On-track routes",
         value: `${onTrackProjects.length}/${activeProjects.length}`,
         description: `${onTrackRate}% on schedule across active work`,
-        tooltip: "Number of active or planned projects that are on track or ahead vs total active/planned projects.",
+        tooltip: "Number of active or planned routes that are on track or ahead vs total active/planned routes.",
         icon: <CheckCircle className="h-4 w-4" weight="fill" />,
         tone: onTrackRate >= 70 ? "positive" : onTrackRate >= 50 ? "warning" : "danger",
       },
       {
-        title: "Overdue tasks",
+        title: "Overdue stops",
         value: String(overdueTasks.length),
-        description: "Tasks past their planned end date",
-        tooltip: "Tasks not done and whose end date is earlier than the selected end date.",
+        description: "Stops past their planned end time",
+        tooltip: "Stops not completed whose planned end time is earlier than the selected end date.",
         icon: <Clock className="h-4 w-4" />,
         tone: overdueTasks.length > 6 ? "danger" : overdueTasks.length > 2 ? "warning" : "neutral",
       },
@@ -606,15 +606,15 @@ export function PerformanceContent() {
         title: "Completed in range",
         value: String(completedInRange.length),
         description: rangeLabelText,
-        tooltip: "Count of tasks completed within the selected date range.",
+        tooltip: "Count of stops completed within the selected date range.",
         icon: <ChartBar className="h-4 w-4" />,
         tone: completedInRange.length > 10 ? "positive" : "neutral",
       },
       {
-        title: "Projects at risk",
+        title: "Routes at risk",
         value: String(riskProjectsAll.length),
-        description: "Projects behind or at risk vs schedule",
-        tooltip: "Projects whose progress is behind schedule (Behind/At risk).",
+        description: "Routes behind or at risk vs schedule",
+        tooltip: "Routes whose progress is behind schedule (Behind/At risk).",
         icon: <WarningOctagon className="h-4 w-4" weight="fill" />,
         tone: riskProjectsAll.length > 3 ? "danger" : riskProjectsAll.length > 1 ? "warning" : "neutral",
       },
@@ -658,7 +658,7 @@ export function PerformanceContent() {
   }
 
   return (
-    <div className="flex flex-1 flex-col bg-background mx-2 my-2 border border-border rounded-lg min-w-0">
+    <div className="flex flex-1 flex-col bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
       <header className="flex flex-col border-b border-border/40">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="flex items-center gap-3">
@@ -747,7 +747,7 @@ export function PerformanceContent() {
             <CalendarBlank className="h-4 w-4" />
             <span>Showing performance for: {rangeLabel}</span>
           </div>
-          <span>{filteredProjectCount} projects | {workMixTotal} tasks in range</span>
+          <span>{filteredProjectCount} routes | {workMixTotal} stops in range</span>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {kpis.map((kpi) => (
@@ -768,16 +768,16 @@ export function PerformanceContent() {
             <CardHeader className="flex-row items-center justify-between space-y-0 pb-4">
               <div>
                 <CardTitle className="text-base font-semibold">Throughput trend</CardTitle>
-                <p className="text-xs text-muted-foreground">Completed tasks in range ({rangeLabel})</p>
+                <p className="text-xs text-muted-foreground">Completed stops in range ({rangeLabel})</p>
               </div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                Total {totalThroughput} tasks
+                Total {totalThroughput} stops
               </div>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col py-10">
               {totalThroughput === 0 ? (
                 <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">
-                  No completed tasks available for the selected range.
+                  No completed stops available for the selected range.
                 </div>
               ) : (
                 <div className="flex flex-col flex-1">
@@ -801,7 +801,7 @@ export function PerformanceContent() {
                           </div>
                         </TooltipTrigger>
                         <TooltipContent side="top" className="text-xs">
-                          {item.count} tasks
+                          {item.count} stops
                         </TooltipContent>
                       </Tooltip>
                     ))}
@@ -830,12 +830,12 @@ export function PerformanceContent() {
                   <CardTitle className="text-base font-semibold">Work mix</CardTitle>
                   <p className="text-xs text-muted-foreground">Distribution of work types in range</p>
                 </div>
-                <div className="text-xs text-muted-foreground">{workMixTotal} tasks</div>
+                <div className="text-xs text-muted-foreground">{workMixTotal} stops</div>
               </CardHeader>
               <CardContent>
                 {workMixTotal === 0 ? (
                   <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">
-                    No tasks available for the selected filters.
+                    No stops available for the selected filters.
                   </div>
                 ) : (
                   <>
@@ -850,21 +850,21 @@ export function PerformanceContent() {
                       <div className="flex items-center justify-between">
                         <span className="flex items-center gap-2">
                           <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
-                          Bug
+                          Exception
                         </span>
                         <span className="text-foreground">{workMix.bug}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="flex items-center gap-2">
                           <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-                          Improvement
+                          Recovery
                         </span>
                         <span className="text-foreground">{workMix.improvement}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="flex items-center gap-2">
                           <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
-                          Task
+                          Service stop
                         </span>
                         <span className="text-foreground">{workMix.task}</span>
                       </div>
@@ -877,20 +877,20 @@ export function PerformanceContent() {
             <Card className="border-border/60 bg-card/70 flex flex-col flex-1">
               <CardHeader className="flex-row items-center justify-between space-y-0 pb-4">
                 <div>
-                  <CardTitle className="text-base font-semibold">Bug clearance</CardTitle>
-                  <p className="text-xs text-muted-foreground">Completed bugs in range</p>
+                  <CardTitle className="text-base font-semibold">Exception clearance</CardTitle>
+                  <p className="text-xs text-muted-foreground">Resolved exceptions in range</p>
                 </div>
                 <WarningOctagon className="h-4 w-4 text-rose-500" weight="fill" />
               </CardHeader>
               <CardContent className="flex-1 flex flex-col space-y-3">
                 {bugSummary.open === 0 && totalBugThroughput === 0 ? (
                   <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">
-                    No bug data available for the selected filters.
+                    No exception data available for the selected filters.
                   </div>
                 ) : (
                   <>
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Open bugs</span>
+                      <span>Open exceptions</span>
                       <Badge variant="outline" className="rounded-full px-2 py-0.5 text-rose-600 border-rose-200">
                         {bugSummary.open}
                       </Badge>
@@ -913,7 +913,7 @@ export function PerformanceContent() {
                               </div>
                             </TooltipTrigger>
                             <TooltipContent side="top" className="text-xs">
-                              {item.count} bugs
+                              {item.count} exceptions
                             </TooltipContent>
                           </Tooltip>
                         ))}
@@ -944,14 +944,14 @@ export function PerformanceContent() {
               <CardHeader className="flex-row items-center justify-between space-y-0 pb-4">
                 <div>
                   <CardTitle className="text-base font-semibold">Delivery risk</CardTitle>
-                  <p className="text-xs text-muted-foreground">Projects falling behind schedule</p>
+                  <p className="text-xs text-muted-foreground">Routes falling behind schedule</p>
                 </div>
                 <WarningOctagon className="h-4 w-4 text-rose-500" weight="fill" />
               </CardHeader>
               <CardContent className="space-y-4">
                 {riskProjects.length === 0 && (
                   <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">
-                    No projects are currently flagged as at risk.
+                    No routes are currently flagged as at risk.
                   </div>
                 )}
                 {riskProjects.map((project) => (
@@ -963,7 +963,7 @@ export function PerformanceContent() {
                           <Badge className={cn("rounded-full px-2 py-0.5", getStatusBadgeClass(project.status))}>
                             {getStatusLabel(project.status)}
                           </Badge>
-                          <span>{project.taskCount} tasks</span>
+                          <span>{project.taskCount} stops</span>
                         </div>
                       </div>
                       <Badge className={cn("rounded-full px-2 py-0.5", getHealthBadgeClass(project.health.tone))}>
@@ -991,14 +991,14 @@ export function PerformanceContent() {
             <CardHeader className="flex-row items-center justify-between space-y-0 pb-4">
               <div>
                 <CardTitle className="text-base font-semibold">Work mix trend</CardTitle>
-                <p className="text-xs text-muted-foreground">Completed tasks by type over time ({rangeLabel})</p>
+                <p className="text-xs text-muted-foreground">Completed stops by type over time ({rangeLabel})</p>
               </div>
-              <div className="text-xs text-muted-foreground">{mixTrendTotal} tasks</div>
+              <div className="text-xs text-muted-foreground">{mixTrendTotal} stops</div>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col space-y-10">
               {mixTrendTotal === 0 ? (
                 <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">
-                  No completed tasks available for the selected range.
+                  No completed stops available for the selected range.
                 </div>
               ) : (
                 <>
@@ -1037,7 +1037,7 @@ export function PerformanceContent() {
                             </div>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="text-xs">
-                            {item.total} tasks
+                            {item.total} stops
                           </TooltipContent>
                         </Tooltip>
                       ))}
@@ -1058,15 +1058,15 @@ export function PerformanceContent() {
                   <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                     <span className="flex items-center gap-2">
                       <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
-                      Bug
+                      Exception
                     </span>
                     <span className="flex items-center gap-2">
                       <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-                      Improvement
+                      Recovery
                     </span>
                     <span className="flex items-center gap-2">
                       <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
-                      Task
+                      Service stop
                     </span>
                   </div>
                 </>
@@ -1078,16 +1078,16 @@ export function PerformanceContent() {
         <Card className="border-border/60 bg-card/70">
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-4">
             <div>
-              <CardTitle className="text-base font-semibold">Project health</CardTitle>
+              <CardTitle className="text-base font-semibold">Route health</CardTitle>
               <p className="text-xs text-muted-foreground">Actual progress vs schedule and delivery status</p>
             </div>
-            <div className="text-xs text-muted-foreground">{filteredProjectCount} projects tracked</div>
+            <div className="text-xs text-muted-foreground">{filteredProjectCount} routes tracked</div>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Project</TableHead>
+                  <TableHead>Route</TableHead>
                   <TableHead>Progress</TableHead>
                   <TableHead>Health</TableHead>
                   <TableHead>Due</TableHead>
@@ -1098,7 +1098,7 @@ export function PerformanceContent() {
                   <TableRow>
                     <TableCell colSpan={4}>
                       <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">
-                        No projects match the selected filters.
+                        No routes match the selected filters.
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1118,7 +1118,7 @@ export function PerformanceContent() {
                               <Badge className={cn("rounded-full px-2 py-0.5", getStatusBadgeClass(project.status))}>
                                 {getStatusLabel(project.status)}
                               </Badge>
-                              <span>{project.taskCount} tasks</span>
+                              <span>{project.taskCount} stops</span>
                             </div>
                           </div>
                         </div>

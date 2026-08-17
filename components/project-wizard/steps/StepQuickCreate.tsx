@@ -24,17 +24,17 @@ import { clients, type Client } from "@/lib/data/clients";
 // --- Mock Data ---
 
 const USERS = [
-  { id: "1", name: "Jason D", avatar: "/avatar-profile.jpg" },
-  { id: "2", name: "Sarah Connor", avatar: "" },
-  { id: "3", name: "Alex Murphy", avatar: "" },
+  { id: "1", name: "Olivia Larsen", avatar: "/avatar-profile.jpg" },
+  { id: "2", name: "Mads Jensen", avatar: "" },
+  { id: "3", name: "Freja Nielsen", avatar: "" },
 ];
 
 const STATUSES = [
   { id: "backlog", label: "Backlog", dotClass: "bg-orange-600" },
-  { id: "todo", label: "Todo", dotClass: "bg-neutral-300" },
+  { id: "todo", label: "Todo", dotClass: "bg-muted-foreground/50" },
   { id: "in-progress", label: "In Progress", dotClass: "bg-yellow-400" },
   { id: "done", label: "Done", dotClass: "bg-green-600" },
-  { id: "canceled", label: "Canceled", dotClass: "bg-neutral-400" },
+  { id: "canceled", label: "Canceled", dotClass: "bg-muted-foreground" },
 ];
 
 const PRIORITIES = [
@@ -46,23 +46,23 @@ const PRIORITIES = [
 ];
 
 const SPRINT_TYPES = [
-  { id: "design", label: "Design Sprint" },
-  { id: "dev", label: "Dev Sprint" },
-  { id: "planning", label: "Planning" },
+  { id: "daily", label: "Daily Route" },
+  { id: "recovery", label: "Recovery Route" },
+  { id: "scheme", label: "Route Scheme" },
 ];
 
 const WORKSTREAMS = [
-  { id: "frontend", label: "Frontend" },
-  { id: "backend", label: "Backend" },
-  { id: "design", label: "Design" },
-  { id: "qa", label: "QA" },
+  { id: "residual", label: "Residual Waste" },
+  { id: "organic", label: "Organic Waste" },
+  { id: "paper", label: "Paper & Cardboard" },
+  { id: "glass", label: "Glass" },
 ];
 
 const TAGS = [
-  { id: "bug", label: "Bug", color: "var(--chart-5)" },
-  { id: "feature", label: "Feature", color: "var(--chart-2)" },
-  { id: "enhancement", label: "Enhancement", color: "var(--chart-4)" },
-  { id: "docs", label: "Documentation", color: "var(--chart-3)" },
+  { id: "municipal", label: "Municipal", color: "var(--chart-5)" },
+  { id: "commercial", label: "Commercial", color: "var(--chart-2)" },
+  { id: "exception", label: "Exception", color: "var(--chart-4)" },
+  { id: "recollection", label: "Recollection", color: "var(--chart-3)" },
 ];
 
 // --- Helper Components ---
@@ -253,7 +253,7 @@ export function StepQuickCreate({
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Project title"
+              placeholder="Route title"
               className="w-full font-normal leading-7 text-foreground placeholder:text-muted-foreground text-xl outline-none bg-transparent border-none p-0"
               autoComplete="off"
             />
@@ -331,7 +331,7 @@ export function StepQuickCreate({
             items={clients}
             onSelect={setClient}
             selectedId={client?.id}
-            placeholder="Assign client..."
+            placeholder="Assign customer..."
             renderItem={(item, isSelected) => (
               <div className="flex items-center gap-2 w-full">
                 <div className="size-5 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
@@ -347,12 +347,12 @@ export function StepQuickCreate({
                   "flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border transition-colors",
                   client
                     ? "bg-muted"
-                    : "bg-background hover:bg-black/5",
+                    : "bg-background hover:bg-accent",
                 )}
               >
                 <UserCircle className="size-4 text-muted-foreground" />
                 <span className="font-medium text-foreground text-sm leading-5">
-                  {client ? client.name : "Client"}
+                  {client ? client.name : "Customer"}
                 </span>
               </button>
             }
@@ -375,7 +375,7 @@ export function StepQuickCreate({
               <button
                 className={cn(
                   "flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border transition-colors",
-                  "bg-background hover:bg-black/5",
+                  "bg-background hover:bg-accent",
                 )}
               >
                 <Wrapper>
@@ -410,7 +410,7 @@ export function StepQuickCreate({
             items={SPRINT_TYPES}
             onSelect={setSprintType}
             selectedId={sprintType?.id}
-            placeholder="Select sprint type..."
+            placeholder="Select route type..."
             renderItem={(item, isSelected) => (
               <div className="flex items-center gap-2 w-full">
                 <span className="flex-1">{item.label}</span>
@@ -418,12 +418,12 @@ export function StepQuickCreate({
               </div>
             )}
             trigger={
-              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-black/5 transition-colors">
+              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
                 <List className="size-4 text-muted-foreground" />
                 <span className="font-medium text-foreground text-sm leading-5">
                   {sprintType
                     ? sprintType.label
-                    : "Sprint Type"}
+                    : "Route Type"}
                 </span>
               </button>
             }
@@ -434,7 +434,7 @@ export function StepQuickCreate({
             date={targetDate}
             onSelect={setTargetDate}
             trigger={
-              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-black/5 transition-colors">
+              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
                 <CalendarBlank className="size-4 text-muted-foreground" />
                 <span className="font-medium text-foreground text-sm leading-5">
                   {targetDate
@@ -450,7 +450,7 @@ export function StepQuickCreate({
             items={WORKSTREAMS}
             onSelect={setWorkstream}
             selectedId={workstream?.id}
-            placeholder="Select workstream..."
+            placeholder="Select waste fraction..."
             renderItem={(item, isSelected) => (
               <div className="flex items-center gap-2 w-full">
                 <span className="flex-1">{item.label}</span>
@@ -458,12 +458,12 @@ export function StepQuickCreate({
               </div>
             )}
             trigger={
-              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-black/5 transition-colors">
+              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
                 <Rows className="size-4 text-muted-foreground" />
                 <span className="font-medium text-foreground text-sm leading-5">
                   {workstream
                     ? workstream.label
-                    : "Workstreams"}
+                    : "Waste Fraction"}
                 </span>
               </button>
             }
@@ -482,7 +482,7 @@ export function StepQuickCreate({
               </div>
             )}
             trigger={
-              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-black/5 transition-colors">
+              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
                 <ChartBar className="size-4 text-muted-foreground" />
                 <span className="font-medium text-foreground text-sm leading-5">
                   {priority ? priority.label : "Priority"}
@@ -508,7 +508,7 @@ export function StepQuickCreate({
               </div>
             )}
             trigger={
-              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-black/5 transition-colors">
+              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
                 <Wrapper>
                   <g
                     clipPath="url(#clip0_13_2458)"
@@ -537,10 +537,10 @@ export function StepQuickCreate({
         {/* Footer */}
         <div className="flex items-center justify-between mt-auto w-full pt-4 shrink-0">
           <div className="flex items-center">
-            <button className="flex items-center justify-center size-10 rounded-lg hover:bg-black/5 transition-colors cursor-pointer">
+            <button className="flex items-center justify-center size-10 rounded-lg hover:bg-accent transition-colors cursor-pointer">
               <Paperclip className="size-4 text-muted-foreground" />
             </button>
-            <button className="flex items-center justify-center size-10 rounded-lg hover:bg-black/5 transition-colors cursor-pointer">
+            <button className="flex items-center justify-center size-10 rounded-lg hover:bg-accent transition-colors cursor-pointer">
               <Microphone className="size-4 text-muted-foreground" />
             </button>
           </div>
@@ -550,7 +550,7 @@ export function StepQuickCreate({
             className="bg-primary hover:bg-primary/90 flex gap-3 h-10 items-center justify-center px-4 py-2 rounded-lg transition-colors cursor-pointer"
           >
             <span className="font-medium text-primary-foreground text-sm leading-5">
-              Create Project
+              Create Route
             </span>
           </button>
         </div>

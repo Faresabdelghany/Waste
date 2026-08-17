@@ -50,7 +50,7 @@ export function MyTasksPage() {
       .filter((group) => group.tasks.length > 0)
   })
 
-  const [filters, setFilters] = useState<FilterChipType[]>([{ key: "members", value: "jason" }])
+  const [filters, setFilters] = useState<FilterChipType[]>([{ key: "members", value: "olivia" }])
   const [viewOptions, setViewOptions] = useState<ViewOptions>(DEFAULT_VIEW_OPTIONS)
 
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false)
@@ -217,11 +217,11 @@ export function MyTasksPage() {
 
   if (!visibleGroups.length) {
     return (
-      <div className="flex flex-1 flex-col min-h-0 bg-background mx-2 my-2 border border-border rounded-lg min-w-0">
+      <div className="flex flex-1 flex-col min-h-0 bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
         <div className="flex items-center justify-between px-4 py-4 border-b border-border/70">
           <div className="space-y-1">
-            <h1 className="text-lg font-semibold tracking-tight">Tasks</h1>
-            <p className="text-xs text-muted-foreground">No tasks available yet.</p>
+            <h1 className="text-lg font-semibold tracking-tight">Tickets</h1>
+            <p className="text-xs text-muted-foreground">No tickets available yet.</p>
           </div>
         </div>
       </div>
@@ -229,12 +229,12 @@ export function MyTasksPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col min-h-0 bg-background mx-2 my-2 border border-border rounded-lg min-w-0">
+    <div className="flex flex-1 flex-col min-h-0 bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
       <header className="flex flex-col border-b border-border/40">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border/70">
           <div className="flex items-center gap-3">
             <SidebarTrigger className="h-8 w-8 rounded-lg hover:bg-accent text-muted-foreground" />
-            <p className="text-base font-medium text-foreground">Tasks</p>
+            <p className="text-base font-medium text-foreground">Tickets</p>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -243,7 +243,7 @@ export function MyTasksPage() {
               onClick={() => openCreateTask()}
             >
               <Plus className="mr-1.5 h-4 w-4" />
-              New Task
+              New Ticket
             </Button>
           </div>
         </div>

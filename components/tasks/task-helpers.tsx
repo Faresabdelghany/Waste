@@ -53,7 +53,7 @@ export function computeTaskFilterCounts(tasks: ProjectTask[]): FilterCounts {
     members: {
       "no-member": 0,
       current: 0,
-      jason: 0,
+      olivia: 0,
     },
   }
 
@@ -64,8 +64,8 @@ export function computeTaskFilterCounts(tasks: ProjectTask[]): FilterCounts {
       counts.members!.current = (counts.members!.current || 0) + 1
 
       const name = task.assignee.name.toLowerCase()
-      if (name.includes("jason duong")) {
-        counts.members!.jason = (counts.members!.jason || 0) + 1
+      if (name.includes("olivia larsen")) {
+        counts.members!.olivia = (counts.members!.olivia || 0) + 1
       }
     }
   }

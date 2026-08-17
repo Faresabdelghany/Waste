@@ -26,7 +26,7 @@ export function ClientWizard({ mode, initialClient, onClose, onSubmit }: ClientW
   const [industry, setIndustry] = useState(initialClient?.industry ?? "")
   const [website, setWebsite] = useState(initialClient?.website ?? "")
   const [location, setLocation] = useState(initialClient?.location ?? "")
-  const [owner, setOwner] = useState(initialClient?.owner ?? "Jason Duong")
+  const [owner, setOwner] = useState(initialClient?.owner ?? "Olivia Larsen")
   const [notes, setNotes] = useState(initialClient?.notes ?? "")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -34,7 +34,7 @@ export function ClientWizard({ mode, initialClient, onClose, onSubmit }: ClientW
 
   const handleSave = () => {
     if (!name.trim()) {
-      toast.error("Client name is required")
+      toast.error("Customer name is required")
       return
     }
 
@@ -55,7 +55,7 @@ export function ClientWizard({ mode, initialClient, onClose, onSubmit }: ClientW
       }
 
       const saved = upsertClient(payload)
-      toast.success(isEdit ? "Client updated" : "Client created")
+      toast.success(isEdit ? "Customer updated" : "Customer created")
       onSubmit?.(saved)
       onClose()
     } finally {
@@ -74,10 +74,10 @@ export function ClientWizard({ mode, initialClient, onClose, onSubmit }: ClientW
         <div className="flex items-start justify-between px-6 pt-5 pb-4">
           <div>
             <p className="text-base font-semibold text-foreground">
-              {isEdit ? "Edit client" : "New client"}
+              {isEdit ? "Edit customer" : "New customer"}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Basic information about the client, primary contact and context.
+              Basic information about the customer, primary contact and service context.
             </p>
           </div>
           <Button
@@ -93,7 +93,7 @@ export function ClientWizard({ mode, initialClient, onClose, onSubmit }: ClientW
         <div className="flex-1 overflow-y-auto px-6 pb-6 pt-3 space-y-5">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">Client name</Label>
+              <Label className="text-xs font-medium text-muted-foreground">Customer name</Label>
               <Input
                 value={name}
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
@@ -194,7 +194,7 @@ export function ClientWizard({ mode, initialClient, onClose, onSubmit }: ClientW
             <Textarea
               value={notes}
               onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setNotes(e.target.value)}
-              placeholder="Context about this client, expectations, or important details."
+              placeholder="Service context, access requirements, or important customer details."
               className="min-h-24 text-sm"
             />
           </div>
@@ -205,7 +205,7 @@ export function ClientWizard({ mode, initialClient, onClose, onSubmit }: ClientW
             Cancel
           </Button>
           <Button size="sm" onClick={handleSave} disabled={isSubmitting}>
-            {isEdit ? "Save changes" : "Create client"}
+            {isEdit ? "Save changes" : "Create customer"}
           </Button>
         </div>
       </motion.div>

@@ -172,7 +172,7 @@ export function ProjectTimeline() {
         const needsExpand = newStart < p.startDate || newEnd > p.endDate
         if (needsExpand) {
           showConfirmDialog(
-            "This task is outside the project range. Expand project to fit?",
+            "This stop is outside the route range. Expand the route to fit?",
             () => {
               setProjects((prev) =>
                 prev.map((proj) => {
@@ -259,7 +259,7 @@ export function ProjectTimeline() {
         const shouldMoveChildren = p.tasks.length > 0
         if (shouldMoveChildren && !confirmed) {
           showConfirmDialog(
-            `Move all ${p.tasks.length} tasks along with the project?`,
+            `Move all ${p.tasks.length} stops along with the route?`,
             () => {
               // Re-run the update with confirmation
               handleUpdateProject(projectId, newStart, true)
@@ -694,7 +694,7 @@ export function ProjectTimeline() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <label htmlFor="item-name" className="text-sm font-medium">Name {editDialog.type === "project" ? "(Project)" : "(Task)"}</label>
+              <label htmlFor="item-name" className="text-sm font-medium">Name {editDialog.type === "project" ? "(Route)" : "(Stop)"}</label>
               <Input
                 id="item-name"
                 value={editDialog.type === "project"

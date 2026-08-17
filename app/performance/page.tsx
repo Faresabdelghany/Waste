@@ -1,17 +1,12 @@
-import { Suspense } from "react"
-import { AppSidebar } from "@/components/app-sidebar"
-import { PerformanceContent } from "@/components/performance-content"
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+"use client"
+
+import dynamic from "next/dynamic"
+
+const PerformancePage = dynamic(
+  () => import("@/components/performance-page").then((module) => module.PerformancePage),
+  { ssr: false },
+)
 
 export default function Page() {
-  return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset>
-        <Suspense fallback={null}>
-          <PerformanceContent />
-        </Suspense>
-      </SidebarInset>
-    </SidebarProvider>
-  )
+  return <PerformancePage />
 }

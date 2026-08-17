@@ -63,7 +63,7 @@ export function StepMode({ selected, onSelect, onCancel, onContinue, onClose }: 
           <div className="relative shrink-0 w-full">
             <div className="flex flex-row items-center justify-center size-full">
               <div className="flex items-center justify-center px-2 py-0 relative w-full">
-                <p className="basis-0 font-normal grow leading-5 min-h-px min-w-px relative shrink-0 text-muted-foreground text-sm">{`Choose how you'd like to set up your project`}</p>
+                <p className="basis-0 font-normal grow leading-5 min-h-px min-w-px relative shrink-0 text-muted-foreground text-sm">{`Choose how you'd like to set up your route`}</p>
               </div>
             </div>
           </div>
@@ -80,7 +80,7 @@ export function StepMode({ selected, onSelect, onCancel, onContinue, onClose }: 
               <div className="content-stretch flex flex-col items-start relative shrink-0 w-full">
                 <div className="content-stretch flex items-center relative shrink-0 w-full" data-name="Card / Header">
                   <div className="basis-0 content-stretch flex grow items-start min-h-px min-w-px relative shrink-0">
-                    <Helper text="Quick create" text1="Create a project with minimal setup" />
+                    <Helper text="Quick create" text1="Create a route with minimal setup" />
                   </div>
                 </div>
               </div>
@@ -111,7 +111,7 @@ export function StepMode({ selected, onSelect, onCancel, onContinue, onClose }: 
               <div className="content-stretch flex flex-col items-start relative shrink-0 w-full">
                 <div className="content-stretch flex items-center relative shrink-0 w-full" data-name="Card / Header">
                   <div className="basis-0 content-stretch flex grow items-start min-h-px min-w-px relative shrink-0">
-                    <Helper text="Guided Setup" text1="Define Goal, ownership, and structure" />
+                    <Helper text="Guided Setup" text1="Define service, ownership, and execution" />
                   </div>
                 </div>
               </div>

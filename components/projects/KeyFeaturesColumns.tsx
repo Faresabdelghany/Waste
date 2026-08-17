@@ -7,7 +7,7 @@ type KeyFeaturesColumnsProps = {
 export function KeyFeaturesColumns({ features }: KeyFeaturesColumnsProps) {
   return (
     <section>
-      <h2 className="text-base font-semibold text-foreground">Key features</h2>
+      <h2 className="text-base font-semibold text-foreground">Operational Controls</h2>
       <div className="mt-4 grid grid-cols-1 gap-10 md:grid-cols-3">
         <div>
           <div className="text-sm font-semibold text-foreground">P0:</div>
