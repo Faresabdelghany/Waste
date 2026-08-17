@@ -1,143 +1,92 @@
-<h1 align="center">Project Dashboard · Next.js + shadcn/ui</h1>
+<h1 align="center">WasteHero Operations Platform · UI Prototype</h1>
 
 <p align="center">
-  A modern project & task management dashboard, built as a real-world UI template for founders, product designers, and full‑stack developers.
-</p>
-
-<p align="center">
-  <a href="https://v0-project-workspace.vercel.app"><strong>Live demo</strong></a>
-  ·
-  <a href="#getting-started"><strong>Run locally</strong></a>
-  ·
-  <a href="#architecture"><strong>Explore the architecture</strong></a>
+  A multi-workspace prototype of the WasteHero operations platform for waste & recycling logistics —
+  covering daily operations, route planning, fleet, customers, assets, commercial, and analytics.
 </p>
 
 ---
 
 ## Overview
 
-This repository is a small but opinionated **project management dashboard UI** built with:
+This repository is a **UI-only prototype** of the WasteHero operations platform, built with:
 
-- **Next.js App Router**
+- **Next.js (App Router)**
 - **TypeScript**
-- **Tailwind CSS**
-- **shadcn/ui + custom sidebar primitives**
+- **Tailwind CSS v4**
+- **shadcn/ui + Radix UI primitives**
 
-It is designed as a **living portfolio piece**:
+There is no backend, API, or real authentication. All data is fixture data in `lib/data/`, merged with user-created records in client-side stores persisted to `localStorage`. The goal is to explore and validate the product's information architecture, workflows, and UI patterns before backend integration.
 
-- You can browse the actual code, not just design mockups.
-- You can clone, run, and extend the dashboard like a real product.
-- It demonstrates how to combine design and engineering decisions in a clean, extensible way.
+## Workspaces
 
-If you are a founder, indie hacker, or engineer evaluating collaboration, this repo is meant to show how I think about **systems, structure, and UI details**.
+The platform is organized into role- and domain-oriented workspaces, each rendered through a shared workspace shell:
 
-## Live Demo
+| Route | Workspace |
+| --- | --- |
+| `/operate` | Daily operations — collections, tickets, exceptions |
+| `/plan` | Planning — route schemes, scheduling |
+| `/route-studio` | Route Studio — route design and optimization |
+| `/fleet` | Fleet — vehicles, maintenance, compliance |
+| `/customers` | Customers — properties, agreements, service requests |
+| `/resources` | Resources — containers, assets, warehouses, staff |
+| `/commercial` | Commercial — pricing, invoicing, contracts |
+| `/improve` | Improve — analytics, performance, quality |
+| `/configure` | Configure — organization and platform settings |
+| `/control-center` | Control Center — live dispatch and monitoring |
 
-The dashboard is deployed on Vercel:
+Restricted persona surfaces sit alongside the internal workspaces:
 
-- **Production**: https://v0-project-workspace.vercel.app
-
-> Note: This is a UI‑first demo. It uses mocked data and does not include authentication or a backend API.
-
-## Features
-
-- **Project overview layout**
-  - Sidebar navigation with active states and badges.
-  - Active projects list with progress visualization.
-
-- **Responsive sidebar system**
-  - Built on top of a custom `SidebarProvider` with context.
-  - Keyboard shortcut to toggle sidebar.
-  - Mobile behavior and state persisted via cookies.
-
-- **Design‑system‑oriented components**
-  - Base primitives from shadcn/ui.
-  - Composed `AppSidebar` component using data from `lib/data`.
-  - Utility helpers in `lib/utils` for consistent styling.
-
-- **Mock data that resembles real workloads**
-  - Projects with statuses, priorities, tags, and time ranges.
-  - Sidebar navigation and “Active projects” summaries.
+- `/driver` — driver app experience
+- `/portal` — customer portal
+- `/contractor-workspace` — external contractor workspace
 
 ## Architecture
 
-High‑level structure:
+- `app/` — thin server-component routes; most render `WorkspacePageShell` with a `workspaceId`. In-workspace navigation is driven by `?module=` and `?record=` search params.
+- `components/wastehero/` — the workspace shell machinery:
+  - `business-workspace.tsx` — generic module list/table/detail rendering used by every workspace
+  - `business-record-form-dialog.tsx` — create/edit dialogs generated from form schemas
+  - `restricted-workspace-shell.tsx` — shells for the driver, portal, contractor, and control-center personas
+- `lib/data/` — the data registries:
+  - `business-modules.ts` — central registry: workspaces → modules → fixture records
+  - `business-domain.ts` — machine-readable map of every UI surface to canonical business modules M01–M24 (owners, personas, dependencies, boundaries); human-readable companion in `docs/BUSINESS_MODULE_MAP.md`
+  - `business-form-types.ts` + `business-form-schemas*.ts` — per-module form field schemas
+- `components/ui/` — shadcn/ui primitives (new-york style); theme tokens live in `app/globals.css` (Tailwind v4, no config file).
 
-- `app/`
-  - `layout.tsx` – Root layout, metadata, fonts, and global styles.
-  - `page.tsx` – Main dashboard page wiring the `SidebarProvider`, `AppSidebar`, and page content.
+### Domain language
 
-- `components/`
-  - `app-sidebar.tsx` – Application sidebar composed from shared sidebar primitives and data.
-  - `projects-content.tsx` – Main dashboard content (project list, filters, and timeline). 
-  - `progress-circle.tsx` – Small reusable visualization for project progress.
-  - `ui/` – Design-system‑like primitives (buttons, sidebar primitives, input, tooltip, etc.).
-
-- `lib/`
-  - `utils.ts` – Utility helpers (e.g., class name helpers).
-  - `data/projects.ts` – Seed data for projects and helpers to compute filter counts.
-  - `data/sidebar.ts` – Seed data for sidebar navigation, active projects summary, and footer items.
-
-This separation keeps:
-
-- **UI primitives** (in `components/ui`) reusable across the app.
-- **Feature components** (like `AppSidebar`) focused on composition instead of raw config.
-- **Data** (in `lib/data`) decoupled from the UI, so you can easily swap mock data for real APIs later.
-
-## Tech Stack
-
-- **Framework**: Next.js (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **UI Library**: shadcn/ui, Radix UI primitives
-- **Icons**: Lucide, Phosphor Icons
-- **Analytics**: Vercel Analytics
+`CONTEXT.md` is the canonical glossary. Every term lists synonyms to avoid — use the exact terms in UI copy and identifiers (e.g. **Agreement** not Subscription, **Route Scheme** not Route, **Warehouse** not Depot, **Ticket** not Alert). In WasteHero language a **Project** is an operating scope (municipality, contract, region) — never a route.
 
 ## Getting Started
 
 ### Prerequisites
 
 - Node.js 18+
-- pnpm (recommended) or npm/yarn
+- pnpm
 
-### Install dependencies
+### Install & run
 
-\`\`\`bash
+```bash
 pnpm install
-\`\`\`
-
-### Run the development server
-
-\`\`\`bash
 pnpm dev
-\`\`\`
+```
 
 The app will be available at `http://localhost:3000`.
 
-### Build for production
+### Build & type-check
 
-\`\`\`bash
+```bash
 pnpm build
 pnpm start
-\`\`\`
+npx tsc --noEmit   # type errors are not caught by the build — run tsc explicitly
+```
 
-## Reuse & Customization
+## Tech Stack
 
-This project is intentionally small so you can:
-
-- **Use it as a starting point** for your own SaaS dashboard or internal tooling.
-- **Replace the mock data** in `lib/data` with real data from your API.
-- **Extend the design system** by adding more components under `components/ui`.
-- **Refine the information architecture** (routes under `app/`) to match your own product.
-
-If you end up using this as a starting point, a link back or a star on the repo is always appreciated.
-
-## About
-
-This project was built as an **open-source, living portfolio** to demonstrate how I approach:
-
-- Structuring small front‑end apps.
-- Balancing visual design and implementation detail.
-- Building reusable UI primitives that are still easy to adapt.
-
-If you are a founder, PM, or engineer and want to talk about collaborating, feel free to reach out.
+- **Framework**: Next.js (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS v4
+- **UI**: shadcn/ui, Radix UI
+- **Icons**: Lucide, Phosphor Icons
+- **State**: React context stores persisted to `localStorage` (records, organization settings, themes)
