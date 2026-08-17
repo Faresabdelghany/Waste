@@ -137,7 +137,6 @@ type ProjectScope = "copenhagen" | "harbor" | "all"
 
 const emptyBusinessFilters: BusinessFilters = {
   statuses: [],
-  owners: [],
   sources: [],
   freshness: [],
   containerTypes: [],
@@ -154,7 +153,6 @@ const emptyBusinessFilters: BusinessFilters = {
 
 const filterFieldByChipLabel: Record<string, keyof BusinessFilters> = {
   Status: "statuses",
-  Owner: "owners",
   Source: "sources",
   Freshness: "freshness",
   "Container type": "containerTypes",
@@ -802,9 +800,6 @@ export function BusinessWorkspace({
   const activeSecondaryModule = secondaryModules.find(
     (module) => module.id === activeModule.id,
   )
-  const showOwnerColumn =
-    viewOptions.showOwner &&
-    !(workspace.id === "customers" && activeModule.id === "properties")
   const activeModuleFormSchema = useMemo(
     () =>
       configuredAssetFormSchema(
@@ -993,9 +988,6 @@ export function BusinessWorkspace({
       const matchesStatus =
         businessFilters.statuses.length === 0 ||
         businessFilters.statuses.includes(record.status)
-      const matchesOwner =
-        businessFilters.owners.length === 0 ||
-        businessFilters.owners.includes(record.owner)
       const matchesSource =
         businessFilters.sources.length === 0 ||
         businessFilters.sources.includes(record.source)
@@ -1060,7 +1052,6 @@ export function BusinessWorkspace({
           record.name,
           record.context,
           record.status,
-          record.owner,
           record.value,
           record.description,
           ...Object.values(record.facts),
@@ -1072,7 +1063,6 @@ export function BusinessWorkspace({
 
       return (
         matchesStatus &&
-        matchesOwner &&
         matchesSource &&
         matchesFreshness &&
         matchesContainerType &&
@@ -1104,9 +1094,6 @@ export function BusinessWorkspace({
     const chips: Array<{ key: string; value: string }> = []
     businessFilters.statuses.forEach((value) =>
       chips.push({ key: "Status", value }),
-    )
-    businessFilters.owners.forEach((value) =>
-      chips.push({ key: "Owner", value }),
     )
     businessFilters.sources.forEach((value) =>
       chips.push({ key: "Source", value }),
@@ -1163,7 +1150,6 @@ export function BusinessWorkspace({
       Number(viewOptions.showProject)
     : 3 +
       Number(viewOptions.showContext) +
-      Number(showOwnerColumn) +
       Number(viewOptions.showUpdated)
   const isFleetPlanningView =
     workspace.id === "fleet" && activeModule.id === "vehicle-planning"
@@ -1993,9 +1979,6 @@ export function BusinessWorkspace({
         return displayFormValue(field, value)
       })
       .filter(Boolean)
-    const ownerValue = formSchema.ownerField
-      ? values[formSchema.ownerField]
-      : undefined
     const projectIds = selectedProjectIds(projectScope, values)
     const newRecord: BusinessRecord = {
       id: `${resolvedTarget.module.id}-${formSchema.recordKind
@@ -2005,10 +1988,7 @@ export function BusinessWorkspace({
       name: recordName,
       context: contextValues.join(" · ") || projectScopeLabel(projectIds),
       status: initialFormStatus(resolvedTarget.module, formSchema, values),
-      owner:
-        typeof ownerValue === "string" && ownerValue.trim()
-          ? ownerValue
-          : "Olivia Larsen",
+      owner: "Olivia Larsen",
       value: formSchema.execution.resultValue ?? formSchema.submitLabel,
       updated: "Now",
       description: formSchema.description,
@@ -2115,7 +2095,6 @@ export function BusinessWorkspace({
           contractorId,
           ownershipType: "contractor",
           resourceKind: "powered-vehicle",
-          owner: selectedRecord.name,
         },
       })
       return
@@ -2128,7 +2107,6 @@ export function BusinessWorkspace({
         initialValues: {
           contractorId,
           employmentType: "contractor",
-          owner: selectedRecord.name,
         },
       })
       return
@@ -2348,13 +2326,7 @@ export function BusinessWorkspace({
                 <BusinessViewOptionsPopover
                   value={viewOptions}
                   onChange={setViewOptions}
-                  variant={
-                    isContainersAssetsView
-                      ? "containers"
-                      : workspace.id === "customers" && activeModule.id === "properties"
-                        ? "customer-properties"
-                        : "default"
-                  }
+                  variant={isContainersAssetsView ? "containers" : "default"}
                 />
               </div>
 
@@ -2468,7 +2440,6 @@ export function BusinessWorkspace({
                       title={record.name}
                       subtitle={[
                         viewOptions.showContext ? record.context : "",
-                        viewOptions.showOwner ? record.owner : "",
                       ]
                         .filter(Boolean)
                         .join(" · ")}
@@ -2529,7 +2500,6 @@ export function BusinessWorkspace({
                           )}
                           <TableHead>Status</TableHead>
                           <TableHead>{activeModule.valueLabel}</TableHead>
-                          {showOwnerColumn && <TableHead>Owner</TableHead>}
                           {viewOptions.showUpdated && <TableHead>Updated</TableHead>}
                         </>
                       )}
@@ -2673,11 +2643,6 @@ export function BusinessWorkspace({
                               <TableCell className="min-w-[150px]">
                                 <RecordValue record={record} />
                               </TableCell>
-                              {showOwnerColumn && (
-                                <TableCell className="min-w-[150px] text-sm text-muted-foreground">
-                                  {record.owner}
-                                </TableCell>
-                              )}
                               {viewOptions.showUpdated && (
                                 <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                                   {record.updated}

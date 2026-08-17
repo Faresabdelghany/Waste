@@ -173,7 +173,6 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
     submitLabel: "Create property group",
     nameField: "name",
     contextFieldIds: ["projectId", "purpose", "responsibleCustomerId"],
-    ownerField: "recordOwner",
     sections: [
       {
         id: "scope-source",
@@ -193,13 +192,6 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             required: true,
             defaultValue: "manual",
             options: sourceOptions,
-          },
-          {
-            id: "recordOwner",
-            label: "Business owner",
-            type: "text",
-            required: true,
-            placeholder: "Customer Service Team",
           },
         ],
       },
@@ -326,7 +318,6 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
     submitLabel: "Create draft shared point",
     nameField: "name",
     contextFieldIds: ["projectId", "pointType", "operatingModel"],
-    ownerField: "recordOwner",
     sections: [
       {
         id: "scope-source",
@@ -346,13 +337,6 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             required: true,
             defaultValue: "manual",
             options: sourceOptions,
-          },
-          {
-            id: "recordOwner",
-            label: "Business owner",
-            type: "text",
-            required: true,
-            placeholder: "Shared Services Team",
           },
         ],
       },
@@ -532,7 +516,6 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
     submitLabel: "Create party",
     nameField: "displayName",
     contextFieldIds: ["partyType", "projectScope", "relationshipRole"],
-    ownerField: "recordOwner",
     sections: [
       {
         id: "scope-source",
@@ -568,12 +551,6 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
               ...sourceOptions,
               { value: "business-registry", label: "Business registry lookup" },
             ],
-          },
-          {
-            id: "recordOwner",
-            label: "Business owner",
-            type: "text",
-            required: true,
           },
         ],
       },
@@ -692,7 +669,6 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
     submitLabel: "Create draft agreement",
     nameField: "agreementNumber",
     contextFieldIds: ["projectId", "customerId", "payerId"],
-    ownerField: "recordOwner",
     sections: [
       {
         id: "scope-source",
@@ -715,13 +691,6 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
               ...sourceOptions,
               { value: "template", label: "Agreement template" },
             ],
-          },
-          {
-            id: "recordOwner",
-            label: "Contract owner",
-            type: "text",
-            required: true,
-            placeholder: "Contract Team",
           },
         ],
       },
@@ -990,7 +959,6 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
     submitLabel: "Add container",
     nameField: "containerId",
     contextFieldIds: ["projectId", "containerType", "serviceAddress"],
-    ownerField: "recordOwner",
     execution: {
       kind: "create-record",
       resultValue: "Awaiting first measurement",
@@ -1038,13 +1006,6 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
               { value: "inventory-receipt", label: "Inventory receipt" },
               { value: "mobile-scan", label: "Mobile scan" },
             ],
-          },
-          {
-            id: "recordOwner",
-            label: "Registry owner team",
-            type: "text",
-            required: true,
-            placeholder: "Asset Team",
           },
         ],
       },
@@ -1366,7 +1327,6 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
     description: "",
     submitLabel: "Record movement",
     contextFieldIds: ["projectId", "movementType", "stockItemId"],
-    ownerField: "performedBy",
     sections: [
       {
         id: "scope-source",
@@ -1525,7 +1485,6 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
     submitLabel: "Create warehouse",
     nameField: "name",
     contextFieldIds: ["projectId", "code", "address"],
-    ownerField: "recordOwner",
     sections: [
       {
         id: "scope-source",
@@ -1553,13 +1512,6 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             label: "Effective from",
             type: "date",
             required: true,
-          },
-          {
-            id: "recordOwner",
-            label: "Warehouse owner team",
-            type: "text",
-            required: true,
-            placeholder: "Warehouse Team",
           },
         ],
       },
@@ -1668,7 +1620,6 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
     submitLabel: "Create draft location",
     nameField: "name",
     contextFieldIds: ["projectId", "locationType", "ownership"],
-    ownerField: "recordOwner",
     sections: [
       {
         id: "scope-source",
@@ -1700,12 +1651,6 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             label: "Effective to",
             type: "date",
             description: "Optional; historic Route destinations remain unchanged.",
-          },
-          {
-            id: "recordOwner",
-            label: "Operational owner team",
-            type: "text",
-            required: true,
           },
         ],
       },

@@ -265,12 +265,12 @@ export function StepQuickCreate({
 
         {/* Property Buttons - Interactive Dropdowns */}
         <div className="flex flex-wrap gap-2.5 items-start w-full shrink-0">
-          {/* Owner Picker */}
+          {/* Assignee Picker */}
           <GenericPicker
             items={USERS}
             onSelect={setAssignee}
             selectedId={assignee.id}
-            placeholder="Assign owner..."
+            placeholder="Assign to..."
             renderItem={(item, isSelected) => (
               <div className="flex items-center gap-2 w-full">
                 {item.avatar ? (

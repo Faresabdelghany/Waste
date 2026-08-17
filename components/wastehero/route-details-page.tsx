@@ -846,9 +846,6 @@ function TicketsTab({
                     Status
                   </TableHead>
                   <TableHead className="text-xs font-medium text-muted-foreground">
-                    Owner
-                  </TableHead>
-                  <TableHead className="text-xs font-medium text-muted-foreground">
                     SLA
                   </TableHead>
                   <TableHead className="w-20" />
@@ -857,7 +854,7 @@ function TicketsTab({
               <TableBody>
                 {tickets.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-52 text-center">
+                    <TableCell colSpan={6} className="h-52 text-center">
                       <Ticket className="mx-auto h-6 w-6 text-muted-foreground" />
                       <p className="mt-2 text-sm font-medium">No related tickets</p>
                     </TableCell>
@@ -897,9 +894,6 @@ function TicketsTab({
                         >
                           {ticketRecord.status}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="py-3 text-sm text-muted-foreground">
-                        {ticketRecord.owner}
                       </TableCell>
                       <TableCell className="py-3 text-sm">
                         {ticketRecord.value}
