@@ -45,7 +45,7 @@ export function ProjectWizard({ onClose, onCreate }: ProjectWizardProps) {
   // 0: Mode
   // 1: Intent
   // 2: Outcome
-  // 3: Ownership
+  // 3: People
   // 4: Structure
   // 5: Review
 
@@ -81,7 +81,6 @@ export function ProjectWizard({ onClose, onCreate }: ProjectWizardProps) {
   };
 
   const isNextDisabled = () => {
-      if (step === 3 && !data.ownerId) return true; // Step 3: Ownership
       return false;
   }
 
@@ -93,7 +92,7 @@ export function ProjectWizard({ onClose, onCreate }: ProjectWizardProps) {
   const steps = [
     "Route purpose",
     "Service outcome",
-    "Ownership",
+    "People",
     "Execution structure",
     "Review & create"
   ];

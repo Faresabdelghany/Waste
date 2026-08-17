@@ -2,9 +2,7 @@ import { ProjectData } from "../types";
 import { Card } from "../../ui/card";
 import { Separator } from "../../ui/separator";
 import { Button } from "../../ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "../../ui/avatar";
-import { getAvatarUrl } from "@/lib/assets/avatars";
-import { Rocket, Flask, Briefcase, User, Users, Layout, Target, CheckCircle, Question, PencilSimpleLine } from "@phosphor-icons/react/dist/ssr";
+import { Rocket, Flask, Briefcase, Users, Layout, Target, CheckCircle, Question, PencilSimpleLine } from "@phosphor-icons/react/dist/ssr";
 
 interface StepReviewProps {
   data: ProjectData;
@@ -42,30 +40,6 @@ export function StepReview({ data, onEditStep }: StepReviewProps) {
             default: return <Question className="h-5 w-5" />;
         }
     };
-
-    const ownerNameMap: Record<string, string> = {
-        "jason-d": "Jason D",
-        "alex-morgan": "Alex Morgan",
-        "sarah-chen": "Sarah Chen",
-        "mike-ross": "Mike Ross",
-        "harrold": "Harrold",
-        "james": "James Boarnd",
-        "mitch": "Mitch Sato",
-    };
-
-    const getInitials = (name: string | undefined) => {
-        if (!name) return "";
-        const parts = name.trim().split(" ");
-        if (parts.length === 1) return parts[0]?.[0]?.toUpperCase() ?? "";
-        const first = parts[0]?.[0];
-        const last = parts[parts.length - 1]?.[0];
-        return `${first ?? ""}${last ?? ""}`.toUpperCase();
-    };
-
-    const ownerId = data.ownerId;
-    const ownerName = ownerId ? ownerNameMap[ownerId] ?? "Selected owner" : "Not assigned";
-    const ownerAvatarUrl = ownerName ? getAvatarUrl(ownerName) : undefined;
-    const ownerInitials = getInitials(ownerName);
 
     const structureLabel =
         data.structure === 'milestones'
@@ -148,26 +122,18 @@ export function StepReview({ data, onEditStep }: StepReviewProps) {
 
           <Separator className="opacity-0" />
 
-          {/* Ownership */}
+          {/* People */}
           <div className="flex items-center gap-4 rounded-3xl bg-background p-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border text-muted-foreground">
-              <User className="h-5 w-5" />
+              <Users className="h-5 w-5" />
             </div>
             <div className="flex-1">
-              <p className="text-xs text-muted-foreground pb-1">Ownership</p>
-              <div className="mt-1 flex items-center gap-2">
-                <Avatar className="h-6 w-6 border border-border bg-background text-xs">
-                  {ownerAvatarUrl && <AvatarImage src={ownerAvatarUrl} alt={ownerName} />}
-                  <AvatarFallback>{ownerInitials}</AvatarFallback>
-                </Avatar>
-                <p className="text-sm font-semibold">{ownerName}</p>
-              </div>
-              {data.contributorIds.length > 0 && (
-                <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                  <Users className="h-3 w-3" />
-                  <span>Contributors: {data.contributorIds.length}</span>
-                </div>
-              )}
+              <p className="text-xs text-muted-foreground pb-1">People</p>
+              <p className="text-sm font-semibold">
+                {data.contributorIds.length > 0
+                  ? `Contributors: ${data.contributorIds.length}`
+                  : "No contributors yet"}
+              </p>
             </div>
             <Button
               variant="ghost"

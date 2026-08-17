@@ -109,7 +109,6 @@ export type BusinessFormSchema = {
   disabledReason?: string
   nameField?: string
   contextFieldIds?: readonly string[]
-  ownerField?: string
   execution?: BusinessFormExecution
   validationRules?: readonly BusinessFormValidationRule[]
   sections: readonly BusinessFormSection[]

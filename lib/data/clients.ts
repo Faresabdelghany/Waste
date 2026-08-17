@@ -9,7 +9,6 @@ export type Client = {
   industry?: string
   website?: string
   location?: string
-  owner?: string
   primaryContactName?: string
   primaryContactEmail?: string
   notes?: string
@@ -25,7 +24,6 @@ export const clients: Client[] = [
     industry: "Municipality",
     website: "https://www.kk.dk",
     location: "Indre By, Copenhagen",
-    owner: "Olivia Larsen",
     primaryContactName: "Anna Nielsen",
     primaryContactEmail: "anna.nielsen@example.dk",
     notes: "Municipal collection agreement covering residual waste, route schemes, service exceptions, and documented recollections.",
@@ -38,7 +36,6 @@ export const clients: Client[] = [
     status: "active",
     industry: "Housing association",
     location: "Østerbro, Copenhagen",
-    owner: "Olivia Larsen",
     primaryContactName: "Mikkel Sørensen",
     primaryContactEmail: "mikkel.sorensen@example.dk",
     notes: "Multi-property organic-waste agreement with access windows and locked-yard service requirements.",
@@ -51,7 +48,6 @@ export const clients: Client[] = [
     status: "active",
     industry: "Retail",
     location: "Vesterbro, Copenhagen",
-    owner: "Olivia Larsen",
     primaryContactName: "Sofie Madsen",
     primaryContactEmail: "sofie.madsen@example.dk",
     segment: "Commercial",
@@ -63,7 +59,6 @@ export const clients: Client[] = [
     status: "active",
     industry: "Municipality",
     location: "Amager, Copenhagen",
-    owner: "Olivia Larsen",
     primaryContactName: "Emil Hansen",
     primaryContactEmail: "emil.hansen@example.dk",
     segment: "Municipal",
@@ -75,7 +70,6 @@ export const clients: Client[] = [
     status: "active",
     industry: "Municipality",
     location: "Nørrebro, Copenhagen",
-    owner: "Olivia Larsen",
     primaryContactName: "Freja Pedersen",
     primaryContactEmail: "freja.pedersen@example.dk",
     segment: "Municipal",
@@ -87,7 +81,6 @@ export const clients: Client[] = [
     status: "prospect",
     industry: "Commercial property",
     location: "Nordhavn, Copenhagen",
-    owner: "Olivia Larsen",
     primaryContactName: "Jonas Kristensen",
     primaryContactEmail: "jonas.kristensen@example.dk",
     notes: "Cardboard collection proposal awaiting capacity confirmation and agreement activation.",
@@ -100,7 +93,6 @@ export const clients: Client[] = [
     status: "active",
     industry: "Municipality",
     location: "Frederiksberg",
-    owner: "Olivia Larsen",
     primaryContactName: "Katrine Holm",
     primaryContactEmail: "katrine.holm@example.dk",
     segment: "Pilot",
@@ -112,7 +104,6 @@ export const clients: Client[] = [
     status: "active",
     industry: "Housing association",
     location: "Islands Brygge, Copenhagen",
-    owner: "Olivia Larsen",
     primaryContactName: "Lucas Andersen",
     primaryContactEmail: "lucas.andersen@example.dk",
     segment: "Enterprise",
@@ -124,7 +115,6 @@ export const clients: Client[] = [
     status: "prospect",
     industry: "Food service",
     location: "Kødbyen, Copenhagen",
-    owner: "Olivia Larsen",
     primaryContactName: "Clara Jensen",
     primaryContactEmail: "clara.jensen@example.dk",
     segment: "Commercial",
@@ -136,7 +126,6 @@ export const clients: Client[] = [
     status: "on_hold",
     industry: "Education",
     location: "Copenhagen",
-    owner: "Olivia Larsen",
     primaryContactName: "Noah Lund",
     primaryContactEmail: "noah.lund@example.dk",
     segment: "Public sector",
@@ -148,7 +137,6 @@ export const clients: Client[] = [
     status: "active",
     industry: "Property association",
     location: "Valby, Copenhagen",
-    owner: "Olivia Larsen",
     primaryContactName: "Ida Thomsen",
     primaryContactEmail: "ida.thomsen@example.dk",
     segment: "SMB",
@@ -160,7 +148,6 @@ export const clients: Client[] = [
     status: "archived",
     industry: "Hospitality",
     location: "Indre By, Copenhagen",
-    owner: "Olivia Larsen",
     primaryContactName: "Oscar Møller",
     primaryContactEmail: "oscar.moeller@example.dk",
     segment: "Commercial",

@@ -99,7 +99,6 @@ export const operationsBusinessFormSchemas = [
     submitLabel: "Create alert",
     nameField: "title",
     contextFieldIds: ["projectId", "alertType", "severity", "detectedAt"],
-    ownerField: "owner",
     sections: [
       {
         id: "identity-scope",
@@ -159,12 +158,6 @@ export const operationsBusinessFormSchemas = [
             id: "detectedAt",
             label: "Detected at",
             type: "datetime",
-            required: true,
-          },
-          {
-            id: "owner",
-            label: "Attention owner",
-            type: "text",
             required: true,
           },
         ],
@@ -276,13 +269,12 @@ export const operationsBusinessFormSchemas = [
     submitLabel: "Create ticket",
     nameField: "subject",
     contextFieldIds: ["projectId", "ticketType", "priority", "source"],
-    ownerField: "owner",
     sections: [
       {
         id: "classification",
-        title: "Classification and ownership",
+        title: "Classification and assignment",
         description:
-          "Validation: Project, configured Ticket type, source, priority, and owner or team are required. New office Tickets start Created; later states follow the configured transition graph rather than a linear status list.",
+          "Validation: Project, configured Ticket type, source, and priority are required. New office Tickets start Created; later states follow the configured transition graph rather than a linear status list.",
         fields: [
           {
             id: "subject",
@@ -342,12 +334,6 @@ export const operationsBusinessFormSchemas = [
               { value: "low", label: "Low" },
               { value: "none", label: "None" },
             ],
-          },
-          {
-            id: "owner",
-            label: "Owner",
-            type: "text",
-            required: true,
           },
           {
             id: "assignedTeam",
@@ -473,7 +459,6 @@ export const operationsBusinessFormSchemas = [
       "Every stop generated for a dated Route appears as a Pickup. Execution updates that Pickup with its outcome and proof instead of creating a separate history row.",
     submitLabel: "Open execution source",
     contextFieldIds: ["routeId", "stopReference", "outcome", "occurredAt", "source"],
-    ownerField: "actor",
     sections: [
       {
         id: "execution-capture",
@@ -638,7 +623,6 @@ export const operationsBusinessFormSchemas = [
     submitLabel: "Review weight action",
     nameField: "actionType",
     contextFieldIds: ["projectId", "routeId", "actionType", "capturedAt"],
-    ownerField: "controller",
     sections: [
       {
         id: "action-source",
@@ -826,7 +810,6 @@ export const operationsBusinessFormSchemas = [
     submitLabel: "Record driver action",
     nameField: "actionType",
     contextFieldIds: ["sessionId", "routeId", "actionType", "occurredAt"],
-    ownerField: "driverId",
     sections: [
       {
         id: "session-action",
@@ -989,13 +972,12 @@ export const operationsBusinessFormSchemas = [
     submitLabel: "Create scenario",
     nameField: "scenarioName",
     contextFieldIds: ["projectId", "planningAreaId", "periodStart", "periodEnd"],
-    ownerField: "owner",
     sections: [
       {
         id: "identity-scope",
         title: "Scenario and planning scope",
         description:
-          "Validation: Project, operational Planning Area, baseline, owner, and period are required. The baseline and Planning Area must belong to the same Project, and the period end must follow the start.",
+          "Validation: Project, operational Planning Area, baseline, and period are required. The baseline and Planning Area must belong to the same Project, and the period end must follow the start.",
         fields: [
           {
             id: "scenarioName",
@@ -1051,12 +1033,6 @@ export const operationsBusinessFormSchemas = [
             id: "periodEnd",
             label: "Planning period end",
             type: "date",
-            required: true,
-          },
-          {
-            id: "owner",
-            label: "Scenario owner",
-            type: "text",
             required: true,
           },
         ],
@@ -1158,7 +1134,6 @@ export const operationsBusinessFormSchemas = [
     submitLabel: "Create route scheme",
     nameField: "schemeName",
     contextFieldIds: ["projectId", "planningAreaId", "effectiveFrom", "effectiveTo"],
-    ownerField: "owner",
     sections: [
       {
         id: "identity-effective-period",
@@ -1201,12 +1176,6 @@ export const operationsBusinessFormSchemas = [
             id: "effectiveTo",
             label: "Effective to",
             type: "date",
-          },
-          {
-            id: "owner",
-            label: "Scheme owner",
-            type: "text",
-            required: true,
           },
         ],
       },
@@ -1344,7 +1313,6 @@ export const operationsBusinessFormSchemas = [
     submitLabel: "Review deviation",
     nameField: "deviationReason",
     contextFieldIds: ["calendarId", "projectId", "originalDate", "replacementDate"],
-    ownerField: "requestedBy",
     sections: [
       {
         id: "calendar-scope",
@@ -1464,13 +1432,12 @@ export const operationsBusinessFormSchemas = [
     submitLabel: "Create area version",
     nameField: "areaName",
     contextFieldIds: ["projectId", "purpose", "effectiveFrom", "effectiveTo"],
-    ownerField: "owner",
     sections: [
       {
         id: "identity-scope",
         title: "Identity and operating purpose",
         description:
-          "Validation: name, unique reference, Project, purpose, effective-from date, owner, and geometry are required. A new boundary supersedes a prior version rather than changing historical scope.",
+          "Validation: name, unique reference, Project, purpose, effective-from date, and geometry are required. A new boundary supersedes a prior version rather than changing historical scope.",
         fields: [
           {
             id: "areaName",
@@ -1519,12 +1486,6 @@ export const operationsBusinessFormSchemas = [
             label: "Effective to",
             type: "date",
             description: "Must follow Effective from; blank means open-ended.",
-          },
-          {
-            id: "owner",
-            label: "Area owner",
-            type: "text",
-            required: true,
           },
         ],
       },
@@ -1594,7 +1555,6 @@ export const operationsBusinessFormSchemas = [
     submitLabel: "Record decision",
     nameField: "decision",
     contextFieldIds: ["approvalId", "decision", "decidedAt"],
-    ownerField: "reviewer",
     sections: [
       {
         id: "request-decision",
@@ -1739,7 +1699,6 @@ export const operationsBusinessFormSchemas = [
     submitLabel: "Create fleet resource",
     nameField: "registrationNumber",
     contextFieldIds: ["resourceKind", "ownershipType", "effectiveFrom"],
-    ownerField: "owner",
     sections: [
       {
         id: "identity-ownership",
@@ -1803,12 +1762,6 @@ export const operationsBusinessFormSchemas = [
               { value: "inactive", label: "Inactive" },
               { value: "maintenance", label: "Maintenance" },
             ],
-          },
-          {
-            id: "owner",
-            label: "Fleet owner",
-            type: "text",
-            required: true,
           },
         ],
       },
@@ -1923,7 +1876,6 @@ export const operationsBusinessFormSchemas = [
     submitLabel: "Create driver profile",
     nameField: "driverName",
     contextFieldIds: ["employmentType", "projectId"],
-    ownerField: "owner",
     sections: [
       {
         id: "identity-employment",
@@ -1971,12 +1923,6 @@ export const operationsBusinessFormSchemas = [
             type: "select",
             required: true,
             relation: { workspaceId: "resources", moduleId: "depots" },
-          },
-          {
-            id: "owner",
-            label: "Workforce owner",
-            type: "text",
-            required: true,
           },
         ],
       },
@@ -2029,7 +1975,6 @@ export const operationsBusinessFormSchemas = [
     submitLabel: "Review allocation",
     nameField: "allocationAction",
     contextFieldIds: ["projectId", "allocationAction", "plannedStart", "plannedEnd"],
-    ownerField: "planner",
     sections: [
       {
         id: "target-period",

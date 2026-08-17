@@ -125,10 +125,6 @@ export function ClientDetailsPage({ clientId }: ClientDetailsPageProps) {
                         </div>
                       </div>
 
-                      <div className="rounded-lg border border-border bg-card/80 p-4 space-y-2">
-                        <p className="text-xs font-medium text-muted-foreground">Owner</p>
-                        <p className="text-sm text-foreground">{client.owner ?? "Unassigned"}</p>
-                      </div>
                     </div>
 
                     {client.notes && (

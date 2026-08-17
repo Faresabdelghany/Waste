@@ -26,7 +26,6 @@ export function ClientWizard({ mode, initialClient, onClose, onSubmit }: ClientW
   const [industry, setIndustry] = useState(initialClient?.industry ?? "")
   const [website, setWebsite] = useState(initialClient?.website ?? "")
   const [location, setLocation] = useState(initialClient?.location ?? "")
-  const [owner, setOwner] = useState(initialClient?.owner ?? "Olivia Larsen")
   const [notes, setNotes] = useState(initialClient?.notes ?? "")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -50,7 +49,6 @@ export function ClientWizard({ mode, initialClient, onClose, onSubmit }: ClientW
         industry: industry.trim() || undefined,
         website: website.trim() || undefined,
         location: location.trim() || undefined,
-        owner: owner.trim() || undefined,
         notes: notes.trim() || undefined,
       }
 
@@ -171,21 +169,6 @@ export function ClientWizard({ mode, initialClient, onClose, onSubmit }: ClientW
                 placeholder="https://"
                 className="h-9 text-sm"
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">Owner (internal)</Label>
-              <Select value={owner} onValueChange={setOwner}>
-                <SelectTrigger className="h-9 text-sm">
-                  <SelectValue placeholder="Select owner" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Jason Duong">Jason Duong</SelectItem>
-                  <SelectItem value="Alex Chen">Alex Chen</SelectItem>
-                  <SelectItem value="Emma Wright">Emma Wright</SelectItem>
-                  <SelectItem value="Sarah Chen">Sarah Chen</SelectItem>
-                  <SelectItem value="Alex Morgan">Alex Morgan</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
 

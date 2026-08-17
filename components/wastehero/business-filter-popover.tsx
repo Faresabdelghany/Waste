@@ -11,7 +11,6 @@ import {
   Speedometer,
   Spinner,
   Truck,
-  User,
   WifiHigh,
 } from "@phosphor-icons/react/dist/ssr"
 
@@ -28,7 +27,6 @@ import {
 
 export type BusinessFilters = {
   statuses: string[]
-  owners: string[]
   sources: string[]
   freshness: string[]
   containerTypes: string[]
@@ -47,7 +45,6 @@ type FilterCategory = keyof BusinessFilters
 
 const emptyFilters: BusinessFilters = {
   statuses: [],
-  owners: [],
   sources: [],
   freshness: [],
   containerTypes: [],
@@ -80,7 +77,6 @@ function fractionValues(value: string | undefined) {
 
 const defaultCategories: FilterDefinition[] = [
   { id: "statuses", label: "Status", icon: Spinner, values: (record) => [record.status] },
-  { id: "owners", label: "Owner", icon: User, values: (record) => [record.owner] },
   { id: "sources", label: "Source", icon: Database, values: (record) => [record.source] },
   { id: "freshness", label: "Freshness", icon: WifiHigh, values: (record) => [record.freshness] },
 ]

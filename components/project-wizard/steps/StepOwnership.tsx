@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ProjectData, OwnershipEntry } from "../types";
 import { Label } from "../../ui/label";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "../../ui/select";
@@ -23,8 +23,6 @@ interface Account {
   team?: string;
   initials: string;
 }
-
-const DEFAULT_OWNER_ID = "jason-d";
 
 const DEFAULT_ACCOUNTS: Account[] = [
   {
@@ -90,14 +88,6 @@ export function StepOwnership({ data, updateData }: StepOwnershipProps) {
   const [query, setQuery] = useState("");
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
 
-  const ownerId = data.ownerId ?? DEFAULT_OWNER_ID;
-
-  useEffect(() => {
-    if (!data.ownerId) {
-      updateData({ ownerId: DEFAULT_OWNER_ID });
-    }
-  }, [data.ownerId, updateData]);
-
   useEffect(() => {
     if (!data.contributorOwnerships || data.contributorOwnerships.length === 0) {
       updateData({
@@ -130,11 +120,6 @@ export function StepOwnership({ data, updateData }: StepOwnershipProps) {
       accountId: id,
       access: "can_view",
     }));
-
-  const ownerAccount = useMemo(
-    () => accounts.find((a) => a.id === ownerId) ?? accounts[0],
-    [accounts, ownerId]
-  );
 
   const getAccountById = (accountId: string): Account | undefined =>
     accounts.find((a) => a.id === accountId);
@@ -226,7 +211,7 @@ export function StepOwnership({ data, updateData }: StepOwnershipProps) {
   return (
     <div className="flex flex-col space-y-1.5 bg-muted p-2 rounded-lg">
       <p className="text-sm px-3 py-2 text-muted-foreground">
-        Define the customer, route owner, contributors, and followers.
+        Define the customer, contributors, and followers.
       </p>
 
       <div className="space-y-2">
@@ -304,42 +289,6 @@ export function StepOwnership({ data, updateData }: StepOwnershipProps) {
           </div>
         </div>
 
-        {/* Owner - Required */}
-        <div className="px-3 flex flex-col space-y-3">
-          <Label className="text-sm text-muted-foreground">
-            Route Owner
-          </Label>
-          <div className="flex items-center justify-between rounded-lg border-border bg-muted/40">
-            <div className="flex items-center gap-3">
-              <Avatar className="h-5 w-5">
-                {ownerAccount && (
-                  <AvatarImage src={getAvatarUrl(ownerAccount.name)} />
-                )}
-                <AvatarFallback>
-                  {ownerAccount ? ownerAccount.initials : "PO"}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex flex-col text-left">
-                <span className="text-sm font-medium">
-                  {ownerAccount?.name ?? "Route owner"}
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Select value="full_access" disabled>
-                <SelectTrigger className="h-8 flex gap-2 rounded-md border-none bg-transparent p-2 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="full_access">Full access</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
-<Separator />
-
-        
         {/* Contributors - Multi-select mockup */}
         <div className="space-y-3 px-3">
           <div className="flex items-center justify-between">
@@ -354,7 +303,7 @@ export function StepOwnership({ data, updateData }: StepOwnershipProps) {
             ) : (
               contributorOwnerships.map((entry) => {
                 const account = getAccountById(entry.accountId);
-                if (!account || account.id === ownerId) return null;
+                if (!account) return null;
                 const avatarUrl = getAvatarUrl(account.name);
 
                 return (
@@ -439,7 +388,7 @@ export function StepOwnership({ data, updateData }: StepOwnershipProps) {
             ) : (
               stakeholderOwnerships.map((entry) => {
                 const account = getAccountById(entry.accountId);
-                if (!account || account.id === ownerId) return null;
+                if (!account) return null;
                 const avatarUrl = getAvatarUrl(account.name);
 
                 return (

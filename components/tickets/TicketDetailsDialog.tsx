@@ -1025,7 +1025,7 @@ export function TicketDetailsDialog({
 
                   <section>
                     <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Ownership
+                      Assignment
                     </h3>
                     <div className="mt-3 divide-y divide-border/60 border-y border-border/60">
                       <EditableInformationRow

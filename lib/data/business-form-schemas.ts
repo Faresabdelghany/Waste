@@ -364,13 +364,6 @@ function enhanceField(
   const conditional = conditionalFields[fieldKey]
   let enhanced: BusinessFormField = { ...field }
 
-  if (
-    schema.ownerField === field.id &&
-    enhanced.defaultValue === undefined
-  ) {
-    enhanced = { ...enhanced, defaultValue: "Olivia Larsen" }
-  }
-
   if (/email/i.test(field.id) && field.type === "text") {
     enhanced = { ...enhanced, type: "email" }
   }
@@ -638,7 +631,6 @@ const schemaIntegrityIssues = businessFormSchemas.flatMap((schema) => {
 
   for (const fieldId of [
     schema.nameField,
-    schema.ownerField,
     ...(schema.contextFieldIds ?? []),
     schema.execution?.sourceField,
   ]) {

@@ -39,7 +39,6 @@ export interface ProjectData {
   metricTarget?: string;
   deadlineType: DeadlineType;
   deadlineDate?: string; 
-  ownerId?: string;
   contributorIds: string[];
   stakeholderIds: string[];
   contributorOwnerships?: OwnershipEntry[];

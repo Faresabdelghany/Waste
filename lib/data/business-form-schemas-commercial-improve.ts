@@ -20,7 +20,6 @@ export const commercialImproveBusinessFormSchemas = [
     submitLabel: "Create product",
     nameField: "productName",
     contextFieldIds: ["productCode", "productType", "projectId", "validFrom"],
-    ownerField: "owner",
     sections: [
       {
         id: "identity",
@@ -110,12 +109,6 @@ export const commercialImproveBusinessFormSchemas = [
             description: "Optional; must be later than Effective from.",
           },
           {
-            id: "owner",
-            label: "Product owner",
-            type: "text",
-            required: true,
-          },
-          {
             id: "changeReason",
             label: "Change reason",
             type: "textarea",
@@ -188,7 +181,6 @@ export const commercialImproveBusinessFormSchemas = [
     submitLabel: "Create price list",
     nameField: "priceListName",
     contextFieldIds: ["priceListCode", "projectId", "validFrom", "currency"],
-    ownerField: "owner",
     sections: [
       {
         id: "identity-scope",
@@ -238,12 +230,6 @@ export const commercialImproveBusinessFormSchemas = [
               { value: "SEK", label: "SEK" },
               { value: "NOK", label: "NOK" },
             ],
-          },
-          {
-            id: "owner",
-            label: "Price owner",
-            type: "text",
-            required: true,
           },
         ],
       },
@@ -352,7 +338,6 @@ export const commercialImproveBusinessFormSchemas = [
     submitLabel: "Add contractor",
     nameField: "legalName",
     contextFieldIds: ["registrationNumber", "projectId", "relationshipStart"],
-    ownerField: "relationshipOwner",
     sections: [
       {
         id: "company",
@@ -392,12 +377,6 @@ export const commercialImproveBusinessFormSchemas = [
             type: "text",
             required: true,
             description: "Must be a valid email address.",
-          },
-          {
-            id: "relationshipOwner",
-            label: "Relationship owner",
-            type: "text",
-            required: true,
           },
         ],
       },
@@ -562,7 +541,6 @@ export const commercialImproveBusinessFormSchemas = [
     submitLabel: "Add user",
     nameField: "fullName",
     contextFieldIds: ["contractorId", "projectId", "contractAreaId", "role"],
-    ownerField: "invitedBy",
     sections: [
       {
         id: "restricted-user-invite",
@@ -634,7 +612,6 @@ export const commercialImproveBusinessFormSchemas = [
     disabledReason:
       "Generic creation is disabled. Use New contractor price, Calculate settlement, Close settlement, or Reopen settlement; each has different permissions, validation, and audit requirements.",
     contextFieldIds: ["contractorId", "projectId", "periodStart", "periodEnd"],
-    ownerField: "settlementOwner",
     sections: [
       {
         id: "contractor-price-version",
@@ -728,12 +705,6 @@ export const commercialImproveBusinessFormSchemas = [
             defaultValue: false,
             description: "If enabled, result remains Provisional and cannot be closed.",
           },
-          {
-            id: "settlementOwner",
-            label: "Settlement owner",
-            type: "text",
-            required: true,
-          },
         ],
       },
       {
@@ -786,7 +757,6 @@ export const commercialImproveBusinessFormSchemas = [
     submitLabel: "Add billable event",
     nameField: "eventReference",
     contextFieldIds: ["projectId", "customerId", "occurredAt", "eventState"],
-    ownerField: "enteredBy",
     sections: [
       {
         id: "origin-scope",
@@ -952,7 +922,6 @@ export const commercialImproveBusinessFormSchemas = [
     submitLabel: "Review billing run",
     nameField: "runName",
     contextFieldIds: ["projectId", "runMode", "periodStart", "periodEnd"],
-    ownerField: "requestedBy",
     sections: [
       {
         id: "run-scope",
@@ -1092,7 +1061,6 @@ export const commercialImproveBusinessFormSchemas = [
     disabledReason:
       "Generic creation is disabled. Create invoices through Billing Runs; select an issued invoice to issue a partial/full credit note, cancel where legally permitted, send, or export.",
     contextFieldIds: ["sourceInvoiceId", "creditType", "creditDate"],
-    ownerField: "requestedBy",
     sections: [
       {
         id: "source-document",
@@ -1218,7 +1186,6 @@ export const commercialImproveBusinessFormSchemas = [
     disabledReason:
       "Generic creation is disabled. Use Ask a question, Create monitor, Create report, or Define metric; generated insights cannot be manually invented.",
     contextFieldIds: ["projectId", "metricId", "analysisFrom", "analysisTo"],
-    ownerField: "owner",
     sections: [
       {
         id: "ask",
@@ -1276,7 +1243,7 @@ export const commercialImproveBusinessFormSchemas = [
         id: "monitor",
         title: "Monitor definition",
         description:
-          "Relationship: monitor uses a governed metric and scoped audience. Validation: condition, evaluation window, freshness tolerance, channel, and owner are required.",
+          "Relationship: monitor uses a governed metric and scoped audience. Validation: condition, evaluation window, freshness tolerance, and channel are required.",
         fields: [
           {
             id: "monitorName",
@@ -1365,12 +1332,6 @@ export const commercialImproveBusinessFormSchemas = [
             type: "text",
             description: "Required for a scheduled report.",
           },
-          {
-            id: "owner",
-            label: "Owner",
-            type: "text",
-            required: true,
-          },
         ],
       },
       {
@@ -1418,13 +1379,12 @@ export const commercialImproveBusinessFormSchemas = [
     submitLabel: "Create dashboard",
     nameField: "dashboardName",
     contextFieldIds: ["projectId", "audience", "defaultPeriod"],
-    ownerField: "owner",
     sections: [
       {
         id: "dashboard",
         title: "Dashboard definition",
         description:
-          "Validation: name, scope, owner, audience, and at least one governed metric are required. Viewer permissions always narrow the saved scope.",
+          "Validation: name, scope, audience, and at least one governed metric are required. Viewer permissions always narrow the saved scope.",
         fields: [
           {
             id: "dashboardName",
@@ -1471,12 +1431,6 @@ export const commercialImproveBusinessFormSchemas = [
               { value: "month-to-date", label: "Month to date" },
               { value: "custom", label: "Custom" },
             ],
-          },
-          {
-            id: "owner",
-            label: "Dashboard owner",
-            type: "text",
-            required: true,
           },
         ],
       },
@@ -1530,13 +1484,12 @@ export const commercialImproveBusinessFormSchemas = [
     submitLabel: "Create draft flow",
     nameField: "flowName",
     contextFieldIds: ["projectId", "triggerType", "riskLevel", "validFrom"],
-    ownerField: "owner",
     sections: [
       {
         id: "identity-scope",
         title: "Identity and scope",
         description:
-          "Validation: flow code is unique, owner and project scope are explicit, and a new revision creates a version rather than overwriting history.",
+          "Validation: flow code is unique, project scope is explicit, and a new revision creates a version rather than overwriting history.",
         fields: [
           {
             id: "flowName",
@@ -1557,12 +1510,6 @@ export const commercialImproveBusinessFormSchemas = [
             type: "select",
             required: true,
             relation: { workspaceId: "configure", moduleId: "organization" },
-          },
-          {
-            id: "owner",
-            label: "Flow owner",
-            type: "text",
-            required: true,
           },
           {
             id: "validFrom",
@@ -1680,12 +1627,6 @@ export const commercialImproveBusinessFormSchemas = [
             type: "checkbox",
             defaultValue: true,
           },
-          {
-            id: "killSwitchOwner",
-            label: "Kill-switch owner",
-            type: "text",
-            required: true,
-          },
         ],
       },
     ],
@@ -1701,7 +1642,6 @@ export const commercialImproveBusinessFormSchemas = [
     disabledReason:
       "Generic creation is disabled. Start an Import wizard or Export wizard so data type, mapping version, permissions, validation, destination, and retry behavior are explicit.",
     contextFieldIds: ["projectId", "jobType", "dataType", "mappingId"],
-    ownerField: "requestedBy",
     sections: [
       {
         id: "import-job",
@@ -1865,7 +1805,6 @@ export const commercialImproveBusinessFormSchemas = [
     submitLabel: "Create scorecard",
     nameField: "scorecardName",
     contextFieldIds: ["projectId", "subjectType", "period", "validFrom"],
-    ownerField: "owner",
     sections: [
       {
         id: "scope",
@@ -1911,12 +1850,6 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Contract area",
             type: "select",
             relation: { workspaceId: "plan", moduleId: "areas" },
-          },
-          {
-            id: "owner",
-            label: "Scorecard owner",
-            type: "text",
-            required: true,
           },
         ],
       },
@@ -1979,13 +1912,12 @@ export const commercialImproveBusinessFormSchemas = [
     disabledReason:
       "Generic creation is disabled. Use Define metric, Create report, Review exposure, or Retract output so lineage, privacy, approval, and immutable history are preserved.",
     contextFieldIds: ["projectId", "recordType", "validFrom", "classification"],
-    ownerField: "owner",
     sections: [
       {
         id: "metric-definition",
         title: "Metric definition version",
         description:
-          "Validation: key, formula, unit, grain, aggregation, owner, sources, freshness target, effective dates, and missing-value policy are mandatory. Published versions are immutable.",
+          "Validation: key, formula, unit, grain, aggregation, sources, freshness target, effective dates, and missing-value policy are mandatory. Published versions are immutable.",
         fields: [
           {
             id: "metricName",
@@ -2046,12 +1978,6 @@ export const commercialImproveBusinessFormSchemas = [
             id: "validFrom",
             label: "Effective from",
             type: "date",
-            required: true,
-          },
-          {
-            id: "owner",
-            label: "Metric owner",
-            type: "text",
             required: true,
           },
         ],
@@ -2158,13 +2084,12 @@ export const commercialImproveBusinessFormSchemas = [
     disabledReason:
       "Generic creation is disabled. Use New lead, Build offer, Activate subscription, Grant entitlement, or Start marketplace order; each enforces its own lifecycle and financial authority.",
     contextFieldIds: ["recordType", "tenantId", "projectId", "effectiveFrom"],
-    ownerField: "owner",
     sections: [
       {
         id: "lead",
         title: "Sales lead",
         description:
-          "Validation: lead owner, source, organization, contact route, region, expected value, and next action are required. A lead grants no tenant, portal, feature, or marketplace access.",
+          "Validation: source, organization, contact route, region, expected value, and next action are required. A lead grants no tenant, portal, feature, or marketplace access.",
         fields: [
           {
             id: "recordType",
@@ -2212,12 +2137,6 @@ export const commercialImproveBusinessFormSchemas = [
             id: "nextAction",
             label: "Next action",
             type: "textarea",
-            required: true,
-          },
-          {
-            id: "owner",
-            label: "Owner",
-            type: "text",
             required: true,
           },
         ],

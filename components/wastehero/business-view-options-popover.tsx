@@ -22,7 +22,6 @@ export type BusinessViewOptions = {
   ordering: "updated" | "name" | "status"
   showDescription: boolean
   showContext: boolean
-  showOwner: boolean
   showUpdated: boolean
   showContainerType: boolean
   showWasteFraction: boolean
@@ -37,7 +36,6 @@ export const defaultBusinessViewOptions: BusinessViewOptions = {
   ordering: "updated",
   showDescription: true,
   showContext: true,
-  showOwner: true,
   showUpdated: true,
   showContainerType: true,
   showWasteFraction: true,
@@ -55,13 +53,8 @@ type BooleanViewOption = Exclude<
 const defaultFields: Array<{ key: BooleanViewOption; label: string }> = [
   { key: "showDescription", label: "Description" },
   { key: "showContext", label: "Business context" },
-  { key: "showOwner", label: "Owner" },
   { key: "showUpdated", label: "Updated time" },
 ]
-
-const customerPropertyFields = defaultFields.filter(
-  (field) => field.key !== "showOwner",
-)
 
 const containerFields: Array<{ key: BooleanViewOption; label: string }> = [
   { key: "showDescription", label: "Description under ID" },
@@ -80,14 +73,9 @@ export function BusinessViewOptionsPopover({
 }: {
   value: BusinessViewOptions
   onChange: (options: BusinessViewOptions) => void
-  variant?: "default" | "containers" | "customer-properties"
+  variant?: "default" | "containers"
 }) {
-  const fields =
-    variant === "containers"
-      ? containerFields
-      : variant === "customer-properties"
-        ? customerPropertyFields
-        : defaultFields
+  const fields = variant === "containers" ? containerFields : defaultFields
 
   return (
     <Popover>

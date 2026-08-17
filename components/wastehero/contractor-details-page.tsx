@@ -83,10 +83,6 @@ function ContractorInformation({
     ["Country", submittedText("country") || "Not provided"],
     ["Primary contact", submittedText("contactName") || "Not provided"],
     ["Contact email", submittedText("contactEmail") || "Not provided"],
-    [
-      "Relationship owner",
-      submittedText("relationshipOwner") || record.owner,
-    ],
     ["Relationship state", record.status],
   ] as const
   const relationshipInformation = [
@@ -180,9 +176,6 @@ function RelatedRecordsTable({
                     Status
                   </TableHead>
                   <TableHead className="text-xs font-medium text-muted-foreground">
-                    Owner
-                  </TableHead>
-                  <TableHead className="text-xs font-medium text-muted-foreground">
                     {valueLabel}
                   </TableHead>
                   <TableHead className="text-xs font-medium text-muted-foreground">
@@ -194,7 +187,7 @@ function RelatedRecordsTable({
               <TableBody>
                 {records.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-52 text-center">
+                    <TableCell colSpan={6} className="h-52 text-center">
                       <Buildings className="mx-auto h-6 w-6 text-muted-foreground" />
                       <p className="mt-2 text-sm font-medium">{emptyLabel}</p>
                     </TableCell>
@@ -220,9 +213,6 @@ function RelatedRecordsTable({
                         >
                           {relatedRecord.status}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="py-3 text-sm text-muted-foreground">
-                        {relatedRecord.owner}
                       </TableCell>
                       <TableCell className="py-3 text-sm">
                         {relatedRecord.value}
