@@ -160,3 +160,8 @@ Three interactive variants were built on `/commercial?variant=a|b|c` and capture
 
 1. **The §4.1 placement rule is load-bearing, not optional** — anything configured once (company defaults, registries, surcharge rules, contractor performance parameters, the price-lists index) lives in **/settings → Commercial defaults**; anything adjusted repeatedly (prices, variations, bulk adjustments, indexation, negotiated deals) lives in **Commercial**. The prototype must demonstrate both surfaces.
 2. **Existing UI primitives only** — the build uses the app's established components and visual language (shadcn/ui primitives, the BusinessWorkspace table/chrome patterns, existing dialog/sheet/detail-page precedents). No new visual styles, layouts, or component idioms.
+
+**Follow-up (same day, after the refined prototype walkthrough):** two additions requested by Fares and built into the prototype:
+
+1. **The prototype is the default Commercial surface in dev** — the sidebar's Commercial link (plain `/commercial`) renders the prototype in development builds; the old workspace stays reachable via `?module=…` (workspace-internal navigation) and production builds are unchanged. Real implication: the redesigned Products & Prices IS the Commercial landing surface, not a side-door variant.
+2. **Contractor details gets a Prices tab** — previously deferred, now demonstrated: the contractor record page (Contractors workspace) carries a "Prices" tab rendering that contractor's PAY-lane rates (locked bid, indexed current fee, Apply index). This is the contract-first entry point from §8's bid-entry risk row and belongs in the real build order (§9) as part of "Contractor prices module + details tab".

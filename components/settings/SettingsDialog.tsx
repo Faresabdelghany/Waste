@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   SquaresFour,
+  Tag,
   UserCircle,
   UsersThree,
   Warning,
@@ -38,6 +39,11 @@ import { ThemeCustomizer } from "@/components/settings/theme-customizer"
 import { OrganizationAccessManagement } from "@/components/settings/organization-access-management"
 import { CompanyProjectsManagement } from "@/components/settings/company-projects-management"
 import { AssetManagementSettings } from "@/components/settings/asset-management-settings"
+// PROTOTYPE — Products & Prices redesign (throwaway): read-mostly extras for the dev-only Commercial defaults pane.
+import { CommercialDefaultsExtras } from "@/components/wastehero/products-prices-prototype/settings-commercial-defaults"
+
+// PROTOTYPE — Products & Prices redesign (throwaway): gate the Commercial defaults pane out of production builds.
+const SHOW_COMMERCIAL_DEFAULTS = process.env.NODE_ENV !== "production"
 
 type SettingControl =
   | {
@@ -120,6 +126,10 @@ const settingsSections: Array<{
     label: "Administration",
     items: [
       { id: "finance", label: "Finance & invoicing", icon: CreditCard },
+      // PROTOTYPE — Products & Prices redesign (throwaway): dev-only Commercial defaults nav entry.
+      ...(SHOW_COMMERCIAL_DEFAULTS
+        ? [{ id: "pricing", label: "Commercial defaults", icon: Tag }]
+        : []),
       { id: "integrations", label: "Integrations", icon: LinkSimple },
       { id: "portals", label: "Portals & branding", icon: PaintBrush },
       { id: "privacy", label: "Privacy, audit & retention", icon: ShieldCheck },
@@ -1294,6 +1304,51 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   },
   "ticket-comms": paneDefinitions["ticket-comms"],
   finance: paneDefinitions.finance,
+  // PROTOTYPE — Products & Prices redesign (throwaway): dev-only Commercial defaults pane (spec §4.1).
+  ...(SHOW_COMMERCIAL_DEFAULTS
+    ? ({
+        pricing: {
+          title: "Commercial defaults",
+          description:
+            "One-time commercial setup: company defaults, registries, surcharge rules, and the price lists index. Day-to-day pricing lives in the Commercial workspace.",
+          groups: [
+            {
+              title: "Company defaults",
+              controls: [
+                {
+                  id: "pricing-currency",
+                  label: "Currency",
+                  description: "Currency for all product prices and contractor fees.",
+                  scope: "Company",
+                  type: "select",
+                  value: "EUR",
+                  options: [
+                    { value: "EUR", label: "EUR" },
+                    { value: "DKK", label: "DKK" },
+                  ],
+                },
+                {
+                  id: "pricing-default-vat",
+                  label: "Default VAT rate",
+                  description: "Prefilled on every new product.",
+                  scope: "Company",
+                  type: "input",
+                  value: "25%",
+                },
+                {
+                  id: "pricing-invoice-prefix",
+                  label: "Invoice code prefix",
+                  description: "Prepended to suggested invoice codes.",
+                  scope: "Company",
+                  type: "input",
+                  value: "WH-",
+                },
+              ],
+            },
+          ],
+        },
+      } satisfies Record<string, SettingsPaneDefinition>)
+    : {}),
   integrations: paneDefinitions.integrations,
   portals: paneDefinitions.portals,
   privacy: paneDefinitions.privacy,
@@ -1733,6 +1788,9 @@ function SettingsPane({
               {groupIndex < definition.groups.length - 1 && <Separator />}
             </div>
           ))}
+
+          {/* PROTOTYPE — Products & Prices redesign (throwaway): read-mostly Commercial defaults sections below the generic controls. */}
+          {paneId === "pricing" && SHOW_COMMERCIAL_DEFAULTS && <CommercialDefaultsExtras />}
 
           <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-border bg-background py-4">
             <p className="text-xs text-muted-foreground">
