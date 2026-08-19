@@ -1,7 +1,7 @@
 # Products & Prices redesign — design spec
 
 - **Date:** 2026-08-19
-- **Status:** Approved by Fares in brainstorming session (interactive decisions logged below). Next step: implementation plan via the `writing-plans` skill.
+- **Status:** Approved by Fares in brainstorming session (interactive decisions logged below). Prototype variant verdict recorded — see §10. Next step: implementation plan via the `writing-plans` skill.
 - **Sources:** live-app research in `docs/research/PRODUCTS_AND_PRICES.md` (+ `pp-*.png` screenshots in the same folder); adversarial design panel (3 independent redesigns, each critiqued); brainstorm mockups in `.superpowers/brainstorm/` (gitignored).
 
 ## 1. Purpose
@@ -147,3 +147,16 @@ Use: **Product / Service**, **Price list** (as the tag/index name), **Agreement*
 ## 9. Next step
 
 Run the **`superpowers:writing-plans`** skill against this spec to produce the implementation plan (task breakdown, file-by-file changes, fixture inventory, type-check gates via `npx tsc --noEmit`). Suggested build order: registry + fixtures → Products table changes → full-page product detail → flows (Quick create, Vary, Adjust) → Contractor prices module + details tab → Explain a price → settings pane.
+
+## 10. Prototype variant verdict (2026-08-19)
+
+Three interactive variants were built on `/commercial?variant=a|b|c` and captured on the throwaway branch `prototype/products-prices-variants` (commit 536c714 — not for merge):
+
+- **A — Catalogue + detail page** (spec-literal, §4.2)
+- **B — Inline price grid** (no navigation; price rows as the selection unit)
+- **C — Split-view pricing desk** (price-list rail + persistent detail)
+
+**Verdict (Fares): Variant A wins.** Two conditions attached to the verdict:
+
+1. **The §4.1 placement rule is load-bearing, not optional** — anything configured once (company defaults, registries, surcharge rules, contractor performance parameters, the price-lists index) lives in **/settings → Commercial defaults**; anything adjusted repeatedly (prices, variations, bulk adjustments, indexation, negotiated deals) lives in **Commercial**. The prototype must demonstrate both surfaces.
+2. **Existing UI primitives only** — the build uses the app's established components and visual language (shadcn/ui primitives, the BusinessWorkspace table/chrome patterns, existing dialog/sheet/detail-page precedents). No new visual styles, layouts, or component idioms.
