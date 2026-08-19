@@ -30,3 +30,9 @@ next-env.d.ts
 # windsurf fules
 .windsurf/
 *.code-workspace
+
+# browser automation artifacts
+.playwright-mcp/
+
+# brainstorming companion mockups
+.superpowers/

@@ -1,0 +1,149 @@
+# Products & Prices redesign — design spec
+
+- **Date:** 2026-08-19
+- **Status:** Approved by Fares in brainstorming session (interactive decisions logged below). Next step: implementation plan via the `writing-plans` skill.
+- **Sources:** live-app research in `docs/research/PRODUCTS_AND_PRICES.md` (+ `pp-*.png` screenshots in the same folder); adversarial design panel (3 independent redesigns, each critiqued); brainstorm mockups in `.superpowers/brainstorm/` (gitignored).
+
+## 1. Purpose
+
+Bring the WasteHero **Products & prices** capability (real app: Settings → Products & prices) into this prototype — but with a **redesigned, simpler process**, not a port. The prototype's job is to argue for a better workflow than the live module. This closes the `docs/BUSINESS_MODULE_MAP.md` priority gap P1 on M05 (price check, service levels, contractor prices, bulk tools, history…), on the prototype's own terms.
+
+## 2. Problem: why the real module feels complicated
+
+1. **One price lives in four places** — base fee on the product, pickup price in a price list, extras on the product's Extras tab, surcharges in Setup. "What does this customer pay?" requires a simulator.
+2. **Setup demands ~8 concepts before the first sale** (templates, categories, materials, service levels, price lists, surcharge rules, VAT config, simulator).
+3. **Duplication** — invoice name/code + VAT on both product and price row; price lists listed under both Prices and Setup; templates/categories/types are three names for one axis.
+4. **Two unrelated mental models share one tab** — customer pricing (best-match condition rows) vs contractor pricing (bid/current fee + indexed components).
+
+Essential complexity that must survive: prices genuinely vary by zone/customer type; negotiated deals exist; changes are scheduled and bulk-adjusted; the contractor bid is contractually immutable; VAT/invoice fields must reach accounting; everything effective-dated and auditable.
+
+## 3. Decisions made (brainstorm log)
+
+| # | Decision | Choice |
+|---|----------|--------|
+| 0 | Overall direction | **"Two Lanes"** (progressive disclosure) as backbone, with patches from the adversarial critiques |
+| 1 | Customer pricing surface | **Products table is the price list** — default price inline on the row; variations behind the product |
+| 2 | Contractor prices shape | **Flat table** (one row per contractor × product × contract area), surfaced in **two places**: a Commercial module *and* a new Prices tab on the Contractor details page |
+| 3 | Product detail | **Full-page detail** (Route-details precedent), not the generic side sheet |
+| 4 | Price list term | **Survives as a tag on price rows + a read-mostly index in /settings** (never deleted — it is canonical vocabulary in `CONTEXT.md`) |
+
+Consensus moves adopted from all three panel designs: SELL/PAY split; Setup hub dissolved (inline creation + settings registries); VAT + invoice name/code live once, on the product; templates/categories/types collapse to 3 fixed product types; a product is born priced; "Explain a price" is first-class and launchable from invoice lines.
+
+Critique patches folded in: negotiated rows **excluded by default** from bulk adjustments; one written tie-break rule (§4.4); the PAY module is named **"Contractor prices"** (canonical term — never "rates"); the Price list term survives (§4.6).
+
+## 4. Design
+
+### 4.1 Information architecture
+
+**Commercial workspace** (recurring daily work), pill-tab modules:
+
+1. **Products** — the SELL lane. Absorbs the old `pricing` module (price lists + price check). The catalogue table *is* the price list.
+2. **Contractor prices** — the PAY lane, new module. Deliberately separate from Settlements (domain-map rule: contractor price and settlement are separate records) and from customer pricing entirely.
+3. **Settlements / Events / Billing / Invoices** — unchanged, except invoice lines become clickable → "Explain a price" (§4.5).
+
+**Contractors workspace** — the existing Contractor details full page gains a **Prices tab**: the same contractor-price records filtered by `contractorId` (read + link into the Commercial module). Matches how procurement thinks (contractor-first) without a second data model.
+
+**/settings → "Commercial defaults" pane** (things done once; expose the existing hidden `pricing` pane under this name):
+
+- Company defaults: currency, default VAT rate(s), invoice code prefix.
+- Read-mostly registries of things created inline elsewhere: zones, customer types, materials, service levels (for rename/merge/retire — the janitorial views).
+- Surcharge rules (holiday/weekend, %, or fixed; highest wins on overlap).
+- Contractor performance parameters as a **read-only card**: coefficient = 1 + a × (b − complaint share), reliability gate, cap (fixture values; no editor).
+- **Price lists index** (§4.6).
+
+Gone as surfaces: the Products|Prices|Setup tab triad, the Setup hub's five cards, the standalone simulator page, template/category schema configuration.
+
+### 4.2 SELL lane — Products module
+
+**Table columns:** Name · Type (3 fixed: Container collection / Recurring service / Additional service) · Price (default price, inline-editable, unit-typed: €/pickup, €/month, €/job) · VAT · Variations (count badge) · Status. Filterable by type, status, price-list tag, zone.
+
+**Header actions:** `+ New product`, `Adjust prices`, `Explain a price`.
+
+**Full-page product detail** (replaces the workspace body; Route-details precedent), sections top-to-bottom:
+
+1. Header strip: name, type badge, status badge, back to Products; actions `Explain a price`, `Edit`.
+2. **Price** — table: default row ("Everyone") + variation rows, each showing amount, condition chips (zone, customer type, container type, waste fraction), effective from/to, negotiated flag (🤝 + customer name, visually locked). Buttons: **Vary this price** (adds a condition row; condition values creatable inline), **Schedule a change** (effective-from/until + optional auto-revert), **Negotiated deal** (customer-scoped override row; also surfaced on that customer's Agreement record as a related entry).
+3. **Invoice & tax** — invoice name, invoice code, VAT rate + computed incl-VAT price. **The only home of these fields.** Per-row override exists only behind an explicit "Override invoice details" disclosure on a variation row.
+4. **Extras** (collapsed by default) — materials/BOM, linked additional services, service levels; every picker has "+ Create new" inline.
+5. **History** — this product's audit trail (creations, edits, adjustments) with field-level old → new diffs.
+
+**New product** — reuses the Quick create / Guided setup chooser (route-create-flow precedent):
+
+- *Quick create*: one form (name, type, price + unit, VAT prefilled from settings, invoice name/code auto-suggested) → review → create. **A product is born priced** — no conditions = applies to everyone.
+- *Guided setup*: left-rail stepper adding optional Variations and Schedule steps.
+
+**Adjust prices** (bulk; the annual-increase flow): select rows in the table (or select-all after filtering) → dialog: +%/−%/fixed/multiply, optional rounding rule, effective date, optional auto-revert date → **review step: full old → new diff table** → confirm. **Negotiated rows are excluded by default** (explicit opt-in checkbox to include them, with a warning). Affected rows show a "Scheduled" chip until the date.
+
+### 4.3 PAY lane — Contractor prices module
+
+**Table columns:** Contractor · Product · Contract area · **Bid** (🔒 immutable) · **Current fee** (with last-index annotation, e.g. "CPI +5%") · Valid from/until · Last indexed. One row per contractor × product × contract area.
+
+**Header actions:** `+ New contractor price`, `Apply index`.
+
+**Apply index** — mirrors Adjust prices so one learned pattern covers both lanes: select rows / filter by contractor or contract area → index % (CPI/fuel), **base = original bid or current fee** (current compounds earlier changes; bid never moves), effective date → review computed new current fees per row → confirm. Each run appends an entry to the row's indexation history.
+
+**Rate detail** — the standard record detail sheet: facts show bid, current fee, validity, itemised fee components (flat € / % lines), metered lines (rate × measured monthly quantity — displayed as static fixture data), and the indexation timeline in related entries. Bid immutability is a stated rule + UI lock (no edit path for the bid after creation).
+
+**Second surface:** Contractor details page → **Prices tab** rendering the same records filtered by that contractor, grouped by contract area, with a link into the module.
+
+### 4.4 Price resolution rule (written once, shown in UI)
+
+Displayed inline above variation rows and used by Explain a price:
+
+> The row matching the **most conditions** wins. A **negotiated row for the specific customer always wins**. Remaining ties go to the row with the **newest effective-from date**.
+
+### 4.5 Explain a price
+
+Launchable from (a) the Products header action, (b) the product detail header, (c) **clicking any invoice line amount** in the Invoices module. Input: customer (or zone + customer type), product, date. Output sheet: the winning row highlighted with its matched conditions, losing rows greyed with the disqualifying condition named, then the line math — price, surcharge (if a rule matches the date), VAT → total. Every element links to the record that produced it. This replaces the real app's Setup-buried simulator.
+
+### 4.6 Price lists as tags
+
+- Every price row (default or variation) may carry **one Price list tag** (e.g. `PL-Copenhagen-2026`, `Negotiated · Østerbro Housing`).
+- The Products table and product detail can filter/group by tag.
+- **/settings → Commercial defaults → Price lists**: a read-mostly index (name, row count, effective from, status derived from its rows) linking to filtered views. This keeps the canonical glossary term and the "annual tariff as a document" story without a lifecycle container object.
+
+## 5. Prototype implementation mapping
+
+Known constraints from the codebase (verified 2026-08-19 by parallel exploration):
+
+- **Module registry** — `lib/data/business-modules.ts` (~4200 lines): `ModuleDefinition {id, label, title, description, entityLabel, contextLabel, valueLabel, primaryAction, metrics, records, lifecycle, rules}`. New fixture record ids **must** be registered in one of the scope arrays (`copenhagenFixtureRecordIds` / `harborFixtureRecordIds` / `companyWideFixtureRecordIds`) or `record()` throws. Contractor-owned records also map in `fixtureContractorIdByRecordId`.
+- **Schema integrity gate** — `lib/data/business-form-schemas.ts` throws unless there is **exactly one form schema per public workspace module** per `business-domain.ts`'s `publicWorkspaceDomains`. Retiring `commercial.pricing` and adding `commercial.contractor-prices` (and any hidden `price-rows` module) therefore requires touching `business-domain.ts` and the schema files together. Schemas live in `lib/data/business-form-schemas-commercial-improve.ts`.
+- **Registry changes:** rework the `products` module (labels, columns via facts, metrics, rules); retire `pricing` as a nav tab (its Price-check rule text moves to Products); add `contractor-prices`; update `primaryModuleIdsByWorkspace` (business-workspace.tsx ~line 537) for commercial: `products, contractor-prices, settlements, events` (billing/invoices in More).
+- **Price rows as records:** the default price is itself a price-row record with no conditions ("Everyone") — the Products table's Price column reads it, so there is exactly one price model, not a product field plus rows. Rows live in a support module `commercial.price-rows`, hidden from nav (precedent: `operate.driver-app` is "retained as data contract, hidden from office nav"; commercial gets a `publicModuleIdsByWorkspace` allowlist in `workspace-page-shell.tsx` if needed). Each row links to its product via `relationRefs` (`{fieldId: 'productId', workspaceId: 'commercial', moduleId: 'products', recordId}`); facts carry amount, conditions, effective dates, negotiated flag, price-list tag. The product detail page reads them from the record store.
+- **Full-page product detail:** new component, wired via the existing full-page ternary in `business-workspace.tsx` (~line 2596, `isRouteDetails` / `isContractorDetails` precedent) — add `isProductDetails`. Cross-record data (variations, extras) computed in BusinessWorkspace and passed down, like ContractorDetailsPage receives its related arrays.
+- **Contractor details Prices tab:** extend `components/wastehero/contractor-details-page.tsx` (RouteDetailsPage already demonstrates local Tabs).
+- **Create flows:** Quick create = existing `BusinessRecordFormDialog` two-step (`execution.reviewBeforeSubmit: true`); Guided setup + Adjust prices + Apply index reuse the route-create-flow chooser/stepper components (`components/wastehero/route-create-flow.tsx`, `components/project-wizard/Stepper.tsx`). Bulk flows write via the store like `handleGuidedRouteCreate` does.
+- **Settings pane:** expose the hidden `pricing` pane in `components/settings/SettingsDialog.tsx` (`settingsSections` + `visiblePaneDefinitions`) as "Commercial defaults", delegating to a custom full-bleed component (company/access/asset-management precedent).
+- **Persistence:** all records via `BusinessRecordStoreProvider` (localStorage `wastehero-business-records-v1`). Bid immutability, negotiated-exclusion, and the tie-break rule are client-side conventions enforced in UI code.
+- **Fixtures must be honest:** several products with 3–6 variations each (zones, customer types, one negotiated), one scheduled change, contractor prices for both fixture contractors (NordRen CA-Ø-2, CityHaul CA-AM-1) with at least one indexed row — so the demo shows municipal-scale reality, not a toy.
+
+## 6. Conscious cuts (deferred, not forgotten)
+
+- xlsx import/export of products and prices.
+- Product template schema configuration (3 fixed types instead).
+- Minimum charge per price row.
+- Long-tail condition dimensions: service responsibility, pickup setting, property type (the condition-row pattern extends to them without redesign).
+- Contractor performance formula **editing** and per-exception-type pay effects (read-only parameter card only; coefficient still appears on settlement fixtures).
+- Global cross-entity audit browser (per-product/per-rate History + a settings export link instead).
+- Metered-line quantity capture (belongs to Settlements/Billable Events).
+- Sell-vs-pay **margin strip** on the product page — a good later idea from the "One Product, One Page" design; out of v1.
+- Named revertible **change sets** (from "The Pricing Desk") — out of v1; the Adjust-prices audit entries cover the basic story.
+
+## 7. Glossary compliance (`CONTEXT.md` is canonical)
+
+Use: **Product / Service**, **Price list** (as the tag/index name), **Agreement** (customer entitlement — never "Subscription"), **Contractor price** (never "rates"), **Contract Area** (never "operational area" for awards), **Settlement** (never merged with contractor prices), **Billable Event**, **Invoice**. Zones as customer-price conditions are Plan-owned operational geography — distinct from Contract Areas.
+
+## 8. Risks & mitigations (from the adversarial critiques)
+
+| Risk | Mitigation in this design |
+|---|---|
+| Bulk +3% silently sweeps negotiated deals | Excluded by default; explicit opt-in with warning |
+| Tie between equally specific rows | Written tie-break rule (§4.4), shown in UI |
+| "Price list" deletion invites rebuttal | Term survives as tag + settings index |
+| Contract-first bid entry (20 products at once) | Contractor details Prices tab + (later) a multi-product step in the New contractor price flow |
+| Row price is "the price nobody pays" at municipal scale | Honest fixtures; Variations badge + tag filters keep cross-product views usable |
+| Per-segment view ("everything for Zone North") | Table filter by zone/tag over price rows (flat records make this cheap) |
+
+## 9. Next step
+
+Run the **`superpowers:writing-plans`** skill against this spec to produce the implementation plan (task breakdown, file-by-file changes, fixture inventory, type-check gates via `npx tsc --noEmit`). Suggested build order: registry + fixtures → Products table changes → full-page product detail → flows (Quick create, Vary, Adjust) → Contractor prices module + details tab → Explain a price → settings pane.
