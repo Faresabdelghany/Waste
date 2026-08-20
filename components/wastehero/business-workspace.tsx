@@ -983,6 +983,15 @@ export function BusinessWorkspace({
       contractAreasModule.records,
     ).filter((record) => record.contractorId === selectedContractorId)
   }, [getRecords, selectedContractorId])
+  const relatedContractorPrices = useMemo(() => {
+    if (!selectedContractorId) return []
+    const commercialWorkspace = getWorkspaceDefinition("commercial")
+    const ratesModule = commercialWorkspace.modules.find((module) => module.id === "contractor-prices")
+    if (!ratesModule) return []
+    return getRecords("commercial", ratesModule.id, ratesModule.records).filter(
+      (record) => record.contractorId === selectedContractorId,
+    )
+  }, [getRecords, selectedContractorId])
   const scopedRecords = useMemo(
     () =>
       projectScope === "all"
@@ -2789,7 +2798,7 @@ export function BusinessWorkspace({
   }
 
   const requestContractorRelatedCreate = (
-    target: "user" | "vehicle" | "driver" | "contract-area",
+    target: "user" | "vehicle" | "driver" | "contract-area" | "contractor-price",
   ) => {
     if (!selectedRecord) return
     const contractorId = selectedRecord.id
@@ -2827,6 +2836,21 @@ export function BusinessWorkspace({
         initialValues: {
           contractorId,
           employmentType: "contractor",
+        },
+      })
+      return
+    }
+
+    if (target === "contractor-price") {
+      // Opens the same "Apply index" workflow as the Price Engine's module
+      // header (commercial.contractor-prices is a start-workflow action, not
+      // a create schema) — no schemaOverride needed, and it never creates or
+      // edits a contractor price directly; it only recomputes current fees.
+      setRelatedCreateTarget({
+        workspaceId: "commercial",
+        moduleId: "contractor-prices",
+        initialValues: {
+          rateIds: relatedContractorPrices.map((priceRecord) => priceRecord.id).join(", "),
         },
       })
       return
@@ -2916,6 +2940,7 @@ export function BusinessWorkspace({
           vehicles={relatedContractorVehicles}
           drivers={relatedContractorDrivers}
           contractAreas={relatedContractAreas}
+          contractorPrices={relatedContractorPrices}
           onBack={closeRecord}
           onCreate={requestContractorRelatedCreate}
         />

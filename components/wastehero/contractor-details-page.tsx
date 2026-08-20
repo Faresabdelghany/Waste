@@ -25,12 +25,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-// PROTOTYPE — Products & Prices redesign (throwaway): dev-only Prices tab
-// showing this contractor's PAY-lane rates (locked bid + indexed current fee).
-// Remove together with components/wastehero/products-prices-prototype/.
-import { ContractorPricesTab } from "@/components/wastehero/products-prices-prototype/contractor-prices-tab"
-
-const SHOW_PRICES_TAB = process.env.NODE_ENV !== "production"
 
 function statusClasses(status: string) {
   if (/active|completed|approved/i.test(status)) {
@@ -259,6 +253,7 @@ export function ContractorDetailsPage({
   vehicles,
   drivers,
   contractAreas,
+  contractorPrices,
   onBack,
   onCreate,
 }: {
@@ -267,8 +262,11 @@ export function ContractorDetailsPage({
   vehicles: readonly BusinessRecord[]
   drivers: readonly BusinessRecord[]
   contractAreas: readonly BusinessRecord[]
+  contractorPrices: readonly BusinessRecord[]
   onBack: () => void
-  onCreate: (target: "user" | "vehicle" | "driver" | "contract-area") => void
+  onCreate: (
+    target: "user" | "vehicle" | "driver" | "contract-area" | "contractor-price",
+  ) => void
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -319,12 +317,9 @@ export function ContractorDetailsPage({
               <TabsTrigger value="contract-areas" className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background">
                 Contract Areas <span className="ml-1.5 text-[10px] text-muted-foreground">{contractAreas.length}</span>
               </TabsTrigger>
-              {SHOW_PRICES_TAB ? (
-                // PROTOTYPE — Products & Prices redesign (throwaway)
-                <TabsTrigger value="prices" className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background">
-                  Prices
-                </TabsTrigger>
-              ) : null}
+              <TabsTrigger value="prices" className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background">
+                Prices <span className="ml-1.5 text-[10px] text-muted-foreground">{contractorPrices.length}</span>
+              </TabsTrigger>
             </TabsList>
           </div>
         </div>
@@ -388,12 +383,19 @@ export function ContractorDetailsPage({
             moduleId="contract-areas"
           />
         </TabsContent>
-        {SHOW_PRICES_TAB ? (
-          // PROTOTYPE — Products & Prices redesign (throwaway)
-          <TabsContent value="prices" className="mt-0 min-h-0 flex-1">
-            <ContractorPricesTab contractorName={record.name} />
-          </TabsContent>
-        ) : null}
+        <TabsContent value="prices" className="mt-0 min-h-0 flex-1">
+          <RelatedRecordsTable
+            records={contractorPrices}
+            entityLabel="Contractor price"
+            contextLabel="Contract area · validity"
+            valueLabel="Current fee"
+            emptyLabel="No contractor prices"
+            actionLabel="Apply index"
+            onCreate={() => onCreate("contractor-price")}
+            workspaceId="commercial"
+            moduleId="contractor-prices"
+          />
+        </TabsContent>
       </Tabs>
     </div>
   )
