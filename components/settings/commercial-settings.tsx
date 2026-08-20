@@ -40,8 +40,10 @@ import { SURCHARGE_RULES } from "@/lib/commercial/price-resolution"
 import {
   COMMERCIAL_DEFAULTS,
   CONTRACTOR_PERFORMANCE,
+  CUSTOMER_TYPES,
   PRICING_REFERENCE_DATE,
   PRODUCT_FACTS,
+  ZONES,
   defaultRowOf,
   encodeHistory,
   money,
@@ -54,13 +56,6 @@ import {
   type PriceRowModel,
   type PriceUnit,
 } from "@/lib/commercial/price-model"
-
-// Fixed pricing-condition registries (spec §4.1). Task 1's price-model.ts
-// intentionally exposes no such enum — conditions are free-form strings on a
-// price row — so these are UI-layer lookup lists local to the Commercial
-// settings section, matched against the same values the fixtures use.
-const ZONES = ["Zone North", "City Centre", "Amager", "Harbor"] as const
-const CUSTOMER_TYPES = ["Household", "Commercial", "Municipal"] as const
 
 function splitList(value?: string): string[] {
   return value
