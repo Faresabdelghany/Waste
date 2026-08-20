@@ -1,10 +1,10 @@
 "use client"
 
 // PROTOTYPE — throwaway code, do not ship.
-// Products & Prices flow dialogs (Explain / Adjust / Vary / Schedule / Negotiated / Quick create),
-// restyled to the app's dialog and sheet recipes.
+// Products & Prices flow dialogs (Adjust / Vary / Schedule / Negotiated / Quick create),
+// restyled to the app's dialog recipes.
 
-import { useMemo, useState, type ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import {
@@ -36,13 +36,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
 import { statusClasses } from "@/components/wastehero/business-record-views"
 
 import {
@@ -54,10 +47,8 @@ import {
   PROTO_TODAY,
   WASTE_FRACTIONS,
   ZONES,
-  explainPrice,
   money,
   unitSuffix,
-  type ExplainInput,
   type PriceConditions,
   type PriceRow,
   type Product,
@@ -66,7 +57,6 @@ import {
 import {
   COMMERCIAL_SETTINGS_HREF,
   ConditionChips,
-  RuleCallout,
   ScheduledChip,
   computeAdjusted,
   protoId,
@@ -117,285 +107,6 @@ function ReviewConfirm({
         {children}
       </Label>
     </div>
-  )
-}
-
-// --- 1. Explain a price (§4.5) ---
-
-export function ExplainPriceSheet({
-  open,
-  onOpenChange,
-  db,
-  initial,
-  onOpenProduct,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  db: PrototypeDb
-  initial?: Partial<ExplainInput>
-  onOpenProduct?: (productId: string) => void
-}) {
-  // Seeded once on mount — callers remount via key to reseed.
-  const [productId, setProductId] = useState(
-    initial?.productId ?? db.products[0]?.id ?? "",
-  )
-  const [zone, setZone] = useState<string>(initial?.zone ?? ZONES[1])
-  const [customerType, setCustomerType] = useState<string>(
-    initial?.customerType ?? CUSTOMER_TYPES[0],
-  )
-  const [containerType, setContainerType] = useState<string>(
-    initial?.containerType ?? "any",
-  )
-  const [wasteFraction, setWasteFraction] = useState<string>(
-    initial?.wasteFraction ?? "any",
-  )
-  const [customer, setCustomer] = useState<string>(initial?.customer ?? "none")
-  const [date, setDate] = useState(initial?.date ?? PROTO_TODAY)
-
-  const product = db.products.find((entry) => entry.id === productId)
-  const explanation = useMemo(
-    () =>
-      explainPrice(db, {
-        productId,
-        zone,
-        customerType,
-        containerType: containerType === "any" ? undefined : containerType,
-        wasteFraction: wasteFraction === "any" ? undefined : wasteFraction,
-        customer: customer === "none" ? undefined : customer,
-        date,
-      }),
-    [db, productId, zone, customerType, containerType, wasteFraction, customer, date],
-  )
-
-  const winnerScore = explanation.winner?.score ?? 0
-
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 overflow-y-auto p-0 sm:max-w-xl">
-        <SheetHeader className="border-b border-border px-5 py-4 pr-12 text-left">
-          <SheetTitle>Explain a price</SheetTitle>
-          <SheetDescription>
-            Who pays what, and which row decided it. In the full design this also
-            opens from any invoice line amount.
-          </SheetDescription>
-        </SheetHeader>
-        <div className="space-y-5 px-5 py-6">
-          <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
-            <div className="grid content-start gap-2 sm:col-span-2">
-              <Label htmlFor="explain-product">Product</Label>
-              <Select value={productId} onValueChange={setProductId}>
-                <SelectTrigger id="explain-product">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {db.products.map((entry) => (
-                    <SelectItem key={entry.id} value={entry.id}>
-                      {entry.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid content-start gap-2">
-              <Label htmlFor="explain-zone">Zone</Label>
-              <Select value={zone} onValueChange={setZone}>
-                <SelectTrigger id="explain-zone">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ZONES.map((entry) => (
-                    <SelectItem key={entry} value={entry}>
-                      {entry}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid content-start gap-2">
-              <Label htmlFor="explain-customer-type">Customer type</Label>
-              <Select value={customerType} onValueChange={setCustomerType}>
-                <SelectTrigger id="explain-customer-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CUSTOMER_TYPES.map((entry) => (
-                    <SelectItem key={entry} value={entry}>
-                      {entry}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid content-start gap-2">
-              <Label htmlFor="explain-container-type">Container type</Label>
-              <Select value={containerType} onValueChange={setContainerType}>
-                <SelectTrigger id="explain-container-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="any">Any</SelectItem>
-                  {CONTAINER_TYPES.map((entry) => (
-                    <SelectItem key={entry} value={entry}>
-                      {entry}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid content-start gap-2">
-              <Label htmlFor="explain-waste-fraction">Waste fraction</Label>
-              <Select value={wasteFraction} onValueChange={setWasteFraction}>
-                <SelectTrigger id="explain-waste-fraction">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="any">Any</SelectItem>
-                  {WASTE_FRACTIONS.map((entry) => (
-                    <SelectItem key={entry} value={entry}>
-                      {entry}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid content-start gap-2">
-              <Label htmlFor="explain-customer">Customer (for negotiated deals)</Label>
-              <Select value={customer} onValueChange={setCustomer}>
-                <SelectTrigger id="explain-customer">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No specific customer</SelectItem>
-                  {KNOWN_CUSTOMERS.map((entry) => (
-                    <SelectItem key={entry} value={entry}>
-                      {entry}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid content-start gap-2">
-              <Label htmlFor="explain-date">Date</Label>
-              <Input
-                id="explain-date"
-                type="date"
-                value={date}
-                onChange={(event) => setDate(event.target.value)}
-              />
-            </div>
-          </div>
-
-          <RuleCallout />
-
-          <div className="grid gap-2">
-            {explanation.verdicts.map((verdict) => (
-              <div
-                key={verdict.row.id}
-                className={cn(
-                  "flex items-start justify-between gap-3 rounded-lg border px-3 py-2.5",
-                  verdict.winner
-                    ? "border-primary bg-muted/40"
-                    : "border-border/60 bg-muted/40",
-                )}
-              >
-                <div className="min-w-0 space-y-1">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {verdict.winner && (
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                          statusClasses("active"),
-                        )}
-                      >
-                        Wins
-                      </Badge>
-                    )}
-                    <ConditionChips row={verdict.row} />
-                  </div>
-                  {verdict.winner && verdict.matched.length > 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      Matched: {verdict.matched.join(", ")}
-                    </p>
-                  )}
-                  {!verdict.winner && (
-                    <p className="text-xs text-muted-foreground">
-                      {verdict.reason ??
-                        (verdict.score < winnerScore
-                          ? "Matched fewer conditions than the winning row"
-                          : "Tie broken by the winner's newer effective-from date")}
-                    </p>
-                  )}
-                  {verdict.winner && onOpenProduct && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => onOpenProduct(productId)}
-                    >
-                      Open product
-                    </Button>
-                  )}
-                </div>
-                <span
-                  className={cn(
-                    "shrink-0 text-sm tabular-nums",
-                    verdict.winner ? "font-medium" : "text-muted-foreground",
-                  )}
-                >
-                  {money(verdict.amountOnDate)}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {explanation.winner && product && (
-            <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm">
-              <div className="flex justify-between py-1">
-                <span className="text-muted-foreground">
-                  Price <span className="text-xs">({unitSuffix(product.unit)})</span>
-                </span>
-                <span className="tabular-nums">{money(explanation.base)}</span>
-              </div>
-              {explanation.surcharge && (
-                <div className="flex justify-between py-1">
-                  <span className="text-muted-foreground">
-                    {explanation.surcharge.name}{" "}
-                    <span className="text-xs">({explanation.surcharge.describe})</span>
-                  </span>
-                  <span className="tabular-nums">
-                    +{money(explanation.surcharge.amount)}
-                  </span>
-                </div>
-              )}
-              <div className="flex justify-between py-1">
-                <span className="text-muted-foreground">
-                  VAT {Math.round(explanation.vatRate * 100)}%
-                </span>
-                <span className="tabular-nums">+{money(explanation.vat)}</span>
-              </div>
-              <div className="mt-1 flex justify-between border-t border-border/60 pt-2 font-medium">
-                <span>Total incl. VAT</span>
-                <span className="tabular-nums">{money(explanation.total)}</span>
-              </div>
-              <p className="mt-2 text-xs font-normal text-muted-foreground">
-                Surcharge and VAT defaults are managed in{" "}
-                <CommercialDefaultsLink>Commercial defaults</CommercialDefaultsLink>.
-              </p>
-            </div>
-          )}
-          {!explanation.winner && (
-            <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2.5 text-xs text-muted-foreground">
-              <Warning className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>
-                No price row applies on this date — the product is not sellable for
-                this input.
-              </span>
-            </div>
-          )}
-        </div>
-      </SheetContent>
-    </Sheet>
   )
 }
 

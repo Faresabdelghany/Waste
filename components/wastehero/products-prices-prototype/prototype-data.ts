@@ -46,6 +46,10 @@ export type Product = {
   invoiceName: string
   invoiceCode: string
   status: ProductStatus
+  // Catalogue attributes shown as table columns; services mostly leave them unset.
+  container?: string
+  containerType?: string
+  wasteFraction?: string
   extras: { materials: string[]; services: string[]; serviceLevels: string[] }
   history: HistoryEntry[]
 }
@@ -252,6 +256,17 @@ export function variationsOf(db: PrototypeDb, productId: string) {
   )
 }
 
+// Customers with a negotiated row on this product (Customer column).
+export function negotiatedCustomersOf(db: PrototypeDb, productId: string) {
+  return [
+    ...new Set(
+      db.priceRows
+        .filter((row) => row.productId === productId && row.negotiatedCustomer)
+        .map((row) => row.negotiatedCustomer as string),
+    ),
+  ]
+}
+
 export function rowsOf(db: PrototypeDb, productId: string) {
   const rows = db.priceRows.filter((row) => row.productId === productId)
   const isDefault = (row: PriceRow) =>
@@ -454,6 +469,9 @@ export function makeFixtureDb(): PrototypeDb {
       invoiceName: "Residual waste collection 240L",
       invoiceCode: "RES-240",
       status: "Active",
+      container: "240L bin (rental)",
+      containerType: "240L bin",
+      wasteFraction: "Residual",
       extras: {
         materials: ["240L bin (rental)"],
         services: ["Bin cleaning · monthly"],
@@ -484,6 +502,9 @@ export function makeFixtureDb(): PrototypeDb {
       invoiceName: "Cardboard collection 660L",
       invoiceCode: "CRD-660",
       status: "Active",
+      container: "660L container (rental)",
+      containerType: "660L container",
+      wasteFraction: "Paper & cardboard",
       extras: {
         materials: ["660L container (rental)"],
         services: [],
@@ -502,6 +523,9 @@ export function makeFixtureDb(): PrototypeDb {
       invoiceName: "Glass igloo emptying",
       invoiceCode: "GLS-IGL",
       status: "Active",
+      // Igloos are municipal-owned — emptying is sold without a container rental.
+      containerType: "Igloo 3m³",
+      wasteFraction: "Glass",
       extras: { materials: [], services: [], serviceLevels: ["Crane emptying"] },
       history: [
         { at: "2025-12-10", who: "Mette Holm", what: "Product created (Guided setup)" },
@@ -549,6 +573,7 @@ export function makeFixtureDb(): PrototypeDb {
       invoiceName: "Extra bag tag",
       invoiceCode: "SRV-TAG",
       status: "Active",
+      wasteFraction: "Residual",
       extras: { materials: [], services: [], serviceLevels: [] },
       history: [
         { at: "2026-03-14", who: "Jonas Friis", what: "Product created (Quick create)" },
@@ -563,6 +588,7 @@ export function makeFixtureDb(): PrototypeDb {
       invoiceName: "Christmas tree collection",
       invoiceCode: "SRV-XMS",
       status: "Draft",
+      wasteFraction: "Organic",
       extras: { materials: [], services: [], serviceLevels: [] },
       history: [
         { at: "2026-08-01", who: "Mette Holm", what: "Product created (Quick create)" },

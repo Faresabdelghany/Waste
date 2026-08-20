@@ -17,7 +17,6 @@ import {
   MagnifyingGlass,
   PencilSimple,
   Plus,
-  Receipt,
 } from "@phosphor-icons/react/dist/ssr"
 
 import { cn } from "@/lib/utils"
@@ -54,10 +53,10 @@ import {
   defaultRowOf,
   explainPrice,
   money,
+  negotiatedCustomersOf,
   rowsOf,
   unitSuffix,
   variationsOf,
-  type ExplainInput,
   type PriceRow,
   type Product,
   type PrototypeDb,
@@ -79,7 +78,6 @@ import {
 } from "./prototype-shared"
 import {
   AdjustPricesDialog,
-  ExplainPriceSheet,
   NegotiatedDealDialog,
   QuickCreateProductDialog,
   ScheduleChangeDialog,
@@ -109,10 +107,6 @@ export function VariantACatalogue({
   initialTag,
 }: VariantProps) {
   const [openProductId, setOpenProductId] = useState<string | null>(null)
-  const [explain, setExplain] = useState<{
-    seed: number
-    initial?: Partial<ExplainInput>
-  } | null>(null)
   const [adjustOpen, setAdjustOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -170,9 +164,6 @@ export function VariantACatalogue({
   const openProduct = db.products.find((entry) => entry.id === openProductId)
   const adjustRows = db.priceRows.filter((row) => selected.has(row.productId))
 
-  const openExplain = (initial?: Partial<ExplainInput>) =>
-    setExplain((previous) => ({ seed: (previous?.seed ?? 0) + 1, initial }))
-
   const settingsLink = (
     <Button variant="ghost" size="sm" asChild>
       <Link href={COMMERCIAL_SETTINGS_HREF}>
@@ -186,10 +177,6 @@ export function VariantACatalogue({
     lane === "products" ? (
       <>
         {settingsLink}
-        <Button variant="ghost" size="sm" onClick={() => openExplain()}>
-          <Receipt className="h-4 w-4" />
-          <span className="hidden sm:inline">Explain a price</span>
-        </Button>
         <Button
           variant="outline"
           size="sm"
@@ -201,14 +188,6 @@ export function VariantACatalogue({
         <Button size="sm" onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4" weight="bold" />
           <span className="hidden sm:inline">New product</span>
-        </Button>
-      </>
-    ) : lane === "invoices" ? (
-      <>
-        {settingsLink}
-        <Button variant="ghost" size="sm" onClick={() => openExplain()}>
-          <Receipt className="h-4 w-4" />
-          <span className="hidden sm:inline">Explain a price</span>
         </Button>
       </>
     ) : (
@@ -323,7 +302,6 @@ export function VariantACatalogue({
           actions={actions}
           product={openProduct}
           onBack={() => setOpenProductId(null)}
-          onExplain={() => openExplain({ productId: openProduct.id })}
         />
       ) : (
         <PrototypeChrome
@@ -336,10 +314,6 @@ export function VariantACatalogue({
             <>
               <section className="flex flex-col gap-1">
                 <h1 className="text-lg font-semibold tracking-tight">Products</h1>
-                <p className="text-sm text-muted-foreground">
-                  The catalogue is the price list — the default price sits on the row,
-                  variations live behind the product.
-                </p>
               </section>
               <ProductsTable
                 db={db}
@@ -370,28 +344,16 @@ export function VariantACatalogue({
               <section className="flex flex-col gap-1">
                 <h1 className="text-lg font-semibold tracking-tight">Invoices</h1>
                 <p className="text-sm text-muted-foreground">
-                  Unchanged by the redesign — except every line amount now explains itself.
+                  Unchanged by the redesign — line amounts are resolved from the live
+                  price rows.
                 </p>
               </section>
-              <InvoicesLane db={db} onExplainLine={openExplain} />
+              <InvoicesLane db={db} />
             </>
           )}
         </PrototypeChrome>
       )}
 
-      {explain && (
-        <ExplainPriceSheet
-          key={explain.seed}
-          open
-          onOpenChange={(next) => !next && setExplain(null)}
-          db={db}
-          initial={explain.initial}
-          onOpenProduct={(productId) => {
-            setExplain(null)
-            setOpenProductId(productId)
-          }}
-        />
-      )}
       <AdjustPricesDialog
         open={adjustOpen}
         onOpenChange={setAdjustOpen}
@@ -448,7 +410,7 @@ function ProductsTable({
         </p>
       </div>
       <div className="overflow-x-auto">
-        <Table className="min-w-[960px]">
+        <Table className="min-w-[1280px]">
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
               <TableHead className="w-10">
@@ -460,6 +422,10 @@ function ProductsTable({
               </TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Type</TableHead>
+              <TableHead>Container</TableHead>
+              <TableHead>Container type</TableHead>
+              <TableHead>Customer</TableHead>
+              <TableHead>Waste fraction</TableHead>
               <TableHead className="text-right">Price</TableHead>
               <TableHead className="text-right">VAT</TableHead>
               <TableHead>Variations</TableHead>
@@ -470,7 +436,7 @@ function ProductsTable({
           <TableBody>
             {products.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-52 text-center">
+                <TableCell colSpan={12} className="h-52 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <MagnifyingGlass className="h-6 w-6 text-muted-foreground" />
                     <p className="text-sm font-medium">No matching products</p>
@@ -484,6 +450,7 @@ function ProductsTable({
               products.map((product) => {
                 const defaultRow = defaultRowOf(db, product.id)
                 const variations = variationsOf(db, product.id)
+                const negotiated = negotiatedCustomersOf(db, product.id)
                 return (
                   <TableRow
                     key={product.id}
@@ -513,6 +480,26 @@ function ProductsTable({
                     </TableCell>
                     <TableCell>
                       <TypeBadge type={product.type} />
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                      {product.container ?? "—"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                      {product.containerType ?? "—"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                      {negotiated.length > 0 ? (
+                        <span className="inline-flex items-center gap-1.5 text-foreground">
+                          <Handshake className="h-3.5 w-3.5 shrink-0" />
+                          {negotiated[0]}
+                          {negotiated.length > 1 ? ` +${negotiated.length - 1}` : ""}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                      {product.wasteFraction ?? "—"}
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-right">
                       {defaultRow ? (
@@ -560,13 +547,7 @@ function ProductsTable({
   )
 }
 
-function InvoicesLane({
-  db,
-  onExplainLine,
-}: {
-  db: PrototypeDb
-  onExplainLine: (initial: Partial<ExplainInput>) => void
-}) {
+function InvoicesLane({ db }: { db: PrototypeDb }) {
   return (
     <>
       {INVOICES.map((invoice) => {
@@ -628,23 +609,8 @@ function InvoicesLane({
                       <TableCell className="whitespace-nowrap text-right text-sm tabular-nums text-muted-foreground">
                         {line.qty}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap text-right">
-                        <button
-                          type="button"
-                          title="Explain this price"
-                          onClick={() =>
-                            onExplainLine({
-                              productId: line.productId,
-                              zone: invoice.zone,
-                              customerType: invoice.customerType,
-                              customer: invoice.customer,
-                              date: line.date,
-                            })
-                          }
-                          className="rounded-md px-1.5 py-0.5 text-sm font-medium tabular-nums hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                        >
-                          {money(unitExVat)}
-                        </button>
+                      <TableCell className="whitespace-nowrap text-right text-sm font-medium tabular-nums">
+                        {money(unitExVat)}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right text-sm font-medium tabular-nums">
                         {money(total)}
@@ -668,10 +634,6 @@ function InvoicesLane({
           </section>
         )
       })}
-      <p className="text-xs text-muted-foreground">
-        Click any unit price to explain it — the sheet shows the winning row, the surcharge and
-        the VAT math (spec §4.5).
-      </p>
     </>
   )
 }
@@ -681,13 +643,11 @@ function ProductDetailPage({
   actions,
   product,
   onBack,
-  onExplain,
 }: {
   db: PrototypeDb
   actions: PrototypeActions
   product: Product
   onBack: () => void
-  onExplain: () => void
 }) {
   const [varyOpen, setVaryOpen] = useState(false)
   const [scheduleRow, setScheduleRow] = useState<PriceRow | null>(null)
@@ -728,10 +688,6 @@ function ProductDetailPage({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={onExplain}>
-              <Receipt className="h-4 w-4" />
-              <span className="hidden sm:inline">Explain a price</span>
-            </Button>
             <Button
               variant="outline"
               size="sm"

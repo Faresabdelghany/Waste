@@ -9,8 +9,12 @@ import {
   CheckCircle,
   CreditCard,
   Gear,
+  IdentificationBadge,
+  Lightning,
   LinkSimple,
   MagnifyingGlass,
+  MapTrifold,
+  Package,
   PaintBrush,
   ShieldCheck,
   SlidersHorizontal,
@@ -41,6 +45,8 @@ import { CompanyProjectsManagement } from "@/components/settings/company-project
 import { AssetManagementSettings } from "@/components/settings/asset-management-settings"
 // PROTOTYPE — Products & Prices redesign (throwaway): read-mostly extras for the dev-only Commercial defaults pane.
 import { CommercialDefaultsExtras } from "@/components/wastehero/products-prices-prototype/settings-commercial-defaults"
+// PROTOTYPE — Products & Prices redesign (throwaway): dev-only Commercial section panes.
+import { CommercialSectionPane } from "@/components/wastehero/products-prices-prototype/settings-commercial-section"
 
 // PROTOTYPE — Products & Prices redesign (throwaway): gate the Commercial defaults pane out of production builds.
 const SHOW_COMMERCIAL_DEFAULTS = process.env.NODE_ENV !== "production"
@@ -135,6 +141,25 @@ const settingsSections: Array<{
       { id: "privacy", label: "Privacy, audit & retention", icon: ShieldCheck },
     ],
   },
+  // PROTOTYPE — Products & Prices redesign (throwaway): dev-only Commercial section.
+  ...(SHOW_COMMERCIAL_DEFAULTS
+    ? [
+        {
+          id: "commercial",
+          label: "Commercial",
+          items: [
+            { id: "commercial-products", label: "Products", icon: Package },
+            { id: "commercial-zones", label: "Zones", icon: MapTrifold },
+            { id: "commercial-service", label: "Service", icon: Lightning },
+            {
+              id: "commercial-customer-types",
+              label: "Customer types",
+              icon: IdentificationBadge,
+            },
+          ],
+        },
+      ]
+    : []),
 ]
 
 const paneDefinitions: Record<string, SettingsPaneDefinition> = {
@@ -1347,6 +1372,30 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
             },
           ],
         },
+        "commercial-products": {
+          title: "Products",
+          description:
+            "The sellable catalogue with each product's container, customer and waste fraction. Day-to-day price management lives in the Commercial workspace.",
+          groups: [],
+        },
+        "commercial-zones": {
+          title: "Zones",
+          description:
+            "Pricing zones that price rows can condition on — renamed, merged and retired here.",
+          groups: [],
+        },
+        "commercial-service": {
+          title: "Service",
+          description:
+            "Service levels offered on products — collection tiers like same-week, backdoor or crane emptying.",
+          groups: [],
+        },
+        "commercial-customer-types": {
+          title: "Customer types",
+          description:
+            "Customer segments that price rows can condition on — renamed, merged and retired here.",
+          groups: [],
+        },
       } satisfies Record<string, SettingsPaneDefinition>)
     : {}),
   integrations: paneDefinitions.integrations,
@@ -1791,6 +1840,10 @@ function SettingsPane({
 
           {/* PROTOTYPE — Products & Prices redesign (throwaway): read-mostly Commercial defaults sections below the generic controls. */}
           {paneId === "pricing" && SHOW_COMMERCIAL_DEFAULTS && <CommercialDefaultsExtras />}
+          {/* PROTOTYPE — Products & Prices redesign (throwaway): dev-only Commercial section panes. */}
+          {paneId.startsWith("commercial-") && SHOW_COMMERCIAL_DEFAULTS && (
+            <CommercialSectionPane paneId={paneId} />
+          )}
 
           <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-border bg-background py-4">
             <p className="text-xs text-muted-foreground">

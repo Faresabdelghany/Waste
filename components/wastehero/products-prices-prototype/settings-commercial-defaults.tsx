@@ -23,18 +23,16 @@ import {
 import { statusClasses } from "@/components/wastehero/business-record-views"
 import {
   CONTRACTOR_PERFORMANCE,
-  CUSTOMER_TYPES,
   PRICE_LIST_TAGS,
   PROTO_TODAY,
   SURCHARGE_RULES,
   WASTE_FRACTIONS,
-  ZONES,
   makeFixtureDb,
   money,
   priceListIndex,
 } from "./prototype-data"
 
-function usageLabel(count: number, noun: string) {
+export function usageLabel(count: number, noun: string) {
   return `${count} ${noun}${count === 1 ? "" : "s"}`
 }
 
@@ -44,47 +42,68 @@ function stubAction() {
   })
 }
 
-type RegistryEntry = { name: string; usage: string }
-type Registry = { title: string; entries: RegistryEntry[] }
+export type RegistryEntry = { name: string; usage: string }
+export type Registry = { title: string; entries: RegistryEntry[] }
+
+// Shared registry card — also used by the Settings → Commercial section panes.
+export function RegistryCard({ registry }: { registry: Registry }) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-border/60">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
+        <p className="text-xs font-medium text-foreground">{registry.title}</p>
+        <p className="text-xs text-muted-foreground">
+          {registry.entries.length} {registry.entries.length === 1 ? "entry" : "entries"}
+        </p>
+      </div>
+      <div className="divide-y divide-border/60">
+        {registry.entries.map((entry) => (
+          <div
+            key={entry.name}
+            className="flex items-center justify-between gap-3 px-4 py-1.5"
+          >
+            <div className="flex min-w-0 items-baseline gap-2">
+              <p className="truncate text-sm text-foreground">{entry.name}</p>
+              <p className="shrink-0 text-xs text-muted-foreground">{entry.usage}</p>
+            </div>
+            <div className="flex shrink-0 items-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground"
+                onClick={stubAction}
+              >
+                Rename
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground"
+                onClick={stubAction}
+              >
+                Retire
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
 
 export function CommercialDefaultsExtras() {
   const db = useMemo(() => makeFixtureDb(), [])
 
   const registries = useMemo<Registry[]>(() => {
-    const zones = ZONES.map((zone) => ({
-      name: zone,
-      usage: usageLabel(
-        db.priceRows.filter((row) => row.conditions.zone === zone).length,
-        "price row",
-      ),
-    }))
-    const customerTypes = CUSTOMER_TYPES.map((type) => ({
-      name: type,
-      usage: usageLabel(
-        db.priceRows.filter((row) => row.conditions.customerType === type).length,
-        "price row",
-      ),
-    }))
     const materialCounts = new Map<string, number>()
-    const serviceLevelCounts = new Map<string, number>()
     for (const product of db.products) {
       for (const material of product.extras.materials) {
         materialCounts.set(material, (materialCounts.get(material) ?? 0) + 1)
       }
-      for (const level of product.extras.serviceLevels) {
-        serviceLevelCounts.set(level, (serviceLevelCounts.get(level) ?? 0) + 1)
-      }
     }
-    const fromCounts = (counts: Map<string, number>) =>
-      [...counts.entries()]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([name, count]) => ({ name, usage: usageLabel(count, "product") }))
-    return [
-      { title: "Zones", entries: zones },
-      { title: "Customer types", entries: customerTypes },
-      { title: "Materials", entries: fromCounts(materialCounts) },
-      { title: "Service levels", entries: fromCounts(serviceLevelCounts) },
-    ]
+    const entries = [...materialCounts.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, count]) => ({ name, usage: usageLabel(count, "product") }))
+    return [{ title: "Materials", entries }]
   }, [db])
 
   const priceLists = useMemo(() => priceListIndex(db), [db])
@@ -109,52 +128,12 @@ export function CommercialDefaultsExtras() {
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
           {registries.map((registry) => (
-            <section
-              key={registry.title}
-              className="overflow-hidden rounded-xl border border-border/60"
-            >
-              <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
-                <p className="text-xs font-medium text-foreground">{registry.title}</p>
-                <p className="text-xs text-muted-foreground">
-                  {registry.entries.length} {registry.entries.length === 1 ? "entry" : "entries"}
-                </p>
-              </div>
-              <div className="divide-y divide-border/60">
-                {registry.entries.map((entry) => (
-                  <div
-                    key={entry.name}
-                    className="flex items-center justify-between gap-3 px-4 py-1.5"
-                  >
-                    <div className="flex min-w-0 items-baseline gap-2">
-                      <p className="truncate text-sm text-foreground">{entry.name}</p>
-                      <p className="shrink-0 text-xs text-muted-foreground">{entry.usage}</p>
-                    </div>
-                    <div className="flex shrink-0 items-center">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs text-muted-foreground"
-                        onClick={stubAction}
-                      >
-                        Rename
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs text-muted-foreground"
-                        onClick={stubAction}
-                      >
-                        Retire
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
+            <RegistryCard key={registry.title} registry={registry} />
           ))}
         </div>
         <p className="text-xs leading-5 text-muted-foreground">
-          Container types and the {WASTE_FRACTIONS.length} waste fractions are
+          Zones, service levels and customer types are managed in the Commercial
+          section. Container types and the {WASTE_FRACTIONS.length} waste fractions are
           Operations-owned registries — price rows can condition on them, but they are
           managed under Operations setup.
         </p>
@@ -192,7 +171,8 @@ export function CommercialDefaultsExtras() {
           </div>
           <div className="border-t border-border px-4 py-2">
             <p className="text-xs text-muted-foreground">
-              Highest wins when rules overlap. Applied automatically in Explain a price.
+              Highest wins when rules overlap. Applied automatically to affected pickup
+              dates.
             </p>
           </div>
         </section>
