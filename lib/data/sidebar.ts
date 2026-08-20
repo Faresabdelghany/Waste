@@ -40,7 +40,7 @@ export const navItems: NavItem[] = [
   { id: "customers", label: "Customers", href: "/customers" },
   { id: "resources", label: "Assets & Inventory", href: "/resources", badge: 8 },
   { id: "contractors", label: "Contractors", href: "/contractors" },
-  { id: "commercial", label: "Commercial", href: "/commercial", badge: 14 },
+  { id: "commercial", label: "Price Engine", href: "/commercial", badge: 14 },
 ]
 
 export const activeRoutes: ActiveRouteSummary[] = [

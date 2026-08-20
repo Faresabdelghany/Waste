@@ -64,6 +64,21 @@ const actionExecutions: Record<string, BusinessFormExecution> = {
     reviewBeforeSubmit: true,
     completionMessage: "The reviewed billing run was started with a reproducible selection snapshot.",
   },
+  "commercial.products": {
+    kind: "create-record",
+    reviewBeforeSubmit: true,
+    completionMessage: "Product created and born priced — its default row applies to everyone.",
+  },
+  "commercial.price-rows": {
+    kind: "create-record",
+    reviewBeforeSubmit: true,
+    completionMessage: "Price row created — resolution follows the most-conditions rule.",
+  },
+  "commercial.contractor-prices": {
+    kind: "start-workflow",
+    reviewBeforeSubmit: true,
+    completionMessage: "Index applied — current fees recomputed, bids untouched.",
+  },
 }
 
 const conditionalFields: Record<
@@ -130,10 +145,6 @@ const conditionalFields: Record<
       fieldId: "movementType",
       oneOf: ["receipt", "transfer"],
     },
-    required: true,
-  },
-  "commercial.products.componentQuantity": {
-    condition: { fieldId: "componentProductId", hasValue: true },
     required: true,
   },
   "commercial.events.overrideReason": {
@@ -389,23 +400,6 @@ function enhanceField(
       ...(conditional.required
         ? { requiredWhen: conditional.condition }
         : {}),
-    }
-  }
-
-  if (fieldKey === "commercial.products.changeReason") {
-    enhanced = { ...enhanced, required: false }
-  }
-
-  if (fieldKey === "commercial.products.categoryId") {
-    enhanced = {
-      ...enhanced,
-      relation: undefined,
-      options: [
-        { value: "collection-service", label: "Collection service" },
-        { value: "container-service", label: "Container service" },
-        { value: "one-off-service", label: "One-off service" },
-        { value: "add-on", label: "Add-on" },
-      ],
     }
   }
 

@@ -104,3 +104,23 @@ const of = (productId: string) => rows.filter((row) => row.productId === product
 
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)
+
+// --- Registry integration (Task 2): fixtures → converters → engine ---
+import { businessWorkspaces } from "../lib/data/business-modules"
+import { recordToContractorPrice, recordToPriceRow, recordToProduct } from "../lib/commercial/price-model"
+{
+  const commercial = businessWorkspaces.commercial
+  const productRecords = commercial.modules.find((m) => m.id === "products")?.records ?? []
+  const rowRecords = commercial.modules.find((m) => m.id === "price-rows")?.records ?? []
+  const rateRecords = commercial.modules.find((m) => m.id === "contractor-prices")?.records ?? []
+  const registryRows = rowRecords.map(recordToPriceRow).filter((row): row is NonNullable<typeof row> => row !== null)
+  check("fixtures: 7 products, 20 rows, 5 contractor prices", [productRecords.length, registryRows.length, rateRecords.length], [7, 20, 5])
+  check("fixtures: 2 negotiated rows, 1 scheduled change", [registryRows.filter((r) => r.negotiatedCustomer).length, registryRows.filter((r) => r.scheduled).length], [2, 1])
+  const res240 = registryRows.filter((r) => r.productId === "product-res-240")
+  const vat = recordToProduct(productRecords.find((r) => r.id === "product-res-240")!).vatRate
+  const negotiated = resolvePrice(res240, vat, { zone: "Zone North", customerType: "Household", customer: "Østerbro Housing Association", date: "2026-08-19" })
+  check("registry: negotiated €15.90 wins via converters", [negotiated.winner?.row.id, negotiated.base, vat], ["price-row-res-osterbro", 15.9, 0.25])
+  const nordrenRes = rateRecords.find((r) => r.id === "contractor-price-nordren-res")
+  const rate = nordrenRes ? recordToContractorPrice(nordrenRes) : null
+  check("registry: NordRen residual bid locked €11.20, fee €11.76, 1 indexation", [rate?.bid, rate?.currentFee, rate?.indexation.length], [11.2, 11.76, 1])
+}

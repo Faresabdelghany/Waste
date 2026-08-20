@@ -815,10 +815,11 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             id: "priceListId",
             label: "Price list",
             type: "select",
-            relation: {
-              workspaceId: "commercial",
-              moduleId: "pricing",
-            },
+            description: "A price list is a tag on price rows; the agreement stores the tag.",
+            options: [
+              { value: "PL-Copenhagen-2026", label: "PL-Copenhagen-2026" },
+              { value: "PL-Harbor-2026", label: "PL-Harbor-2026" },
+            ],
           },
           {
             id: "serviceFrequency",
