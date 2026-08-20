@@ -1415,6 +1415,56 @@ export function BusinessWorkspace({
     [activeModule.entityLabel],
   )
 
+  // Keeps a price row's parent product's derived facts (Price list /
+  // Variations / Customer / headline value) honest after any price-row
+  // write — create, edit, or (with `exclude`) delete. Component-level so
+  // both handleFormSubmit (create/edit) and commitRecordAction (delete) can
+  // call it; on create only, callers pass historyWhat to also append the
+  // product's History entry.
+  const syncProductForRow = (
+    rowRecord: BusinessRecord,
+    options?: { historyWhat?: string; exclude?: boolean },
+  ) => {
+    const row = recordToPriceRow(rowRecord)
+    const productsTarget = resolveFormModule("commercial", "products")
+    const rowsTarget = resolveFormModule("commercial", "price-rows")
+    if (!row || !productsTarget || !rowsTarget) return
+    const product = getRecords(
+      productsTarget.workspaceId,
+      productsTarget.module.id,
+      productsTarget.module.records,
+    ).find((candidate) => candidate.id === row.productId)
+    if (!product) return
+    const existingRowRecords = getRecords(
+      rowsTarget.workspaceId,
+      rowsTarget.module.id,
+      rowsTarget.module.records,
+    )
+    // Delete is a soft delete (the row stays in the store with a "Registry
+    // visibility" fact) and this runs before that write lands, so the row
+    // would otherwise still be read back as live — exclude it explicitly
+    // instead of relying on the store to have already dropped it.
+    const allRowRecords = options?.exclude
+      ? existingRowRecords.filter((candidate) => candidate.id !== rowRecord.id)
+      : existingRowRecords.some((candidate) => candidate.id === rowRecord.id)
+        ? existingRowRecords.map((candidate) => (candidate.id === rowRecord.id ? rowRecord : candidate))
+        : [...existingRowRecords, rowRecord]
+    const rows = allRowRecords
+      .map(recordToPriceRow)
+      .filter((candidate): candidate is PriceRowModel => candidate !== null)
+    const synced = syncProductPricingFacts(product, rows)
+    upsertRecord("commercial", "products", {
+      ...synced,
+      updated: "Now",
+      related: options?.historyWhat
+        ? [
+            encodeHistory({ at: PRICING_REFERENCE_DATE, who: "Olivia Larsen", what: options.historyWhat }),
+            ...synced.related,
+          ]
+        : synced.related,
+    })
+  }
+
   const commitRecordAction = ({
     reason,
     effectiveDate,
@@ -1457,6 +1507,13 @@ export function BusinessWorkspace({
         },
         related: [`Deletion log ${event.id}`, ...record.related],
       })
+      if (workspace.id === "commercial" && activeModule.id === "price-rows") {
+        // Soft delete leaves the row in the store (marked, not removed), so
+        // the product's derived facts must be recomputed with this row
+        // explicitly excluded rather than relying on the store to have
+        // already dropped it.
+        syncProductForRow(record, { exclude: true })
+      }
       setSelectedRecord(null)
       setPendingAction(null)
       router.replace(
@@ -1747,10 +1804,17 @@ export function BusinessWorkspace({
       const factValue = editingRecord.facts[field.label]?.trim()
 
       if (field.type === "date") {
-        values[field.id] =
-          factValue && /^\d{4}-\d{2}-\d{2}$/.test(factValue)
-            ? factValue
-            : localDateInputValue()
+        if (factValue && /^\d{4}-\d{2}-\d{2}$/.test(factValue)) {
+          values[field.id] = factValue
+        } else if (field.required) {
+          // Only a required date needs a same-page fallback so the form
+          // isn't born invalid. An optional date with no matching fact (e.g.
+          // a price row's Effective to / Scheduled revert on) must stay
+          // empty — defaulting it to today would silently write a real
+          // value the record never had (ending the row's effective period,
+          // or reverting a schedule before it starts).
+          values[field.id] = localDateInputValue()
+        }
         continue
       }
 
@@ -2378,44 +2442,6 @@ export function BusinessWorkspace({
         ? { ...withUnit, name: rowDisplayName(row), value: `${money(row.amount)}${unitSuffix(row.unit)}` }
         : withUnit
     }
-    // Keeps the row's parent product's derived facts (Price list / Variations
-    // / Customer / headline value) honest after any price-row write, and — on
-    // create only — appends the product's History entry the brief specifies.
-    const syncProductForRow = (rowRecord: BusinessRecord, historyWhat?: string) => {
-      const row = recordToPriceRow(rowRecord)
-      const productsTarget = resolveFormModule("commercial", "products")
-      const rowsTarget = resolveFormModule("commercial", "price-rows")
-      if (!row || !productsTarget || !rowsTarget) return
-      const product = getRecords(
-        productsTarget.workspaceId,
-        productsTarget.module.id,
-        productsTarget.module.records,
-      ).find((candidate) => candidate.id === row.productId)
-      if (!product) return
-      const existingRowRecords = getRecords(
-        rowsTarget.workspaceId,
-        rowsTarget.module.id,
-        rowsTarget.module.records,
-      )
-      const hasExisting = existingRowRecords.some((candidate) => candidate.id === rowRecord.id)
-      const allRowRecords = hasExisting
-        ? existingRowRecords.map((candidate) => (candidate.id === rowRecord.id ? rowRecord : candidate))
-        : [...existingRowRecords, rowRecord]
-      const rows = allRowRecords
-        .map(recordToPriceRow)
-        .filter((candidate): candidate is PriceRowModel => candidate !== null)
-      const synced = syncProductPricingFacts(product, rows)
-      upsertRecord("commercial", "products", {
-        ...synced,
-        updated: "Now",
-        related: historyWhat
-          ? [
-              encodeHistory({ at: PRICING_REFERENCE_DATE, who: "Olivia Larsen", what: historyWhat }),
-              ...synced.related,
-            ]
-          : synced.related,
-      })
-    }
 
     if (editingRecord) {
       let updatedRecord: BusinessRecord = {
@@ -2534,12 +2560,11 @@ export function BusinessWorkspace({
     upsertRecord(resolvedTarget.workspaceId, resolvedTarget.module.id, newRecord)
     if (resolvedTarget.module.id === "price-rows") {
       const createdRow = recordToPriceRow(newRecord)
-      syncProductForRow(
-        newRecord,
-        createdRow?.negotiatedCustomer
+      syncProductForRow(newRecord, {
+        historyWhat: createdRow?.negotiatedCustomer
           ? `Negotiated deal added for ${createdRow.negotiatedCustomer}`
           : "Variation added",
-      )
+      })
     }
     setAuditEvents((current) => ({
       ...current,
