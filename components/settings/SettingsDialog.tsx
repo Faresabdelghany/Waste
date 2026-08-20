@@ -43,13 +43,7 @@ import { ThemeCustomizer } from "@/components/settings/theme-customizer"
 import { OrganizationAccessManagement } from "@/components/settings/organization-access-management"
 import { CompanyProjectsManagement } from "@/components/settings/company-projects-management"
 import { AssetManagementSettings } from "@/components/settings/asset-management-settings"
-// PROTOTYPE — Products & Prices redesign (throwaway): read-mostly extras for the dev-only Commercial defaults pane.
-import { CommercialDefaultsExtras } from "@/components/wastehero/products-prices-prototype/settings-commercial-defaults"
-// PROTOTYPE — Products & Prices redesign (throwaway): dev-only Commercial section panes.
-import { CommercialSectionPane } from "@/components/wastehero/products-prices-prototype/settings-commercial-section"
-
-// PROTOTYPE — Products & Prices redesign (throwaway): gate the Commercial defaults pane out of production builds.
-const SHOW_COMMERCIAL_DEFAULTS = process.env.NODE_ENV !== "production"
+import { CommercialDefaultsExtras, CommercialSectionPane } from "@/components/settings/commercial-settings"
 
 type SettingControl =
   | {
@@ -132,34 +126,26 @@ const settingsSections: Array<{
     label: "Administration",
     items: [
       { id: "finance", label: "Finance & invoicing", icon: CreditCard },
-      // PROTOTYPE — Products & Prices redesign (throwaway): dev-only Commercial defaults nav entry.
-      ...(SHOW_COMMERCIAL_DEFAULTS
-        ? [{ id: "pricing", label: "Commercial defaults", icon: Tag }]
-        : []),
+      { id: "pricing", label: "Commercial defaults", icon: Tag },
       { id: "integrations", label: "Integrations", icon: LinkSimple },
       { id: "portals", label: "Portals & branding", icon: PaintBrush },
       { id: "privacy", label: "Privacy, audit & retention", icon: ShieldCheck },
     ],
   },
-  // PROTOTYPE — Products & Prices redesign (throwaway): dev-only Commercial section.
-  ...(SHOW_COMMERCIAL_DEFAULTS
-    ? [
-        {
-          id: "commercial",
-          label: "Commercial",
-          items: [
-            { id: "commercial-products", label: "Products", icon: Package },
-            { id: "commercial-zones", label: "Zones", icon: MapTrifold },
-            { id: "commercial-service", label: "Service", icon: Lightning },
-            {
-              id: "commercial-customer-types",
-              label: "Customer types",
-              icon: IdentificationBadge,
-            },
-          ],
-        },
-      ]
-    : []),
+  {
+    id: "commercial",
+    label: "Commercial",
+    items: [
+      { id: "commercial-products", label: "Products", icon: Package },
+      { id: "commercial-zones", label: "Zones", icon: MapTrifold },
+      { id: "commercial-service", label: "Service", icon: Lightning },
+      {
+        id: "commercial-customer-types",
+        label: "Customer types",
+        icon: IdentificationBadge,
+      },
+    ],
+  },
 ]
 
 const paneDefinitions: Record<string, SettingsPaneDefinition> = {
@@ -1329,75 +1315,69 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   },
   "ticket-comms": paneDefinitions["ticket-comms"],
   finance: paneDefinitions.finance,
-  // PROTOTYPE — Products & Prices redesign (throwaway): dev-only Commercial defaults pane (spec §4.1).
-  ...(SHOW_COMMERCIAL_DEFAULTS
-    ? ({
-        pricing: {
-          title: "Commercial defaults",
-          description:
-            "One-time commercial setup: company defaults, registries, surcharge rules, and the price lists index. Day-to-day pricing lives in the Commercial workspace.",
-          groups: [
-            {
-              title: "Company defaults",
-              controls: [
-                {
-                  id: "pricing-currency",
-                  label: "Currency",
-                  description: "Currency for all product prices and contractor fees.",
-                  scope: "Company",
-                  type: "select",
-                  value: "EUR",
-                  options: [
-                    { value: "EUR", label: "EUR" },
-                    { value: "DKK", label: "DKK" },
-                  ],
-                },
-                {
-                  id: "pricing-default-vat",
-                  label: "Default VAT rate",
-                  description: "Prefilled on every new product.",
-                  scope: "Company",
-                  type: "input",
-                  value: "25%",
-                },
-                {
-                  id: "pricing-invoice-prefix",
-                  label: "Invoice code prefix",
-                  description: "Prepended to suggested invoice codes.",
-                  scope: "Company",
-                  type: "input",
-                  value: "WH-",
-                },
-              ],
-            },
-          ],
-        },
-        "commercial-products": {
-          title: "Products",
-          description:
-            "The sellable catalogue with each product's container, customer and waste fraction. Day-to-day price management lives in the Commercial workspace.",
-          groups: [],
-        },
-        "commercial-zones": {
-          title: "Zones",
-          description:
-            "Pricing zones that price rows can condition on — renamed, merged and retired here.",
-          groups: [],
-        },
-        "commercial-service": {
-          title: "Service",
-          description:
-            "Service levels offered on products — collection tiers like same-week, backdoor or crane emptying.",
-          groups: [],
-        },
-        "commercial-customer-types": {
-          title: "Customer types",
-          description:
-            "Customer segments that price rows can condition on — renamed, merged and retired here.",
-          groups: [],
-        },
-      } satisfies Record<string, SettingsPaneDefinition>)
-    : {}),
+  pricing: {
+    title: "Commercial defaults",
+    description:
+      "One-time commercial setup: company defaults, registries, surcharge rules, and the price lists index. Day-to-day pricing lives in Price Engine.",
+    groups: [
+      {
+        title: "Company defaults",
+        controls: [
+          {
+            id: "pricing-currency",
+            label: "Currency",
+            description: "Currency for all product prices and contractor fees.",
+            scope: "Company",
+            type: "select",
+            value: "EUR",
+            options: [
+              { value: "EUR", label: "EUR" },
+              { value: "DKK", label: "DKK" },
+            ],
+          },
+          {
+            id: "pricing-default-vat",
+            label: "Default VAT rate",
+            description: "Prefilled on every new product.",
+            scope: "Company",
+            type: "input",
+            value: "25%",
+          },
+          {
+            id: "pricing-invoice-prefix",
+            label: "Invoice code prefix",
+            description: "Prepended to suggested invoice codes.",
+            scope: "Company",
+            type: "input",
+            value: "WH-",
+          },
+        ],
+      },
+    ],
+  },
+  "commercial-products": {
+    title: "Products",
+    description: "The sellable catalogue — add and edit products here. Prices are managed in Price Engine.",
+    groups: [],
+  },
+  "commercial-zones": {
+    title: "Zones",
+    description:
+      "Pricing zones that price rows can condition on — renamed, merged and retired here.",
+    groups: [],
+  },
+  "commercial-service": {
+    title: "Service",
+    description:
+      "Service levels offered on products — collection tiers like same-week, backdoor or crane emptying.",
+    groups: [],
+  },
+  "commercial-customer-types": {
+    title: "Customer types",
+    description:
+      "Customer segments that price rows can condition on — renamed, merged and retired here.",
+    groups: [],
+  },
   integrations: paneDefinitions.integrations,
   portals: paneDefinitions.portals,
   privacy: paneDefinitions.privacy,
@@ -1838,12 +1818,8 @@ function SettingsPane({
             </div>
           ))}
 
-          {/* PROTOTYPE — Products & Prices redesign (throwaway): read-mostly Commercial defaults sections below the generic controls. */}
-          {paneId === "pricing" && SHOW_COMMERCIAL_DEFAULTS && <CommercialDefaultsExtras />}
-          {/* PROTOTYPE — Products & Prices redesign (throwaway): dev-only Commercial section panes. */}
-          {paneId.startsWith("commercial-") && SHOW_COMMERCIAL_DEFAULTS && (
-            <CommercialSectionPane paneId={paneId} />
-          )}
+          {paneId === "pricing" && <CommercialDefaultsExtras />}
+          {paneId.startsWith("commercial-") && <CommercialSectionPane paneId={paneId} />}
 
           <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-border bg-background py-4">
             <p className="text-xs text-muted-foreground">

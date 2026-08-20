@@ -50,6 +50,7 @@ import {
   money,
   PRICING_REFERENCE_DATE,
   priceRowToRecord,
+  PRODUCT_FACTS,
   recordToContractorPrice,
   recordToPriceRow,
   ROW_FACTS,
@@ -1819,7 +1820,15 @@ export function BusinessWorkspace({
       }
 
       if (!field.relation) {
-        if (factValue) values[field.id] = factValue
+        if (factValue) {
+          values[field.id] = factValue
+        } else if (field.id === "status" && isProductsAdjustFlow) {
+          // Products never carry a separate "Status" fact (top-level status
+          // is the only source of truth), so falling through to the
+          // schema's first option here would show every fixture product as
+          // Active in the edit dialog and silently promote it on save.
+          values[field.id] = editingRecord.status
+        }
         continue
       }
 
@@ -1866,6 +1875,7 @@ export function BusinessWorkspace({
     editingRecord,
     formInitialValues,
     getFormRelationOptions,
+    isProductsAdjustFlow,
   ])
 
   const editFormSchema = useMemo<BusinessFormSchema | undefined>(() => {
@@ -2443,6 +2453,33 @@ export function BusinessWorkspace({
         : withUnit
     }
 
+    // Same class of bug on the products module's generic edit path (row
+    // Actions → Edit): the Unit field's LABEL ("€ per pickup") lands in the
+    // Unit fact instead of the raw enum, the VAT rate field's label lands
+    // under its own field label "VAT rate" instead of the product's "VAT"
+    // fact, and — unlike create, which derives status via initialFormStatus
+    // — a generic edit never re-derives top-level status at all, so it can
+    // drift from a Status-shaped fact the form also writes. Fix all three so
+    // the generic path agrees with the Settings product editor's fact shape;
+    // top-level status is the source of truth, so no separate Status fact
+    // is kept.
+    const normalizeProductRecord = (record: BusinessRecord): BusinessRecord => {
+      const submittedUnit = typeof values.priceUnit === "string" ? values.priceUnit : undefined
+      const submittedVat = typeof values.vatRate === "string" ? values.vatRate : undefined
+      const submittedStatus =
+        typeof values.status === "string" && values.status ? values.status : undefined
+      const nextFacts = { ...record.facts }
+      if (submittedUnit) nextFacts[PRODUCT_FACTS.unit] = submittedUnit
+      if (submittedVat) nextFacts[PRODUCT_FACTS.vat] = `${submittedVat}%`
+      delete nextFacts["VAT rate"]
+      delete nextFacts["Status"]
+      return {
+        ...record,
+        facts: nextFacts,
+        status: submittedStatus ?? record.status,
+      }
+    }
+
     if (editingRecord) {
       let updatedRecord: BusinessRecord = {
         ...editingRecord,
@@ -2462,6 +2499,9 @@ export function BusinessWorkspace({
       }
       if (resolvedTarget.module.id === "price-rows") {
         updatedRecord = normalizePriceRowRecord(updatedRecord)
+      }
+      if (resolvedTarget.module.id === "products") {
+        updatedRecord = normalizeProductRecord(updatedRecord)
       }
       const editEvent: AuditEvent = {
         id: `audit-edit-${now}`,
@@ -2543,6 +2583,9 @@ export function BusinessWorkspace({
     }
     if (resolvedTarget.module.id === "price-rows") {
       newRecord = normalizePriceRowRecord(newRecord)
+    }
+    if (resolvedTarget.module.id === "products") {
+      newRecord = normalizeProductRecord(newRecord)
     }
     const creationEvent: AuditEvent = {
       id: `audit-form-${now}`,
