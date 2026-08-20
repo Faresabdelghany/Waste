@@ -330,6 +330,30 @@ export function contractorPriceToRecord(rate: ContractorPriceModel, existing: Bu
   }
 }
 
+// Recomputes a product's derived pricing facts (Price list / Variations /
+// Customer) and its headline value string from the current price-row set.
+// Shared by every write path that touches price rows — Task 3's bulk-adjust
+// and price-row create/edit branches in business-workspace.tsx, and Task 4's
+// Settings product editor — so they all keep the product's facts in sync the
+// same way instead of duplicating the derivation.
+export function syncProductPricingFacts(product: BusinessRecord, rows: readonly PriceRowModel[]): BusinessRecord {
+  const productRows = rowsOf(rows, product.id)
+  const defaultRow = defaultRowOf(rows, product.id)
+  const negotiated = negotiatedCustomersOf(rows, product.id)
+  const facts = { ...product.facts }
+  if (defaultRow) facts[PRODUCT_FACTS.priceList] = defaultRow.tag ?? ""
+  const variations = productRows.length - (defaultRow ? 1 : 0)
+  if (variations > 0) facts[PRODUCT_FACTS.variations] = String(variations)
+  else delete facts[PRODUCT_FACTS.variations]
+  if (negotiated.length > 0) facts[PRODUCT_FACTS.customer] = negotiated.join(", ")
+  else delete facts[PRODUCT_FACTS.customer]
+  return {
+    ...product,
+    value: defaultRow ? `${money(defaultRow.amount)}${unitSuffix(defaultRow.unit)}` : "Unpriced",
+    facts,
+  }
+}
+
 // Indexation run (spec §4.3): recompute the current fee from the chosen base,
 // append to the indexation history. The bid itself never changes.
 export function applyIndexToRate(rate: ContractorPriceModel, opts: { label: string; percent: number; from: string; base: "bid" | "current fee" }): ContractorPriceModel {

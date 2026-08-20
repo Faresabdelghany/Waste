@@ -35,12 +35,29 @@ import {
   type WorkspaceId,
 } from "@/lib/data/business-modules"
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
+import { adjustPricesFormSchema } from "@/lib/data/business-form-schemas-commercial-improve"
 import type {
   BusinessFormField,
   BusinessFormOption,
   BusinessFormSchema,
   BusinessFormValues,
 } from "@/lib/data/business-form-types"
+import {
+  applyIndexToRate,
+  computeAdjusted,
+  contractorPriceToRecord,
+  encodeHistory,
+  money,
+  PRICING_REFERENCE_DATE,
+  priceRowToRecord,
+  recordToContractorPrice,
+  recordToPriceRow,
+  ROW_FACTS,
+  rowDisplayName,
+  syncProductPricingFacts,
+  unitSuffix,
+  type PriceRowModel,
+} from "@/lib/commercial/price-model"
 import {
   getBusinessModuleHref,
   resolveBusinessRelation,
@@ -514,6 +531,10 @@ const richViewFactColumnDefaults: Record<string, readonly string[]> = {
   pickups: ["Address", "Container ID", "Container Type", "Waste fraction", "Weight"],
   weights: ["Gross", "Tare", "Difference"],
   products: ["Type", "Container", "Container type", "Customer", "Waste fraction", "VAT", "Variations", "Price list"],
+  // Row-level Actions (generic edit/delete) are gated on rich-view
+  // membership; price rows need the edit path for the schedule-a-change
+  // flow, so they join the rich view like products did.
+  "price-rows": ["Zone", "Customer type", "Container type", "Waste fraction", "Negotiated customer", "Price list", "Effective from"],
 }
 
 // Governance facts are shown in record details, never offered as table columns.
@@ -763,6 +784,7 @@ export function BusinessWorkspace({
   const [editingRecord, setEditingRecord] = useState<BusinessRecord | null>(null)
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [isAdjustOpen, setIsAdjustOpen] = useState(false)
   const [relatedCreateTarget, setRelatedCreateTarget] =
     useState<RelatedCreateTarget | null>(null)
   const [auditEvents, setAuditEvents] = useState<Record<string, AuditEvent[]>>({})
@@ -807,6 +829,12 @@ export function BusinessWorkspace({
         relatedCreateTarget.moduleId,
       )
     : null
+  // Products' header button opens the bulk Adjust-prices action instead of
+  // the module's registered create schema (product creation lives in
+  // Settings — Task 4); this schema is deliberately unregistered, so it only
+  // becomes the active form while its own dialog is open.
+  const isProductsAdjustFlow =
+    workspace.id === "commercial" && activeModule.id === "products"
   const formSchema = useMemo(
     () =>
       relatedCreateTarget?.schemaOverride ?? (relatedCreateModule
@@ -820,10 +848,14 @@ export function BusinessWorkspace({
             measurementSettings,
             projectScope,
           )
-        : activeModuleFormSchema),
+        : isAdjustOpen && isProductsAdjustFlow
+          ? adjustPricesFormSchema
+          : activeModuleFormSchema),
     [
       activeModuleFormSchema,
       containerTypes,
+      isAdjustOpen,
+      isProductsAdjustFlow,
       measurementSettings,
       projectScope,
       relatedCreateModule,
@@ -1135,7 +1167,10 @@ export function BusinessWorkspace({
     ? viewOptions.viewType
     : "table"
   const canCreateFromView =
-    showPrimaryAction && canOpenBusinessForm && Boolean(formSchema)
+    showPrimaryAction &&
+    canOpenBusinessForm &&
+    Boolean(formSchema) &&
+    !isProductsAdjustFlow
   const canEditRecords =
     isRichRecordView && Boolean(activeModuleFormSchema?.execution)
   const canDeleteRecords = isRichRecordView
@@ -1724,6 +1759,21 @@ export function BusinessWorkspace({
         continue
       }
 
+      // Some records link a relation only through relationRefs and never
+      // duplicate it as a display fact (e.g. a price row's Product) — prefer
+      // that authoritative link over fuzzy label-matching when it names this
+      // exact field. Multiselect fields can carry several refs per fieldId,
+      // so they keep using the fact-based candidate matching below.
+      if (field.type !== "multiselect") {
+        const relationRef = editingRecord.relationRefs?.find(
+          (ref) => ref.fieldId === field.id,
+        )
+        if (relationRef) {
+          values[field.id] = relationRef.recordId
+          continue
+        }
+      }
+
       const candidate =
         factValue ??
         (field.id === "schemeId"
@@ -1966,6 +2016,120 @@ export function BusinessWorkspace({
   const handleFormSubmit = (values: BusinessFormValues) => {
     if (!formSchema?.execution) return
 
+    if (formSchema.recordKind === "Price adjustment") {
+      const rowsModule = workspace.modules.find((m) => m.id === "price-rows")
+      const productsModule = workspace.modules.find((m) => m.id === "products")
+      if (!rowsModule || !productsModule) return
+      const rowRecords = getRecords("commercial", "price-rows", rowsModule.records)
+      const productRecords = getRecords("commercial", "products", productsModule.records)
+      const tag = typeof values.priceListTag === "string" ? values.priceListTag : "all"
+      const pickedProducts =
+        typeof values.productIds === "string" && values.productIds
+          ? values.productIds.split(",").map((item) => item.trim()).filter(Boolean)
+          : []
+      const includeNegotiated = values.includeNegotiated === true
+      const kind = (values.adjustKind || "percent") as "percent" | "fixed" | "multiply"
+      const value = Number(values.adjustValue)
+      const round = values.roundTo05 === true
+      const from = typeof values.effectiveFrom === "string" ? values.effectiveFrom : PRICING_REFERENCE_DATE
+      const revertOn = typeof values.revertOn === "string" && values.revertOn ? values.revertOn : undefined
+      if (!Number.isFinite(value)) {
+        toast.error("Enter a numeric adjustment value.")
+        return
+      }
+      const note =
+        kind === "percent"
+          ? `${value > 0 ? "+" : ""}${value}%`
+          : kind === "fixed"
+            ? `${value > 0 ? "+" : ""}€${value}`
+            : `×${value}`
+      let adjusted = 0
+      const touchedProducts = new Map<string, string[]>()
+      const rows = rowRecords
+        .map(recordToPriceRow)
+        .filter((candidate): candidate is PriceRowModel => candidate !== null)
+      for (const rowRecord of rowRecords) {
+        const row = recordToPriceRow(rowRecord)
+        if (!row) continue
+        if (row.negotiatedCustomer && !includeNegotiated) continue
+        if (tag !== "all" && row.tag !== tag) continue
+        if (pickedProducts.length > 0 && !pickedProducts.includes(row.productId)) continue
+        const newAmount = computeAdjusted(row.amount, kind, value, round)
+        const product = productRecords.find((p) => p.id === row.productId)
+        const updated = priceRowToRecord(
+          { ...row, scheduled: { newAmount, from, revertOn, note: `Adjust prices ${note}` } },
+          { id: row.productId, name: product?.name ?? rowRecord.context },
+        )
+        upsertRecord("commercial", "price-rows", {
+          ...rowRecord,
+          ...updated,
+          related: rowRecord.related,
+          companyId: rowRecord.companyId,
+          projectIds: rowRecord.projectIds,
+          contractorId: rowRecord.contractorId,
+        })
+        adjusted += 1
+        const diffs = touchedProducts.get(row.productId) ?? []
+        diffs.push(`${rowDisplayName(row)} ${money(row.amount)} → ${money(newAmount)} (scheduled)`)
+        touchedProducts.set(row.productId, diffs)
+      }
+      for (const [productId, diffs] of touchedProducts) {
+        const product = productRecords.find((p) => p.id === productId)
+        if (!product) continue
+        const synced = syncProductPricingFacts(product, rows)
+        upsertRecord("commercial", "products", {
+          ...synced,
+          updated: "Now",
+          related: [
+            encodeHistory({
+              at: PRICING_REFERENCE_DATE,
+              who: "Olivia Larsen",
+              what: `Adjust prices · ${note} scheduled for ${from} — ${diffs.join("; ")}`,
+            }),
+            ...synced.related,
+          ],
+        })
+      }
+      setIsAdjustOpen(false)
+      toast.success("Adjustment scheduled", {
+        description: `${adjusted} price row${adjusted === 1 ? "" : "s"} scheduled ${note} from ${from}${
+          includeNegotiated ? " (negotiated rows included)" : " (negotiated rows excluded)"
+        }.`,
+      })
+      return
+    }
+
+    if (formSchema.recordKind === "Contractor price indexation") {
+      const ratesModule = workspace.modules.find((m) => m.id === "contractor-prices")
+      if (!ratesModule) return
+      const rateRecords = getRecords("commercial", "contractor-prices", ratesModule.records)
+      const pickedIds =
+        typeof values.rateIds === "string" && values.rateIds
+          ? values.rateIds.split(",").map((item) => item.trim()).filter(Boolean)
+          : []
+      const label = typeof values.indexLabel === "string" ? values.indexLabel.trim() : ""
+      const percent = Number(values.percent)
+      const base = values.base === "bid" ? ("bid" as const) : ("current fee" as const)
+      const from = typeof values.effectiveFrom === "string" ? values.effectiveFrom : PRICING_REFERENCE_DATE
+      if (pickedIds.length === 0 || !label || !Number.isFinite(percent)) {
+        toast.error("Pick contractor prices, an index label, and a percent.")
+        return
+      }
+      let indexed = 0
+      for (const rateRecord of rateRecords) {
+        if (!pickedIds.includes(rateRecord.id)) continue
+        const updated = applyIndexToRate(recordToContractorPrice(rateRecord), { label, percent, from, base })
+        upsertRecord("commercial", "contractor-prices", contractorPriceToRecord(updated, rateRecord))
+        indexed += 1
+      }
+      setIsCreateOpen(false)
+      setRelatedCreateTarget(null)
+      toast.success("Index applied", {
+        description: `${indexed} contractor price${indexed === 1 ? "" : "s"} recomputed from ${base} (${label} +${percent}%). Bids untouched.`,
+      })
+      return
+    }
+
     if (formSchema.recordKind === "Contract area assignment") {
       const contractAreaId =
         typeof values.contractAreaId === "string" ? values.contractAreaId : ""
@@ -2199,8 +2363,62 @@ export function BusinessWorkspace({
       .filter(Boolean)
     const projectIds = selectedProjectIds(projectScope, values)
 
+    // The generic path stores select-field facts as their display label
+    // (e.g. Unit → "€ per pickup"), but a price row's Unit fact must stay the
+    // raw PriceUnit enum ("pickup") for recordToPriceRow/unitSuffix to read
+    // it back correctly — normalize it here, then derive the row's display
+    // name and headline value the same way both on create and on edit.
+    const normalizePriceRowRecord = (record: BusinessRecord): BusinessRecord => {
+      const submittedUnit = typeof values.unit === "string" ? values.unit : undefined
+      const withUnit = submittedUnit
+        ? { ...record, facts: { ...record.facts, [ROW_FACTS.unit]: submittedUnit } }
+        : record
+      const row = recordToPriceRow(withUnit)
+      return row
+        ? { ...withUnit, name: rowDisplayName(row), value: `${money(row.amount)}${unitSuffix(row.unit)}` }
+        : withUnit
+    }
+    // Keeps the row's parent product's derived facts (Price list / Variations
+    // / Customer / headline value) honest after any price-row write, and — on
+    // create only — appends the product's History entry the brief specifies.
+    const syncProductForRow = (rowRecord: BusinessRecord, historyWhat?: string) => {
+      const row = recordToPriceRow(rowRecord)
+      const productsTarget = resolveFormModule("commercial", "products")
+      const rowsTarget = resolveFormModule("commercial", "price-rows")
+      if (!row || !productsTarget || !rowsTarget) return
+      const product = getRecords(
+        productsTarget.workspaceId,
+        productsTarget.module.id,
+        productsTarget.module.records,
+      ).find((candidate) => candidate.id === row.productId)
+      if (!product) return
+      const existingRowRecords = getRecords(
+        rowsTarget.workspaceId,
+        rowsTarget.module.id,
+        rowsTarget.module.records,
+      )
+      const hasExisting = existingRowRecords.some((candidate) => candidate.id === rowRecord.id)
+      const allRowRecords = hasExisting
+        ? existingRowRecords.map((candidate) => (candidate.id === rowRecord.id ? rowRecord : candidate))
+        : [...existingRowRecords, rowRecord]
+      const rows = allRowRecords
+        .map(recordToPriceRow)
+        .filter((candidate): candidate is PriceRowModel => candidate !== null)
+      const synced = syncProductPricingFacts(product, rows)
+      upsertRecord("commercial", "products", {
+        ...synced,
+        updated: "Now",
+        related: historyWhat
+          ? [
+              encodeHistory({ at: PRICING_REFERENCE_DATE, who: "Olivia Larsen", what: historyWhat }),
+              ...synced.related,
+            ]
+          : synced.related,
+      })
+    }
+
     if (editingRecord) {
-      const updatedRecord: BusinessRecord = {
+      let updatedRecord: BusinessRecord = {
         ...editingRecord,
         // Only user-named records can be renamed; system-issued and
         // action-derived names stay untouched.
@@ -2215,6 +2433,9 @@ export function BusinessWorkspace({
         submittedValues: { ...editingRecord.submittedValues, ...values },
         relationRefs,
         projectIds,
+      }
+      if (resolvedTarget.module.id === "price-rows") {
+        updatedRecord = normalizePriceRowRecord(updatedRecord)
       }
       const editEvent: AuditEvent = {
         id: `audit-edit-${now}`,
@@ -2234,6 +2455,9 @@ export function BusinessWorkspace({
         resolvedTarget.module.id,
         updatedRecord,
       )
+      if (resolvedTarget.module.id === "price-rows") {
+        syncProductForRow(updatedRecord)
+      }
       setAuditEvents((current) => ({
         ...current,
         [updatedRecord.id]: [editEvent, ...(current[updatedRecord.id] ?? [])],
@@ -2248,7 +2472,7 @@ export function BusinessWorkspace({
       return
     }
 
-    const newRecord: BusinessRecord = {
+    let newRecord: BusinessRecord = {
       id: `${resolvedTarget.module.id}-${formSchema.recordKind
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
@@ -2291,6 +2515,9 @@ export function BusinessWorkspace({
       submittedValues: values,
       relationRefs,
     }
+    if (resolvedTarget.module.id === "price-rows") {
+      newRecord = normalizePriceRowRecord(newRecord)
+    }
     const creationEvent: AuditEvent = {
       id: `audit-form-${now}`,
       action: formSchema.submitLabel,
@@ -2305,6 +2532,15 @@ export function BusinessWorkspace({
     }
 
     upsertRecord(resolvedTarget.workspaceId, resolvedTarget.module.id, newRecord)
+    if (resolvedTarget.module.id === "price-rows") {
+      const createdRow = recordToPriceRow(newRecord)
+      syncProductForRow(
+        newRecord,
+        createdRow?.negotiatedCustomer
+          ? `Negotiated deal added for ${createdRow.negotiatedCustomer}`
+          : "Variation added",
+      )
+    }
     setAuditEvents((current) => ({
       ...current,
       [newRecord.id]: [creationEvent],
@@ -2666,7 +2902,13 @@ export function BusinessWorkspace({
                 </Button>
               )}
               {showPrimaryAction && canOpenBusinessForm && formSchema && (
-                isRouteCreateFlow ? (
+                isProductsAdjustFlow ? (
+                  <Button size="sm" onClick={() => setIsAdjustOpen(true)}>
+                    <Plus className="h-4 w-4" weight="bold" />
+                    <span className="hidden sm:inline">Adjust prices</span>
+                    <span className="sm:hidden">Action</span>
+                  </Button>
+                ) : isRouteCreateFlow ? (
                   <RouteCreateEntry
                     submitLabel={formSchema.submitLabel}
                     onQuickCreate={() => setIsCreateOpen(true)}
@@ -3326,6 +3568,18 @@ export function BusinessWorkspace({
             reviewSummary={getFormReviewSummary}
           />
         )}
+      {isAdjustOpen && isProductsAdjustFlow && (
+        <BusinessRecordFormDialog
+          schema={adjustPricesFormSchema}
+          open={isAdjustOpen}
+          onOpenChange={setIsAdjustOpen}
+          onSubmit={handleFormSubmit}
+          relationOptions={getFormRelationOptions}
+          initialValueOverrides={formInitialValues}
+          validateValues={validateFormValues}
+          reviewSummary={getFormReviewSummary}
+        />
+      )}
       {editingRecord && editFormSchema && (
         <BusinessRecordFormDialog
           schema={editFormSchema}
