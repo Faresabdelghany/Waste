@@ -1681,3 +1681,24 @@ git commit -m "Retire Products & Prices prototype; Price Engine is the real Comm
 - **Type consistency:** names in Interfaces blocks are the contract; fact-key strings live once in Task 1 (`ROW_FACTS`/`PRODUCT_FACTS`/`RATE_FACTS`) and the harness registry block fails if fixtures drift. `rowDisplayName`, `syncProductPricingFacts`, `applyIndexToRate`, `contractorPriceToRecord` are each defined once and reused.
 - **Known intentional oddities:** `price-rows` is a visible module (no custom product page to host rows); the products header button is swapped to Adjust prices (RouteCreateEntry precedent) while creation lives in Settings; contractor-prices' action-mode schema doubles as the bid lock; denormalized `Customer`/`Variations`/`Price list` product facts are maintained by every row write; `PRICING_REFERENCE_DATE` fixed at 2026-08-20 for determinism; invoices module untouched.
 - **Executor verify-first spots (existing machinery whose exact behavior the plan depends on):** multiselect value encoding in `BusinessRecordFormDialog` (Task 3 branches), the generic create path's fact-building for `price-rows` (Task 3 step 4), `RelatedRecordsTable` required props (Task 5), the fact-column picker's default column set (Task 2 step 6). Each is called out inline where it matters.
+
+---
+
+## Post-implementation follow-ups (recorded 2026-08-21, triaged by the final whole-branch review — none block merge)
+
+Executed on `recovered-wastehero` (12 task commits `6a66c76..742cd14` + final fix wave `f6f151a`). Final review verdict: merge with fixes → all fixed and re-verified (tsc 0, harness 19/19 exit 0/1-on-failure, build exit 0).
+
+- Signed-percent formatting: negative percents persist as "+-2%" in toasts AND indexation history notes — one signed-format helper fixes both flows.
+- `rateIds` picker in Apply index offers every contractor's rows even from a contractor's own Prices tab — scope via `relation.allowedRecordIds` schemaOverride.
+- Adjust prices header button uses a `Plus` icon — it is a bulk action, not a create.
+- Workspace-created price rows get status "Scheduled" regardless of effectiveFrom — derive status in `normalizePriceRowRecord` (shared helper with `priceRowToRecord`).
+- Generic edit rewrites `context` in the contextFieldIds join format, diverging from fixture/Settings formats (price rows; products now derived, fixed in f6f151a).
+- Label/fact drift: products schema `container` field is labeled "Container (rental)" but the fact key is "Container" — needs a label→fact mapping, unmapped scrubbing would drop user edits.
+- Generic edit cannot clear facts (empty values skipped, merge-over) — a condition/Effective to/scheduled change is un-cancellable via edit; made load-bearing for price rows by this build.
+- Re-parenting a price row via edit syncs only the new product; the old parent's facts go stale.
+- `decodeIndexation` corrupts on " · " inside an index label (history codec handles it; indexation codec doesn't).
+- Soft-deleting a product leaves its rows orphaned (no cascade); acceptable, documented here.
+- `ModuleDefinition.rules` is rendered nowhere app-wide (53 modules) — platform gap; §4.4 reaches the UI via the price-rows dialog description.
+- Dead exports in `lib/commercial/price-model.ts` (`KNOWN_CUSTOMERS`, `CONTAINER_TYPES`, `WASTE_FRACTIONS`, `PRICE_LIST_TAGS`, `RESOLUTION_RULE`, `decodeHistory`, `variationsOf`) — wire `RESOLUTION_RULE` up (the §4.4 sentence is hand-duplicated in 3 places) or trim.
+- Fixture description prose (e.g. "5 variations including one negotiated deal") can go stale after row deletes — prose only.
+- Harness: add checks for soft-delete exclusion in `syncProductPricingFacts` and a `recordToPriceRow(priceRowToRecord(x)) = x` round-trip.
