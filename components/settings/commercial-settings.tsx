@@ -3,7 +3,7 @@
 // Settings → Commercial: product management surface plus the read-mostly
 // Commercial defaults extras (registries, surcharge rules, contractor
 // performance, price-lists index). Ported from the throwaway prototype
-// (components/wastehero/products-prices-prototype/settings-commercial-*.tsx)
+// (retired at the 2026-08-20 cutover — see git history and the design spec)
 // onto real store-backed records — see docs/superpowers/plans/2026-08-20-
 // products-prices-implementation. `CommercialDefaultsExtras` and
 // `CommercialSectionPane` are the two names SettingsDialog renders; keep
