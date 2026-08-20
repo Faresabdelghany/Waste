@@ -513,6 +513,7 @@ const richViewFactColumnDefaults: Record<string, readonly string[]> = {
   schemes: ["Version", "Effective", "Vehicle"],
   pickups: ["Address", "Container ID", "Container Type", "Waste fraction", "Weight"],
   weights: ["Gross", "Tare", "Difference"],
+  products: ["Type", "Container", "Container type", "Customer", "Waste fraction", "VAT", "Variations", "Price list"],
 }
 
 // Governance facts are shown in record details, never offered as table columns.
