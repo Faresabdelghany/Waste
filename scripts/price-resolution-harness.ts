@@ -102,9 +102,6 @@ const of = (productId: string) => rows.filter((row) => row.productId === product
   check("adjust multiply ×1.02", computeAdjusted(24.0, "multiply", 1.02, false), 24.48)
 }
 
-console.log(`\n${passed} passed, ${failed} failed`)
-if (failed > 0) process.exit(1)
-
 // --- Registry integration (Task 2): fixtures → converters → engine ---
 import { businessWorkspaces } from "../lib/data/business-modules"
 import { recordToContractorPrice, recordToPriceRow, recordToProduct } from "../lib/commercial/price-model"
@@ -124,3 +121,8 @@ import { recordToContractorPrice, recordToPriceRow, recordToProduct } from "../l
   const rate = nordrenRes ? recordToContractorPrice(nordrenRes) : null
   check("registry: NordRen residual bid locked €11.20, fee €11.76, 1 indexation", [rate?.bid, rate?.currentFee, rate?.indexation.length], [11.2, 11.76, 1])
 }
+
+// The summary and the exit guard must stay at the very end of the file so
+// every check above — engine scenarios AND registry checks — is counted.
+console.log(`\n${passed} passed, ${failed} failed`)
+if (failed > 0) process.exit(1)

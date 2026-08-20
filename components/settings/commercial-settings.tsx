@@ -46,6 +46,7 @@ import {
   ZONES,
   defaultRowOf,
   encodeHistory,
+  isSoftDeleted,
   money,
   negotiatedCustomersOf,
   priceListIndex,
@@ -74,8 +75,16 @@ function useCommercialCatalogue() {
   const commercial = businessWorkspaces.commercial
   const fixturesOf = (moduleId: string) =>
     commercial.modules.find((module) => module.id === moduleId)?.records ?? []
-  const productRecords = getRecords("commercial", "products", fixturesOf("products"))
+  const allProductRecords = getRecords("commercial", "products", fixturesOf("products"))
   const rowRecords = getRecords("commercial", "price-rows", fixturesOf("price-rows"))
+  // Soft-deleted records stay in the store (marked, not removed), so both the
+  // product list and every count derived from it must skip them. Price rows
+  // get the same treatment for free — recordToPriceRow returns null for a
+  // soft-deleted row.
+  const productRecords = useMemo(
+    () => allProductRecords.filter((record) => !isSoftDeleted(record)),
+    [allProductRecords],
+  )
   const rows = useMemo(
     () =>
       rowRecords
@@ -343,15 +352,15 @@ export function CommercialSectionPane({ paneId }: { paneId: string }) {
   return null
 }
 
-// Reads submittedValues when present (a record created or previously edited
-// through any form dialog carries its raw submission); otherwise derives
-// form values from facts and the default price row, the same way the
-// generic workspace edit path does for fixture records.
+// Always derived from the LIVE record plus the LIVE default price row — never
+// from record.submittedValues. A stored submission is a snapshot of one past
+// edit: after the Everyone row is repriced in Price Engine (row edit, bulk
+// adjust) its defaultPrice is stale, and prefilling it would make the next
+// Settings save silently revert the row back to the old amount.
 function productRecordToFormValues(
   record: BusinessRecord,
   rows: readonly PriceRowModel[],
 ): BusinessFormValues {
-  if (record.submittedValues) return record.submittedValues
   const defaultRow = defaultRowOf(rows, record.id)
   return {
     productName: record.name,

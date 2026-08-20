@@ -98,6 +98,15 @@ export const RATE_FACTS = {
   bid: "Bid (locked)", currentFee: "Current fee", unit: "Unit", validFrom: "Valid from",
   validUntil: "Valid until", lastIndexed: "Last indexed", lastIndexNote: "Last index note",
 } as const
+// Soft delete marks the record instead of removing it (written by
+// commitRecordAction in business-workspace.tsx — search "Registry
+// visibility"), so every pricing read path must skip marked records or a
+// deleted row gets counted, adjusted and resurrected.
+export const REGISTRY_VISIBILITY_FACT = "Registry visibility"
+export const SOFT_DELETED = "Soft deleted"
+export function isSoftDeleted(record: BusinessRecord): boolean {
+  return record.facts[REGISTRY_VISIBILITY_FACT] === SOFT_DELETED
+}
 export const COMPONENT_FACT_PREFIX = "Component · "
 export const HISTORY_PREFIX = "History · "
 export const INDEXED_PREFIX = "Indexed · "
@@ -199,7 +208,12 @@ export function decodeIndexation(related: readonly string[]): ContractorPriceMod
 }
 
 // --- Record ⇄ model converters ---
+// Returns null for a record that cannot be read as a live price row —
+// including a soft-deleted one. That single guard keeps every consumer
+// honest (bulk adjust, the product-fact sync, the Settings reads) instead of
+// each of them having to remember the visibility marker.
 export function recordToPriceRow(record: BusinessRecord): PriceRowModel | null {
+  if (isSoftDeleted(record)) return null
   const productId = record.relationRefs?.find((ref) => ref.fieldId === "productId")?.recordId
   const amount = Number(record.facts[ROW_FACTS.amount])
   const effectiveFrom = record.facts[ROW_FACTS.effectiveFrom]
@@ -341,7 +355,11 @@ export function syncProductPricingFacts(product: BusinessRecord, rows: readonly 
   const defaultRow = defaultRowOf(rows, product.id)
   const negotiated = negotiatedCustomersOf(rows, product.id)
   const facts = { ...product.facts }
-  if (defaultRow) facts[PRODUCT_FACTS.priceList] = defaultRow.tag ?? ""
+  // No default row (or an untagged one) means the product has no price list —
+  // drop the key rather than leaving the previous tag behind as a stale fact
+  // or writing an empty string the detail sheet would render as a blank row.
+  if (defaultRow?.tag) facts[PRODUCT_FACTS.priceList] = defaultRow.tag
+  else delete facts[PRODUCT_FACTS.priceList]
   const variations = productRows.length - (defaultRow ? 1 : 0)
   if (variations > 0) facts[PRODUCT_FACTS.variations] = String(variations)
   else delete facts[PRODUCT_FACTS.variations]

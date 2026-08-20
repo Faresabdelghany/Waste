@@ -58,6 +58,7 @@ import {
   syncProductPricingFacts,
   unitSuffix,
   type PriceRowModel,
+  type PriceUnit,
 } from "@/lib/commercial/price-model"
 import {
   getBusinessModuleHref,
@@ -1890,8 +1891,23 @@ export function BusinessWorkspace({
   const editFormSchema = useMemo<BusinessFormSchema | undefined>(() => {
     if (!editingRecord || !activeModuleFormSchema?.execution) return undefined
     const entity = activeModule.entityLabel
+    // Products' registered schema is a create contract ("a product is born
+    // priced") that doubles as this edit host, but its Default price section
+    // is create-only: the price it creates IS the product's no-conditions
+    // price row, and that row is edited as a row (Price Engine → Price rows)
+    // or through the Settings product editor that owns the catalogue. Left
+    // in, the section shows a required price field that reprices nothing —
+    // so drop it on edit rather than growing a second write path onto the
+    // same row.
+    const sections =
+      activeModuleFormSchema.key === "commercial.products"
+        ? activeModuleFormSchema.sections.filter(
+            (section) => section.id !== "default-price",
+          )
+        : activeModuleFormSchema.sections
     return {
       ...activeModuleFormSchema,
+      sections,
       title: `Edit ${entity.toLowerCase()}`,
       description: `Update the linked records and details of ${editingRecord.name}. Changes are recorded with audit history.`,
       submitLabel: "Save changes",
@@ -2482,8 +2498,23 @@ export function BusinessWorkspace({
       if (submittedVat) nextFacts[PRODUCT_FACTS.vat] = `${submittedVat}%`
       delete nextFacts["VAT rate"]
       delete nextFacts["Status"]
+      // Field labels that are not product facts: the name duplicates the
+      // record's own name, and Default price / Effective from describe the
+      // product's no-conditions price row, not the product. The edit host no
+      // longer offers the price fields, so this also scrubs the strays left
+      // behind on records edited before that section was dropped.
+      delete nextFacts["Product name"]
+      delete nextFacts["Default price"]
+      delete nextFacts["Effective from"]
+      // contextFieldIds names two of those dropped price fields, so derive the
+      // context line from the product's own facts — the same shape the
+      // Settings product editor writes — instead of letting it degrade to the
+      // product type alone.
+      const unit = (nextFacts[PRODUCT_FACTS.unit] as PriceUnit) || "pickup"
+      const productType = nextFacts[PRODUCT_FACTS.type]
       return {
         ...record,
+        context: productType ? `${productType} · ${unitSuffix(unit)}` : record.context,
         facts: nextFacts,
         status: submittedStatus ?? record.status,
       }
