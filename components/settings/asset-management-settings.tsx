@@ -90,7 +90,7 @@ function parseNumber(value: string) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-function Field({
+export function Field({
   label,
   description,
   required,
@@ -117,7 +117,7 @@ function Field({
   )
 }
 
-function DialogSection({
+export function DialogSection({
   title,
   description,
   children,
@@ -137,16 +137,16 @@ function DialogSection({
   )
 }
 
-type AssetView = {
+export type AssetView = {
   ordering: "updated" | "name"
   showDetails: boolean
 }
 
-const defaultAssetView: AssetView = { ordering: "updated", showDetails: true }
+export const defaultAssetView: AssetView = { ordering: "updated", showDetails: true }
 
 const assetStatusOptions = ["Active", "Inactive"] as const
 
-function sortByView<T>(
+export function sortByView<T>(
   items: T[],
   view: AssetView,
   name: (item: T) => string,
@@ -159,7 +159,7 @@ function sortByView<T>(
   )
 }
 
-type AssetFilterGroup = {
+export type AssetFilterGroup = {
   label: string
   options: readonly string[]
   value: string[]
@@ -288,12 +288,13 @@ function AssetViewPopover({
   )
 }
 
-function AssetToolbar({
+export function AssetToolbar({
   searchPlaceholder,
   query,
   onQueryChange,
   statuses,
   onStatusesChange,
+  statusOptions = assetStatusOptions,
   extraFilters,
   view,
   onViewChange,
@@ -303,6 +304,7 @@ function AssetToolbar({
   onQueryChange: (value: string) => void
   statuses: string[]
   onStatusesChange: (value: string[]) => void
+  statusOptions?: readonly string[]
   extraFilters?: AssetFilterGroup[]
   view: AssetView
   onViewChange: (value: AssetView) => void
@@ -323,7 +325,7 @@ function AssetToolbar({
           groups={[
             {
               label: "Status",
-              options: assetStatusOptions,
+              options: statusOptions,
               value: statuses,
               onChange: onStatusesChange,
             },
@@ -336,7 +338,7 @@ function AssetToolbar({
   )
 }
 
-function RecordsSection({
+export function RecordsSection({
   shown,
   total,
   children,
@@ -357,7 +359,7 @@ function RecordsSection({
   )
 }
 
-function EmptyRow({ colSpan, message }: { colSpan: number; message: string }) {
+export function EmptyRow({ colSpan, message }: { colSpan: number; message: string }) {
   return (
     <TableRow>
       <TableCell colSpan={colSpan} className="h-52 text-center">
@@ -371,7 +373,7 @@ function EmptyRow({ colSpan, message }: { colSpan: number; message: string }) {
   )
 }
 
-function StatusBadge({ active }: { active: boolean }) {
+export function StatusBadge({ active }: { active: boolean }) {
   return (
     <Badge
       variant="outline"
@@ -417,7 +419,8 @@ export function AssetManagementSettings() {
   )
 }
 
-function AssetPanelShell({
+export function AssetPanelShell({
+  heading = "Asset management",
   tabs,
   action,
   toolbar,
@@ -425,7 +428,8 @@ function AssetPanelShell({
   description,
   children,
 }: {
-  tabs: ReactNode
+  heading?: string
+  tabs?: ReactNode
   action?: ReactNode
   toolbar: ReactNode
   title: string
@@ -436,7 +440,7 @@ function AssetPanelShell({
     <div className="flex flex-1 flex-col">
       <header className="flex flex-col border-b border-border/40">
         <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-          <p className="text-base font-medium text-foreground">Asset management</p>
+          <p className="text-base font-medium text-foreground">{heading}</p>
           {action && <div className="flex items-center gap-2">{action}</div>}
         </div>
         <div className="flex flex-col gap-3 px-4 py-3">

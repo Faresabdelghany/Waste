@@ -67,12 +67,12 @@ const actionExecutions: Record<string, BusinessFormExecution> = {
   "commercial.products": {
     kind: "create-record",
     reviewBeforeSubmit: true,
-    completionMessage: "Product created and born priced — its default row applies to everyone.",
+    completionMessage: "Product created — add its price in Price Engine with Add price.",
   },
   "commercial.price-rows": {
     kind: "create-record",
     reviewBeforeSubmit: true,
-    completionMessage: "Price row created — resolution follows the most-conditions rule.",
+    completionMessage: "Price added — resolution follows the most-conditions rule.",
   },
   "commercial.contractor-prices": {
     kind: "start-workflow",

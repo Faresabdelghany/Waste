@@ -1363,7 +1363,7 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   "commercial-zones": {
     title: "Zones",
     description:
-      "Pricing zones that price rows can condition on — renamed, merged and retired here.",
+      "Pricing zones that price rows can condition on — created, edited and retired here.",
     groups: [],
   },
   "commercial-service": {
@@ -1375,7 +1375,7 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   "commercial-customer-types": {
     title: "Customer types",
     description:
-      "Customer segments that price rows can condition on — renamed, merged and retired here.",
+      "Customer segments that price rows can condition on — created, edited and retired here.",
     groups: [],
   },
   integrations: paneDefinitions.integrations,
@@ -1643,7 +1643,8 @@ export function SettingsWorkspace({
           className={
             activeItemId === "asset-management" ||
             activeItemId === "access" ||
-            activeItemId === "company"
+            activeItemId === "company" ||
+            activeItemId.startsWith("commercial-")
               ? "flex min-h-full w-full flex-col"
               : "mx-auto min-h-full w-full max-w-5xl px-5 py-7 sm:px-10 sm:py-10 lg:px-14"
           }
@@ -1685,7 +1686,10 @@ function SettingsPane({
   return (
     <div
       className={
-        paneId === "asset-management" || paneId === "access" || paneId === "company"
+        paneId === "asset-management" ||
+        paneId === "access" ||
+        paneId === "company" ||
+        paneId.startsWith("commercial-")
           ? "flex min-w-0 flex-1 flex-col"
           : "space-y-7"
       }
@@ -1697,7 +1701,9 @@ function SettingsPane({
             Manage companies, company information, and projects.
           </p>
         </>
-      ) : paneId === "asset-management" || paneId === "access" ? null : (
+      ) : paneId === "asset-management" ||
+        paneId === "access" ||
+        paneId.startsWith("commercial-") ? null : (
         <>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -1726,6 +1732,8 @@ function SettingsPane({
         <OrganizationAccessManagement />
       ) : paneId === "asset-management" ? (
         <AssetManagementSettings />
+      ) : paneId.startsWith("commercial-") ? (
+        <CommercialSectionPane paneId={paneId} />
       ) : (
         <>
           {paneId === "account" && <ThemeCustomizer />}
@@ -1819,7 +1827,6 @@ function SettingsPane({
           ))}
 
           {paneId === "pricing" && <CommercialDefaultsExtras />}
-          {paneId.startsWith("commercial-") && <CommercialSectionPane paneId={paneId} />}
 
           <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-border bg-background py-4">
             <p className="text-xs text-muted-foreground">

@@ -1,30 +1,53 @@
 "use client"
 
-// Settings → Commercial: product management surface plus the read-mostly
-// Commercial defaults extras (registries, surcharge rules, contractor
-// performance, price-lists index). Ported from the throwaway prototype
-// (retired at the 2026-08-20 cutover — see git history and the design spec)
-// onto real store-backed records — see docs/superpowers/plans/2026-08-20-
-// products-prices-implementation. `CommercialDefaultsExtras` and
-// `CommercialSectionPane` are the two names SettingsDialog renders; keep
-// their exported shape stable.
+// Settings → Commercial: the management surface for the sellable catalogue
+// and its registries, rendered in the same full-page panel style as Asset
+// management (AssetPanelShell + toolbar + records table + dialogs).
+//
+// - Products stay business records ("commercial.products") so Price Engine
+//   reads the same catalogue; the form here carries no price/VAT/invoice
+//   fields — pricing happens in Price Engine via Add price.
+// - Zones, Service levels and Customer types are real CRUD entities in the
+//   commercial-registries store; Price Engine consumes them as form options.
+//
+// `CommercialDefaultsExtras` and `CommercialSectionPane` are the two names
+// SettingsDialog renders; keep their exported shape stable.
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import {
   ArrowSquareOut,
-  Handshake,
   PencilSimple,
   Plus,
+  Trash,
 } from "@phosphor-icons/react/dist/ssr"
 
 import { cn } from "@/lib/utils"
 import { businessWorkspaces, type BusinessRecord } from "@/lib/data/business-modules"
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
-import type { BusinessFormValues } from "@/lib/data/business-form-types"
+import type {
+  BusinessFormOption,
+  BusinessFormValues,
+} from "@/lib/data/business-form-types"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -33,24 +56,37 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Textarea } from "@/components/ui/textarea"
 import { statusClasses } from "@/components/wastehero/business-record-views"
 import { BusinessRecordFormDialog } from "@/components/wastehero/business-record-form-dialog"
 import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
+import {
+  AssetPanelShell,
+  AssetToolbar,
+  DialogSection,
+  EmptyRow,
+  Field,
+  RecordsSection,
+  StatusBadge,
+  defaultAssetView,
+  sortByView,
+  type AssetView,
+} from "@/components/settings/asset-management-settings"
+import {
+  registryEntityId,
+  useCommercialRegistriesStore,
+  type RegistryStatus,
+} from "@/components/settings/commercial-registries-store"
 import { SURCHARGE_RULES } from "@/lib/commercial/price-resolution"
 import {
-  COMMERCIAL_DEFAULTS,
   CONTRACTOR_PERFORMANCE,
-  CUSTOMER_TYPES,
   PRICING_REFERENCE_DATE,
   PRODUCT_FACTS,
-  ZONES,
   defaultRowOf,
   encodeHistory,
   isSoftDeleted,
   money,
-  negotiatedCustomersOf,
   priceListIndex,
-  priceRowToRecord,
   recordToPriceRow,
   syncProductPricingFacts,
   unitSuffix,
@@ -66,6 +102,18 @@ function splitList(value?: string): string[] {
 
 function text(values: BusinessFormValues, id: string): string {
   return typeof values[id] === "string" ? (values[id] as string).trim() : ""
+}
+
+function nowIso() {
+  return new Date().toISOString()
+}
+
+function slug(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
 }
 
 // Reads the store the same way for the defaults extras and the section
@@ -106,7 +154,8 @@ function registryStubAction() {
 export type RegistryEntry = { name: string; usage: string }
 export type Registry = { title: string; entries: RegistryEntry[] }
 
-// Shared registry card — also used by the section panes below.
+// Read-only registry card — used by the Commercial defaults pane for the
+// registries that are still derived (e.g. Materials from product facts).
 export function RegistryCard({ registry }: { registry: Registry }) {
   return (
     <section className="overflow-hidden rounded-xl border border-border/60">
@@ -341,56 +390,66 @@ export function CommercialDefaultsExtras() {
 }
 
 export function CommercialSectionPane({ paneId }: { paneId: string }) {
-  const { productRecords, rows, upsertRecord } = useCommercialCatalogue()
-
-  if (paneId === "commercial-products") {
-    return <ProductsPane productRecords={productRecords} rows={rows} upsertRecord={upsertRecord} />
-  }
-  if (paneId === "commercial-zones") return <ZonesPane rows={rows} />
-  if (paneId === "commercial-service") return <ServicePane productRecords={productRecords} />
-  if (paneId === "commercial-customer-types") return <CustomerTypesPane rows={rows} />
+  if (paneId === "commercial-products") return <ProductsPane />
+  if (paneId === "commercial-zones") return <ZonesPane />
+  if (paneId === "commercial-service") return <ServicePane />
+  if (paneId === "commercial-customer-types") return <CustomerTypesPane />
   return null
 }
 
-// Always derived from the LIVE record plus the LIVE default price row — never
-// from record.submittedValues. A stored submission is a snapshot of one past
-// edit: after the Everyone row is repriced in Price Engine (row edit, bulk
-// adjust) its defaultPrice is stale, and prefilling it would make the next
-// Settings save silently revert the row back to the old amount.
-function productRecordToFormValues(
-  record: BusinessRecord,
-  rows: readonly PriceRowModel[],
-): BusinessFormValues {
-  const defaultRow = defaultRowOf(rows, record.id)
+// ---------------------------------------------------------------------------
+// Products — Asset-management-style page over the commercial.products records.
+// ---------------------------------------------------------------------------
+
+const PRODUCT_TYPE_OPTIONS = [
+  "Container collection",
+  "Recurring service",
+  "Additional service",
+] as const
+
+const PRODUCT_STATUS_OPTIONS = ["Active", "Draft", "Inactive"] as const
+
+function productRecordToFormValues(record: BusinessRecord): BusinessFormValues {
   return {
     productName: record.name,
     productType: record.facts[PRODUCT_FACTS.type] || "Additional service",
     status: record.status,
-    defaultPrice: defaultRow ? String(defaultRow.amount) : "",
     priceUnit: record.facts[PRODUCT_FACTS.unit] || "pickup",
-    priceListTag: defaultRow?.tag ?? "",
-    effectiveFrom: defaultRow?.effectiveFrom ?? PRICING_REFERENCE_DATE,
-    vatRate: (record.facts[PRODUCT_FACTS.vat] ?? "25%").replace("%", ""),
-    invoiceName: record.facts[PRODUCT_FACTS.invoiceName] || record.name,
-    invoiceCode: record.facts[PRODUCT_FACTS.invoiceCode] || "",
     container: record.facts[PRODUCT_FACTS.container] || "",
     containerType: record.facts[PRODUCT_FACTS.containerType] || "",
     wasteFraction: record.facts[PRODUCT_FACTS.wasteFraction] || "",
+    serviceLevels: splitList(record.facts[PRODUCT_FACTS.serviceLevels]).join(", "),
   }
 }
 
-function ProductsPane({
-  productRecords,
-  rows,
-  upsertRecord,
-}: {
-  productRecords: BusinessRecord[]
-  rows: PriceRowModel[]
-  upsertRecord: ReturnType<typeof useBusinessRecordStore>["upsertRecord"]
-}) {
+function ProductsPane() {
+  const { productRecords, rows, upsertRecord } = useCommercialCatalogue()
+  const { serviceLevels } = useCommercialRegistriesStore()
+  const [query, setQuery] = useState("")
+  const [statuses, setStatuses] = useState<string[]>([])
+  const [typeFilters, setTypeFilters] = useState<string[]>([])
+  const [view, setView] = useState<AssetView>(defaultAssetView)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<BusinessRecord | null>(null)
-  const productSchema = getBusinessFormSchema("commercial", "products")
+
+  // Same injection Price Engine applies: the Service levels field offers
+  // whatever the Settings → Service registry currently holds.
+  const productSchema = useMemo(() => {
+    const schema = getBusinessFormSchema("commercial", "products")
+    if (!schema) return undefined
+    const options: BusinessFormOption[] = serviceLevels
+      .filter((level) => level.status === "Active")
+      .map((level) => ({ value: level.name, label: level.name }))
+    return {
+      ...schema,
+      sections: schema.sections.map((section) => ({
+        ...section,
+        fields: section.fields.map((field) =>
+          field.id === "serviceLevels" ? { ...field, options } : field,
+        ),
+      })),
+    }
+  }, [serviceLevels])
   const editFormSchema = useMemo(
     () =>
       productSchema
@@ -404,91 +463,101 @@ function ProductsPane({
     [productSchema],
   )
 
-  // New product (spec §4.2 / §10): born priced — creating the product also
-  // creates its Everyone (no-conditions) default price row in one step.
-  const handleCreateProduct = (values: BusinessFormValues) => {
-    const name = text(values, "productName")
-    const unit = (text(values, "priceUnit") || "pickup") as PriceUnit
-    const amount = Number(text(values, "defaultPrice"))
-    const productId = `product-${Date.now().toString(36)}`
+  const filtered = sortByView(
+    productRecords
+      .filter((record) =>
+        [
+          record.name,
+          record.facts[PRODUCT_FACTS.type],
+          record.facts[PRODUCT_FACTS.container],
+          record.facts[PRODUCT_FACTS.containerType],
+          record.facts[PRODUCT_FACTS.wasteFraction],
+          record.facts[PRODUCT_FACTS.serviceLevels],
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query.trim().toLowerCase()),
+      )
+      .filter((record) => statuses.length === 0 || statuses.includes(record.status))
+      .filter(
+        (record) =>
+          typeFilters.length === 0 ||
+          typeFilters.includes(record.facts[PRODUCT_FACTS.type] ?? ""),
+      ),
+    view,
+    (record) => record.name,
+    // Records carry a fuzzy "updated" label, not a sortable timestamp — the
+    // "Last updated" ordering keeps the store's order instead of inventing one.
+    () => "",
+  )
+
+  const productFactsFromValues = (values: BusinessFormValues) => {
     const facts: Record<string, string> = {
       [PRODUCT_FACTS.type]: text(values, "productType"),
-      ...(text(values, "container") ? { [PRODUCT_FACTS.container]: text(values, "container") } : {}),
-      ...(text(values, "containerType")
-        ? { [PRODUCT_FACTS.containerType]: text(values, "containerType") }
-        : {}),
-      ...(text(values, "wasteFraction")
-        ? { [PRODUCT_FACTS.wasteFraction]: text(values, "wasteFraction") }
-        : {}),
-      [PRODUCT_FACTS.vat]: `${text(values, "vatRate") || "25"}%`,
-      ...(text(values, "priceListTag")
-        ? { [PRODUCT_FACTS.priceList]: text(values, "priceListTag") }
-        : {}),
-      [PRODUCT_FACTS.unit]: unit,
-      [PRODUCT_FACTS.invoiceName]: text(values, "invoiceName") || name,
-      [PRODUCT_FACTS.invoiceCode]:
-        text(values, "invoiceCode") ||
-        `${COMMERCIAL_DEFAULTS.invoiceCodePrefix}${name.slice(0, 12).toUpperCase().replace(/[^A-Z0-9]+/g, "-")}`,
+      [PRODUCT_FACTS.unit]: text(values, "priceUnit") || "pickup",
     }
+    if (text(values, "container")) facts[PRODUCT_FACTS.container] = text(values, "container")
+    if (text(values, "containerType")) facts[PRODUCT_FACTS.containerType] = text(values, "containerType")
+    if (text(values, "wasteFraction")) facts[PRODUCT_FACTS.wasteFraction] = text(values, "wasteFraction")
+    const levels = splitList(text(values, "serviceLevels")).join(", ")
+    if (levels) facts[PRODUCT_FACTS.serviceLevels] = levels
+    return facts
+  }
+
+  // New product: catalogue facts only — no price row is created. The product
+  // stays Unpriced until Add price creates its no-conditions default row in
+  // Price Engine.
+  const handleCreateProduct = (values: BusinessFormValues) => {
+    const name = text(values, "productName")
+    const productType = text(values, "productType") || "Additional service"
+    const unit = (text(values, "priceUnit") || "pickup") as PriceUnit
     upsertRecord("commercial", "products", {
-      id: productId,
+      id: `product-${Date.now().toString(36)}`,
       name,
-      context: `${text(values, "productType")} · ${unitSuffix(unit)}`,
+      context: `${productType} · ${unitSuffix(unit)}`,
       status: text(values, "status") || "Active",
       owner: "Pricing",
-      value: `${money(amount)}${unitSuffix(unit)}`,
+      value: "Unpriced",
       updated: "Now",
-      description: `${text(values, "productType")} product created in Settings; born priced at ${money(amount)}${unitSuffix(unit)}.`,
-      facts,
-      related: [encodeHistory({ at: PRICING_REFERENCE_DATE, who: "You", what: "Product created (Quick create)" })],
+      description: `${productType} product created in Settings. Unpriced until Add price creates its default row in Price Engine.`,
+      facts: productFactsFromValues(values),
+      related: [
+        encodeHistory({ at: PRICING_REFERENCE_DATE, who: "You", what: "Product created in Settings" }),
+      ],
       source: "Price Engine",
       freshness: "Now",
       recordKind: "Product",
       submittedValues: values,
     })
-    upsertRecord(
-      "commercial",
-      "price-rows",
-      priceRowToRecord(
-        {
-          id: `price-row-${Date.now().toString(36)}`,
-          productId,
-          amount,
-          unit,
-          conditions: {},
-          effectiveFrom: text(values, "effectiveFrom") || PRICING_REFERENCE_DATE,
-          tag: text(values, "priceListTag") || undefined,
-        },
-        { id: productId, name },
-      ),
-    )
-    toast.success("Product created", { description: "Born priced — the default row applies to everyone." })
+    toast.success("Product created", {
+      description: "Unpriced — add its price in Price Engine with Add price.",
+    })
     setIsCreateOpen(false)
   }
 
-  // Edit product: upserts over the same record id. When defaultPrice (or the
-  // unit/price-list tag that travel with it) changed, the default row is
-  // updated too so the product and its Everyone row never disagree.
+  // Edit product: upserts over the same record id, touching only the facts
+  // this form owns. Derived pricing facts (Price list / Variations /
+  // Customer) and the headline value are recomputed from the live rows.
   const handleEditProduct = (values: BusinessFormValues) => {
     if (!editingProduct) return
     const name = text(values, "productName") || editingProduct.name
-    const productType = text(values, "productType") || editingProduct.facts[PRODUCT_FACTS.type] || ""
+    const productType =
+      text(values, "productType") || editingProduct.facts[PRODUCT_FACTS.type] || ""
     const unit = (text(values, "priceUnit") || "pickup") as PriceUnit
     const status = text(values, "status") || editingProduct.status
 
     const nextFacts: Record<string, string> = { ...editingProduct.facts }
     nextFacts[PRODUCT_FACTS.type] = productType
     nextFacts[PRODUCT_FACTS.unit] = unit
-    nextFacts[PRODUCT_FACTS.vat] = `${text(values, "vatRate") || "25"}%`
-    nextFacts[PRODUCT_FACTS.invoiceName] = text(values, "invoiceName") || name
-    nextFacts[PRODUCT_FACTS.invoiceCode] =
-      text(values, "invoiceCode") || editingProduct.facts[PRODUCT_FACTS.invoiceCode] || ""
     if (text(values, "container")) nextFacts[PRODUCT_FACTS.container] = text(values, "container")
     else delete nextFacts[PRODUCT_FACTS.container]
     if (text(values, "containerType")) nextFacts[PRODUCT_FACTS.containerType] = text(values, "containerType")
     else delete nextFacts[PRODUCT_FACTS.containerType]
     if (text(values, "wasteFraction")) nextFacts[PRODUCT_FACTS.wasteFraction] = text(values, "wasteFraction")
     else delete nextFacts[PRODUCT_FACTS.wasteFraction]
+    const levels = splitList(text(values, "serviceLevels")).join(", ")
+    if (levels) nextFacts[PRODUCT_FACTS.serviceLevels] = levels
+    else delete nextFacts[PRODUCT_FACTS.serviceLevels]
 
     const updatedProduct: BusinessRecord = {
       ...editingProduct,
@@ -504,54 +573,18 @@ function ProductsPane({
       ],
       submittedValues: values,
     }
-
-    const defaultPriceText = text(values, "defaultPrice")
-    const newAmount = Number(defaultPriceText)
-    const defaultRow = defaultRowOf(rows, editingProduct.id)
-    const nextTag = text(values, "priceListTag") || undefined
-    const hasNewAmount = defaultPriceText !== "" && Number.isFinite(newAmount)
-    const priceChanged = Boolean(defaultRow && hasNewAmount && newAmount !== defaultRow.amount)
-
-    let allRows = rows
-    if (defaultRow) {
-      const rowChanged =
-        (hasNewAmount && newAmount !== defaultRow.amount) ||
-        unit !== defaultRow.unit ||
-        nextTag !== defaultRow.tag
-      if (rowChanged) {
-        const nextRow: PriceRowModel = {
-          ...defaultRow,
-          amount: hasNewAmount ? newAmount : defaultRow.amount,
-          unit,
-          tag: nextTag,
-        }
-        allRows = rows.map((row) => (row.id === nextRow.id ? nextRow : row))
-        upsertRecord(
-          "commercial",
-          "price-rows",
-          priceRowToRecord(nextRow, { id: editingProduct.id, name }),
-        )
-      }
-    }
-
-    const synced = syncProductPricingFacts(updatedProduct, allRows)
-    upsertRecord("commercial", "products", synced)
-
-    toast.success("Product updated", {
-      description: priceChanged
-        ? `${name} was updated — the default row now reads ${money(newAmount)}${unitSuffix(unit)}.`
-        : `${name} was updated.`,
-    })
+    upsertRecord("commercial", "products", syncProductPricingFacts(updatedProduct, rows))
+    toast.success("Product updated", { description: `${name} was updated.` })
     setEditingProduct(null)
   }
 
   return (
-    <section className="overflow-hidden rounded-xl border border-border/60">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2">
-        <p className="text-xs text-muted-foreground">
-          {productRecords.length} products · manage prices in Price Engine
-        </p>
-        <div className="flex items-center gap-2">
+    <AssetPanelShell
+      heading="Commercial"
+      title="Products"
+      description="The sellable catalogue — add and edit products here. Prices are managed in Price Engine with Add price."
+      action={
+        <>
           <Button variant="ghost" size="sm" asChild>
             <Link href="/commercial">
               Open in Price Engine
@@ -564,98 +597,121 @@ function ProductsPane({
               New product
             </Button>
           )}
+        </>
+      }
+      toolbar={
+        <AssetToolbar
+          searchPlaceholder="Search products"
+          query={query}
+          onQueryChange={setQuery}
+          statuses={statuses}
+          onStatusesChange={setStatuses}
+          statusOptions={PRODUCT_STATUS_OPTIONS}
+          extraFilters={[
+            {
+              label: "Type",
+              options: PRODUCT_TYPE_OPTIONS,
+              value: typeFilters,
+              onChange: setTypeFilters,
+            },
+          ]}
+          view={view}
+          onViewChange={setView}
+        />
+      }
+    >
+      <RecordsSection shown={filtered.length} total={productRecords.length}>
+        <div className="overflow-x-auto">
+          <Table className="min-w-[1080px]">
+            <TableHeader>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableHead>Name</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Container</TableHead>
+                <TableHead>Container type</TableHead>
+                <TableHead>Waste fraction</TableHead>
+                <TableHead>Service levels</TableHead>
+                <TableHead className="text-right">Price</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="w-16" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.length === 0 ? (
+                <EmptyRow colSpan={9} message="No products match this search." />
+              ) : (
+                filtered.map((product) => {
+                  const defaultRow = defaultRowOf(rows, product.id)
+                  const levels = splitList(product.facts[PRODUCT_FACTS.serviceLevels])
+                  return (
+                    <TableRow key={product.id}>
+                      <TableCell className="min-w-[220px]">
+                        <p className="text-sm font-medium text-foreground">{product.name}</p>
+                        {view.showDetails && (
+                          <p className="text-xs text-muted-foreground">{product.context}</p>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="rounded-full px-2 py-0.5 text-[11px] font-normal">
+                          {product.facts[PRODUCT_FACTS.type] ?? "—"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                        {product.facts[PRODUCT_FACTS.container] ?? "—"}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                        {product.facts[PRODUCT_FACTS.containerType] ?? "—"}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                        {product.facts[PRODUCT_FACTS.wasteFraction] ?? "—"}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                        {levels.length > 0
+                          ? `${levels[0]}${levels.length > 1 ? ` +${levels.length - 1}` : ""}`
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-right text-sm font-medium tabular-nums">
+                        {defaultRow ? (
+                          <>
+                            {money(defaultRow.amount)}
+                            <span className="text-xs font-normal text-muted-foreground">
+                              {unitSuffix(defaultRow.unit)}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-xs font-normal text-muted-foreground">Unpriced</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                            statusClasses(product.status),
+                          )}
+                        >
+                          {product.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setEditingProduct(product)}
+                          aria-label={`Edit ${product.name}`}
+                        >
+                          <PencilSimple className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
+              )}
+            </TableBody>
+          </Table>
         </div>
-      </div>
-      <div className="overflow-x-auto">
-        <Table className="min-w-[1120px]">
-          <TableHeader>
-            <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <TableHead>Name</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Container</TableHead>
-              <TableHead>Container type</TableHead>
-              <TableHead>Customer</TableHead>
-              <TableHead>Waste fraction</TableHead>
-              <TableHead className="text-right">Price</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="w-16 text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {productRecords.map((product) => {
-              const defaultRow = defaultRowOf(rows, product.id)
-              const negotiated = negotiatedCustomersOf(rows, product.id)
-              const unit = (product.facts[PRODUCT_FACTS.unit] as PriceUnit) || "pickup"
-              return (
-                <TableRow key={product.id} className="hover:bg-muted/40">
-                  <TableCell className="min-w-[220px] text-sm font-medium text-foreground">
-                    {product.name}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="rounded-full px-2 py-0.5 text-[11px] font-normal">
-                      {product.facts[PRODUCT_FACTS.type] ?? "—"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                    {product.facts[PRODUCT_FACTS.container] ?? "—"}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                    {product.facts[PRODUCT_FACTS.containerType] ?? "—"}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                    {negotiated.length > 0 ? (
-                      <span className="inline-flex items-center gap-1.5 text-foreground">
-                        <Handshake className="h-3.5 w-3.5 shrink-0" />
-                        {negotiated[0]}
-                        {negotiated.length > 1 ? ` +${negotiated.length - 1}` : ""}
-                      </span>
-                    ) : (
-                      "—"
-                    )}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                    {product.facts[PRODUCT_FACTS.wasteFraction] ?? "—"}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-right text-sm font-medium tabular-nums">
-                    {defaultRow ? (
-                      <>
-                        {money(defaultRow.amount)}
-                        <span className="text-xs font-normal text-muted-foreground">
-                          {unitSuffix(unit)}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-xs font-normal text-muted-foreground">Unpriced</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                        statusClasses(product.status),
-                      )}
-                    >
-                      {product.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => setEditingProduct(product)}
-                      aria-label={`Edit ${product.name}`}
-                    >
-                      <PencilSimple className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
-      </div>
+      </RecordsSection>
 
       {productSchema && (
         <BusinessRecordFormDialog
@@ -675,68 +731,400 @@ function ProductsPane({
           }}
           onSubmit={handleEditProduct}
           relationOptions={() => []}
-          initialValueOverrides={productRecordToFormValues(editingProduct, rows)}
+          initialValueOverrides={productRecordToFormValues(editingProduct)}
         />
       )}
-    </section>
+    </AssetPanelShell>
   )
 }
 
-function ZonesPane({ rows }: { rows: readonly PriceRowModel[] }) {
-  const registry = useMemo<Registry>(
-    () => ({
-      title: "Zones",
-      entries: ZONES.map((zone) => ({
-        name: zone,
-        usage: usageLabel(
-          rows.filter((row) => row.conditions.zone === zone).length,
-          "price row",
-        ),
-      })),
-    }),
-    [rows],
-  )
-  return <RegistryCard registry={registry} />
+// ---------------------------------------------------------------------------
+// Zones / Service levels / Customer types — CRUD registry pages sharing one
+// panel + dialog, differing only in the store slice and usage derivation.
+// ---------------------------------------------------------------------------
+
+type RegistryItem = {
+  id: string
+  name: string
+  code?: string
+  description: string
+  status: RegistryStatus
+  createdAt: string
+  updatedAt: string
 }
 
-function ServicePane({ productRecords }: { productRecords: BusinessRecord[] }) {
-  const registry = useMemo<Registry>(() => {
-    const counts = new Map<string, number>()
-    for (const product of productRecords) {
-      for (const level of splitList(product.facts[PRODUCT_FACTS.serviceLevels])) {
-        counts.set(level, (counts.get(level) ?? 0) + 1)
-      }
-    }
-    return {
-      title: "Service levels",
-      entries: [...counts.entries()]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([name, count]) => ({ name, usage: usageLabel(count, "product") })),
-    }
-  }, [productRecords])
+function blankRegistryItem(): RegistryItem {
+  const createdAt = nowIso()
+  return {
+    id: "",
+    name: "",
+    code: "",
+    description: "",
+    status: "Active",
+    createdAt,
+    updatedAt: createdAt,
+  }
+}
+
+function RegistryDialog({
+  value,
+  entityLabel,
+  dialogDescription,
+  withCode,
+  onSave,
+  onClose,
+}: {
+  value: RegistryItem | null
+  entityLabel: string
+  dialogDescription: string
+  withCode?: boolean
+  onSave: (item: RegistryItem) => void
+  onClose: () => void
+}) {
+  const [draft, setDraft] = useState<RegistryItem>(value ?? blankRegistryItem())
+  if (!value) return null
+  const isEditing = Boolean(value.id)
+  const update = <K extends keyof RegistryItem>(key: K, next: RegistryItem[K]) =>
+    setDraft((current) => ({ ...current, [key]: next }))
+  const save = () => {
+    if (!draft.name.trim()) return toast.error(`${entityLabel} name is required.`)
+    onSave({
+      ...draft,
+      name: draft.name.trim(),
+      code: draft.code?.trim() ?? "",
+      description: draft.description.trim(),
+    })
+    onClose()
+    toast.success(isEditing ? `${entityLabel} updated` : `${entityLabel} created`)
+  }
   return (
-    <>
-      <RegistryCard registry={registry} />
-      <p className="text-xs leading-5 text-muted-foreground">
-        Service levels are offered per product under its Extras section.
-      </p>
-    </>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+        <DialogHeader className="border-b px-6 py-5 pr-12">
+          <DialogTitle>
+            {isEditing ? `Edit ${entityLabel.toLowerCase()}` : `New ${entityLabel.toLowerCase()}`}
+          </DialogTitle>
+          <DialogDescription>{dialogDescription}</DialogDescription>
+        </DialogHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          <DialogSection title="Details">
+            <Field label="Name" required>
+              <Input
+                value={draft.name}
+                onChange={(event) => update("name", event.target.value)}
+              />
+            </Field>
+            {withCode && (
+              <Field label="Code" description="Short reference used on invoices and imports.">
+                <Input
+                  value={draft.code ?? ""}
+                  onChange={(event) => update("code", event.target.value)}
+                />
+              </Field>
+            )}
+            <Field label="Status">
+              <Select
+                value={draft.status}
+                onValueChange={(next: RegistryStatus) => update("status", next)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Active">Active</SelectItem>
+                  <SelectItem value="Inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Description" wide>
+              <Textarea
+                rows={3}
+                value={draft.description}
+                onChange={(event) => update("description", event.target.value)}
+              />
+            </Field>
+          </DialogSection>
+        </div>
+        <DialogFooter className="border-t px-6 py-4">
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={save}>Save {entityLabel.toLowerCase()}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
-function CustomerTypesPane({ rows }: { rows: readonly PriceRowModel[] }) {
-  const registry = useMemo<Registry>(
-    () => ({
-      title: "Customer types",
-      entries: CUSTOMER_TYPES.map((type) => ({
-        name: type,
-        usage: usageLabel(
-          rows.filter((row) => row.conditions.customerType === type).length,
-          "price row",
-        ),
-      })),
-    }),
-    [rows],
+function RegistryPane({
+  title,
+  description,
+  entityLabel,
+  dialogDescription,
+  searchPlaceholder,
+  newLabel,
+  idPrefix,
+  withCode,
+  items,
+  usage,
+  usageNoun,
+  inUseHint,
+  onSave,
+  onDelete,
+}: {
+  title: string
+  description: string
+  entityLabel: string
+  dialogDescription: string
+  searchPlaceholder: string
+  newLabel: string
+  idPrefix: string
+  withCode?: boolean
+  items: readonly RegistryItem[]
+  usage: (item: RegistryItem) => number
+  usageNoun: string
+  inUseHint: string
+  onSave: (item: RegistryItem) => void
+  onDelete: (id: string) => void
+}) {
+  const [query, setQuery] = useState("")
+  const [statuses, setStatuses] = useState<string[]>([])
+  const [view, setView] = useState<AssetView>(defaultAssetView)
+  const [editing, setEditing] = useState<RegistryItem | null>(null)
+
+  const filtered = sortByView(
+    items
+      .filter((item) =>
+        [item.name, item.code ?? "", item.description]
+          .join(" ")
+          .toLowerCase()
+          .includes(query.trim().toLowerCase()),
+      )
+      .filter((item) => statuses.length === 0 || statuses.includes(item.status)),
+    view,
+    (item) => item.name,
+    (item) => item.updatedAt,
   )
-  return <RegistryCard registry={registry} />
+
+  const handleDelete = (item: RegistryItem) => {
+    const count = usage(item)
+    if (count > 0) {
+      toast.error(`${item.name} is in use`, {
+        description: `${usageLabel(count, usageNoun)} ${inUseHint} — set it Inactive instead of deleting.`,
+      })
+      return
+    }
+    onDelete(item.id)
+    toast.success(`${entityLabel} deleted`)
+  }
+
+  return (
+    <AssetPanelShell
+      heading="Commercial"
+      title={title}
+      description={description}
+      action={
+        <Button size="sm" onClick={() => setEditing(blankRegistryItem())}>
+          <Plus className="h-4 w-4" weight="bold" />
+          {newLabel}
+        </Button>
+      }
+      toolbar={
+        <AssetToolbar
+          searchPlaceholder={searchPlaceholder}
+          query={query}
+          onQueryChange={setQuery}
+          statuses={statuses}
+          onStatusesChange={setStatuses}
+          view={view}
+          onViewChange={setView}
+        />
+      }
+    >
+      <RecordsSection shown={filtered.length} total={items.length}>
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <TableHead>Name</TableHead>
+              {withCode && <TableHead>Code</TableHead>}
+              <TableHead>Used by</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="w-24" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.length === 0 ? (
+              <EmptyRow
+                colSpan={withCode ? 5 : 4}
+                message={`No ${entityLabel.toLowerCase()}s match this search.`}
+              />
+            ) : (
+              filtered.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell className="min-w-[200px]">
+                    <p className="text-sm font-medium text-foreground">{item.name}</p>
+                    {view.showDetails && (
+                      <p className="line-clamp-1 text-xs text-muted-foreground">
+                        {item.description || "No description"}
+                      </p>
+                    )}
+                  </TableCell>
+                  {withCode && (
+                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                      {item.code || "—"}
+                    </TableCell>
+                  )}
+                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                    {usageLabel(usage(item), usageNoun)}
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge active={item.status === "Active"} />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex justify-end">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setEditing(item)}
+                        aria-label={`Edit ${item.name}`}
+                      >
+                        <PencilSimple className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => handleDelete(item)}
+                        aria-label={`Delete ${item.name}`}
+                      >
+                        <Trash className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </RecordsSection>
+      <RegistryDialog
+        key={editing ? editing.id || "new" : "closed"}
+        value={editing}
+        entityLabel={entityLabel}
+        dialogDescription={dialogDescription}
+        withCode={withCode}
+        onSave={(item) =>
+          onSave({
+            ...item,
+            id: item.id || registryEntityId(`${idPrefix}-${slug(item.name)}`),
+            createdAt: item.createdAt || nowIso(),
+            updatedAt: nowIso(),
+          })
+        }
+        onClose={() => setEditing(null)}
+      />
+    </AssetPanelShell>
+  )
+}
+
+function ZonesPane() {
+  const registries = useCommercialRegistriesStore()
+  const { rows } = useCommercialCatalogue()
+  return (
+    <RegistryPane
+      title="Zones"
+      description="Pricing zones that price rows can condition on. Price Engine's Add price form offers the active zones."
+      entityLabel="Zone"
+      dialogDescription="Zones narrow who pays a price — Add price offers them as a condition."
+      searchPlaceholder="Search zones"
+      newLabel="New zone"
+      idPrefix="zone"
+      items={registries.zones}
+      usage={(item) => rows.filter((row) => row.conditions.zone === item.name).length}
+      usageNoun="price row"
+      inUseHint="condition on it"
+      onSave={(item) =>
+        registries.saveZone({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          status: item.status,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        })
+      }
+      onDelete={registries.deleteZone}
+    />
+  )
+}
+
+function ServicePane() {
+  const registries = useCommercialRegistriesStore()
+  const { productRecords } = useCommercialCatalogue()
+  return (
+    <RegistryPane
+      title="Service"
+      description="Service levels offered on products — collection tiers like backdoor or crane emptying. Products pick from the active levels."
+      entityLabel="Service level"
+      dialogDescription="Service levels are offered per product; the product form picks from the active ones."
+      searchPlaceholder="Search service levels"
+      newLabel="New service level"
+      idPrefix="service"
+      withCode
+      items={registries.serviceLevels}
+      usage={(item) =>
+        productRecords.filter((product) =>
+          splitList(product.facts[PRODUCT_FACTS.serviceLevels]).includes(item.name),
+        ).length
+      }
+      usageNoun="product"
+      inUseHint="offer it"
+      onSave={(item) =>
+        registries.saveServiceLevel({
+          id: item.id,
+          name: item.name,
+          code: item.code ?? "",
+          description: item.description,
+          status: item.status,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        })
+      }
+      onDelete={registries.deleteServiceLevel}
+    />
+  )
+}
+
+function CustomerTypesPane() {
+  const registries = useCommercialRegistriesStore()
+  const { rows } = useCommercialCatalogue()
+  return (
+    <RegistryPane
+      title="Customer types"
+      description="Customer segments that price rows can condition on. Price Engine's Add price form offers the active types."
+      entityLabel="Customer type"
+      dialogDescription="Customer types narrow who pays a price — Add price offers them as a condition."
+      searchPlaceholder="Search customer types"
+      newLabel="New customer type"
+      idPrefix="customer-type"
+      items={registries.customerTypes}
+      usage={(item) =>
+        rows.filter((row) => row.conditions.customerType === item.name).length
+      }
+      usageNoun="price row"
+      inUseHint="condition on it"
+      onSave={(item) =>
+        registries.saveCustomerType({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          status: item.status,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        })
+      }
+      onDelete={registries.deleteCustomerType}
+    />
+  )
 }

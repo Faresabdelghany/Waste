@@ -9,6 +9,7 @@ import { ThemeBootstrapScript } from "@/components/theme-bootstrap-script"
 import { BusinessRecordStoreProvider } from "@/components/wastehero/business-record-store"
 import { OrganizationStoreProvider } from "@/components/settings/organization-store"
 import { AssetManagementStoreProvider } from "@/components/settings/asset-management-store"
+import { CommercialRegistriesStoreProvider } from "@/components/settings/commercial-registries-store"
 import "./globals.css"
 
 const geist = Geist({
@@ -50,11 +51,13 @@ export default function RootLayout({
           <AppThemeProvider>
             <OrganizationStoreProvider>
               <AssetManagementStoreProvider>
-                <BusinessRecordStoreProvider>
-                  {children}
-                  <Analytics />
-                  <Toaster richColors closeButton />
-                </BusinessRecordStoreProvider>
+                <CommercialRegistriesStoreProvider>
+                  <BusinessRecordStoreProvider>
+                    {children}
+                    <Analytics />
+                    <Toaster richColors closeButton />
+                  </BusinessRecordStoreProvider>
+                </CommercialRegistriesStoreProvider>
               </AssetManagementStoreProvider>
             </OrganizationStoreProvider>
           </AppThemeProvider>

@@ -210,7 +210,7 @@ export function decodeIndexation(related: readonly string[]): ContractorPriceMod
 // --- Record ⇄ model converters ---
 // Returns null for a record that cannot be read as a live price row —
 // including a soft-deleted one. That single guard keeps every consumer
-// honest (bulk adjust, the product-fact sync, the Settings reads) instead of
+// honest (the product-fact sync, the Settings reads) instead of
 // each of them having to remember the visibility marker.
 export function recordToPriceRow(record: BusinessRecord): PriceRowModel | null {
   if (isSoftDeleted(record)) return null
@@ -346,10 +346,10 @@ export function contractorPriceToRecord(rate: ContractorPriceModel, existing: Bu
 
 // Recomputes a product's derived pricing facts (Price list / Variations /
 // Customer) and its headline value string from the current price-row set.
-// Shared by every write path that touches price rows — Task 3's bulk-adjust
-// and price-row create/edit branches in business-workspace.tsx, and Task 4's
-// Settings product editor — so they all keep the product's facts in sync the
-// same way instead of duplicating the derivation.
+// Shared by every write path that touches price rows — the Add price /
+// row-edit branches in business-workspace.tsx and the Settings reads — so
+// they all keep the product's facts in sync the same way instead of
+// duplicating the derivation.
 export function syncProductPricingFacts(product: BusinessRecord, rows: readonly PriceRowModel[]): BusinessRecord {
   const productRows = rowsOf(rows, product.id)
   const defaultRow = defaultRowOf(rows, product.id)

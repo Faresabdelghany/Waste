@@ -16,10 +16,10 @@ export const commercialImproveBusinessFormSchemas = [
     recordKind: "Product",
     title: "New product",
     description:
-      "Create a sellable product. A product is born priced — the default price becomes the row with no conditions ('Everyone'); variations, schedules and negotiated deals are price rows in Price Engine.",
+      "Create a sellable product for the catalogue. Products carry no price of their own — prices are added in Price Engine with Add price, starting with the no-conditions default row.",
     submitLabel: "Create product",
     nameField: "productName",
-    contextFieldIds: ["productType", "priceUnit", "effectiveFrom"],
+    contextFieldIds: ["productType", "priceUnit"],
     sections: [
       {
         id: "identity",
@@ -50,56 +50,19 @@ export const commercialImproveBusinessFormSchemas = [
               { value: "Draft", label: "Draft" },
             ],
           },
-        ],
-      },
-      {
-        id: "default-price",
-        title: "Default price",
-        description: "A product is born priced: this default applies to everyone until variation rows narrow it.",
-        fields: [
-          { id: "defaultPrice", label: "Default price", type: "number", required: true, min: 0, unit: "EUR" },
           {
             id: "priceUnit",
             label: "Unit",
             type: "select",
             required: true,
+            defaultValue: "pickup",
+            description: "Price rows on this product are quoted in this unit.",
             options: [
               { value: "pickup", label: "€ per pickup" },
               { value: "month", label: "€ per month" },
               { value: "job", label: "€ per job" },
             ],
           },
-          {
-            id: "priceListTag",
-            label: "Price list",
-            type: "select",
-            description: "Optional tag — a price list is a tag on price rows, not a container object.",
-            options: [
-              { value: "PL-Copenhagen-2026", label: "PL-Copenhagen-2026" },
-              { value: "PL-Harbor-2026", label: "PL-Harbor-2026" },
-            ],
-          },
-          { id: "effectiveFrom", label: "Effective from", type: "date", required: true, defaultValue: "2026-08-20" },
-        ],
-      },
-      {
-        id: "invoice-tax",
-        title: "Invoice & tax",
-        description: "The only home of VAT and invoice fields; price rows never duplicate them.",
-        fields: [
-          {
-            id: "vatRate",
-            label: "VAT rate",
-            type: "select",
-            required: true,
-            defaultValue: "25",
-            options: [
-              { value: "25", label: "25%" },
-              { value: "0", label: "0%" },
-            ],
-          },
-          { id: "invoiceName", label: "Invoice name", type: "text", description: "Defaults to the product name when left blank." },
-          { id: "invoiceCode", label: "Invoice code", type: "text", placeholder: "WH-RES-240", description: "Suggested from the company prefix WH-." },
         ],
       },
       {
@@ -107,7 +70,7 @@ export const commercialImproveBusinessFormSchemas = [
         title: "Catalogue attributes",
         description: "Shown as catalogue columns; services usually leave them unset.",
         fields: [
-          { id: "container", label: "Container (rental)", type: "text", placeholder: "240L bin (rental)" },
+          { id: "container", label: "Container", type: "text", placeholder: "240L bin (rental)" },
           {
             id: "containerType",
             label: "Container type",
@@ -129,6 +92,19 @@ export const commercialImproveBusinessFormSchemas = [
               { value: "Organic", label: "Organic" },
             ],
           },
+          {
+            id: "serviceLevels",
+            label: "Service levels",
+            type: "multiselect",
+            description: "Collection tiers offered on this product — managed in Settings → Commercial → Service.",
+            options: [
+              { value: "Standard kerbside", label: "Standard kerbside" },
+              { value: "Backdoor service", label: "Backdoor service" },
+              { value: "Crane emptying", label: "Crane emptying" },
+              { value: "Same-week", label: "Same-week" },
+              { value: "Next-day", label: "Next-day" },
+            ],
+          },
         ],
       },
     ],
@@ -137,10 +113,10 @@ export const commercialImproveBusinessFormSchemas = [
     key: "commercial.price-rows",
     mode: "create",
     recordKind: "Price row",
-    title: "New price row",
+    title: "Add price",
     description:
-      "Add a variation or a negotiated deal. Leave every condition empty for a default row. The row matching the most conditions wins; a negotiated row for the specific customer always wins; ties go to the newest effective-from date.",
-    submitLabel: "Create price row",
+      "Price a product from the Settings catalogue. Leave every condition empty for the default price that applies to everyone. The row matching the most conditions wins; a negotiated row for the specific customer always wins; ties go to the newest effective-from date.",
+    submitLabel: "Add price",
     contextFieldIds: ["productId", "amount", "effectiveFrom"],
     sections: [
       {
@@ -2253,79 +2229,3 @@ export const commercialImproveBusinessFormSchemas = [
     ],
   },
 ] as const satisfies readonly BusinessFormSchema[]
-
-// Bulk annual-increase flow (spec §4.2). Hosted by the Products header button;
-// deliberately not in the registered array (commercial.products' registered
-// schema is the create contract used by Settings).
-export const adjustPricesFormSchema: BusinessFormSchema = {
-  key: "commercial.products",
-  mode: "action",
-  recordKind: "Price adjustment",
-  title: "Adjust prices",
-  description:
-    "Schedule a bulk change across price rows. Negotiated rows are excluded unless explicitly included. Affected rows carry a Scheduled amount until the effective date.",
-  submitLabel: "Schedule adjustment",
-  contextFieldIds: ["adjustKind", "adjustValue", "effectiveFrom"],
-  execution: {
-    kind: "start-workflow",
-    reviewBeforeSubmit: true,
-    completionMessage: "Adjustment scheduled across the selected price rows.",
-  },
-  validationRules: [],
-  sections: [
-    {
-      id: "adjust-scope",
-      title: "Scope",
-      description: "Every non-negotiated row of the selected products (or the whole tag) is adjusted.",
-      fields: [
-        {
-          id: "priceListTag",
-          label: "Price list",
-          type: "select",
-          options: [
-            { value: "all", label: "All price rows" },
-            { value: "PL-Copenhagen-2026", label: "PL-Copenhagen-2026" },
-            { value: "PL-Harbor-2026", label: "PL-Harbor-2026" },
-          ],
-          defaultValue: "all",
-        },
-        {
-          id: "productIds",
-          label: "Products",
-          type: "multiselect",
-          relation: { workspaceId: "commercial", moduleId: "products" },
-          description: "Optional narrowing — empty means every product in the chosen price list.",
-        },
-        {
-          id: "includeNegotiated",
-          label: "Include negotiated rows",
-          type: "checkbox",
-          defaultValue: false,
-          description: "Warning: negotiated deals are customer commitments. Including them reprices those commitments.",
-        },
-      ],
-    },
-    {
-      id: "adjust-terms",
-      title: "Adjustment",
-      fields: [
-        {
-          id: "adjustKind",
-          label: "Kind",
-          type: "select",
-          required: true,
-          defaultValue: "percent",
-          options: [
-            { value: "percent", label: "Percent (+/−)" },
-            { value: "fixed", label: "Fixed amount (+/−)" },
-            { value: "multiply", label: "Multiply" },
-          ],
-        },
-        { id: "adjustValue", label: "Value", type: "number", required: true },
-        { id: "roundTo05", label: "Round to nearest €0.05", type: "checkbox", defaultValue: false },
-        { id: "effectiveFrom", label: "Effective from", type: "date", required: true, defaultValue: "2027-01-01" },
-        { id: "revertOn", label: "Auto-revert on", type: "date", description: "Optional: the amount reverts on this date." },
-      ],
-    },
-  ],
-}

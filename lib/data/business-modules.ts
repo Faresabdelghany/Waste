@@ -2960,20 +2960,18 @@ const commercial: WorkspaceDefinition = {
       entityLabel: "Product",
       contextLabel: "Type · unit",
       valueLabel: "Default price",
-      primaryAction: "Adjust prices",
+      primaryAction: "Add price",
       metrics: [
         { label: "Products", value: "7", helper: "3 fixed types" },
-        { label: "Negotiated deals", value: "2", helper: "Excluded from bulk adjust by default" },
+        { label: "Negotiated deals", value: "2", helper: "Always win for their customer" },
         { label: "Scheduled changes", value: "1", helper: "+3% on 2027-01-01", tone: "warning" },
         { label: "Price lists", value: "2 + 2", helper: "Annual tariffs + negotiated tags" },
       ],
       lifecycle: ["Draft", "Active", "Inactive"],
       rules: [
         "The row matching the most conditions wins. A negotiated row for the specific customer always wins. Remaining ties go to the row with the newest effective-from date.",
-        "A product is born priced — the default price is a row with no conditions.",
+        "The default price is the price row with no conditions — Add price creates it for a product from Settings.",
         "Prices are effective-dated and selection is explainable.",
-        "VAT and invoice fields live once, on the product.",
-        "Negotiated rows are excluded from bulk adjustments unless explicitly included.",
       ],
       records: [
         {
@@ -3003,7 +3001,7 @@ const commercial: WorkspaceDefinition = {
               "Service levels": "Standard kerbside, Backdoor service",
             },
             [
-              "History · 2026-06-15 · Mette Holm · Adjust prices · +3% scheduled for 1 Jan 2027 — Default price €18.50 → €19.06 (scheduled)",
+              "History · 2026-06-15 · Mette Holm · Price change scheduled · +3% for 1 Jan 2027 — Default price €18.50 → €19.06 (scheduled)",
               "History · 2026-02-03 · Mette Holm · Negotiated deal added for Østerbro Housing Association",
               "History · 2025-11-02 · Jonas Friis · Product created (Quick create)",
             ],
@@ -3140,7 +3138,7 @@ const commercial: WorkspaceDefinition = {
             "Pricing",
             "€3.50/job",
             "5 months ago",
-            "Extra bag tag for occasional overflow. Born priced with a single default row — no variations yet.",
+            "Extra bag tag for occasional overflow. Priced with a single default row — no variations yet.",
             {
               Type: "Additional service",
               "Waste fraction": "Residual",
@@ -3191,11 +3189,11 @@ const commercial: WorkspaceDefinition = {
       label: "Price rows",
       title: "Price Rows",
       description:
-        "Every sellable price is a row — default, variation, or negotiated deal — with conditions, effective dates and a price-list tag. Variations and negotiated deals are created here.",
+        "Every sellable price is a row — default, variation, or negotiated deal — with conditions, effective dates and a price-list tag. Add price creates defaults, variations and negotiated deals alike.",
       entityLabel: "Price row",
       contextLabel: "Product",
       valueLabel: "Amount",
-      primaryAction: "New price row",
+      primaryAction: "Add price",
       metrics: [
         { label: "Rows", value: "20", helper: "7 defaults · 11 variations · 2 negotiated" },
         { label: "Tagged", value: "19", helper: "PL-Copenhagen-2026 · PL-Harbor-2026 · negotiated" },

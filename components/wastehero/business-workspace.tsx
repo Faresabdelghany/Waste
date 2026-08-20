@@ -35,7 +35,6 @@ import {
   type WorkspaceId,
 } from "@/lib/data/business-modules"
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
-import { adjustPricesFormSchema } from "@/lib/data/business-form-schemas-commercial-improve"
 import type {
   BusinessFormField,
   BusinessFormOption,
@@ -44,7 +43,6 @@ import type {
 } from "@/lib/data/business-form-types"
 import {
   applyIndexToRate,
-  computeAdjusted,
   contractorPriceToRecord,
   encodeHistory,
   money,
@@ -148,6 +146,12 @@ import {
   type ContainerType,
   type WasteFraction,
 } from "@/components/settings/asset-management-store"
+import {
+  useCommercialRegistriesStore,
+  type CustomerTypeEntry,
+  type PricingZone,
+  type ServiceLevel,
+} from "@/components/settings/commercial-registries-store"
 import { ContractorDetailsPage } from "@/components/wastehero/contractor-details-page"
 import { ContainerDetailsSheet } from "@/components/wastehero/containers-assets-register"
 import { RouteDetailsPage } from "@/components/wastehero/route-details-page"
@@ -278,6 +282,50 @@ function configuredAssetFormSchema(
       .map((item) => ({ value: item.id, label: item.name })),
   }
 
+  return {
+    ...schema,
+    sections: schema.sections.map((section) => ({
+      ...section,
+      fields: section.fields.map((field) =>
+        optionsByField[field.id]
+          ? { ...field, options: optionsByField[field.id] }
+          : field,
+      ),
+    })),
+  }
+}
+
+// Same idea for the Commercial forms: the Add price conditions (zone,
+// customer type) and the product form's service levels offer whatever the
+// Settings → Commercial registries currently hold, not the fixture options
+// baked into the schema. Registry NAMES are the stored values — price-row
+// conditions and product facts reference them as plain strings.
+function configuredCommercialFormSchema(
+  schema: BusinessFormSchema | undefined,
+  zones: readonly PricingZone[],
+  serviceLevels: readonly ServiceLevel[],
+  customerTypes: readonly CustomerTypeEntry[],
+) {
+  if (
+    schema?.key !== "commercial.price-rows" &&
+    schema?.key !== "commercial.products"
+  ) {
+    return schema
+  }
+  const toOptions = (names: readonly string[]): BusinessFormOption[] =>
+    names.map((name) => ({ value: name, label: name }))
+  const activeNames = <T extends { name: string; status: string }>(
+    items: readonly T[],
+  ) => items.filter((item) => item.status === "Active").map((item) => item.name)
+  const optionsByField: Record<string, readonly BusinessFormOption[]> =
+    schema.key === "commercial.price-rows"
+      ? {
+          zone: toOptions(activeNames(zones)),
+          customerType: toOptions(activeNames(customerTypes)),
+        }
+      : {
+          serviceLevels: toOptions(activeNames(serviceLevels)),
+        }
   return {
     ...schema,
     sections: schema.sections.map((section) => ({
@@ -743,6 +791,7 @@ export function BusinessWorkspace({
   const { getRecords, upsertRecord } = useBusinessRecordStore()
   const { containerTypes, wasteFractions, measurementSettings } =
     useAssetManagementStore()
+  const { zones, serviceLevels, customerTypes } = useCommercialRegistriesStore()
   const router = useRouter()
   const workspace = useMemo<WorkspaceDefinition>(() => {
     const allowedModules = allowedModuleIds ? new Set(allowedModuleIds) : null
@@ -786,7 +835,6 @@ export function BusinessWorkspace({
   const [editingRecord, setEditingRecord] = useState<BusinessRecord | null>(null)
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [isAdjustOpen, setIsAdjustOpen] = useState(false)
   const [relatedCreateTarget, setRelatedCreateTarget] =
     useState<RelatedCreateTarget | null>(null)
   const [auditEvents, setAuditEvents] = useState<Record<string, AuditEvent[]>>({})
@@ -809,20 +857,28 @@ export function BusinessWorkspace({
   )
   const activeModuleFormSchema = useMemo(
     () =>
-      configuredAssetFormSchema(
-        getBusinessFormSchema(workspace.id, activeModule.id),
-        containerTypes,
-        wasteFractions,
-        measurementSettings,
-        projectScope,
+      configuredCommercialFormSchema(
+        configuredAssetFormSchema(
+          getBusinessFormSchema(workspace.id, activeModule.id),
+          containerTypes,
+          wasteFractions,
+          measurementSettings,
+          projectScope,
+        ),
+        zones,
+        serviceLevels,
+        customerTypes,
       ),
     [
       activeModule.id,
       containerTypes,
+      customerTypes,
       measurementSettings,
       projectScope,
+      serviceLevels,
       wasteFractions,
       workspace.id,
+      zones,
     ],
   )
   const relatedCreateModule = relatedCreateTarget
@@ -831,38 +887,42 @@ export function BusinessWorkspace({
         relatedCreateTarget.moduleId,
       )
     : null
-  // Products' header button opens the bulk Adjust-prices action instead of
-  // the module's registered create schema (product creation lives in
-  // Settings — Task 4); this schema is deliberately unregistered, so it only
-  // becomes the active form while its own dialog is open.
-  const isProductsAdjustFlow =
+  // The Price Engine's Products header button opens Add price — a price-row
+  // create targeting commercial.price-rows — instead of the module's
+  // registered create schema: product creation lives in Settings →
+  // Commercial → Products, and pricing a product is the module's real action.
+  const isPriceEngineProducts =
     workspace.id === "commercial" && activeModule.id === "products"
   const formSchema = useMemo(
     () =>
       relatedCreateTarget?.schemaOverride ?? (relatedCreateModule
-        ? configuredAssetFormSchema(
-            getBusinessFormSchema(
-              relatedCreateModule.workspaceId,
-              relatedCreateModule.module.id,
+        ? configuredCommercialFormSchema(
+            configuredAssetFormSchema(
+              getBusinessFormSchema(
+                relatedCreateModule.workspaceId,
+                relatedCreateModule.module.id,
+              ),
+              containerTypes,
+              wasteFractions,
+              measurementSettings,
+              projectScope,
             ),
-            containerTypes,
-            wasteFractions,
-            measurementSettings,
-            projectScope,
+            zones,
+            serviceLevels,
+            customerTypes,
           )
-        : isAdjustOpen && isProductsAdjustFlow
-          ? adjustPricesFormSchema
-          : activeModuleFormSchema),
+        : activeModuleFormSchema),
     [
       activeModuleFormSchema,
       containerTypes,
-      isAdjustOpen,
-      isProductsAdjustFlow,
+      customerTypes,
       measurementSettings,
       projectScope,
       relatedCreateModule,
       relatedCreateTarget?.schemaOverride,
+      serviceLevels,
       wasteFractions,
+      zones,
     ],
   )
   const canOpenBusinessForm =
@@ -1181,7 +1241,7 @@ export function BusinessWorkspace({
     showPrimaryAction &&
     canOpenBusinessForm &&
     Boolean(formSchema) &&
-    !isProductsAdjustFlow
+    !isPriceEngineProducts
   const canEditRecords =
     isRichRecordView && Boolean(activeModuleFormSchema?.execution)
   const canDeleteRecords = isRichRecordView
@@ -1832,7 +1892,7 @@ export function BusinessWorkspace({
       if (!field.relation) {
         if (factValue) {
           values[field.id] = factValue
-        } else if (field.id === "status" && isProductsAdjustFlow) {
+        } else if (field.id === "status" && isPriceEngineProducts) {
           // Products never carry a separate "Status" fact (top-level status
           // is the only source of truth), so falling through to the
           // schema's first option here would show every fixture product as
@@ -1885,29 +1945,14 @@ export function BusinessWorkspace({
     editingRecord,
     formInitialValues,
     getFormRelationOptions,
-    isProductsAdjustFlow,
+    isPriceEngineProducts,
   ])
 
   const editFormSchema = useMemo<BusinessFormSchema | undefined>(() => {
     if (!editingRecord || !activeModuleFormSchema?.execution) return undefined
     const entity = activeModule.entityLabel
-    // Products' registered schema is a create contract ("a product is born
-    // priced") that doubles as this edit host, but its Default price section
-    // is create-only: the price it creates IS the product's no-conditions
-    // price row, and that row is edited as a row (Price Engine → Price rows)
-    // or through the Settings product editor that owns the catalogue. Left
-    // in, the section shows a required price field that reprices nothing —
-    // so drop it on edit rather than growing a second write path onto the
-    // same row.
-    const sections =
-      activeModuleFormSchema.key === "commercial.products"
-        ? activeModuleFormSchema.sections.filter(
-            (section) => section.id !== "default-price",
-          )
-        : activeModuleFormSchema.sections
     return {
       ...activeModuleFormSchema,
-      sections,
       title: `Edit ${entity.toLowerCase()}`,
       description: `Update the linked records and details of ${editingRecord.name}. Changes are recorded with audit history.`,
       submitLabel: "Save changes",
@@ -2114,89 +2159,6 @@ export function BusinessWorkspace({
 
   const handleFormSubmit = (values: BusinessFormValues) => {
     if (!formSchema?.execution) return
-
-    if (formSchema.recordKind === "Price adjustment") {
-      const rowsModule = workspace.modules.find((m) => m.id === "price-rows")
-      const productsModule = workspace.modules.find((m) => m.id === "products")
-      if (!rowsModule || !productsModule) return
-      const rowRecords = getRecords("commercial", "price-rows", rowsModule.records)
-      const productRecords = getRecords("commercial", "products", productsModule.records)
-      const tag = typeof values.priceListTag === "string" ? values.priceListTag : "all"
-      const pickedProducts =
-        typeof values.productIds === "string" && values.productIds
-          ? values.productIds.split(",").map((item) => item.trim()).filter(Boolean)
-          : []
-      const includeNegotiated = values.includeNegotiated === true
-      const kind = (values.adjustKind || "percent") as "percent" | "fixed" | "multiply"
-      const value = Number(values.adjustValue)
-      const round = values.roundTo05 === true
-      const from = typeof values.effectiveFrom === "string" ? values.effectiveFrom : PRICING_REFERENCE_DATE
-      const revertOn = typeof values.revertOn === "string" && values.revertOn ? values.revertOn : undefined
-      if (!Number.isFinite(value)) {
-        toast.error("Enter a numeric adjustment value.")
-        return
-      }
-      const note =
-        kind === "percent"
-          ? `${value > 0 ? "+" : ""}${value}%`
-          : kind === "fixed"
-            ? `${value > 0 ? "+" : ""}€${value}`
-            : `×${value}`
-      let adjusted = 0
-      const touchedProducts = new Map<string, string[]>()
-      const rows = rowRecords
-        .map(recordToPriceRow)
-        .filter((candidate): candidate is PriceRowModel => candidate !== null)
-      for (const rowRecord of rowRecords) {
-        const row = recordToPriceRow(rowRecord)
-        if (!row) continue
-        if (row.negotiatedCustomer && !includeNegotiated) continue
-        if (tag !== "all" && row.tag !== tag) continue
-        if (pickedProducts.length > 0 && !pickedProducts.includes(row.productId)) continue
-        const newAmount = computeAdjusted(row.amount, kind, value, round)
-        const product = productRecords.find((p) => p.id === row.productId)
-        const updated = priceRowToRecord(
-          { ...row, scheduled: { newAmount, from, revertOn, note: `Adjust prices ${note}` } },
-          { id: row.productId, name: product?.name ?? rowRecord.context },
-        )
-        upsertRecord("commercial", "price-rows", {
-          ...rowRecord,
-          ...updated,
-          related: rowRecord.related,
-          companyId: rowRecord.companyId,
-          projectIds: rowRecord.projectIds,
-          contractorId: rowRecord.contractorId,
-        })
-        adjusted += 1
-        const diffs = touchedProducts.get(row.productId) ?? []
-        diffs.push(`${rowDisplayName(row)} ${money(row.amount)} → ${money(newAmount)} (scheduled)`)
-        touchedProducts.set(row.productId, diffs)
-      }
-      for (const [productId, diffs] of touchedProducts) {
-        const product = productRecords.find((p) => p.id === productId)
-        if (!product) continue
-        const synced = syncProductPricingFacts(product, rows)
-        upsertRecord("commercial", "products", {
-          ...synced,
-          updated: "Now",
-          related: [
-            encodeHistory({
-              at: PRICING_REFERENCE_DATE,
-              who: "Olivia Larsen",
-              what: `Adjust prices · ${note} scheduled for ${from} — ${diffs.join("; ")}`,
-            }),
-            ...synced.related,
-          ],
-        })
-      }
-      setIsAdjustOpen(false)
-      toast.success("Adjustment scheduled", {
-        description: `${adjusted} price row${adjusted === 1 ? "" : "s"} scheduled ${note} from ${from}${
-          includeNegotiated ? " (negotiated rows included)" : " (negotiated rows excluded)"
-        }.`,
-      })
-      return
-    }
 
     if (formSchema.recordKind === "Contractor price indexation") {
       const ratesModule = workspace.modules.find((m) => m.id === "contractor-prices")
@@ -2490,12 +2452,22 @@ export function BusinessWorkspace({
     // is kept.
     const normalizeProductRecord = (record: BusinessRecord): BusinessRecord => {
       const submittedUnit = typeof values.priceUnit === "string" ? values.priceUnit : undefined
-      const submittedVat = typeof values.vatRate === "string" ? values.vatRate : undefined
       const submittedStatus =
         typeof values.status === "string" && values.status ? values.status : undefined
       const nextFacts = { ...record.facts }
       if (submittedUnit) nextFacts[PRODUCT_FACTS.unit] = submittedUnit
-      if (submittedVat) nextFacts[PRODUCT_FACTS.vat] = `${submittedVat}%`
+      // The generic path stores the multiselect fact as its display join
+      // ("A · B"), but splitList consumers of the Service levels fact parse a
+      // comma-separated list — rewrite it from the raw submitted value, and
+      // treat an emptied selection as clearing the fact.
+      if (typeof values.serviceLevels === "string") {
+        const levels = values.serviceLevels
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean)
+        if (levels.length > 0) nextFacts[PRODUCT_FACTS.serviceLevels] = levels.join(", ")
+        else delete nextFacts[PRODUCT_FACTS.serviceLevels]
+      }
       delete nextFacts["VAT rate"]
       delete nextFacts["Status"]
       // Field labels that are not product facts: the name duplicates the
@@ -3026,10 +2998,19 @@ export function BusinessWorkspace({
                 </Button>
               )}
               {showPrimaryAction && canOpenBusinessForm && formSchema && (
-                isProductsAdjustFlow ? (
-                  <Button size="sm" onClick={() => setIsAdjustOpen(true)}>
+                isPriceEngineProducts ? (
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      setRelatedCreateTarget({
+                        workspaceId: "commercial",
+                        moduleId: "price-rows",
+                        initialValues: {},
+                      })
+                    }
+                  >
                     <Plus className="h-4 w-4" weight="bold" />
-                    <span className="hidden sm:inline">Adjust prices</span>
+                    <span className="hidden sm:inline">Add price</span>
                     <span className="sm:hidden">Action</span>
                   </Button>
                 ) : isRouteCreateFlow ? (
@@ -3692,18 +3673,6 @@ export function BusinessWorkspace({
             reviewSummary={getFormReviewSummary}
           />
         )}
-      {isAdjustOpen && isProductsAdjustFlow && (
-        <BusinessRecordFormDialog
-          schema={adjustPricesFormSchema}
-          open={isAdjustOpen}
-          onOpenChange={setIsAdjustOpen}
-          onSubmit={handleFormSubmit}
-          relationOptions={getFormRelationOptions}
-          initialValueOverrides={formInitialValues}
-          validateValues={validateFormValues}
-          reviewSummary={getFormReviewSummary}
-        />
-      )}
       {editingRecord && editFormSchema && (
         <BusinessRecordFormDialog
           schema={editFormSchema}
