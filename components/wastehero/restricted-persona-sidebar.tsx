@@ -2,13 +2,15 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import type { ComponentType } from "react"
 import {
+  CaretRight,
   HouseLine,
   Path,
   ShieldCheck,
   ShieldStar,
+  SignOut,
   Ticket,
   Truck,
   UsersThree,
@@ -16,6 +18,12 @@ import {
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Sidebar,
   SidebarContent,
@@ -108,6 +116,7 @@ type RestrictedPersonaSidebarProps = {
 export function RestrictedPersonaSidebar({ persona }: RestrictedPersonaSidebarProps) {
   const { setOpenMobile } = useSidebar()
   const pathname = usePathname()
+  const router = useRouter()
   const definition = personaDefinitions[persona]
   const ScopeCardIcon = definition.scopeCard?.icon
 
@@ -184,17 +193,34 @@ export function RestrictedPersonaSidebar({ persona }: RestrictedPersonaSidebarPr
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-3">
-        <div className="flex items-center gap-3 rounded-lg p-2">
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="bg-sidebar-accent text-xs text-sidebar-accent-foreground">
-              {definition.initials}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{definition.identityName}</p>
-            <p className="truncate text-xs text-sidebar-foreground/60">{definition.identityDetail}</p>
-          </div>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="flex w-full cursor-pointer items-center gap-3 rounded-lg p-2 text-left hover:bg-sidebar-accent"
+            >
+              <Avatar className="h-8 w-8">
+                <AvatarFallback className="bg-sidebar-accent text-xs text-sidebar-accent-foreground">
+                  {definition.initials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{definition.identityName}</p>
+                <p className="truncate text-xs text-sidebar-foreground/60">{definition.identityDetail}</p>
+              </div>
+              <CaretRight className="h-4 w-4 shrink-0 text-sidebar-foreground/55" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="right" align="end" className="w-40">
+            <DropdownMenuItem
+              className="cursor-pointer text-destructive focus:text-destructive"
+              onSelect={() => router.push("/login")}
+            >
+              <SignOut className="h-4 w-4" />
+              Logout
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </SidebarFooter>
     </Sidebar>
   )

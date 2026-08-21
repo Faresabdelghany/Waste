@@ -1,8 +1,7 @@
 "use client"
 
-import { useState } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   Sidebar,
   SidebarContent,
@@ -42,7 +41,6 @@ import {
   CaretRight,
 } from "@phosphor-icons/react/dist/ssr"
 import { activeRoutes, footerItems, navItems, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
-import { AuthDialog, type AuthMode } from "@/components/auth/AuthDialog"
 
 const navItemIcons: Record<NavItemId, React.ComponentType<{ className?: string }>> = {
   operate: Tray,
@@ -63,14 +61,8 @@ const footerItemIcons: Record<SidebarFooterItemId, React.ComponentType<{ classNa
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   const { setOpenMobile } = useSidebar()
-  const [isAuthOpen, setIsAuthOpen] = useState(false)
-  const [authMode, setAuthMode] = useState<AuthMode>("sign-in")
-
-  const openAuth = (mode: AuthMode) => {
-    setAuthMode(mode)
-    setIsAuthOpen(true)
-  }
 
   const isItemActive = (id: NavItemId): boolean => {
     if (id === "operate")
@@ -102,8 +94,7 @@ export function AppSidebar() {
   }
 
   return (
-    <>
-      <Sidebar className="border-none shadow-none">
+    <Sidebar className="border-none shadow-none">
       <SidebarHeader className="px-3 pb-2 pt-3">
         <div className="flex items-center">
           <div className="flex items-center gap-3">
@@ -234,7 +225,7 @@ export function AppSidebar() {
           <DropdownMenuContent side="right" align="end" className="w-40">
             <DropdownMenuItem
               className="cursor-pointer text-destructive focus:text-destructive"
-              onSelect={() => openAuth("sign-in")}
+              onSelect={() => router.push("/login")}
             >
               <SignOut className="h-4 w-4" />
               Logout
@@ -243,13 +234,6 @@ export function AppSidebar() {
         </DropdownMenu>
       </SidebarFooter>
 
-      </Sidebar>
-      <AuthDialog
-        open={isAuthOpen}
-        onOpenChange={setIsAuthOpen}
-        mode={authMode}
-        onModeChange={setAuthMode}
-      />
-    </>
+    </Sidebar>
   )
 }
