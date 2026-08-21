@@ -12,6 +12,7 @@ import { toast } from "sonner"
 
 import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
 import { useOrganizationStore } from "@/components/settings/organization-store"
+import { RolePermissionsPanel } from "@/components/settings/role-permissions"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -426,6 +427,7 @@ export function OrganizationAccessManagement() {
     createRole,
   } = useOrganizationStore()
   const [activeTab, setActiveTab] = useState("users")
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null)
 
   const [userQuery, setUserQuery] = useState("")
   const [userStatuses, setUserStatuses] = useState<string[]>([])
@@ -742,7 +744,13 @@ export function OrganizationAccessManagement() {
 
   const tabs = (
     <div className="flex items-center gap-1 overflow-x-auto pb-1">
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(tab) => {
+          setActiveTab(tab)
+          setSelectedRoleId(null)
+        }}
+      >
         <TabsList className="inline-flex h-8 bg-muted rounded-full px-1 py-0.5 text-xs border border-border/50">
           <TabsTrigger value="users" className="rounded-full px-3 whitespace-nowrap">
             Users
@@ -844,6 +852,15 @@ export function OrganizationAccessManagement() {
             </Table>
           </RecordsSection>
         </PanelShell>
+      ) : selectedRoleId ? (
+        <RolePermissionsPanel
+          roleId={selectedRoleId}
+          userCount={roleUserCount(
+            roles.find((roleDefinition) => roleDefinition.id === selectedRoleId)
+              ?.name ?? "",
+          )}
+          onBack={() => setSelectedRoleId(null)}
+        />
       ) : (
         <PanelShell
           tabs={tabs}
@@ -898,7 +915,19 @@ export function OrganizationAccessManagement() {
               </TableHeader>
               <TableBody>
                 {filteredRoles.map((roleDefinition) => (
-                  <TableRow key={roleDefinition.id}>
+                  <TableRow
+                    key={roleDefinition.id}
+                    tabIndex={0}
+                    className="cursor-pointer"
+                    aria-label={`Open permissions for ${roleDefinition.name}`}
+                    onClick={() => setSelectedRoleId(roleDefinition.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault()
+                        setSelectedRoleId(roleDefinition.id)
+                      }
+                    }}
+                  >
                     <TableCell className="min-w-48 py-3 font-medium text-foreground">
                       {roleDefinition.name}
                     </TableCell>

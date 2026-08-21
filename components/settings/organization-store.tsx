@@ -16,6 +16,10 @@ import {
   FIXTURE_COMPANY_ID,
   FIXTURE_PROJECT_IDS,
 } from "@/lib/data/business-modules"
+import {
+  isRoleAccessMap,
+  type RoleAccessMap,
+} from "@/lib/data/role-permissions"
 
 export type CompanyStatus = "Active" | "Onboarding"
 export type ProjectStatus = "Active" | "Onboarding"
@@ -71,6 +75,9 @@ export type OrganizationRole = {
   type: OrganizationRoleType
   scope: string
   permissions: string
+  // Sparse per-module grants. Absent means "use the seeded defaults for this
+  // role id" (see lib/data/role-permissions.ts); {} means explicitly nothing.
+  access?: RoleAccessMap
   source: "fixture" | "created"
   createdAt: string
 }
@@ -137,6 +144,11 @@ export type CreateOrganizationRoleInput = {
   permissions: string
 }
 
+export type UpdateRoleAccessInput = {
+  roleId: string
+  access: RoleAccessMap
+}
+
 type OrganizationStoreValue = OrganizationState & {
   hydrated: boolean
   createCompany: (input: CreateCompanyInput) => Company
@@ -145,6 +157,7 @@ type OrganizationStoreValue = OrganizationState & {
   updateProject: (input: UpdateProjectInput) => Project
   createUser: (input: CreateOrganizationUserInput) => OrganizationUser
   createRole: (input: CreateOrganizationRoleInput) => OrganizationRole
+  updateRoleAccess: (input: UpdateRoleAccessInput) => OrganizationRole
   projectsForCompany: (companyId: string) => Project[]
   usersForCompany: (companyId: string) => OrganizationUser[]
   primaryAdministratorForCompany: (
@@ -307,6 +320,7 @@ type OrganizationActions = Pick<
   | "updateProject"
   | "createUser"
   | "createRole"
+  | "updateRoleAccess"
 >
 
 type OrganizationStoreHandle = ExternalStore<OrganizationSnapshot> & {
@@ -372,7 +386,8 @@ function isOrganizationState(value: unknown): value is OrganizationState {
             typeof role.name === "string" &&
             (role.type === "System" || role.type === "Custom") &&
             typeof role.scope === "string" &&
-            typeof role.permissions === "string",
+            typeof role.permissions === "string" &&
+            (role.access === undefined || isRoleAccessMap(role.access)),
         )))
 
   if (!hasValidShape) return false
@@ -786,6 +801,36 @@ function createOrganizationStore(): OrganizationStoreHandle {
     return createdRole
   }
 
+  const updateRoleAccess = (input: UpdateRoleAccessInput) => {
+    const state = store.getSnapshot()
+    const existingRole = state.roles.find((role) => role.id === input.roleId)
+    if (!existingRole) {
+      throw new Error("The role could not be found.")
+    }
+
+    // Keep the persisted map sparse: entries with no granted actions are the
+    // same as absent entries. An all-empty map still persists as {} so an
+    // explicit "nothing granted" survives over the seeded defaults.
+    const sanitizedAccess: RoleAccessMap = {}
+    for (const [key, actions] of Object.entries(input.access)) {
+      const uniqueActions = [...new Set(actions)]
+      if (uniqueActions.length > 0) sanitizedAccess[key] = uniqueActions
+    }
+
+    const updatedRole: OrganizationRole = {
+      ...existingRole,
+      access: sanitizedAccess,
+    }
+
+    store.set((current) => ({
+      ...current,
+      roles: current.roles.map((role) =>
+        role.id === input.roleId ? updatedRole : role,
+      ),
+    }))
+    return updatedRole
+  }
+
   return {
     ...store,
     actions: {
@@ -795,6 +840,7 @@ function createOrganizationStore(): OrganizationStoreHandle {
       updateProject,
       createUser,
       createRole,
+      updateRoleAccess,
     },
   }
 }
