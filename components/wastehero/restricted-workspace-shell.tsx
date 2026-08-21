@@ -4,20 +4,34 @@ import {
   RestrictedPersonaSidebar,
   type RestrictedPersona,
 } from "@/components/wastehero/restricted-persona-sidebar"
-import type { WorkspaceId } from "@/lib/data/business-modules"
+import {
+  FIXTURE_CONTRACTOR_IDS,
+  type WorkspaceId,
+} from "@/lib/data/business-modules"
 
-type RestrictedWorkspaceDefinition = {
+type RestrictedWorkspacePage = {
+  id: string
   workspaceId: WorkspaceId
   moduleId: string
   moduleIds: readonly string[]
   recordIds?: readonly string[]
   workspaceLabel: string
   workspaceDescription: string
-  fixedProjectScope: "copenhagen" | "harbor" | "all"
-  fixedScopeLabel: string
   navigationBasePath: string
   showWorkspaceActions: boolean
   showFilters: boolean
+}
+
+type RestrictedWorkspaceDefinition = {
+  fixedProjectScope: "copenhagen" | "harbor" | "all"
+  fixedScopeLabel: string
+  /** Every record and relation option is isolated to this contractor. */
+  contractorScopeId?: string
+  /** Module capabilities resolve from this role's Settings permission matrix. */
+  permissionsRoleId?: string
+  /** Signed-in identity written to audit events and created records. */
+  actorName?: string
+  pages: readonly RestrictedWorkspacePage[]
 }
 
 const restrictedWorkspaceDefinitions: Record<
@@ -25,73 +39,136 @@ const restrictedWorkspaceDefinitions: Record<
   RestrictedWorkspaceDefinition
 > = {
   citizen: {
-    workspaceId: "customers",
-    moduleId: "citizen-portal",
-    moduleIds: ["citizen-portal"],
-    recordIds: ["portal-activity-parkvej"],
-    workspaceLabel: "Citizen portal",
-    workspaceDescription:
-      "Authorized property services, collection dates, requests, documents, and messages.",
     fixedProjectScope: "copenhagen",
     fixedScopeLabel: "Østerbro Housing · Parkvej 18",
-    navigationBasePath: "/portal",
-    showWorkspaceActions: false,
-    showFilters: false,
+    pages: [
+      {
+        id: "portal",
+        workspaceId: "customers",
+        moduleId: "citizen-portal",
+        moduleIds: ["citizen-portal"],
+        recordIds: ["portal-activity-parkvej"],
+        workspaceLabel: "Citizen portal",
+        workspaceDescription:
+          "Authorized property services, collection dates, requests, documents, and messages.",
+        navigationBasePath: "/portal",
+        showWorkspaceActions: false,
+        showFilters: false,
+      },
+    ],
   },
   contractor: {
-    workspaceId: "contractors",
-    moduleId: "contractor-workspace",
-    moduleIds: ["contractor-workspace"],
-    recordIds: ["contractor-access-nordren-manager"],
-    workspaceLabel: "Contractor workspace",
-    workspaceDescription:
-      "NordRen operations, permitted users, fleet, routes, proposals, and manager access.",
     fixedProjectScope: "copenhagen",
-    fixedScopeLabel: "NordRen ApS · permitted projects",
-    navigationBasePath: "/contractor-workspace",
-    showWorkspaceActions: false,
-    showFilters: false,
+    fixedScopeLabel: "NordRen ApS · CA-Ø-2",
+    contractorScopeId: FIXTURE_CONTRACTOR_IDS.nordren,
+    permissionsRoleId: "role-contractor-manager",
+    actorName: "Lars Mikkelsen",
+    pages: [
+      {
+        id: "routes",
+        workspaceId: "route-studio",
+        moduleId: "routes",
+        moduleIds: ["routes"],
+        workspaceLabel: "Routes",
+        workspaceDescription:
+          "NordRen ApS route lists across permitted projects — read-only.",
+        navigationBasePath: "/contractor-workspace",
+        showWorkspaceActions: true,
+        showFilters: false,
+      },
+      {
+        id: "fleet",
+        workspaceId: "fleet",
+        moduleId: "vehicles",
+        moduleIds: ["vehicles", "drivers"],
+        workspaceLabel: "Fleet",
+        workspaceDescription:
+          "NordRen ApS vehicles and drivers — fully self-managed.",
+        navigationBasePath: "/contractor-workspace/fleet",
+        showWorkspaceActions: true,
+        showFilters: false,
+      },
+      {
+        id: "tickets",
+        workspaceId: "operate",
+        moduleId: "tickets",
+        moduleIds: ["tickets"],
+        workspaceLabel: "Tickets",
+        workspaceDescription:
+          "Tickets on NordRen ApS work — raise new ones for the office to resolve.",
+        navigationBasePath: "/contractor-workspace/tickets",
+        showWorkspaceActions: true,
+        showFilters: false,
+      },
+      {
+        id: "team",
+        workspaceId: "contractors",
+        moduleId: "contractor-workspace",
+        moduleIds: ["contractor-workspace"],
+        workspaceLabel: "Team",
+        workspaceDescription:
+          "NordRen ApS workspace users — invite managers, foremen, and drivers.",
+        navigationBasePath: "/contractor-workspace/team",
+        showWorkspaceActions: true,
+        showFilters: false,
+      },
+    ],
   },
   internal: {
-    workspaceId: "control-center",
-    moduleId: "control-center",
-    moduleIds: ["control-center"],
-    workspaceLabel: "WasteHero Control Center",
-    workspaceDescription:
-      "Internal sales, onboarding, subscriptions, entitlements, and marketplace fulfillment.",
     fixedProjectScope: "all",
     fixedScopeLabel: "WasteHero internal · cross-tenant",
-    navigationBasePath: "/control-center",
-    showWorkspaceActions: false,
-    showFilters: true,
+    pages: [
+      {
+        id: "control-center",
+        workspaceId: "control-center",
+        moduleId: "control-center",
+        moduleIds: ["control-center"],
+        workspaceLabel: "WasteHero Control Center",
+        workspaceDescription:
+          "Internal sales, onboarding, subscriptions, entitlements, and marketplace fulfillment.",
+        navigationBasePath: "/control-center",
+        showWorkspaceActions: false,
+        showFilters: true,
+      },
+    ],
   },
 }
 
 type RestrictedWorkspaceShellProps = {
   persona: RestrictedPersona
+  pageId?: string
 }
 
-export function RestrictedWorkspaceShell({ persona }: RestrictedWorkspaceShellProps) {
+export function RestrictedWorkspaceShell({
+  persona,
+  pageId,
+}: RestrictedWorkspaceShellProps) {
   const definition = restrictedWorkspaceDefinitions[persona]
+  const page =
+    definition.pages.find((candidate) => candidate.id === pageId) ??
+    definition.pages[0]
 
   return (
     <SidebarProvider>
       <RestrictedPersonaSidebar persona={persona} />
       <SidebarInset>
         <BusinessWorkspace
-          workspaceId={definition.workspaceId}
-          initialModuleId={definition.moduleId}
-          allowedModuleIds={definition.moduleIds}
-          allowedRecordIds={definition.recordIds}
-          workspaceLabel={definition.workspaceLabel}
-          workspaceDescription={definition.workspaceDescription}
+          workspaceId={page.workspaceId}
+          initialModuleId={page.moduleId}
+          allowedModuleIds={page.moduleIds}
+          allowedRecordIds={page.recordIds}
+          workspaceLabel={page.workspaceLabel}
+          workspaceDescription={page.workspaceDescription}
           fixedProjectScope={definition.fixedProjectScope}
           fixedScopeLabel={definition.fixedScopeLabel}
-          navigationBasePath={definition.navigationBasePath}
+          navigationBasePath={page.navigationBasePath}
           showDeepLinks={false}
-          showExportAction={definition.showWorkspaceActions}
-          showPrimaryAction={definition.showWorkspaceActions}
-          showFilters={definition.showFilters}
+          showExportAction={false}
+          showPrimaryAction={page.showWorkspaceActions}
+          showFilters={page.showFilters}
+          contractorScopeId={definition.contractorScopeId}
+          permissionsRoleId={definition.permissionsRoleId}
+          actorName={definition.actorName}
         />
       </SidebarInset>
     </SidebarProvider>

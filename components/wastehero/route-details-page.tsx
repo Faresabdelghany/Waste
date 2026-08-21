@@ -277,10 +277,12 @@ function OverviewTab({
   record,
   onAction,
   onDelete,
+  readOnly = false,
 }: {
   record: BusinessRecord
   onAction: (action: string) => void
   onDelete?: () => void
+  readOnly?: boolean
 }) {
   const [stops, setStops] = useState<RouteStop[]>(initialStops)
   const [search, setSearch] = useState("")
@@ -495,14 +497,18 @@ function OverviewTab({
                   <DownloadSimple className="h-4 w-4" />
                   Export route
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  onSelect={() => (onDelete ? onDelete() : onAction("Cancel"))}
-                >
-                  <Trash className="h-4 w-4" />
-                  Delete route
-                </DropdownMenuItem>
+                {!readOnly && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onSelect={() => (onDelete ? onDelete() : onAction("Cancel"))}
+                    >
+                      <Trash className="h-4 w-4" />
+                      Delete route
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -1041,6 +1047,7 @@ export function RouteDetailsPage({
   onAction,
   onEdit,
   onDelete,
+  readOnly = false,
 }: {
   module: ModuleDefinition
   record: BusinessRecord
@@ -1050,6 +1057,8 @@ export function RouteDetailsPage({
   onAction: (action: string) => void
   onEdit?: () => void
   onDelete?: () => void
+  /** Hides every lifecycle and mutation control, e.g. for contractor scopes. */
+  readOnly?: boolean
 }) {
   const primaryAction =
     record.status === "Active"
@@ -1088,10 +1097,12 @@ export function RouteDetailsPage({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" onClick={() => onAction(primaryAction)}>
-              <Play className="h-4 w-4" weight="fill" />
-              {primaryAction}
-            </Button>
+            {!readOnly && (
+              <Button size="sm" onClick={() => onAction(primaryAction)}>
+                <Play className="h-4 w-4" weight="fill" />
+                {primaryAction}
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm">
@@ -1099,17 +1110,18 @@ export function RouteDetailsPage({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-52">
-                {(record.allowedTransitions ?? module.lifecycle.slice(1, 3)).map(
-                  (action) => (
-                    <DropdownMenuItem
-                      key={action}
-                      onSelect={() => onAction(action)}
-                    >
-                      {action}
-                    </DropdownMenuItem>
-                  ),
-                )}
-                <DropdownMenuSeparator />
+                {!readOnly &&
+                  (record.allowedTransitions ?? module.lifecycle.slice(1, 3)).map(
+                    (action) => (
+                      <DropdownMenuItem
+                        key={action}
+                        onSelect={() => onAction(action)}
+                      >
+                        {action}
+                      </DropdownMenuItem>
+                    ),
+                  )}
+                {!readOnly && <DropdownMenuSeparator />}
                 {onEdit && (
                   <DropdownMenuItem onSelect={onEdit}>
                     <PencilSimple className="h-4 w-4" />
@@ -1176,7 +1188,12 @@ export function RouteDetailsPage({
           </div>
         </div>
         <TabsContent value="overview" className="mt-0 min-h-0 flex-1">
-          <OverviewTab record={record} onAction={onAction} onDelete={onDelete} />
+          <OverviewTab
+            record={record}
+            onAction={onAction}
+            onDelete={onDelete}
+            readOnly={readOnly}
+          />
         </TabsContent>
         <TabsContent value="tickets" className="mt-0 min-h-0 flex-1">
           <TicketsTab tickets={tickets} />

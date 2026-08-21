@@ -161,6 +161,12 @@ import { ContractorDetailsPage } from "@/components/wastehero/contractor-details
 import { ContainerDetailsSheet } from "@/components/wastehero/containers-assets-register"
 import { RouteDetailsPage } from "@/components/wastehero/route-details-page"
 import { TicketDetailsDialog } from "@/components/tickets/TicketDetailsDialog"
+import { useOrganizationStore } from "@/components/settings/organization-store"
+import {
+  effectiveRoleAccess,
+  type RoleAccessMap,
+  type RolePermissionAction,
+} from "@/lib/data/role-permissions"
 
 type BusinessWorkspaceProps = {
   workspaceId: WorkspaceId
@@ -176,6 +182,20 @@ type BusinessWorkspaceProps = {
   showPrimaryAction?: boolean
   showFilters?: boolean
   navigationBasePath?: string
+  /**
+   * Isolates the workspace to one contractor: only records attributed to it
+   * are visible, created records are stamped with it, and relation options
+   * belonging to other contractors are excluded.
+   */
+  contractorScopeId?: string
+  /**
+   * Resolves view/edit/create/delete per module from this organization
+   * role's effective access map (Settings → role permissions). Absent means
+   * the office workspace default: everything permitted.
+   */
+  permissionsRoleId?: string
+  /** Name written as owner/actor on audit events and created records. */
+  actorName?: string
 }
 
 type ProjectScope = "copenhagen" | "harbor" | "all"
@@ -585,6 +605,20 @@ const queueModuleIds = new Set(["exceptions", "tickets"])
 // Modules that get the richer record views introduced for Routes: table with
 // configurable fact columns and grouping, list/board/timeline layouts, and
 // row-level edit/delete actions. The value is the module's default fact columns.
+// Records of these modules are operated by a specific party, so a contractor
+// scope offers only its own — unlike shared registries (projects, depots,
+// ticket types), where unattributed records stay selectable.
+const contractorOperatedRelationModuleIds = new Set([
+  "routes",
+  "vehicles",
+  "drivers",
+  "contractor-workspace",
+  "contract-areas",
+  "contractor-prices",
+  "settlements",
+  "contractors",
+])
+
 const richViewFactColumnDefaults: Record<string, readonly string[]> = {
   routes: ["Vehicle", "Driver"],
   schemes: ["Version", "Effective", "Vehicle"],
@@ -595,6 +629,10 @@ const richViewFactColumnDefaults: Record<string, readonly string[]> = {
   // membership; price rows need the edit path for the schedule-a-change
   // flow, so they join the rich view like products did.
   "price-rows": ["Zone", "Customer type", "Container type", "Waste fraction", "Negotiated customer", "Price list", "Effective from"],
+  // Fleet resources are self-managed by contractor managers, so both need
+  // the rich view's edit and delete paths.
+  vehicles: ["Ownership", "Capacity", "Fractions", "Fuel"],
+  drivers: ["Licence", "AppAccess", "Employer"],
 }
 
 // Governance facts are shown in record details, never offered as table columns.
@@ -796,6 +834,9 @@ export function BusinessWorkspace({
   showPrimaryAction = true,
   showFilters = true,
   navigationBasePath,
+  contractorScopeId,
+  permissionsRoleId,
+  actorName = "Olivia Larsen",
 }: BusinessWorkspaceProps) {
   const sourceWorkspace = getWorkspaceDefinition(workspaceId)
   const { getRecords, upsertRecord } = useBusinessRecordStore()
@@ -803,7 +844,17 @@ export function BusinessWorkspace({
     useAssetManagementStore()
   const { zones, serviceLevels, customerTypes, priceLists } =
     useCommercialRegistriesStore()
+  const { roles: organizationRoles } = useOrganizationStore()
   const router = useRouter()
+  // The live grants for the restricting role — Settings edits apply on the
+  // next render. Null means no role restriction (office default).
+  const roleAccess = useMemo<RoleAccessMap | null>(() => {
+    if (!permissionsRoleId) return null
+    const role = organizationRoles.find(
+      (candidate) => candidate.id === permissionsRoleId,
+    )
+    return effectiveRoleAccess(role ?? { id: permissionsRoleId })
+  }, [organizationRoles, permissionsRoleId])
   const workspace = useMemo<WorkspaceDefinition>(() => {
     const allowedModules = allowedModuleIds ? new Set(allowedModuleIds) : null
     const allowedRecords = allowedRecordIds ? new Set(allowedRecordIds) : null
@@ -822,11 +873,27 @@ export function BusinessWorkspace({
       throw new Error(`No permitted modules are available in ${sourceWorkspace.id}`)
     }
 
+    // A restricting role hides modules it cannot view. When it can view none,
+    // the configured modules are kept so the workspace can still render its
+    // frame around the access notice instead of crashing.
+    const viewableModules = roleAccess
+      ? modules.filter((module) =>
+          (roleAccess[`${sourceWorkspace.id}.${module.id}`] ?? []).includes(
+            "view",
+          ),
+        )
+      : modules
+
     return {
       ...sourceWorkspace,
-      modules,
+      modules: viewableModules.length > 0 ? viewableModules : modules,
     }
-  }, [allowedModuleIds, allowedRecordIds, sourceWorkspace])
+  }, [allowedModuleIds, allowedRecordIds, roleAccess, sourceWorkspace])
+  const hasRoleViewableModules =
+    !roleAccess ||
+    workspace.modules.some((module) =>
+      (roleAccess[`${workspace.id}.${module.id}`] ?? []).includes("view"),
+    )
   const tabsScrollRef = useRef<HTMLDivElement>(null)
   const [activeModuleId, setActiveModuleId] = useState(
     workspace.modules.some((module) => module.id === initialModuleId)
@@ -852,6 +919,11 @@ export function BusinessWorkspace({
 
   const activeModule =
     workspace.modules.find((module) => module.id === activeModuleId) ?? workspace.modules[0]
+  const activeModuleGrants = roleAccess
+    ? roleAccess[`${workspace.id}.${activeModule.id}`] ?? []
+    : null
+  const hasGrant = (action: RolePermissionAction) =>
+    activeModuleGrants === null || activeModuleGrants.includes(action)
   const isContainersAssetsView =
     workspace.id === "resources" && activeModule.id === "containers"
   const primaryModuleIds =
@@ -951,15 +1023,18 @@ export function BusinessWorkspace({
   // Routes get a chooser between Quick create and the Guided Setup wizard.
   const isRouteCreateFlow =
     activeModuleFormSchema?.key === "route-studio.routes"
-  const activeRecords = useMemo(
-    () =>
-      getRecords(
-        workspace.id,
-        activeModule.id,
-        activeModule.records,
-      ),
-    [activeModule, getRecords, workspace.id],
-  )
+  const activeRecords = useMemo(() => {
+    const records = getRecords(
+      workspace.id,
+      activeModule.id,
+      activeModule.records,
+    )
+    // Contractor isolation covers user-created records too, which a static
+    // fixture-id allowlist cannot.
+    return contractorScopeId
+      ? records.filter((record) => record.contractorId === contractorScopeId)
+      : records
+  }, [activeModule, contractorScopeId, getRecords, workspace.id])
   const formTargetRecords = useMemo(
     () =>
       relatedCreateModule
@@ -1257,14 +1332,18 @@ export function BusinessWorkspace({
   const activeViewType: BusinessViewType = isRichRecordView
     ? viewOptions.viewType
     : "table"
+  const effectiveShowPrimaryAction = showPrimaryAction && hasGrant("create")
   const canCreateFromView =
-    showPrimaryAction &&
+    effectiveShowPrimaryAction &&
     canOpenBusinessForm &&
     Boolean(formSchema) &&
     !isPriceEngineProducts
   const canEditRecords =
-    isRichRecordView && Boolean(activeModuleFormSchema?.execution)
-  const canDeleteRecords = isRichRecordView
+    isRichRecordView &&
+    Boolean(activeModuleFormSchema?.execution) &&
+    hasGrant("edit")
+  const canDeleteRecords = isRichRecordView && hasGrant("delete")
+  const canRunRecordActions = hasGrant("edit")
   const factColumnOptions = useMemo(() => {
     if (!isRichRecordView) return []
     const labels: string[] = []
@@ -1452,13 +1531,21 @@ export function BusinessWorkspace({
         (candidate) => candidate.id === moduleId,
       )
       if (!module) return null
-      return (
+      const record =
         getRecords(workspace.id, module.id, module.records).find(
-          (record) => record.id === recordId,
+          (candidate) => candidate.id === recordId,
         ) ?? null
-      )
+      // Deep links cannot escape a contractor scope.
+      if (
+        record &&
+        contractorScopeId &&
+        record.contractorId !== contractorScopeId
+      ) {
+        return null
+      }
+      return record
     },
-    [getRecords, workspace],
+    [contractorScopeId, getRecords, workspace],
   )
 
   const openRecord = (record: BusinessRecord) => {
@@ -1489,6 +1576,8 @@ export function BusinessWorkspace({
 
   const requestRecordAction = (action: string) => {
     if (!selectedRecord) return
+    const requiresDeleteGrant = action.toLowerCase().includes("delete")
+    if (requiresDeleteGrant ? !hasGrant("delete") : !hasGrant("edit")) return
     setPendingAction({ record: selectedRecord, action })
   }
 
@@ -1549,7 +1638,7 @@ export function BusinessWorkspace({
       updated: "Now",
       related: options?.historyWhat
         ? [
-            encodeHistory({ at: PRICING_REFERENCE_DATE, who: "Olivia Larsen", what: options.historyWhat }),
+            encodeHistory({ at: PRICING_REFERENCE_DATE, who: actorName, what: options.historyWhat }),
             ...synced.related,
           ]
         : synced.related,
@@ -1571,7 +1660,7 @@ export function BusinessWorkspace({
     const event: AuditEvent = {
       id: `audit-${Date.now()}`,
       action,
-      actor: "Olivia Larsen",
+      actor: actorName,
       at: "Now",
       reason,
       before: record.status,
@@ -1594,7 +1683,7 @@ export function BusinessWorkspace({
           ...record.facts,
           "Registry visibility": "Soft deleted",
           "Deletion reason": reason,
-          "Deleted by": "Olivia Larsen",
+          "Deleted by": actorName,
         },
         related: [`Deletion log ${event.id}`, ...record.related],
       })
@@ -1628,7 +1717,7 @@ export function BusinessWorkspace({
         name: companionLabel(activeModule, action, record),
         context: record.context,
         status: activeModule.lifecycle[0] ?? "Draft",
-        owner: "Olivia Larsen",
+        owner: actorName,
         value: isCorrection ? "Pending amount validation" : action,
         updated: "Now",
         description: isCorrection
@@ -1636,7 +1725,7 @@ export function BusinessWorkspace({
           : `Controlled ${action.toLowerCase()} record created without mutating its source.`,
         facts: {
           "Source record": record.id,
-          "Requested by": "Olivia Larsen",
+          "Requested by": actorName,
           Reason: reason,
           "Effective date": effectiveDate || "Immediate after validation",
           Integrity: isCorrection
@@ -1650,6 +1739,7 @@ export function BusinessWorkspace({
         companyId: record.companyId ?? FIXTURE_COMPANY_ID,
         projectIds:
           record.projectIds ?? selectedProjectIds(projectScope, {}),
+        contractorId: record.contractorId ?? contractorScopeId,
         recordKind: isCorrection ? "Correction" : "Controlled child record",
         relationRefs: [
           {
@@ -1689,7 +1779,7 @@ export function BusinessWorkspace({
           ...record.facts,
           "Last controlled action": action,
           "Action reason": reason,
-          "Action actor": "Olivia Larsen",
+          "Action actor": actorName,
           ...(effectiveDate ? { "Effective date": effectiveDate } : {}),
         },
         related: [`Audit ${event.id}`, ...record.related.filter((item) => item !== `Audit ${event.id}`)],
@@ -1768,6 +1858,19 @@ export function BusinessWorkspace({
             !permittedStatuses ||
             permittedStatuses.has(record.status.toLowerCase()),
         )
+        // Inside a contractor scope, records attributed to another contractor
+        // are never offered. Contractor-operated entities must match the
+        // scope exactly — company-operated ones are not the contractor's to
+        // reference — while shared registries without attribution remain.
+        .filter((record) => {
+          if (!contractorScopeId) return true
+          if (contractorOperatedRelationModuleIds.has(resolved.module.id)) {
+            return record.contractorId === contractorScopeId
+          }
+          return (
+            !record.contractorId || record.contractorId === contractorScopeId
+          )
+        })
         .filter((record) => {
           if (
             field.id === "scheduleId" &&
@@ -1857,7 +1960,7 @@ export function BusinessWorkspace({
           label: record.name,
         }))
     },
-    [formSchema?.recordKind, getRecords, projectScope],
+    [contractorScopeId, formSchema?.recordKind, getRecords, projectScope],
   )
 
   const formInitialValues = useMemo<BusinessFormValues>(
@@ -1871,9 +1974,12 @@ export function BusinessWorkspace({
                 ? FIXTURE_PROJECT_IDS.harbor
                 : FIXTURE_PROJECT_IDS.copenhagen,
           }),
+      ...(contractorScopeId
+        ? { contractorId: contractorScopeId, invitedBy: actorName }
+        : {}),
       ...(relatedCreateTarget?.initialValues ?? {}),
     }),
-    [projectScope, relatedCreateTarget],
+    [actorName, contractorScopeId, projectScope, relatedCreateTarget],
   )
 
   const editInitialValues = useMemo<BusinessFormValues>(() => {
@@ -2344,7 +2450,7 @@ export function BusinessWorkspace({
       const assignmentEvent: AuditEvent = {
         id: `audit-contract-area-assignment-${Date.now()}`,
         action: "Assign contract area",
-        actor: "Olivia Larsen",
+        actor: actorName,
         at: "Now",
         reason: assignmentReason,
         before: previousContractor,
@@ -2645,7 +2751,7 @@ export function BusinessWorkspace({
       const editEvent: AuditEvent = {
         id: `audit-edit-${now}`,
         action: `Edit ${activeModule.entityLabel.toLowerCase()}`,
-        actor: "Olivia Larsen",
+        actor: actorName,
         at: "Now",
         reason: preferredReason(values),
         before: editingRecord.status,
@@ -2685,7 +2791,7 @@ export function BusinessWorkspace({
       name: recordName,
       context: contextValues.join(" · ") || projectScopeLabel(projectIds),
       status: initialFormStatus(resolvedTarget.module, formSchema, values),
-      owner: "Olivia Larsen",
+      owner: actorName,
       value: formSchema.execution.resultValue ?? formSchema.submitLabel,
       updated: "Now",
       description: formSchema.description,
@@ -2693,7 +2799,7 @@ export function BusinessWorkspace({
         Scope: projectScopeLabel(projectIds),
         "Record kind": formSchema.recordKind,
         "Execution policy": formSchema.execution.kind.replaceAll("-", " "),
-        "Submitted by": "Olivia Larsen",
+        "Submitted by": actorName,
         ...facts,
       },
       related: [
@@ -2715,7 +2821,7 @@ export function BusinessWorkspace({
       contractorId:
         typeof values.contractorId === "string" && values.contractorId
           ? values.contractorId
-          : undefined,
+          : contractorScopeId,
       recordKind: formSchema.recordKind,
       submittedValues: values,
       relationRefs,
@@ -2732,7 +2838,7 @@ export function BusinessWorkspace({
     const creationEvent: AuditEvent = {
       id: `audit-form-${now}`,
       action: formSchema.submitLabel,
-      actor: "Olivia Larsen",
+      actor: actorName,
       at: "Now",
       reason: preferredReason(values),
       before: "Absent",
@@ -2834,7 +2940,7 @@ export function BusinessWorkspace({
       Scope: projectScopeLabel(projectIds),
       "Record kind": "Route",
       "Execution policy": "create record",
-      "Submitted by": "Olivia Larsen",
+      "Submitted by": actorName,
       ...(project ? { Project: project.name } : {}),
       ...(data.date ? { Date: data.date } : {}),
       ...(contractor ? { Contractor: contractor.name } : {}),
@@ -2864,7 +2970,7 @@ export function BusinessWorkspace({
         activeModuleFormSchema?.execution?.initialStatus ??
         activeModule.lifecycle[0] ??
         "Planned",
-      owner: "Olivia Larsen",
+      owner: actorName,
       value:
         activeModuleFormSchema?.execution?.resultValue ??
         "Stops pending generation",
@@ -2881,7 +2987,7 @@ export function BusinessWorkspace({
       allowedTransitions: activeModule.lifecycle.slice(1, 3),
       companyId: FIXTURE_COMPANY_ID,
       projectIds,
-      contractorId: data.contractorId,
+      contractorId: data.contractorId ?? contractorScopeId,
       recordKind: "Route",
       submittedValues: {
         projectId: data.projectId ?? "",
@@ -2900,7 +3006,7 @@ export function BusinessWorkspace({
     const creationEvent: AuditEvent = {
       id: `audit-guided-route-${now}`,
       action: "Create route · Guided Setup",
-      actor: "Olivia Larsen",
+      actor: actorName,
       at: "Now",
       reason: "Guided Setup",
       before: "Absent",
@@ -2943,7 +3049,7 @@ export function BusinessWorkspace({
         initialValues: {
           contractorId,
           contractAreaId: relatedContractAreas[0]?.id ?? "",
-          invitedBy: "Olivia Larsen",
+          invitedBy: actorName,
         },
       })
       return
@@ -3054,6 +3160,26 @@ export function BusinessWorkspace({
     })
   }
 
+  if (!hasRoleViewableModules) {
+    return (
+      <div className="flex flex-1 flex-col min-h-0 bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
+        <header className="flex items-center gap-3 border-b border-border px-4 py-3">
+          <SidebarTrigger className="h-8 w-8 rounded-lg hover:bg-accent text-muted-foreground" />
+          <Breadcrumbs items={[{ label: workspaceLabel ?? workspace.label }]} />
+        </header>
+        <div className="flex flex-1 items-center justify-center p-8">
+          <div className="max-w-sm text-center">
+            <p className="text-sm font-medium">No permitted modules</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Your role has no view access to this area. Ask an administrator
+              to review its permissions.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-1 flex-col min-h-0 bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
       {isRouteDetails && selectedRecord ? (
@@ -3064,8 +3190,9 @@ export function BusinessWorkspace({
           sessions={relatedRouteSessions}
           onBack={closeRecord}
           onAction={requestRecordAction}
-          onEdit={() => openEditRecord(selectedRecord)}
-          onDelete={() => requestRecordDelete(selectedRecord)}
+          onEdit={canEditRecords ? () => openEditRecord(selectedRecord) : undefined}
+          onDelete={canDeleteRecords ? () => requestRecordDelete(selectedRecord) : undefined}
+          readOnly={!canRunRecordActions}
         />
       ) : isContractorDetails && selectedRecord ? (
         <ContractorDetailsPage
@@ -3104,7 +3231,7 @@ export function BusinessWorkspace({
           </div>
           {(isContainersAssetsView ||
             showExportAction ||
-            (showPrimaryAction && canOpenBusinessForm)) && (
+            (effectiveShowPrimaryAction && canOpenBusinessForm)) && (
             <div className="flex items-center gap-2">
               {isContainersAssetsView && (
                 <Button variant="outline" size="sm" asChild>
@@ -3128,7 +3255,7 @@ export function BusinessWorkspace({
                   <span className="hidden sm:inline">Export</span>
                 </Button>
               )}
-              {showPrimaryAction && canOpenBusinessForm && formSchema && (
+              {effectiveShowPrimaryAction && canOpenBusinessForm && formSchema && (
                 isPriceEngineProducts ? (
                   <Button
                     size="sm"
@@ -3748,7 +3875,7 @@ export function BusinessWorkspace({
                                     record={record}
                                     entityLabel={activeModule.entityLabel}
                                     onEdit={canEditRecords ? openEditRecord : undefined}
-                                    onDelete={requestRecordDelete}
+                                    onDelete={canDeleteRecords ? requestRecordDelete : undefined}
                                   />
                                 </TableCell>
                               )}
@@ -3787,6 +3914,7 @@ export function BusinessWorkspace({
           showDeepLinks={showDeepLinks}
           onEdit={canEditRecords ? openEditRecord : undefined}
           onDelete={canDeleteRecords ? requestRecordDelete : undefined}
+          showActions={canRunRecordActions}
         />
       )}
         </>
@@ -3861,6 +3989,7 @@ function RecordDetailsDialog({
   showDeepLinks,
   onEdit,
   onDelete,
+  showActions = true,
 }: {
   module: ModuleDefinition
   record: BusinessRecord | null
@@ -3869,6 +3998,7 @@ function RecordDetailsDialog({
   showDeepLinks: boolean
   onEdit?: (record: BusinessRecord) => void
   onDelete?: (record: BusinessRecord) => void
+  showActions?: boolean
 }) {
   return (
     <Sheet open={Boolean(record)} onOpenChange={(open) => !open && onClose()}>
@@ -3993,15 +4123,16 @@ function RecordDetailsDialog({
                 Close
               </Button>
               <div className="flex flex-wrap justify-end gap-2">
-                {(record.allowedTransitions ?? module.lifecycle.slice(1, 3)).map((action) => (
-                  <Button
-                    key={action}
-                    variant={action === "Rejected" || action === "Cancelled" ? "outline" : "default"}
-                    onClick={() => onAction(action)}
-                  >
-                    {action}
-                  </Button>
-                ))}
+                {showActions &&
+                  (record.allowedTransitions ?? module.lifecycle.slice(1, 3)).map((action) => (
+                    <Button
+                      key={action}
+                      variant={action === "Rejected" || action === "Cancelled" ? "outline" : "default"}
+                      onClick={() => onAction(action)}
+                    >
+                      {action}
+                    </Button>
+                  ))}
               </div>
             </SheetFooter>
           </>

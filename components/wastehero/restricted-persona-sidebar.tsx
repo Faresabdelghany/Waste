@@ -2,12 +2,17 @@
 
 import Link from "next/link"
 import Image from "next/image"
+import { usePathname } from "next/navigation"
 import type { ComponentType } from "react"
 import {
   Buildings,
   HouseLine,
+  Path,
   ShieldCheck,
   ShieldStar,
+  Ticket,
+  Truck,
+  UsersThree,
 } from "@phosphor-icons/react/dist/ssr"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -28,6 +33,12 @@ import {
 
 export type RestrictedPersona = "citizen" | "contractor" | "internal"
 
+type PersonaNavItem = {
+  label: string
+  href: string
+  icon: ComponentType<{ className?: string }>
+}
+
 type PersonaSidebarDefinition = {
   workspaceName: string
   personaLabel: string
@@ -35,9 +46,9 @@ type PersonaSidebarDefinition = {
   identityName: string
   identityDetail: string
   initials: string
-  href: string
   badgeLabel: string
   icon: ComponentType<{ className?: string }>
+  navItems: PersonaNavItem[]
 }
 
 const personaDefinitions: Record<RestrictedPersona, PersonaSidebarDefinition> = {
@@ -49,20 +60,26 @@ const personaDefinitions: Record<RestrictedPersona, PersonaSidebarDefinition> = 
     identityName: "Østerbro Housing",
     identityDetail: "Authorized property user",
     initials: "ØH",
-    href: "/portal",
     badgeLabel: "Verified access",
     icon: HouseLine,
+    navItems: [{ label: "Citizen Portal", href: "/portal", icon: HouseLine }],
   },
   contractor: {
     workspaceName: "Contractor Workspace",
     personaLabel: "Contractor manager",
-    accessLabel: "NordRen ApS, its permitted projects, users, fleet, and operating records only.",
+    accessLabel:
+      "NordRen ApS only: own routes read-only, own fleet and team self-managed, own tickets.",
     identityName: "Lars Mikkelsen",
     identityDetail: "NordRen ApS · Manager",
     initials: "LM",
-    href: "/contractor-workspace",
     badgeLabel: "Contractor scope",
     icon: Buildings,
+    navItems: [
+      { label: "Routes", href: "/contractor-workspace", icon: Path },
+      { label: "Fleet", href: "/contractor-workspace/fleet", icon: Truck },
+      { label: "Tickets", href: "/contractor-workspace/tickets", icon: Ticket },
+      { label: "Team", href: "/contractor-workspace/team", icon: UsersThree },
+    ],
   },
   internal: {
     workspaceName: "Control Center",
@@ -72,9 +89,11 @@ const personaDefinitions: Record<RestrictedPersona, PersonaSidebarDefinition> = 
     identityName: "WasteHero Operations",
     identityDetail: "Authorized internal staff",
     initials: "WH",
-    href: "/control-center",
     badgeLabel: "Internal only",
     icon: ShieldStar,
+    navItems: [
+      { label: "Control Center", href: "/control-center", icon: ShieldStar },
+    ],
   },
 }
 
@@ -84,6 +103,7 @@ type RestrictedPersonaSidebarProps = {
 
 export function RestrictedPersonaSidebar({ persona }: RestrictedPersonaSidebarProps) {
   const { setOpenMobile } = useSidebar()
+  const pathname = usePathname()
   const definition = personaDefinitions[persona]
   const WorkspaceIcon = definition.icon
 
@@ -123,18 +143,23 @@ export function RestrictedPersonaSidebar({ persona }: RestrictedPersonaSidebarPr
           <SidebarGroupLabel>Workspace</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive
-                  className="h-9 rounded-md px-3 text-sidebar-foreground"
-                >
-                  <Link href={definition.href} onClick={() => setOpenMobile(false)}>
-                    <WorkspaceIcon className="h-[18px] w-[18px]" />
-                    <span>{definition.workspaceName}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              {definition.navItems.map((item) => {
+                const ItemIcon = item.icon
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname === item.href}
+                      className="h-9 rounded-md px-3 text-sidebar-foreground"
+                    >
+                      <Link href={item.href} onClick={() => setOpenMobile(false)}>
+                        <ItemIcon className="h-[18px] w-[18px]" />
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
