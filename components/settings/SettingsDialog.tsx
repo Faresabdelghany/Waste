@@ -1609,12 +1609,12 @@ export function SettingsWorkspace({
         </div>
 
         <nav
-          className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 text-sm"
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 text-sm"
           aria-label="Settings sections"
         >
           {filteredSections.map((section) => (
-            <div key={section.id} className="space-y-1">
-              <div className="px-3 text-xs font-medium text-sidebar-foreground/55">
+            <div key={section.id}>
+              <div className="flex h-6 items-center px-2.5 text-sm font-medium text-sidebar-foreground/55">
                 {section.label}
               </div>
               <div className="flex flex-col gap-0.5">
@@ -1628,11 +1628,11 @@ export function SettingsWorkspace({
                       onClick={() => selectPane(item.id)}
                       aria-current={isActive ? "page" : undefined}
                       className={cn(
-                        "flex h-9 cursor-pointer items-center gap-2 rounded-md px-3 text-left text-sm font-normal text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                        "flex h-7 cursor-pointer items-center gap-2 rounded-md px-2.5 text-left text-[11px] font-normal text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
                         isActive && "bg-sidebar-accent font-medium text-sidebar-foreground",
                       )}
                     >
-                      <Icon className="h-[18px] w-[18px] shrink-0" />
+                      <Icon className="h-4 w-4 shrink-0" />
                       <span className="truncate">{item.label}</span>
                     </button>
                   )
