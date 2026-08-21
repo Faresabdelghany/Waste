@@ -8,7 +8,6 @@ import {
 } from "@phosphor-icons/react/dist/ssr"
 
 import { useOrganizationStore } from "@/components/settings/organization-store"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -228,11 +227,9 @@ function PermissionSectionCard({
 
 export function RolePermissionsPanel({
   roleId,
-  userCount,
   onBack,
 }: {
   roleId: string
-  userCount: number
   onBack: () => void
 }) {
   const { roles, updateRoleAccess } = useOrganizationStore()
@@ -465,28 +462,9 @@ export function RolePermissionsPanel({
           </nav>
           <div className="min-w-0 flex-1 space-y-4">
             <section className="flex flex-wrap items-start justify-between gap-3">
-              <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-lg font-semibold tracking-tight">
-                    {role.name}
-                  </h1>
-                  <Badge variant="muted">{role.type}</Badge>
-                  <Badge
-                    variant="outline"
-                    className="rounded-full font-normal text-muted-foreground"
-                  >
-                    {role.scope}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {userCount} {userCount === 1 ? "user" : "users"}
-                  </span>
-                </div>
-                <p className="text-sm text-muted-foreground">{role.permissions}</p>
-                <p className="text-xs text-muted-foreground">
-                  Permission changes apply immediately and are saved on this
-                  device.
-                </p>
-              </div>
+              <h1 className="text-lg font-semibold tracking-tight">
+                {role.name}
+              </h1>
               <div className="text-right">
                 <p className="text-sm font-medium tabular-nums text-foreground">
                   {grantedTotal} of {rolePermissionCellCount}

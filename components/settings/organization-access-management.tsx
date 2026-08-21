@@ -855,10 +855,6 @@ export function OrganizationAccessManagement() {
       ) : selectedRoleId ? (
         <RolePermissionsPanel
           roleId={selectedRoleId}
-          userCount={roleUserCount(
-            roles.find((roleDefinition) => roleDefinition.id === selectedRoleId)
-              ?.name ?? "",
-          )}
           onBack={() => setSelectedRoleId(null)}
         />
       ) : (
