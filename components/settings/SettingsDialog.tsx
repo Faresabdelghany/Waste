@@ -1628,7 +1628,7 @@ export function SettingsWorkspace({
                       onClick={() => selectPane(item.id)}
                       aria-current={isActive ? "page" : undefined}
                       className={cn(
-                        "flex h-7 cursor-pointer items-center gap-2 rounded-md px-2.5 text-left text-[11px] font-normal text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                        "flex h-7 cursor-pointer items-center gap-2 rounded-md px-2.5 text-left text-xs font-normal text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
                         isActive && "bg-sidebar-accent font-medium text-sidebar-foreground",
                       )}
                     >
