@@ -390,7 +390,7 @@ export function ContractorDetailsPage({
             contextLabel="Contract area · validity"
             valueLabel="Current fee"
             emptyLabel="No contractor prices"
-            actionLabel="Apply index"
+            actionLabel="New contractor price"
             onCreate={() => onCreate("contractor-price")}
             workspaceId="commercial"
             moduleId="contractor-prices"

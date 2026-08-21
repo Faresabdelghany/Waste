@@ -280,6 +280,23 @@ export function recordToProduct(record: BusinessRecord): ProductModel {
   }
 }
 
+// Contract-bound validity → lifecycle status. "Expiring" mirrors the fixture
+// convention: an end date within ~6 months of the reference date.
+export function deriveContractorPriceStatus(
+  validFrom: string,
+  validUntil?: string,
+  referenceDate: string = PRICING_REFERENCE_DATE,
+): "Upcoming" | "Active" | "Expiring" | "Expired" {
+  if (validFrom > referenceDate) return "Upcoming"
+  if (validUntil && validUntil < referenceDate) return "Expired"
+  if (validUntil) {
+    const horizon = new Date(referenceDate)
+    horizon.setUTCDate(horizon.getUTCDate() + 180)
+    if (validUntil <= horizon.toISOString().slice(0, 10)) return "Expiring"
+  }
+  return "Active"
+}
+
 export function recordToContractorPrice(record: BusinessRecord): ContractorPriceModel {
   const productRef = record.relationRefs?.find((ref) => ref.fieldId === "productId")
   return {

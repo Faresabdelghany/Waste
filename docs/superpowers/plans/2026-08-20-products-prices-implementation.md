@@ -1689,7 +1689,7 @@ git commit -m "Retire Products & Prices prototype; Price Engine is the real Comm
 Executed on `recovered-wastehero` (12 task commits `6a66c76..742cd14` + final fix wave `f6f151a`). Final review verdict: merge with fixes → all fixed and re-verified (tsc 0, harness 19/19 exit 0/1-on-failure, build exit 0).
 
 - Signed-percent formatting: negative percents persist as "+-2%" in toasts AND indexation history notes — one signed-format helper fixes both flows.
-- `rateIds` picker in Apply index offers every contractor's rows even from a contractor's own Prices tab — scope via `relation.allowedRecordIds` schemaOverride.
+- `rateIds` picker in Apply index offers every contractor's rows even from a contractor's own Prices tab — scope via `relation.allowedRecordIds` schemaOverride. (Superseded 2026-08-21: the Prices tab now launches New contractor price with the contractor prefilled; Apply index lives only on the Price Engine module header, where all rows is the intended scope — see below.)
 - Adjust prices header button uses a `Plus` icon — it is a bulk action, not a create.
 - Workspace-created price rows get status "Scheduled" regardless of effectiveFrom — derive status in `normalizePriceRowRecord` (shared helper with `priceRowToRecord`).
 - Generic edit rewrites `context` in the contextFieldIds join format, diverging from fixture/Settings formats (price rows; products now derived, fixed in f6f151a).
@@ -1715,3 +1715,40 @@ derived price-lists index in Commercial defaults (spec §4.6) and its
 `priceListIndex` helper were removed — the registry page shows live row
 usage per list instead, with the same in-use delete guard as Zones. Stored
 registries state predating the slice hydrates with the seeds backfilled.
+
+## New contractor price + hydration-safe stores (2026-08-21, second wave)
+
+- **New contractor price is a real create flow.** `commercial.contractor-prices`
+  now resolves to a create schema — contractor, product, and contract area are
+  explicit required selects (we are adding a price *for* a contractor), plus
+  locked bid, unit, and validity. The generic create path shapes the record via
+  `normalizeContractorPriceRecord` (raw `PriceUnit` fact, current fee = bid
+  until the first indexation, fixture-shaped name/context/value, status via
+  `deriveContractorPriceStatus`). Overlap validation rejects a second live row
+  for the same contractor × product × contract area (fixture rows store the
+  area code, created rows the area name — compared by code); a date-order rule
+  guards the validity window. The contract-area select offers only the chosen
+  contractor's Upcoming/Active/Expiring awards. Entry points: the Price Engine
+  module header (primary button) and the contractor page's Prices tab, which
+  prefills the contractor.
+- **Apply index moved out of the registry** to
+  `contractorPriceIndexationFormSchema`, opened via schemaOverride from the
+  module header's secondary button. Behavior is unchanged and the bid lock
+  holds: rates remain non-row-editable (not a rich view), so creation fixes
+  the bid and Apply index is still the only write to the current fee.
+- **The five localStorage providers are hydration-safe.** Business records,
+  organization, asset management, commercial registries, and app theme now
+  keep state in an external store (`lib/external-store.ts`) whose stable
+  handle is the context value; consumers read it through
+  `useSyncExternalStore`. Every component hydrates against the fixture
+  server snapshot and flips to persisted state only after it has hydrated, so
+  persisted state divergence can no longer invalidate late-hydrating streamed
+  segments (the real mismatch hazard under a cold chunk cache). Public hook
+  APIs are unchanged.
+- **The radix useId hydration warning is Next dev-mode noise.** In dev, every
+  server-rendered useId carries one extra root-level tree fork the client
+  never materializes (`server id = client id × 4 + 1` — the head/body fork),
+  so dev ids can never match and the warning fires whenever React happens to
+  diff that subtree; localStorage contents merely change the timing. A
+  production build is clean (0 warnings across 12 cold- and warm-cache
+  reloads of /settings). Not app-fixable — ignore it in `pnpm dev`.

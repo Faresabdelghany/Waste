@@ -35,6 +35,7 @@ import {
   type WorkspaceId,
 } from "@/lib/data/business-modules"
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
+import { contractorPriceIndexationFormSchema } from "@/lib/data/business-form-schemas-commercial-improve"
 import type {
   BusinessFormField,
   BusinessFormOption,
@@ -44,11 +45,14 @@ import type {
 import {
   applyIndexToRate,
   contractorPriceToRecord,
+  deriveContractorPriceStatus,
   encodeHistory,
+  isSoftDeleted,
   money,
   PRICING_REFERENCE_DATE,
   priceRowToRecord,
   PRODUCT_FACTS,
+  RATE_FACTS,
   recordToContractorPrice,
   recordToPriceRow,
   ROW_FACTS,
@@ -902,6 +906,11 @@ export function BusinessWorkspace({
   // Commercial → Products, and pricing a product is the module's real action.
   const isPriceEngineProducts =
     workspace.id === "commercial" && activeModule.id === "products"
+  // Contractor prices keep two governed entry points: creating a rate (the
+  // module's registered create schema) and the bulk Apply index workflow,
+  // which lives outside the registry and opens via schemaOverride.
+  const isContractorPricesModule =
+    workspace.id === "commercial" && activeModule.id === "contractor-prices"
   const formSchema = useMemo(
     () =>
       relatedCreateTarget?.schemaOverride ?? (relatedCreateModule
@@ -1741,6 +1750,16 @@ export function BusinessWorkspace({
               typeof values.contractorId === "string" ? values.contractorId : ""
             return record.contractorId !== assignedContractorId
           }
+          // A contractor price belongs inside one of the contractor's own
+          // awarded areas; until a contractor is picked, every area shows.
+          if (
+            formSchema?.recordKind === "Contractor price" &&
+            field.id === "contractAreaId"
+          ) {
+            const selectedContractorId =
+              typeof values.contractorId === "string" ? values.contractorId : ""
+            return !selectedContractorId || record.contractorId === selectedContractorId
+          }
           return true
         })
         .filter((record) => !permittedIds || permittedIds.has(record.id))
@@ -2074,6 +2093,57 @@ export function BusinessWorkspace({
         }
       }
 
+      if (formSchema.key === "commercial.contractor-prices") {
+        const selectedContractorId =
+          typeof values.contractorId === "string" ? values.contractorId : ""
+        const selectedRateProductId =
+          typeof values.productId === "string" ? values.productId : ""
+        const selectedAreaId =
+          typeof values.contractAreaId === "string" ? values.contractAreaId : ""
+        const validFrom = typeof values.validFrom === "string" ? values.validFrom : ""
+        const validUntil = typeof values.validUntil === "string" ? values.validUntil : ""
+        if (selectedContractorId && selectedRateProductId && selectedAreaId && validFrom) {
+          const areasTarget = resolveFormModule("contractors", "contract-areas")
+          const areaName = areasTarget
+            ? getRecords(
+                areasTarget.workspaceId,
+                areasTarget.module.id,
+                areasTarget.module.records,
+              ).find((record) => record.id === selectedAreaId)?.name
+            : undefined
+          // Fixture rates store the area code ("CA-Ø-2"); created rates store
+          // the area record's full name ("CA-Ø-2 · Østerbro") — compare by code.
+          const areaCode = areaName?.split(" · ")[0]?.trim()
+          const overlapping = formTargetRecords.find((record) => {
+            if (record.id === editingRecord?.id) return false
+            if (record.recordKind !== "Contractor price") return false
+            if (isSoftDeleted(record)) return false
+            if (record.contractorId !== selectedContractorId) return false
+            const recordProductId = record.relationRefs?.find(
+              (ref) => ref.fieldId === "productId",
+            )?.recordId
+            if (recordProductId !== selectedRateProductId) return false
+            const recordAreaCode = record.facts[RATE_FACTS.contractArea]
+              ?.split(" · ")[0]
+              ?.trim()
+            if (!areaCode || !recordAreaCode || recordAreaCode !== areaCode) return false
+            const recordFrom = record.facts[RATE_FACTS.validFrom] ?? ""
+            const recordUntil = record.facts[RATE_FACTS.validUntil] ?? ""
+            const startsBeforeExistingEnds = !recordUntil || validFrom <= recordUntil
+            const existingStartsBeforeNewEnds =
+              !validUntil || !recordFrom || recordFrom <= validUntil
+            return startsBeforeExistingEnds && existingStartsBeforeNewEnds
+          })
+          if (overlapping) {
+            errors.validFrom = `Overlaps ${overlapping.name} (${
+              overlapping.facts[RATE_FACTS.validFrom] ?? "?"
+            } → ${
+              overlapping.facts[RATE_FACTS.validUntil] ?? "open"
+            }) for the same contractor, product, and contract area.`
+          }
+        }
+      }
+
       if (
         formSchema.key === "customers.contacts" &&
         values.partyType === "person" &&
@@ -2104,6 +2174,7 @@ export function BusinessWorkspace({
       editingRecord?.id,
       formSchema,
       formTargetRecords,
+      getRecords,
       measurementSettings,
       projectScope,
       wasteFractions,
@@ -2172,9 +2243,9 @@ export function BusinessWorkspace({
     if (!formSchema?.execution) return
 
     if (formSchema.recordKind === "Contractor price indexation") {
-      const ratesModule = workspace.modules.find((m) => m.id === "contractor-prices")
-      if (!ratesModule) return
-      const rateRecords = getRecords("commercial", "contractor-prices", ratesModule.records)
+      const ratesTarget = resolveFormModule("commercial", "contractor-prices")
+      if (!ratesTarget) return
+      const rateRecords = getRecords("commercial", "contractor-prices", ratesTarget.module.records)
       const pickedIds =
         typeof values.rateIds === "string" && values.rateIds
           ? values.rateIds.split(",").map((item) => item.trim()).filter(Boolean)
@@ -2503,6 +2574,48 @@ export function BusinessWorkspace({
       }
     }
 
+    // Contractor prices get the same treatment: the Unit fact must stay the
+    // raw PriceUnit enum, the current fee tracks the locked bid until the
+    // first Apply index run, and name/context/status/value are derived the
+    // way the fixture rates shape them.
+    const normalizeContractorPriceRecord = (
+      record: BusinessRecord,
+    ): BusinessRecord => {
+      const submittedUnit = typeof values.unit === "string" ? values.unit : undefined
+      const nextFacts = { ...record.facts }
+      if (submittedUnit) nextFacts[RATE_FACTS.unit] = submittedUnit
+      const bid = Number(nextFacts[RATE_FACTS.bid])
+      if (Number.isFinite(bid)) {
+        nextFacts[RATE_FACTS.bid] = bid.toFixed(2)
+        // An already-indexed rate keeps its recomputed current fee.
+        if (!nextFacts[RATE_FACTS.lastIndexed]) {
+          nextFacts[RATE_FACTS.currentFee] = bid.toFixed(2)
+        }
+      }
+      const rate = recordToContractorPrice({ ...record, facts: nextFacts })
+      return {
+        ...record,
+        name:
+          rate.contractor && rate.productName
+            ? `${rate.contractor} · ${rate.productName}`
+            : record.name,
+        context: [
+          rate.contractArea,
+          rate.validUntil ? `${rate.validFrom} → ${rate.validUntil}` : rate.validFrom,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        status: deriveContractorPriceStatus(
+          rate.validFrom,
+          rate.validUntil || undefined,
+        ),
+        value: `${money(rate.currentFee)}${unitSuffix(rate.unit)}`,
+        description: `Contractor price: locked bid ${money(rate.bid)}, current fee ${money(rate.currentFee)}.`,
+        source: "Contract management",
+        facts: nextFacts,
+      }
+    }
+
     if (editingRecord) {
       let updatedRecord: BusinessRecord = {
         ...editingRecord,
@@ -2525,6 +2638,9 @@ export function BusinessWorkspace({
       }
       if (resolvedTarget.module.id === "products") {
         updatedRecord = normalizeProductRecord(updatedRecord)
+      }
+      if (resolvedTarget.module.id === "contractor-prices") {
+        updatedRecord = normalizeContractorPriceRecord(updatedRecord)
       }
       const editEvent: AuditEvent = {
         id: `audit-edit-${now}`,
@@ -2609,6 +2725,9 @@ export function BusinessWorkspace({
     }
     if (resolvedTarget.module.id === "products") {
       newRecord = normalizeProductRecord(newRecord)
+    }
+    if (resolvedTarget.module.id === "contractor-prices") {
+      newRecord = normalizeContractorPriceRecord(newRecord)
     }
     const creationEvent: AuditEvent = {
       id: `audit-form-${now}`,
@@ -2856,15 +2975,16 @@ export function BusinessWorkspace({
     }
 
     if (target === "contractor-price") {
-      // Opens the same "Apply index" workflow as the Price Engine's module
-      // header (commercial.contractor-prices is a start-workflow action, not
-      // a create schema) — no schemaOverride needed, and it never creates or
-      // edits a contractor price directly; it only recomputes current fees.
+      // Opens the module's New contractor price create form with the
+      // contractor fixed from the current page — we are adding a price for
+      // this contractor. The bulk Apply index workflow stays on the Price
+      // Engine module header.
       setRelatedCreateTarget({
         workspaceId: "commercial",
         moduleId: "contractor-prices",
         initialValues: {
-          rateIds: relatedContractorPrices.map((priceRecord) => priceRecord.id).join(", "),
+          contractorId,
+          validFrom: localDateInputValue(),
         },
       })
       return
@@ -3024,6 +3144,29 @@ export function BusinessWorkspace({
                     <span className="hidden sm:inline">Add price</span>
                     <span className="sm:hidden">Action</span>
                   </Button>
+                ) : isContractorPricesModule ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setRelatedCreateTarget({
+                          workspaceId: "commercial",
+                          moduleId: "contractor-prices",
+                          initialValues: {},
+                          schemaOverride: contractorPriceIndexationFormSchema,
+                        })
+                      }
+                    >
+                      <span className="hidden sm:inline">Apply index</span>
+                      <span className="sm:hidden">Index</span>
+                    </Button>
+                    <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+                      <Plus className="h-4 w-4" weight="bold" />
+                      <span className="hidden sm:inline">{formSchema.submitLabel}</span>
+                      <span className="sm:hidden">Action</span>
+                    </Button>
+                  </>
                 ) : isRouteCreateFlow ? (
                   <RouteCreateEntry
                     submitLabel={formSchema.submitLabel}

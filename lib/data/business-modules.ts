@@ -3735,7 +3735,7 @@ const commercial: WorkspaceDefinition = {
       entityLabel: "Contractor price",
       contextLabel: "Contract area · validity",
       valueLabel: "Current fee",
-      primaryAction: "Apply index",
+      primaryAction: "New contractor price",
       metrics: [
         { label: "Contractor prices", value: "5", helper: "2 contractors · 2 contract areas" },
         { label: "Indexed in 2026", value: "2", helper: "CPI +5% · Fuel +3%" },

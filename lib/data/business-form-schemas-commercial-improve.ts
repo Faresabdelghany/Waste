@@ -202,46 +202,88 @@ export const commercialImproveBusinessFormSchemas = [
   },
   {
     key: "commercial.contractor-prices",
-    mode: "action",
-    recordKind: "Contractor price indexation",
-    title: "Apply index",
+    mode: "create",
+    recordKind: "Contractor price",
+    title: "New contractor price",
     description:
-      "Recompute current fees for the selected contractor prices. The base is the original bid or the current fee (current compounds earlier changes; the bid never moves). Each run appends to the indexation history.",
-    submitLabel: "Apply index",
-    contextFieldIds: ["indexLabel", "percent", "effectiveFrom"],
+      "Create the confidential price we pay a contractor for one product inside a contract area. The bid is locked from creation and the current fee starts equal to it — Apply index is the only way to move the current fee afterwards.",
+    submitLabel: "New contractor price",
+    contextFieldIds: ["contractAreaId", "validFrom", "validUntil"],
     sections: [
       {
-        id: "index-scope",
-        title: "Scope",
+        id: "rate-target",
+        title: "Contractor, product, and contract area",
+        description:
+          "Validation: the price cannot overlap another row for the same contractor, product, and contract area. It is confidential and never copied from a customer price list.",
         fields: [
           {
-            id: "rateIds",
-            label: "Contractor prices",
-            type: "multiselect",
+            id: "contractorId",
+            label: "Contractor",
+            type: "select",
             required: true,
-            relation: { workspaceId: "commercial", moduleId: "contractor-prices" },
-            description: "Pick the rows to index — filter by contractor or contract area as you select.",
+            relation: { workspaceId: "contractors", moduleId: "contractors" },
+          },
+          {
+            id: "productId",
+            label: "Product",
+            type: "select",
+            required: true,
+            relation: { workspaceId: "commercial", moduleId: "products" },
+          },
+          {
+            id: "contractAreaId",
+            label: "Contract area",
+            type: "select",
+            required: true,
+            description: "Only the selected contractor's awarded areas are offered.",
+            relation: {
+              workspaceId: "contractors",
+              moduleId: "contract-areas",
+              allowedStatuses: ["Upcoming", "Active", "Expiring"],
+            },
           },
         ],
       },
       {
-        id: "index-terms",
-        title: "Index terms",
+        id: "rate-compensation",
+        title: "Compensation",
         fields: [
-          { id: "indexLabel", label: "Index", type: "text", required: true, placeholder: "CPI" },
-          { id: "percent", label: "Percent", type: "number", required: true, unit: "%" },
           {
-            id: "base",
-            label: "Base",
+            id: "bid",
+            label: "Bid (locked)",
+            type: "number",
+            required: true,
+            min: 0,
+            unit: "EUR",
+            description:
+              "The contractually agreed amount. It never changes after creation; indexation moves only the current fee.",
+          },
+          {
+            id: "unit",
+            label: "Unit",
             type: "select",
             required: true,
-            defaultValue: "current fee",
+            description: "Match the product's unit.",
             options: [
-              { value: "current fee", label: "Current fee (compounds earlier changes)" },
-              { value: "bid", label: "Original bid (never moves)" },
+              { value: "pickup", label: "€ per pickup" },
+              { value: "month", label: "€ per month" },
+              { value: "job", label: "€ per job" },
             ],
           },
-          { id: "effectiveFrom", label: "Effective from", type: "date", required: true, defaultValue: "2026-08-20" },
+        ],
+      },
+      {
+        id: "rate-validity",
+        title: "Validity",
+        fields: [
+          { id: "validFrom", label: "Valid from", type: "date", required: true, defaultValue: "2026-08-20" },
+          {
+            id: "validUntil",
+            label: "Valid until",
+            type: "date",
+            required: true,
+            description: "End of the awarded period — usually the contract area's end date.",
+          },
         ],
       },
     ],
@@ -2232,3 +2274,60 @@ export const commercialImproveBusinessFormSchemas = [
     ],
   },
 ] as const satisfies readonly BusinessFormSchema[]
+
+// Apply index is the contractor-prices module's bulk maintenance workflow.
+// The module key now resolves to the New contractor price create schema, so
+// this action lives outside the registry and is offered via schemaOverride
+// (the Price Engine module header's secondary button). Unlike registry
+// schemas, it carries its execution policy inline.
+export const contractorPriceIndexationFormSchema: BusinessFormSchema = {
+  key: "commercial.contractor-prices.apply-index",
+  mode: "action",
+  recordKind: "Contractor price indexation",
+  title: "Apply index",
+  description:
+    "Recompute current fees for the selected contractor prices. The base is the original bid or the current fee (current compounds earlier changes; the bid never moves). Each run appends to the indexation history.",
+  submitLabel: "Apply index",
+  contextFieldIds: ["indexLabel", "percent", "effectiveFrom"],
+  execution: {
+    kind: "start-workflow",
+    reviewBeforeSubmit: true,
+    completionMessage: "Index applied — current fees recomputed, bids untouched.",
+  },
+  sections: [
+    {
+      id: "index-scope",
+      title: "Scope",
+      fields: [
+        {
+          id: "rateIds",
+          label: "Contractor prices",
+          type: "multiselect",
+          required: true,
+          relation: { workspaceId: "commercial", moduleId: "contractor-prices" },
+          description: "Pick the rows to index — filter by contractor or contract area as you select.",
+        },
+      ],
+    },
+    {
+      id: "index-terms",
+      title: "Index terms",
+      fields: [
+        { id: "indexLabel", label: "Index", type: "text", required: true, placeholder: "CPI" },
+        { id: "percent", label: "Percent", type: "number", required: true, unit: "%" },
+        {
+          id: "base",
+          label: "Base",
+          type: "select",
+          required: true,
+          defaultValue: "current fee",
+          options: [
+            { value: "current fee", label: "Current fee (compounds earlier changes)" },
+            { value: "bid", label: "Original bid (never moves)" },
+          ],
+        },
+        { id: "effectiveFrom", label: "Effective from", type: "date", required: true, defaultValue: "2026-08-20" },
+      ],
+    },
+  ],
+}

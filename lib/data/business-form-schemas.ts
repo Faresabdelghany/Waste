@@ -75,9 +75,10 @@ const actionExecutions: Record<string, BusinessFormExecution> = {
     completionMessage: "Price added — resolution follows the most-conditions rule.",
   },
   "commercial.contractor-prices": {
-    kind: "start-workflow",
+    kind: "create-record",
     reviewBeforeSubmit: true,
-    completionMessage: "Index applied — current fees recomputed, bids untouched.",
+    completionMessage:
+      "Contractor price created — the bid is locked; Apply index moves the current fee from here.",
   },
 }
 
@@ -508,6 +509,17 @@ function enhanceSchema(schema: BusinessFormSchema): BusinessFormSchema {
             firstField: "originalDate",
             secondField: "replacementDate",
             message: "Replacement date must differ from the original date.",
+          },
+        ]
+      : []),
+    ...(schema.key === "commercial.contractor-prices"
+      ? [
+          {
+            type: "date-order" as const,
+            startField: "validFrom",
+            endField: "validUntil",
+            allowSame: true,
+            message: "Valid until must be on or after Valid from.",
           },
         ]
       : []),
