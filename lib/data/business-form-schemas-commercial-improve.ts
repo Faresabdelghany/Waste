@@ -141,6 +141,9 @@ export const commercialImproveBusinessFormSchemas = [
             id: "tag",
             label: "Price list",
             type: "select",
+            description: "Managed in Settings → Commercial → Price lists; the active lists are offered here.",
+            // Fallback only — business-workspace.tsx replaces these with the
+            // active lists from the commercial-registries store.
             options: [
               { value: "PL-Copenhagen-2026", label: "PL-Copenhagen-2026" },
               { value: "PL-Harbor-2026", label: "PL-Harbor-2026" },

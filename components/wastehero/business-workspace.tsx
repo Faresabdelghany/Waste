@@ -149,6 +149,7 @@ import {
 import {
   useCommercialRegistriesStore,
   type CustomerTypeEntry,
+  type PriceListEntry,
   type PricingZone,
   type ServiceLevel,
 } from "@/components/settings/commercial-registries-store"
@@ -296,15 +297,17 @@ function configuredAssetFormSchema(
 }
 
 // Same idea for the Commercial forms: the Add price conditions (zone,
-// customer type) and the product form's service levels offer whatever the
-// Settings → Commercial registries currently hold, not the fixture options
-// baked into the schema. Registry NAMES are the stored values — price-row
-// conditions and product facts reference them as plain strings.
+// customer type), its price-list tag, and the product form's service levels
+// offer whatever the Settings → Commercial registries currently hold, not
+// the fixture options baked into the schema. Registry NAMES are the stored
+// values — price-row conditions/tags and product facts reference them as
+// plain strings.
 function configuredCommercialFormSchema(
   schema: BusinessFormSchema | undefined,
   zones: readonly PricingZone[],
   serviceLevels: readonly ServiceLevel[],
   customerTypes: readonly CustomerTypeEntry[],
+  priceLists: readonly PriceListEntry[],
 ) {
   if (
     schema?.key !== "commercial.price-rows" &&
@@ -322,6 +325,9 @@ function configuredCommercialFormSchema(
       ? {
           zone: toOptions(activeNames(zones)),
           customerType: toOptions(activeNames(customerTypes)),
+          // Active includes scheduled lists (future effective-from) — rows
+          // for next year's tariff are added before it starts applying.
+          tag: toOptions(activeNames(priceLists)),
         }
       : {
           serviceLevels: toOptions(activeNames(serviceLevels)),
@@ -791,7 +797,8 @@ export function BusinessWorkspace({
   const { getRecords, upsertRecord } = useBusinessRecordStore()
   const { containerTypes, wasteFractions, measurementSettings } =
     useAssetManagementStore()
-  const { zones, serviceLevels, customerTypes } = useCommercialRegistriesStore()
+  const { zones, serviceLevels, customerTypes, priceLists } =
+    useCommercialRegistriesStore()
   const router = useRouter()
   const workspace = useMemo<WorkspaceDefinition>(() => {
     const allowedModules = allowedModuleIds ? new Set(allowedModuleIds) : null
@@ -868,12 +875,14 @@ export function BusinessWorkspace({
         zones,
         serviceLevels,
         customerTypes,
+        priceLists,
       ),
     [
       activeModule.id,
       containerTypes,
       customerTypes,
       measurementSettings,
+      priceLists,
       projectScope,
       serviceLevels,
       wasteFractions,
@@ -910,6 +919,7 @@ export function BusinessWorkspace({
             zones,
             serviceLevels,
             customerTypes,
+            priceLists,
           )
         : activeModuleFormSchema),
     [
@@ -917,6 +927,7 @@ export function BusinessWorkspace({
       containerTypes,
       customerTypes,
       measurementSettings,
+      priceLists,
       projectScope,
       relatedCreateModule,
       relatedCreateTarget?.schemaOverride,

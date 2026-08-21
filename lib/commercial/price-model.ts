@@ -62,7 +62,9 @@ export const ZONES = ["Zone North", "City Centre", "Amager", "Harbor"] as const
 export const CUSTOMER_TYPES = ["Household", "Commercial", "Municipal"] as const
 export const CONTAINER_TYPES = ["240L bin", "660L container", "Igloo 3m³"] as const
 export const WASTE_FRACTIONS = ["Residual", "Paper & cardboard", "Glass", "Organic"] as const
-export const PRICE_LIST_TAGS = ["PL-Copenhagen-2026", "PL-Harbor-2026"] as const
+// Price lists are managed entities in the commercial-registries store
+// (Settings → Commercial → Price lists); the row's "Price list" fact stores
+// the list's name as its tag.
 export const KNOWN_CUSTOMERS = ["Østerbro Housing Association", "Nørrebro CoWork ApS"] as const
 export const COMMERCIAL_DEFAULTS = { currency: "EUR", defaultVatRate: 0.25, invoiceCodePrefix: "WH-" }
 export const CONTRACTOR_PERFORMANCE = {
@@ -155,29 +157,6 @@ export function negotiatedCustomersOf(rows: readonly PriceRowModel[], productId:
     ),
   ]
 }
-export function priceListIndex(rows: readonly PriceRowModel[]): { tag: string; rows: number; effectiveFrom: string; status: string; negotiated: boolean }[] {
-  const byTag = new Map<string, { rows: number; earliest: string }>()
-  for (const row of rows) {
-    if (!row.tag) continue
-    const entry = byTag.get(row.tag)
-    if (!entry) {
-      byTag.set(row.tag, { rows: 1, earliest: row.effectiveFrom })
-    } else {
-      entry.rows += 1
-      if (row.effectiveFrom < entry.earliest) entry.earliest = row.effectiveFrom
-    }
-  }
-  return [...byTag.entries()]
-    .map(([tag, entry]) => ({
-      tag,
-      rows: entry.rows,
-      effectiveFrom: entry.earliest,
-      status: entry.earliest <= PRICING_REFERENCE_DATE ? "Active" : "Scheduled",
-      negotiated: tag.startsWith("Negotiated"),
-    }))
-    .sort((a, b) => a.tag.localeCompare(b.tag))
-}
-
 // --- History / indexation codecs (BusinessRecord.related entries) ---
 // `History · <date> · <who> · <what>` — the what may itself contain " · ",
 // so decode takes the first two segments and joins the rest.

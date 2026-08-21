@@ -1699,6 +1699,19 @@ Executed on `recovered-wastehero` (12 task commits `6a66c76..742cd14` + final fi
 - `decodeIndexation` corrupts on " · " inside an index label (history codec handles it; indexation codec doesn't).
 - Soft-deleting a product leaves its rows orphaned (no cascade); acceptable, documented here.
 - `ModuleDefinition.rules` is rendered nowhere app-wide (53 modules) — platform gap; §4.4 reaches the UI via the price-rows dialog description.
-- Dead exports in `lib/commercial/price-model.ts` (`KNOWN_CUSTOMERS`, `CONTAINER_TYPES`, `WASTE_FRACTIONS`, `PRICE_LIST_TAGS`, `RESOLUTION_RULE`, `decodeHistory`, `variationsOf`) — wire `RESOLUTION_RULE` up (the §4.4 sentence is hand-duplicated in 3 places) or trim.
+- Dead exports in `lib/commercial/price-model.ts` (`KNOWN_CUSTOMERS`, `CONTAINER_TYPES`, `WASTE_FRACTIONS`, `RESOLUTION_RULE`, `decodeHistory`, `variationsOf`) — wire `RESOLUTION_RULE` up (the §4.4 sentence is hand-duplicated in 3 places) or trim. (`PRICE_LIST_TAGS` and `priceListIndex` were removed 2026-08-21 when price lists became a managed registry — see below.)
 - Fixture description prose (e.g. "5 variations including one negotiated deal") can go stale after row deletes — prose only.
 - Harness: add checks for soft-delete exclusion in `syncProductPricingFacts` and a `recordToPriceRow(priceRowToRecord(x)) = x` round-trip.
+
+## Price lists became a managed registry (2026-08-21)
+
+The last hardcoded select in Add price is gone. Price lists are now real CRUD
+entities in the commercial-registries store (Settings → Commercial → Price
+lists: name, description, effective from, status), seeded with all four tags
+the fixture rows carry (2 annual tariffs + 2 negotiated deals). Add price and
+row edit offer the ACTIVE lists from the store; a row still stores the list's
+name as its "Price list" fact, so no row/fixture migration was needed. The
+derived price-lists index in Commercial defaults (spec §4.6) and its
+`priceListIndex` helper were removed — the registry page shows live row
+usage per list instead, with the same in-use delete guard as Zones. Stored
+registries state predating the slice hydrates with the seeds backfilled.

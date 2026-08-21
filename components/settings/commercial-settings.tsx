@@ -7,8 +7,9 @@
 // - Products stay business records ("commercial.products") so Price Engine
 //   reads the same catalogue; the form here carries no price/VAT/invoice
 //   fields — pricing happens in Price Engine via Add price.
-// - Zones, Service levels and Customer types are real CRUD entities in the
-//   commercial-registries store; Price Engine consumes them as form options.
+// - Zones, Service levels, Customer types and Price lists are real CRUD
+//   entities in the commercial-registries store; Price Engine consumes them
+//   as form options. A price list's name is the tag stored on price rows.
 //
 // `CommercialDefaultsExtras` and `CommercialSectionPane` are the two names
 // SettingsDialog renders; keep their exported shape stable.
@@ -86,7 +87,6 @@ import {
   encodeHistory,
   isSoftDeleted,
   money,
-  priceListIndex,
   recordToPriceRow,
   syncProductPricingFacts,
   unitSuffix,
@@ -201,7 +201,7 @@ export function RegistryCard({ registry }: { registry: Registry }) {
 }
 
 export function CommercialDefaultsExtras() {
-  const { productRecords, rows } = useCommercialCatalogue()
+  const { productRecords } = useCommercialCatalogue()
 
   const registries = useMemo<Registry[]>(() => {
     const materialCounts = new Map<string, number>()
@@ -215,10 +215,6 @@ export function CommercialDefaultsExtras() {
       .map(([name, count]) => ({ name, usage: usageLabel(count, "product") }))
     return [{ title: "Materials", entries }]
   }, [productRecords])
-
-  const priceLists = useMemo(() => priceListIndex(rows), [rows])
-  const negotiatedCount = priceLists.filter((list) => list.negotiated).length
-  const annualTariffCount = priceLists.length - negotiatedCount
 
   const performanceRows: Array<[string, string]> = [
     ["a — performance weight", String(CONTRACTOR_PERFORMANCE.a)],
@@ -243,10 +239,10 @@ export function CommercialDefaultsExtras() {
           ))}
         </div>
         <p className="text-xs leading-5 text-muted-foreground">
-          Zones, service levels and customer types are managed in the Commercial
-          section. Container types and waste fractions are Operations-owned
-          registries — price rows can condition on them, but they are managed
-          under Operations setup.
+          Zones, service levels, customer types and price lists are managed in
+          the Commercial section. Container types and waste fractions are
+          Operations-owned registries — price rows can condition on them, but
+          they are managed under Operations setup.
         </p>
       </div>
 
@@ -317,80 +313,13 @@ export function CommercialDefaultsExtras() {
         </section>
       </div>
 
-      {/* 4. Price lists index (spec §4.6) */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Price lists</h3>
-        <section className="overflow-hidden rounded-xl border border-border/60">
-          <div className="border-b border-border px-4 py-2">
-            <p className="text-xs text-muted-foreground">
-              {priceLists.length} price lists · {annualTariffCount} annual tariffs and{" "}
-              {negotiatedCount} negotiated deals, derived from row tags as of{" "}
-              {PRICING_REFERENCE_DATE}
-            </p>
-          </div>
-          <div className="overflow-x-auto">
-            <Table className="min-w-[640px]">
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead>Name</TableHead>
-                  <TableHead>Rows</TableHead>
-                  <TableHead>Effective from</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-10">
-                    <span className="sr-only">Actions</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {priceLists.map((list) => (
-                  <TableRow key={list.tag} className="hover:bg-muted/60">
-                    <TableCell className="min-w-[220px] text-sm font-medium text-foreground">
-                      {list.tag}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                      {list.rows}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                      {list.effectiveFrom}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                          statusClasses(list.status),
-                        )}
-                      >
-                        {list.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap pr-3 text-right">
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href="/commercial?module=products">
-                          Open in Price Engine
-                          <ArrowSquareOut className="h-3.5 w-3.5" />
-                        </Link>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          <div className="border-t border-border px-4 py-2">
-            <p className="text-xs text-muted-foreground">
-              A price list is a tag on price rows — the index is derived, there is no
-              container object to manage.
-            </p>
-          </div>
-        </section>
-      </div>
     </>
   )
 }
 
 export function CommercialSectionPane({ paneId }: { paneId: string }) {
   if (paneId === "commercial-products") return <ProductsPane />
+  if (paneId === "commercial-price-lists") return <PriceListsPane />
   if (paneId === "commercial-zones") return <ZonesPane />
   if (paneId === "commercial-service") return <ServicePane />
   if (paneId === "commercial-customer-types") return <CustomerTypesPane />
@@ -748,6 +677,7 @@ type RegistryItem = {
   name: string
   code?: string
   description: string
+  effectiveFrom?: string
   status: RegistryStatus
   createdAt: string
   updatedAt: string
@@ -760,6 +690,7 @@ function blankRegistryItem(): RegistryItem {
     name: "",
     code: "",
     description: "",
+    effectiveFrom: PRICING_REFERENCE_DATE,
     status: "Active",
     createdAt,
     updatedAt: createdAt,
@@ -771,6 +702,7 @@ function RegistryDialog({
   entityLabel,
   dialogDescription,
   withCode,
+  withEffectiveFrom,
   onSave,
   onClose,
 }: {
@@ -778,6 +710,7 @@ function RegistryDialog({
   entityLabel: string
   dialogDescription: string
   withCode?: boolean
+  withEffectiveFrom?: boolean
   onSave: (item: RegistryItem) => void
   onClose: () => void
 }) {
@@ -788,6 +721,8 @@ function RegistryDialog({
     setDraft((current) => ({ ...current, [key]: next }))
   const save = () => {
     if (!draft.name.trim()) return toast.error(`${entityLabel} name is required.`)
+    if (withEffectiveFrom && !draft.effectiveFrom)
+      return toast.error(`${entityLabel} needs an effective-from date.`)
     onSave({
       ...draft,
       name: draft.name.trim(),
@@ -819,6 +754,19 @@ function RegistryDialog({
                 <Input
                   value={draft.code ?? ""}
                   onChange={(event) => update("code", event.target.value)}
+                />
+              </Field>
+            )}
+            {withEffectiveFrom && (
+              <Field
+                label="Effective from"
+                required
+                description="Lists starting after today show as Scheduled."
+              >
+                <Input
+                  type="date"
+                  value={draft.effectiveFrom ?? ""}
+                  onChange={(event) => update("effectiveFrom", event.target.value)}
                 />
               </Field>
             )}
@@ -865,10 +813,12 @@ function RegistryPane({
   newLabel,
   idPrefix,
   withCode,
+  withEffectiveFrom,
   items,
   usage,
   usageNoun,
   inUseHint,
+  statusLabelOf,
   onSave,
   onDelete,
 }: {
@@ -880,10 +830,14 @@ function RegistryPane({
   newLabel: string
   idPrefix: string
   withCode?: boolean
+  withEffectiveFrom?: boolean
   items: readonly RegistryItem[]
   usage: (item: RegistryItem) => number
   usageNoun: string
   inUseHint: string
+  // Overrides the plain Active/Inactive badge with a derived label
+  // (e.g. price lists show Scheduled while their effective-from is ahead).
+  statusLabelOf?: (item: RegistryItem) => string
   onSave: (item: RegistryItem) => void
   onDelete: (id: string) => void
 }) {
@@ -948,6 +902,7 @@ function RegistryPane({
               <TableHead>Name</TableHead>
               {withCode && <TableHead>Code</TableHead>}
               <TableHead>Used by</TableHead>
+              {withEffectiveFrom && <TableHead>Effective from</TableHead>}
               <TableHead>Status</TableHead>
               <TableHead className="w-24" />
             </TableRow>
@@ -955,7 +910,7 @@ function RegistryPane({
           <TableBody>
             {filtered.length === 0 ? (
               <EmptyRow
-                colSpan={withCode ? 5 : 4}
+                colSpan={(withCode ? 5 : 4) + (withEffectiveFrom ? 1 : 0)}
                 message={`No ${entityLabel.toLowerCase()}s match this search.`}
               />
             ) : (
@@ -977,8 +932,25 @@ function RegistryPane({
                   <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                     {usageLabel(usage(item), usageNoun)}
                   </TableCell>
+                  {withEffectiveFrom && (
+                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                      {item.effectiveFrom || "—"}
+                    </TableCell>
+                  )}
                   <TableCell>
-                    <StatusBadge active={item.status === "Active"} />
+                    {statusLabelOf ? (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                          statusClasses(statusLabelOf(item)),
+                        )}
+                      >
+                        {statusLabelOf(item)}
+                      </Badge>
+                    ) : (
+                      <StatusBadge active={item.status === "Active"} />
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-end">
@@ -1014,6 +986,7 @@ function RegistryPane({
         entityLabel={entityLabel}
         dialogDescription={dialogDescription}
         withCode={withCode}
+        withEffectiveFrom={withEffectiveFrom}
         onSave={(item) =>
           onSave({
             ...item,
@@ -1025,6 +998,46 @@ function RegistryPane({
         onClose={() => setEditing(null)}
       />
     </AssetPanelShell>
+  )
+}
+
+function PriceListsPane() {
+  const registries = useCommercialRegistriesStore()
+  const { rows } = useCommercialCatalogue()
+  return (
+    <RegistryPane
+      title="Price lists"
+      description="Annual tariffs and negotiated deals. Price rows carry a list as their tag; Price Engine's Add price form offers the active lists."
+      entityLabel="Price list"
+      dialogDescription="Price rows carry the list as their tag — Add price offers the active lists."
+      searchPlaceholder="Search price lists"
+      newLabel="New price list"
+      idPrefix="price-list"
+      withEffectiveFrom
+      items={registries.priceLists}
+      usage={(item) => rows.filter((row) => row.tag === item.name).length}
+      usageNoun="price row"
+      inUseHint="tagged with it"
+      statusLabelOf={(item) =>
+        item.status === "Inactive"
+          ? "Inactive"
+          : item.effectiveFrom && item.effectiveFrom > PRICING_REFERENCE_DATE
+            ? "Scheduled"
+            : "Active"
+      }
+      onSave={(item) =>
+        registries.savePriceList({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          effectiveFrom: item.effectiveFrom || PRICING_REFERENCE_DATE,
+          status: item.status,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        })
+      }
+      onDelete={registries.deletePriceList}
+    />
   )
 }
 

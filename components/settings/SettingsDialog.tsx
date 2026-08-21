@@ -16,6 +16,7 @@ import {
   MapTrifold,
   Package,
   PaintBrush,
+  Receipt,
   ShieldCheck,
   SlidersHorizontal,
   SquaresFour,
@@ -137,6 +138,7 @@ const settingsSections: Array<{
     label: "Commercial",
     items: [
       { id: "commercial-products", label: "Products", icon: Package },
+      { id: "commercial-price-lists", label: "Price lists", icon: Receipt },
       { id: "commercial-zones", label: "Zones", icon: MapTrifold },
       { id: "commercial-service", label: "Service", icon: Lightning },
       {
@@ -1318,7 +1320,7 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   pricing: {
     title: "Commercial defaults",
     description:
-      "One-time commercial setup: company defaults, registries, surcharge rules, and the price lists index. Day-to-day pricing lives in Price Engine.",
+      "One-time commercial setup: company defaults, registries, and surcharge rules. Price lists are managed in the Commercial section; day-to-day pricing lives in Price Engine.",
     groups: [
       {
         title: "Company defaults",
@@ -1358,6 +1360,12 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   "commercial-products": {
     title: "Products",
     description: "The sellable catalogue — add and edit products here. Prices are managed in Price Engine.",
+    groups: [],
+  },
+  "commercial-price-lists": {
+    title: "Price lists",
+    description:
+      "Annual tariffs and negotiated deals that price rows are tagged with — created, edited and retired here.",
     groups: [],
   },
   "commercial-zones": {

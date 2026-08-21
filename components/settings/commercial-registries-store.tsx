@@ -1,11 +1,11 @@
 "use client"
 
-// Settings → Commercial registries: zones, service levels, and customer
-// types managed as real entities (Asset-management style) instead of the
-// read-only constants they replaced. Price Engine consumes them as select
-// options (business-workspace.tsx injects them into the Add price and
+// Settings → Commercial registries: zones, service levels, customer types
+// and price lists managed as real entities (Asset-management style) instead
+// of the read-only constants they replaced. Price Engine consumes them as
+// select options (business-workspace.tsx injects them into the Add price and
 // product forms), so names double as the condition values stored on price
-// rows and product facts.
+// rows and product facts — a price list's name IS the row's "Price list" tag.
 
 import {
   createContext,
@@ -47,10 +47,21 @@ export type CustomerTypeEntry = {
   updatedAt: string
 }
 
+export type PriceListEntry = {
+  id: string
+  name: string
+  description: string
+  effectiveFrom: string
+  status: RegistryStatus
+  createdAt: string
+  updatedAt: string
+}
+
 export type CommercialRegistriesState = {
   zones: PricingZone[]
   serviceLevels: ServiceLevel[]
   customerTypes: CustomerTypeEntry[]
+  priceLists: PriceListEntry[]
 }
 
 type EntityWithId = { id: string }
@@ -63,6 +74,8 @@ type CommercialRegistriesStoreValue = CommercialRegistriesState & {
   deleteServiceLevel: (id: string) => void
   saveCustomerType: (value: CustomerTypeEntry) => void
   deleteCustomerType: (id: string) => void
+  savePriceList: (value: PriceListEntry) => void
+  deletePriceList: (id: string) => void
 }
 
 const STORAGE_KEY = "wastehero.commercial-registries.v1"
@@ -129,11 +142,46 @@ const defaultState: CommercialRegistriesState = {
     { id: "customer-type-commercial", ...fixture("Commercial") },
     { id: "customer-type-municipal", ...fixture("Municipal") },
   ],
+  // Every tag the fixture price rows carry — including the two negotiated
+  // deal tags — so usage counts and row-edit prefill line up from the first
+  // render. Effective-from mirrors each tag's earliest fixture row.
+  priceLists: [
+    {
+      id: "price-list-copenhagen-2026",
+      effectiveFrom: "2026-01-01",
+      ...fixture("PL-Copenhagen-2026", {
+        description: "Annual tariff for Copenhagen municipal collection.",
+      }),
+    },
+    {
+      id: "price-list-harbor-2026",
+      effectiveFrom: "2026-01-01",
+      ...fixture("PL-Harbor-2026", {
+        description: "Annual tariff for the Harbor contract area.",
+      }),
+    },
+    {
+      id: "price-list-negotiated-osterbro",
+      effectiveFrom: "2026-02-03",
+      ...fixture("Negotiated · Østerbro Housing", {
+        description: "Negotiated deal for Østerbro Housing Association.",
+      }),
+    },
+    {
+      id: "price-list-negotiated-norrebro",
+      effectiveFrom: "2026-04-08",
+      ...fixture("Negotiated · Nørrebro CoWork", {
+        description: "Negotiated deal for Nørrebro CoWork ApS.",
+      }),
+    },
+  ],
 }
 
 const CommercialRegistriesStoreContext =
   createContext<CommercialRegistriesStoreValue | null>(null)
 
+// Deliberately does NOT require priceLists: stored state predating that
+// slice must still hydrate (the provider backfills the seeds).
 function isCommercialRegistriesState(
   value: unknown,
 ): value is CommercialRegistriesState {
@@ -172,7 +220,15 @@ export function CommercialRegistriesStoreProvider({
       const raw = window.localStorage.getItem(STORAGE_KEY)
       const parsed: unknown = raw ? JSON.parse(raw) : null
       if (isCommercialRegistriesState(parsed)) {
-        setState({ ...defaultState, ...parsed })
+        // State persisted before price lists became managed lacks the slice —
+        // keep the seeds instead of discarding the whole stored state.
+        setState({
+          ...defaultState,
+          ...parsed,
+          priceLists: Array.isArray(parsed.priceLists)
+            ? parsed.priceLists
+            : defaultState.priceLists,
+        })
       }
     } catch {
       // Safe fixture registries remain available when storage is unavailable.
@@ -223,6 +279,18 @@ export function CommercialRegistriesStoreProvider({
       customerTypes: current.customerTypes.filter((item) => item.id !== id),
     }))
   }, [])
+  const savePriceList = useCallback((value: PriceListEntry) => {
+    setState((current) => ({
+      ...current,
+      priceLists: upsert(current.priceLists, value),
+    }))
+  }, [])
+  const deletePriceList = useCallback((id: string) => {
+    setState((current) => ({
+      ...current,
+      priceLists: current.priceLists.filter((item) => item.id !== id),
+    }))
+  }, [])
 
   const value = useMemo<CommercialRegistriesStoreValue>(
     () => ({
@@ -234,13 +302,17 @@ export function CommercialRegistriesStoreProvider({
       deleteServiceLevel,
       saveCustomerType,
       deleteCustomerType,
+      savePriceList,
+      deletePriceList,
     }),
     [
       deleteCustomerType,
+      deletePriceList,
       deleteServiceLevel,
       deleteZone,
       hydrated,
       saveCustomerType,
+      savePriceList,
       saveServiceLevel,
       saveZone,
       state,
