@@ -1,5 +1,6 @@
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { BusinessWorkspace } from "@/components/wastehero/business-workspace"
+import { ContractorDashboard } from "@/components/wastehero/contractor-dashboard"
 import {
   RestrictedPersonaSidebar,
   type RestrictedPersona,
@@ -68,11 +69,11 @@ const restrictedWorkspaceDefinitions: Record<
         id: "routes",
         workspaceId: "route-studio",
         moduleId: "routes",
-        moduleIds: ["routes"],
+        moduleIds: ["routes", "pickups"],
         workspaceLabel: "Routes",
         workspaceDescription:
-          "NordRen ApS route lists across permitted projects — read-only.",
-        navigationBasePath: "/contractor-workspace",
+          "NordRen ApS route days and their generated Pickups — read-only.",
+        navigationBasePath: "/contractor-workspace/routes",
         showWorkspaceActions: true,
         showFilters: false,
       },
@@ -144,6 +145,19 @@ export function RestrictedWorkspaceShell({
   pageId,
 }: RestrictedWorkspaceShellProps) {
   const definition = restrictedWorkspaceDefinitions[persona]
+
+  // The contractor landing page is a bespoke dashboard, not a module list.
+  if (persona === "contractor" && pageId === "dashboard") {
+    return (
+      <SidebarProvider>
+        <RestrictedPersonaSidebar persona={persona} />
+        <SidebarInset>
+          <ContractorDashboard />
+        </SidebarInset>
+      </SidebarProvider>
+    )
+  }
+
   const page =
     definition.pages.find((candidate) => candidate.id === pageId) ??
     definition.pages[0]

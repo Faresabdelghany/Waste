@@ -74,6 +74,27 @@ export const activeRoutes: ActiveRouteSummary[] = [
   },
 ]
 
+/**
+ * The contractor manager sidebar mirrors the operator's Active Routes group,
+ * scoped to NordRen ApS route days (RC-1048 running, RC-1052 planned).
+ */
+export const contractorActiveRoutes: ActiveRouteSummary[] = [
+  {
+    id: "route-day-1048",
+    name: "Østerbro · Organic",
+    color: "var(--chart-3)",
+    progress: 64,
+    href: "/contractor-workspace/routes?module=routes&record=route-day-1048",
+  },
+  {
+    id: "route-day-1052",
+    name: "Østerbro · Paper",
+    color: "var(--chart-2)",
+    progress: 0,
+    href: "/contractor-workspace/routes?module=routes&record=route-day-1052",
+  },
+]
+
 export const footerItems: SidebarFooterItem[] = [
   { id: "settings", label: "Settings" },
   { id: "templates", label: "Ticket templates" },
