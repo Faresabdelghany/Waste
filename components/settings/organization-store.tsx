@@ -2,13 +2,15 @@
 
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react"
+
+import { createExternalStore, type ExternalStore } from "@/lib/external-store"
 
 import {
   FIXTURE_COMPANY_ID,
@@ -295,8 +297,32 @@ const fixtureState: OrganizationState = {
   roles: fixtureRoles,
 }
 
+type OrganizationSnapshot = OrganizationState & { hydrated: boolean }
+
+type OrganizationActions = Pick<
+  OrganizationStoreValue,
+  | "createCompany"
+  | "updateCompany"
+  | "createProject"
+  | "updateProject"
+  | "createUser"
+  | "createRole"
+>
+
+type OrganizationStoreHandle = ExternalStore<OrganizationSnapshot> & {
+  actions: OrganizationActions
+}
+
+// The server (and every hydrating component) sees the fixture tenant only —
+// see lib/external-store.ts for why the context carries a stable handle
+// instead of the state itself (hydration safety under streaming SSR).
+const organizationServerSnapshot: OrganizationSnapshot = {
+  ...fixtureState,
+  hydrated: false,
+}
+
 const OrganizationStoreContext =
-  createContext<OrganizationStoreValue | null>(null)
+  createContext<OrganizationStoreHandle | null>(null)
 
 function normalize(value: string) {
   return value.trim().toLocaleLowerCase()
@@ -498,418 +524,358 @@ function assertCompanyUpdateInput(
   }
 }
 
+function createOrganizationStore(): OrganizationStoreHandle {
+  const store = createExternalStore<OrganizationSnapshot>(
+    organizationServerSnapshot,
+  )
+
+  const createCompany = (input: CreateCompanyInput) => {
+    assertCompanyInput(store.getSnapshot(), input)
+
+    const createdAt = new Date().toISOString()
+    const companyId = entityId("company")
+    const createdCompany: Company = {
+      id: companyId,
+      name: input.companyName.trim(),
+      legalName: input.legalName.trim(),
+      registrationNumber: input.registrationNumber.trim(),
+      status: "Onboarding",
+      source: "created",
+      createdAt,
+    }
+    const firstProject: Project = {
+      id: entityId("project"),
+      companyId,
+      name: input.projectName.trim(),
+      kind: input.projectKind,
+      language: input.projectLanguage,
+      currency: input.projectCurrency,
+      timezone: input.projectTimezone,
+      status: "Onboarding",
+      source: "created",
+      createdAt,
+    }
+    const primaryAdministrator: OrganizationUser = {
+      id: entityId("user"),
+      companyId,
+      fullName: input.administratorName.trim(),
+      email: normalize(input.administratorEmail),
+      role: "Company Administrator",
+      status: "Invited",
+      accessMode: "all-company-projects",
+      projectIds: [],
+      isPrimaryAdministrator: true,
+      createdAt,
+    }
+
+    store.set((current) => ({
+      ...current,
+      companies: [createdCompany, ...current.companies],
+      projects: [firstProject, ...current.projects],
+      users: [primaryAdministrator, ...current.users],
+    }))
+    return createdCompany
+  }
+
+  const updateCompany = (input: UpdateCompanyInput) => {
+    const state = store.getSnapshot()
+    assertCompanyUpdateInput(state, input)
+
+    const existingCompany = state.companies.find(
+      (company) => company.id === input.companyId,
+    )
+    if (!existingCompany) {
+      throw new Error("The company could not be found.")
+    }
+
+    const updatedCompany: Company = {
+      ...existingCompany,
+      name: input.companyName.trim(),
+      legalName: input.legalName.trim(),
+      registrationNumber: input.registrationNumber.trim(),
+    }
+
+    store.set((current) => ({
+      ...current,
+      companies: current.companies.map((company) =>
+        company.id === input.companyId ? updatedCompany : company,
+      ),
+    }))
+    return updatedCompany
+  }
+
+  const createProject = (input: CreateProjectInput) => {
+    const state = store.getSnapshot()
+    if (!state.companies.some((company) => company.id === input.companyId)) {
+      throw new Error("Select a valid company.")
+    }
+    if (
+      [
+        input.name,
+        input.kind,
+        input.language,
+        input.currency,
+        input.timezone,
+      ].some((value) => !value.trim())
+    ) {
+      throw new Error("Complete all project fields.")
+    }
+    if (
+      state.projects.some(
+        (project) =>
+          project.companyId === input.companyId &&
+          normalize(project.name) === normalize(input.name),
+      )
+    ) {
+      throw new Error(
+        "A project with this name already exists in the company.",
+      )
+    }
+
+    const createdProject: Project = {
+      id: entityId("project"),
+      companyId: input.companyId,
+      name: input.name.trim(),
+      kind: input.kind,
+      language: input.language,
+      currency: input.currency,
+      timezone: input.timezone,
+      status: "Onboarding",
+      source: "created",
+      createdAt: new Date().toISOString(),
+    }
+
+    store.set((current) => ({
+      ...current,
+      projects: [createdProject, ...current.projects],
+    }))
+    return createdProject
+  }
+
+  const updateProject = (input: UpdateProjectInput) => {
+    const state = store.getSnapshot()
+    const existingProject = state.projects.find(
+      (project) => project.id === input.projectId,
+    )
+    if (!existingProject) {
+      throw new Error("The project could not be found.")
+    }
+    if (
+      [input.name, input.kind, input.language, input.currency, input.timezone].some(
+        (value) => !value.trim(),
+      )
+    ) {
+      throw new Error("Complete all project fields.")
+    }
+    if (
+      state.projects.some(
+        (project) =>
+          project.id !== input.projectId &&
+          project.companyId === existingProject.companyId &&
+          normalize(project.name) === normalize(input.name),
+      )
+    ) {
+      throw new Error("A project with this name already exists in the company.")
+    }
+
+    const updatedProject: Project = {
+      ...existingProject,
+      name: input.name.trim(),
+      kind: input.kind,
+      language: input.language,
+      currency: input.currency,
+      timezone: input.timezone,
+    }
+
+    store.set((current) => ({
+      ...current,
+      projects: current.projects.map((project) =>
+        project.id === input.projectId ? updatedProject : project,
+      ),
+    }))
+    return updatedProject
+  }
+
+  const createUser = (input: CreateOrganizationUserInput) => {
+    const state = store.getSnapshot()
+    if (!state.companies.some((company) => company.id === input.companyId)) {
+      throw new Error("Select a valid company.")
+    }
+    if (
+      !input.fullName.trim() ||
+      !input.email.trim() ||
+      !input.role.trim()
+    ) {
+      throw new Error("Complete the required user fields.")
+    }
+    if (
+      state.users.some(
+        (user) => normalize(user.email) === normalize(input.email),
+      )
+    ) {
+      throw new Error("A user with this email already exists.")
+    }
+
+    const companyProjectIds = new Set(
+      state.projects
+        .filter((project) => project.companyId === input.companyId)
+        .map((project) => project.id),
+    )
+    if (
+      input.projectIds.some((projectId) => !companyProjectIds.has(projectId))
+    ) {
+      throw new Error("Project access must belong to the selected company.")
+    }
+
+    const createdUser: OrganizationUser = {
+      id: entityId("user"),
+      companyId: input.companyId,
+      fullName: input.fullName.trim(),
+      email: normalize(input.email),
+      role: input.role,
+      status: "Invited",
+      accessMode:
+        input.role === "Company Administrator"
+          ? "all-company-projects"
+          : input.accessMode,
+      projectIds:
+        input.role !== "Company Administrator" &&
+        input.accessMode === "selected-projects"
+          ? input.projectIds
+          : [],
+      isPrimaryAdministrator: false,
+      contractorId: input.contractorId,
+      contractorName: input.contractorName,
+      createdAt: new Date().toISOString(),
+    }
+
+    store.set((current) => ({
+      ...current,
+      users: [createdUser, ...current.users],
+    }))
+    return createdUser
+  }
+
+  const createRole = (input: CreateOrganizationRoleInput) => {
+    const state = store.getSnapshot()
+    if (!input.name.trim() || !input.scope.trim()) {
+      throw new Error("Complete the role name and scope.")
+    }
+    if (
+      state.roles.some(
+        (role) => normalize(role.name) === normalize(input.name),
+      )
+    ) {
+      throw new Error("A role with this name already exists.")
+    }
+
+    const createdRole: OrganizationRole = {
+      id: entityId("role"),
+      name: input.name.trim(),
+      type: "Custom",
+      scope: input.scope.trim(),
+      permissions: input.permissions.trim() || "Custom permissions",
+      source: "created",
+      createdAt: new Date().toISOString(),
+    }
+
+    store.set((current) => ({
+      ...current,
+      roles: [...current.roles, createdRole],
+    }))
+    return createdRole
+  }
+
+  return {
+    ...store,
+    actions: {
+      createCompany,
+      updateCompany,
+      createProject,
+      updateProject,
+      createUser,
+      createRole,
+    },
+  }
+}
+
 export function OrganizationStoreProvider({
   children,
 }: {
   children: ReactNode
 }) {
-  const [state, setState] = useState<OrganizationState>(fixtureState)
-  const [hydrated, setHydrated] = useState(false)
+  const [store] = useState(createOrganizationStore)
 
   useEffect(() => {
+    let parsed: unknown = null
     try {
       const rawValue = window.localStorage.getItem(ORGANIZATION_STORAGE_KEY)
-      const parsed: unknown = rawValue ? JSON.parse(rawValue) : null
-      if (isOrganizationState(parsed)) {
-        setState({
-          ...parsed,
-          roles:
-            parsed.roles && parsed.roles.length > 0
-              ? parsed.roles
-              : fixtureRoles,
-        })
-      }
+      parsed = rawValue ? JSON.parse(rawValue) : null
     } catch {
       // Keep the fixture tenant available if browser persistence is corrupt.
-    } finally {
-      setHydrated(true)
     }
-  }, [])
-
-  useEffect(() => {
-    if (!hydrated) return
-    try {
-      window.localStorage.setItem(
-        ORGANIZATION_STORAGE_KEY,
-        JSON.stringify(state),
-      )
-    } catch {
-      // The normalized graph remains usable for this browser session.
+    store.set((current) =>
+      isOrganizationState(parsed)
+        ? {
+            ...parsed,
+            roles:
+              parsed.roles && parsed.roles.length > 0
+                ? parsed.roles
+                : fixtureRoles,
+            hydrated: true,
+          }
+        : { ...current, hydrated: true },
+    )
+    const persist = () => {
+      const { hydrated: _hydrated, ...persistable } = store.getSnapshot()
+      try {
+        window.localStorage.setItem(
+          ORGANIZATION_STORAGE_KEY,
+          JSON.stringify(persistable),
+        )
+      } catch {
+        // The normalized graph remains usable for this browser session.
+      }
     }
-  }, [hydrated, state])
-
-  const createCompany = useCallback(
-    (input: CreateCompanyInput) => {
-      assertCompanyInput(state, input)
-
-      const createdAt = new Date().toISOString()
-      const companyId = entityId("company")
-      const createdCompany: Company = {
-        id: companyId,
-        name: input.companyName.trim(),
-        legalName: input.legalName.trim(),
-        registrationNumber: input.registrationNumber.trim(),
-        status: "Onboarding",
-        source: "created",
-        createdAt,
-      }
-      const firstProject: Project = {
-        id: entityId("project"),
-        companyId,
-        name: input.projectName.trim(),
-        kind: input.projectKind,
-        language: input.projectLanguage,
-        currency: input.projectCurrency,
-        timezone: input.projectTimezone,
-        status: "Onboarding",
-        source: "created",
-        createdAt,
-      }
-      const primaryAdministrator: OrganizationUser = {
-        id: entityId("user"),
-        companyId,
-        fullName: input.administratorName.trim(),
-        email: normalize(input.administratorEmail),
-        role: "Company Administrator",
-        status: "Invited",
-        accessMode: "all-company-projects",
-        projectIds: [],
-        isPrimaryAdministrator: true,
-        createdAt,
-      }
-
-      setState((current) => {
-        assertCompanyInput(current, input)
-        return {
-          ...current,
-          companies: [createdCompany, ...current.companies],
-          projects: [firstProject, ...current.projects],
-          users: [primaryAdministrator, ...current.users],
-        }
-      })
-      return createdCompany
-    },
-    [state],
-  )
-
-  const updateCompany = useCallback(
-    (input: UpdateCompanyInput) => {
-      assertCompanyUpdateInput(state, input)
-
-      const existingCompany = state.companies.find(
-        (company) => company.id === input.companyId,
-      )
-      if (!existingCompany) {
-        throw new Error("The company could not be found.")
-      }
-
-      const updatedCompany: Company = {
-        ...existingCompany,
-        name: input.companyName.trim(),
-        legalName: input.legalName.trim(),
-        registrationNumber: input.registrationNumber.trim(),
-      }
-
-      setState((current) => {
-        assertCompanyUpdateInput(current, input)
-        return {
-          ...current,
-          companies: current.companies.map((company) =>
-            company.id === input.companyId ? updatedCompany : company,
-          ),
-        }
-      })
-      return updatedCompany
-    },
-    [state],
-  )
-
-  const createProject = useCallback(
-    (input: CreateProjectInput) => {
-      if (
-        !state.companies.some((company) => company.id === input.companyId)
-      ) {
-        throw new Error("Select a valid company.")
-      }
-      if (
-        [
-          input.name,
-          input.kind,
-          input.language,
-          input.currency,
-          input.timezone,
-        ].some((value) => !value.trim())
-      ) {
-        throw new Error("Complete all project fields.")
-      }
-      if (
-        state.projects.some(
-          (project) =>
-            project.companyId === input.companyId &&
-            normalize(project.name) === normalize(input.name),
-        )
-      ) {
-        throw new Error(
-          "A project with this name already exists in the company.",
-        )
-      }
-
-      const createdProject: Project = {
-        id: entityId("project"),
-        companyId: input.companyId,
-        name: input.name.trim(),
-        kind: input.kind,
-        language: input.language,
-        currency: input.currency,
-        timezone: input.timezone,
-        status: "Onboarding",
-        source: "created",
-        createdAt: new Date().toISOString(),
-      }
-
-      setState((current) => {
-        if (
-          current.projects.some(
-            (project) =>
-              project.companyId === input.companyId &&
-              normalize(project.name) === normalize(input.name),
-          )
-        ) {
-          throw new Error(
-            "A project with this name already exists in the company.",
-          )
-        }
-        return {
-          ...current,
-          projects: [createdProject, ...current.projects],
-        }
-      })
-      return createdProject
-    },
-    [state],
-  )
-
-  const updateProject = useCallback(
-    (input: UpdateProjectInput) => {
-      const existingProject = state.projects.find(
-        (project) => project.id === input.projectId,
-      )
-      if (!existingProject) {
-        throw new Error("The project could not be found.")
-      }
-      if (
-        [input.name, input.kind, input.language, input.currency, input.timezone].some(
-          (value) => !value.trim(),
-        )
-      ) {
-        throw new Error("Complete all project fields.")
-      }
-      if (
-        state.projects.some(
-          (project) =>
-            project.id !== input.projectId &&
-            project.companyId === existingProject.companyId &&
-            normalize(project.name) === normalize(input.name),
-        )
-      ) {
-        throw new Error("A project with this name already exists in the company.")
-      }
-
-      const updatedProject: Project = {
-        ...existingProject,
-        name: input.name.trim(),
-        kind: input.kind,
-        language: input.language,
-        currency: input.currency,
-        timezone: input.timezone,
-      }
-
-      setState((current) => ({
-        ...current,
-        projects: current.projects.map((project) =>
-          project.id === input.projectId ? updatedProject : project,
-        ),
-      }))
-      return updatedProject
-    },
-    [state.projects],
-  )
-
-  const createUser = useCallback(
-    (input: CreateOrganizationUserInput) => {
-      if (
-        !state.companies.some((company) => company.id === input.companyId)
-      ) {
-        throw new Error("Select a valid company.")
-      }
-      if (
-        !input.fullName.trim() ||
-        !input.email.trim() ||
-        !input.role.trim()
-      ) {
-        throw new Error("Complete the required user fields.")
-      }
-      if (
-        state.users.some(
-          (user) => normalize(user.email) === normalize(input.email),
-        )
-      ) {
-        throw new Error("A user with this email already exists.")
-      }
-
-      const companyProjectIds = new Set(
-        state.projects
-          .filter((project) => project.companyId === input.companyId)
-          .map((project) => project.id),
-      )
-      if (
-        input.projectIds.some((projectId) => !companyProjectIds.has(projectId))
-      ) {
-        throw new Error("Project access must belong to the selected company.")
-      }
-
-      const createdUser: OrganizationUser = {
-        id: entityId("user"),
-        companyId: input.companyId,
-        fullName: input.fullName.trim(),
-        email: normalize(input.email),
-        role: input.role,
-        status: "Invited",
-        accessMode:
-          input.role === "Company Administrator"
-            ? "all-company-projects"
-            : input.accessMode,
-        projectIds:
-          input.role !== "Company Administrator" &&
-          input.accessMode === "selected-projects"
-            ? input.projectIds
-            : [],
-        isPrimaryAdministrator: false,
-        contractorId: input.contractorId,
-        contractorName: input.contractorName,
-        createdAt: new Date().toISOString(),
-      }
-
-      setState((current) => {
-        if (
-          current.users.some(
-            (user) => normalize(user.email) === normalize(input.email),
-          )
-        ) {
-          throw new Error("A user with this email already exists.")
-        }
-        return {
-          ...current,
-          users: [createdUser, ...current.users],
-        }
-      })
-      return createdUser
-    },
-    [state],
-  )
-
-  const createRole = useCallback(
-    (input: CreateOrganizationRoleInput) => {
-      if (!input.name.trim() || !input.scope.trim()) {
-        throw new Error("Complete the role name and scope.")
-      }
-      if (
-        state.roles.some(
-          (role) => normalize(role.name) === normalize(input.name),
-        )
-      ) {
-        throw new Error("A role with this name already exists.")
-      }
-
-      const createdRole: OrganizationRole = {
-        id: entityId("role"),
-        name: input.name.trim(),
-        type: "Custom",
-        scope: input.scope.trim(),
-        permissions: input.permissions.trim() || "Custom permissions",
-        source: "created",
-        createdAt: new Date().toISOString(),
-      }
-
-      setState((current) => {
-        if (
-          current.roles.some(
-            (role) => normalize(role.name) === normalize(input.name),
-          )
-        ) {
-          throw new Error("A role with this name already exists.")
-        }
-        return {
-          ...current,
-          roles: [...current.roles, createdRole],
-        }
-      })
-      return createdRole
-    },
-    [state],
-  )
-
-  const projectsForCompany = useCallback(
-    (companyId: string) =>
-      state.projects.filter((project) => project.companyId === companyId),
-    [state.projects],
-  )
-  const usersForCompany = useCallback(
-    (companyId: string) =>
-      state.users.filter((user) => user.companyId === companyId),
-    [state.users],
-  )
-  const primaryAdministratorForCompany = useCallback(
-    (companyId: string) =>
-      state.users.find(
-        (user) =>
-          user.companyId === companyId && user.isPrimaryAdministrator,
-      ),
-    [state.users],
-  )
-
-  const value = useMemo(
-    () => ({
-      ...state,
-      hydrated,
-      createCompany,
-      updateCompany,
-      createProject,
-      updateProject,
-      createUser,
-      createRole,
-      projectsForCompany,
-      usersForCompany,
-      primaryAdministratorForCompany,
-    }),
-    [
-      createCompany,
-      createProject,
-      createRole,
-      createUser,
-      hydrated,
-      primaryAdministratorForCompany,
-      projectsForCompany,
-      state,
-      updateCompany,
-      updateProject,
-      usersForCompany,
-    ],
-  )
+    persist()
+    return store.subscribe(persist)
+  }, [store])
 
   return (
-    <OrganizationStoreContext.Provider value={value}>
+    <OrganizationStoreContext.Provider value={store}>
       {children}
     </OrganizationStoreContext.Provider>
   )
 }
 
-export function useOrganizationStore() {
-  const value = useContext(OrganizationStoreContext)
-  if (!value) {
+export function useOrganizationStore(): OrganizationStoreValue {
+  const store = useContext(OrganizationStoreContext)
+  if (!store) {
     throw new Error(
       "useOrganizationStore must be used within OrganizationStoreProvider",
     )
   }
-  return value
+  const snapshot = useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getServerSnapshot,
+  )
+  // Derived reads come from the rendered snapshot (not live store state) so a
+  // component hydrating against the server snapshot stays self-consistent.
+  return useMemo(
+    () => ({
+      ...snapshot,
+      ...store.actions,
+      projectsForCompany: (companyId: string) =>
+        snapshot.projects.filter((project) => project.companyId === companyId),
+      usersForCompany: (companyId: string) =>
+        snapshot.users.filter((user) => user.companyId === companyId),
+      primaryAdministratorForCompany: (companyId: string) =>
+        snapshot.users.find(
+          (user) =>
+            user.companyId === companyId && user.isPrimaryAdministrator,
+        ),
+    }),
+    [snapshot, store],
+  )
 }

@@ -2,15 +2,16 @@
 
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react"
 import { useTheme } from "next-themes"
 
+import { createExternalStore, type ExternalStore } from "@/lib/external-store"
 import {
   APP_THEME_SELECTION_STORAGE_KEY,
   CUSTOM_THEME_STORAGE_KEY,
@@ -33,7 +34,27 @@ type AppThemeContextValue = {
   setCustomPalette: (palette: CustomThemePalette) => void
 }
 
-const AppThemeContext = createContext<AppThemeContextValue | null>(null)
+type AppThemeSnapshot = {
+  selection: AppThemeSelection
+  customPalette: CustomThemePalette
+  mounted: boolean
+}
+
+type AppThemeStoreHandle = ExternalStore<AppThemeSnapshot> & {
+  bindSetBaseTheme: (setBaseTheme: (theme: string) => void) => void
+  actions: Pick<AppThemeContextValue, "selectTheme" | "setCustomPalette">
+}
+
+// The server (and every hydrating component) sees the default theme state —
+// see lib/external-store.ts for why the context carries a stable handle
+// instead of the state itself (hydration safety under streaming SSR).
+const appThemeServerSnapshot: AppThemeSnapshot = {
+  selection: defaultThemeSelection,
+  customPalette: defaultCustomTheme,
+  mounted: false,
+}
+
+const AppThemeContext = createContext<AppThemeStoreHandle | null>(null)
 
 function applyThemePalette(palette: CustomThemePalette) {
   const root = document.documentElement
@@ -111,20 +132,71 @@ function readStoredSelection(): AppThemeSelection {
   return prefersDark ? "midnight" : defaultThemeSelection
 }
 
+function createAppThemeStore(): AppThemeStoreHandle {
+  const store = createExternalStore<AppThemeSnapshot>(appThemeServerSnapshot)
+  // next-themes' setter comes from a hook, so the provider binds it after
+  // mount; the actions always run long after binding.
+  let setBaseTheme: (theme: string) => void = () => {}
+
+  const selectTheme = (nextSelection: AppThemeSelection) => {
+    store.set((current) => ({ ...current, selection: nextSelection }))
+    applyThemeSelection(
+      nextSelection,
+      store.getSnapshot().customPalette,
+      setBaseTheme,
+    )
+    try {
+      window.localStorage.setItem(
+        APP_THEME_SELECTION_STORAGE_KEY,
+        nextSelection,
+      )
+    } catch {
+      // The selected theme still applies for the current session.
+    }
+  }
+
+  const setCustomPalette = (nextPalette: CustomThemePalette) => {
+    const normalized = normalizeCustomTheme(nextPalette)
+    store.set((current) => ({ ...current, customPalette: normalized }))
+    if (store.getSnapshot().selection === "custom") {
+      applyThemeSelection("custom", normalized, setBaseTheme)
+    }
+    try {
+      window.localStorage.setItem(
+        CUSTOM_THEME_STORAGE_KEY,
+        JSON.stringify(normalized),
+      )
+    } catch {
+      // The custom palette still applies for the current session.
+    }
+  }
+
+  return {
+    ...store,
+    bindSetBaseTheme: (next) => {
+      setBaseTheme = next
+    },
+    actions: { selectTheme, setCustomPalette },
+  }
+}
+
 export function AppThemeProvider({ children }: { children: ReactNode }) {
   const { setTheme: setBaseTheme } = useTheme()
-  const [selection, setSelection] =
-    useState<AppThemeSelection>(defaultThemeSelection)
-  const [customPalette, setCustomPaletteState] =
-    useState<CustomThemePalette>(defaultCustomTheme)
-  const [mounted, setMounted] = useState(false)
+  const [store] = useState(createAppThemeStore)
+
+  useEffect(() => {
+    store.bindSetBaseTheme(setBaseTheme)
+  }, [setBaseTheme, store])
 
   useEffect(() => {
     const storedPalette = readStoredPalette()
     const storedSelection = readStoredSelection()
 
-    setCustomPaletteState(storedPalette)
-    setSelection(storedSelection)
+    store.set({
+      selection: storedSelection,
+      customPalette: storedPalette,
+      mounted: true,
+    })
     applyThemeSelection(storedSelection, storedPalette, setBaseTheme)
     try {
       window.localStorage.setItem(
@@ -134,84 +206,40 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
     } catch {
       // The migrated selection still applies for the current session.
     }
-    setMounted(true)
-  }, [setBaseTheme])
+  }, [setBaseTheme, store])
 
   useEffect(() => {
     const syncStoredTheme = () => {
       const storedPalette = readStoredPalette()
       const storedSelection = readStoredSelection()
-      setCustomPaletteState(storedPalette)
-      setSelection(storedSelection)
+      store.set((current) => ({
+        ...current,
+        selection: storedSelection,
+        customPalette: storedPalette,
+      }))
       applyThemeSelection(storedSelection, storedPalette, setBaseTheme)
     }
 
     window.addEventListener("storage", syncStoredTheme)
     return () => window.removeEventListener("storage", syncStoredTheme)
-  }, [setBaseTheme])
-
-  useEffect(() => {
-    if (!mounted) return
-    applyThemeSelection(selection, customPalette, setBaseTheme)
-  }, [customPalette, mounted, selection, setBaseTheme])
-
-  const selectTheme = useCallback(
-    (nextSelection: AppThemeSelection) => {
-      setSelection(nextSelection)
-      applyThemeSelection(nextSelection, customPalette, setBaseTheme)
-      try {
-        window.localStorage.setItem(
-          APP_THEME_SELECTION_STORAGE_KEY,
-          nextSelection,
-        )
-      } catch {
-        // The selected theme still applies for the current session.
-      }
-    },
-    [customPalette, setBaseTheme],
-  )
-
-  const setCustomPalette = useCallback(
-    (nextPalette: CustomThemePalette) => {
-      const normalized = normalizeCustomTheme(nextPalette)
-      setCustomPaletteState(normalized)
-      if (selection === "custom") {
-        applyThemeSelection("custom", normalized, setBaseTheme)
-      }
-      try {
-        window.localStorage.setItem(
-          CUSTOM_THEME_STORAGE_KEY,
-          JSON.stringify(normalized),
-        )
-      } catch {
-        // The custom palette still applies for the current session.
-      }
-    },
-    [selection, setBaseTheme],
-  )
-
-  const value = useMemo(
-    () => ({
-      selection,
-      customPalette,
-      mounted,
-      selectTheme,
-      setCustomPalette,
-    }),
-    [customPalette, mounted, selectTheme, selection, setCustomPalette],
-  )
+  }, [setBaseTheme, store])
 
   return (
-    <AppThemeContext.Provider value={value}>
+    <AppThemeContext.Provider value={store}>
       {children}
     </AppThemeContext.Provider>
   )
 }
 
-export function useAppTheme() {
-  const context = useContext(AppThemeContext)
-  if (!context) {
+export function useAppTheme(): AppThemeContextValue {
+  const store = useContext(AppThemeContext)
+  if (!store) {
     throw new Error("useAppTheme must be used inside AppThemeProvider")
   }
-  return context
+  const snapshot = useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getServerSnapshot,
+  )
+  return useMemo(() => ({ ...snapshot, ...store.actions }), [snapshot, store])
 }

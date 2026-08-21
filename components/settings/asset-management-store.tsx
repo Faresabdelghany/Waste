@@ -2,13 +2,15 @@
 
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react"
+
+import { createExternalStore, type ExternalStore } from "@/lib/external-store"
 
 import { FIXTURE_PROJECT_IDS } from "@/lib/data/business-modules"
 
@@ -480,8 +482,27 @@ const defaultState: AssetManagementState = {
   },
 }
 
+type AssetManagementSnapshot = AssetManagementState & { hydrated: boolean }
+
+type AssetManagementActions = Omit<
+  AssetManagementStoreValue,
+  keyof AssetManagementSnapshot
+>
+
+type AssetManagementStoreHandle = ExternalStore<AssetManagementSnapshot> & {
+  actions: AssetManagementActions
+}
+
+// The server (and every hydrating component) sees the fixture configuration
+// only — see lib/external-store.ts for why the context carries a stable
+// handle instead of the state itself (hydration safety under streaming SSR).
+const serverSnapshot: AssetManagementSnapshot = {
+  ...defaultState,
+  hydrated: false,
+}
+
 const AssetManagementStoreContext =
-  createContext<AssetManagementStoreValue | null>(null)
+  createContext<AssetManagementStoreHandle | null>(null)
 
 function isAssetManagementState(value: unknown): value is AssetManagementState {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
@@ -521,159 +542,125 @@ export function assetEntityId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
+function createAssetManagementStore(): AssetManagementStoreHandle {
+  const store = createExternalStore<AssetManagementSnapshot>(serverSnapshot)
+  return {
+    ...store,
+    actions: {
+      saveContainerType: (value) =>
+        store.set((current) => ({
+          ...current,
+          containerTypes: upsert(current.containerTypes, value),
+        })),
+      deleteContainerType: (id) =>
+        store.set((current) => ({
+          ...current,
+          containerTypes: current.containerTypes.filter((item) => item.id !== id),
+        })),
+      saveWasteFraction: (value) =>
+        store.set((current) => ({
+          ...current,
+          wasteFractions: upsert(current.wasteFractions, value),
+        })),
+      deleteWasteFraction: (id) =>
+        store.set((current) => ({
+          ...current,
+          wasteFractions: current.wasteFractions.filter((item) => item.id !== id),
+        })),
+      savePartType: (value) =>
+        store.set((current) => ({
+          ...current,
+          partTypes: upsert(current.partTypes, value),
+        })),
+      saveSparePart: (value) =>
+        store.set((current) => ({
+          ...current,
+          spareParts: upsert(current.spareParts, value),
+        })),
+      deleteSparePart: (id) =>
+        store.set((current) => ({
+          ...current,
+          spareParts: current.spareParts.filter((item) => item.id !== id),
+        })),
+      savePropertyEquipment: (value) =>
+        store.set((current) => ({
+          ...current,
+          propertyEquipment: upsert(current.propertyEquipment, value),
+        })),
+      saveKeyType: (value) =>
+        store.set((current) => ({
+          ...current,
+          keyTypes: upsert(current.keyTypes, value),
+        })),
+      saveMeasurementSetting: (value) =>
+        store.set((current) => ({
+          ...current,
+          measurementSettings: upsert(current.measurementSettings, value),
+        })),
+      deleteMeasurementSetting: (id) =>
+        store.set((current) => ({
+          ...current,
+          measurementSettings: current.measurementSettings.filter(
+            (item) => item.id !== id,
+          ),
+        })),
+      addImportJob: (value) =>
+        store.set((current) => ({
+          ...current,
+          importJobs: [value, ...current.importJobs],
+        })),
+      setLocksmithEmail: (locksmithEmail) =>
+        store.set((current) => ({ ...current, locksmithEmail })),
+    },
+  }
+}
+
 export function AssetManagementStoreProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AssetManagementState>(defaultState)
-  const [hydrated, setHydrated] = useState(false)
+  const [store] = useState(createAssetManagementStore)
 
   useEffect(() => {
+    let parsed: unknown = null
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY)
-      const parsed: unknown = raw ? JSON.parse(raw) : null
-      if (isAssetManagementState(parsed)) setState(mergeStoredState(parsed))
+      parsed = raw ? JSON.parse(raw) : null
     } catch {
       // Safe fixture configuration remains available when storage is unavailable.
-    } finally {
-      setHydrated(true)
     }
-  }, [])
-
-  useEffect(() => {
-    if (!hydrated) return
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-    } catch {
-      // Keep the in-memory configuration usable when persistence is blocked.
+    store.set((current) =>
+      isAssetManagementState(parsed)
+        ? { ...mergeStoredState(parsed), hydrated: true }
+        : { ...current, hydrated: true },
+    )
+    const persist = () => {
+      const { hydrated: _hydrated, ...persistable } = store.getSnapshot()
+      try {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persistable))
+      } catch {
+        // Keep the in-memory configuration usable when persistence is blocked.
+      }
     }
-  }, [hydrated, state])
-
-  const saveContainerType = useCallback((value: ContainerType) => {
-    setState((current) => ({
-      ...current,
-      containerTypes: upsert(current.containerTypes, value),
-    }))
-  }, [])
-  const deleteContainerType = useCallback((id: string) => {
-    setState((current) => ({
-      ...current,
-      containerTypes: current.containerTypes.filter((item) => item.id !== id),
-    }))
-  }, [])
-  const saveWasteFraction = useCallback((value: WasteFraction) => {
-    setState((current) => ({
-      ...current,
-      wasteFractions: upsert(current.wasteFractions, value),
-    }))
-  }, [])
-  const deleteWasteFraction = useCallback((id: string) => {
-    setState((current) => ({
-      ...current,
-      wasteFractions: current.wasteFractions.filter((item) => item.id !== id),
-    }))
-  }, [])
-  const savePartType = useCallback((value: PartType) => {
-    setState((current) => ({
-      ...current,
-      partTypes: upsert(current.partTypes, value),
-    }))
-  }, [])
-  const saveSparePart = useCallback((value: SparePart) => {
-    setState((current) => ({
-      ...current,
-      spareParts: upsert(current.spareParts, value),
-    }))
-  }, [])
-  const deleteSparePart = useCallback((id: string) => {
-    setState((current) => ({
-      ...current,
-      spareParts: current.spareParts.filter((item) => item.id !== id),
-    }))
-  }, [])
-  const savePropertyEquipment = useCallback((value: PropertyEquipment) => {
-    setState((current) => ({
-      ...current,
-      propertyEquipment: upsert(current.propertyEquipment, value),
-    }))
-  }, [])
-  const saveKeyType = useCallback((value: KeyType) => {
-    setState((current) => ({
-      ...current,
-      keyTypes: upsert(current.keyTypes, value),
-    }))
-  }, [])
-  const saveMeasurementSetting = useCallback((value: MeasurementSetting) => {
-    setState((current) => ({
-      ...current,
-      measurementSettings: upsert(current.measurementSettings, value),
-    }))
-  }, [])
-  const deleteMeasurementSetting = useCallback((id: string) => {
-    setState((current) => ({
-      ...current,
-      measurementSettings: current.measurementSettings.filter(
-        (item) => item.id !== id,
-      ),
-    }))
-  }, [])
-  const addImportJob = useCallback((value: ContainerImportJob) => {
-    setState((current) => ({
-      ...current,
-      importJobs: [value, ...current.importJobs],
-    }))
-  }, [])
-  const setLocksmithEmail = useCallback((locksmithEmail: string) => {
-    setState((current) => ({ ...current, locksmithEmail }))
-  }, [])
-
-  const value = useMemo<AssetManagementStoreValue>(
-    () => ({
-      ...state,
-      hydrated,
-      saveContainerType,
-      deleteContainerType,
-      saveWasteFraction,
-      deleteWasteFraction,
-      savePartType,
-      saveSparePart,
-      deleteSparePart,
-      savePropertyEquipment,
-      saveKeyType,
-      saveMeasurementSetting,
-      deleteMeasurementSetting,
-      addImportJob,
-      setLocksmithEmail,
-    }),
-    [
-      addImportJob,
-      deleteContainerType,
-      deleteMeasurementSetting,
-      deleteSparePart,
-      deleteWasteFraction,
-      hydrated,
-      saveContainerType,
-      saveKeyType,
-      saveMeasurementSetting,
-      savePartType,
-      savePropertyEquipment,
-      saveSparePart,
-      saveWasteFraction,
-      setLocksmithEmail,
-      state,
-    ],
-  )
+    persist()
+    return store.subscribe(persist)
+  }, [store])
 
   return (
-    <AssetManagementStoreContext.Provider value={value}>
+    <AssetManagementStoreContext.Provider value={store}>
       {children}
     </AssetManagementStoreContext.Provider>
   )
 }
 
-export function useAssetManagementStore() {
-  const value = useContext(AssetManagementStoreContext)
-  if (!value) {
+export function useAssetManagementStore(): AssetManagementStoreValue {
+  const store = useContext(AssetManagementStoreContext)
+  if (!store) {
     throw new Error(
       "useAssetManagementStore must be used within AssetManagementStoreProvider",
     )
   }
-  return value
+  const snapshot = useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getServerSnapshot,
+  )
+  return useMemo(() => ({ ...snapshot, ...store.actions }), [snapshot, store])
 }

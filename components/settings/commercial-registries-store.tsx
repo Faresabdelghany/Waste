@@ -9,13 +9,15 @@
 
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react"
+
+import { createExternalStore, type ExternalStore } from "@/lib/external-store"
 
 export type RegistryStatus = "Active" | "Inactive"
 
@@ -177,8 +179,30 @@ const defaultState: CommercialRegistriesState = {
   ],
 }
 
+type CommercialRegistriesSnapshot = CommercialRegistriesState & {
+  hydrated: boolean
+}
+
+type CommercialRegistriesActions = Omit<
+  CommercialRegistriesStoreValue,
+  keyof CommercialRegistriesSnapshot
+>
+
+type CommercialRegistriesStoreHandle =
+  ExternalStore<CommercialRegistriesSnapshot> & {
+    actions: CommercialRegistriesActions
+  }
+
+// The server (and every hydrating component) sees the seeds only — see
+// lib/external-store.ts for why the context carries a stable handle instead
+// of the state itself (hydration safety under streaming SSR).
+const serverSnapshot: CommercialRegistriesSnapshot = {
+  ...defaultState,
+  hydrated: false,
+}
+
 const CommercialRegistriesStoreContext =
-  createContext<CommercialRegistriesStoreValue | null>(null)
+  createContext<CommercialRegistriesStoreHandle | null>(null)
 
 // Deliberately does NOT require priceLists: stored state predating that
 // slice must still hydrate (the provider backfills the seeds).
@@ -207,131 +231,112 @@ export function registryEntityId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
+function createCommercialRegistriesStore(): CommercialRegistriesStoreHandle {
+  const store = createExternalStore<CommercialRegistriesSnapshot>(serverSnapshot)
+  return {
+    ...store,
+    actions: {
+      saveZone: (value) =>
+        store.set((current) => ({
+          ...current,
+          zones: upsert(current.zones, value),
+        })),
+      deleteZone: (id) =>
+        store.set((current) => ({
+          ...current,
+          zones: current.zones.filter((item) => item.id !== id),
+        })),
+      saveServiceLevel: (value) =>
+        store.set((current) => ({
+          ...current,
+          serviceLevels: upsert(current.serviceLevels, value),
+        })),
+      deleteServiceLevel: (id) =>
+        store.set((current) => ({
+          ...current,
+          serviceLevels: current.serviceLevels.filter((item) => item.id !== id),
+        })),
+      saveCustomerType: (value) =>
+        store.set((current) => ({
+          ...current,
+          customerTypes: upsert(current.customerTypes, value),
+        })),
+      deleteCustomerType: (id) =>
+        store.set((current) => ({
+          ...current,
+          customerTypes: current.customerTypes.filter((item) => item.id !== id),
+        })),
+      savePriceList: (value) =>
+        store.set((current) => ({
+          ...current,
+          priceLists: upsert(current.priceLists, value),
+        })),
+      deletePriceList: (id) =>
+        store.set((current) => ({
+          ...current,
+          priceLists: current.priceLists.filter((item) => item.id !== id),
+        })),
+    },
+  }
+}
+
 export function CommercialRegistriesStoreProvider({
   children,
 }: {
   children: ReactNode
 }) {
-  const [state, setState] = useState<CommercialRegistriesState>(defaultState)
-  const [hydrated, setHydrated] = useState(false)
+  const [store] = useState(createCommercialRegistriesStore)
 
   useEffect(() => {
+    let parsed: unknown = null
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY)
-      const parsed: unknown = raw ? JSON.parse(raw) : null
-      if (isCommercialRegistriesState(parsed)) {
-        // State persisted before price lists became managed lacks the slice —
-        // keep the seeds instead of discarding the whole stored state.
-        setState({
-          ...defaultState,
-          ...parsed,
-          priceLists: Array.isArray(parsed.priceLists)
-            ? parsed.priceLists
-            : defaultState.priceLists,
-        })
-      }
+      parsed = raw ? JSON.parse(raw) : null
     } catch {
       // Safe fixture registries remain available when storage is unavailable.
-    } finally {
-      setHydrated(true)
     }
-  }, [])
-
-  useEffect(() => {
-    if (!hydrated) return
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-    } catch {
-      // Keep the in-memory registries usable when persistence is blocked.
+    const stored = isCommercialRegistriesState(parsed) ? parsed : null
+    store.set((current) => ({
+      ...current,
+      ...(stored ?? {}),
+      // State persisted before price lists became managed lacks the slice —
+      // keep the seeds instead of discarding the whole stored state.
+      priceLists:
+        stored && Array.isArray(stored.priceLists)
+          ? stored.priceLists
+          : current.priceLists,
+      hydrated: true,
+    }))
+    const persist = () => {
+      const { hydrated: _hydrated, ...persistable } = store.getSnapshot()
+      try {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persistable))
+      } catch {
+        // Keep the in-memory registries usable when persistence is blocked.
+      }
     }
-  }, [hydrated, state])
-
-  const saveZone = useCallback((value: PricingZone) => {
-    setState((current) => ({ ...current, zones: upsert(current.zones, value) }))
-  }, [])
-  const deleteZone = useCallback((id: string) => {
-    setState((current) => ({
-      ...current,
-      zones: current.zones.filter((item) => item.id !== id),
-    }))
-  }, [])
-  const saveServiceLevel = useCallback((value: ServiceLevel) => {
-    setState((current) => ({
-      ...current,
-      serviceLevels: upsert(current.serviceLevels, value),
-    }))
-  }, [])
-  const deleteServiceLevel = useCallback((id: string) => {
-    setState((current) => ({
-      ...current,
-      serviceLevels: current.serviceLevels.filter((item) => item.id !== id),
-    }))
-  }, [])
-  const saveCustomerType = useCallback((value: CustomerTypeEntry) => {
-    setState((current) => ({
-      ...current,
-      customerTypes: upsert(current.customerTypes, value),
-    }))
-  }, [])
-  const deleteCustomerType = useCallback((id: string) => {
-    setState((current) => ({
-      ...current,
-      customerTypes: current.customerTypes.filter((item) => item.id !== id),
-    }))
-  }, [])
-  const savePriceList = useCallback((value: PriceListEntry) => {
-    setState((current) => ({
-      ...current,
-      priceLists: upsert(current.priceLists, value),
-    }))
-  }, [])
-  const deletePriceList = useCallback((id: string) => {
-    setState((current) => ({
-      ...current,
-      priceLists: current.priceLists.filter((item) => item.id !== id),
-    }))
-  }, [])
-
-  const value = useMemo<CommercialRegistriesStoreValue>(
-    () => ({
-      ...state,
-      hydrated,
-      saveZone,
-      deleteZone,
-      saveServiceLevel,
-      deleteServiceLevel,
-      saveCustomerType,
-      deleteCustomerType,
-      savePriceList,
-      deletePriceList,
-    }),
-    [
-      deleteCustomerType,
-      deletePriceList,
-      deleteServiceLevel,
-      deleteZone,
-      hydrated,
-      saveCustomerType,
-      savePriceList,
-      saveServiceLevel,
-      saveZone,
-      state,
-    ],
-  )
+    persist()
+    return store.subscribe(persist)
+  }, [store])
 
   return (
-    <CommercialRegistriesStoreContext.Provider value={value}>
+    <CommercialRegistriesStoreContext.Provider value={store}>
       {children}
     </CommercialRegistriesStoreContext.Provider>
   )
 }
 
-export function useCommercialRegistriesStore() {
-  const value = useContext(CommercialRegistriesStoreContext)
-  if (!value) {
+export function useCommercialRegistriesStore(): CommercialRegistriesStoreValue {
+  const store = useContext(CommercialRegistriesStoreContext)
+  if (!store) {
     throw new Error(
       "useCommercialRegistriesStore must be used within CommercialRegistriesStoreProvider",
     )
   }
-  return value
+  const snapshot = useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getServerSnapshot,
+  )
+  return useMemo(() => ({ ...snapshot, ...store.actions }), [snapshot, store])
 }

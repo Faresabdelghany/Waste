@@ -7,9 +7,11 @@ import {
   useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react"
 
+import { createExternalStore, type ExternalStore } from "@/lib/external-store"
 import type {
   BusinessRecord,
   WorkspaceId,
@@ -32,8 +34,13 @@ type BusinessRecordStoreValue = {
   ) => void
 }
 
+// The context carries the stable store handle, never the state itself — see
+// lib/external-store.ts for why (hydration safety under streaming SSR).
 const BusinessRecordStoreContext =
-  createContext<BusinessRecordStoreValue | null>(null)
+  createContext<ExternalStore<StoredRecords> | null>(null)
+
+// The server (and every hydrating component) sees fixtures only.
+const EMPTY_STORED_RECORDS: StoredRecords = {}
 
 function moduleKey(workspaceId: WorkspaceId, moduleId: string) {
   return `${workspaceId}.${moduleId}`
@@ -59,29 +66,51 @@ export function BusinessRecordStoreProvider({
 }: {
   children: ReactNode
 }) {
-  const [storedRecords, setStoredRecords] = useState<StoredRecords>({})
-  const [hydrated, setHydrated] = useState(false)
+  const [store] = useState(() =>
+    createExternalStore<StoredRecords>(EMPTY_STORED_RECORDS),
+  )
 
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY)
       const parsed: unknown = raw ? JSON.parse(raw) : null
-      if (isStoredRecords(parsed)) setStoredRecords(parsed)
+      if (isStoredRecords(parsed)) store.set(parsed)
     } catch {
       // A corrupt or unavailable browser store should not block the workspace.
-    } finally {
-      setHydrated(true)
     }
-  }, [])
+    const persist = () => {
+      try {
+        window.localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify(store.getSnapshot()),
+        )
+      } catch {
+        // The in-memory record graph remains usable when persistence is blocked.
+      }
+    }
+    persist()
+    return store.subscribe(persist)
+  }, [store])
 
-  useEffect(() => {
-    if (!hydrated) return
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(storedRecords))
-    } catch {
-      // The in-memory record graph remains usable when persistence is blocked.
-    }
-  }, [hydrated, storedRecords])
+  return (
+    <BusinessRecordStoreContext.Provider value={store}>
+      {children}
+    </BusinessRecordStoreContext.Provider>
+  )
+}
+
+export function useBusinessRecordStore(): BusinessRecordStoreValue {
+  const store = useContext(BusinessRecordStoreContext)
+  if (!store) {
+    throw new Error(
+      "useBusinessRecordStore must be used within BusinessRecordStoreProvider",
+    )
+  }
+  const storedRecords = useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getServerSnapshot,
+  )
 
   const getRecords = useCallback(
     (
@@ -105,7 +134,7 @@ export function BusinessRecordStoreProvider({
   const upsertRecord = useCallback(
     (workspaceId: WorkspaceId, moduleId: string, record: BusinessRecord) => {
       const key = moduleKey(workspaceId, moduleId)
-      setStoredRecords((current) => {
+      store.set((current) => {
         const existing = current[key] ?? []
         const hasRecord = existing.some((candidate) => candidate.id === record.id)
         return {
@@ -118,27 +147,11 @@ export function BusinessRecordStoreProvider({
         }
       })
     },
-    [],
+    [store],
   )
 
-  const value = useMemo(
+  return useMemo(
     () => ({ getRecords, upsertRecord }),
     [getRecords, upsertRecord],
   )
-
-  return (
-    <BusinessRecordStoreContext.Provider value={value}>
-      {children}
-    </BusinessRecordStoreContext.Provider>
-  )
-}
-
-export function useBusinessRecordStore() {
-  const value = useContext(BusinessRecordStoreContext)
-  if (!value) {
-    throw new Error(
-      "useBusinessRecordStore must be used within BusinessRecordStoreProvider",
-    )
-  }
-  return value
 }
