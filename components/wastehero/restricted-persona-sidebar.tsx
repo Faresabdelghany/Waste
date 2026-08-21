@@ -5,7 +5,6 @@ import Image from "next/image"
 import { usePathname } from "next/navigation"
 import type { ComponentType } from "react"
 import {
-  Buildings,
   HouseLine,
   Path,
   ShieldCheck,
@@ -39,41 +38,44 @@ type PersonaNavItem = {
   icon: ComponentType<{ className?: string }>
 }
 
-type PersonaSidebarDefinition = {
+type PersonaScopeCard = {
   workspaceName: string
+  badgeLabel: string
+  icon: ComponentType<{ className?: string }>
+}
+
+type PersonaSidebarDefinition = {
   personaLabel: string
-  accessLabel: string
   identityName: string
   identityDetail: string
   initials: string
-  badgeLabel: string
-  icon: ComponentType<{ className?: string }>
   navItems: PersonaNavItem[]
+  /** Workspace name + badge card under the header; omitted for lean personas. */
+  scopeCard?: PersonaScopeCard
+  /** Access-scope explainer group; omitted for lean personas. */
+  accessLabel?: string
 }
 
 const personaDefinitions: Record<RestrictedPersona, PersonaSidebarDefinition> = {
   citizen: {
-    workspaceName: "Citizen Portal",
     personaLabel: "Customer self-service",
-    accessLabel:
-      "Verified Parkvej 18 services, requests, documents, and customer-safe history only.",
     identityName: "Østerbro Housing",
     identityDetail: "Authorized property user",
     initials: "ØH",
-    badgeLabel: "Verified access",
-    icon: HouseLine,
+    scopeCard: {
+      workspaceName: "Citizen Portal",
+      badgeLabel: "Verified access",
+      icon: HouseLine,
+    },
+    accessLabel:
+      "Verified Parkvej 18 services, requests, documents, and customer-safe history only.",
     navItems: [{ label: "Citizen Portal", href: "/portal", icon: HouseLine }],
   },
   contractor: {
-    workspaceName: "Contractor Workspace",
     personaLabel: "Contractor manager",
-    accessLabel:
-      "NordRen ApS only: own routes read-only, own fleet and team self-managed, own tickets.",
     identityName: "Lars Mikkelsen",
     identityDetail: "NordRen ApS · Manager",
     initials: "LM",
-    badgeLabel: "Contractor scope",
-    icon: Buildings,
     navItems: [
       { label: "Routes", href: "/contractor-workspace", icon: Path },
       { label: "Fleet", href: "/contractor-workspace/fleet", icon: Truck },
@@ -82,15 +84,17 @@ const personaDefinitions: Record<RestrictedPersona, PersonaSidebarDefinition> = 
     ],
   },
   internal: {
-    workspaceName: "Control Center",
     personaLabel: "WasteHero internal",
-    accessLabel:
-      "Internal sales, onboarding, subscriptions, entitlements, and fulfillment operations.",
     identityName: "WasteHero Operations",
     identityDetail: "Authorized internal staff",
     initials: "WH",
-    badgeLabel: "Internal only",
-    icon: ShieldStar,
+    scopeCard: {
+      workspaceName: "Control Center",
+      badgeLabel: "Internal only",
+      icon: ShieldStar,
+    },
+    accessLabel:
+      "Internal sales, onboarding, subscriptions, entitlements, and fulfillment operations.",
     navItems: [
       { label: "Control Center", href: "/control-center", icon: ShieldStar },
     ],
@@ -105,7 +109,7 @@ export function RestrictedPersonaSidebar({ persona }: RestrictedPersonaSidebarPr
   const { setOpenMobile } = useSidebar()
   const pathname = usePathname()
   const definition = personaDefinitions[persona]
-  const WorkspaceIcon = definition.icon
+  const ScopeCardIcon = definition.scopeCard?.icon
 
   return (
     <Sidebar className="border-none shadow-none">
@@ -120,22 +124,26 @@ export function RestrictedPersonaSidebar({ persona }: RestrictedPersonaSidebarPr
           </div>
         </div>
 
-        <div className="border-y border-sidebar-border py-3">
-          <div className="flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center text-sidebar-foreground">
-              <WorkspaceIcon className="h-[18px] w-[18px]" />
-            </div>
-            <div className="min-w-0 space-y-1.5">
-              <p className="truncate text-sm font-medium">{definition.workspaceName}</p>
-              <Badge
-                variant="outline"
-                className="rounded-full border-sidebar-border px-2 py-0 text-[10px] font-normal text-sidebar-foreground/70"
-              >
-                {definition.badgeLabel}
-              </Badge>
+        {definition.scopeCard && ScopeCardIcon && (
+          <div className="border-y border-sidebar-border py-3">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center text-sidebar-foreground">
+                <ScopeCardIcon className="h-[18px] w-[18px]" />
+              </div>
+              <div className="min-w-0 space-y-1.5">
+                <p className="truncate text-sm font-medium">
+                  {definition.scopeCard.workspaceName}
+                </p>
+                <Badge
+                  variant="outline"
+                  className="rounded-full border-sidebar-border px-2 py-0 text-[10px] font-normal text-sidebar-foreground/70"
+                >
+                  {definition.scopeCard.badgeLabel}
+                </Badge>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </SidebarHeader>
 
       <SidebarContent className="gap-0 px-2">
@@ -164,13 +172,15 @@ export function RestrictedPersonaSidebar({ persona }: RestrictedPersonaSidebarPr
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Access scope</SidebarGroupLabel>
-          <div className="mx-2 flex items-start gap-2.5 border-y border-sidebar-border py-3">
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" weight="fill" />
-            <p className="text-xs leading-5 text-sidebar-foreground/60">{definition.accessLabel}</p>
-          </div>
-        </SidebarGroup>
+        {definition.accessLabel && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Access scope</SidebarGroupLabel>
+            <div className="mx-2 flex items-start gap-2.5 border-y border-sidebar-border py-3">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" weight="fill" />
+              <p className="text-xs leading-5 text-sidebar-foreground/60">{definition.accessLabel}</p>
+            </div>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-3">
