@@ -115,24 +115,6 @@ const restrictedWorkspaceDefinitions: Record<
       },
     ],
   },
-  internal: {
-    fixedProjectScope: "all",
-    fixedScopeLabel: "WasteHero internal · cross-tenant",
-    pages: [
-      {
-        id: "control-center",
-        workspaceId: "control-center",
-        moduleId: "control-center",
-        moduleIds: ["control-center"],
-        workspaceLabel: "WasteHero Control Center",
-        workspaceDescription:
-          "Internal sales, onboarding, subscriptions, entitlements, and marketplace fulfillment.",
-        navigationBasePath: "/control-center",
-        showWorkspaceActions: false,
-        showFilters: true,
-      },
-    ],
-  },
 }
 
 type RestrictedWorkspaceShellProps = {

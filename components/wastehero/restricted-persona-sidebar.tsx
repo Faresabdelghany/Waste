@@ -11,7 +11,6 @@ import {
   MagnifyingGlass,
   Path,
   ShieldCheck,
-  ShieldStar,
   SignOut,
   Ticket,
   Truck,
@@ -43,7 +42,7 @@ import {
 import { ProgressCircle } from "@/components/progress-circle"
 import { contractorActiveRoutes } from "@/lib/data/sidebar"
 
-export type RestrictedPersona = "citizen" | "contractor" | "internal"
+export type RestrictedPersona = "citizen" | "contractor"
 
 type LeanPersona = Exclude<RestrictedPersona, "contractor">
 
@@ -85,22 +84,6 @@ const personaDefinitions: Record<LeanPersona, PersonaSidebarDefinition> = {
     accessLabel:
       "Verified Parkvej 18 services, requests, documents, and customer-safe history only.",
     navItems: [{ label: "Citizen Portal", href: "/portal", icon: HouseLine }],
-  },
-  internal: {
-    personaLabel: "WasteHero internal",
-    identityName: "WasteHero Operations",
-    identityDetail: "Authorized internal staff",
-    initials: "WH",
-    scopeCard: {
-      workspaceName: "Control Center",
-      badgeLabel: "Internal only",
-      icon: ShieldStar,
-    },
-    accessLabel:
-      "Internal sales, onboarding, subscriptions, entitlements, and fulfillment operations.",
-    navItems: [
-      { label: "Control Center", href: "/control-center", icon: ShieldStar },
-    ],
   },
 }
 

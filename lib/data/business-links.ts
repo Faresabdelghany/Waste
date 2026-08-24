@@ -202,7 +202,9 @@ const workspaceEntries = Object.entries(businessWorkspaces) as Array<
 
 const recordIndex: IndexedRecord[] = workspaceEntries.flatMap(([workspaceId, workspace]) =>
   workspace.modules.flatMap((module) => {
-    // Control Center is intentionally exposed through its dedicated workspace.
+    // Control Center has no navigable surface — its records must not appear
+    // in search results, which would otherwise link to a removed route.
+    if (workspaceId === "control-center") return []
     if (workspaceId === "configure" && module.id === "control-center") return []
     return module.records.map((record) => indexRecord(workspaceId, module, record))
   }),

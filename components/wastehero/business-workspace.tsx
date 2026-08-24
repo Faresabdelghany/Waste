@@ -35,7 +35,6 @@ import {
   type WorkspaceId,
 } from "@/lib/data/business-modules"
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
-import { contractorPriceIndexationFormSchema } from "@/lib/data/business-form-schemas-commercial-improve"
 import type {
   BusinessFormField,
   BusinessFormOption,
@@ -1014,11 +1013,6 @@ export function BusinessWorkspace({
   // Commercial → Products, and pricing a product is the module's real action.
   const isPriceEngineProducts =
     workspace.id === "commercial" && activeModule.id === "products"
-  // Contractor prices keep two governed entry points: creating a rate (the
-  // module's registered create schema) and the bulk Apply index workflow,
-  // which lives outside the registry and opens via schemaOverride.
-  const isContractorPricesModule =
-    workspace.id === "commercial" && activeModule.id === "contractor-prices"
   const formSchema = useMemo(
     () =>
       relatedCreateTarget?.schemaOverride ?? (relatedCreateModule
@@ -3336,29 +3330,6 @@ export function BusinessWorkspace({
                     <span className="hidden sm:inline">Add price</span>
                     <span className="sm:hidden">Action</span>
                   </Button>
-                ) : isContractorPricesModule ? (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setRelatedCreateTarget({
-                          workspaceId: "commercial",
-                          moduleId: "contractor-prices",
-                          initialValues: {},
-                          schemaOverride: contractorPriceIndexationFormSchema,
-                        })
-                      }
-                    >
-                      <span className="hidden sm:inline">Apply index</span>
-                      <span className="sm:hidden">Index</span>
-                    </Button>
-                    <Button size="sm" onClick={() => setIsCreateOpen(true)}>
-                      <Plus className="h-4 w-4" weight="bold" />
-                      <span className="hidden sm:inline">{formSchema.submitLabel}</span>
-                      <span className="sm:hidden">Action</span>
-                    </Button>
-                  </>
                 ) : isRouteCreateFlow ? (
                   <RouteCreateEntry
                     submitLabel={formSchema.submitLabel}

@@ -39,13 +39,4 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
     homePath: "/portal",
     viewLabel: "Citizen portal",
   },
-  {
-    id: "wastehero-internal",
-    name: "WasteHero Operations",
-    detail: "Authorized internal staff",
-    email: "ops@wastehero.io",
-    initials: "WH",
-    homePath: "/control-center",
-    viewLabel: "Control Center",
-  },
 ]

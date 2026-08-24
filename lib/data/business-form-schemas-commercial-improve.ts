@@ -569,8 +569,6 @@ export const commercialImproveBusinessFormSchemas = [
     description:
       "Contractor price versions, settlement calculation, close, and reopen are different records and commands. Settlement amounts must come from a reproducible calculation snapshot, not a generic form.",
     submitLabel: "Open settlement workflow",
-    disabledReason:
-      "Generic creation is disabled. Use New contractor price, Calculate settlement, Close settlement, or Reopen settlement; each has different permissions, validation, and audit requirements.",
     contextFieldIds: ["contractorId", "projectId", "periodStart", "periodEnd"],
     sections: [
       {
