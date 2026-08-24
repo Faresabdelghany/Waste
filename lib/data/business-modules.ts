@@ -4205,7 +4205,7 @@ const commercial: WorkspaceDefinition = {
       label: "Contractor Workspace",
       title: "Restricted Contractor Workspace",
       description: "Contractor-scoped company, fleet, users, route lists, proposals, performance, complaints, and manager-only commercial views.",
-      entityLabel: "Contractor access profile",
+      entityLabel: "Contractor user",
       contextLabel: "Contractor · role · scope",
       valueLabel: "Visible workspace",
       primaryAction: "Invite contractor user",
@@ -4225,7 +4225,7 @@ const commercial: WorkspaceDefinition = {
       records: [
         record(
           "contractor-access-nordren-manager",
-          "NordRen contractor manager",
+          "Lars Mikkelsen",
           "NordRen ApS · manager · CA-Ø-2",
           "Active",
           "Lars Mikkelsen",
@@ -4233,6 +4233,8 @@ const commercial: WorkspaceDefinition = {
           "1 hour ago",
           "Manager workspace includes own users, fleet, route lists, proposals, prices, settlement, performance, and feedback.",
           {
+            "User email": "lars.mikkelsen@nordren.dk",
+            "Contractor role": "Contractor manager",
             Contractor: "NordRen ApS only",
             Projects: "Copenhagen Central · Østerbro",
             FinancialAccess: "Prices + settlement",
@@ -4247,7 +4249,7 @@ const commercial: WorkspaceDefinition = {
         ),
         record(
           "contractor-access-nordren-foreman",
-          "NordRen foreman operations",
+          "Eva Sørensen",
           "NordRen ApS · foreman · CA-Ø-2",
           "Restricted",
           "Eva Sørensen",
@@ -4255,6 +4257,8 @@ const commercial: WorkspaceDefinition = {
           "12 min ago",
           "Operational workspace supports daily route coordination while financial and structural controls remain hidden.",
           {
+            "User email": "eva.sorensen@nordren.dk",
+            "Contractor role": "Foreman",
             Contractor: "NordRen ApS only",
             Projects: "Copenhagen Central · Østerbro",
             FinancialAccess: "Hidden",
@@ -4269,7 +4273,7 @@ const commercial: WorkspaceDefinition = {
         ),
         record(
           "contractor-access-cityhaul-manager",
-          "CityHaul contractor manager",
+          "Mikkel Andersen",
           "CityHaul A/S · manager · CA-AM-1",
           "Review due",
           "Contract Team",
@@ -4277,6 +4281,8 @@ const commercial: WorkspaceDefinition = {
           "Yesterday",
           "Manager access must be reapproved before the contract area expires on 31 August.",
           {
+            "User email": "mikkel.andersen@cityhaul.dk",
+            "Contractor role": "Contractor manager",
             Contractor: "CityHaul A/S only",
             Projects: "Amager District",
             FinancialAccess: "Temporarily active · review due",

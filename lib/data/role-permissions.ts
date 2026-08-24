@@ -183,12 +183,12 @@ const DEFAULT_ROLE_ACCESS: Record<string, RoleAccessMap> = {
     workspaceGrant("operate", VIEW_ONLY),
     {
       // The restricted contractor workspace reads these grants live: fleet is
-      // fully self-managed, tickets can be raised, and contractor users can
-      // be invited — while routes stay read-only.
+      // fully self-managed, tickets can be raised, and contractor users are
+      // fully administered by the manager — while routes stay read-only.
       "fleet.vehicles": ALL_ACTIONS,
       "fleet.drivers": ALL_ACTIONS,
       "operate.tickets": ["view", "create"],
-      "contractors.contractor-workspace": VIEW_EDIT_CREATE,
+      "contractors.contractor-workspace": ALL_ACTIONS,
       "commercial.contractor-prices": VIEW_ONLY,
       "commercial.settlements": VIEW_ONLY,
     },

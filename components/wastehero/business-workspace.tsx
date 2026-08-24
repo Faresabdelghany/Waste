@@ -632,6 +632,9 @@ const richViewFactColumnDefaults: Record<string, readonly string[]> = {
   // the rich view's edit and delete paths.
   vehicles: ["Ownership", "Capacity", "Fractions", "Fuel"],
   drivers: ["Licence", "AppAccess", "Employer"],
+  // Contractor users render Email and Role as dedicated table columns, so no
+  // fact columns are seeded; membership still unlocks edit/delete actions.
+  "contractor-workspace": [],
 }
 
 // Governance facts are shown in record details, never offered as table columns.
@@ -652,6 +655,14 @@ const excludedColumnFacts = new Set([
 // Routes render Project and Area as dedicated table columns, so they are not
 // offered as fact columns there.
 const routesExcludedColumnFacts = new Set(["Project", "Area"])
+
+// Contractor users render Email and Role as dedicated table columns; Full
+// name duplicates the name column.
+const contractorUsersExcludedColumnFacts = new Set([
+  "User email",
+  "Contractor role",
+  "Full name",
+])
 
 const primaryModuleIdsByWorkspace: Partial<Record<WorkspaceId, readonly string[]>> = {
   operate: ["tickets", "exceptions"],
@@ -1132,7 +1143,10 @@ export function BusinessWorkspace({
       "contractors",
       usersModule.id,
       usersModule.records,
-    ).filter((record) => record.contractorId === selectedContractorId)
+    ).filter(
+      (record) =>
+        record.contractorId === selectedContractorId && !isSoftDeleted(record),
+    )
   }, [getRecords, selectedContractorId])
   const relatedContractorVehicles = useMemo(() => {
     if (!selectedContractorId) return []
@@ -1142,7 +1156,8 @@ export function BusinessWorkspace({
     )
     if (!vehiclesModule) return []
     return getRecords("fleet", vehiclesModule.id, vehiclesModule.records).filter(
-      (record) => record.contractorId === selectedContractorId,
+      (record) =>
+        record.contractorId === selectedContractorId && !isSoftDeleted(record),
     )
   }, [getRecords, selectedContractorId])
   const relatedContractorDrivers = useMemo(() => {
@@ -1153,7 +1168,8 @@ export function BusinessWorkspace({
     )
     if (!driversModule) return []
     return getRecords("fleet", driversModule.id, driversModule.records).filter(
-      (record) => record.contractorId === selectedContractorId,
+      (record) =>
+        record.contractorId === selectedContractorId && !isSoftDeleted(record),
     )
   }, [getRecords, selectedContractorId])
   const relatedContractAreas = useMemo(() => {
@@ -1167,7 +1183,10 @@ export function BusinessWorkspace({
       "contractors",
       contractAreasModule.id,
       contractAreasModule.records,
-    ).filter((record) => record.contractorId === selectedContractorId)
+    ).filter(
+      (record) =>
+        record.contractorId === selectedContractorId && !isSoftDeleted(record),
+    )
   }, [getRecords, selectedContractorId])
   const relatedContractorPrices = useMemo(() => {
     if (!selectedContractorId) return []
@@ -1175,7 +1194,8 @@ export function BusinessWorkspace({
     const ratesModule = commercialWorkspace.modules.find((module) => module.id === "contractor-prices")
     if (!ratesModule) return []
     return getRecords("commercial", ratesModule.id, ratesModule.records).filter(
-      (record) => record.contractorId === selectedContractorId,
+      (record) =>
+        record.contractorId === selectedContractorId && !isSoftDeleted(record),
     )
   }, [getRecords, selectedContractorId])
   const scopedRecords = useMemo(
@@ -1355,6 +1375,7 @@ export function BusinessWorkspace({
   }, [businessFilters, fixedProjectScope, projectScope])
   const isQueueView = queueModuleIds.has(activeModule.id)
   const isRoutesView = activeModule.id === "routes"
+  const isContractorUsersView = activeModule.id === "contractor-workspace"
   const isRichRecordView = activeModule.id in richViewFactColumnDefaults
   const moduleViewTypes: readonly BusinessViewType[] = isRichRecordView
     ? ["table", "list", "board", "timeline"]
@@ -1381,11 +1402,16 @@ export function BusinessWorkspace({
       for (const label of Object.keys(record.facts)) {
         if (excludedColumnFacts.has(label)) continue
         if (isRoutesView && routesExcludedColumnFacts.has(label)) continue
+        if (
+          isContractorUsersView &&
+          contractorUsersExcludedColumnFacts.has(label)
+        )
+          continue
         if (!labels.includes(label)) labels.push(label)
       }
     }
     return labels
-  }, [isRichRecordView, isRoutesView, visibleScopedRecords])
+  }, [isContractorUsersView, isRichRecordView, isRoutesView, visibleScopedRecords])
   const activeStaticColumns = useMemo(
     () =>
       viewOptions.staticColumns.filter((column) =>
@@ -1420,7 +1446,12 @@ export function BusinessWorkspace({
         label: "Status",
         count: distinctCount((record) => record.status, "state"),
       },
-      ...(isRoutesView ? ["Project", "Area"] : []).map((label) => ({
+      ...(isRoutesView
+        ? ["Project", "Area"]
+        : isContractorUsersView
+          ? ["Contractor role"]
+          : []
+      ).map((label) => ({
         value: label,
         label,
         count: distinctCount(
@@ -1437,7 +1468,13 @@ export function BusinessWorkspace({
         ),
       })),
     ]
-  }, [isRichRecordView, isRoutesView, factColumnOptions, visibleScopedRecords])
+  }, [
+    isContractorUsersView,
+    isRichRecordView,
+    isRoutesView,
+    factColumnOptions,
+    visibleScopedRecords,
+  ])
   const visibleTableColumnCount = isContainersAssetsView
     ? 2 +
       Number(viewOptions.showContainerType) +
@@ -1450,7 +1487,10 @@ export function BusinessWorkspace({
       ? 3 +
         (isRoutesView
           ? Number(viewOptions.showProject) + Number(viewOptions.showArea)
-          : Number(viewOptions.showContext)) +
+          : // Email and Role replace the context and value columns (net +1).
+            isContractorUsersView
+            ? 1
+            : Number(viewOptions.showContext)) +
         Number(viewOptions.showUpdated) +
         activeStaticColumns.length +
         activeFactColumns.length +
@@ -2057,7 +2097,13 @@ export function BusinessWorkspace({
 
       if (!field.relation) {
         if (factValue) {
-          values[field.id] = factValue
+          // Facts store the option's display label; the select needs its value.
+          const optionMatch = field.options?.find(
+            (option) =>
+              option.value === factValue ||
+              option.label.toLowerCase() === factValue.toLowerCase(),
+          )
+          values[field.id] = optionMatch ? optionMatch.value : factValue
         } else if (field.id === "status" && isPriceEngineProducts) {
           // Products never carry a separate "Status" fact (top-level status
           // is the only source of truth), so falling through to the
@@ -3443,11 +3489,18 @@ export function BusinessWorkspace({
                   }
                   builtinColumnChips={
                     isRichRecordView && !isRoutesView
-                      ? [
-                          { key: "showDescription", label: "Description" },
-                          { key: "showContext", label: activeModule.contextLabel },
-                          { key: "showUpdated", label: "Updated" },
-                        ]
+                      ? isContractorUsersView
+                        ? // Email and Role are fixed columns; context is folded
+                          // into them, so only Description and Updated toggle.
+                          [
+                            { key: "showDescription", label: "Description" },
+                            { key: "showUpdated", label: "Updated" },
+                          ]
+                        : [
+                            { key: "showDescription", label: "Description" },
+                            { key: "showContext", label: activeModule.contextLabel },
+                            { key: "showUpdated", label: "Updated" },
+                          ]
                       : undefined
                   }
                 />
@@ -3646,7 +3699,11 @@ export function BusinessWorkspace({
                       ) : (
                         <>
                           <TableHead>
-                            {isRoutesView ? "Route ID" : activeModule.entityLabel}
+                            {isRoutesView
+                              ? "Route ID"
+                              : isContractorUsersView
+                                ? "Name"
+                                : activeModule.entityLabel}
                           </TableHead>
                           {isRichRecordView &&
                             activeStaticColumns.map((column, index) => (
@@ -3670,13 +3727,20 @@ export function BusinessWorkspace({
                               )}
                               {viewOptions.showArea && <TableHead>Area</TableHead>}
                             </>
+                          ) : isContractorUsersView ? (
+                            <>
+                              <TableHead>Email</TableHead>
+                              <TableHead>Role</TableHead>
+                            </>
                           ) : (
                             viewOptions.showContext && (
                               <TableHead>{activeModule.contextLabel}</TableHead>
                             )
                           )}
                           <TableHead>Status</TableHead>
-                          <TableHead>{activeModule.valueLabel}</TableHead>
+                          {!isContractorUsersView && (
+                            <TableHead>{activeModule.valueLabel}</TableHead>
+                          )}
                           {isRichRecordView &&
                             activeFactColumns.map((column) => (
                               <TableHead key={column}>{column}</TableHead>
@@ -3870,6 +3934,15 @@ export function BusinessWorkspace({
                                     </TableCell>
                                   )}
                                 </>
+                              ) : isContractorUsersView ? (
+                                <>
+                                  <TableCell className="min-w-[200px] whitespace-nowrap text-sm text-muted-foreground">
+                                    {recordFactValue(record, "User email")}
+                                  </TableCell>
+                                  <TableCell className="min-w-[140px] whitespace-nowrap text-sm text-muted-foreground">
+                                    {recordFactValue(record, "Contractor role")}
+                                  </TableCell>
+                                </>
                               ) : (
                                 viewOptions.showContext && (
                                   <TableCell className="min-w-[220px] text-sm text-muted-foreground">
@@ -3888,9 +3961,11 @@ export function BusinessWorkspace({
                                   {record.status}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="min-w-[150px]">
-                                <RecordValue record={record} />
-                              </TableCell>
+                              {!isContractorUsersView && (
+                                <TableCell className="min-w-[150px]">
+                                  <RecordValue record={record} />
+                                </TableCell>
+                              )}
                               {isRichRecordView &&
                                 activeFactColumns.map((column) => (
                                   <TableCell
