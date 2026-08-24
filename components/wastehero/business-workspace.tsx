@@ -821,6 +821,38 @@ function preferredReason(values: BusinessFormValues) {
   return "Submitted through the governed module form"
 }
 
+// A contractor-scoped workspace already knows which contractor and which
+// signed-in manager it belongs to, so the invite form must not ask for either:
+// Contractor and Invited by are stamped from the account at submit time.
+const CONTRACTOR_ACCOUNT_FIELD_IDS = ["contractorId", "invitedBy"] as const
+
+function contractorScopedFormSchema(
+  schema: BusinessFormSchema | undefined,
+  contractorScopeId: string | undefined,
+): BusinessFormSchema | undefined {
+  if (
+    !schema ||
+    !contractorScopeId ||
+    schema.key !== "contractors.contractor-workspace"
+  ) {
+    return schema
+  }
+  const hiddenFieldIds: readonly string[] = CONTRACTOR_ACCOUNT_FIELD_IDS
+  return {
+    ...schema,
+    description: "Add a user with access limited to your contractor.",
+    contextFieldIds: schema.contextFieldIds?.filter(
+      (fieldId) => !hiddenFieldIds.includes(fieldId),
+    ),
+    sections: schema.sections.map((section) => ({
+      ...section,
+      fields: section.fields.filter(
+        (field) => !hiddenFieldIds.includes(field.id),
+      ),
+    })),
+  }
+}
+
 export function BusinessWorkspace({
   workspaceId,
   initialModuleId,
@@ -940,22 +972,26 @@ export function BusinessWorkspace({
   )
   const activeModuleFormSchema = useMemo(
     () =>
-      configuredCommercialFormSchema(
-        configuredAssetFormSchema(
-          getBusinessFormSchema(workspace.id, activeModule.id),
-          containerTypes,
-          wasteFractions,
-          measurementSettings,
-          projectScope,
+      contractorScopedFormSchema(
+        configuredCommercialFormSchema(
+          configuredAssetFormSchema(
+            getBusinessFormSchema(workspace.id, activeModule.id),
+            containerTypes,
+            wasteFractions,
+            measurementSettings,
+            projectScope,
+          ),
+          zones,
+          serviceLevels,
+          customerTypes,
+          priceLists,
         ),
-        zones,
-        serviceLevels,
-        customerTypes,
-        priceLists,
+        contractorScopeId,
       ),
     [
       activeModule.id,
       containerTypes,
+      contractorScopeId,
       customerTypes,
       measurementSettings,
       priceLists,
@@ -2573,6 +2609,35 @@ export function BusinessWorkspace({
           })
         }
       }
+    }
+
+    // The contractor-scoped invite form omits Contractor and Invited by, so
+    // stamp both onto the record from the signed-in account instead.
+    if (
+      contractorScopeId &&
+      formSchema.key === "contractors.contractor-workspace" &&
+      !editingRecord &&
+      !values.contractorId
+    ) {
+      const contractorTarget = resolveFormModule("contractors", "contractors")
+      const contractorName = contractorTarget
+        ? getRecords(
+            contractorTarget.workspaceId,
+            contractorTarget.module.id,
+            contractorTarget.module.records,
+          ).find((record) => record.id === contractorScopeId)?.name
+        : undefined
+      if (contractorName) {
+        facts["Contractor"] = contractorName
+        relationRefs.push({
+          fieldId: "contractorId",
+          workspaceId: "contractors",
+          moduleId: "contractors",
+          recordId: contractorScopeId,
+          label: contractorName,
+        })
+      }
+      facts["Invited by"] = actorName
     }
 
     const now = Date.now()
