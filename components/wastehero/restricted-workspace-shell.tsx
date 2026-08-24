@@ -75,7 +75,7 @@ const restrictedWorkspaceDefinitions: Record<
           "NordRen ApS route days and their generated Pickups — read-only.",
         navigationBasePath: "/contractor-workspace/routes",
         showWorkspaceActions: true,
-        showFilters: false,
+        showFilters: true,
       },
       {
         id: "fleet",
@@ -87,7 +87,7 @@ const restrictedWorkspaceDefinitions: Record<
           "NordRen ApS vehicles and drivers — fully self-managed.",
         navigationBasePath: "/contractor-workspace/fleet",
         showWorkspaceActions: true,
-        showFilters: false,
+        showFilters: true,
       },
       {
         id: "tickets",
@@ -99,7 +99,7 @@ const restrictedWorkspaceDefinitions: Record<
           "Tickets on NordRen ApS work — raise new ones for the office to resolve.",
         navigationBasePath: "/contractor-workspace/tickets",
         showWorkspaceActions: true,
-        showFilters: false,
+        showFilters: true,
       },
       {
         id: "team",
@@ -111,7 +111,7 @@ const restrictedWorkspaceDefinitions: Record<
           "NordRen ApS workspace users — invite managers, foremen, and drivers.",
         navigationBasePath: "/contractor-workspace/team",
         showWorkspaceActions: true,
-        showFilters: false,
+        showFilters: true,
       },
     ],
   },
