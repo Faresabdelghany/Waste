@@ -103,6 +103,8 @@ const DEFAULT_SCOPE_OPTIONS: ScopeOption[] = [
   { value: "all", label: "All operating projects" },
 ]
 
+type HideableTableColumn = "proof" | "exceptions" | "trend"
+
 type PerformanceControlRoomProps = {
   breadcrumbLabel?: string
   subtitle?: string
@@ -111,6 +113,9 @@ type PerformanceControlRoomProps = {
   series?: ThroughputPoint[]
   summary?: PerformancePortfolioSummary
   priorityAttentionIds?: string[]
+  hideTableColumns?: readonly HideableTableColumn[]
+  /** When set, clicking a route opens it here instead of filtering in place. */
+  onRouteOpen?: (routeId: string) => void
 }
 
 const numberFormatter = new Intl.NumberFormat("en-US")
@@ -247,6 +252,8 @@ export function PerformanceControlRoom({
   series = THROUGHPUT_SERIES,
   summary = PORTFOLIO_SUMMARY,
   priorityAttentionIds = PRIORITY_ATTENTION_IDS,
+  hideTableColumns = [],
+  onRouteOpen,
 }: PerformanceControlRoomProps) {
   const [scope, setScope] = useState(scopeOptions[0]?.value ?? "copenhagen")
   const [rangeId, setRangeId] = useState<RangeId>("30d")
@@ -465,6 +472,13 @@ export function PerformanceControlRoom({
       tableSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
     })
   }
+
+  const openRoute = onRouteOpen ?? focusRoute
+
+  const showProof = !hideTableColumns.includes("proof")
+  const showExceptions = !hideTableColumns.includes("exceptions")
+  const showTrend = !hideTableColumns.includes("trend")
+  const tableColumnCount = 8 + Number(showProof) + Number(showExceptions) + Number(showTrend)
 
   const exportCsv = () => {
     const header = [
@@ -754,7 +768,7 @@ export function PerformanceControlRoom({
                   <button
                     key={row.id}
                     type="button"
-                    onClick={() => focusRoute(row.id)}
+                    onClick={() => openRoute(row.id)}
                     className="grid w-full grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_70px_20px] items-center gap-2 px-4 py-1.5 text-left transition-colors hover:bg-accent/55 focus-visible:bg-accent focus-visible:outline-none"
                   >
                     <span className="flex min-w-0 items-center gap-2">
@@ -797,13 +811,17 @@ export function PerformanceControlRoom({
             <div className="flex flex-col gap-2 border-b border-border/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Route health</h2>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">Service delivery, proof, exceptions, and SLA performance</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  {showProof && showExceptions
+                    ? "Service delivery, proof, exceptions, and SLA performance"
+                    : "Service delivery and SLA performance"}
+                </p>
               </div>
               <p className="text-[11px] text-muted-foreground">Showing {sortedRows.length} of {summary.totalRoutes} routes</p>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1080px] border-collapse text-left">
+              <table className={cn("w-full border-collapse text-left", showTrend && showProof && showExceptions ? "min-w-[1080px]" : "min-w-[840px]")}>
                 <thead>
                   <tr className="border-b border-border/70 text-[10px]">
                     <th className="px-4 py-2.5"><SortButton label="Route" sortKey="route" activeKey={sort.key} onSort={handleSort} /></th>
@@ -811,18 +829,22 @@ export function PerformanceControlRoom({
                     <th className="px-3 py-2.5"><SortButton label="Type" sortKey="type" activeKey={sort.key} onSort={handleSort} /></th>
                     <th className="px-3 py-2.5"><SortButton label="On-time %" sortKey="onTime" activeKey={sort.key} onSort={handleSort} /></th>
                     <th className="px-3 py-2.5"><SortButton label="Stops" sortKey="stops" activeKey={sort.key} onSort={handleSort} /></th>
-                    <th className="px-3 py-2.5"><SortButton label="Proof %" sortKey="proof" activeKey={sort.key} onSort={handleSort} /></th>
-                    <th className="px-3 py-2.5"><SortButton label="Exceptions" sortKey="exceptions" activeKey={sort.key} onSort={handleSort} /></th>
+                    {showProof && (
+                      <th className="px-3 py-2.5"><SortButton label="Proof %" sortKey="proof" activeKey={sort.key} onSort={handleSort} /></th>
+                    )}
+                    {showExceptions && (
+                      <th className="px-3 py-2.5"><SortButton label="Exceptions" sortKey="exceptions" activeKey={sort.key} onSort={handleSort} /></th>
+                    )}
                     <th className="px-3 py-2.5"><SortButton label="SLA" sortKey="sla" activeKey={sort.key} onSort={handleSort} /></th>
                     <th className="px-3 py-2.5"><SortButton label="Status" sortKey="status" activeKey={sort.key} onSort={handleSort} /></th>
-                    <th className="px-3 py-2.5 text-muted-foreground">Trend</th>
+                    {showTrend && <th className="px-3 py-2.5 text-muted-foreground">Trend</th>}
                     <th className="w-8 px-2 py-2.5"><span className="sr-only">Open</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   {visibleRows.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="px-4 py-10 text-center text-xs text-muted-foreground">
+                      <td colSpan={tableColumnCount} className="px-4 py-10 text-center text-xs text-muted-foreground">
                         No routes match the selected filters.
                       </td>
                     </tr>
@@ -831,9 +853,23 @@ export function PerformanceControlRoom({
                       const proof = proofPercent(row)
                       const completion = completionPercent(row)
                       return (
-                        <tr key={row.id} className="border-b border-border/60 text-xs last:border-b-0 hover:bg-accent/35">
+                        <tr
+                          key={row.id}
+                          onClick={onRouteOpen ? () => onRouteOpen(row.id) : undefined}
+                          className={cn(
+                            "border-b border-border/60 text-xs last:border-b-0 hover:bg-accent/35",
+                            onRouteOpen && "cursor-pointer",
+                          )}
+                        >
                           <td className="px-4 py-2">
-                            <button type="button" onClick={() => focusRoute(row.id)} className="flex min-w-0 items-center gap-2 text-left">
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                openRoute(row.id)
+                              }}
+                              className="flex min-w-0 items-center gap-2 text-left"
+                            >
                               <span
                                 className="h-2 w-2 shrink-0 rounded-full border-2 border-current bg-transparent"
                                 style={{ color: getStatusColor(row.status) }}
@@ -854,10 +890,12 @@ export function PerformanceControlRoom({
                             <span className="text-muted-foreground"> / {row.stopsPlanned}</span>
                             <span className="ml-1 text-[10px] text-muted-foreground">({completion}%)</span>
                           </td>
-                          <td className={cn("px-3 py-2 font-medium", proof < 80 ? "text-rose-500" : proof < 92 ? "text-amber-500" : "text-emerald-500")}>
-                            {proof}%
-                          </td>
-                          <td className="px-3 py-2 text-foreground">{row.exceptions}</td>
+                          {showProof && (
+                            <td className={cn("px-3 py-2 font-medium", proof < 80 ? "text-rose-500" : proof < 92 ? "text-amber-500" : "text-emerald-500")}>
+                              {proof}%
+                            </td>
+                          )}
+                          {showExceptions && <td className="px-3 py-2 text-foreground">{row.exceptions}</td>}
                           <td className={cn("px-3 py-2 font-medium", row.slaPercent < 70 ? "text-rose-500" : row.slaPercent < 85 ? "text-amber-500" : "text-emerald-500")}>
                             {row.slaPercent}%
                           </td>
@@ -866,11 +904,14 @@ export function PerformanceControlRoom({
                               {row.status}
                             </Badge>
                           </td>
-                          <td className="px-3 py-2"><TrendSparkline row={row} /></td>
+                          {showTrend && <td className="px-3 py-2"><TrendSparkline row={row} /></td>}
                           <td className="px-2 py-2">
                             <button
                               type="button"
-                              onClick={() => focusRoute(row.id)}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                openRoute(row.id)
+                              }}
                               className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                               aria-label={`View ${row.id}`}
                             >

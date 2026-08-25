@@ -1,6 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
+import { useRouter } from "next/navigation"
 
 import {
   CONTRACTOR_PORTFOLIO_SUMMARY,
@@ -20,6 +21,14 @@ const PerformanceControlRoom = dynamic(
 // The operator's Route performance control room, scoped to NordRen ApS —
 // same layout and interactions, contractor-only routes and totals.
 export function ContractorDashboard() {
+  const router = useRouter()
+
+  // Dashboard rows use route codes (RC-1048); route records use ids (route-day-1048).
+  const openRoute = (routeId: string) => {
+    const recordId = `route-day-${routeId.replace(/^RC-/, "")}`
+    router.push(`/contractor-workspace/routes?module=routes&record=${recordId}`)
+  }
+
   return (
     <PerformanceControlRoom
       breadcrumbLabel="Dashboard"
@@ -29,6 +38,8 @@ export function ContractorDashboard() {
       series={CONTRACTOR_THROUGHPUT_SERIES}
       summary={CONTRACTOR_PORTFOLIO_SUMMARY}
       priorityAttentionIds={CONTRACTOR_PRIORITY_ATTENTION_IDS}
+      hideTableColumns={["proof", "exceptions", "trend"]}
+      onRouteOpen={openRoute}
     />
   )
 }
