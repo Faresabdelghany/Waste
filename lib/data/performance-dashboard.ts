@@ -17,6 +17,23 @@ export type RoutePerformanceRow = {
   trend: number[]
 }
 
+export type ThroughputPoint = {
+  date: Date
+  completed: number
+  previous: number
+}
+
+export type PerformancePortfolioSummary = {
+  onTimePercent: number
+  onTimeRoutes: number
+  totalRoutes: number
+  completed: number
+  planned: number
+  proof: number
+  exceptions: number
+  exceptionRouteCount: number
+}
+
 export const PERFORMANCE_REFERENCE_DATE = new Date(2026, 7, 12)
 
 export const ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
@@ -188,16 +205,144 @@ const CURRENT_PERIOD_VALUES = [
   237, 254, 221, 232, 243, 214, 193, 204, 221, 191,
 ]
 
-export const THROUGHPUT_SERIES = CURRENT_PERIOD_VALUES.map((completed, index) => {
-  const date = new Date(2026, 6, 14 + index)
-  const previous = Math.max(
-    96,
-    Math.round(completed * (0.9 + ((index * 7) % 13) / 100)),
-  )
+export const THROUGHPUT_SERIES: ThroughputPoint[] = CURRENT_PERIOD_VALUES.map(
+  (completed, index) => {
+    const date = new Date(2026, 6, 14 + index)
+    const previous = Math.max(
+      96,
+      Math.round(completed * (0.9 + ((index * 7) % 13) / 100)),
+    )
 
-  return {
-    date,
-    completed,
-    previous,
-  }
-})
+    return {
+      date,
+      completed,
+      previous,
+    }
+  },
+)
+
+// NordRen ApS route days on contract area CA-Ø-2 (Østerbro). RC-1048 is the
+// same route day the operator sees — the contractor view is a scoped subset.
+export const CONTRACTOR_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
+  {
+    id: "RC-1052",
+    name: "Østerbro Residual",
+    area: "Østerbro N",
+    serviceType: "Residual",
+    stopsCompleted: 176,
+    stopsPlanned: 238,
+    onTimePercent: 64,
+    proofComplete: 121,
+    exceptions: 6,
+    slaPercent: 64,
+    status: "At risk",
+    issue: "SLA misses",
+    issueDetail: "6 in last 7 days",
+    trend: [78, 75, 73, 71, 70, 68, 66, 64],
+  },
+  {
+    id: "RC-1048",
+    name: "Østerbro Organic",
+    area: "Østerbro",
+    serviceType: "Organic",
+    stopsCompleted: 512,
+    stopsPlanned: 624,
+    onTimePercent: 79,
+    proofComplete: 466,
+    exceptions: 4,
+    slaPercent: 79,
+    status: "Monitor",
+    issue: "Open exceptions",
+    issueDetail: "4 exceptions",
+    trend: [76, 78, 77, 80, 79, 81, 78, 79],
+  },
+  {
+    id: "RC-1061",
+    name: "Indre Østerbro Glass",
+    area: "Indre Østerbro",
+    serviceType: "Glass",
+    stopsCompleted: 204,
+    stopsPlanned: 246,
+    onTimePercent: 81,
+    proofComplete: 168,
+    exceptions: 2,
+    slaPercent: 81,
+    status: "Monitor",
+    issue: "Proof incomplete",
+    issueDetail: "36 stops",
+    trend: [86, 85, 84, 83, 83, 82, 81, 81],
+  },
+  {
+    id: "RC-1057",
+    name: "Svanemøllen Paper",
+    area: "Svanemøllen",
+    serviceType: "Paper",
+    stopsCompleted: 342,
+    stopsPlanned: 358,
+    onTimePercent: 94,
+    proofComplete: 328,
+    exceptions: 0,
+    slaPercent: 94,
+    status: "On track",
+    issue: "Stable service",
+    issueDetail: "No action needed",
+    trend: [88, 89, 90, 90, 91, 92, 93, 94],
+  },
+  {
+    id: "RC-1064",
+    name: "Ryvangen Cardboard",
+    area: "Ryvangen",
+    serviceType: "Cardboard",
+    stopsCompleted: 288,
+    stopsPlanned: 302,
+    onTimePercent: 92,
+    proofComplete: 274,
+    exceptions: 1,
+    slaPercent: 92,
+    status: "On track",
+    issue: "Stable service",
+    issueDetail: "No action needed",
+    trend: [87, 88, 88, 89, 90, 91, 91, 92],
+  },
+  {
+    id: "RC-1068",
+    name: "Østerbro Bulky",
+    area: "Østerbro S",
+    serviceType: "Bulky",
+    stopsCompleted: 122,
+    stopsPlanned: 130,
+    onTimePercent: 90,
+    proofComplete: 118,
+    exceptions: 0,
+    slaPercent: 90,
+    status: "On track",
+    issue: "Stable service",
+    issueDetail: "No action needed",
+    trend: [84, 85, 86, 86, 87, 88, 89, 90],
+  },
+]
+
+export const CONTRACTOR_PRIORITY_ATTENTION_IDS = [
+  "RC-1052",
+  "RC-1048",
+  "RC-1061",
+]
+
+// Sums of CONTRACTOR_ROUTE_PERFORMANCE_ROWS; on-time = routes at ≥80%.
+export const CONTRACTOR_PORTFOLIO_SUMMARY: PerformancePortfolioSummary = {
+  onTimePercent: 67,
+  onTimeRoutes: 4,
+  totalRoutes: 6,
+  completed: 1644,
+  planned: 1898,
+  proof: 1475,
+  exceptions: 13,
+  exceptionRouteCount: 4,
+}
+
+export const CONTRACTOR_THROUGHPUT_SERIES: ThroughputPoint[] =
+  THROUGHPUT_SERIES.map((point) => ({
+    date: point.date,
+    completed: Math.round(point.completed * 0.36),
+    previous: Math.max(34, Math.round(point.previous * 0.34)),
+  }))

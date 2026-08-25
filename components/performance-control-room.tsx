@@ -38,8 +38,10 @@ import {
   PERFORMANCE_REFERENCE_DATE,
   ROUTE_PERFORMANCE_ROWS,
   THROUGHPUT_SERIES,
+  type PerformancePortfolioSummary,
   type RouteHealthStatus,
   type RoutePerformanceRow,
+  type ThroughputPoint,
 } from "@/lib/data/performance-dashboard"
 import { cn } from "@/lib/utils"
 
@@ -83,11 +85,32 @@ const PRIORITY_ATTENTION_IDS = [
   "RC-1055",
 ]
 
-const PORTFOLIO_SUMMARY = {
+const PORTFOLIO_SUMMARY: PerformancePortfolioSummary = {
+  onTimePercent: 86,
+  onTimeRoutes: 31,
+  totalRoutes: 36,
   completed: 4612,
   planned: 5148,
   proof: 4236,
   exceptions: 23,
+  exceptionRouteCount: 11,
+}
+
+type ScopeOption = { value: string; label: string }
+
+const DEFAULT_SCOPE_OPTIONS: ScopeOption[] = [
+  { value: "copenhagen", label: "Copenhagen Central" },
+  { value: "all", label: "All operating projects" },
+]
+
+type PerformanceControlRoomProps = {
+  breadcrumbLabel?: string
+  subtitle?: string
+  scopeOptions?: ScopeOption[]
+  rows?: RoutePerformanceRow[]
+  series?: ThroughputPoint[]
+  summary?: PerformancePortfolioSummary
+  priorityAttentionIds?: string[]
 }
 
 const numberFormatter = new Intl.NumberFormat("en-US")
@@ -216,8 +239,16 @@ function completionPercent(row: RoutePerformanceRow) {
   return Math.round((row.stopsCompleted / row.stopsPlanned) * 100)
 }
 
-export function PerformanceControlRoom() {
-  const [scope, setScope] = useState("copenhagen")
+export function PerformanceControlRoom({
+  breadcrumbLabel = "Route performance",
+  subtitle = "Operational delivery and service health",
+  scopeOptions = DEFAULT_SCOPE_OPTIONS,
+  rows = ROUTE_PERFORMANCE_ROWS,
+  series = THROUGHPUT_SERIES,
+  summary = PORTFOLIO_SUMMARY,
+  priorityAttentionIds = PRIORITY_ATTENTION_IDS,
+}: PerformanceControlRoomProps) {
+  const [scope, setScope] = useState(scopeOptions[0]?.value ?? "copenhagen")
   const [rangeId, setRangeId] = useState<RangeId>("30d")
   const [cadence, setCadence] = useState<Cadence>("daily")
   const [selectedRouteId, setSelectedRouteId] = useState("all")
@@ -230,8 +261,8 @@ export function PerformanceControlRoom() {
   const tableSectionRef = useRef<HTMLDivElement>(null)
 
   const selectedRoute = useMemo(
-    () => ROUTE_PERFORMANCE_ROWS.find((route) => route.id === selectedRouteId) ?? null,
-    [selectedRouteId],
+    () => rows.find((route) => route.id === selectedRouteId) ?? null,
+    [rows, selectedRouteId],
   )
 
   const range = RANGE_OPTIONS.find((option) => option.value === rangeId) ?? RANGE_OPTIONS[1]
@@ -240,7 +271,7 @@ export function PerformanceControlRoom() {
   const previousRangeEnd = subDays(rangeStart, 1)
 
   const chartData = useMemo(() => {
-    const current = THROUGHPUT_SERIES
+    const current = series
     const expanded =
       rangeId === "90d"
         ? [-60, -30, 0].flatMap((dayOffset, groupIndex) =>
@@ -282,15 +313,15 @@ export function PerformanceControlRoom() {
       buckets[bucketIndex].previous += point.previous
     })
     return buckets
-  }, [cadence, rangeId])
+  }, [cadence, rangeId, series])
 
   const filteredRows = useMemo(() => {
-    return ROUTE_PERFORMANCE_ROWS.filter((row) => {
+    return rows.filter((row) => {
       if (selectedRouteId !== "all" && row.id !== selectedRouteId) return false
       if (selectedStatus !== "all" && row.status !== selectedStatus) return false
       return true
     })
-  }, [selectedRouteId, selectedStatus])
+  }, [rows, selectedRouteId, selectedStatus])
 
   const sortedRows = useMemo(() => {
     const rows = [...filteredRows]
@@ -323,13 +354,14 @@ export function PerformanceControlRoom() {
 
   const riskRows = useMemo(
     () =>
-      ROUTE_PERFORMANCE_ROWS.filter((row) => row.status !== "On track")
+      rows
+        .filter((row) => row.status !== "On track")
         .sort(
           (a, b) =>
-            PRIORITY_ATTENTION_IDS.indexOf(a.id) - PRIORITY_ATTENTION_IDS.indexOf(b.id),
+            priorityAttentionIds.indexOf(a.id) - priorityAttentionIds.indexOf(b.id),
         )
         .slice(0, 5),
-    [],
+    [rows, priorityAttentionIds],
   )
 
   const kpis = selectedRoute
@@ -379,8 +411,8 @@ export function PerformanceControlRoom() {
     : [
         {
           label: "On-time routes",
-          value: "86%",
-          helper: "31 of 36 routes",
+          value: `${summary.onTimePercent}%`,
+          helper: `${summary.onTimeRoutes} of ${summary.totalRoutes} routes`,
           trend: "6pp",
           trendLabel: `vs ${format(previousRangeStart, "MMM d")} – ${format(previousRangeEnd, "MMM d")}`,
           tone: "positive" as const,
@@ -388,8 +420,8 @@ export function PerformanceControlRoom() {
         },
         {
           label: "Completed stops",
-          value: numberFormatter.format(PORTFOLIO_SUMMARY.completed),
-          helper: `of ${numberFormatter.format(PORTFOLIO_SUMMARY.planned)} planned stops`,
+          value: numberFormatter.format(summary.completed),
+          helper: `of ${numberFormatter.format(summary.planned)} planned stops`,
           trend: "7.4%",
           trendLabel: `vs ${format(previousRangeStart, "MMM d")} – ${format(previousRangeEnd, "MMM d")}`,
           tone: "positive" as const,
@@ -397,8 +429,8 @@ export function PerformanceControlRoom() {
         },
         {
           label: "Open exceptions",
-          value: String(PORTFOLIO_SUMMARY.exceptions),
-          helper: "across 11 routes",
+          value: String(summary.exceptions),
+          helper: `across ${summary.exceptionRouteCount} routes`,
           trend: "28%",
           trendLabel: `vs ${format(previousRangeStart, "MMM d")} – ${format(previousRangeEnd, "MMM d")}`,
           tone: "negative" as const,
@@ -406,8 +438,8 @@ export function PerformanceControlRoom() {
         },
         {
           label: "Proof complete",
-          value: `${Math.round((PORTFOLIO_SUMMARY.proof / PORTFOLIO_SUMMARY.completed) * 100)}%`,
-          helper: `${numberFormatter.format(PORTFOLIO_SUMMARY.proof)} of ${numberFormatter.format(PORTFOLIO_SUMMARY.completed)} stops`,
+          value: `${Math.round((summary.proof / summary.completed) * 100)}%`,
+          helper: `${numberFormatter.format(summary.proof)} of ${numberFormatter.format(summary.completed)} stops`,
           trend: "2pp",
           trendLabel: `vs ${format(previousRangeStart, "MMM d")} – ${format(previousRangeEnd, "MMM d")}`,
           tone: "warning" as const,
@@ -479,8 +511,8 @@ export function PerformanceControlRoom() {
           <div className="flex min-w-0 items-center gap-3">
             <SidebarTrigger className="h-8 w-8 shrink-0 rounded-md text-muted-foreground hover:bg-accent" />
             <div className="min-w-0">
-              <Breadcrumbs items={[{ label: "Route performance" }]} />
-              <p className="hidden text-[11px] text-muted-foreground sm:block">Operational delivery and service health</p>
+              <Breadcrumbs items={[{ label: breadcrumbLabel }]} />
+              <p className="hidden text-[11px] text-muted-foreground sm:block">{subtitle}</p>
             </div>
           </div>
           <Button variant="outline" size="sm" className="h-8 gap-2 bg-transparent" onClick={exportCsv}>
@@ -497,8 +529,11 @@ export function PerformanceControlRoom() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="copenhagen">Copenhagen Central</SelectItem>
-                <SelectItem value="all">All operating projects</SelectItem>
+                {scopeOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={rangeId} onValueChange={(value) => setRangeId(value as RangeId)}>
@@ -539,7 +574,7 @@ export function PerformanceControlRoom() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All routes</SelectItem>
-                      {ROUTE_PERFORMANCE_ROWS.map((route) => (
+                      {rows.map((route) => (
                         <SelectItem key={route.id} value={route.id}>
                           {route.id} · {route.name}
                         </SelectItem>
@@ -764,7 +799,7 @@ export function PerformanceControlRoom() {
                 <h2 className="text-sm font-semibold text-foreground">Route health</h2>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">Service delivery, proof, exceptions, and SLA performance</p>
               </div>
-              <p className="text-[11px] text-muted-foreground">Showing {sortedRows.length} of 36 routes</p>
+              <p className="text-[11px] text-muted-foreground">Showing {sortedRows.length} of {summary.totalRoutes} routes</p>
             </div>
 
             <div className="overflow-x-auto">
