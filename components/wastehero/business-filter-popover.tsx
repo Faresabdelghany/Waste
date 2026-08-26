@@ -7,6 +7,7 @@ import {
   Cube,
   Database,
   Funnel,
+  IdentificationBadge,
   MapTrifold,
   Speedometer,
   Spinner,
@@ -39,6 +40,7 @@ export type BusinessFilters = {
   contractAreas: string[]
   serviceScopes: string[]
   reliabilityBands: string[]
+  roles: string[]
 }
 
 type FilterCategory = keyof BusinessFilters
@@ -57,6 +59,7 @@ const emptyFilters: BusinessFilters = {
   contractAreas: [],
   serviceScopes: [],
   reliabilityBands: [],
+  roles: [],
 }
 
 type FilterDefinition = {
@@ -64,6 +67,11 @@ type FilterDefinition = {
   label: string
   icon: typeof Spinner
   values: (record: BusinessRecord) => string[]
+  /**
+   * When set, the category always offers exactly these values (in this
+   * order) instead of deriving the options from the loaded records.
+   */
+  options?: readonly string[]
 }
 
 function singleValue(value: string | undefined) {
@@ -149,6 +157,30 @@ const contractorCategories: FilterDefinition[] = [
   },
 ]
 
+// Contractor users are filtered by the data the Add User form captures: the
+// enumerable Role plus the lifecycle Status. Name, phone, and email are
+// free-text and stay searchable instead. The "Contractor role" key covers
+// records created before the field was renamed. Both categories offer the
+// full fixed value set, matching the user lifecycle and the form's roles,
+// even when no loaded record currently holds a value.
+const contractorUserCategories: FilterDefinition[] = [
+  {
+    id: "statuses",
+    label: "Status",
+    icon: Spinner,
+    values: (record) => [record.status],
+    options: ["Invited", "Active", "Deactive"],
+  },
+  {
+    id: "roles",
+    label: "Role",
+    icon: IdentificationBadge,
+    values: (record) =>
+      singleValue(record.facts.Role ?? record.facts["Contractor role"]),
+    options: ["Contractor manager", "Foreman", "Driver", "Read-only viewer"],
+  },
+]
+
 function uniqueSorted(values: string[]) {
   return Array.from(new Set(values.filter(Boolean))).sort((left, right) =>
     left.localeCompare(right),
@@ -170,7 +202,7 @@ export function BusinessFilterPopover({
   records: BusinessRecord[]
   value: BusinessFilters
   onChange: (filters: BusinessFilters) => void
-  variant?: "default" | "containers" | "contractors"
+  variant?: "default" | "containers" | "contractors" | "contractor-users"
 }) {
   const [open, setOpen] = useState(false)
   const [activeCategory, setActiveCategory] =
@@ -184,7 +216,9 @@ export function BusinessFilterPopover({
       ? containerCategories
       : variant === "contractors"
         ? contractorCategories
-        : defaultCategories
+        : variant === "contractor-users"
+          ? contractorUserCategories
+          : defaultCategories
   const resolvedActiveCategory = categories.some(
     (category) => category.id === activeCategory,
   )
@@ -197,7 +231,9 @@ export function BusinessFilterPopover({
       next[key] = []
     }
     for (const category of categories) {
-      next[category.id] = uniqueSorted(records.flatMap(category.values))
+      next[category.id] = category.options
+        ? [...category.options]
+        : uniqueSorted(records.flatMap(category.values))
     }
     return next
   }, [categories, records])

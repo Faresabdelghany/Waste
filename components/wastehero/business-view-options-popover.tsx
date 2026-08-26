@@ -155,6 +155,7 @@ export function BusinessViewOptionsPopover({
   columnOptions = [],
   groupOptions = [],
   builtinColumnChips,
+  fixedColumnChips = [],
   columnsStyle = "chips",
 }: {
   value: BusinessViewOptions
@@ -164,6 +165,11 @@ export function BusinessViewOptionsPopover({
   columnOptions?: readonly string[]
   groupOptions?: readonly BusinessGroupOption[]
   builtinColumnChips?: readonly BusinessColumnChip[]
+  /**
+   * Columns the table always shows. They are listed so the popover mirrors
+   * the table, but they cannot be toggled off.
+   */
+  fixedColumnChips?: readonly string[]
   /**
    * "chips": toggle chips with an add-column picker. "display": the
    * Display-columns panel with a Static Columns drop zone and Other Columns.
@@ -530,9 +536,23 @@ export function BusinessViewOptionsPopover({
             <div>
               <span className="text-sm font-medium">Columns</span>
               <p className="mt-1 text-xs text-muted-foreground">
-                Toggle visible columns or add more from the record data.
+                {fixedColumnChips.length > 0 && columnOptions.length === 0
+                  ? "These columns are always shown; only Updated can be toggled."
+                  : "Toggle visible columns or add more from the record data."}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
+                {fixedColumnChips.map((column) => {
+                  const Icon = columnIcon(column)
+                  return (
+                    <span
+                      key={column}
+                      className="flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground"
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {column}
+                    </span>
+                  )
+                })}
                 {builtinChips.map((chip) => {
                   const Icon = columnIcon(chip.label)
                   const isActive = value[chip.key]
@@ -569,6 +589,7 @@ export function BusinessViewOptionsPopover({
                     </button>
                   )
                 })}
+                {columnOptions.length > 0 && (
                 <Popover open={addColumnOpen} onOpenChange={setAddColumnOpen}>
                   <PopoverTrigger asChild>
                     <button
@@ -606,6 +627,7 @@ export function BusinessViewOptionsPopover({
                     )}
                   </PopoverContent>
                 </Popover>
+                )}
               </div>
             </div>
           ) : (

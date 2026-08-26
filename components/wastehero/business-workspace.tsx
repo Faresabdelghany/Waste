@@ -213,6 +213,7 @@ const emptyBusinessFilters: BusinessFilters = {
   contractAreas: [],
   serviceScopes: [],
   reliabilityBands: [],
+  roles: [],
 }
 
 const filterFieldByChipLabel: Record<string, keyof BusinessFilters> = {
@@ -229,6 +230,7 @@ const filterFieldByChipLabel: Record<string, keyof BusinessFilters> = {
   "Contract area": "contractAreas",
   "Service scope": "serviceScopes",
   Reliability: "reliabilityBands",
+  Role: "roles",
 }
 
 type AuditEvent = {
@@ -656,14 +658,6 @@ const excludedColumnFacts = new Set([
 // offered as fact columns there.
 const routesExcludedColumnFacts = new Set(["Project", "Area"])
 
-// Contractor users render Email and Role as dedicated table columns; Full
-// name duplicates the name column.
-const contractorUsersExcludedColumnFacts = new Set([
-  "User email",
-  "Contractor role",
-  "Full name",
-])
-
 const primaryModuleIdsByWorkspace: Partial<Record<WorkspaceId, readonly string[]>> = {
   operate: ["tickets", "exceptions"],
   plan: [
@@ -831,10 +825,16 @@ function preferredReason(values: BusinessFormValues) {
   return "Submitted through the governed module form"
 }
 
-// A contractor-scoped workspace already knows which contractor and which
-// signed-in manager it belongs to, so the invite form must not ask for either:
-// Contractor and Invited by are stamped from the account at submit time.
-const CONTRACTOR_ACCOUNT_FIELD_IDS = ["contractorId", "invitedBy"] as const
+// A contractor-scoped workspace already knows which contractor, project,
+// contract area, and signed-in manager it belongs to, so the invite form must
+// not ask for any of them: all four are stamped from the account and its
+// fixed scope at submit time, leaving only the person's own details.
+const CONTRACTOR_ACCOUNT_FIELD_IDS = [
+  "contractorId",
+  "projectId",
+  "contractAreaId",
+  "invitedBy",
+] as const
 
 function contractorScopedFormSchema(
   schema: BusinessFormSchema | undefined,
@@ -1280,6 +1280,13 @@ export function BusinessWorkspace({
         businessFilters.reliabilityBands,
         "Reliability band",
       )
+      // Contractor users created before the Role field rename carry the fact
+      // under "Contractor role", so check both keys.
+      const matchesRole =
+        businessFilters.roles.length === 0 ||
+        businessFilters.roles.includes(
+          (record.facts.Role ?? record.facts["Contractor role"] ?? "").trim(),
+        )
       const matchesQuery =
         !normalizedQuery ||
         [
@@ -1309,6 +1316,7 @@ export function BusinessWorkspace({
         matchesContractArea &&
         matchesServiceScope &&
         matchesReliability &&
+        matchesRole &&
         matchesQuery
       )
     })
@@ -1365,6 +1373,9 @@ export function BusinessWorkspace({
     businessFilters.reliabilityBands.forEach((value) =>
       chips.push({ key: "Reliability", value }),
     )
+    businessFilters.roles.forEach((value) =>
+      chips.push({ key: "Role", value }),
+    )
     if (!fixedProjectScope && projectScope !== "copenhagen") {
       chips.push({
         key: "Project",
@@ -1397,16 +1408,14 @@ export function BusinessWorkspace({
   const canRunRecordActions = hasGrant("edit")
   const factColumnOptions = useMemo(() => {
     if (!isRichRecordView) return []
+    // The contractor users table shows a fixed column set (Full name, Email,
+    // Phone number, Role, Status, Updated); no extra fact columns are offered.
+    if (isContractorUsersView) return []
     const labels: string[] = []
     for (const record of visibleScopedRecords) {
       for (const label of Object.keys(record.facts)) {
         if (excludedColumnFacts.has(label)) continue
         if (isRoutesView && routesExcludedColumnFacts.has(label)) continue
-        if (
-          isContractorUsersView &&
-          contractorUsersExcludedColumnFacts.has(label)
-        )
-          continue
         if (!labels.includes(label)) labels.push(label)
       }
     }
@@ -1449,7 +1458,7 @@ export function BusinessWorkspace({
       ...(isRoutesView
         ? ["Project", "Area"]
         : isContractorUsersView
-          ? ["Contractor role"]
+          ? ["Role"]
           : []
       ).map((label) => ({
         value: label,
@@ -1487,9 +1496,10 @@ export function BusinessWorkspace({
       ? 3 +
         (isRoutesView
           ? Number(viewOptions.showProject) + Number(viewOptions.showArea)
-          : // Email and Role replace the context and value columns (net +1).
+          : // Email, Phone number, and Role replace the context and value
+            // columns (net +2).
             isContractorUsersView
-            ? 1
+            ? 2
             : Number(viewOptions.showContext)) +
         Number(viewOptions.showUpdated) +
         activeStaticColumns.length +
@@ -2651,8 +2661,10 @@ export function BusinessWorkspace({
       }
     }
 
-    // The contractor-scoped invite form omits Contractor and Invited by, so
-    // stamp both onto the record from the signed-in account instead.
+    // The contractor-scoped invite form omits Contractor, Allowed contract
+    // area, and Invited by, so stamp them onto the record from the signed-in
+    // account instead. The project comes from the fixed workspace scope via
+    // selectedProjectIds below.
     if (
       contractorScopeId &&
       formSchema.key === "contractors.contractor-workspace" &&
@@ -2677,6 +2689,24 @@ export function BusinessWorkspace({
           label: contractorName,
         })
       }
+      const areaTarget = resolveFormModule("contractors", "contract-areas")
+      const contractorAreas = areaTarget
+        ? getRecords(
+            areaTarget.workspaceId,
+            areaTarget.module.id,
+            areaTarget.module.records,
+          ).filter((record) => record.contractorId === contractorScopeId)
+        : []
+      if (contractorAreas.length === 1) {
+        facts["Allowed contract area"] = contractorAreas[0].name
+        relationRefs.push({
+          fieldId: "contractAreaId",
+          workspaceId: "contractors",
+          moduleId: "contract-areas",
+          recordId: contractorAreas[0].id,
+          label: contractorAreas[0].name,
+        })
+      }
       facts["Invited by"] = actorName
     }
 
@@ -2688,8 +2718,21 @@ export function BusinessWorkspace({
       nameField && values[nameField.id] !== undefined
         ? displayFormValue(nameField, values[nameField.id])
         : ""
+    // Contractor users are captured as First/Last name fields; the record
+    // name is the composed full name.
+    const contractorUserName =
+      formSchema.key === "contractors.contractor-workspace"
+        ? [values.firstName, values.lastName]
+            .filter(
+              (part): part is string =>
+                typeof part === "string" && part.trim().length > 0,
+            )
+            .map((part) => part.trim())
+            .join(" ")
+        : ""
     const nameValue =
       submittedNameValue ||
+      contractorUserName ||
       (formSchema.key === "resources.containers"
         ? `BIN-${String(now).slice(-5)}`
         : "")
@@ -2833,9 +2876,10 @@ export function BusinessWorkspace({
         // Only user-named records can be renamed; system-issued and
         // action-derived names stay untouched.
         name:
-          nameField?.type === "text" && submittedNameValue
+          contractorUserName ||
+          (nameField?.type === "text" && submittedNameValue
             ? submittedNameValue
-            : editingRecord.name,
+            : editingRecord.name),
         context: contextValues.join(" · ") || editingRecord.context,
         updated: "Now",
         freshness: "Now",
@@ -3468,7 +3512,9 @@ export function BusinessWorkspace({
                       : workspace.id === "contractors" &&
                           activeModule.id === "contractors"
                         ? "contractors"
-                        : "default"
+                        : isContractorUsersView
+                          ? "contractor-users"
+                          : "default"
                   }
                 />
                 <BusinessViewOptionsPopover
@@ -3487,15 +3533,18 @@ export function BusinessWorkspace({
                   columnsStyle={
                     activeModule.id === "pickups" ? "display" : "chips"
                   }
+                  fixedColumnChips={
+                    isContractorUsersView
+                      ? ["Full name", "Email", "Phone number", "Role", "Status"]
+                      : undefined
+                  }
                   builtinColumnChips={
                     isRichRecordView && !isRoutesView
                       ? isContractorUsersView
-                        ? // Email and Role are fixed columns; context is folded
-                          // into them, so only Description and Updated toggle.
-                          [
-                            { key: "showDescription", label: "Description" },
-                            { key: "showUpdated", label: "Updated" },
-                          ]
+                        ? // Full name, Email, Phone number, Role, and Status
+                          // are fixed columns and the description is never
+                          // shown, so only Updated toggles.
+                          [{ key: "showUpdated", label: "Updated" }]
                         : [
                             { key: "showDescription", label: "Description" },
                             { key: "showContext", label: activeModule.contextLabel },
@@ -3702,7 +3751,7 @@ export function BusinessWorkspace({
                             {isRoutesView
                               ? "Route ID"
                               : isContractorUsersView
-                                ? "Name"
+                                ? "Full name"
                                 : activeModule.entityLabel}
                           </TableHead>
                           {isRichRecordView &&
@@ -3730,6 +3779,7 @@ export function BusinessWorkspace({
                           ) : isContractorUsersView ? (
                             <>
                               <TableHead>Email</TableHead>
+                              <TableHead>Phone number</TableHead>
                               <TableHead>Role</TableHead>
                             </>
                           ) : (
@@ -3901,11 +3951,12 @@ export function BusinessWorkspace({
                               >
                                 <div className="space-y-1">
                                   <p className="text-sm font-medium text-foreground">{record.name}</p>
-                                  {viewOptions.showDescription && (
-                                    <p className="max-w-[340px] truncate text-xs text-muted-foreground">
-                                      {record.description}
-                                    </p>
-                                  )}
+                                  {viewOptions.showDescription &&
+                                    !isContractorUsersView && (
+                                      <p className="max-w-[340px] truncate text-xs text-muted-foreground">
+                                        {record.description}
+                                      </p>
+                                    )}
                                 </div>
                               </TableCell>
                               {isRichRecordView &&
@@ -3937,10 +3988,21 @@ export function BusinessWorkspace({
                               ) : isContractorUsersView ? (
                                 <>
                                   <TableCell className="min-w-[200px] whitespace-nowrap text-sm text-muted-foreground">
-                                    {recordFactValue(record, "User email")}
+                                    {recordFactValue(
+                                      record,
+                                      "Email",
+                                      recordFactValue(record, "User email"),
+                                    )}
                                   </TableCell>
                                   <TableCell className="min-w-[140px] whitespace-nowrap text-sm text-muted-foreground">
-                                    {recordFactValue(record, "Contractor role")}
+                                    {recordFactValue(record, "Phone number")}
+                                  </TableCell>
+                                  <TableCell className="min-w-[140px] whitespace-nowrap text-sm text-muted-foreground">
+                                    {recordFactValue(
+                                      record,
+                                      "Role",
+                                      recordFactValue(record, "Contractor role"),
+                                    )}
                                   </TableCell>
                                 </>
                               ) : (

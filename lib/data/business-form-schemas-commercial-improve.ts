@@ -496,10 +496,9 @@ export const commercialImproveBusinessFormSchemas = [
     key: "contractors.contractor-workspace",
     mode: "create",
     recordKind: "Contractor user",
-    title: "Add contractor user",
+    title: "Add User",
     description: "Add a user with access limited to the selected contractor.",
     submitLabel: "Add user",
-    nameField: "fullName",
     contextFieldIds: ["contractorId", "projectId", "contractAreaId", "role"],
     sections: [
       {
@@ -528,20 +527,32 @@ export const commercialImproveBusinessFormSchemas = [
             relation: { workspaceId: "contractors", moduleId: "contract-areas" },
           },
           {
-            id: "fullName",
-            label: "Full name",
+            id: "firstName",
+            label: "First name",
             type: "text",
             required: true,
           },
           {
+            id: "lastName",
+            label: "Last name",
+            type: "text",
+            required: true,
+          },
+          {
+            id: "phone",
+            label: "Phone number",
+            type: "text",
+            placeholder: "+45 12 34 56 78",
+          },
+          {
             id: "email",
-            label: "User email",
+            label: "Email",
             type: "email",
             required: true,
           },
           {
             id: "role",
-            label: "Contractor role",
+            label: "Role",
             type: "select",
             required: true,
             options: [

@@ -33,8 +33,10 @@ import { cn } from "@/lib/utils"
 export function statusClasses(status: string): string {
   const normalized = status.toLowerCase()
 
+  // "deactive" must be checked before the "active" substring match below.
   if (
     normalized.includes("inactive") ||
+    normalized.includes("deactive") ||
     normalized.includes("deactivated") ||
     normalized.includes("disabled") ||
     normalized.includes("unavailable")
