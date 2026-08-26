@@ -27,6 +27,11 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 function statusClasses(status: string) {
+  // "Deactive"/"Inactive" contain the "active" substring, so they must be
+  // classified before the positive match below.
+  if (/deactive|inactive|deactivated|disabled/i.test(status)) {
+    return "border-border bg-muted/50 text-muted-foreground"
+  }
   if (/active|completed|approved/i.test(status)) {
     return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
   }
