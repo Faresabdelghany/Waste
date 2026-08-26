@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
+import { useMemo } from "react"
 import {
   Sidebar,
   SidebarContent,
@@ -40,7 +41,13 @@ import {
   SignOut,
   CaretRight,
 } from "@phosphor-icons/react/dist/ssr"
-import { activeRoutes, footerItems, navItems, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
+import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
+import {
+  resolveActiveRouteSummaries,
+  routeDayFixtures,
+  useActiveRoutes,
+} from "@/components/wastehero/active-routes-store"
+import { footerItems, navItems, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
 
 const navItemIcons: Record<NavItemId, React.ComponentType<{ className?: string }>> = {
   operate: Tray,
@@ -63,6 +70,18 @@ export function AppSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { setOpenMobile } = useSidebar()
+  const { starredRouteIds } = useActiveRoutes("operator")
+  const { getRecords } = useBusinessRecordStore()
+
+  const activeRouteItems = useMemo(
+    () =>
+      resolveActiveRouteSummaries(
+        starredRouteIds,
+        getRecords("route-studio", "routes", routeDayFixtures),
+        "operator",
+      ),
+    [getRecords, starredRouteIds],
+  )
 
   const isItemActive = (id: NavItemId): boolean => {
     if (id === "operate")
@@ -161,21 +180,27 @@ export function AppSidebar() {
             Active Routes
           </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="gap-0.5">
-              {activeRoutes.map((route) => (
-                <SidebarMenuItem key={route.name}>
-                  <SidebarMenuButton asChild className="h-7 rounded-md px-2.5 group">
-                    <Link href={route.href} onClick={() => setOpenMobile(false)}>
-                      <ProgressCircle progress={route.progress} color={route.color} size={16} />
-                      <span className="flex-1 truncate text-sm">{route.name}</span>
-                      <span className="rounded p-0.5 opacity-0 hover:bg-sidebar-accent group-hover:opacity-100">
-                        <span className="text-lg text-sidebar-foreground/55">···</span>
-                      </span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+            {activeRouteItems.length === 0 ? (
+              <p className="px-2.5 py-1 text-xs text-sidebar-foreground/50">
+                Star a route in Route Studio to pin it here.
+              </p>
+            ) : (
+              <SidebarMenu className="gap-0.5">
+                {activeRouteItems.map((route) => (
+                  <SidebarMenuItem key={route.id}>
+                    <SidebarMenuButton asChild className="h-7 rounded-md px-2.5 group">
+                      <Link href={route.href} onClick={() => setOpenMobile(false)}>
+                        <ProgressCircle progress={route.progress} color={route.color} size={16} />
+                        <span className="flex-1 truncate text-sm">{route.name}</span>
+                        <span className="rounded p-0.5 opacity-0 hover:bg-sidebar-accent group-hover:opacity-100">
+                          <span className="text-lg text-sidebar-foreground/55">···</span>
+                        </span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            )}
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

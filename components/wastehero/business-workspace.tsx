@@ -22,6 +22,7 @@ import {
   Plus,
   PushPin,
   ShieldCheck,
+  Star,
 } from "@phosphor-icons/react/dist/ssr"
 
 import {
@@ -143,6 +144,7 @@ import {
   type GuidedRouteData,
 } from "@/components/wastehero/route-create-flow"
 import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
+import { useActiveRoutes } from "@/components/wastehero/active-routes-store"
 import {
   useAssetManagementStore,
   type MeasurementSetting,
@@ -955,6 +957,9 @@ export function BusinessWorkspace({
 }: BusinessWorkspaceProps) {
   const sourceWorkspace = getWorkspaceDefinition(workspaceId)
   const { getRecords, upsertRecord } = useBusinessRecordStore()
+  const { isRouteStarred, toggleRouteStarred } = useActiveRoutes(
+    contractorScopeId ? "contractor" : "operator",
+  )
   const { containerTypes, wasteFractions, measurementSettings } =
     useAssetManagementStore()
   const { zones, serviceLevels, customerTypes, priceLists } =
@@ -1493,6 +1498,9 @@ export function BusinessWorkspace({
   const isQueueView =
     queueModuleIds.has(activeModule.id) && !isContractorTicketsView
   const isRoutesView = activeModule.id === "routes"
+  // Operators and contractor managers pin route days to their own sidebar's
+  // Active Routes group from a star column on the routes table.
+  const showRouteStarColumn = isRoutesView
   const isContractorUsersView = activeModule.id === "contractor-workspace"
   const isRichRecordView =
     activeModule.id in richViewFactColumnDefaults || isContractorTicketsView
@@ -1610,6 +1618,7 @@ export function BusinessWorkspace({
       Number(viewOptions.showProject)
     : isRichRecordView
       ? 3 +
+        Number(showRouteStarColumn) +
         (isRoutesView
           ? Number(viewOptions.showProject) + Number(viewOptions.showArea)
           : // Email, Phone number, and Role replace the context and value
@@ -3896,6 +3905,11 @@ export function BusinessWorkspace({
                         </>
                       ) : (
                         <>
+                          {showRouteStarColumn && (
+                            <TableHead className="w-8 pr-0">
+                              <span className="sr-only">Pin to Active Routes</span>
+                            </TableHead>
+                          )}
                           <TableHead>
                             {isRoutesView
                               ? "Route ID"
@@ -4092,6 +4106,40 @@ export function BusinessWorkspace({
                             </>
                           ) : (
                             <>
+                              {showRouteStarColumn && (
+                                <TableCell
+                                  className={cn(
+                                    "w-8 pr-0",
+                                    viewOptions.density === "compact" && "py-2",
+                                  )}
+                                  onClick={(event) => event.stopPropagation()}
+                                  onKeyDown={(event) => event.stopPropagation()}
+                                >
+                                  <button
+                                    type="button"
+                                    aria-pressed={isRouteStarred(record.id)}
+                                    aria-label={
+                                      isRouteStarred(record.id)
+                                        ? `Remove ${record.name} from Active Routes`
+                                        : `Add ${record.name} to Active Routes`
+                                    }
+                                    className="flex h-6 w-6 cursor-pointer items-center justify-center rounded hover:bg-muted"
+                                    onClick={() => toggleRouteStarred(record.id)}
+                                  >
+                                    <Star
+                                      weight={
+                                        isRouteStarred(record.id) ? "fill" : "regular"
+                                      }
+                                      className={cn(
+                                        "h-4 w-4",
+                                        isRouteStarred(record.id)
+                                          ? "text-amber-500"
+                                          : "text-muted-foreground/60 hover:text-foreground",
+                                      )}
+                                    />
+                                  </button>
+                                </TableCell>
+                              )}
                               <TableCell
                                 className={cn(
                                   "min-w-[240px]",

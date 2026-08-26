@@ -3,7 +3,7 @@
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
-import type { ComponentType } from "react"
+import { useMemo, type ComponentType } from "react"
 import {
   CaretRight,
   ChartBar,
@@ -40,7 +40,12 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { ProgressCircle } from "@/components/progress-circle"
-import { contractorActiveRoutes } from "@/lib/data/sidebar"
+import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
+import {
+  resolveActiveRouteSummaries,
+  routeDayFixtures,
+  useActiveRoutes,
+} from "@/components/wastehero/active-routes-store"
 
 export type RestrictedPersona = "citizen" | "contractor"
 
@@ -104,6 +109,18 @@ function ContractorManagerSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { setOpenMobile } = useSidebar()
+  const { starredRouteIds } = useActiveRoutes("contractor")
+  const { getRecords } = useBusinessRecordStore()
+
+  const activeRouteItems = useMemo(
+    () =>
+      resolveActiveRouteSummaries(
+        starredRouteIds,
+        getRecords("route-studio", "routes", routeDayFixtures),
+        "contractor",
+      ),
+    [getRecords, starredRouteIds],
+  )
 
   const isItemActive = (href: string): boolean =>
     href === "/contractor-workspace"
@@ -169,21 +186,27 @@ function ContractorManagerSidebar() {
             Active Routes
           </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="gap-0.5">
-              {contractorActiveRoutes.map((route) => (
-                <SidebarMenuItem key={route.id}>
-                  <SidebarMenuButton asChild className="h-7 rounded-md px-2.5 group">
-                    <Link href={route.href} onClick={() => setOpenMobile(false)}>
-                      <ProgressCircle progress={route.progress} color={route.color} size={16} />
-                      <span className="flex-1 truncate text-sm">{route.name}</span>
-                      <span className="rounded p-0.5 opacity-0 hover:bg-sidebar-accent group-hover:opacity-100">
-                        <span className="text-lg text-sidebar-foreground/55">···</span>
-                      </span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+            {activeRouteItems.length === 0 ? (
+              <p className="px-2.5 py-1 text-xs text-sidebar-foreground/50">
+                Star a route on the Routes page to pin it here.
+              </p>
+            ) : (
+              <SidebarMenu className="gap-0.5">
+                {activeRouteItems.map((route) => (
+                  <SidebarMenuItem key={route.id}>
+                    <SidebarMenuButton asChild className="h-7 rounded-md px-2.5 group">
+                      <Link href={route.href} onClick={() => setOpenMobile(false)}>
+                        <ProgressCircle progress={route.progress} color={route.color} size={16} />
+                        <span className="flex-1 truncate text-sm">{route.name}</span>
+                        <span className="rounded p-0.5 opacity-0 hover:bg-sidebar-accent group-hover:opacity-100">
+                          <span className="text-lg text-sidebar-foreground/55">···</span>
+                        </span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            )}
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

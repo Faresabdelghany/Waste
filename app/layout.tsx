@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { AppThemeProvider } from "@/components/app-theme-provider"
 import { ThemeBootstrapScript } from "@/components/theme-bootstrap-script"
 import { BusinessRecordStoreProvider } from "@/components/wastehero/business-record-store"
+import { ActiveRoutesStoreProvider } from "@/components/wastehero/active-routes-store"
 import { OrganizationStoreProvider } from "@/components/settings/organization-store"
 import { AssetManagementStoreProvider } from "@/components/settings/asset-management-store"
 import { CommercialRegistriesStoreProvider } from "@/components/settings/commercial-registries-store"
@@ -53,9 +54,11 @@ export default function RootLayout({
               <AssetManagementStoreProvider>
                 <CommercialRegistriesStoreProvider>
                   <BusinessRecordStoreProvider>
-                    {children}
-                    <Analytics />
-                    <Toaster richColors closeButton />
+                    <ActiveRoutesStoreProvider>
+                      {children}
+                      <Analytics />
+                      <Toaster richColors closeButton />
+                    </ActiveRoutesStoreProvider>
                   </BusinessRecordStoreProvider>
                 </CommercialRegistriesStoreProvider>
               </AssetManagementStoreProvider>
