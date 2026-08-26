@@ -12,6 +12,7 @@ export type BusinessFormFieldType =
   | "select"
   | "multiselect"
   | "checkbox"
+  | "file"
 
 export type BusinessFormOption = {
   value: string

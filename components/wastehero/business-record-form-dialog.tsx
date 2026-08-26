@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from "react"
 import {
   ArrowLeft,
   CheckCircle,
+  Paperclip,
+  UploadSimple,
+  X,
 } from "@phosphor-icons/react/dist/ssr"
 import { ChevronDown } from "lucide-react"
 
@@ -236,6 +239,80 @@ function MultiSelectField({
         </Command>
       </PopoverContent>
     </Popover>
+  )
+}
+
+// UI-only prototype: the selected file names are kept as the field's value;
+// no bytes are stored.
+function FileUploadField({
+  field,
+  value,
+  error,
+  onChange,
+}: {
+  field: BusinessFormField
+  value: BusinessFormValue | undefined
+  error?: string
+  onChange: (next: string) => void
+}) {
+  const fileNames = splitMultiValue(value)
+
+  return (
+    <div className="grid gap-2">
+      <label
+        htmlFor={`business-form-${field.id}`}
+        className={cn(
+          "flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border px-4 py-5 text-sm text-muted-foreground transition-colors hover:border-primary/60 hover:text-foreground",
+          error && "border-destructive",
+        )}
+      >
+        <UploadSimple className="h-4 w-4" />
+        Upload attachment
+        <input
+          id={`business-form-${field.id}`}
+          type="file"
+          multiple
+          disabled={field.readOnly}
+          className="sr-only"
+          onChange={(event) => {
+            const names = Array.from(event.target.files ?? []).map(
+              (file) => file.name,
+            )
+            if (names.length > 0) {
+              onChange(Array.from(new Set([...fileNames, ...names])).join(", "))
+            }
+            event.target.value = ""
+          }}
+        />
+      </label>
+      {fileNames.length > 0 && (
+        <ul className="space-y-1">
+          {fileNames.map((name) => (
+            <li
+              key={name}
+              className="flex items-center gap-2 rounded-md border border-border/60 px-3 py-1.5 text-xs"
+            >
+              <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="flex-1 truncate">{name}</span>
+              <button
+                type="button"
+                aria-label={`Remove ${name}`}
+                onClick={() =>
+                  onChange(
+                    fileNames
+                      .filter((candidate) => candidate !== name)
+                      .join(", "),
+                  )
+                }
+                className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }
 
@@ -473,7 +550,9 @@ export function BusinessRecordFormDialog({
                         : field.options ?? []
                       const value = values[field.id]
                       const isWide =
-                        field.type === "textarea" || field.type === "checkbox"
+                        field.type === "textarea" ||
+                        field.type === "checkbox" ||
+                        field.type === "file"
                       const required = isFieldRequired(field, values)
                       const error = attempted ? fieldErrors[field.id] : undefined
 
@@ -566,6 +645,15 @@ export function BusinessRecordFormDialog({
                             <MultiSelectField
                               field={field}
                               options={options}
+                              value={value}
+                              error={error}
+                              onChange={(nextValue) =>
+                                updateValue(field.id, nextValue)
+                              }
+                            />
+                          ) : field.type === "file" ? (
+                            <FileUploadField
+                              field={field}
                               value={value}
                               error={error}
                               onChange={(nextValue) =>

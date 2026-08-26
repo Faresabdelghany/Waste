@@ -37,6 +37,14 @@ const actionExecutions: Record<string, BusinessFormExecution> = {
     sourceField: "sessionId",
     completionMessage: "The driver action was recorded against the assigned route and session.",
   },
+  // A new ticket's headline value is its response target, which the type SLA
+  // supplies later — not the form's submit label.
+  "operate.tickets": {
+    kind: "create-record",
+    resultValue: "Response target pending",
+    completionMessage:
+      "The ticket was created; its response target follows the type SLA.",
+  },
   "plan.calendars": {
     kind: "append-event",
     sourceField: "calendarId",

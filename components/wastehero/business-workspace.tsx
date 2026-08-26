@@ -214,6 +214,9 @@ const emptyBusinessFilters: BusinessFilters = {
   serviceScopes: [],
   reliabilityBands: [],
   roles: [],
+  ticketTypes: [],
+  priorities: [],
+  teams: [],
 }
 
 const filterFieldByChipLabel: Record<string, keyof BusinessFilters> = {
@@ -231,6 +234,9 @@ const filterFieldByChipLabel: Record<string, keyof BusinessFilters> = {
   "Service scope": "serviceScopes",
   Reliability: "reliabilityBands",
   Role: "roles",
+  Type: "ticketTypes",
+  Priority: "priorities",
+  "Assigned team": "teams",
 }
 
 type AuditEvent = {
@@ -658,6 +664,21 @@ const excludedColumnFacts = new Set([
 // offered as fact columns there.
 const routesExcludedColumnFacts = new Set(["Project", "Area"])
 
+// Contractor tickets join the rich record view; these are the fact columns
+// seeded when the module opens.
+const contractorTicketsFactColumnDefaults = ["Type", "Priority", "Team"] as const
+
+// Ticket facts written from form fields that duplicate the table's own
+// columns (subject/description) or hold long free text, so they are never
+// offered as ticket table columns.
+const ticketExcludedColumnFacts = new Set([
+  "Subject",
+  "Case description",
+  "Attachments",
+  "Attachment references",
+  "All linked records and content visibility were checked",
+])
+
 const primaryModuleIdsByWorkspace: Partial<Record<WorkspaceId, readonly string[]>> = {
   operate: ["tickets", "exceptions"],
   plan: [
@@ -836,31 +857,83 @@ const CONTRACTOR_ACCOUNT_FIELD_IDS = [
   "invitedBy",
 ] as const
 
+// A contractor manager raises tickets on their own work for the office to
+// resolve, so the office-side fields disappear: Project and Source are known
+// from the account, response SLAs, parent tickets, and the customer/internal
+// communication split are the office's to manage, and Category comes from the
+// selected Ticket type. Evidence is uploaded directly instead of referenced.
+const CONTRACTOR_TICKET_HIDDEN_FIELD_IDS: readonly string[] = [
+  "projectId",
+  "responseDueAt",
+  "occurredAt",
+  "parentTicketId",
+  "internalComment",
+  "customerMessage",
+  "source",
+  "category",
+]
+
+const contractorTicketSectionDescriptions: Record<string, string> = {
+  classification:
+    "Validation: a configured Ticket type and priority are required. New Tickets start Created; the office drives later states.",
+  "business-context":
+    "Validation: at least one permitted customer, Property, Shared Collection Point, Container, or Route relationship is required.",
+  "content-visibility":
+    "Describe the case and upload photos or documents as evidence.",
+}
+
 function contractorScopedFormSchema(
   schema: BusinessFormSchema | undefined,
   contractorScopeId: string | undefined,
 ): BusinessFormSchema | undefined {
-  if (
-    !schema ||
-    !contractorScopeId ||
-    schema.key !== "contractors.contractor-workspace"
-  ) {
-    return schema
-  }
-  const hiddenFieldIds: readonly string[] = CONTRACTOR_ACCOUNT_FIELD_IDS
-  return {
-    ...schema,
-    description: "Add a user with access limited to your contractor.",
-    contextFieldIds: schema.contextFieldIds?.filter(
-      (fieldId) => !hiddenFieldIds.includes(fieldId),
-    ),
-    sections: schema.sections.map((section) => ({
-      ...section,
-      fields: section.fields.filter(
-        (field) => !hiddenFieldIds.includes(field.id),
+  if (!schema || !contractorScopeId) return schema
+  if (schema.key === "contractors.contractor-workspace") {
+    const hiddenFieldIds: readonly string[] = CONTRACTOR_ACCOUNT_FIELD_IDS
+    return {
+      ...schema,
+      description: "Add a user with access limited to your contractor.",
+      contextFieldIds: schema.contextFieldIds?.filter(
+        (fieldId) => !hiddenFieldIds.includes(fieldId),
       ),
-    })),
+      sections: schema.sections.map((section) => ({
+        ...section,
+        fields: section.fields.filter(
+          (field) => !hiddenFieldIds.includes(field.id),
+        ),
+      })),
+    }
   }
+  if (schema.key === "operate.tickets") {
+    return {
+      ...schema,
+      description:
+        "Raise a scoped case on your own work for the office to resolve. Assignment and resolution history remain separate parts of the Ticket.",
+      contextFieldIds: schema.contextFieldIds?.filter(
+        (fieldId) => !CONTRACTOR_TICKET_HIDDEN_FIELD_IDS.includes(fieldId),
+      ),
+      sections: schema.sections.map((section) => ({
+        ...section,
+        description:
+          contractorTicketSectionDescriptions[section.id] ?? section.description,
+        fields: section.fields
+          .filter(
+            (field) => !CONTRACTOR_TICKET_HIDDEN_FIELD_IDS.includes(field.id),
+          )
+          .map((field) =>
+            field.id === "attachmentReferences"
+              ? {
+                  ...field,
+                  type: "file" as const,
+                  label: "Attachments",
+                  description: undefined,
+                  placeholder: undefined,
+                }
+              : field,
+          ),
+      })),
+    }
+  }
+  return schema
 }
 
 export function BusinessWorkspace({
@@ -1287,6 +1360,23 @@ export function BusinessWorkspace({
         businessFilters.roles.includes(
           (record.facts.Role ?? record.facts["Contractor role"] ?? "").trim(),
         )
+      // Fixture tickets store classification as Type/Team; tickets created
+      // through the form store the field labels Ticket type/Assigned team.
+      const matchesTicketType =
+        businessFilters.ticketTypes.length === 0 ||
+        businessFilters.ticketTypes.includes(
+          (record.facts.Type ?? record.facts["Ticket type"] ?? "").trim(),
+        )
+      const matchesPriority =
+        businessFilters.priorities.length === 0 ||
+        businessFilters.priorities.includes(
+          (record.facts.Priority ?? "").trim(),
+        )
+      const matchesTeam =
+        businessFilters.teams.length === 0 ||
+        businessFilters.teams.includes(
+          (record.facts.Team ?? record.facts["Assigned team"] ?? "").trim(),
+        )
       const matchesQuery =
         !normalizedQuery ||
         [
@@ -1317,6 +1407,9 @@ export function BusinessWorkspace({
         matchesServiceScope &&
         matchesReliability &&
         matchesRole &&
+        matchesTicketType &&
+        matchesPriority &&
+        matchesTeam &&
         matchesQuery
       )
     })
@@ -1376,6 +1469,15 @@ export function BusinessWorkspace({
     businessFilters.roles.forEach((value) =>
       chips.push({ key: "Role", value }),
     )
+    businessFilters.ticketTypes.forEach((value) =>
+      chips.push({ key: "Type", value }),
+    )
+    businessFilters.priorities.forEach((value) =>
+      chips.push({ key: "Priority", value }),
+    )
+    businessFilters.teams.forEach((value) =>
+      chips.push({ key: "Assigned team", value }),
+    )
     if (!fixedProjectScope && projectScope !== "copenhagen") {
       chips.push({
         key: "Project",
@@ -1384,10 +1486,16 @@ export function BusinessWorkspace({
     }
     return chips
   }, [businessFilters, fixedProjectScope, projectScope])
-  const isQueueView = queueModuleIds.has(activeModule.id)
+  // Inside a contractor scope, tickets render as the standard record table
+  // (like Routes and Fleet) instead of the operator's triage queue.
+  const isContractorTicketsView =
+    activeModule.id === "tickets" && Boolean(contractorScopeId)
+  const isQueueView =
+    queueModuleIds.has(activeModule.id) && !isContractorTicketsView
   const isRoutesView = activeModule.id === "routes"
   const isContractorUsersView = activeModule.id === "contractor-workspace"
-  const isRichRecordView = activeModule.id in richViewFactColumnDefaults
+  const isRichRecordView =
+    activeModule.id in richViewFactColumnDefaults || isContractorTicketsView
   const moduleViewTypes: readonly BusinessViewType[] = isRichRecordView
     ? ["table", "list", "board", "timeline"]
     : ["table"]
@@ -1416,11 +1524,19 @@ export function BusinessWorkspace({
       for (const label of Object.keys(record.facts)) {
         if (excludedColumnFacts.has(label)) continue
         if (isRoutesView && routesExcludedColumnFacts.has(label)) continue
+        if (isContractorTicketsView && ticketExcludedColumnFacts.has(label))
+          continue
         if (!labels.includes(label)) labels.push(label)
       }
     }
     return labels
-  }, [isContractorUsersView, isRichRecordView, isRoutesView, visibleScopedRecords])
+  }, [
+    isContractorTicketsView,
+    isContractorUsersView,
+    isRichRecordView,
+    isRoutesView,
+    visibleScopedRecords,
+  ])
   const activeStaticColumns = useMemo(
     () =>
       viewOptions.staticColumns.filter((column) =>
@@ -1565,11 +1681,13 @@ export function BusinessWorkspace({
       groupBy: "none",
       factColumns: [
         ...(richViewFactColumnDefaults[activeModuleId] ??
-          defaultBusinessViewOptions.factColumns),
+          (activeModuleId === "tickets" && contractorScopeId
+            ? contractorTicketsFactColumnDefaults
+            : defaultBusinessViewOptions.factColumns)),
       ],
       staticColumns: [],
     }))
-  }, [activeModuleId])
+  }, [activeModuleId, contractorScopeId])
 
   const removeFilterChip = (key: string, value: string) => {
     const filterField = filterFieldByChipLabel[key]
@@ -2870,6 +2988,29 @@ export function BusinessWorkspace({
       }
     }
 
+    // Tickets keep their classification facts under the fixture keys (Type,
+    // Team) so table columns and filters read one shape regardless of whether
+    // a ticket was seeded or submitted, and the record description is the
+    // submitted case description rather than the form's boilerplate.
+    const normalizeTicketRecord = (record: BusinessRecord): BusinessRecord => {
+      const nextFacts = { ...record.facts }
+      if (nextFacts["Ticket type"] && !nextFacts.Type) {
+        nextFacts.Type = nextFacts["Ticket type"]
+      }
+      delete nextFacts["Ticket type"]
+      if (nextFacts["Assigned team"] && !nextFacts.Team) {
+        nextFacts.Team = nextFacts["Assigned team"]
+      }
+      delete nextFacts["Assigned team"]
+      const caseDescription =
+        typeof values.description === "string" ? values.description.trim() : ""
+      return {
+        ...record,
+        description: caseDescription || record.description,
+        facts: nextFacts,
+      }
+    }
+
     if (editingRecord) {
       let updatedRecord: BusinessRecord = {
         ...editingRecord,
@@ -2896,6 +3037,9 @@ export function BusinessWorkspace({
       }
       if (resolvedTarget.module.id === "contractor-prices") {
         updatedRecord = normalizeContractorPriceRecord(updatedRecord)
+      }
+      if (resolvedTarget.module.id === "tickets") {
+        updatedRecord = normalizeTicketRecord(updatedRecord)
       }
       const editEvent: AuditEvent = {
         id: `audit-edit-${now}`,
@@ -2983,6 +3127,9 @@ export function BusinessWorkspace({
     }
     if (resolvedTarget.module.id === "contractor-prices") {
       newRecord = normalizeContractorPriceRecord(newRecord)
+    }
+    if (resolvedTarget.module.id === "tickets") {
+      newRecord = normalizeTicketRecord(newRecord)
     }
     const creationEvent: AuditEvent = {
       id: `audit-form-${now}`,
@@ -3514,7 +3661,9 @@ export function BusinessWorkspace({
                         ? "contractors"
                         : isContractorUsersView
                           ? "contractor-users"
-                          : "default"
+                          : isContractorTicketsView
+                            ? "tickets"
+                            : "default"
                   }
                 />
                 <BusinessViewOptionsPopover

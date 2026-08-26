@@ -6,12 +6,15 @@ import {
   CalendarBlank,
   Cube,
   Database,
+  Flag,
   Funnel,
   IdentificationBadge,
   MapTrifold,
   Speedometer,
   Spinner,
+  Tag,
   Truck,
+  UsersThree,
   WifiHigh,
 } from "@phosphor-icons/react/dist/ssr"
 
@@ -41,6 +44,9 @@ export type BusinessFilters = {
   serviceScopes: string[]
   reliabilityBands: string[]
   roles: string[]
+  ticketTypes: string[]
+  priorities: string[]
+  teams: string[]
 }
 
 type FilterCategory = keyof BusinessFilters
@@ -60,6 +66,9 @@ const emptyFilters: BusinessFilters = {
   serviceScopes: [],
   reliabilityBands: [],
   roles: [],
+  ticketTypes: [],
+  priorities: [],
+  teams: [],
 }
 
 type FilterDefinition = {
@@ -181,6 +190,35 @@ const contractorUserCategories: FilterDefinition[] = [
   },
 ]
 
+// Tickets are filtered by the classification data every Ticket carries:
+// lifecycle Status plus the Type, Priority, and Assigned team facts. Fixture
+// tickets store them as Type/Priority/Team; tickets created through the form
+// store the field labels Ticket type/Priority/Assigned team, so both keys are
+// read. Subject and description stay free-text searchable instead.
+const ticketCategories: FilterDefinition[] = [
+  { id: "statuses", label: "Status", icon: Spinner, values: (record) => [record.status] },
+  {
+    id: "ticketTypes",
+    label: "Type",
+    icon: Tag,
+    values: (record) =>
+      singleValue(record.facts.Type ?? record.facts["Ticket type"]),
+  },
+  {
+    id: "priorities",
+    label: "Priority",
+    icon: Flag,
+    values: (record) => singleValue(record.facts.Priority),
+  },
+  {
+    id: "teams",
+    label: "Assigned team",
+    icon: UsersThree,
+    values: (record) =>
+      singleValue(record.facts.Team ?? record.facts["Assigned team"]),
+  },
+]
+
 function uniqueSorted(values: string[]) {
   return Array.from(new Set(values.filter(Boolean))).sort((left, right) =>
     left.localeCompare(right),
@@ -202,7 +240,7 @@ export function BusinessFilterPopover({
   records: BusinessRecord[]
   value: BusinessFilters
   onChange: (filters: BusinessFilters) => void
-  variant?: "default" | "containers" | "contractors" | "contractor-users"
+  variant?: "default" | "containers" | "contractors" | "contractor-users" | "tickets"
 }) {
   const [open, setOpen] = useState(false)
   const [activeCategory, setActiveCategory] =
@@ -218,7 +256,9 @@ export function BusinessFilterPopover({
         ? contractorCategories
         : variant === "contractor-users"
           ? contractorUserCategories
-          : defaultCategories
+          : variant === "tickets"
+            ? ticketCategories
+            : defaultCategories
   const resolvedActiveCategory = categories.some(
     (category) => category.id === activeCategory,
   )
