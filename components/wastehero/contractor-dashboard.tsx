@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation"
 
 import {
   CONTRACTOR_PORTFOLIO_SUMMARY,
-  CONTRACTOR_PRIORITY_ATTENTION_IDS,
   CONTRACTOR_ROUTE_PERFORMANCE_ROWS,
   CONTRACTOR_THROUGHPUT_SERIES,
+  CONTRACTOR_TICKET_ATTENTION_ROWS,
 } from "@/lib/data/performance-dashboard"
 
 const PerformanceControlRoom = dynamic(
@@ -37,7 +37,8 @@ export function ContractorDashboard() {
       rows={CONTRACTOR_ROUTE_PERFORMANCE_ROWS}
       series={CONTRACTOR_THROUGHPUT_SERIES}
       summary={CONTRACTOR_PORTFOLIO_SUMMARY}
-      priorityAttentionIds={CONTRACTOR_PRIORITY_ATTENTION_IDS}
+      tickets={CONTRACTOR_TICKET_ATTENTION_ROWS}
+      ticketsBasePath="/contractor-workspace/tickets"
       hideTableColumns={["proof", "exceptions", "trend"]}
       onRouteOpen={openRoute}
     />

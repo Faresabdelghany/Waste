@@ -10,11 +10,26 @@ export type RoutePerformanceRow = {
   onTimePercent: number
   proofComplete: number
   exceptions: number
+  openTickets: number
+  ticketSlaPercent: number
   slaPercent: number
   status: RouteHealthStatus
   issue: string
   issueDetail: string
   trend: number[]
+}
+
+export type TicketImpact = "High" | "Medium" | "Low"
+
+export type TicketAttentionRow = {
+  /** Display code, e.g. "T-8831". */
+  id: string
+  /** Business record id the tickets page opens, e.g. "ticket-8831". */
+  recordId: string
+  subject: string
+  issue: string
+  issueDetail: string
+  impact: TicketImpact
 }
 
 export type ThroughputPoint = {
@@ -29,9 +44,10 @@ export type PerformancePortfolioSummary = {
   totalRoutes: number
   completed: number
   planned: number
-  proof: number
-  exceptions: number
-  exceptionRouteCount: number
+  openTickets: number
+  ticketRouteCount: number
+  resolvedWithinSla: number
+  resolvedTotal: number
 }
 
 export const PERFORMANCE_REFERENCE_DATE = new Date(2026, 7, 12)
@@ -47,6 +63,8 @@ export const ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     onTimePercent: 62,
     proofComplete: 145,
     exceptions: 5,
+    openTickets: 4,
+    ticketSlaPercent: 71,
     slaPercent: 62,
     status: "At risk",
     issue: "SLA misses",
@@ -63,6 +81,8 @@ export const ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     onTimePercent: 79,
     proofComplete: 466,
     exceptions: 4,
+    openTickets: 1,
+    ticketSlaPercent: 78,
     slaPercent: 79,
     status: "Monitor",
     issue: "Open exceptions",
@@ -79,6 +99,8 @@ export const ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     onTimePercent: 93,
     proofComplete: 440,
     exceptions: 1,
+    openTickets: 0,
+    ticketSlaPercent: 97,
     slaPercent: 93,
     status: "On track",
     issue: "Stable service",
@@ -95,6 +117,8 @@ export const ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     onTimePercent: 58,
     proofComplete: 144,
     exceptions: 9,
+    openTickets: 5,
+    ticketSlaPercent: 64,
     slaPercent: 58,
     status: "At risk",
     issue: "Proof incomplete",
@@ -111,6 +135,8 @@ export const ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     onTimePercent: 88,
     proofComplete: 413,
     exceptions: 0,
+    openTickets: 0,
+    ticketSlaPercent: 98,
     slaPercent: 88,
     status: "On track",
     issue: "Stable service",
@@ -127,6 +153,8 @@ export const ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     onTimePercent: 84,
     proofComplete: 484,
     exceptions: 2,
+    openTickets: 2,
+    ticketSlaPercent: 86,
     slaPercent: 84,
     status: "Monitor",
     issue: "Route over time",
@@ -143,6 +171,8 @@ export const ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     onTimePercent: 81,
     proofComplete: 428,
     exceptions: 3,
+    openTickets: 2,
+    ticketSlaPercent: 84,
     slaPercent: 81,
     status: "Monitor",
     issue: "Stops behind",
@@ -159,6 +189,8 @@ export const ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     onTimePercent: 96,
     proofComplete: 663,
     exceptions: 0,
+    openTickets: 0,
+    ticketSlaPercent: 99,
     slaPercent: 96,
     status: "On track",
     issue: "Stable service",
@@ -175,6 +207,8 @@ export const ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     onTimePercent: 91,
     proofComplete: 532,
     exceptions: 1,
+    openTickets: 1,
+    ticketSlaPercent: 95,
     slaPercent: 91,
     status: "On track",
     issue: "Stable service",
@@ -191,6 +225,8 @@ export const ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     onTimePercent: 76,
     proofComplete: 463,
     exceptions: 2,
+    openTickets: 1,
+    ticketSlaPercent: 88,
     slaPercent: 76,
     status: "Monitor",
     issue: "Stops behind",
@@ -221,6 +257,51 @@ export const THROUGHPUT_SERIES: ThroughputPoint[] = CURRENT_PERIOD_VALUES.map(
   },
 )
 
+// Top open tickets by operational impact; recordIds match the Tickets module
+// fixtures in business-modules.ts so each row opens a real ticket record.
+export const TICKET_ATTENTION_ROWS: TicketAttentionRow[] = [
+  {
+    id: "T-8826",
+    recordId: "ticket-8826",
+    subject: "Glass container overflow",
+    issue: "Overflow",
+    issueDetail: "Critical · SLA due in 1 h 26 min",
+    impact: "High",
+  },
+  {
+    id: "T-8840",
+    recordId: "ticket-8840",
+    subject: "Missed collection at Adelgade 12",
+    issue: "Missed collection",
+    issueDetail: "SLA due in 38 min",
+    impact: "High",
+  },
+  {
+    id: "T-8831",
+    recordId: "ticket-8831",
+    subject: "Blocked access at Parkvej 18",
+    issue: "Missed collection",
+    issueDetail: "SLA due in 44 min",
+    impact: "High",
+  },
+  {
+    id: "T-8853",
+    recordId: "ticket-8853",
+    subject: "Overfilled container at Vennemindevej 14",
+    issue: "Overflow",
+    issueDetail: "SLA due in 52 min",
+    impact: "High",
+  },
+  {
+    id: "T-8842",
+    recordId: "ticket-8842",
+    subject: "Access note for Borgergade 41",
+    issue: "Access issue",
+    issueDetail: "SLA due in 1 h 12 min",
+    impact: "Medium",
+  },
+]
+
 // NordRen ApS route days on contract area CA-Ø-2 (Østerbro). RC-1048 is the
 // same route day the operator sees — the contractor view is a scoped subset.
 export const CONTRACTOR_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
@@ -234,6 +315,8 @@ export const CONTRACTOR_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     onTimePercent: 64,
     proofComplete: 121,
     exceptions: 6,
+    openTickets: 1,
+    ticketSlaPercent: 68,
     slaPercent: 64,
     status: "At risk",
     issue: "SLA misses",
@@ -250,6 +333,8 @@ export const CONTRACTOR_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     onTimePercent: 79,
     proofComplete: 466,
     exceptions: 4,
+    openTickets: 1,
+    ticketSlaPercent: 78,
     slaPercent: 79,
     status: "Monitor",
     issue: "Open exceptions",
@@ -266,6 +351,8 @@ export const CONTRACTOR_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     onTimePercent: 81,
     proofComplete: 168,
     exceptions: 2,
+    openTickets: 1,
+    ticketSlaPercent: 82,
     slaPercent: 81,
     status: "Monitor",
     issue: "Proof incomplete",
@@ -282,6 +369,8 @@ export const CONTRACTOR_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     onTimePercent: 94,
     proofComplete: 328,
     exceptions: 0,
+    openTickets: 0,
+    ticketSlaPercent: 96,
     slaPercent: 94,
     status: "On track",
     issue: "Stable service",
@@ -298,6 +387,8 @@ export const CONTRACTOR_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     onTimePercent: 92,
     proofComplete: 274,
     exceptions: 1,
+    openTickets: 0,
+    ticketSlaPercent: 94,
     slaPercent: 92,
     status: "On track",
     issue: "Stable service",
@@ -314,6 +405,8 @@ export const CONTRACTOR_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
     onTimePercent: 90,
     proofComplete: 118,
     exceptions: 0,
+    openTickets: 0,
+    ticketSlaPercent: 97,
     slaPercent: 90,
     status: "On track",
     issue: "Stable service",
@@ -322,10 +415,32 @@ export const CONTRACTOR_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
   },
 ]
 
-export const CONTRACTOR_PRIORITY_ATTENTION_IDS = [
-  "RC-1052",
-  "RC-1048",
-  "RC-1061",
+// NordRen ApS open tickets; ticket-8831 is the same record the operator sees.
+export const CONTRACTOR_TICKET_ATTENTION_ROWS: TicketAttentionRow[] = [
+  {
+    id: "T-8853",
+    recordId: "ticket-8853",
+    subject: "Overfilled container at Vennemindevej 14",
+    issue: "Overflow",
+    issueDetail: "SLA due in 52 min",
+    impact: "High",
+  },
+  {
+    id: "T-8831",
+    recordId: "ticket-8831",
+    subject: "Blocked access at Parkvej 18",
+    issue: "Missed collection",
+    issueDetail: "SLA due in 44 min",
+    impact: "High",
+  },
+  {
+    id: "T-8858",
+    recordId: "ticket-8858",
+    subject: "Missing proof photos at Strandboulevarden 92",
+    issue: "Proof follow-up",
+    issueDetail: "Due today",
+    impact: "Medium",
+  },
 ]
 
 // Sums of CONTRACTOR_ROUTE_PERFORMANCE_ROWS; on-time = routes at ≥80%.
@@ -335,9 +450,10 @@ export const CONTRACTOR_PORTFOLIO_SUMMARY: PerformancePortfolioSummary = {
   totalRoutes: 6,
   completed: 1644,
   planned: 1898,
-  proof: 1475,
-  exceptions: 13,
-  exceptionRouteCount: 4,
+  openTickets: 3,
+  ticketRouteCount: 3,
+  resolvedWithinSla: 24,
+  resolvedTotal: 27,
 }
 
 export const CONTRACTOR_THROUGHPUT_SERIES: ThroughputPoint[] =

@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useRef, useState, type ReactNode } from "react"
+import { useRouter } from "next/navigation"
 import { format, subDays } from "date-fns"
 import {
   ArrowUp,
@@ -13,6 +14,7 @@ import {
   DownloadSimple,
   Funnel,
   Info,
+  Timer,
   WarningCircle,
 } from "@phosphor-icons/react/dist/ssr"
 import {
@@ -38,10 +40,13 @@ import {
   PERFORMANCE_REFERENCE_DATE,
   ROUTE_PERFORMANCE_ROWS,
   THROUGHPUT_SERIES,
+  TICKET_ATTENTION_ROWS,
   type PerformancePortfolioSummary,
   type RouteHealthStatus,
   type RoutePerformanceRow,
   type ThroughputPoint,
+  type TicketAttentionRow,
+  type TicketImpact,
 } from "@/lib/data/performance-dashboard"
 import { cn } from "@/lib/utils"
 
@@ -70,30 +75,16 @@ const STATUS_ORDER: Record<RouteHealthStatus, number> = {
   "On track": 2,
 }
 
-const IMPACT_BY_STATUS: Record<RouteHealthStatus, "High" | "Medium" | "Low"> = {
-  "At risk": "High",
-  Monitor: "Medium",
-  "On track": "Low",
-}
-
-const PRIORITY_ATTENTION_IDS = [
-  "RC-1042",
-  "RC-1048",
-  "RC-1033",
-  "RC-1051",
-  "RC-1022",
-  "RC-1055",
-]
-
 const PORTFOLIO_SUMMARY: PerformancePortfolioSummary = {
   onTimePercent: 86,
   onTimeRoutes: 31,
   totalRoutes: 36,
   completed: 4612,
   planned: 5148,
-  proof: 4236,
-  exceptions: 23,
-  exceptionRouteCount: 11,
+  openTickets: 27,
+  ticketRouteCount: 11,
+  resolvedWithinSla: 118,
+  resolvedTotal: 128,
 }
 
 type ScopeOption = { value: string; label: string }
@@ -112,7 +103,9 @@ type PerformanceControlRoomProps = {
   rows?: RoutePerformanceRow[]
   series?: ThroughputPoint[]
   summary?: PerformancePortfolioSummary
-  priorityAttentionIds?: string[]
+  tickets?: TicketAttentionRow[]
+  /** Tickets page this view navigates to for ticket rows and "View all". */
+  ticketsBasePath?: string
   hideTableColumns?: readonly HideableTableColumn[]
   /** When set, clicking a route opens it here instead of filtering in place. */
   onRouteOpen?: (routeId: string) => void
@@ -130,6 +123,12 @@ function getStatusColor(status: RouteHealthStatus) {
   if (status === "At risk") return "var(--color-rose-500)"
   if (status === "Monitor") return "var(--color-amber-500)"
   return "var(--color-emerald-500)"
+}
+
+function getImpactColor(impact: TicketImpact) {
+  if (impact === "High") return "var(--color-rose-500)"
+  if (impact === "Medium") return "var(--color-amber-500)"
+  return "var(--muted-foreground)"
 }
 
 function KpiItem({
@@ -251,10 +250,12 @@ export function PerformanceControlRoom({
   rows = ROUTE_PERFORMANCE_ROWS,
   series = THROUGHPUT_SERIES,
   summary = PORTFOLIO_SUMMARY,
-  priorityAttentionIds = PRIORITY_ATTENTION_IDS,
+  tickets = TICKET_ATTENTION_ROWS,
+  ticketsBasePath = "/tickets",
   hideTableColumns = [],
   onRouteOpen,
 }: PerformanceControlRoomProps) {
+  const router = useRouter()
   const [scope, setScope] = useState(scopeOptions[0]?.value ?? "copenhagen")
   const [rangeId, setRangeId] = useState<RangeId>("30d")
   const [cadence, setCadence] = useState<Cadence>("daily")
@@ -359,17 +360,11 @@ export function PerformanceControlRoom({
   const safePage = Math.min(page, pageCount)
   const visibleRows = sortedRows.slice((safePage - 1) * pageSize, safePage * pageSize)
 
-  const riskRows = useMemo(
-    () =>
-      rows
-        .filter((row) => row.status !== "On track")
-        .sort(
-          (a, b) =>
-            priorityAttentionIds.indexOf(a.id) - priorityAttentionIds.indexOf(b.id),
-        )
-        .slice(0, 5),
-    [rows, priorityAttentionIds],
-  )
+  const attentionTickets = tickets.slice(0, 5)
+
+  const openTicket = (ticket: TicketAttentionRow) => {
+    router.push(`${ticketsBasePath}?module=tickets&record=${ticket.recordId}`)
+  }
 
   const kpis = selectedRoute
     ? [
@@ -397,22 +392,25 @@ export function PerformanceControlRoom({
           icon: <CheckCircle className="h-4 w-4" weight="fill" />,
         },
         {
-          label: "Open exceptions",
-          value: String(selectedRoute.exceptions),
-          helper: selectedRoute.issueDetail,
-          trend: selectedRoute.exceptions > 3 ? "28%" : "8%",
+          label: "Open tickets",
+          value: String(selectedRoute.openTickets),
+          helper:
+            selectedRoute.openTickets > 0
+              ? "awaiting resolution on this route"
+              : "no open tickets on this route",
+          trend: selectedRoute.openTickets > 3 ? "28%" : "8%",
           trendLabel: "vs previous period",
-          tone: selectedRoute.exceptions > 3 ? ("negative" as const) : ("warning" as const),
+          tone: selectedRoute.openTickets > 3 ? ("negative" as const) : ("warning" as const),
           icon: <WarningCircle className="h-4 w-4" weight="fill" />,
         },
         {
-          label: "Proof complete",
-          value: `${proofPercent(selectedRoute)}%`,
-          helper: `${numberFormatter.format(selectedRoute.proofComplete)} of ${numberFormatter.format(selectedRoute.stopsCompleted)} stops`,
+          label: "Resolved within SLA",
+          value: `${selectedRoute.ticketSlaPercent}%`,
+          helper: "of tickets resolved this period",
           trend: "2pp",
           trendLabel: "vs previous period",
-          tone: proofPercent(selectedRoute) >= 92 ? ("positive" as const) : ("warning" as const),
-          icon: <CalendarBlank className="h-4 w-4" />,
+          tone: selectedRoute.ticketSlaPercent >= 90 ? ("positive" as const) : ("warning" as const),
+          icon: <Timer className="h-4 w-4" weight="fill" />,
         },
       ]
     : [
@@ -435,22 +433,25 @@ export function PerformanceControlRoom({
           icon: <CheckCircle className="h-4 w-4" weight="fill" />,
         },
         {
-          label: "Open exceptions",
-          value: String(summary.exceptions),
-          helper: `across ${summary.exceptionRouteCount} routes`,
+          label: "Open tickets",
+          value: String(summary.openTickets),
+          helper: `across ${summary.ticketRouteCount} routes`,
           trend: "28%",
           trendLabel: `vs ${format(previousRangeStart, "MMM d")} – ${format(previousRangeEnd, "MMM d")}`,
           tone: "negative" as const,
           icon: <WarningCircle className="h-4 w-4" weight="fill" />,
         },
         {
-          label: "Proof complete",
-          value: `${Math.round((summary.proof / summary.completed) * 100)}%`,
-          helper: `${numberFormatter.format(summary.proof)} of ${numberFormatter.format(summary.completed)} stops`,
+          label: "Resolved within SLA",
+          value: `${Math.round((summary.resolvedWithinSla / summary.resolvedTotal) * 100)}%`,
+          helper: `${numberFormatter.format(summary.resolvedWithinSla)} of ${numberFormatter.format(summary.resolvedTotal)} tickets`,
           trend: "2pp",
           trendLabel: `vs ${format(previousRangeStart, "MMM d")} – ${format(previousRangeEnd, "MMM d")}`,
-          tone: "warning" as const,
-          icon: <CalendarBlank className="h-4 w-4" />,
+          tone:
+            Math.round((summary.resolvedWithinSla / summary.resolvedTotal) * 100) >= 90
+              ? ("positive" as const)
+              : ("warning" as const),
+          icon: <Timer className="h-4 w-4" weight="fill" />,
         },
       ]
 
@@ -739,69 +740,61 @@ export function PerformanceControlRoom({
           <section className="min-w-0 overflow-hidden rounded-lg border border-border/70 bg-card/55">
             <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
               <div>
-                <h2 className="text-sm font-semibold text-foreground">Routes needing attention</h2>
+                <h2 className="text-sm font-semibold text-foreground">Tickets needing attention</h2>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">Highest operational impact</p>
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedRouteId("all")
-                  setSelectedStatus("all")
-                  setPage(1)
-                  tableSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-                }}
+                onClick={() => router.push(ticketsBasePath)}
                 className="text-[11px] font-medium text-primary hover:underline"
               >
                 View all
               </button>
             </div>
             <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_70px_20px] gap-2 border-b border-border/70 px-4 py-2 text-[10px] font-medium text-muted-foreground">
-              <span>Route</span>
+              <span>Ticket</span>
               <span>Issue</span>
               <span>Impact</span>
               <span className="sr-only">Open</span>
             </div>
             <div className="divide-y divide-border/70">
-              {riskRows.map((row) => {
-                const impact = IMPACT_BY_STATUS[row.status]
-                return (
-                  <button
-                    key={row.id}
-                    type="button"
-                    onClick={() => openRoute(row.id)}
-                    className="grid w-full grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_70px_20px] items-center gap-2 px-4 py-1.5 text-left transition-colors hover:bg-accent/55 focus-visible:bg-accent focus-visible:outline-none"
-                  >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span
-                        className="h-2 w-2 shrink-0 rounded-full"
-                        style={{ backgroundColor: getStatusColor(row.status) }}
-                      />
-                      <span className="min-w-0">
-                        <span className="block truncate text-xs font-medium text-foreground">{row.id}</span>
-                        <span className="block truncate text-[10px] text-muted-foreground">{row.name}</span>
-                      </span>
-                    </span>
+              {attentionTickets.map((ticket) => (
+                <button
+                  key={ticket.recordId}
+                  type="button"
+                  onClick={() => openTicket(ticket)}
+                  className="grid w-full grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_70px_20px] items-center gap-2 px-4 py-1.5 text-left transition-colors hover:bg-accent/55 focus-visible:bg-accent focus-visible:outline-none"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: getImpactColor(ticket.impact) }}
+                    />
                     <span className="min-w-0">
-                      <span className="block truncate text-[11px] text-foreground">{row.issue}</span>
-                      <span className="block truncate text-[10px] text-muted-foreground">{row.issueDetail}</span>
+                      <span className="block truncate text-xs font-medium text-foreground">{ticket.id}</span>
+                      <span className="block truncate text-[10px] text-muted-foreground">{ticket.subject}</span>
                     </span>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "h-5 w-fit rounded px-1.5 text-[10px] font-medium",
-                        impact === "High"
-                          ? "border-rose-500/20 bg-rose-500/10 text-rose-500"
-                          : impact === "Medium"
-                            ? "border-amber-500/20 bg-amber-500/10 text-amber-500"
-                            : "border-border bg-muted text-muted-foreground",
-                      )}
-                    >
-                      {impact}
-                    </Badge>
-                    <CaretRight className="h-3.5 w-3.5 text-muted-foreground" />
-                  </button>
-                )
-              })}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-[11px] text-foreground">{ticket.issue}</span>
+                    <span className="block truncate text-[10px] text-muted-foreground">{ticket.issueDetail}</span>
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "h-5 w-fit rounded px-1.5 text-[10px] font-medium",
+                      ticket.impact === "High"
+                        ? "border-rose-500/20 bg-rose-500/10 text-rose-500"
+                        : ticket.impact === "Medium"
+                          ? "border-amber-500/20 bg-amber-500/10 text-amber-500"
+                          : "border-border bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {ticket.impact}
+                  </Badge>
+                  <CaretRight className="h-3.5 w-3.5 text-muted-foreground" />
+                </button>
+              ))}
             </div>
           </section>
         </div>
