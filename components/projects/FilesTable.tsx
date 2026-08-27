@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
 import { getFileIcon } from "@/components/projects/FileLinkRow"
 
 type FilesTableProps = {
@@ -24,6 +25,8 @@ export function FilesTable({ files, onAddFile }: FilesTableProps) {
     const filteredFiles = files.filter((file) =>
         file.name.toLowerCase().includes(searchQuery.toLowerCase()),
     )
+
+    const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(filteredFiles)
 
     const toggleSelectAll = () => {
         if (selectedFiles.length === filteredFiles.length) {
@@ -79,7 +82,7 @@ export function FilesTable({ files, onAddFile }: FilesTableProps) {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredFiles.map((file) => {
+                        {pageRows.map((file) => {
                             const icon = getFileIcon(file.type)
                             const sizeLabel = file.isLinkAsset || file.sizeMB === 0 ? "Link" : `${file.sizeMB.toFixed(1)} MB`
 
@@ -134,6 +137,7 @@ export function FilesTable({ files, onAddFile }: FilesTableProps) {
                         })}
                     </TableBody>
                 </Table>
+                <TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} />
             </div>
         </div>
     )

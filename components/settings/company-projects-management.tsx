@@ -65,6 +65,10 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
+  TablePagination,
+  useTablePagination,
+} from "@/components/ui/table-pagination"
+import {
   Tabs,
   TabsList,
   TabsTrigger,
@@ -459,6 +463,8 @@ function CompanyList({
       return left.name.localeCompare(right.name)
     })
   }, [companies, ordering, projectsForCompany, statuses])
+  const { page, setPage, pageCount, pageRows, totalCount } =
+    useTablePagination(visibleCompanies)
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
@@ -527,7 +533,7 @@ function CompanyList({
                       </TableCell>
                     </TableRow>
                   ) : (
-                    visibleCompanies.map((company) => {
+                    pageRows.map((company) => {
                   const companyProjects = projectsForCompany(company.id)
                   const administrator =
                     primaryAdministratorForCompany(company.id)
@@ -604,6 +610,12 @@ function CompanyList({
                 </TableBody>
               </Table>
             </div>
+            <TablePagination
+              page={page}
+              pageCount={pageCount}
+              totalCount={totalCount}
+              onPageChange={setPage}
+            />
           </RecordsSection>
         </div>
       </div>
@@ -728,6 +740,8 @@ function ProjectsTable({
       return left.name.localeCompare(right.name)
     })
   }, [normalizedQuery, ordering, projects, statuses])
+  const { page, setPage, pageCount, pageRows, totalCount } =
+    useTablePagination(visibleProjects)
 
   return (
     <RecordsSection shown={visibleProjects.length} total={projects.length}>
@@ -756,7 +770,7 @@ function ProjectsTable({
                   </TableCell>
                 </TableRow>
               ) : (
-                visibleProjects.map((project) => (
+                pageRows.map((project) => (
                   <TableRow key={project.id}>
                     <TableCell className="min-w-[220px] py-3">
                       <p className="text-sm font-medium text-foreground">
@@ -802,6 +816,12 @@ function ProjectsTable({
             </TableBody>
           </Table>
         </div>
+        <TablePagination
+          page={page}
+          pageCount={pageCount}
+          totalCount={totalCount}
+          onPageChange={setPage}
+        />
     </RecordsSection>
   )
 }

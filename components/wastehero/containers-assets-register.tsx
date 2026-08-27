@@ -66,6 +66,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAssetManagementStore } from "@/components/settings/asset-management-store"
 
@@ -662,6 +663,8 @@ function ContainerTable({
   onOpenRecord: (record: BusinessRecord) => void
   onAction: (record: BusinessRecord, action: string) => void
 }) {
+  const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(records)
+
   return (
     <section className="overflow-hidden rounded-xl border border-border/60 bg-card">
       <div className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
@@ -697,7 +700,7 @@ function ContainerTable({
                 </TableCell>
               </TableRow>
             ) : (
-              records.map((record) => {
+              pageRows.map((record) => {
                 const profile = profileFor(record)
                 const sensorPaired = profile.sensor !== "None" && profile.sensor !== "Not fitted"
                 return (
@@ -762,6 +765,12 @@ function ContainerTable({
           </TableBody>
         </Table>
       </div>
+      <TablePagination
+        page={page}
+        pageCount={pageCount}
+        totalCount={totalCount}
+        onPageChange={setPage}
+      />
     </section>
   )
 }
@@ -809,6 +818,14 @@ function ContainerMap({
 }
 
 function GroupsTable({ groups }: { groups: ContainerGroup[] }) {
+  const {
+    page: groupsPage,
+    setPage: setGroupsPage,
+    pageCount: groupsPageCount,
+    pageRows: groupsPageRows,
+    totalCount: groupsTotalCount,
+  } = useTablePagination(groups)
+
   return (
     <section className="overflow-hidden rounded-xl border border-border/60 bg-card">
       <div className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
@@ -825,7 +842,7 @@ function GroupsTable({ groups }: { groups: ContainerGroup[] }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {groups.map((group) => (
+          {groupsPageRows.map((group) => (
             <TableRow key={group.id}>
               <TableCell className="font-medium">{group.name}</TableCell>
               <TableCell className="text-muted-foreground">{group.location}</TableCell>
@@ -836,6 +853,12 @@ function GroupsTable({ groups }: { groups: ContainerGroup[] }) {
           ))}
         </TableBody>
       </Table>
+      <TablePagination
+        page={groupsPage}
+        pageCount={groupsPageCount}
+        totalCount={groupsTotalCount}
+        onPageChange={setGroupsPage}
+      />
     </section>
   )
 }

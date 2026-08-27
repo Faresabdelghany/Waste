@@ -56,6 +56,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  TablePagination,
+  useTablePagination,
+} from "@/components/ui/table-pagination"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 type RouteStop = {
@@ -307,6 +311,14 @@ function OverviewTab({
         .includes(normalized)
     })
   }, [attentionOnly, search, stops])
+
+  const {
+    page: stopsPage,
+    setPage: setStopsPage,
+    pageCount: stopsPageCount,
+    pageRows: stopsPageRows,
+    totalCount: stopsTotalCount,
+  } = useTablePagination(visibleStops)
 
   const visibleStopIds = visibleStops.map((stop) => stop.id)
   const selectedVisibleCount = visibleStopIds.filter((id) =>
@@ -635,7 +647,7 @@ function OverviewTab({
                         </TableCell>
                       </TableRow>
                     ) : (
-                      visibleStops.map((stop) => (
+                      stopsPageRows.map((stop) => (
                         <TableRow
                           key={stop.id}
                           data-state={
@@ -719,6 +731,12 @@ function OverviewTab({
                   </TableBody>
                 </Table>
               </div>
+              <TablePagination
+                page={stopsPage}
+                pageCount={stopsPageCount}
+                totalCount={stopsTotalCount}
+                onPageChange={setStopsPage}
+              />
             </div>
           </div>
         </section>
@@ -825,6 +843,14 @@ function TicketsTab({
 }: {
   tickets: readonly BusinessRecord[]
 }) {
+  const {
+    page: ticketsPage,
+    setPage: setTicketsPage,
+    pageCount: ticketsPageCount,
+    pageRows: ticketsPageRows,
+    totalCount: ticketsTotalCount,
+  } = useTablePagination(tickets)
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="border-b border-border px-5 py-4">
@@ -869,7 +895,7 @@ function TicketsTab({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  tickets.map((ticketRecord) => (
+                  ticketsPageRows.map((ticketRecord) => (
                     <TableRow
                       key={ticketRecord.id}
                       className="hover:bg-muted/60"
@@ -926,6 +952,12 @@ function TicketsTab({
               </TableBody>
             </Table>
           </div>
+          <TablePagination
+            page={ticketsPage}
+            pageCount={ticketsPageCount}
+            totalCount={ticketsTotalCount}
+            onPageChange={setTicketsPage}
+          />
         </div>
       </div>
     </div>
@@ -937,6 +969,14 @@ function SessionsTab({
 }: {
   sessions: readonly BusinessRecord[]
 }) {
+  const {
+    page: sessionsPage,
+    setPage: setSessionsPage,
+    pageCount: sessionsPageCount,
+    pageRows: sessionsPageRows,
+    totalCount: sessionsTotalCount,
+  } = useTablePagination(sessions)
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="border-b border-border px-5 py-4">
@@ -983,7 +1023,7 @@ function SessionsTab({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  sessions.map((session) => (
+                  sessionsPageRows.map((session) => (
                     <TableRow key={session.id} className="hover:bg-muted/60">
                       <TableCell className="min-w-[260px] py-3">
                         <p className="text-sm font-medium text-foreground">
@@ -1032,6 +1072,12 @@ function SessionsTab({
               </TableBody>
             </Table>
           </div>
+          <TablePagination
+            page={sessionsPage}
+            pageCount={sessionsPageCount}
+            totalCount={sessionsTotalCount}
+            onPageChange={setSessionsPage}
+          />
         </div>
       </div>
     </div>

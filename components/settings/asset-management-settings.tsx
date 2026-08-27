@@ -52,6 +52,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  TablePagination,
+  useTablePagination,
+} from "@/components/ui/table-pagination"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -549,6 +553,7 @@ function ContainerTypesPanel({ tabs }: { tabs: ReactNode }) {
     (item) => item.name,
     (item) => item.updatedAt,
   )
+  const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(filtered)
 
   const remove = (item: ContainerType) => {
     const inUse = allContainers.some(
@@ -614,7 +619,7 @@ function ContainerTypesPanel({ tabs }: { tabs: ReactNode }) {
             {filtered.length === 0 ? (
               <EmptyRow colSpan={7} message="No container types match this search." />
             ) : (
-              filtered.map((item) => (
+              pageRows.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -673,6 +678,12 @@ function ContainerTypesPanel({ tabs }: { tabs: ReactNode }) {
             )}
           </TableBody>
         </Table>
+        <TablePagination
+          page={page}
+          pageCount={pageCount}
+          totalCount={totalCount}
+          onPageChange={setPage}
+        />
       </RecordsSection>
       <ContainerTypeDialog
         key={editing ? editing.id || "new" : "closed"}
@@ -909,6 +920,7 @@ function WasteFractionsPanel({ tabs }: { tabs: ReactNode }) {
     (item) => item.name,
     (item) => item.updatedAt,
   )
+  const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(filtered)
   return (
     <AssetPanelShell
       tabs={tabs}
@@ -921,7 +933,7 @@ function WasteFractionsPanel({ tabs }: { tabs: ReactNode }) {
         <Table>
           <TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Compliance</TableHead><TableHead>Recovery</TableHead><TableHead>Status</TableHead><TableHead className="w-16" /></TableRow></TableHeader>
           <TableBody>
-            {filtered.length === 0 ? <EmptyRow colSpan={5} message="No waste fractions match this search." /> : filtered.map((item) => (
+            {filtered.length === 0 ? <EmptyRow colSpan={5} message="No waste fractions match this search." /> : pageRows.map((item) => (
               <TableRow key={item.id}>
                 <TableCell><div className="flex items-center gap-3"><span className="h-3 w-3 rounded-full border" style={{ backgroundColor: item.color }} /><div><p className="font-medium">{item.name}</p>{view.showDetails && <p className="text-xs text-muted-foreground">{item.wasteType}</p>}</div></div></TableCell>
                 <TableCell><p>{item.ewcCode || "No EWC code"}</p><p className="text-xs text-muted-foreground">{item.rdCode || "No R/D code"}{item.hazardous ? " · Hazardous" : ""}</p></TableCell>
@@ -932,6 +944,12 @@ function WasteFractionsPanel({ tabs }: { tabs: ReactNode }) {
             ))}
           </TableBody>
         </Table>
+        <TablePagination
+          page={page}
+          pageCount={pageCount}
+          totalCount={totalCount}
+          onPageChange={setPage}
+        />
       </RecordsSection>
       <WasteFractionDialog
         key={editing ? editing.id || "new" : "closed"}
@@ -1022,6 +1040,7 @@ function SparePartsPanel({ tabs }: { tabs: ReactNode }) {
     (item) => item.name,
     (item) => item.updatedAt,
   )
+  const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(filtered)
   return (
     <AssetPanelShell
       tabs={tabs}
@@ -1046,7 +1065,7 @@ function SparePartsPanel({ tabs }: { tabs: ReactNode }) {
             {filtered.length === 0 ? (
               <EmptyRow colSpan={6} message="No spare parts match this search." />
             ) : (
-              filtered.map((item) => {
+              pageRows.map((item) => {
                 const type = assets.containerTypes.find((candidate) => candidate.id === item.containerTypeId)
                 return (
                   <TableRow key={item.id}>
@@ -1070,6 +1089,12 @@ function SparePartsPanel({ tabs }: { tabs: ReactNode }) {
             )}
           </TableBody>
         </Table>
+        <TablePagination
+          page={page}
+          pageCount={pageCount}
+          totalCount={totalCount}
+          onPageChange={setPage}
+        />
       </RecordsSection>
       <SparePartDialog
         key={editing ? editing.id || "new" : "closed"}
@@ -1109,6 +1134,7 @@ function PartTypesPanel({ tabs }: { tabs: ReactNode }) {
     (item) => item.name,
     (item) => item.createdAt,
   )
+  const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(filtered)
   const create = () => {
     if (!name.trim()) return
     if (assets.partTypes.some((item) => item.name.toLowerCase() === name.trim().toLowerCase())) return toast.error("Part type already exists.")
@@ -1120,7 +1146,7 @@ function PartTypesPanel({ tabs }: { tabs: ReactNode }) {
     description="Groupings for spare parts used in pickers and reporting. Deactivated types stay on existing spare parts."
     action={<div className="flex max-w-lg gap-2"><Input value={name} onChange={(event) => setName(event.target.value)} placeholder="New part type name" onKeyDown={(event) => event.key === "Enter" && create()} className="h-8 w-48 text-sm" /><Button size="sm" onClick={create}><Plus className="h-4 w-4" weight="bold" /> Create</Button></div>}
     toolbar={<AssetToolbar searchPlaceholder="Search part types" query={query} onQueryChange={setQuery} statuses={statuses} onStatusesChange={setStatuses} view={view} onViewChange={setView} />}
-  ><RecordsSection shown={filtered.length} total={assets.partTypes.length}><Table><TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Kind</TableHead><TableHead>Status</TableHead><TableHead className="w-28" /></TableRow></TableHeader><TableBody>{filtered.length === 0 ? <EmptyRow colSpan={4} message="No part types match this search." /> : filtered.map((item) => <TableRow key={item.id}><TableCell className="font-medium">{item.name}</TableCell><TableCell><Badge variant="outline">{item.seeded ? "System" : "Custom"}</Badge></TableCell><TableCell><StatusBadge active={item.active} /></TableCell><TableCell><Button variant="outline" size="sm" disabled={!item.active} onClick={() => { assets.savePartType({ ...item, active: false }); toast.success("Part type deactivated", { description: "It no longer appears in pickers; existing spare parts keep it." }) }}>Deactivate</Button></TableCell></TableRow>)}</TableBody></Table></RecordsSection></AssetPanelShell>
+  ><RecordsSection shown={filtered.length} total={assets.partTypes.length}><Table><TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Kind</TableHead><TableHead>Status</TableHead><TableHead className="w-28" /></TableRow></TableHeader><TableBody>{filtered.length === 0 ? <EmptyRow colSpan={4} message="No part types match this search." /> : pageRows.map((item) => <TableRow key={item.id}><TableCell className="font-medium">{item.name}</TableCell><TableCell><Badge variant="outline">{item.seeded ? "System" : "Custom"}</Badge></TableCell><TableCell><StatusBadge active={item.active} /></TableCell><TableCell><Button variant="outline" size="sm" disabled={!item.active} onClick={() => { assets.savePartType({ ...item, active: false }); toast.success("Part type deactivated", { description: "It no longer appears in pickers; existing spare parts keep it." }) }}>Deactivate</Button></TableCell></TableRow>)}</TableBody></Table><TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} /></RecordsSection></AssetPanelShell>
 }
 
 function PropertyEquipmentPanel({ tabs }: { tabs: ReactNode }) {
@@ -1137,13 +1163,14 @@ function PropertyEquipmentPanel({ tabs }: { tabs: ReactNode }) {
     (item) => item.name,
     (item) => item.updatedAt,
   )
+  const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(filtered)
   return <AssetPanelShell
     tabs={tabs}
     title="Property equipment"
     description="Appliances that can be registered on a property alongside containers."
     action={<Button size="sm" onClick={() => setEditing({ id: "", name: "", system: false, active: true, description: "", createdAt: nowIso(), updatedAt: nowIso() })}><Plus className="h-4 w-4" weight="bold" /> New appliance</Button>}
     toolbar={<AssetToolbar searchPlaceholder="Search property equipment" query={query} onQueryChange={setQuery} statuses={statuses} onStatusesChange={setStatuses} view={view} onViewChange={setView} />}
-  ><RecordsSection shown={filtered.length} total={assets.propertyEquipment.length}><Table><TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Description</TableHead><TableHead>Kind</TableHead><TableHead>Status</TableHead><TableHead className="w-16" /></TableRow></TableHeader><TableBody>{filtered.length === 0 ? <EmptyRow colSpan={5} message="No property equipment matches this search." /> : filtered.map((item) => <TableRow key={item.id}><TableCell className="font-medium">{item.name}</TableCell><TableCell className="text-muted-foreground">{item.description || "—"}</TableCell><TableCell><Badge variant="outline">{item.system ? "System" : "Custom"}</Badge></TableCell><TableCell><StatusBadge active={item.active} /></TableCell><TableCell><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(item)}><PencilSimple className="h-4 w-4" /></Button></TableCell></TableRow>)}</TableBody></Table></RecordsSection><SimpleEquipmentDialog key={editing ? editing.id || "new" : "closed"} value={editing} onClose={() => setEditing(null)} /></AssetPanelShell>
+  ><RecordsSection shown={filtered.length} total={assets.propertyEquipment.length}><Table><TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Description</TableHead><TableHead>Kind</TableHead><TableHead>Status</TableHead><TableHead className="w-16" /></TableRow></TableHeader><TableBody>{filtered.length === 0 ? <EmptyRow colSpan={5} message="No property equipment matches this search." /> : pageRows.map((item) => <TableRow key={item.id}><TableCell className="font-medium">{item.name}</TableCell><TableCell className="text-muted-foreground">{item.description || "—"}</TableCell><TableCell><Badge variant="outline">{item.system ? "System" : "Custom"}</Badge></TableCell><TableCell><StatusBadge active={item.active} /></TableCell><TableCell><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(item)}><PencilSimple className="h-4 w-4" /></Button></TableCell></TableRow>)}</TableBody></Table><TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} /></RecordsSection><SimpleEquipmentDialog key={editing ? editing.id || "new" : "closed"} value={editing} onClose={() => setEditing(null)} /></AssetPanelShell>
 }
 
 function SimpleEquipmentDialog({ value, onClose }: { value: PropertyEquipment | null; onClose: () => void }) {
@@ -1168,13 +1195,14 @@ function KeyTypesPanel({ tabs }: { tabs: ReactNode }) {
     (item) => item.name,
     (item) => item.updatedAt,
   )
+  const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(filtered)
   return <AssetPanelShell
     tabs={tabs}
     title="Key types"
     description="Key classifications with deposits, fee products and cutting instructions."
     action={<Button size="sm" onClick={() => setEditing({ id: "", name: "", system: false, active: true, chargeableByDefault: false, feeProduct: "", deposit: 0, instructions: "", createdAt: nowIso(), updatedAt: nowIso() })}><Plus className="h-4 w-4" weight="bold" /> New key type</Button>}
     toolbar={<AssetToolbar searchPlaceholder="Search key types" query={query} onQueryChange={setQuery} statuses={statuses} onStatusesChange={setStatuses} view={view} onViewChange={setView} />}
-  ><RecordsSection shown={filtered.length} total={assets.keyTypes.length}><Table><TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Kind</TableHead><TableHead>Chargeable</TableHead><TableHead>Fee product</TableHead><TableHead>Deposit</TableHead><TableHead>Instructions</TableHead><TableHead className="w-16" /></TableRow></TableHeader><TableBody>{filtered.length === 0 ? <EmptyRow colSpan={7} message="No key types match this search." /> : filtered.map((item) => <TableRow key={item.id} className={!item.active ? "opacity-60" : undefined}><TableCell><p className="font-medium">{item.name}</p>{!item.active && <p className="text-xs text-muted-foreground">Inactive</p>}</TableCell><TableCell><Badge variant="outline">{item.system ? "System" : "Custom"}</Badge></TableCell><TableCell>{item.chargeableByDefault ? "Yes" : "No"}</TableCell><TableCell>{item.feeProduct || "—"}</TableCell><TableCell>{item.deposit ? `${item.deposit.toLocaleString()} DKK` : "—"}</TableCell><TableCell className="max-w-60 truncate">{item.instructions || "—"}</TableCell><TableCell><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(item)}><PencilSimple className="h-4 w-4" /></Button></TableCell></TableRow>)}</TableBody></Table></RecordsSection><KeyTypeDialog key={editing ? editing.id || "new" : "closed"} value={editing} onClose={() => setEditing(null)} /></AssetPanelShell>
+  ><RecordsSection shown={filtered.length} total={assets.keyTypes.length}><Table><TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Name</TableHead><TableHead>Kind</TableHead><TableHead>Chargeable</TableHead><TableHead>Fee product</TableHead><TableHead>Deposit</TableHead><TableHead>Instructions</TableHead><TableHead className="w-16" /></TableRow></TableHeader><TableBody>{filtered.length === 0 ? <EmptyRow colSpan={7} message="No key types match this search." /> : pageRows.map((item) => <TableRow key={item.id} className={!item.active ? "opacity-60" : undefined}><TableCell><p className="font-medium">{item.name}</p>{!item.active && <p className="text-xs text-muted-foreground">Inactive</p>}</TableCell><TableCell><Badge variant="outline">{item.system ? "System" : "Custom"}</Badge></TableCell><TableCell>{item.chargeableByDefault ? "Yes" : "No"}</TableCell><TableCell>{item.feeProduct || "—"}</TableCell><TableCell>{item.deposit ? `${item.deposit.toLocaleString()} DKK` : "—"}</TableCell><TableCell className="max-w-60 truncate">{item.instructions || "—"}</TableCell><TableCell><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(item)}><PencilSimple className="h-4 w-4" /></Button></TableCell></TableRow>)}</TableBody></Table><TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} /></RecordsSection><KeyTypeDialog key={editing ? editing.id || "new" : "closed"} value={editing} onClose={() => setEditing(null)} /></AssetPanelShell>
 }
 
 function KeyTypeDialog({ value, onClose }: { value: KeyType | null; onClose: () => void }) {

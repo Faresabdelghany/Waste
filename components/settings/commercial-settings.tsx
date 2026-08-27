@@ -57,6 +57,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  TablePagination,
+  useTablePagination,
+} from "@/components/ui/table-pagination"
 import { Textarea } from "@/components/ui/textarea"
 import { statusClasses } from "@/components/wastehero/business-record-views"
 import { BusinessRecordFormDialog } from "@/components/wastehero/business-record-form-dialog"
@@ -420,6 +424,14 @@ function ProductsPane() {
     () => "",
   )
 
+  const {
+    page: productsPage,
+    setPage: setProductsPage,
+    pageCount: productsPageCount,
+    pageRows: productsPageRows,
+    totalCount: productsTotalCount,
+  } = useTablePagination(filtered)
+
   const productFactsFromValues = (values: BusinessFormValues) => {
     const facts: Record<string, string> = {
       [PRODUCT_FACTS.type]: text(values, "productType"),
@@ -569,7 +581,7 @@ function ProductsPane() {
               {filtered.length === 0 ? (
                 <EmptyRow colSpan={9} message="No products match this search." />
               ) : (
-                filtered.map((product) => {
+                productsPageRows.map((product) => {
                   const defaultRow = defaultRowOf(rows, product.id)
                   const levels = splitList(product.facts[PRODUCT_FACTS.serviceLevels])
                   return (
@@ -640,6 +652,12 @@ function ProductsPane() {
             </TableBody>
           </Table>
         </div>
+        <TablePagination
+          page={productsPage}
+          pageCount={productsPageCount}
+          totalCount={productsTotalCount}
+          onPageChange={setProductsPage}
+        />
       </RecordsSection>
 
       {productSchema && (
@@ -860,6 +878,14 @@ function RegistryPane({
     (item) => item.updatedAt,
   )
 
+  const {
+    page: itemsPage,
+    setPage: setItemsPage,
+    pageCount: itemsPageCount,
+    pageRows: itemsPageRows,
+    totalCount: itemsTotalCount,
+  } = useTablePagination(filtered)
+
   const handleDelete = (item: RegistryItem) => {
     const count = usage(item)
     if (count > 0) {
@@ -914,7 +940,7 @@ function RegistryPane({
                 message={`No ${entityLabel.toLowerCase()}s match this search.`}
               />
             ) : (
-              filtered.map((item) => (
+              itemsPageRows.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell className="min-w-[200px]">
                     <p className="text-sm font-medium text-foreground">{item.name}</p>
@@ -979,6 +1005,12 @@ function RegistryPane({
             )}
           </TableBody>
         </Table>
+        <TablePagination
+          page={itemsPage}
+          pageCount={itemsPageCount}
+          totalCount={itemsTotalCount}
+          onPageChange={setItemsPage}
+        />
       </RecordsSection>
       <RegistryDialog
         key={editing ? editing.id || "new" : "closed"}

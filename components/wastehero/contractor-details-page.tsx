@@ -24,6 +24,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  TablePagination,
+  useTablePagination,
+} from "@/components/ui/table-pagination"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 function statusClasses(status: string) {
@@ -154,6 +158,10 @@ function RelatedRecordsTable({
   workspaceId,
   moduleId,
 }: RelatedRecordsTableProps) {
+  const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(
+    records,
+  )
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="px-4 py-4 sm:px-5">
@@ -198,7 +206,7 @@ function RelatedRecordsTable({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  records.map((relatedRecord) => (
+                  pageRows.map((relatedRecord) => (
                     <TableRow key={relatedRecord.id} className="hover:bg-muted/60">
                       <TableCell className="min-w-[220px] py-3">
                         <p className="text-sm font-medium text-foreground">
@@ -246,6 +254,12 @@ function RelatedRecordsTable({
               </TableBody>
             </Table>
           </div>
+          <TablePagination
+            page={page}
+            pageCount={pageCount}
+            totalCount={totalCount}
+            onPageChange={setPage}
+          />
         </div>
       </div>
     </div>

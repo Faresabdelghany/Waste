@@ -47,6 +47,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  TablePagination,
+  useTablePagination,
+} from "@/components/ui/table-pagination"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -612,6 +616,21 @@ export function OrganizationAccessManagement() {
     return matches
   }, [normalizedRoleQuery, roleScopes, roleTypes, roleView, roles])
 
+  const {
+    page: usersPage,
+    setPage: setUsersPage,
+    pageCount: usersPageCount,
+    pageRows: usersPageRows,
+    totalCount: usersTotalCount,
+  } = useTablePagination(filteredUsers)
+  const {
+    page: rolesPage,
+    setPage: setRolesPage,
+    pageCount: rolesPageCount,
+    pageRows: rolesPageRows,
+    totalCount: rolesTotalCount,
+  } = useTablePagination(filteredRoles)
+
   const selectedCompany = companies.find(
     (company) => company.id === companyId,
   )
@@ -822,7 +841,7 @@ export function OrganizationAccessManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((user) => (
+                {usersPageRows.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell className="min-w-52 py-3">
                       <div className="font-medium text-foreground">{user.name}</div>
@@ -850,6 +869,12 @@ export function OrganizationAccessManagement() {
                 )}
               </TableBody>
             </Table>
+            <TablePagination
+              page={usersPage}
+              pageCount={usersPageCount}
+              totalCount={usersTotalCount}
+              onPageChange={setUsersPage}
+            />
           </RecordsSection>
         </PanelShell>
       ) : selectedRoleId ? (
@@ -910,7 +935,7 @@ export function OrganizationAccessManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredRoles.map((roleDefinition) => (
+                {rolesPageRows.map((roleDefinition) => (
                   <TableRow
                     key={roleDefinition.id}
                     tabIndex={0}
@@ -949,6 +974,12 @@ export function OrganizationAccessManagement() {
                 )}
               </TableBody>
             </Table>
+            <TablePagination
+              page={rolesPage}
+              pageCount={rolesPageCount}
+              totalCount={rolesTotalCount}
+              onPageChange={setRolesPage}
+            />
           </RecordsSection>
         </PanelShell>
       )}

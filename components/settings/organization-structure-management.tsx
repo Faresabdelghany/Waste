@@ -44,6 +44,10 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
+  TablePagination,
+  useTablePagination,
+} from "@/components/ui/table-pagination"
+import {
   Tabs,
   TabsContent,
   TabsList,
@@ -582,6 +586,24 @@ export function OrganizationStructureManagement() {
       ).length,
     [],
   )
+  const {
+    page: companiesPage,
+    setPage: setCompaniesPage,
+    pageCount: companiesPageCount,
+    pageRows: companiesPageRows,
+    totalCount: companiesTotalCount,
+  } = useTablePagination(companies)
+  const {
+    page: projectsPage,
+    setPage: setProjectsPage,
+    pageCount: projectsPageCount,
+    pageRows: projectsPageRows,
+    totalCount: projectsTotalCount,
+  } = useTablePagination(selectedProjects)
+
+  useEffect(() => {
+    setProjectsPage(1)
+  }, [selectedCompanyId, setProjectsPage])
 
   return (
     <>
@@ -616,7 +638,7 @@ export function OrganizationStructureManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-              {companies.map((company) => {
+              {companiesPageRows.map((company) => {
                 const companyProjects = projectsForCompany(company.id)
                 const administrator =
                   primaryAdministratorForCompany(company.id)
@@ -686,6 +708,12 @@ export function OrganizationStructureManagement() {
               })}
               </TableBody>
             </Table>
+            <TablePagination
+              page={companiesPage}
+              pageCount={companiesPageCount}
+              totalCount={companiesTotalCount}
+              onPageChange={setCompaniesPage}
+            />
           </div>
         </section>
 
@@ -826,7 +854,7 @@ export function OrganizationStructureManagement() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {selectedProjects.map((project) => (
+                      {projectsPageRows.map((project) => (
                         <TableRow key={project.id}>
                           <TableCell className="min-w-48 py-3">
                             <div className="font-medium">{project.name}</div>
@@ -853,6 +881,12 @@ export function OrganizationStructureManagement() {
                       ))}
                     </TableBody>
                   </Table>
+                  <TablePagination
+                    page={projectsPage}
+                    pageCount={projectsPageCount}
+                    totalCount={projectsTotalCount}
+                    onPageChange={setProjectsPage}
+                  />
                 </div>
               </TabsContent>
             </Tabs>

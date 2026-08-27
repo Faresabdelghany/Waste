@@ -104,6 +104,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -1655,13 +1656,20 @@ export function BusinessWorkspace({
         : [],
     [filteredRecords, isFleetPlanningView],
   )
+  const {
+    page: tablePage,
+    setPage: setTablePage,
+    pageCount: tablePageCount,
+    pageRows: pagedRecords,
+    totalCount: tableTotalCount,
+  } = useTablePagination(filteredRecords)
   const tableRecordGroups = useMemo<
     Array<{ label: string | null; records: BusinessRecord[] }>
   >(() => {
     const groupBy = isRichRecordView ? viewOptions.groupBy : "none"
-    if (groupBy === "none") return [{ label: null, records: filteredRecords }]
+    if (groupBy === "none") return [{ label: null, records: pagedRecords }]
     const groups = new Map<string, BusinessRecord[]>()
-    for (const record of filteredRecords) {
+    for (const record of pagedRecords) {
       const label =
         groupBy === "status"
           ? record.status
@@ -1674,7 +1682,7 @@ export function BusinessWorkspace({
       label,
       records,
     }))
-  }, [filteredRecords, isRichRecordView, viewOptions.groupBy])
+  }, [pagedRecords, isRichRecordView, viewOptions.groupBy])
 
   useEffect(() => {
     const activeTab = tabsScrollRef.current?.querySelector<HTMLElement>('[data-state="active"]')
@@ -1696,6 +1704,7 @@ export function BusinessWorkspace({
       ],
       staticColumns: [],
     }))
+    setTablePage(1)
   }, [activeModuleId, contractorScopeId])
 
   const removeFilterChip = (key: string, value: string) => {
@@ -3878,387 +3887,395 @@ export function BusinessWorkspace({
                 onOpenRecord={openRecord}
               />
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      {isContainersAssetsView ? (
-                        <>
-                          <TableHead>Container ID</TableHead>
-                          <TableHead>Status</TableHead>
-                          {viewOptions.showContainerType && (
-                            <TableHead>Container type</TableHead>
-                          )}
-                          {viewOptions.showWasteFraction && (
-                            <TableHead>Waste fraction</TableHead>
-                          )}
-                          {viewOptions.showAddress && (
-                            <TableHead>Address / location</TableHead>
-                          )}
-                          {viewOptions.showFillLevel && (
-                            <TableHead>Fill level / sensor</TableHead>
-                          )}
-                          {viewOptions.showNextCollection && (
-                            <TableHead>Next collection</TableHead>
-                          )}
-                          {viewOptions.showProject && <TableHead>Project</TableHead>}
-                        </>
-                      ) : (
-                        <>
-                          {showRouteStarColumn && (
-                            <TableHead className="w-8 pr-0">
-                              <span className="sr-only">Pin to Active Routes</span>
-                            </TableHead>
-                          )}
-                          <TableHead>
-                            {isRoutesView
-                              ? "Route ID"
-                              : isContractorUsersView
-                                ? "Full name"
-                                : activeModule.entityLabel}
-                          </TableHead>
-                          {isRichRecordView &&
-                            activeStaticColumns.map((column, index) => (
-                              <TableHead
-                                key={column}
-                                className={cn(
-                                  index === activeStaticColumns.length - 1 &&
-                                    "border-r border-border/60",
-                                )}
-                              >
-                                <span className="flex items-center gap-1.5">
-                                  <PushPin className="h-3.5 w-3.5 text-muted-foreground" />
-                                  {column}
-                                </span>
+              <>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/40 hover:bg-muted/40">
+                        {isContainersAssetsView ? (
+                          <>
+                            <TableHead>Container ID</TableHead>
+                            <TableHead>Status</TableHead>
+                            {viewOptions.showContainerType && (
+                              <TableHead>Container type</TableHead>
+                            )}
+                            {viewOptions.showWasteFraction && (
+                              <TableHead>Waste fraction</TableHead>
+                            )}
+                            {viewOptions.showAddress && (
+                              <TableHead>Address / location</TableHead>
+                            )}
+                            {viewOptions.showFillLevel && (
+                              <TableHead>Fill level / sensor</TableHead>
+                            )}
+                            {viewOptions.showNextCollection && (
+                              <TableHead>Next collection</TableHead>
+                            )}
+                            {viewOptions.showProject && <TableHead>Project</TableHead>}
+                          </>
+                        ) : (
+                          <>
+                            {showRouteStarColumn && (
+                              <TableHead className="w-8 pr-0">
+                                <span className="sr-only">Pin to Active Routes</span>
                               </TableHead>
-                            ))}
-                          {isRoutesView ? (
-                            <>
-                              {viewOptions.showProject && (
-                                <TableHead>Project</TableHead>
-                              )}
-                              {viewOptions.showArea && <TableHead>Area</TableHead>}
-                            </>
-                          ) : isContractorUsersView ? (
-                            <>
-                              <TableHead>Email</TableHead>
-                              <TableHead>Phone number</TableHead>
-                              <TableHead>Role</TableHead>
-                            </>
-                          ) : (
-                            viewOptions.showContext && (
-                              <TableHead>{activeModule.contextLabel}</TableHead>
-                            )
-                          )}
-                          <TableHead>Status</TableHead>
-                          {!isContractorUsersView && (
-                            <TableHead>{activeModule.valueLabel}</TableHead>
-                          )}
-                          {isRichRecordView &&
-                            activeFactColumns.map((column) => (
-                              <TableHead key={column}>{column}</TableHead>
-                            ))}
-                          {viewOptions.showUpdated && <TableHead>Updated</TableHead>}
-                          {isRichRecordView && (
-                            <TableHead className="w-10">
-                              <span className="sr-only">Actions</span>
+                            )}
+                            <TableHead>
+                              {isRoutesView
+                                ? "Route ID"
+                                : isContractorUsersView
+                                  ? "Full name"
+                                  : activeModule.entityLabel}
                             </TableHead>
-                          )}
-                        </>
-                      )}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredRecords.length === 0 ? (
-                      <TableRow>
-                        <TableCell
-                          colSpan={visibleTableColumnCount}
-                          className="h-52 text-center"
-                        >
-                          <div className="flex flex-col items-center gap-2">
-                            <MagnifyingGlass className="h-6 w-6 text-muted-foreground" />
-                            <p className="text-sm font-medium">No matching records</p>
-                            <p className="text-xs text-muted-foreground">
-                              Try a different search or status filter.
-                            </p>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      tableRecordGroups.map((group) => (
-                        <Fragment key={group.label ?? "all-records"}>
-                          {group.label !== null && (
-                            <TableRow className="bg-muted/30 hover:bg-muted/30">
-                              <TableCell
-                                colSpan={visibleTableColumnCount}
-                                className="py-2"
-                              >
-                                <div className="flex items-center gap-2">
-                                  {viewOptions.groupBy === "status" ? (
-                                    <Badge
-                                      variant="outline"
-                                      className={cn(
-                                        "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                                        statusClasses(group.label),
-                                      )}
-                                    >
-                                      {group.label}
-                                    </Badge>
-                                  ) : (
-                                    <span className="text-xs font-semibold text-foreground">
-                                      {group.label}
-                                    </span>
-                                  )}
-                                  <span className="text-xs text-muted-foreground">
-                                    {group.records.length}{" "}
-                                    {group.records.length === 1
-                                      ? activeModule.entityLabel.toLowerCase()
-                                      : `${activeModule.entityLabel.toLowerCase()}s`}
-                                  </span>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          )}
-                          {group.records.map((record) => (
-                        <TableRow
-                          key={record.id}
-                          role="button"
-                          tabIndex={0}
-                          aria-label={`Open ${record.name}`}
-                          className="cursor-pointer hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
-                          onClick={() => openRecord(record)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault()
-                              openRecord(record)
-                            }
-                          }}
-                        >
-                          {isContainersAssetsView ? (
-                            <>
-                              <TableCell
-                                className={cn(
-                                  "min-w-[170px]",
-                                  viewOptions.density === "compact" && "py-2",
-                                )}
-                              >
-                                <div className="space-y-1">
-                                  <p className="whitespace-nowrap text-sm font-medium text-foreground">
-                                    {recordFactValue(record, "Container ID", record.name)}
-                                  </p>
-                                  {viewOptions.showDescription && (
-                                    <p className="max-w-[240px] truncate text-xs text-muted-foreground">
-                                      {record.description}
-                                    </p>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant="outline"
+                            {isRichRecordView &&
+                              activeStaticColumns.map((column, index) => (
+                                <TableHead
+                                  key={column}
                                   className={cn(
-                                    "whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium",
-                                    statusClasses(record.status),
+                                    index === activeStaticColumns.length - 1 &&
+                                      "border-r border-border/60",
                                   )}
                                 >
-                                  {record.status}
-                                </Badge>
-                              </TableCell>
-                              {viewOptions.showContainerType && (
-                                <TableCell className="min-w-[190px] text-sm text-muted-foreground">
-                                  {recordFactValue(record, "Container type")}
+                                  <span className="flex items-center gap-1.5">
+                                    <PushPin className="h-3.5 w-3.5 text-muted-foreground" />
+                                    {column}
+                                  </span>
+                                </TableHead>
+                              ))}
+                            {isRoutesView ? (
+                              <>
+                                {viewOptions.showProject && (
+                                  <TableHead>Project</TableHead>
+                                )}
+                                {viewOptions.showArea && <TableHead>Area</TableHead>}
+                              </>
+                            ) : isContractorUsersView ? (
+                              <>
+                                <TableHead>Email</TableHead>
+                                <TableHead>Phone number</TableHead>
+                                <TableHead>Role</TableHead>
+                              </>
+                            ) : (
+                              viewOptions.showContext && (
+                                <TableHead>{activeModule.contextLabel}</TableHead>
+                              )
+                            )}
+                            <TableHead>Status</TableHead>
+                            {!isContractorUsersView && (
+                              <TableHead>{activeModule.valueLabel}</TableHead>
+                            )}
+                            {isRichRecordView &&
+                              activeFactColumns.map((column) => (
+                                <TableHead key={column}>{column}</TableHead>
+                              ))}
+                            {viewOptions.showUpdated && <TableHead>Updated</TableHead>}
+                            {isRichRecordView && (
+                              <TableHead className="w-10">
+                                <span className="sr-only">Actions</span>
+                              </TableHead>
+                            )}
+                          </>
+                        )}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredRecords.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={visibleTableColumnCount}
+                            className="h-52 text-center"
+                          >
+                            <div className="flex flex-col items-center gap-2">
+                              <MagnifyingGlass className="h-6 w-6 text-muted-foreground" />
+                              <p className="text-sm font-medium">No matching records</p>
+                              <p className="text-xs text-muted-foreground">
+                                Try a different search or status filter.
+                              </p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        tableRecordGroups.map((group) => (
+                          <Fragment key={group.label ?? "all-records"}>
+                            {group.label !== null && (
+                              <TableRow className="bg-muted/30 hover:bg-muted/30">
+                                <TableCell
+                                  colSpan={visibleTableColumnCount}
+                                  className="py-2"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {viewOptions.groupBy === "status" ? (
+                                      <Badge
+                                        variant="outline"
+                                        className={cn(
+                                          "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                                          statusClasses(group.label),
+                                        )}
+                                      >
+                                        {group.label}
+                                      </Badge>
+                                    ) : (
+                                      <span className="text-xs font-semibold text-foreground">
+                                        {group.label}
+                                      </span>
+                                    )}
+                                    <span className="text-xs text-muted-foreground">
+                                      {group.records.length}{" "}
+                                      {group.records.length === 1
+                                        ? activeModule.entityLabel.toLowerCase()
+                                        : `${activeModule.entityLabel.toLowerCase()}s`}
+                                    </span>
+                                  </div>
                                 </TableCell>
-                              )}
-                              {viewOptions.showWasteFraction && (
-                                <TableCell className="min-w-[130px] text-sm text-muted-foreground">
-                                  {recordFactValue(record, "Waste fractions")}
-                                </TableCell>
-                              )}
-                              {viewOptions.showAddress && (
-                                <TableCell className="min-w-[230px]">
+                              </TableRow>
+                            )}
+                            {group.records.map((record) => (
+                          <TableRow
+                            key={record.id}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`Open ${record.name}`}
+                            className="cursor-pointer hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                            onClick={() => openRecord(record)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault()
+                                openRecord(record)
+                              }
+                            }}
+                          >
+                            {isContainersAssetsView ? (
+                              <>
+                                <TableCell
+                                  className={cn(
+                                    "min-w-[170px]",
+                                    viewOptions.density === "compact" && "py-2",
+                                  )}
+                                >
                                   <div className="space-y-1">
-                                    <p className="text-sm text-foreground">
-                                      {recordFactValue(record, "Address", record.context)}
+                                    <p className="whitespace-nowrap text-sm font-medium text-foreground">
+                                      {recordFactValue(record, "Container ID", record.name)}
                                     </p>
-                                    {recordFactValue(record, "Curb location") !== "—" && (
-                                      <p className="text-xs text-muted-foreground">
-                                        {recordFactValue(record, "Curb location")}
+                                    {viewOptions.showDescription && (
+                                      <p className="max-w-[240px] truncate text-xs text-muted-foreground">
+                                        {record.description}
                                       </p>
                                     )}
                                   </div>
                                 </TableCell>
-                              )}
-                              {viewOptions.showFillLevel && (
-                                <TableCell className="min-w-[150px]">
-                                  <ContainerSensorState record={record} />
+                                <TableCell>
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      "whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium",
+                                      statusClasses(record.status),
+                                    )}
+                                  >
+                                    {record.status}
+                                  </Badge>
                                 </TableCell>
-                              )}
-                              {viewOptions.showNextCollection && (
-                                <TableCell className="min-w-[145px] whitespace-nowrap text-sm text-muted-foreground">
-                                  {recordFactValue(record, "Next collection")}
-                                </TableCell>
-                              )}
-                              {viewOptions.showProject && (
-                                <TableCell className="min-w-[165px] whitespace-nowrap text-sm text-muted-foreground">
-                                  {recordFactValue(record, "Project")}
-                                </TableCell>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              {showRouteStarColumn && (
+                                {viewOptions.showContainerType && (
+                                  <TableCell className="min-w-[190px] text-sm text-muted-foreground">
+                                    {recordFactValue(record, "Container type")}
+                                  </TableCell>
+                                )}
+                                {viewOptions.showWasteFraction && (
+                                  <TableCell className="min-w-[130px] text-sm text-muted-foreground">
+                                    {recordFactValue(record, "Waste fractions")}
+                                  </TableCell>
+                                )}
+                                {viewOptions.showAddress && (
+                                  <TableCell className="min-w-[230px]">
+                                    <div className="space-y-1">
+                                      <p className="text-sm text-foreground">
+                                        {recordFactValue(record, "Address", record.context)}
+                                      </p>
+                                      {recordFactValue(record, "Curb location") !== "—" && (
+                                        <p className="text-xs text-muted-foreground">
+                                          {recordFactValue(record, "Curb location")}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                )}
+                                {viewOptions.showFillLevel && (
+                                  <TableCell className="min-w-[150px]">
+                                    <ContainerSensorState record={record} />
+                                  </TableCell>
+                                )}
+                                {viewOptions.showNextCollection && (
+                                  <TableCell className="min-w-[145px] whitespace-nowrap text-sm text-muted-foreground">
+                                    {recordFactValue(record, "Next collection")}
+                                  </TableCell>
+                                )}
+                                {viewOptions.showProject && (
+                                  <TableCell className="min-w-[165px] whitespace-nowrap text-sm text-muted-foreground">
+                                    {recordFactValue(record, "Project")}
+                                  </TableCell>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                {showRouteStarColumn && (
+                                  <TableCell
+                                    className={cn(
+                                      "w-8 pr-0",
+                                      viewOptions.density === "compact" && "py-2",
+                                    )}
+                                    onClick={(event) => event.stopPropagation()}
+                                    onKeyDown={(event) => event.stopPropagation()}
+                                  >
+                                    <button
+                                      type="button"
+                                      aria-pressed={isRouteStarred(record.id)}
+                                      aria-label={
+                                        isRouteStarred(record.id)
+                                          ? `Remove ${record.name} from Active Routes`
+                                          : `Add ${record.name} to Active Routes`
+                                      }
+                                      className="flex h-6 w-6 cursor-pointer items-center justify-center rounded hover:bg-muted"
+                                      onClick={() => toggleRouteStarred(record.id)}
+                                    >
+                                      <Star
+                                        weight={
+                                          isRouteStarred(record.id) ? "fill" : "regular"
+                                        }
+                                        className={cn(
+                                          "h-4 w-4",
+                                          isRouteStarred(record.id)
+                                            ? "text-amber-500"
+                                            : "text-muted-foreground/60 hover:text-foreground",
+                                        )}
+                                      />
+                                    </button>
+                                  </TableCell>
+                                )}
                                 <TableCell
                                   className={cn(
-                                    "w-8 pr-0",
+                                    "min-w-[240px]",
                                     viewOptions.density === "compact" && "py-2",
                                   )}
-                                  onClick={(event) => event.stopPropagation()}
-                                  onKeyDown={(event) => event.stopPropagation()}
                                 >
-                                  <button
-                                    type="button"
-                                    aria-pressed={isRouteStarred(record.id)}
-                                    aria-label={
-                                      isRouteStarred(record.id)
-                                        ? `Remove ${record.name} from Active Routes`
-                                        : `Add ${record.name} to Active Routes`
-                                    }
-                                    className="flex h-6 w-6 cursor-pointer items-center justify-center rounded hover:bg-muted"
-                                    onClick={() => toggleRouteStarred(record.id)}
-                                  >
-                                    <Star
-                                      weight={
-                                        isRouteStarred(record.id) ? "fill" : "regular"
-                                      }
-                                      className={cn(
-                                        "h-4 w-4",
-                                        isRouteStarred(record.id)
-                                          ? "text-amber-500"
-                                          : "text-muted-foreground/60 hover:text-foreground",
+                                  <div className="space-y-1">
+                                    <p className="text-sm font-medium text-foreground">{record.name}</p>
+                                    {viewOptions.showDescription &&
+                                      !isContractorUsersView && (
+                                        <p className="max-w-[340px] truncate text-xs text-muted-foreground">
+                                          {record.description}
+                                        </p>
                                       )}
-                                    />
-                                  </button>
+                                  </div>
                                 </TableCell>
-                              )}
-                              <TableCell
-                                className={cn(
-                                  "min-w-[240px]",
-                                  viewOptions.density === "compact" && "py-2",
+                                {isRichRecordView &&
+                                  activeStaticColumns.map((column, index) => (
+                                    <TableCell
+                                      key={column}
+                                      className={cn(
+                                        "min-w-[140px] whitespace-nowrap text-sm text-muted-foreground",
+                                        index === activeStaticColumns.length - 1 &&
+                                          "border-r border-border/60",
+                                      )}
+                                    >
+                                      {recordFactValue(record, column)}
+                                    </TableCell>
+                                  ))}
+                                {isRoutesView ? (
+                                  <>
+                                    {viewOptions.showProject && (
+                                      <TableCell className="min-w-[160px] whitespace-nowrap text-sm text-muted-foreground">
+                                        {recordFactValue(record, "Project")}
+                                      </TableCell>
+                                    )}
+                                    {viewOptions.showArea && (
+                                      <TableCell className="min-w-[120px] whitespace-nowrap text-sm text-muted-foreground">
+                                        {recordFactValue(record, "Area")}
+                                      </TableCell>
+                                    )}
+                                  </>
+                                ) : isContractorUsersView ? (
+                                  <>
+                                    <TableCell className="min-w-[200px] whitespace-nowrap text-sm text-muted-foreground">
+                                      {recordFactValue(
+                                        record,
+                                        "Email",
+                                        recordFactValue(record, "User email"),
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="min-w-[140px] whitespace-nowrap text-sm text-muted-foreground">
+                                      {recordFactValue(record, "Phone number")}
+                                    </TableCell>
+                                    <TableCell className="min-w-[140px] whitespace-nowrap text-sm text-muted-foreground">
+                                      {recordFactValue(
+                                        record,
+                                        "Role",
+                                        recordFactValue(record, "Contractor role"),
+                                      )}
+                                    </TableCell>
+                                  </>
+                                ) : (
+                                  viewOptions.showContext && (
+                                    <TableCell className="min-w-[220px] text-sm text-muted-foreground">
+                                      {record.context}
+                                    </TableCell>
+                                  )
                                 )}
-                              >
-                                <div className="space-y-1">
-                                  <p className="text-sm font-medium text-foreground">{record.name}</p>
-                                  {viewOptions.showDescription &&
-                                    !isContractorUsersView && (
-                                      <p className="max-w-[340px] truncate text-xs text-muted-foreground">
-                                        {record.description}
-                                      </p>
-                                    )}
-                                </div>
-                              </TableCell>
-                              {isRichRecordView &&
-                                activeStaticColumns.map((column, index) => (
-                                  <TableCell
-                                    key={column}
+                                <TableCell>
+                                  <Badge
+                                    variant="outline"
                                     className={cn(
-                                      "min-w-[140px] whitespace-nowrap text-sm text-muted-foreground",
-                                      index === activeStaticColumns.length - 1 &&
-                                        "border-r border-border/60",
+                                      "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                                      statusClasses(record.status),
                                     )}
                                   >
-                                    {recordFactValue(record, column)}
+                                    {record.status}
+                                  </Badge>
+                                </TableCell>
+                                {!isContractorUsersView && (
+                                  <TableCell className="min-w-[150px]">
+                                    <RecordValue record={record} />
                                   </TableCell>
-                                ))}
-                              {isRoutesView ? (
-                                <>
-                                  {viewOptions.showProject && (
-                                    <TableCell className="min-w-[160px] whitespace-nowrap text-sm text-muted-foreground">
-                                      {recordFactValue(record, "Project")}
+                                )}
+                                {isRichRecordView &&
+                                  activeFactColumns.map((column) => (
+                                    <TableCell
+                                      key={column}
+                                      className="min-w-[130px] whitespace-nowrap text-sm text-muted-foreground"
+                                    >
+                                      {recordFactValue(record, column)}
                                     </TableCell>
-                                  )}
-                                  {viewOptions.showArea && (
-                                    <TableCell className="min-w-[120px] whitespace-nowrap text-sm text-muted-foreground">
-                                      {recordFactValue(record, "Area")}
-                                    </TableCell>
-                                  )}
-                                </>
-                              ) : isContractorUsersView ? (
-                                <>
-                                  <TableCell className="min-w-[200px] whitespace-nowrap text-sm text-muted-foreground">
-                                    {recordFactValue(
-                                      record,
-                                      "Email",
-                                      recordFactValue(record, "User email"),
-                                    )}
+                                  ))}
+                                {viewOptions.showUpdated && (
+                                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                                    {record.updated}
                                   </TableCell>
-                                  <TableCell className="min-w-[140px] whitespace-nowrap text-sm text-muted-foreground">
-                                    {recordFactValue(record, "Phone number")}
+                                )}
+                                {isRichRecordView && (
+                                  <TableCell className="w-10 pr-3 text-right">
+                                    <RecordActionsMenu
+                                      record={record}
+                                      entityLabel={activeModule.entityLabel}
+                                      onEdit={canEditRecords ? openEditRecord : undefined}
+                                      onDelete={canDeleteRecords ? requestRecordDelete : undefined}
+                                    />
                                   </TableCell>
-                                  <TableCell className="min-w-[140px] whitespace-nowrap text-sm text-muted-foreground">
-                                    {recordFactValue(
-                                      record,
-                                      "Role",
-                                      recordFactValue(record, "Contractor role"),
-                                    )}
-                                  </TableCell>
-                                </>
-                              ) : (
-                                viewOptions.showContext && (
-                                  <TableCell className="min-w-[220px] text-sm text-muted-foreground">
-                                    {record.context}
-                                  </TableCell>
-                                )
-                              )}
-                              <TableCell>
-                                <Badge
-                                  variant="outline"
-                                  className={cn(
-                                    "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                                    statusClasses(record.status),
-                                  )}
-                                >
-                                  {record.status}
-                                </Badge>
-                              </TableCell>
-                              {!isContractorUsersView && (
-                                <TableCell className="min-w-[150px]">
-                                  <RecordValue record={record} />
-                                </TableCell>
-                              )}
-                              {isRichRecordView &&
-                                activeFactColumns.map((column) => (
-                                  <TableCell
-                                    key={column}
-                                    className="min-w-[130px] whitespace-nowrap text-sm text-muted-foreground"
-                                  >
-                                    {recordFactValue(record, column)}
-                                  </TableCell>
-                                ))}
-                              {viewOptions.showUpdated && (
-                                <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                                  {record.updated}
-                                </TableCell>
-                              )}
-                              {isRichRecordView && (
-                                <TableCell className="w-10 pr-3 text-right">
-                                  <RecordActionsMenu
-                                    record={record}
-                                    entityLabel={activeModule.entityLabel}
-                                    onEdit={canEditRecords ? openEditRecord : undefined}
-                                    onDelete={canDeleteRecords ? requestRecordDelete : undefined}
-                                  />
-                                </TableCell>
-                              )}
-                            </>
-                          )}
-                        </TableRow>
-                          ))}
-                        </Fragment>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
+                                )}
+                              </>
+                            )}
+                          </TableRow>
+                            ))}
+                          </Fragment>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+                <TablePagination
+                  page={tablePage}
+                  pageCount={tablePageCount}
+                  totalCount={tableTotalCount}
+                  onPageChange={setTablePage}
+                />
+              </>
             )}
           </section>
 

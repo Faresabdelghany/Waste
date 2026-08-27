@@ -17,6 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
 import { CaretRight, CaretUpDown, ArrowDown, ArrowUp, DotsThreeVertical, Plus, MagnifyingGlass, Folder } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -122,8 +123,6 @@ export function ClientsContent() {
   const [sortKey, setSortKey] = useState<"name" | "projects">("name")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [pageSize, setPageSize] = useState(10)
-  const [page, setPage] = useState(1)
   const [activeClientId, setActiveClientId] = useState<string | null>(null)
 
   const filtered = useMemo(() => {
@@ -168,10 +167,7 @@ export function ClientsContent() {
     return sorted
   }, [query, statusFilter, sortKey, sortDirection])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
-  const currentPage = Math.min(page, totalPages)
-  const pageStart = (currentPage - 1) * pageSize
-  const visibleClients = filtered.slice(pageStart, pageStart + pageSize)
+  const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(filtered)
 
   const toggleSort = (key: "name" | "projects") => {
     setSortKey((currentKey) => {
@@ -184,7 +180,7 @@ export function ClientsContent() {
     })
   }
 
-  const allVisibleIds = visibleClients.map((c) => c.id)
+  const allVisibleIds = pageRows.map((c) => c.id)
   const isAllSelected = allVisibleIds.length > 0 && allVisibleIds.every((id) => selectedIds.has(id))
   const isIndeterminate = selectedIds.size > 0 && !isAllSelected
 
@@ -215,26 +211,6 @@ export function ClientsContent() {
     toast.success(`Archived ${selectedIds.size} customer${selectedIds.size > 1 ? "s" : ""} (mock)`)
     clearSelection()
   }
-
-  const goToPage = (next: number) => {
-    const clamped = Math.min(Math.max(1, next), totalPages)
-    setPage(clamped)
-  }
-
-  const pageNumbers = (() => {
-    if (totalPages <= 5) {
-      return Array.from({ length: totalPages }, (_, i) => i + 1)
-    }
-    const pages: number[] = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, currentPage + 1)
-    if (start > 1) pages.push(1)
-    if (start > 2) pages.push(-1) // ellipsis
-    for (let p = start; p <= end; p++) pages.push(p)
-    if (end < totalPages - 1) pages.push(-1)
-    if (end < totalPages) pages.push(totalPages)
-    return pages
-  })()
 
   return (
     <div className="flex flex-1 flex-col bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
@@ -366,7 +342,7 @@ export function ClientsContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visibleClients.map((client) => {
+                  {pageRows.map((client) => {
                     const checked = selectedIds.has(client.id)
                     const clientProjects = projects.filter((p) => p.client === client.name)
                     let activeProjects = 0
@@ -491,118 +467,12 @@ export function ClientsContent() {
                 </TableBody>
               </Table>
 
-              <div className="border-t border-border bg-background px-4 py-2 text-xs text-muted-foreground">
-                {/* Mobile pagination (simplified) */}
-                <div className="flex items-center justify-between gap-2 md:hidden">
-                  <div>
-                    Page {currentPage} of {totalPages}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="h-7 w-7"
-                      onClick={() => goToPage(currentPage - 1)}
-                      disabled={currentPage === 1}
-                    >
-                      ‹
-                    </Button>
-                    <span className="min-w-6 text-center">
-                      {currentPage}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="h-7 w-7"
-                      onClick={() => goToPage(currentPage + 1)}
-                      disabled={currentPage === totalPages}
-                    >
-                      ›
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Desktop / tablet pagination */}
-                <div className="hidden items-center justify-between md:flex">
-                  <div>
-                    Page {currentPage} of {totalPages}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="h-7 w-7"
-                        onClick={() => goToPage(1)}
-                        disabled={currentPage === 1}
-                      >
-                        «
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="h-7 w-7"
-                        onClick={() => goToPage(currentPage - 1)}
-                        disabled={currentPage === 1}
-                      >
-                        ‹
-                      </Button>
-                      {pageNumbers.map((p, idx) =>
-                        p === -1 ? (
-                          <span key={`ellipsis-${idx}`} className="px-1">
-                            ...
-                          </span>
-                        ) : (
-                          <Button
-                            key={p}
-                            variant={p === currentPage ? "outline" : "ghost"}
-                            size="sm"
-                            className="h-7 min-w-7 px-2 text-xs"
-                            onClick={() => goToPage(p)}
-                          >
-                            {p}
-                          </Button>
-                        ),
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="h-7 w-7"
-                        onClick={() => goToPage(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                      >
-                        ›
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="h-7 w-7"
-                        onClick={() => goToPage(totalPages)}
-                        disabled={currentPage === totalPages}
-                      >
-                        »
-                      </Button>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span>Rows per page</span>
-                      <select
-                        className="h-7 rounded-md border border-border bg-background px-2 text-xs"
-                        value={pageSize}
-                        onChange={(e) => {
-                          const next = Number(e.target.value) || 10
-                          setPageSize(next)
-                          setPage(1)
-                        }}
-                      >
-                        <option value={10}>10</option>
-                        <option value={7}>7</option>
-                        <option value={25}>25</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <TablePagination
+                page={page}
+                pageCount={pageCount}
+                totalCount={totalCount}
+                onPageChange={setPage}
+              />
             </div>
           )}
         </div>

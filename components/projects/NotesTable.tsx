@@ -24,6 +24,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
 
 type NotesTableProps = {
     notes: ProjectNote[]
@@ -40,6 +41,8 @@ export function NotesTable({ notes, onAddNote, onEditNote, onDeleteNote, onNoteC
     const filteredNotes = notes.filter((note) =>
         note.title.toLowerCase().includes(searchQuery.toLowerCase())
     )
+
+    const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(filteredNotes)
 
     const toggleSelectAll = () => {
         if (selectedNotes.length === filteredNotes.length) {
@@ -97,7 +100,7 @@ export function NotesTable({ notes, onAddNote, onEditNote, onDeleteNote, onNoteC
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredNotes.map((note) => (
+                        {pageRows.map((note) => (
                             <TableRow key={note.id} className="cursor-pointer" onClick={() => onNoteClick?.(note)}>
                                 <TableCell onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                                     <Checkbox
@@ -140,6 +143,7 @@ export function NotesTable({ notes, onAddNote, onEditNote, onDeleteNote, onNoteC
                         ))}
                     </TableBody>
                 </Table>
+                <TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} />
             </div>
         </div>
     )

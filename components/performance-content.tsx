@@ -23,6 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { ChipOverflow } from "@/components/chip-overflow"
 import { ProgressCircle } from "@/components/progress-circle"
@@ -640,6 +641,8 @@ export function PerformanceContent() {
     }
   }, [dateRange.end, dateRange.start, rangeId, selectedMember, selectedProjectId])
 
+  const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(healthRows)
+
   const workMixPercent = {
     bug: workMixTotal ? (workMix.bug / workMixTotal) * 100 : 0,
     improvement: workMixTotal ? (workMix.improvement / workMixTotal) * 100 : 0,
@@ -1103,7 +1106,7 @@ export function PerformanceContent() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  healthRows.map((project) => (
+                  pageRows.map((project) => (
                     <TableRow key={project.id}>
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -1172,6 +1175,12 @@ export function PerformanceContent() {
                 )}
               </TableBody>
             </Table>
+            <TablePagination
+              page={page}
+              pageCount={pageCount}
+              totalCount={totalCount}
+              onPageChange={setPage}
+            />
           </CardContent>
         </Card>
       </div>
