@@ -1,7 +1,7 @@
 <h1 align="center"> Operations Platform · UI Prototype</h1>
 
 <p align="center">
-  A multi-workspace prototype of the WasteHero operations platform for waste & recycling logistics —
+  A multi-workspace prototype of the operations platform for waste & recycling logistics —
   covering daily operations, route planning, fleet, customers, assets, commercial, and analytics.
 </p>
 
@@ -9,7 +9,7 @@
 
 ## Overview
 
-This repository is a **UI-only prototype** of the WasteHero operations platform, built with:
+This repository is a **UI-only prototype** of the  operations platform, built with:
 
 - **Next.js (App Router)**
 - **TypeScript**
