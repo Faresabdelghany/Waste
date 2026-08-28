@@ -66,6 +66,12 @@ export function addDays(iso: string, days: number): string {
   return toIso(date)
 }
 
+/** Today as ISO in the browser's local time — the "now" all date pickers seed from. */
+export function todayIso(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
+}
+
 export function serviceDayOf(iso: string): ServiceDay {
   // getUTCDay: 0 = Sunday; SERVICE_DAYS is Monday-first.
   return SERVICE_DAYS[(parseIso(iso).getUTCDay() + 6) % 7]
@@ -174,7 +180,7 @@ const isFrequency = (value: unknown): value is RecurrenceFrequency =>
 // an Invalid Date, and "2026-02-30" silently rolls over to March — the
 // round trip catches both.
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
-const isIsoDate = (value: string) =>
+export const isIsoDate = (value: string) =>
   ISO_DATE_PATTERN.test(value) &&
   !Number.isNaN(parseIso(value).getTime()) &&
   toIso(parseIso(value)) === value

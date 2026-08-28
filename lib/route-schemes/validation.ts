@@ -131,7 +131,7 @@ export function validateScheme(
 
 type StoredValues = Record<string, string | boolean | undefined>
 
-const stringValue = (values: StoredValues, key: string): string | undefined => {
+export const stringValue = (values: StoredValues, key: string): string | undefined => {
   const value = values[key]
   return typeof value === "string" && value ? value : undefined
 }

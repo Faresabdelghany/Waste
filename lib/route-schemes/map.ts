@@ -4,6 +4,7 @@
 // coordinates: deterministic per container id, so the picture is stable across
 // visits; real geocoding is explicitly out of scope.
 
+import { avalancheHash } from "./hash"
 import type { ServiceDay } from "./recurrence"
 
 /** The SVG overlay's coordinate space; positions are percentages of it. */
@@ -25,18 +26,7 @@ export const SCHEME_DAY_COLORS: Record<ServiceDay, string> = {
 
 /** Deterministic pseudo-position so a container always lands on the same spot. */
 export function stopPosition(containerId: string): { x: number; y: number } {
-  // FNV-1a plus an avalanche mix: seeded container ids differ only in their
-  // trailing digits, and without the mix they line up in a horizontal band.
-  let hash = 2166136261 >>> 0
-  for (const char of containerId) {
-    hash = Math.imul(hash ^ char.charCodeAt(0), 16777619) >>> 0
-  }
-  hash ^= hash >>> 16
-  hash = Math.imul(hash, 2246822507) >>> 0
-  hash ^= hash >>> 13
-  hash = Math.imul(hash, 3266489909) >>> 0
-  hash ^= hash >>> 16
-  hash >>>= 0
+  const hash = avalancheHash(containerId)
   return {
     x: 10 + ((hash % 997) / 997) * 80,
     y: 12 + ((Math.floor(hash / 997) % 991) / 991) * 74,

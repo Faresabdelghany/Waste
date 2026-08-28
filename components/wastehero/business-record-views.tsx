@@ -125,20 +125,30 @@ function NoMatchingRecords() {
   )
 }
 
+export type RecordExtraAction = {
+  label: string
+  icon?: React.ReactNode
+  onSelect: (record: BusinessRecord) => void
+}
+
 export function RecordActionsMenu({
   record,
   onEdit,
   onDelete,
   entityLabel,
   className,
+  extraActions,
 }: {
   record: BusinessRecord
   onEdit?: (record: BusinessRecord) => void
   onDelete?: (record: BusinessRecord) => void
   entityLabel: string
   className?: string
+  /** Module-specific record actions rendered above Edit/Delete. */
+  extraActions?: RecordExtraAction[]
 }) {
-  if (!onEdit && !onDelete) return null
+  const hasExtraActions = Boolean(extraActions?.length)
+  if (!onEdit && !onDelete && !hasExtraActions) return null
   const normalizedEntity = entityLabel.toLowerCase()
 
   return (
@@ -160,6 +170,16 @@ export function RecordActionsMenu({
         className="min-w-44"
         onClick={(event) => event.stopPropagation()}
       >
+        {extraActions?.map((action) => (
+          <DropdownMenuItem
+            key={action.label}
+            onSelect={() => action.onSelect(record)}
+          >
+            {action.icon}
+            {action.label}
+          </DropdownMenuItem>
+        ))}
+        {hasExtraActions && (onEdit || onDelete) && <DropdownMenuSeparator />}
         {onEdit && (
           <DropdownMenuItem onSelect={() => onEdit(record)}>
             <PencilSimple className="h-4 w-4" />

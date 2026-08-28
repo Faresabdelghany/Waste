@@ -43,6 +43,7 @@ import {
   formatServiceDate,
   nextServiceDates,
   recurrenceSentence,
+  todayIso,
   type RecurrenceFrequency,
   type SchemeRecurrence,
   type ServiceDay,
@@ -217,11 +218,6 @@ const GUIDED_STEP_TITLES: Record<number, string> = {
   4: "Which containers does each service day serve?",
   5: "How do the generated routes look?",
   6: "Review route scheme setup",
-}
-
-function todayIso() {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
 }
 
 function GuidedSchemeWizardOverlay({

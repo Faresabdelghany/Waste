@@ -15,6 +15,7 @@ import { toast } from "sonner"
 import {
   ArrowSquareOut,
   CaretDown,
+  ArrowsClockwise,
   DownloadSimple,
   Gear,
   Info,
@@ -148,6 +149,7 @@ import {
   RecordActionsMenu,
   recordProgress,
   statusClasses,
+  type RecordExtraAction,
 } from "@/components/wastehero/business-record-views"
 import { BusinessRecordFormDialog } from "@/components/wastehero/business-record-form-dialog"
 import {
@@ -161,6 +163,10 @@ import {
   type GuidedSchemeData,
 } from "@/components/wastehero/scheme-create-flow"
 import { SchemeRecordRouteMapSection } from "@/components/wastehero/scheme-route-map"
+import {
+  SchemeGenerateRoutesDialog,
+  schemeCanGenerateRoutes,
+} from "@/components/wastehero/scheme-generate-routes"
 import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
 import { useActiveRoutes } from "@/components/wastehero/active-routes-store"
 import {
@@ -1051,6 +1057,8 @@ export function BusinessWorkspace({
   const [editingRecord, setEditingRecord] = useState<BusinessRecord | null>(null)
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [generateSchemeRecord, setGenerateSchemeRecord] =
+    useState<BusinessRecord | null>(null)
   const [relatedCreateTarget, setRelatedCreateTarget] =
     useState<RelatedCreateTarget | null>(null)
   const [auditEvents, setAuditEvents] = useState<Record<string, AuditEvent[]>>({})
@@ -1543,6 +1551,22 @@ export function BusinessWorkspace({
     hasGrant("edit")
   const canDeleteRecords = isRichRecordView && hasGrant("delete")
   const canRunRecordActions = hasGrant("edit")
+  // Generate routes on a scheme (spec FR-6, ticket #7): row menu + detail
+  // view, only for schemes whose recurrence is structured enough to generate.
+  const isSchemesView = activeModule.id === "schemes"
+  const schemeExtraActions = useCallback(
+    (record: BusinessRecord): RecordExtraAction[] | undefined =>
+      isSchemesView && canRunRecordActions && schemeCanGenerateRoutes(record)
+        ? [
+            {
+              label: "Generate routes",
+              icon: <ArrowsClockwise className="h-4 w-4" />,
+              onSelect: (target: BusinessRecord) => setGenerateSchemeRecord(target),
+            },
+          ]
+        : undefined,
+    [canRunRecordActions, isSchemesView],
+  )
   const factColumnOptions = useMemo(() => {
     if (!isRichRecordView) return []
     // The contractor users table shows a fixed column set (Full name, Email,
@@ -4519,6 +4543,7 @@ export function BusinessWorkspace({
                                       entityLabel={activeModule.entityLabel}
                                       onEdit={canEditRecords ? openEditRecord : undefined}
                                       onDelete={canDeleteRecords ? requestRecordDelete : undefined}
+                                      extraActions={schemeExtraActions(record)}
                                     />
                                   </TableCell>
                                 )}
@@ -4565,8 +4590,14 @@ export function BusinessWorkspace({
           onEdit={canEditRecords ? openEditRecord : undefined}
           onDelete={canDeleteRecords ? requestRecordDelete : undefined}
           showActions={canRunRecordActions}
+          extraActions={selectedRecord ? schemeExtraActions(selectedRecord) : undefined}
         />
       )}
+      <SchemeGenerateRoutesDialog
+        scheme={generateSchemeRecord}
+        actorName={actorName}
+        onClose={() => setGenerateSchemeRecord(null)}
+      />
         </>
       )}
       <ActionDecisionDialog
@@ -4640,6 +4671,7 @@ function RecordDetailsDialog({
   onEdit,
   onDelete,
   showActions = true,
+  extraActions,
 }: {
   module: ModuleDefinition
   record: BusinessRecord | null
@@ -4649,6 +4681,7 @@ function RecordDetailsDialog({
   onEdit?: (record: BusinessRecord) => void
   onDelete?: (record: BusinessRecord) => void
   showActions?: boolean
+  extraActions?: RecordExtraAction[]
 }) {
   return (
     <Sheet open={Boolean(record)} onOpenChange={(open) => !open && onClose()}>
@@ -4671,6 +4704,7 @@ function RecordDetailsDialog({
                   entityLabel={module.entityLabel}
                   onEdit={onEdit}
                   onDelete={onDelete}
+                  extraActions={extraActions}
                   className="ml-auto"
                 />
               </div>
@@ -4777,6 +4811,15 @@ function RecordDetailsDialog({
                 Close
               </Button>
               <div className="flex flex-wrap justify-end gap-2">
+                {extraActions?.map((action) => (
+                  <Button
+                    key={action.label}
+                    variant="outline"
+                    onClick={() => action.onSelect(record)}
+                  >
+                    {action.label}
+                  </Button>
+                ))}
                 {showActions &&
                   (record.allowedTransitions ?? module.lifecycle.slice(1, 3)).map((action) => (
                     <Button
