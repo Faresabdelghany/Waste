@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE — Route Scheme generation model</title>
+<style>
+  :root {
+    --bg:#F6F8F6; --card:#fff; --ink:#1B2420; --muted:#5A6B66; --line:#DCE3DE;
+    --accent:#0E6B5C; --accent-soft:#E3EFEB; --warn:#7A5B18; --warn-soft:#F4EDDE;
+    --block:#8C2F2F; --block-soft:#F6E7E7; --ok:#0E6B5C;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:24px 20px 80px; background:var(--bg); color:var(--ink);
+    font:15px/1.55 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif; }
+  .wrap { max-width:1060px; margin:0 auto; }
+  .proto-badge { display:inline-block; font-size:11px; font-weight:700; letter-spacing:.12em;
+    text-transform:uppercase; background:var(--warn-soft); color:var(--warn);
+    border-radius:4px; padding:3px 8px; margin-bottom:10px; }
+  h1 { font-size:26px; margin:0 0 6px; letter-spacing:-.01em; }
+  .question { color:var(--muted); max-width:75ch; margin:0 0 24px; }
+  .question strong { color:var(--ink); }
+  h2 { font-size:13px; letter-spacing:.1em; text-transform:uppercase; color:var(--accent);
+    margin:26px 0 10px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px 18px; }
+  .cols { display:grid; grid-template-columns: 1fr 340px; gap:16px; align-items:start; }
+  @media (max-width:900px){ .cols { grid-template-columns:1fr; } }
+
+  /* scheme panel */
+  .scheme-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px 18px; font-size:14px; }
+  .scheme-grid .k { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  .scheme-grid .v { font-weight:600; }
+  .vtag { font-family:ui-monospace,Menlo,monospace; font-size:12px; background:var(--accent-soft);
+    color:var(--accent); border-radius:4px; padding:1px 6px; margin-left:6px; }
+
+  /* routes table */
+  table { border-collapse:collapse; width:100%; font-size:13.5px; }
+  th { text-align:left; font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--muted); padding:8px 10px; border-bottom:1px solid var(--line); font-weight:600; }
+  td { padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  tr:last-child td { border-bottom:none; }
+  .mono { font-family:ui-monospace,Menlo,monospace; font-size:12.5px; }
+  .pill { display:inline-block; font-size:11.5px; font-weight:600; border-radius:99px; padding:2px 9px; }
+  .pill.Planned { background:#E7ECF4; color:#33517E; }
+  .pill.Ready { background:#EDE9F6; color:#5B4A8C; }
+  .pill.Active { background:var(--accent-soft); color:var(--accent); }
+  .pill.Completed { background:#E6E9E7; color:#4A554F; }
+  .pill.Cancelled { background:var(--block-soft); color:var(--block); }
+  .badge { display:inline-block; font-size:10.5px; font-weight:700; border-radius:4px; padding:1px 5px; margin-left:6px; vertical-align:1px; }
+  .badge.moved { background:var(--warn-soft); color:var(--warn); }
+  .badge.ovr { background:#E7ECF4; color:#33517E; }
+  .rowbtns button { margin:1px 3px 1px 0; }
+  .empty { color:var(--muted); font-style:italic; padding:14px 4px; }
+
+  button { font:600 13px/1 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+    border:1px solid var(--line); background:var(--card); color:var(--ink);
+    border-radius:6px; padding:8px 12px; cursor:pointer; }
+  button:hover { border-color:var(--accent); color:var(--accent); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.primary:hover { opacity:.9; color:#fff; }
+  button.tiny { padding:4px 8px; font-size:12px; }
+  button:disabled { opacity:.45; cursor:default; }
+  button:disabled:hover { border-color:var(--line); color:var(--ink); }
+  .btnrow { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+  .btnrow .lbl { font-size:12px; color:var(--muted); align-self:center; min-width:92px; }
+
+  /* log */
+  .log { max-height:340px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; }
+  .log .entry { font-size:13px; border-left:3px solid var(--line); padding:4px 10px; background:var(--card); }
+  .log .entry.ok { border-left-color:var(--ok); }
+  .log .entry.warn { border-left-color:var(--warn); background:var(--warn-soft); }
+  .log .entry.block { border-left-color:var(--block); background:var(--block-soft); }
+  .log .entry:first-child { font-weight:600; }
+
+  /* walkthrough tabs */
+  .tabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:-1px; }
+  .tabs button { border-radius:8px 8px 0 0; border-bottom-color:transparent; background:transparent; }
+  .tabs button.on { background:var(--card); border-color:var(--line); border-bottom:1px solid var(--card); color:var(--accent); }
+  .tabbody { border-radius:0 8px 8px 8px; }
+  .tabbody p { margin:0 0 12px; color:var(--muted); max-width:80ch; }
+  .steps { display:flex; flex-direction:column; gap:6px; }
+  .steps .step { display:flex; align-items:center; gap:10px; }
+  .steps .n { font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--muted); width:18px; }
+  .steps .done { color:var(--ok); font-weight:700; }
+  .deviations li { font-size:13.5px; margin-bottom:4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="proto-badge">Prototype · throwaway · not production</span>
+  <h1>Route Scheme generation model</h1>
+  <p class="question"><strong>The question this answers:</strong> when a Route Scheme (a recurring template — e.g. “every Sunday, these 12 glass containers, truck WH-31, driver Freja”) generates dated Routes, does the model behave sensibly? Specifically: regenerating must never duplicate; editing the scheme must only touch routes that haven’t left <em>Planned</em>; holiday deviations must move dates; a hand-picked driver on one route must survive regeneration; and started or finished routes must be untouchable. Press the buttons and see if anything feels wrong. Simulated today: <strong>Fri 28 Aug 2026</strong>.</p>
+
+  <h2>Guided walkthroughs</h2>
+  <div class="tabs" id="tabs"></div>
+  <div class="card tabbody" id="tabbody"></div>
+
+  <div class="cols" style="margin-top:26px">
+    <div>
+      <h2>The scheme (the recurring template)</h2>
+      <div class="card" id="schemePanel"></div>
+
+      <h2>Generated routes</h2>
+      <div class="card" id="routesPanel"></div>
+
+      <h2>Approved deviations (holiday / event date swaps)</h2>
+      <div class="card" id="devPanel"></div>
+
+      <h2>Free play — poke at the model in any order</h2>
+      <div class="card" id="freeplay"></div>
+    </div>
+    <div>
+      <h2>What just happened</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================================================================
+   PURE MODULE — routeSchemeEngine
+   This block is the liftable part: a pure reducer over plain data.
+   No DOM access. The page below is a throwaway shell around it.
+   ================================================================ */
+const Engine = (() => {
+  const DAYS = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+  const parse = s => new Date(s + "T00:00:00Z");
+  const fmt = d => d.toISOString().slice(0, 10);
+  const addDays = (s, n) => { const d = parse(s); d.setUTCDate(d.getUTCDate() + n); return fmt(d); };
+  const weekday = s => DAYS[parse(s).getUTCDay()];
+  const isoWeek = s => {
+    const t = parse(s);
+    t.setUTCDate(t.getUTCDate() + 3 - ((t.getUTCDay() + 6) % 7));
+    const w1 = new Date(Date.UTC(t.getUTCFullYear(), 0, 4));
+    return 1 + Math.round(((t - w1) / 864e5 - 3 + ((w1.getUTCDay() + 6) % 7)) / 7);
+  };
+  const pretty = s => parse(s).toLocaleDateString("en-GB",
+    { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+
+  const TODAY = "2026-08-28";
+
+  const initialState = () => ({
+    scheme: {
+      name: "Sunday glass collection",
+      version: 1,
+      frequency: "weekly",          // "weekly" | "every-2-weeks"
+      serviceDays: ["sunday"],
+      weekParity: "odd",            // used only for every-2-weeks
+      effectiveFrom: "2026-08-28",
+      effectiveTo: "2026-12-31",
+      defaultDriver: "Freja Holm",
+      defaultVehicle: "WH-31",
+      containerCount: 12,
+    },
+    routes: [],       // {id, serviceDate, date, status, driver, vehicle, overridden, stops, schemeVersion, deviationNote}
+    deviations: [],   // {originalDate, replacementDate, reason}
+    log: [],
+  });
+
+  const isServiceDate = (scheme, date) => {
+    if (date < scheme.effectiveFrom) return false;
+    if (scheme.effectiveTo && date > scheme.effectiveTo) return false;
+    if (!scheme.serviceDays.includes(weekday(date))) return false;
+    if (scheme.frequency === "every-2-weeks") {
+      const parity = isoWeek(date) % 2 === 1 ? "odd" : "even";
+      if (parity !== scheme.weekParity) return false;
+    }
+    return true;
+  };
+
+  const MUTABLE = ["Planned"]; // regeneration may touch only these
+  const TRANSITIONS = { Planned: ["Ready", "Cancelled"], Ready: ["Active", "Cancelled"], Active: ["Completed"], Completed: [], Cancelled: [] };
+
+  function reduce(state, action) {
+    const s = { ...state, scheme: { ...state.scheme }, routes: state.routes.map(r => ({ ...r })), deviations: [...state.deviations], log: [...state.log] };
+    const log = (msg, kind = "info") => s.log.unshift({ msg, kind });
+
+    switch (action.type) {
+      case "RESET": return initialState();
+
+      case "GENERATE": {
+        const from = addDays(TODAY, 1);
+        const to = addDays(TODAY, action.days);
+        let created = 0, refreshed = 0, skipped = 0, cancelled = 0;
+        for (let d = from; d <= to; d = addDays(d, 1)) {
+          if (!isServiceDate(s.scheme, d)) continue;
+          const dev = s.deviations.find(v => v.originalDate === d);
+          const actual = dev ? dev.replacementDate : d;
+          const note = dev ? `Moved from ${pretty(d)} — ${dev.reason}` : null;
+          const existing = s.routes.find(r => r.serviceDate === d);
+          if (!existing) {
+            s.routes.push({
+              id: "RC-" + d.slice(5).replace("-", ""), serviceDate: d, date: actual,
+              status: "Planned", driver: s.scheme.defaultDriver, vehicle: s.scheme.defaultVehicle,
+              overridden: false, stops: s.scheme.containerCount, schemeVersion: s.scheme.version, deviationNote: note,
+            });
+            created++;
+          } else if (MUTABLE.includes(existing.status)) {
+            existing.date = actual; existing.deviationNote = note;
+            existing.stops = s.scheme.containerCount; existing.schemeVersion = s.scheme.version;
+            if (!existing.overridden) { existing.driver = s.scheme.defaultDriver; existing.vehicle = s.scheme.defaultVehicle; }
+            refreshed++;
+          } else { skipped++; }
+        }
+        // orphan sweep: routes in the window whose service date the scheme no longer serves
+        for (const r of s.routes) {
+          if (r.serviceDate < from || r.serviceDate > to) continue;
+          if (isServiceDate(s.scheme, r.serviceDate)) continue;
+          if (MUTABLE.includes(r.status)) {
+            r.status = "Cancelled";
+            r.deviationNote = "Cancelled — the scheme no longer serves this date";
+            cancelled++;
+          } else if (r.status !== "Cancelled") {
+            log(`${r.id} is ${r.status} but the scheme no longer serves ${pretty(r.serviceDate)} — left as is (started/finished routes are never rescheduled).`, "warn");
+          }
+        }
+        log(`Generated ${pretty(from)} – ${pretty(to)}: ${created} created, ${refreshed} refreshed (no duplicates), ${skipped} left untouched (already started or finished), ${cancelled} cancelled (no longer scheduled).`, "ok");
+        return s;
+      }
+
+      case "EDIT_SCHEME": {
+        Object.assign(s.scheme, action.changes);
+        s.scheme.version = state.scheme.version + 1;
+        log(`Scheme edited → now v${s.scheme.version}: ${action.label}. Existing routes are untouched until you regenerate.`, "ok");
+        return s;
+      }
+
+      case "OVERRIDE_DRIVER": {
+        const r = s.routes.find(r => r.serviceDate === action.serviceDate);
+        if (!r) { log(`No route exists for ${pretty(action.serviceDate)} — generate first.`, "block"); return s; }
+        if (!["Planned", "Ready"].includes(r.status)) { log(`Blocked: ${r.id} is ${r.status} — assignment can only change before the route starts.`, "block"); return s; }
+        r.driver = action.driver; r.overridden = true;
+        log(`${r.id} (${pretty(r.date)}): driver overridden to ${action.driver}. This route only — the scheme default is unchanged.`, "ok");
+        return s;
+      }
+
+      case "SET_STATUS": {
+        const r = s.routes.find(r => r.serviceDate === action.serviceDate);
+        if (!r) { log(`No route exists for ${pretty(action.serviceDate)} — generate first.`, "block"); return s; }
+        if (!TRANSITIONS[r.status].includes(action.to)) {
+          log(`Blocked: ${r.id} is ${r.status} and can’t become ${action.to}. ${r.status === "Completed" ? "Executed routes are immutable." : ""}`, "block");
+          return s;
+        }
+        r.status = action.to;
+        log(`${r.id} (${pretty(r.date)}) → ${action.to}.`, "ok");
+        return s;
+      }
+
+      case "ADD_DEVIATION": {
+        if (s.deviations.some(v => v.originalDate === action.originalDate)) { log(`A deviation for ${pretty(action.originalDate)} already exists.`, "warn"); return s; }
+        s.deviations.push({ originalDate: action.originalDate, replacementDate: action.replacementDate, reason: action.reason });
+        log(`Deviation approved: ${pretty(action.originalDate)} → ${pretty(action.replacementDate)} (${action.reason}). Regenerate to move planned routes; started routes never move.`, "ok");
+        return s;
+      }
+
+      default: return s;
+    }
+  }
+
+  return { initialState, reduce, pretty, TODAY };
+})();
+
+/* ================================================================
+   THROWAWAY SHELL — rendering + walkthroughs. Not liftable.
+   ================================================================ */
+let state = Engine.initialState();
+const dispatch = a => { state = Engine.reduce(state, a); render(); };
+const P = Engine.pretty;
+
+const EDITS = [
+  { label: "Move service day: Sunday → Saturday", changes: { serviceDays: ["saturday"] } },
+  { label: "Change default driver → Mads Jensen", changes: { defaultDriver: "Mads Jensen" } },
+  { label: "Add 3 containers (stops 12 → 15)", changes: { containerCount: 15 } },
+  { label: "Frequency → every 2 weeks (odd ISO weeks)", changes: { frequency: "every-2-weeks", weekParity: "odd" } },
+];
+
+const WALKTHROUGHS = [
+  {
+    title: "1 · Generate & regenerate",
+    blurb: "The scheme runs every Sunday. Generating a window creates one route per service day; generating the same window again must refresh, never duplicate. Watch the route count and the log.",
+    steps: [
+      { label: "Generate next 7 days", act: () => dispatch({ type: "GENERATE", days: 7 }) },
+      { label: "Generate next 7 days again — expect 0 created, 1 refreshed", act: () => dispatch({ type: "GENERATE", days: 7 }) },
+      { label: "Generate next 14 days — only the new Sunday is added", act: () => dispatch({ type: "GENERATE", days: 14 }) },
+    ],
+  },
+  {
+    title: "2 · Edit the scheme mid-flight",
+    blurb: "Two Sunday routes exist; the first is already out driving. Then planning moves the service day to Saturday. On regeneration: the Active Sunday route must stay exactly as it was (pinned to scheme v1), the untouched Planned Sunday must be cancelled, and new Saturday routes appear at v2.",
+    steps: [
+      { label: "Generate next 14 days (two Sunday routes)", act: () => dispatch({ type: "GENERATE", days: 14 }) },
+      { label: "Mark RC-0830 ready", act: () => dispatch({ type: "SET_STATUS", serviceDate: "2026-08-30", to: "Ready" }) },
+      { label: "Start RC-0830 (driver is now out on it)", act: () => dispatch({ type: "SET_STATUS", serviceDate: "2026-08-30", to: "Active" }) },
+      { label: "Edit scheme: Sunday → Saturday (v2)", act: () => dispatch({ type: "EDIT_SCHEME", label: EDITS[0].label, changes: EDITS[0].changes }) },
+      { label: "Regenerate next 14 days — watch what survives", act: () => dispatch({ type: "GENERATE", days: 14 }) },
+    ],
+  },
+  {
+    title: "3 · Holiday deviation",
+    blurb: "Sun 6 Sep clashes with a street festival, approved to move to Mon 7 Sep. A deviation approved before generation lands the route on the replacement date; approved after, it moves the route on the next regeneration. The route keeps its identity (RC-0906) either way.",
+    steps: [
+      { label: "Approve deviation: Sun 6 Sep → Mon 7 Sep (street festival)", act: () => dispatch({ type: "ADD_DEVIATION", originalDate: "2026-09-06", replacementDate: "2026-09-07", reason: "Street festival" }) },
+      { label: "Generate next 14 days — RC-0906 runs on the Monday", act: () => dispatch({ type: "GENERATE", days: 14 }) },
+      { label: "Regenerate — stable, still one RC-0906", act: () => dispatch({ type: "GENERATE", days: 14 }) },
+    ],
+  },
+  {
+    title: "4 · Hand-picked driver survives",
+    blurb: "A dispatcher overrides one Sunday’s driver to Lars. Later the scheme’s default driver changes to Mads. Regeneration must keep Lars on the overridden route (his badge shows “overridden”) while the other route picks up the new default.",
+    steps: [
+      { label: "Generate next 14 days", act: () => dispatch({ type: "GENERATE", days: 14 }) },
+      { label: "Override RC-0830’s driver → Lars Mikkelsen", act: () => dispatch({ type: "OVERRIDE_DRIVER", serviceDate: "2026-08-30", driver: "Lars Mikkelsen" }) },
+      { label: "Edit scheme: default driver → Mads Jensen (v2)", act: () => dispatch({ type: "EDIT_SCHEME", label: EDITS[1].label, changes: EDITS[1].changes }) },
+      { label: "Regenerate — Lars stays, RC-0906 gets Mads", act: () => dispatch({ type: "GENERATE", days: 14 }) },
+    ],
+  },
+  {
+    title: "5 · Guardrails",
+    blurb: "A route that has been driven is history — nothing may change it. Run RC-0830 to completion, then try things that must be blocked. The red log entries are the model saying no.",
+    steps: [
+      { label: "Generate next 7 days", act: () => dispatch({ type: "GENERATE", days: 7 }) },
+      { label: "Mark RC-0830 ready", act: () => dispatch({ type: "SET_STATUS", serviceDate: "2026-08-30", to: "Ready" }) },
+      { label: "Start RC-0830", act: () => dispatch({ type: "SET_STATUS", serviceDate: "2026-08-30", to: "Active" }) },
+      { label: "Complete RC-0830", act: () => dispatch({ type: "SET_STATUS", serviceDate: "2026-08-30", to: "Completed" }) },
+      { label: "Try to cancel the completed route — must be blocked", act: () => dispatch({ type: "SET_STATUS", serviceDate: "2026-08-30", to: "Cancelled" }) },
+      { label: "Try to override its driver — must be blocked", act: () => dispatch({ type: "OVERRIDE_DRIVER", serviceDate: "2026-08-30", driver: "Lars Mikkelsen" }) },
+      { label: "Regenerate next 7 days — completed route untouched", act: () => dispatch({ type: "GENERATE", days: 7 }) },
+    ],
+  },
+  {
+    title: "6 · Every 2 weeks",
+    blurb: "Switch the scheme to every 2 weeks on odd ISO weeks, then generate a 4-week window. Only alternating Sundays appear (30 Aug and 13 Sep) — the even-week Sundays (6 and 20 Sep) are skipped.",
+    steps: [
+      { label: "Edit scheme: frequency → every 2 weeks, odd ISO weeks (v2)", act: () => dispatch({ type: "EDIT_SCHEME", label: EDITS[3].label, changes: EDITS[3].changes }) },
+      { label: "Generate next 28 days — two routes, two weeks apart", act: () => dispatch({ type: "GENERATE", days: 28 }) },
+    ],
+  },
+];
+
+let activeTab = 0;
+let progress = 0;
+
+function startTab(i) { activeTab = i; progress = 0; state = Engine.initialState(); render(); }
+function runStep(i) { if (i !== progress) return; WALKTHROUGHS[activeTab].steps[i].act(); progress++; render(); }
+
+function freqText(sch) {
+  const days = sch.serviceDays.map(d => d[0].toUpperCase() + d.slice(1)).join(", ");
+  return sch.frequency === "weekly" ? `Every week on ${days}` : `Every 2 weeks (${sch.weekParity} ISO weeks) on ${days}`;
+}
+
+function render() {
+  // walkthrough tabs
+  document.getElementById("tabs").innerHTML = WALKTHROUGHS.map((w, i) =>
+    `<button class="${i === activeTab ? "on" : ""}" onclick="startTab(${i})">${w.title}</button>`).join("");
+  const w = WALKTHROUGHS[activeTab];
+  document.getElementById("tabbody").innerHTML = `
+    <p>${w.blurb}</p>
+    <div class="steps">${w.steps.map((s, i) => `
+      <div class="step">
+        <span class="n">${i < progress ? "" : i + 1}</span>
+        ${i < progress ? `<span class="done">✓</span><span style="color:var(--muted)">${s.label}</span>`
+          : `<button class="${i === progress ? "primary" : ""}" ${i === progress ? "" : "disabled"} onclick="runStep(${i})">${s.label}</button>`}
+      </div>`).join("")}
+      ${progress >= w.steps.length ? `<div style="margin-top:10px;color:var(--ok);font-weight:600">Scenario finished — check the routes and the log. Restart via the tab, or free-play below.</div>` : ""}
+    </div>`;
+
+  // scheme
+  const sch = state.scheme;
+  document.getElementById("schemePanel").innerHTML = `
+    <div style="font-weight:700;font-size:16px;margin-bottom:10px">${sch.name}<span class="vtag">v${sch.version}</span></div>
+    <div class="scheme-grid">
+      <div><div class="k">Recurrence</div><div class="v">${freqText(sch)}</div></div>
+      <div><div class="k">Effective</div><div class="v">${P(sch.effectiveFrom)} – ${P(sch.effectiveTo)}</div></div>
+      <div><div class="k">Default driver</div><div class="v">${sch.defaultDriver}</div></div>
+      <div><div class="k">Default vehicle</div><div class="v">${sch.defaultVehicle}</div></div>
+      <div><div class="k">Containers</div><div class="v">${sch.containerCount} glass containers · Copenhagen Central</div></div>
+    </div>`;
+
+  // routes
+  const rows = [...state.routes].sort((a, b) => a.serviceDate < b.serviceDate ? -1 : 1);
+  document.getElementById("routesPanel").innerHTML = rows.length === 0
+    ? `<div class="empty">No routes yet — the scheme is only a template until you generate.</div>`
+    : `<div style="overflow-x:auto"><table>
+        <tr><th>Route</th><th>Runs on</th><th>Status</th><th>Driver</th><th>Vehicle</th><th>Stops</th><th>Scheme</th><th>Actions</th></tr>
+        ${rows.map(r => `<tr>
+          <td class="mono">${r.id}</td>
+          <td>${P(r.date)}${r.deviationNote ? `<span class="badge moved" title="${r.deviationNote}">${r.status === "Cancelled" ? "scheme changed" : "moved"}</span>` : ""}</td>
+          <td><span class="pill ${r.status}">${r.status}</span></td>
+          <td>${r.driver}${r.overridden ? `<span class="badge ovr">overridden</span>` : ""}</td>
+          <td class="mono">${r.vehicle}</td>
+          <td>${r.stops}</td>
+          <td class="mono">v${r.schemeVersion}</td>
+          <td class="rowbtns">${routeActions(r)}</td>
+        </tr>`).join("")}
+      </table></div>`;
+
+  // deviations
+  document.getElementById("devPanel").innerHTML = state.deviations.length === 0
+    ? `<div class="empty">None approved.</div>`
+    : `<ul class="deviations" style="margin:0;padding-left:18px">${state.deviations.map(v =>
+        `<li><strong>${P(v.originalDate)}</strong> → <strong>${P(v.replacementDate)}</strong> · ${v.reason}</li>`).join("")}</ul>`;
+
+  // free play
+  document.getElementById("freeplay").innerHTML = `
+    <div class="btnrow"><span class="lbl">Generate</span>
+      <button onclick='dispatch({type:"GENERATE",days:7})'>Next 7 days</button>
+      <button onclick='dispatch({type:"GENERATE",days:14})'>Next 14 days</button>
+      <button onclick='dispatch({type:"GENERATE",days:28})'>Next 28 days</button>
+    </div>
+    <div class="btnrow"><span class="lbl">Edit scheme</span>
+      ${EDITS.map((e, i) => `<button onclick='dispatch({type:"EDIT_SCHEME",label:${JSON.stringify(e.label)},changes:${JSON.stringify(e.changes)}})'>${e.label}</button>`).join("")}
+    </div>
+    <div class="btnrow"><span class="lbl">Deviation</span>
+      <button onclick='dispatch({type:"ADD_DEVIATION",originalDate:"2026-09-06",replacementDate:"2026-09-07",reason:"Street festival"})'>Sun 6 Sep → Mon 7 Sep (street festival)</button>
+    </div>
+    <div class="btnrow"><span class="lbl"></span>
+      <button onclick='dispatch({type:"RESET"})'>Reset everything</button>
+    </div>`;
+
+  // log
+  document.getElementById("log").innerHTML = state.log.length === 0
+    ? `<div class="entry">Nothing yet — start a walkthrough above or free-play.</div>`
+    : state.log.slice(0, 40).map(e => `<div class="entry ${e.kind}">${e.msg}</div>`).join("");
+}
+
+function routeActions(r) {
+  const b = [];
+  if (r.status === "Planned") {
+    b.push(`<button class="tiny" onclick='dispatch({type:"SET_STATUS",serviceDate:"${r.serviceDate}",to:"Ready"})'>Mark ready</button>`);
+    b.push(`<button class="tiny" onclick='dispatch({type:"SET_STATUS",serviceDate:"${r.serviceDate}",to:"Cancelled"})'>Cancel</button>`);
+  }
+  if (r.status === "Ready") b.push(`<button class="tiny" onclick='dispatch({type:"SET_STATUS",serviceDate:"${r.serviceDate}",to:"Active"})'>Start</button>`);
+  if (r.status === "Active") b.push(`<button class="tiny" onclick='dispatch({type:"SET_STATUS",serviceDate:"${r.serviceDate}",to:"Completed"})'>Complete</button>`);
+  if (["Planned", "Ready"].includes(r.status)) b.push(`<button class="tiny" onclick='dispatch({type:"OVERRIDE_DRIVER",serviceDate:"${r.serviceDate}",driver:"Lars Mikkelsen"})'>Driver → Lars</button>`);
+  return b.join("") || `<span style="color:var(--muted);font-size:12px">—</span>`;
+}
+
+render();
+</script>
+</body>
+</html>
