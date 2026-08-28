@@ -1,4 +1,4 @@
-<h1 align="center">WasteHero Operations Platform · UI Prototype</h1>
+<h1 align="center"> Operations Platform · UI Prototype</h1>
 
 <p align="center">
   A multi-workspace prototype of the WasteHero operations platform for waste & recycling logistics —
