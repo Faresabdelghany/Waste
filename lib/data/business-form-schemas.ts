@@ -483,12 +483,29 @@ function enhanceSchema(schema: BusinessFormSchema): BusinessFormSchema {
       .filter(([startField, endField]) =>
         fieldIds.has(startField) && fieldIds.has(endField),
       )
+      // A one-day scheme window (from == to, a single service date) is valid,
+      // so schemes get their own allowSame rule below.
+      .filter(
+        ([, endField]) =>
+          !(schema.key === "route-studio.schemes" && endField === "effectiveTo"),
+      )
       .map(([startField, endField]) => ({
         type: "date-order" as const,
         startField,
         endField,
         message: "The end date or time must be after the start.",
       })),
+    ...(schema.key === "route-studio.schemes"
+      ? [
+          {
+            type: "date-order" as const,
+            startField: "effectiveFrom",
+            endField: "effectiveTo",
+            allowSame: true,
+            message: "Effective to must be on or after Effective from.",
+          },
+        ]
+      : []),
     ...(schema.key === "resources.inventory"
       ? [
           {

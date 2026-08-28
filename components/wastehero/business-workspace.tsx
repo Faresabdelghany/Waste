@@ -36,6 +36,11 @@ import {
   type WorkspaceId,
 } from "@/lib/data/business-modules"
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
+import {
+  parseServiceDays,
+  recurrenceFromValues,
+  recurrenceSentence,
+} from "@/lib/route-schemes/recurrence"
 import type {
   BusinessFormField,
   BusinessFormOption,
@@ -2201,7 +2206,23 @@ export function BusinessWorkspace({
   const editInitialValues = useMemo<BusinessFormValues>(() => {
     if (!editingRecord || !activeModuleFormSchema) return formInitialValues
     if (editingRecord.submittedValues) {
-      return { ...formInitialValues, ...editingRecord.submittedValues }
+      const seeded = { ...formInitialValues, ...editingRecord.submittedValues }
+      // Schemes saved before recurrence became structured hold values the
+      // form can no longer offer: capitalized textarea day names, and the
+      // retired biweekly/four-week/calendar-rule frequencies. Seed the
+      // multiselect with the tokens that survive, map biweekly onto its
+      // successor, and blank frequencies with no equivalent cadence so the
+      // planner re-picks instead of hitting an unfixable validation error.
+      if (activeModuleFormSchema.key === "route-studio.schemes") {
+        if (typeof seeded.serviceDays === "string") {
+          seeded.serviceDays = parseServiceDays(seeded.serviceDays).join(", ")
+        }
+        if (seeded.frequency === "biweekly") seeded.frequency = "every-2-weeks"
+        if (seeded.frequency === "four-week" || seeded.frequency === "calendar-rule") {
+          seeded.frequency = ""
+        }
+      }
+      return seeded
     }
 
     // Fixture records carry display facts only, so map them back onto the
@@ -3006,6 +3027,25 @@ export function BusinessWorkspace({
       }
     }
 
+    // A scheme's recurrence is machine-readable in submittedValues (frequency,
+    // serviceDays, weekRotation, effectiveFrom/To, plannedStartTime — the shape
+    // lib/route-schemes/recurrence reads); the facts get the one-line summary
+    // the record detail shows.
+    const normalizeRouteSchemeRecord = (record: BusinessRecord): BusinessRecord => {
+      const recurrence = recurrenceFromValues(values)
+      if (!recurrence) return record
+      const nextFacts = { ...record.facts }
+      // The retired free-text cadence field, and — when the frequency moved
+      // away from every-2-weeks — the rotation fact the edit merge would
+      // otherwise carry forward against the new Recurrence line.
+      delete nextFacts["Collection weeks or rule"]
+      if (recurrence.frequency !== "every-2-weeks") delete nextFacts["Week rotation"]
+      return {
+        ...record,
+        facts: { ...nextFacts, Recurrence: recurrenceSentence(recurrence) },
+      }
+    }
+
     // Tickets keep their classification facts under the fixture keys (Type,
     // Team) so table columns and filters read one shape regardless of whether
     // a ticket was seeded or submitted, and the record description is the
@@ -3058,6 +3098,9 @@ export function BusinessWorkspace({
       }
       if (resolvedTarget.module.id === "tickets") {
         updatedRecord = normalizeTicketRecord(updatedRecord)
+      }
+      if (resolvedTarget.module.id === "schemes") {
+        updatedRecord = normalizeRouteSchemeRecord(updatedRecord)
       }
       const editEvent: AuditEvent = {
         id: `audit-edit-${now}`,
@@ -3148,6 +3191,9 @@ export function BusinessWorkspace({
     }
     if (resolvedTarget.module.id === "tickets") {
       newRecord = normalizeTicketRecord(newRecord)
+    }
+    if (resolvedTarget.module.id === "schemes") {
+      newRecord = normalizeRouteSchemeRecord(newRecord)
     }
     const creationEvent: AuditEvent = {
       id: `audit-form-${now}`,

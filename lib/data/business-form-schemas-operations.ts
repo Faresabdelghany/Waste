@@ -971,6 +971,17 @@ export const operationsBusinessFormSchemas = [
     submitLabel: "Create route scheme",
     nameField: "schemeName",
     contextFieldIds: ["projectId", "planningAreaId", "effectiveFrom", "effectiveTo"],
+    recurrencePreview: {
+      sectionId: "cadence-resources",
+      count: 8,
+      fieldIds: {
+        frequency: "frequency",
+        serviceDays: "serviceDays",
+        weekRotation: "weekRotation",
+        effectiveFrom: "effectiveFrom",
+        effectiveTo: "effectiveTo",
+      },
+    },
     sections: [
       {
         id: "identity-effective-period",
@@ -1013,6 +1024,7 @@ export const operationsBusinessFormSchemas = [
             id: "effectiveTo",
             label: "Effective to",
             type: "date",
+            required: true,
           },
         ],
       },
@@ -1021,36 +1033,49 @@ export const operationsBusinessFormSchemas = [
         title: "Cadence and planned resources",
         fields: [
           {
-            id: "serviceDays",
-            label: "Service days",
-            type: "textarea",
-            required: true,
-            placeholder: "Monday, Thursday",
-          },
-          {
             id: "frequency",
             label: "Collection frequency",
             type: "select",
             required: true,
             options: [
               { value: "weekly", label: "Every week" },
-              { value: "biweekly", label: "Every two weeks" },
-              { value: "four-week", label: "Every four weeks" },
-              { value: "calendar-rule", label: "Calendar rule" },
+              { value: "every-2-weeks", label: "Every 2 weeks" },
+              { value: "monthly", label: "Once a month" },
             ],
           },
           {
-            id: "collectionWeeks",
-            label: "Collection weeks or rule",
-            type: "text",
+            id: "weekRotation",
+            label: "Week rotation",
+            type: "select",
+            description: "Which ISO-week parity the scheme serves.",
+            options: [
+              { value: "odd", label: "Odd ISO weeks" },
+              { value: "even", label: "Even ISO weeks" },
+            ],
+            visibleWhen: { fieldId: "frequency", equals: "every-2-weeks" },
+            requiredWhen: { fieldId: "frequency", equals: "every-2-weeks" },
+          },
+          {
+            id: "serviceDays",
+            label: "Service days",
+            type: "multiselect",
             required: true,
+            options: [
+              { value: "monday", label: "Monday" },
+              { value: "tuesday", label: "Tuesday" },
+              { value: "wednesday", label: "Wednesday" },
+              { value: "thursday", label: "Thursday" },
+              { value: "friday", label: "Friday" },
+              { value: "saturday", label: "Saturday" },
+              { value: "sunday", label: "Sunday" },
+            ],
           },
           {
             id: "plannedStartTime",
             label: "Planned start time",
-            type: "text",
+            type: "time",
             required: true,
-            placeholder: "06:30",
+            defaultValue: "06:30",
           },
           {
             id: "contractorId",
@@ -1436,7 +1461,7 @@ export const operationsBusinessFormSchemas = [
             options: [
               { value: "weekly", label: "Every week" },
               { value: "every-2-weeks", label: "Every 2 weeks" },
-              { value: "every-4-weeks", label: "Every 4 weeks" },
+              { value: "monthly", label: "Once a month" },
               { value: "on-demand", label: "On demand" },
             ],
           },
@@ -1452,6 +1477,7 @@ export const operationsBusinessFormSchemas = [
               { value: "thursday", label: "Thursday" },
               { value: "friday", label: "Friday" },
               { value: "saturday", label: "Saturday" },
+              { value: "sunday", label: "Sunday" },
             ],
           },
           {
@@ -1462,7 +1488,7 @@ export const operationsBusinessFormSchemas = [
             description: "Required for alternating frequencies.",
             requiredWhen: {
               fieldId: "frequency",
-              oneOf: ["every-2-weeks", "every-4-weeks"],
+              equals: "every-2-weeks",
             },
           },
           {

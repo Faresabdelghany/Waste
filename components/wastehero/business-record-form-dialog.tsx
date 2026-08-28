@@ -14,10 +14,17 @@ import type {
   BusinessFieldCondition,
   BusinessFormField,
   BusinessFormOption,
+  BusinessFormRecurrencePreview,
   BusinessFormSchema,
   BusinessFormValue,
   BusinessFormValues,
 } from "@/lib/data/business-form-types"
+import {
+  formatServiceDate,
+  nextServiceDates,
+  recurrenceFromValues,
+  recurrenceSentence,
+} from "@/lib/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -311,6 +318,67 @@ function FileUploadField({
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  )
+}
+
+function toLocalIsoDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+}
+
+// Live preview of the upcoming service dates a recurrence produces, updating
+// with every edit to the frequency, service days, rotation, or window fields.
+function RecurrenceDatesPreview({
+  preview,
+  values,
+}: {
+  preview: BusinessFormRecurrencePreview
+  values: BusinessFormValues
+}) {
+  const recurrence = recurrenceFromValues({
+    frequency: values[preview.fieldIds.frequency],
+    serviceDays: values[preview.fieldIds.serviceDays],
+    weekRotation: values[preview.fieldIds.weekRotation],
+    effectiveFrom: values[preview.fieldIds.effectiveFrom],
+    effectiveTo: values[preview.fieldIds.effectiveTo],
+  })
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const dates = recurrence
+    ? nextServiceDates(recurrence, { from: toLocalIsoDate(tomorrow), count: preview.count })
+    : []
+
+  return (
+    <div className="mt-5 rounded-lg border border-border/70 bg-muted/30 px-4 py-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Next dates
+      </p>
+      {recurrence ? (
+        <>
+          <p className="mt-1 text-sm font-medium">{recurrenceSentence(recurrence)}</p>
+          {dates.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {dates.map((date) => (
+                <span
+                  key={date}
+                  className="rounded-md border border-border/60 bg-background px-2 py-1 text-xs font-medium"
+                >
+                  {formatServiceDate(date)}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground">
+              No upcoming service dates fall inside the effective window.
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="mt-1 text-xs text-muted-foreground">
+          Pick a frequency, at least one service day, and the effective dates to
+          preview the upcoming service dates.
+        </p>
       )}
     </div>
   )
@@ -712,6 +780,13 @@ export function BusinessRecordFormDialog({
                       )
                     })}
                   </div>
+
+                  {schema.recurrencePreview?.sectionId === section.id && (
+                    <RecurrenceDatesPreview
+                      preview={schema.recurrencePreview}
+                      values={values}
+                    />
+                  )}
                 </section>
               )
             })}

@@ -9,6 +9,7 @@ export type BusinessFormFieldType =
   | "number"
   | "date"
   | "datetime"
+  | "time"
   | "select"
   | "multiselect"
   | "checkbox"
@@ -96,6 +97,25 @@ export type BusinessFormExecution = {
   completionMessage: string
 }
 
+/**
+ * Live "Next dates" preview rendered under one form section: the dialog feeds
+ * the named fields into the recurrence engine and shows the upcoming service
+ * dates as the planner edits.
+ */
+export type BusinessFormRecurrencePreview = {
+  /** The section the preview renders beneath. */
+  sectionId: string
+  /** How many upcoming dates to show. */
+  count: number
+  fieldIds: {
+    frequency: string
+    serviceDays: string
+    weekRotation: string
+    effectiveFrom: string
+    effectiveTo: string
+  }
+}
+
 export type BusinessFormSchema = {
   key: `${WorkspaceId}.${string}`
   mode: BusinessFormMode
@@ -112,6 +132,7 @@ export type BusinessFormSchema = {
   contextFieldIds?: readonly string[]
   execution?: BusinessFormExecution
   validationRules?: readonly BusinessFormValidationRule[]
+  recurrencePreview?: BusinessFormRecurrencePreview
   sections: readonly BusinessFormSection[]
 }
 
