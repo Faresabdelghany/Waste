@@ -160,6 +160,7 @@ import {
   validateGuidedScheme,
   type GuidedSchemeData,
 } from "@/components/wastehero/scheme-create-flow"
+import { SchemeRecordRouteMapSection } from "@/components/wastehero/scheme-route-map"
 import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
 import { useActiveRoutes } from "@/components/wastehero/active-routes-store"
 import {
@@ -4686,6 +4687,10 @@ function RecordDetailsDialog({
                   ))}
                 </div>
               </section>
+
+              {module.id === "schemes" && (
+                <SchemeRecordRouteMapSection record={record} />
+              )}
 
               <section className="space-y-4">
                 <h3 className="text-sm font-semibold">Lifecycle</h3>

@@ -1,12 +1,12 @@
 "use client"
 
 // Route Scheme create flow for the Route Schemes module (spec FR-1/FR-2/FR-5/
-// FR-14, ticket #5). "New route scheme" opens a chooser between Quick create
-// (the schema-driven dialog, opened via onQuickCreate) and Guided Setup — a
-// six-step wizard: scheme & scope, recurrence, assignment, per-day container
-// plans, route map (placeholder until the map ticket), and review & create.
-// Guided completion hands the collected values to onGuidedCreate, which owns
-// record creation and the Validated/Draft decision.
+// FR-14/FR-15, tickets #5/#6). "New route scheme" opens a chooser between
+// Quick create (the schema-driven dialog, opened via onQuickCreate) and Guided
+// Setup — a six-step wizard: scheme & scope, recurrence, assignment, per-day
+// container plans, route map, and review & create. Guided completion hands the
+// collected values to onGuidedCreate, which owns record creation and the
+// Validated/Draft decision.
 
 import { useEffect, useMemo, useState } from "react"
 import {
@@ -14,7 +14,6 @@ import {
   CaretRight,
   Check,
   MagnifyingGlass,
-  MapTrifold,
   Plus,
   X,
 } from "@phosphor-icons/react/dist/ssr"
@@ -32,12 +31,11 @@ import {
 import { Stepper } from "@/components/project-wizard/Stepper"
 import { StepMode } from "@/components/project-wizard/steps/StepMode"
 import type { ProjectMode } from "@/components/project-wizard/types"
-import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
 import {
-  businessWorkspaces,
-  type BusinessRecord,
-  type WorkspaceId,
-} from "@/lib/data/business-modules"
+  SchemeRouteMap,
+  useModuleRecords,
+} from "@/components/wastehero/scheme-route-map"
+import type { BusinessRecord } from "@/lib/data/business-modules"
 import {
   RECURRENCE_FREQUENCY_LABELS,
   SERVICE_DAYS,
@@ -60,15 +58,6 @@ import {
   type SchemeValidationResult,
 } from "@/lib/route-schemes/validation"
 import { cn } from "@/lib/utils"
-
-function useModuleRecords(workspaceId: WorkspaceId, moduleId: string) {
-  const { getRecords } = useBusinessRecordStore()
-  const fixtureRecords =
-    businessWorkspaces[workspaceId]?.modules.find(
-      (candidate) => candidate.id === moduleId,
-    )?.records ?? []
-  return getRecords(workspaceId, moduleId, fixtureRecords)
-}
 
 export interface GuidedSchemeData {
   schemeName: string
@@ -299,7 +288,7 @@ function GuidedSchemeWizardOverlay({
             {step === 2 && <StepRecurrence data={data} updateData={updateData} />}
             {step === 3 && <StepAssignment data={data} updateData={updateData} />}
             {step === 4 && <StepDayContainers data={data} updateData={updateData} />}
-            {step === 5 && <StepRouteMapPlaceholder data={data} />}
+            {step === 5 && <StepRouteMap data={data} />}
             {step === 6 && <StepSchemeReview data={data} onEditStep={goToStep} />}
           </div>
 
@@ -909,58 +898,19 @@ function SchemeContainerPicker({
   )
 }
 
-// Step 5 — Route map (placeholder; the real map is its own ticket, FR-15)
+// Step 5 — Route map (FR-15): one colored route line + pins per service day
 
-function StepRouteMapPlaceholder({ data }: { data: GuidedSchemeData }) {
+function StepRouteMap({ data }: { data: GuidedSchemeData }) {
   const containers = useModuleRecords("resources", "containers")
   const plans = effectiveDayPlans(data.serviceDays, schemeDayPlans(data))
 
-  const fractionMix = (containerIds: string[]) => {
-    const counts = new Map<string, number>()
-    for (const id of containerIds) {
-      const fraction = containers.find((container) => container.id === id)?.facts?.[
-        "Waste fractions"
-      ]
-      if (fraction) counts.set(fraction, (counts.get(fraction) ?? 0) + 1)
-    }
-    return (
-      Array.from(counts.entries())
-        .sort((a, b) => b[1] - a[1])
-        .map(([fraction, count]) => `${count} ${fraction}`)
-        .join(" · ") || "No containers"
-    )
-  }
-
   return (
     <div className="space-y-4">
-      <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-muted/30 text-center">
-        <MapTrifold className="h-8 w-8 text-muted-foreground" />
-        <p className="text-sm font-medium text-foreground">Route map preview</p>
-        <p className="max-w-sm text-xs text-muted-foreground">
-          The map with one colored route line per service day arrives in a
-          follow-up. Each day below generates its own route in picked order.
-        </p>
-      </div>
-      <div className="divide-y divide-border overflow-hidden rounded-xl border border-border/60">
-        {plans.map((plan) => (
-          <div key={plan.day} className="flex items-center gap-3 px-3 py-2 text-sm">
-            <span className="w-10 font-semibold">
-              {SERVICE_DAY_SHORT_LABELS[plan.day]}
-            </span>
-            <span className="font-mono text-xs">
-              {plan.containerIds.length} stop{plan.containerIds.length === 1 ? "" : "s"}
-            </span>
-            <span className="truncate text-xs text-muted-foreground">
-              {fractionMix(plan.containerIds)}
-            </span>
-          </div>
-        ))}
-        {plans.length === 0 && (
-          <p className="px-3 py-4 text-center text-sm text-muted-foreground">
-            Pick service days first.
-          </p>
-        )}
-      </div>
+      <p className="text-sm text-muted-foreground">
+        Each service day generates its own route in picked order — filter a day
+        to isolate its line.
+      </p>
+      <SchemeRouteMap plans={plans} containers={containers} />
     </div>
   )
 }
