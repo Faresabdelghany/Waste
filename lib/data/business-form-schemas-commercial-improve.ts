@@ -600,7 +600,7 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Contract area",
             type: "select",
             required: true,
-            relation: { workspaceId: "plan", moduleId: "areas" },
+            relation: { workspaceId: "contractors", moduleId: "contract-areas" },
           },
           {
             id: "productId",
@@ -1818,7 +1818,7 @@ export const commercialImproveBusinessFormSchemas = [
             id: "contractAreaId",
             label: "Contract area",
             type: "select",
-            relation: { workspaceId: "plan", moduleId: "areas" },
+            relation: { workspaceId: "contractors", moduleId: "contract-areas" },
           },
         ],
       },

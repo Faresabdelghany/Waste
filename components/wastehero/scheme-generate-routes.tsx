@@ -28,6 +28,7 @@ import { useBusinessRecordStore } from "@/components/wastehero/business-record-s
 import { statusClasses } from "@/components/wastehero/business-record-views"
 import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
 import type { BusinessRecord } from "@/lib/data/business-modules"
+import { calendarFromRecord } from "@/lib/route-schemes/calendar"
 import {
   applySchemeGeneration,
   approvedDeviationsFromRecords,
@@ -57,6 +58,7 @@ const ACTION_LABELS: Record<PlannedRouteAction, string> = {
   refresh: "Refresh",
   skip: "Untouched",
   cancel: "Cancel",
+  omit: "Skipped",
 }
 
 const ACTION_BADGE_CLASSES: Record<PlannedRouteAction, string> = {
@@ -67,6 +69,7 @@ const ACTION_BADGE_CLASSES: Record<PlannedRouteAction, string> = {
   skip: "border-transparent bg-muted text-muted-foreground",
   cancel:
     "bg-red-50 text-red-700 border-transparent dark:bg-red-500/15 dark:text-red-100",
+  omit: "bg-amber-50 text-amber-700 border-transparent dark:bg-amber-500/15 dark:text-amber-100",
 }
 
 export function SchemeGenerateRoutesDialog({
@@ -86,6 +89,7 @@ export function SchemeGenerateRoutesDialog({
   const existingRoutes = useModuleRecords("route-studio", "routes")
   const existingPickups = useModuleRecords("route-studio", "pickups")
   const deviationRecords = useModuleRecords("plan", "collection-deviations")
+  const calendarRecords = useModuleRecords("plan", "calendars")
   const containers = useModuleRecords("resources", "containers")
   const { upsertRecord } = useBusinessRecordStore()
 
@@ -93,11 +97,18 @@ export function SchemeGenerateRoutesDialog({
   // so the preview and the confirm write the exact same records.
   const generation = useMemo(() => {
     if (!scheme || !fromDate || !toDate || toDate < fromDate) return null
+    const calendarId = stringValueOf(scheme, "calendarId")
+    const calendar = calendarId
+      ? calendarFromRecord(
+          calendarRecords.find((record) => record.id === calendarId),
+        )
+      : null
     const plan = planSchemeGeneration({
       scheme,
       window: { from: fromDate, to: toDate },
       existingRoutes,
       deviations: approvedDeviationsFromRecords(deviationRecords),
+      calendar,
     })
     if (!plan) return null
     return {
@@ -116,6 +127,7 @@ export function SchemeGenerateRoutesDialog({
     existingRoutes,
     existingPickups,
     deviationRecords,
+    calendarRecords,
     containers,
     actorName,
   ])
@@ -157,6 +169,9 @@ export function SchemeGenerateRoutesDialog({
           `${summary.refreshed} refreshed`,
           ...(summary.cancelled > 0 ? [`${summary.cancelled} cancelled`] : []),
           ...(summary.skipped > 0 ? [`${summary.skipped} left untouched`] : []),
+          ...(summary.calendarSkipped > 0
+            ? [`${summary.calendarSkipped} calendar-skipped`]
+            : []),
           `${summary.pickups} pickups`,
         ].join(" · "),
       },
@@ -233,7 +248,7 @@ export function SchemeGenerateRoutesDialog({
                           {SERVICE_DAY_SHORT_LABELS[planned.day]}
                         </span>
                         <span className="font-mono text-xs">{planned.routeName}</span>
-                        {planned.action !== "cancel" && (
+                        {planned.action !== "cancel" && planned.action !== "omit" && (
                           <span className="text-xs text-muted-foreground">
                             {planned.containerIds.length} stop
                             {planned.containerIds.length === 1 ? "" : "s"}
@@ -245,6 +260,12 @@ export function SchemeGenerateRoutesDialog({
                         {planned.action === "skip" && planned.note && (
                           <span className="text-xs text-muted-foreground">
                             {planned.note}
+                          </span>
+                        )}
+                        {planned.action === "omit" && planned.note && (
+                          <span className="text-xs text-amber-700 dark:text-amber-400">
+                            {planned.note} — create a Collection Deviation to
+                            move this service
                           </span>
                         )}
                         {planned.action === "cancel" && (
@@ -259,6 +280,11 @@ export function SchemeGenerateRoutesDialog({
                             {deviationNote}
                           </span>
                         )}
+                        {planned.calendarWarning && (
+                          <span className="basis-full pl-[92px] text-xs text-amber-700 dark:text-amber-400">
+                            {planned.calendarWarning}
+                          </span>
+                        )}
                       </div>
                     )
                   })}
@@ -270,7 +296,9 @@ export function SchemeGenerateRoutesDialog({
               <p className="text-xs text-muted-foreground">
                 Scheme version {generation.plan.schemeVersion} is pinned on every
                 generated route. Ready, Active, Completed, and Cancelled routes
-                are never touched.
+                are never touched. Holiday and non-working dates on the
+                scheme&apos;s Collection Calendar are skipped unless an approved
+                deviation moves them.
               </p>
             )}
 

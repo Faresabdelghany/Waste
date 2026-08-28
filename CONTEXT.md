@@ -93,12 +93,20 @@ _Avoid_: Customer, project
 ## Planning and execution
 
 **Collection Calendar**:
-The expected service dates and approved deviations for a project, customer, or service.
-_Avoid_: Route scheme, route
+The working days, holidays, and validity period that determine which planned service dates are valid for a project, customer, or service.
+_Avoid_: Route scheme, route, deviation list
+
+**Collection Deviation**:
+An approved replacement of one planned service date with another, preserving the original service promise.
+_Avoid_: Calendar exception, holiday rule
 
 **Route Scheme**:
-An effective-dated recurring template from which service work is generated.
-_Avoid_: Route, plan
+An effective-dated recurring template — geography, calendar, recurrence, and service days — from which service work is generated.
+_Avoid_: Route, plan, pickup setting, collection week
+
+**Planning Area**:
+A versioned geographic area used for route planning, service operations, or notifications. Operational geography, never a commercial award — that is a Contract Area.
+_Avoid_: Contract area, zone (unqualified)
 
 **Route**:
 A dated, executable unit of work assigned to vehicles and drivers.

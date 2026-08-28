@@ -12,10 +12,12 @@
 //   to generate, and whose effective window overlaps the run window.
 
 import type { BusinessRecord } from "../data/business-modules"
+import { calendarFromRecord } from "./calendar"
 import {
   applySchemeGeneration,
   approvedDeviationsFromRecords,
   planSchemeGeneration,
+  stringValueOf,
   type GenerationWindow,
 } from "./generation"
 import { addDays, recurrenceFromValues } from "./recurrence"
@@ -80,6 +82,8 @@ export type PlanAheadSummary = {
   refreshed: number
   cancelled: number
   skipped: number
+  /** Dates the schemes' Collection Calendars invalidated (holiday / non-working). */
+  calendarSkipped: number
   pickups: number
 }
 
@@ -101,6 +105,8 @@ export function runPlanAhead(input: {
   existingRoutes: readonly BusinessRecord[]
   existingPickups: readonly BusinessRecord[]
   deviationRecords: readonly BusinessRecord[]
+  /** Collection Calendar records; each scheme's calendarId resolves here. */
+  calendarRecords?: readonly BusinessRecord[]
   containers: readonly BusinessRecord[]
   actorName: string
   /** ISO datetime stamped on every written route (FR-13's "Last generated"). */
@@ -108,6 +114,7 @@ export function runPlanAhead(input: {
 }): PlanAheadRunResult {
   const window = planAheadWindow(input.today)
   const deviations = approvedDeviationsFromRecords(input.deviationRecords)
+  const calendarRecords = input.calendarRecords ?? []
   const routes: BusinessRecord[] = []
   const pickups: BusinessRecord[] = []
   const summary: PlanAheadSummary = {
@@ -116,16 +123,24 @@ export function runPlanAhead(input: {
     refreshed: 0,
     cancelled: 0,
     skipped: 0,
+    calendarSkipped: 0,
     pickups: 0,
   }
 
   for (const scheme of input.schemes) {
     if (!schemeAutoGenerates(scheme, input.today)) continue
+    const calendarId = stringValueOf(scheme, "calendarId")
+    const calendar = calendarId
+      ? calendarFromRecord(
+          calendarRecords.find((record) => record.id === calendarId),
+        )
+      : null
     const plan = planSchemeGeneration({
       scheme,
       window,
       existingRoutes: input.existingRoutes,
       deviations,
+      calendar,
     })
     if (!plan) continue
     const result = applySchemeGeneration({
@@ -139,6 +154,7 @@ export function runPlanAhead(input: {
     summary.refreshed += result.summary.refreshed
     summary.cancelled += result.summary.cancelled
     summary.skipped += result.summary.skipped
+    summary.calendarSkipped += result.summary.calendarSkipped
     summary.pickups += result.summary.pickups
     if (result.routes.length === 0 && result.pickups.length === 0) continue
     summary.schemes += 1

@@ -93,9 +93,10 @@ export function isoWeek(iso: string): number {
 // cadence: a 53-week ISO year (2026 is one) ends on week 53 (odd) and the next
 // year starts on week 1 (odd), so an odd-rotation scheme serves two consecutive
 // weeks at that boundary and an even-rotation scheme skips three. That is how
-// odd/even-week municipal collection behaves in the real world and matches the
-// Collection Weeks module's rotation labels; a scheme needing an unbroken
-// 14-day cadence across such a boundary needs a new rotation version there.
+// odd/even-week municipal collection behaves in the real world (the retired
+// Collection Weeks module's rotation labels mapped to the same parity); a
+// scheme needing an unbroken 14-day cadence across such a boundary needs a
+// new scheme version there.
 export function isoWeekRotation(iso: string): WeekRotation {
   return isoWeek(iso) % 2 === 1 ? "odd" : "even"
 }

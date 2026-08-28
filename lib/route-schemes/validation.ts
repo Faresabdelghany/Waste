@@ -5,6 +5,7 @@
 // and the generation engine can read a scheme's per-day plans back from its
 // submittedValues.
 
+import type { CollectionCalendar } from "./calendar"
 import {
   SERVICE_DAYS,
   SERVICE_DAY_SHORT_LABELS,
@@ -61,6 +62,8 @@ export type SchemeValidationInput = {
   plans: SchemeDayPlans
   plannedVehicleId?: string
   plannedDriverId?: string
+  /** The scheme's Collection Calendar, when it carries structured data. */
+  calendar?: CollectionCalendar | null
 }
 
 /** What FR-5(d) needs to know about an already-existing scheme. */
@@ -74,6 +77,57 @@ export type SchemeDefaultsSource = {
 export type SchemeValidationResult = {
   status: "Validated" | "Draft"
   issues: string[]
+  /** Non-blocking calendar caveats (Q6/Q7): shown, but never demote status. */
+  warnings: string[]
+}
+
+/**
+ * The calendar caveats of PLAN_SIMPLIFICATION Q6/Q7, save-time side: service
+ * days the calendar treats as non-working (those dates are skipped at
+ * generation), a calendar that is not Active, and a scheme effective period
+ * that extends outside the calendar's validity. All non-blocking.
+ */
+export function schemeCalendarWarnings(input: {
+  serviceDays: readonly ServiceDay[]
+  effectiveFrom: string
+  effectiveTo: string
+  calendar?: CollectionCalendar | null
+}): string[] {
+  const { calendar } = input
+  if (!calendar) return []
+  const warnings: string[] = []
+
+  if (calendar.workingDays.length > 0) {
+    const nonWorking = input.serviceDays.filter(
+      (day) => !calendar.workingDays.includes(day),
+    )
+    if (nonWorking.length > 0) {
+      warnings.push(
+        `${shortDays(nonWorking)} ${nonWorking.length === 1 ? "is not a working day" : "are not working days"} on ${calendar.name} — those dates are skipped at generation`,
+      )
+    }
+  }
+
+  if (calendar.status !== "Active") {
+    warnings.push(
+      `Calendar ${calendar.name} is ${calendar.status} — its working days and holidays may not be final`,
+    )
+  }
+
+  const fromOutside =
+    input.effectiveFrom && calendar.validFrom && input.effectiveFrom < calendar.validFrom
+  const toOutside =
+    calendar.validTo &&
+    (input.effectiveTo
+      ? input.effectiveTo > calendar.validTo
+      : true)
+  if (fromOutside || toOutside) {
+    warnings.push(
+      `Scheme effective period extends outside ${calendar.name} validity — uncovered dates generate without calendar rules`,
+    )
+  }
+
+  return warnings
 }
 
 /**
@@ -81,7 +135,8 @@ export type SchemeValidationResult = {
  * (b) effective from/to set with to ≥ from, (c) every service day has ≥1
  * container (per-day mode names the empty days), (d) the default vehicle or
  * driver is not already the default on another scheme sharing a service day.
- * All pass → Validated; any fail → Draft with the issues named.
+ * All pass → Validated; any fail → Draft with the issues named. Calendar
+ * caveats come back as non-blocking warnings.
  */
 export function validateScheme(
   input: SchemeValidationInput,
@@ -126,7 +181,11 @@ export function validateScheme(
     }
   }
 
-  return { status: issues.length === 0 ? "Validated" : "Draft", issues }
+  return {
+    status: issues.length === 0 ? "Validated" : "Draft",
+    issues,
+    warnings: schemeCalendarWarnings(input),
+  }
 }
 
 type StoredValues = Record<string, string | boolean | undefined>

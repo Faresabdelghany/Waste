@@ -212,19 +212,12 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
   {
     workspaceId: "plan",
     canonicalPurpose:
-      "Maintain recurring service through pickup settings, collection calendar days, week rotations, and governed deviations.",
+      "Maintain collection calendars, governed deviations, and planning geography. Route Schemes own recurrence and service days and live in Route Studio.",
     blueprintModules: ["M09", "M23"],
     personas: ["Route planner", "Operations administrator"],
-    moduleIds: [
-      "pickup-settings",
-      "calendar-days",
-      "collection-weeks",
-      "collection-deviations",
-      "calendars",
-      "areas",
-    ],
+    moduleIds: ["collection-deviations", "calendars", "areas"],
     boundaryNote:
-      "Plan owns operational planning areas; Commercial owns contractor Contract Areas and their awards.",
+      "Plan owns operational planning areas; Commercial owns contractor Contract Areas and their awards. Pickup Settings, Collection Weeks, and Collection Calendar Days are retired — Route Schemes own recurrence.",
   },
   {
     workspaceId: "route-studio",
@@ -458,45 +451,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
       "The driver application is a restricted mobile shell and must not expose the office Operate navigation.",
   },
   {
-    key: "plan.pickup-settings",
-    workspaceId: "plan",
-    moduleId: "pickup-settings",
-    primaryBlueprintModule: "M09",
-    supportingBlueprintModules: ["M05", "M23"],
-    canonicalOwner: "Plan · Pickup Settings",
-    personas: ["Route planner", "Operations administrator"],
-    upstream: ["M02", "M03", "M04", "M05", "M06"],
-    downstream: ["M09", "M11", "M12", "M17", "M22", "M23"],
-    boundaryNote:
-      "A Pickup Setting defines frequency, collection days, and week rotation; Route Schemes remain the source of generated Routes.",
-  },
-  {
-    key: "plan.calendar-days",
-    workspaceId: "plan",
-    moduleId: "calendar-days",
-    primaryBlueprintModule: "M09",
-    supportingBlueprintModules: ["M02", "M23"],
-    canonicalOwner: "Plan · Collection Calendar Days",
-    personas: ["Route planner", "Operations administrator"],
-    upstream: ["M02", "M03", "M05"],
-    downstream: ["M09", "M11", "M17", "M21", "M23"],
-    boundaryNote:
-      "Settings owns working-day defaults; Plan owns the effective calendar days that anchor pickup generation.",
-  },
-  {
-    key: "plan.collection-weeks",
-    workspaceId: "plan",
-    moduleId: "collection-weeks",
-    primaryBlueprintModule: "M09",
-    supportingBlueprintModules: ["M02", "M23"],
-    canonicalOwner: "Plan · Collection Weeks",
-    personas: ["Route planner", "Operations administrator"],
-    upstream: ["M02", "M05"],
-    downstream: ["M09", "M11", "M17", "M23"],
-    boundaryNote:
-      "A Collection Week maps a rotation label to ISO weeks; Pickup Settings and Route Schemes reference the label, never raw dates.",
-  },
-  {
     key: "plan.collection-deviations",
     workspaceId: "plan",
     moduleId: "collection-deviations",
@@ -507,7 +461,7 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     upstream: ["M02", "M03", "M09"],
     downstream: ["M09", "M11", "M17", "M21", "M23"],
     boundaryNote:
-      "A deviation preserves the original service promise and its replacement date; executed Routes are never rescheduled.",
+      "A deviation preserves the original service promise and its replacement date; executed Routes are never rescheduled. This module is the only creation path for deviations, and generation consumes it.",
   },
   {
     key: "route-studio.schemes",
@@ -533,7 +487,7 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     upstream: ["M02", "M03", "M04", "M05"],
     downstream: ["M09", "M10", "M11", "M17", "M21", "M23"],
     boundaryNote:
-      "Settings owns working-calendar defaults; Plan owns effective calendar records and approved deviations.",
+      "Settings owns working-calendar defaults; Plan owns effective calendar records — working days, holidays, and validity. Replacement dates are Collection Deviations, never calendar records.",
   },
   {
     key: "plan.areas",

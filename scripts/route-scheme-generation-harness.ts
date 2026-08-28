@@ -4,6 +4,7 @@
 // overridden-assignment preservation, and pickup building.
 // Run: npx tsx scripts/route-scheme-generation-harness.ts
 import type { BusinessRecord } from "../lib/data/business-modules"
+import type { CollectionCalendar } from "../lib/route-schemes/calendar"
 import { formatServiceDate } from "../lib/route-schemes/recurrence"
 import {
   applySchemeGeneration,
@@ -235,7 +236,7 @@ check("no deviation → Deviation fact is None", wedRoute?.facts.Deviation, "Non
 check(
   "summary counts the creates",
   applied?.summary,
-  { created: 2, refreshed: 0, cancelled: 0, skipped: 0, pickups: 3 },
+  { created: 2, refreshed: 0, cancelled: 0, skipped: 0, calendarSkipped: 0, pickups: 3 },
 )
 
 /* ----------------------------- apply: pickups ----------------------------- */
@@ -635,6 +636,486 @@ check(
     deviations: [],
   }),
   null,
+)
+
+/* -------------------- calendar consultation (Q2/Q6/Q7) -------------------- */
+
+const allDays = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+] as const
+
+const baseCalendar: CollectionCalendar = {
+  id: "calendar-central",
+  name: "Copenhagen Central 2026",
+  status: "Active",
+  workingDays: [...allDays],
+  holidayDates: [],
+  validFrom: "2026-01-01",
+  validTo: "2026-12-31",
+}
+
+// Holiday: the Wednesday is a holiday → no route, preview-visible omit row.
+const holidayPlan = planSchemeGeneration({
+  scheme,
+  window: WINDOW,
+  existingRoutes: [],
+  deviations: [],
+  calendar: { ...baseCalendar, holidayDates: [WED] },
+})
+check(
+  "a holiday date becomes an omit row with the reason, other dates create",
+  holidayPlan?.routes.map((route) => [route.serviceDate, route.action, route.note ?? ""]),
+  [
+    [WED, "omit", "Holiday on Copenhagen Central 2026"],
+    [SUN, "create", ""],
+  ],
+)
+const holidayApplied = holidayPlan
+  ? applySchemeGeneration({
+      plan: holidayPlan,
+      existingPickups: [],
+      containers,
+      actorName: "Planner",
+    })
+  : null
+check(
+  "a holiday omit writes no route and is counted as calendar-skipped",
+  [
+    holidayApplied?.routes.map((route) => route.submittedValues?.serviceDate),
+    holidayApplied?.summary.created,
+    holidayApplied?.summary.calendarSkipped,
+  ],
+  [[SUN], 1, 1],
+)
+
+// Non-working weekday: Sunday outside Mon–Fri working days → skipped.
+check(
+  "a non-working service day is skipped with the reason",
+  planSchemeGeneration({
+    scheme,
+    window: WINDOW,
+    existingRoutes: [],
+    deviations: [],
+    calendar: {
+      ...baseCalendar,
+      workingDays: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+    },
+  })?.routes.map((route) => [route.serviceDate, route.action, route.note ?? ""]),
+  [
+    [WED, "create", ""],
+    [SUN, "omit", "Not a working day on Copenhagen Central 2026"],
+  ],
+)
+
+// Deviation precedence: an approved deviation relocates a holiday's service.
+check(
+  "an approved deviation outranks the holiday skip and remaps the date",
+  planSchemeGeneration({
+    scheme,
+    window: WINDOW,
+    existingRoutes: [],
+    deviations: [wedDeviation],
+    calendar: { ...baseCalendar, holidayDates: [WED] },
+  })?.routes.find((route) => route.serviceDate === WED)?.actualDate,
+  "2026-09-03",
+)
+
+// Replacement lands on a holiday: honored, but flagged.
+check(
+  "a replacement date on a holiday generates with a calendar warning",
+  planSchemeGeneration({
+    scheme,
+    window: WINDOW,
+    existingRoutes: [],
+    deviations: [wedDeviation],
+    calendar: { ...baseCalendar, holidayDates: ["2026-09-03"] },
+  })?.routes.find((route) => route.serviceDate === WED)?.calendarWarning,
+  "Replacement date is a holiday on Copenhagen Central 2026",
+)
+
+// Uncovered dates: outside validity → generate, warn, never skip (Q6).
+check(
+  "dates outside calendar validity generate with a warning, not a skip",
+  planSchemeGeneration({
+    scheme,
+    window: WINDOW,
+    existingRoutes: [],
+    deviations: [],
+    calendar: { ...baseCalendar, validTo: "2026-09-03" },
+  })?.routes.map((route) => [route.serviceDate, route.action, route.calendarWarning ?? ""]),
+  [
+    [WED, "create", ""],
+    [SUN, "create", "Outside Copenhagen Central 2026 validity — calendar rules not applied"],
+  ],
+)
+
+// A previously generated still-Planned route on a now-holiday date is cancelled.
+const plannedOnHoliday: BusinessRecord = {
+  id: generatedRouteId(scheme.id, WED),
+  name: generatedRouteName(scheme.id, WED),
+  context: "",
+  status: "Planned",
+  owner: "Mads Jensen",
+  value: "2 stops",
+  updated: "",
+  description: "",
+  facts: { Vehicle: "WH-24", Driver: "Mads Jensen" },
+  related: [],
+  source: "",
+  freshness: "",
+  submittedValues: {
+    schemeId: scheme.id,
+    serviceDate: WED,
+    actualDate: WED,
+    appliedVehicle: "WH-24",
+    appliedDriver: "Mads Jensen",
+  },
+}
+const holidayCancelPlan = planSchemeGeneration({
+  scheme,
+  window: WINDOW,
+  existingRoutes: [plannedOnHoliday],
+  deviations: [],
+  calendar: { ...baseCalendar, holidayDates: [WED] },
+})
+check(
+  "a still-Planned route on a now-holiday date is cancelled with the reason",
+  holidayCancelPlan?.routes.find((route) => route.serviceDate === WED)?.action,
+  "cancel",
+)
+check(
+  "the holiday cancel is written and counted",
+  holidayCancelPlan
+    ? applySchemeGeneration({
+        plan: holidayCancelPlan,
+        existingPickups: [],
+        containers,
+        actorName: "Planner",
+      }).summary.cancelled
+    : null,
+  1,
+)
+check(
+  "an already-executing route on a holiday date is left untouched",
+  planSchemeGeneration({
+    scheme,
+    window: WINDOW,
+    existingRoutes: [{ ...plannedOnHoliday, status: "Active" }],
+    deviations: [],
+    calendar: { ...baseCalendar, holidayDates: [WED] },
+  })?.routes.find((route) => route.serviceDate === WED)?.action,
+  "skip",
+)
+
+// Idempotency with a calendar: re-planning against the produced routes
+// refreshes instead of duplicating, and the omit stays an omit.
+const idemFirst = planSchemeGeneration({
+  scheme,
+  window: WINDOW,
+  existingRoutes: [],
+  deviations: [],
+  calendar: { ...baseCalendar, holidayDates: [WED] },
+})
+const idemWritten = idemFirst
+  ? applySchemeGeneration({
+      plan: idemFirst,
+      existingPickups: [],
+      containers,
+      actorName: "Planner",
+    })
+  : null
+check(
+  "regeneration with a calendar refreshes instead of duplicating",
+  planSchemeGeneration({
+    scheme,
+    window: WINDOW,
+    existingRoutes: idemWritten?.routes ?? [],
+    deviations: [],
+    calendar: { ...baseCalendar, holidayDates: [WED] },
+  })?.routes.map((route) => [route.serviceDate, route.action]),
+  [
+    [WED, "omit"],
+    [SUN, "refresh"],
+  ],
+)
+
+/* -------------------- deviation scope semantics (Q8/Q13) ------------------ */
+
+check(
+  "a customer-scoped deviation never remaps route generation",
+  planSchemeGeneration({
+    scheme,
+    window: WINDOW,
+    existingRoutes: [],
+    deviations: [{ ...wedDeviation, scopeType: "customer" }],
+  })?.routes.find((route) => route.serviceDate === WED)?.actualDate,
+  WED,
+)
+
+check(
+  "a scheme-scoped deviation remaps only its exact scheme",
+  planSchemeGeneration({
+    scheme,
+    window: WINDOW,
+    existingRoutes: [],
+    deviations: [{ ...wedDeviation, scopeType: "scheme", schemeId: scheme.id }],
+  })?.routes.find((route) => route.serviceDate === WED)?.actualDate,
+  "2026-09-03",
+)
+
+check(
+  "a scheme-scoped deviation for another scheme has no effect",
+  planSchemeGeneration({
+    scheme,
+    window: WINDOW,
+    existingRoutes: [],
+    deviations: [
+      { ...wedDeviation, scopeType: "scheme", schemeId: "some-other-scheme" },
+    ],
+  })?.routes.find((route) => route.serviceDate === WED)?.actualDate,
+  WED,
+)
+
+check(
+  "a scheme-scoped deviation with no schemeId never falls back to project-wide",
+  planSchemeGeneration({
+    scheme,
+    window: WINDOW,
+    existingRoutes: [],
+    deviations: [{ ...wedDeviation, scopeType: "scheme" }],
+  })?.routes.find((route) => route.serviceDate === WED)?.actualDate,
+  WED,
+)
+
+const schemeOnCentralCalendar: BusinessRecord = {
+  ...scheme,
+  submittedValues: { ...scheme.submittedValues, calendarId: "calendar-central" },
+}
+
+check(
+  "a deviation on the scheme's calendar remaps",
+  planSchemeGeneration({
+    scheme: schemeOnCentralCalendar,
+    window: WINDOW,
+    existingRoutes: [],
+    deviations: [{ ...wedDeviation, calendarId: "calendar-central" }],
+  })?.routes.find((route) => route.serviceDate === WED)?.actualDate,
+  "2026-09-03",
+)
+
+check(
+  "a deviation on a different calendar never remaps, even with matching projects",
+  planSchemeGeneration({
+    scheme: schemeOnCentralCalendar,
+    window: WINDOW,
+    existingRoutes: [],
+    deviations: [
+      {
+        ...wedDeviation,
+        calendarId: "calendar-harbor",
+        projectIds: ["project-central"],
+      },
+    ],
+  })?.routes.find((route) => route.serviceDate === WED)?.actualDate,
+  WED,
+)
+
+check(
+  "a deviation with a calendar does not affect a scheme without one",
+  planSchemeGeneration({
+    scheme,
+    window: WINDOW,
+    existingRoutes: [],
+    deviations: [{ ...wedDeviation, calendarId: "calendar-central" }],
+  })?.routes.find((route) => route.serviceDate === WED)?.actualDate,
+  WED,
+)
+
+check(
+  "a legacy deviation without calendarId keeps project-overlap behavior",
+  planSchemeGeneration({
+    scheme: schemeOnCentralCalendar,
+    window: WINDOW,
+    existingRoutes: [],
+    deviations: [{ ...wedDeviation, projectIds: ["project-central"] }],
+  })?.routes.find((route) => route.serviceDate === WED)?.actualDate,
+  "2026-09-03",
+)
+
+check(
+  "approvedDeviationsFromRecords reads calendar, scope, and scheme from submittedValues",
+  approvedDeviationsFromRecords([
+    {
+      ...deviationRecord("dev-scoped", "Approved", { Reason: "Roadworks" }),
+      submittedValues: {
+        originalDate: "2026-09-02",
+        replacementDate: "2026-09-03",
+        calendarId: "calendar-central",
+        scopeType: "scheme",
+        schemeId: "schemes-route-scheme-777",
+      },
+    },
+  ]).map((deviation) => [
+    deviation.calendarId,
+    deviation.scopeType,
+    deviation.schemeId,
+  ]),
+  [["calendar-central", "scheme", "schemes-route-scheme-777"]],
+)
+
+/* ---------------- review fixes: resurrect, tie-break, walk cap ------------- */
+
+// A generation-authored cancel is bookkeeping: once a deviation relocates the
+// holiday, the route is re-created instead of staying a dead tombstone.
+const tombstoneRun = holidayCancelPlan
+  ? applySchemeGeneration({
+      plan: holidayCancelPlan,
+      existingPickups: [],
+      containers,
+      actorName: "Planner",
+    })
+  : null
+const tombstone = tombstoneRun?.routes.find(
+  (route) => route.submittedValues?.serviceDate === WED,
+)
+check(
+  "a generation-authored cancel carries the bookkeeping marker",
+  tombstone?.submittedValues?.cancelledByGeneration,
+  true,
+)
+const resurrectPlan = planSchemeGeneration({
+  scheme,
+  window: WINDOW,
+  existingRoutes: tombstone ? [tombstone] : [],
+  deviations: [wedDeviation],
+  calendar: { ...baseCalendar, holidayDates: [WED] },
+})
+check(
+  "an approved deviation resurrects a calendar-cancelled route",
+  [
+    resurrectPlan?.routes.find((route) => route.serviceDate === WED)?.action,
+    resurrectPlan?.routes.find((route) => route.serviceDate === WED)?.actualDate,
+  ],
+  ["create", "2026-09-03"],
+)
+check(
+  "removing the holiday also resurrects the cancelled route",
+  planSchemeGeneration({
+    scheme,
+    window: WINDOW,
+    existingRoutes: tombstone ? [tombstone] : [],
+    deviations: [],
+    calendar: baseCalendar,
+  })?.routes.find((route) => route.serviceDate === WED)?.action,
+  "create",
+)
+check(
+  "an operational cancel (no marker) is never resurrected",
+  planSchemeGeneration({
+    scheme,
+    window: WINDOW,
+    existingRoutes: [
+      {
+        ...plannedOnHoliday,
+        status: "Cancelled",
+      },
+    ],
+    deviations: [wedDeviation],
+  })?.routes.find((route) => route.serviceDate === WED)?.action,
+  "skip",
+)
+
+// Skip rows are display-only: they show where the stored route operates, not
+// where a deviation would move a route generation never writes.
+check(
+  "a skip row keeps the stored operating date despite a matching deviation",
+  planSchemeGeneration({
+    scheme,
+    window: WINDOW,
+    existingRoutes: [{ ...plannedOnHoliday, status: "Active" }],
+    deviations: [wedDeviation],
+  })?.routes.find((route) => route.serviceDate === WED)?.actualDate,
+  WED,
+)
+check(
+  "a calendar-branch skip row still shows the day's planned stops",
+  planSchemeGeneration({
+    scheme,
+    window: WINDOW,
+    existingRoutes: [{ ...plannedOnHoliday, status: "Active" }],
+    deviations: [],
+    calendar: { ...baseCalendar, holidayDates: [WED] },
+  })?.routes.find((route) => route.serviceDate === WED)?.containerIds,
+  ["cont-w1", "cont-w2"],
+)
+
+// Deterministic tie-break: scheme scope beats project scope regardless of order.
+const projectWide: ApprovedDeviation = {
+  ...wedDeviation,
+  name: "A project-wide",
+  replacementDate: "2026-09-04",
+  projectIds: ["project-central"],
+}
+const schemeScoped: ApprovedDeviation = {
+  ...wedDeviation,
+  name: "Z scheme-scoped",
+  replacementDate: "2026-09-05",
+  scopeType: "scheme",
+  schemeId: scheme.id,
+}
+check(
+  "with several matching deviations the scheme-scoped one wins, in either order",
+  [
+    planSchemeGeneration({
+      scheme,
+      window: WINDOW,
+      existingRoutes: [],
+      deviations: [projectWide, schemeScoped],
+    })?.routes.find((route) => route.serviceDate === WED)?.actualDate,
+    planSchemeGeneration({
+      scheme,
+      window: WINDOW,
+      existingRoutes: [],
+      deviations: [schemeScoped, projectWide],
+    })?.routes.find((route) => route.serviceDate === WED)?.actualDate,
+  ],
+  ["2026-09-05", "2026-09-05"],
+)
+
+// The date walk caps at 367 days; cleanup must never judge routes beyond it.
+const farFutureMonday = "2027-06-07"
+check(
+  "an over-long window never cancels still-served routes past the walk cap",
+  planSchemeGeneration({
+    scheme: {
+      ...scheme,
+      submittedValues: {
+        ...scheme.submittedValues,
+        serviceDays: "monday",
+        effectiveTo: "2027-12-31",
+      },
+    },
+    window: { from: "2026-01-01", to: "2027-12-31" },
+    existingRoutes: [
+      {
+        ...plannedOnHoliday,
+        id: generatedRouteId(scheme.id, farFutureMonday),
+        submittedValues: {
+          ...plannedOnHoliday.submittedValues,
+          serviceDate: farFutureMonday,
+          actualDate: farFutureMonday,
+        },
+      },
+    ],
+    deviations: [],
+  })?.routes.filter((route) => route.action === "cancel").length,
+  0,
 )
 
 /* --------------------------------- result --------------------------------- */

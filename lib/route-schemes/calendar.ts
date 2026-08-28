@@ -1,0 +1,122 @@
+// Collection Calendar model (spec docs/specs/PLAN_SIMPLIFICATION.md §1).
+// Pure data logic — no UI or store dependencies — so generation, validation,
+// and the harnesses share one definition of "is this planned date
+// operationally valid on this calendar".
+//
+// Semantics (decisions Q2/Q5/Q6/Q7):
+//   the calendar decides whether a normal planned date is valid; a Collection
+//   Deviation decides where exceptional service moves to. A date the calendar
+//   does not cover (outside validFrom/validTo, or no structured data at all)
+//   is "uncovered": generation proceeds and the preview warns — uncovered is
+//   never treated as non-working. Timezone is display-only (Q9): all date
+//   math is day-granular ISO.
+
+import type { BusinessRecord } from "../data/business-modules"
+import { isIsoDate, parseServiceDays, serviceDayOf, type ServiceDay } from "./recurrence"
+import { stringValue } from "./validation"
+
+export type CollectionCalendar = {
+  id: string
+  name: string
+  /** Record lifecycle status (Draft, Active, Superseded, Archived). */
+  status: string
+  /** Weekdays service may operate on; empty = unknown, no constraint. */
+  workingDays: ServiceDay[]
+  /** ISO dates that are non-working holidays. */
+  holidayDates: string[]
+  /** ISO; empty = open-ended. */
+  validFrom: string
+  validTo: string
+  /** Display-only in this prototype — generation is day-granular. */
+  timezone?: string
+}
+
+export type CalendarDayStatus = "working" | "holiday" | "non-working" | "uncovered"
+
+/** "2026-12-25, 2026-12-26" or newline-separated → valid ISO dates only. */
+export function parseHolidayDates(value: string | undefined): string[] {
+  if (!value) return []
+  return [
+    ...new Set(
+      value
+        .split(/[\n,]/)
+        .map((token) => token.trim())
+        .filter((token) => isIsoDate(token)),
+    ),
+  ].sort()
+}
+
+/**
+ * Reads a calendar's structured operational data from its record (the
+ * `plan.calendars` form field ids, kept on records as `submittedValues`).
+ * Returns null for a missing record or one without any structured fields —
+ * such a calendar constrains nothing (legacy display-only records).
+ */
+export function calendarFromRecord(
+  record: BusinessRecord | undefined | null,
+): CollectionCalendar | null {
+  if (!record) return null
+  const values = record.submittedValues ?? {}
+  const workingDays = parseServiceDays(
+    typeof values.workingDays === "string" ? values.workingDays : "",
+  )
+  const holidayDates = parseHolidayDates(
+    typeof values.holidayDates === "string" ? values.holidayDates : undefined,
+  )
+  const validFromRaw = stringValue(values, "validFrom") ?? ""
+  const validToRaw = stringValue(values, "validTo") ?? ""
+  const validFrom = isIsoDate(validFromRaw) ? validFromRaw : ""
+  const validTo = isIsoDate(validToRaw) ? validToRaw : ""
+  if (
+    workingDays.length === 0 &&
+    holidayDates.length === 0 &&
+    !validFrom &&
+    !validTo
+  ) {
+    return null
+  }
+  return {
+    id: record.id,
+    name: record.name,
+    status: record.status,
+    workingDays,
+    holidayDates,
+    validFrom,
+    validTo,
+    ...(stringValue(values, "timezone")
+      ? { timezone: stringValue(values, "timezone") }
+      : {}),
+  }
+}
+
+/** Whether the calendar's validity period covers the date (blank = open side). */
+export function calendarCoversDate(
+  calendar: CollectionCalendar,
+  iso: string,
+): boolean {
+  if (calendar.validFrom && iso < calendar.validFrom) return false
+  if (calendar.validTo && iso > calendar.validTo) return false
+  return true
+}
+
+/**
+ * The calendar's verdict on one date. Constraints apply only where the
+ * calendar covers the date (Q6) — an uncovered date is a warning, not a skip.
+ * Holidays outrank the working-day check: a holiday on a working weekday is
+ * still a holiday.
+ */
+export function calendarDayStatus(
+  calendar: CollectionCalendar | null | undefined,
+  iso: string,
+): CalendarDayStatus {
+  if (!calendar) return "uncovered"
+  if (!calendarCoversDate(calendar, iso)) return "uncovered"
+  if (calendar.holidayDates.includes(iso)) return "holiday"
+  if (
+    calendar.workingDays.length > 0 &&
+    !calendar.workingDays.includes(serviceDayOf(iso))
+  ) {
+    return "non-working"
+  }
+  return "working"
+}

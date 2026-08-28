@@ -45,12 +45,6 @@ const actionExecutions: Record<string, BusinessFormExecution> = {
     completionMessage:
       "The ticket was created; its response target follows the type SLA.",
   },
-  "plan.calendars": {
-    kind: "append-event",
-    sourceField: "calendarId",
-    reviewBeforeSubmit: true,
-    completionMessage: "The calendar deviation was recorded with its original date preserved.",
-  },
   "fleet.vehicle-planning": {
     kind: "append-event",
     sourceField: "existingAllocationId",
@@ -239,14 +233,6 @@ const conditionalFields: Record<
     condition: { fieldId: "actionType", equals: "reschedule-stop" },
     required: true,
   },
-  "plan.calendars.schemeId": {
-    condition: { fieldId: "scopeType", equals: "scheme" },
-    required: true,
-  },
-  "plan.calendars.customerId": {
-    condition: { fieldId: "scopeType", equals: "customer" },
-    required: true,
-  },
   "route-studio.schemes.approvalId": {
     condition: {
       fieldId: "proposalSource",
@@ -419,13 +405,6 @@ function enhanceField(
     }
   }
 
-  if (fieldKey === "plan.calendars.customerId") {
-    enhanced = {
-      ...enhanced,
-      relation: { workspaceId: "customers", moduleId: "contacts" },
-    }
-  }
-
   if (
     enhanced.relation?.moduleId === "master" &&
     /fraction/i.test(field.id)
@@ -524,16 +503,6 @@ function enhanceSchema(schema: BusinessFormSchema): BusinessFormSchema {
             endField: "periodEnd",
             allowSame: true,
             message: "Generate through must be on or after the operating date.",
-          },
-        ]
-      : []),
-    ...(schema.key === "plan.calendars"
-      ? [
-          {
-            type: "different-values" as const,
-            firstField: "originalDate",
-            secondField: "replacementDate",
-            message: "Replacement date must differ from the original date.",
           },
         ]
       : []),

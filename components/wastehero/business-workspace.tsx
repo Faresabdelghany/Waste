@@ -38,6 +38,7 @@ import {
   type WorkspaceId,
 } from "@/lib/data/business-modules"
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
+import { calendarFromRecord } from "@/lib/route-schemes/calendar"
 import {
   isPlanAheadEnabled,
   setPlanAhead,
@@ -714,14 +715,7 @@ const ticketExcludedColumnFacts = new Set([
 
 const primaryModuleIdsByWorkspace: Partial<Record<WorkspaceId, readonly string[]>> = {
   operate: ["tickets", "exceptions"],
-  plan: [
-    "pickup-settings",
-    "calendar-days",
-    "collection-weeks",
-    "collection-deviations",
-    "calendars",
-    "areas",
-  ],
+  plan: ["collection-deviations", "calendars", "areas"],
   "route-studio": ["live", "schemes", "routes", "pickups", "weights"],
   customers: ["properties", "groups", "shared", "agreements"],
   resources: ["containers", "inventory", "warehouses", "depots"],
@@ -3526,6 +3520,7 @@ export function BusinessWorkspace({
     const validation = validateGuidedScheme(
       data,
       getRecords(workspace.id, activeModule.id, activeModule.records),
+      calendarFromRecord(calendar),
     )
 
     const submittedValues: NonNullable<BusinessRecord["submittedValues"]> = {
@@ -3584,6 +3579,9 @@ export function BusinessWorkspace({
       Containers: dayPlanCountSummary(dayPlans),
       ...(validation.issues.length > 0
         ? { "Validation issues": validation.issues.join(" · ") }
+        : {}),
+      ...(validation.warnings.length > 0
+        ? { "Validation warnings": validation.warnings.join(" · ") }
         : {}),
     }
 

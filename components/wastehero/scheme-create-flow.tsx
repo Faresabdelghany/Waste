@@ -37,6 +37,10 @@ import {
 } from "@/components/wastehero/scheme-route-map"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import {
+  calendarFromRecord,
+  type CollectionCalendar,
+} from "@/lib/route-schemes/calendar"
+import {
   RECURRENCE_FREQUENCY_LABELS,
   SERVICE_DAYS,
   SERVICE_DAY_SHORT_LABELS,
@@ -93,10 +97,14 @@ export function schemeDayPlans(data: GuidedSchemeData): SchemeDayPlans {
   }
 }
 
-/** FR-5 over the wizard draft plus every existing scheme's defaults. */
+/**
+ * FR-5 over the wizard draft plus every existing scheme's defaults; the
+ * selected Collection Calendar adds non-blocking warnings (Q6/Q7).
+ */
 export function validateGuidedScheme(
   data: GuidedSchemeData,
   existingSchemes: readonly BusinessRecord[],
+  calendar?: CollectionCalendar | null,
 ): SchemeValidationResult {
   return validateScheme(
     {
@@ -106,6 +114,7 @@ export function validateGuidedScheme(
       plans: schemeDayPlans(data),
       plannedVehicleId: data.plannedVehicleId,
       plannedDriverId: data.plannedDriverId,
+      calendar,
     },
     existingSchemes
       .map((record) => schemeDefaultsFromValues(record.name, record.submittedValues))
@@ -929,7 +938,10 @@ function StepSchemeReview({
   const depots = useModuleRecords("resources", "depots")
   const existingSchemes = useModuleRecords("route-studio", "schemes")
 
-  const validation = validateGuidedScheme(data, existingSchemes)
+  const calendar = calendarFromRecord(
+    calendars.find((record) => record.id === data.calendarId),
+  )
+  const validation = validateGuidedScheme(data, existingSchemes, calendar)
   const recurrence = draftRecurrence(data)
   const normalizedPlans = schemeDayPlans(data)
   const plans = effectiveDayPlans(data.serviceDays, normalizedPlans)
@@ -1052,6 +1064,19 @@ function StepSchemeReview({
           <ul className="list-disc space-y-1 pl-5 text-xs text-amber-700 dark:text-amber-400">
             {validation.issues.map((issue) => (
               <li key={issue}>{issue}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {validation.warnings.length > 0 && (
+        <div className="space-y-1.5 rounded-2xl border border-amber-500/40 bg-amber-500/5 p-4">
+          <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+            Calendar warnings — the scheme can still be created
+          </p>
+          <ul className="list-disc space-y-1 pl-5 text-xs text-amber-700 dark:text-amber-400">
+            {validation.warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
             ))}
           </ul>
         </div>

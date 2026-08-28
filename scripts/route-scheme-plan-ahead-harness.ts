@@ -310,5 +310,89 @@ const disabledRun = runPlanAhead({
 check("toggling off stops auto-generation", disabledRun.routes.length, 0)
 check("toggling off writes no pickups", disabledRun.pickups.length, 0)
 
+
+/* --------------------- calendar consultation (Q2/Q6) ---------------------- */
+
+const centralCalendarRecord: BusinessRecord = {
+  id: "calendar-central",
+  name: "Copenhagen Central 2026",
+  context: "Copenhagen Central · Europe/Copenhagen",
+  status: "Active",
+  owner: "Operations Admin",
+  value: "",
+  updated: "",
+  description: "",
+  facts: {},
+  related: [],
+  source: "",
+  freshness: "",
+  submittedValues: {
+    calendarName: "Copenhagen Central 2026",
+    workingDays:
+      "monday, tuesday, wednesday, thursday, friday, saturday, sunday",
+    holidayDates: WED,
+    validFrom: "2026-01-01",
+    validTo: "2026-12-31",
+  },
+}
+
+const onCalendar: BusinessRecord = {
+  ...eligible,
+  submittedValues: {
+    ...eligible.submittedValues,
+    calendarId: "calendar-central",
+  },
+}
+
+const calendarRun = runPlanAhead({
+  schemes: [onCalendar],
+  today: TODAY,
+  existingRoutes: [],
+  existingPickups: [],
+  deviationRecords: [],
+  calendarRecords: [centralCalendarRecord],
+  containers,
+  actorName: "Plan Ahead",
+})
+check(
+  "an auto-run skips the scheme calendar's holiday",
+  [
+    calendarRun.summary.created,
+    calendarRun.summary.calendarSkipped,
+    calendarRun.routes.map((route) => route.submittedValues?.serviceDate),
+  ],
+  [1, 1, [SUN]],
+)
+
+check(
+  "a scheme without a calendar is not constrained by calendar records",
+  runPlanAhead({
+    schemes: [eligible],
+    today: TODAY,
+    existingRoutes: [],
+    existingPickups: [],
+    deviationRecords: [],
+    calendarRecords: [centralCalendarRecord],
+    containers,
+    actorName: "Plan Ahead",
+  }).summary.created,
+  2,
+)
+
+check(
+  "a calendarId with no matching record applies no constraint",
+  runPlanAhead({
+    schemes: [onCalendar],
+    today: TODAY,
+    existingRoutes: [],
+    existingPickups: [],
+    deviationRecords: [],
+    calendarRecords: [],
+    containers,
+    actorName: "Plan Ahead",
+  }).summary.created,
+  2,
+)
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)

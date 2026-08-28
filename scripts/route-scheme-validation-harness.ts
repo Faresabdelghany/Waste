@@ -2,6 +2,7 @@
 // ticket #5): per-day service plans, blocking checks at review, and the
 // submittedValues round trip the generation engine will read.
 // Run: npx tsx scripts/route-scheme-validation-harness.ts
+import type { CollectionCalendar } from "../lib/route-schemes/calendar"
 import {
   dayPlanCountSummary,
   dayPlansFromValues,
@@ -76,30 +77,31 @@ const validInput: SchemeValidationInput = {
 check("all checks pass → Validated with no issues", validateScheme(validInput, []), {
   status: "Validated",
   issues: [],
+  warnings: [],
 })
 
 check(
   "no service days → Draft, named issue",
   validateScheme({ ...validInput, serviceDays: [] }, []),
-  { status: "Draft", issues: ["Pick at least one service day"] },
+  { status: "Draft", issues: ["Pick at least one service day"], warnings: [] },
 )
 
 check(
   "missing effective to → Draft, named issue",
   validateScheme({ ...validInput, effectiveTo: "" }, []),
-  { status: "Draft", issues: ["Set the effective from and to dates"] },
+  { status: "Draft", issues: ["Set the effective from and to dates"], warnings: [] },
 )
 
 check(
   "missing effective from → Draft, named issue",
   validateScheme({ ...validInput, effectiveFrom: "" }, []),
-  { status: "Draft", issues: ["Set the effective from and to dates"] },
+  { status: "Draft", issues: ["Set the effective from and to dates"], warnings: [] },
 )
 
 check(
   "effective to before from → Draft, named issue",
   validateScheme({ ...validInput, effectiveTo: "2026-08-27" }, []),
-  { status: "Draft", issues: ["Effective to must be on or after effective from"] },
+  { status: "Draft", issues: ["Effective to must be on or after effective from"], warnings: [] },
 )
 
 check(
@@ -117,7 +119,7 @@ check(
     },
     [],
   ),
-  { status: "Draft", issues: ["Pick at least one container"] },
+  { status: "Draft", issues: ["Pick at least one container"], warnings: [] },
 )
 
 check(
@@ -129,7 +131,7 @@ check(
     },
     [],
   ),
-  { status: "Draft", issues: ["Pick containers for Sun"] },
+  { status: "Draft", issues: ["Pick containers for Sun"], warnings: [] },
 )
 
 check(
@@ -142,7 +144,7 @@ check(
     },
     [],
   ),
-  { status: "Draft", issues: ["Pick containers for Wed, Sun"] },
+  { status: "Draft", issues: ["Pick containers for Wed, Sun"], warnings: [] },
 )
 
 /* --------------------- default vehicle/driver conflicts ------------------ */
@@ -162,6 +164,7 @@ check(
     issues: [
       'Default vehicle is already the default on "RS-Central · Week A" (shares Wed)',
     ],
+    warnings: [],
   },
 )
 
@@ -175,13 +178,14 @@ check(
     issues: [
       'Default driver is already the default on "RS-Central · Week A" (shares Wed)',
     ],
+    warnings: [],
   },
 )
 
 check(
   "same defaults but no shared service day → no conflict",
   validateScheme(validInput, [{ ...otherScheme, serviceDays: ["monday"] }]),
-  { status: "Validated", issues: [] },
+  { status: "Validated", issues: [], warnings: [] },
 )
 
 check(
@@ -189,7 +193,7 @@ check(
   validateScheme(validInput, [
     { ...otherScheme, plannedVehicleId: "vehicle-9", plannedDriverId: "driver-9" },
   ]),
-  { status: "Validated", issues: [] },
+  { status: "Validated", issues: [], warnings: [] },
 )
 
 check(
@@ -198,7 +202,7 @@ check(
     { ...validInput, plannedVehicleId: undefined, plannedDriverId: undefined },
     [{ ...otherScheme, plannedVehicleId: undefined, plannedDriverId: undefined }],
   ),
-  { status: "Validated", issues: [] },
+  { status: "Validated", issues: [], warnings: [] },
 )
 
 check(
@@ -213,6 +217,7 @@ check(
       'Default vehicle is already the default on "A" (shares Wed, Sun)',
       'Default driver is already the default on "B" (shares Sun)',
     ],
+    warnings: [],
   },
 )
 
@@ -294,6 +299,106 @@ check(
 )
 
 check("empty plan summary", dayPlanCountSummary([]), "No service days")
+
+
+/* --------------------------- calendar warnings ---------------------------- */
+// PLAN_SIMPLIFICATION Q6/Q7: calendar caveats warn at save time and never
+// demote a scheme to Draft.
+
+const centralCalendar: CollectionCalendar = {
+  id: "calendar-central",
+  name: "Copenhagen Central 2026",
+  status: "Active",
+  workingDays: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+  holidayDates: ["2026-12-25", "2026-12-26"],
+  validFrom: "2026-01-01",
+  validTo: "2026-12-31",
+}
+
+check(
+  "service day outside calendar working days → warning, still Validated",
+  validateScheme({ ...validInput, calendar: centralCalendar }, []),
+  {
+    status: "Validated",
+    issues: [],
+    warnings: [
+      "Sun is not a working day on Copenhagen Central 2026 — those dates are skipped at generation",
+    ],
+  },
+)
+
+check(
+  "all service days working → no warnings",
+  validateScheme(
+    { ...validInput, serviceDays: ["wednesday"], calendar: centralCalendar },
+    [],
+  ),
+  { status: "Validated", issues: [], warnings: [] },
+)
+
+check(
+  "non-Active calendar → warning, still Validated",
+  validateScheme(
+    {
+      ...validInput,
+      serviceDays: ["wednesday"],
+      calendar: { ...centralCalendar, status: "Draft" },
+    },
+    [],
+  ),
+  {
+    status: "Validated",
+    issues: [],
+    warnings: [
+      "Calendar Copenhagen Central 2026 is Draft — its working days and holidays may not be final",
+    ],
+  },
+)
+
+check(
+  "scheme effective period past calendar validity → warning",
+  validateScheme(
+    {
+      ...validInput,
+      serviceDays: ["wednesday"],
+      calendar: { ...centralCalendar, validTo: "2026-10-31" },
+    },
+    [],
+  ),
+  {
+    status: "Validated",
+    issues: [],
+    warnings: [
+      "Scheme effective period extends outside Copenhagen Central 2026 validity — uncovered dates generate without calendar rules",
+    ],
+  },
+)
+
+check(
+  "open-ended scheme with a bounded calendar → validity warning stacks with blocking issues",
+  validateScheme(
+    {
+      ...validInput,
+      serviceDays: ["wednesday"],
+      effectiveTo: "",
+      calendar: centralCalendar,
+    },
+    [],
+  ),
+  {
+    status: "Draft",
+    issues: ["Set the effective from and to dates"],
+    warnings: [
+      "Scheme effective period extends outside Copenhagen Central 2026 validity — uncovered dates generate without calendar rules",
+    ],
+  },
+)
+
+check(
+  "no calendar → no warnings",
+  validateScheme(validInput, []).warnings,
+  [],
+)
 
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)
