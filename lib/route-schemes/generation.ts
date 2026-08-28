@@ -174,8 +174,11 @@ export function deviationMatchesScheme(
 
 const REFRESHABLE_STATUSES = new Set(["Draft", "Planned"])
 
-const stringValueOf = (record: BusinessRecord, key: string): string | undefined =>
-  stringValue(record.submittedValues ?? {}, key)
+/** A record's submitted value as a non-empty string, else undefined. */
+export const stringValueOf = (
+  record: BusinessRecord,
+  key: string,
+): string | undefined => stringValue(record.submittedValues ?? {}, key)
 
 /** A day-by-day walk is fine: windows are weeks, not years. */
 function windowDates(window: GenerationWindow): string[] {
@@ -278,6 +281,92 @@ export function planSchemeGeneration(input: {
   return { scheme, schemeVersion: schemeVersionOf(scheme), window, routes }
 }
 
+/* ------------------------ scheme route list (FR-13) ----------------------- */
+
+/** The routes one scheme generated, sorted by service date. */
+export function schemeGeneratedRoutes(
+  schemeId: string,
+  routes: readonly BusinessRecord[],
+): BusinessRecord[] {
+  return routes
+    .filter((route) => stringValueOf(route, "schemeId") === schemeId)
+    .sort((a, b) =>
+      (stringValueOf(a, "serviceDate") ?? "").localeCompare(
+        stringValueOf(b, "serviceDate") ?? "",
+      ),
+    )
+}
+
+/** The newest generatedAt stamp across the routes, or null if none carry one. */
+export function lastGeneratedAt(
+  routes: readonly BusinessRecord[],
+): string | null {
+  let latest: string | null = null
+  for (const route of routes) {
+    const stamp = stringValueOf(route, "generatedAt")
+    if (stamp && (!latest || stamp > latest)) latest = stamp
+  }
+  return latest
+}
+
+/* ---------------------- single-route reassignment (FR-12) ----------------- */
+
+/**
+ * The reassigned route record to upsert; the input is left untouched. Only
+ * this route's facts move — the scheme defaults and the appliedVehicle/
+ * appliedDriver stamps stay as generation wrote them, which is exactly what
+ * lets the next regeneration detect the drift and keep the override.
+ */
+export function reassignRouteAssignment(
+  route: BusinessRecord,
+  assignment: { driver?: string; vehicle?: string },
+): BusinessRecord {
+  const driver = assignment.driver?.trim()
+  const vehicle = assignment.vehicle?.trim()
+  return {
+    ...route,
+    ...(driver ? { owner: driver } : {}),
+    updated: "Now",
+    freshness: "Now",
+    facts: {
+      ...route.facts,
+      ...(driver ? { Driver: driver } : {}),
+      ...(vehicle ? { Vehicle: vehicle } : {}),
+    },
+  }
+}
+
+const OPEN_PICKUP_STATUSES = new Set(["Planned", "Next"])
+
+/**
+ * The route's own still-open pickups rewritten for a driver reassignment, so
+ * the stop list agrees with the route's assignment. Completed/Skipped pickups
+ * record who actually serviced them and other routes' pickups are not this
+ * reassignment's business — neither is returned. Vehicle-only reassignments
+ * return nothing (pickups carry no vehicle).
+ */
+export function reassignRoutePickups(
+  routeId: string,
+  pickups: readonly BusinessRecord[],
+  driver: string | undefined,
+): BusinessRecord[] {
+  const trimmed = driver?.trim()
+  if (!trimmed) return []
+  return pickups
+    .filter(
+      (pickup) =>
+        stringValueOf(pickup, "routeId") === routeId &&
+        OPEN_PICKUP_STATUSES.has(pickup.status),
+    )
+    .map((pickup) => ({
+      ...pickup,
+      owner: trimmed,
+      updated: "Now",
+      freshness: "Now",
+      facts: { ...pickup.facts, Driver: trimmed },
+    }))
+}
+
 /* -------------------------------- applying -------------------------------- */
 
 function addMinutes(time: string, minutes: number): string {
@@ -306,6 +395,13 @@ export function applySchemeGeneration(input: {
   existingPickups: readonly BusinessRecord[]
   containers: readonly BusinessRecord[]
   actorName: string
+  /**
+   * ISO datetime stamped as submittedValues.generatedAt on every route this
+   * run writes (the scheme detail's "Last generated", FR-13). Optional so
+   * the engine stays deterministic for harnesses; omitted, a refreshed
+   * route keeps its prior stamp.
+   */
+  generatedAt?: string
 }): GenerationApplyResult {
   const { plan } = input
   const scheme = plan.scheme
@@ -370,6 +466,14 @@ export function applySchemeGeneration(input: {
           Deviation: planned.note ?? "Scheme no longer serves this date",
         },
         allowedTransitions: [],
+        ...(input.generatedAt
+          ? {
+              submittedValues: {
+                ...existing.submittedValues,
+                generatedAt: input.generatedAt,
+              },
+            }
+          : {}),
       })
       for (const pickup of pickupsByRoute.get(existing.id) ?? []) {
         skipStalePickup(pickup, planned.note ?? "Route cancelled by regeneration")
@@ -381,6 +485,10 @@ export function applySchemeGeneration(input: {
     const isRefresh = planned.action === "refresh"
     if (isRefresh) summary.refreshed += 1
     else summary.created += 1
+    // A stamp-less run (harness determinism) keeps a refreshed route's prior stamp.
+    const generatedAtStamp =
+      input.generatedAt ??
+      (existing ? stringValueOf(existing, "generatedAt") : undefined)
 
     const schemeVehicle = schemeFacts.Vehicle ?? "Unassigned"
     const schemeDriver = schemeFacts.Driver ?? "Unassigned"
@@ -457,6 +565,7 @@ export function applySchemeGeneration(input: {
         schemeVersion: plan.schemeVersion,
         appliedVehicle: schemeVehicle,
         appliedDriver: schemeDriver,
+        ...(generatedAtStamp ? { generatedAt: generatedAtStamp } : {}),
       },
     })
 

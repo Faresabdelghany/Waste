@@ -20,6 +20,7 @@ import {
   Plus,
   Ticket,
   Trash,
+  UserSwitch,
 } from "@phosphor-icons/react/dist/ssr"
 
 import type {
@@ -27,6 +28,11 @@ import type {
   ModuleDefinition,
 } from "@/lib/data/business-modules"
 import { getBusinessModuleHref } from "@/lib/data/business-links"
+import {
+  reassignRouteAssignment,
+  reassignRoutePickups,
+  stringValueOf,
+} from "@/lib/route-schemes/generation"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -34,9 +40,20 @@ import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -157,8 +174,11 @@ function routeReference(record: BusinessRecord) {
 }
 
 function routeDate(record: BusinessRecord) {
-  const submittedDate = record.submittedValues?.operatingDate
-  if (typeof submittedDate === "string" && submittedDate) {
+  // Wizard-created routes submit operatingDate; scheme-generated routes carry
+  // the deviation-remapped actualDate instead.
+  const submittedDate =
+    stringValueOf(record, "operatingDate") ?? stringValueOf(record, "actualDate")
+  if (submittedDate) {
     return new Intl.DateTimeFormat("en-GB", {
       day: "numeric",
       month: "long",
@@ -178,6 +198,118 @@ function routeScheme(record: BusinessRecord) {
   return record.source.replace(/^Route scheme\s*/i, "") || "RS-Central-A"
 }
 
+/**
+ * Reassign driver/vehicle for this route only (spec FR-12, ticket #9). The
+ * write goes through reassignRouteAssignment, which leaves the generation
+ * stamps (appliedDriver/appliedVehicle) untouched — so on a scheme-generated
+ * route the override is detected as drift and survives later regenerations.
+ * The scheme's own defaults and sibling routes are never touched.
+ */
+function ReassignRouteDialog({
+  record,
+  onClose,
+  onReassign,
+}: {
+  record: BusinessRecord
+  onClose: () => void
+  onReassign: (updated: BusinessRecord, pickups: BusinessRecord[]) => void
+}) {
+  const driverRecords = useModuleRecords("fleet", "drivers")
+  const vehicleRecords = useModuleRecords("fleet", "vehicles")
+  const pickupRecords = useModuleRecords("route-studio", "pickups")
+  const currentDriver = record.facts.Driver ?? record.owner ?? "Unassigned"
+  const currentVehicle = record.facts.Vehicle ?? "Unassigned"
+  const [driver, setDriver] = useState(currentDriver)
+  const [vehicle, setVehicle] = useState(currentVehicle)
+
+  const dedupe = (values: string[]) => Array.from(new Set(values))
+  const driverOptions = dedupe([
+    currentDriver,
+    ...driverRecords.map((candidate) => candidate.name),
+  ])
+  // Vehicle facts store the reference ("WH-24"), not the full registry name.
+  const vehicleOptions = dedupe([
+    currentVehicle,
+    ...vehicleRecords.map((candidate) => candidate.name.split(" · ")[0]),
+  ])
+  const unchanged = driver === currentDriver && vehicle === currentVehicle
+
+  const save = () => {
+    onReassign(
+      reassignRouteAssignment(record, {
+        ...(driver !== currentDriver ? { driver } : {}),
+        ...(vehicle !== currentVehicle ? { vehicle } : {}),
+      }),
+      // The route's own open pickups follow the new driver so the stop list
+      // agrees with the assignment; completed work keeps its actual driver.
+      reassignRoutePickups(
+        record.id,
+        pickupRecords,
+        driver !== currentDriver ? driver : undefined,
+      ),
+    )
+    toast.success("Route reassigned", {
+      description: `${routeReference(record)} · ${driver} · ${vehicle}. Other routes from the same scheme are unchanged.`,
+    })
+    onClose()
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Reassign route</DialogTitle>
+          <DialogDescription>
+            Changes {routeReference(record)} only. The route scheme&apos;s
+            defaults stay as they are, and this override survives
+            regeneration.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="reassign-driver">Driver</Label>
+            <Select value={driver} onValueChange={setDriver}>
+              <SelectTrigger id="reassign-driver" className="w-full">
+                <SelectValue placeholder="Select driver" />
+              </SelectTrigger>
+              <SelectContent>
+                {driverOptions.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="reassign-vehicle">Vehicle</Label>
+            <Select value={vehicle} onValueChange={setVehicle}>
+              <SelectTrigger id="reassign-vehicle" className="w-full">
+                <SelectValue placeholder="Select vehicle" />
+              </SelectTrigger>
+              <SelectContent>
+                {vehicleOptions.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={save} disabled={unchanged}>
+            Reassign
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function RouteInformation({
   record,
   stops,
@@ -195,9 +327,19 @@ function RouteInformation({
         ? "Completed"
         : record.status
   type InformationRow = readonly [string, string, boolean?]
+  // Planned vs actual assignment stay distinct (spec FR-12): when a dispatcher
+  // override drifted from what generation applied, show the scheme default too.
+  const appliedDriver = stringValueOf(record, "appliedDriver")
+  const appliedVehicle = stringValueOf(record, "appliedVehicle")
   const assignment: InformationRow[] = [
     ["Vehicle", record.facts.Vehicle ?? "Not assigned", true],
+    ...(appliedVehicle && appliedVehicle !== record.facts.Vehicle
+      ? [["Scheme default vehicle", appliedVehicle] as InformationRow]
+      : []),
     ["Driver", record.facts.Driver ?? record.owner, true],
+    ...(appliedDriver && appliedDriver !== record.facts.Driver
+      ? [["Scheme default driver", appliedDriver] as InformationRow]
+      : []),
     ["Trailer", record.facts["Vehicle Trailer"] ?? "None", false],
     [
       "Hauler",
@@ -1093,6 +1235,7 @@ export function RouteDetailsPage({
   onAction,
   onEdit,
   onDelete,
+  onReassign,
   readOnly = false,
 }: {
   module: ModuleDefinition
@@ -1103,9 +1246,15 @@ export function RouteDetailsPage({
   onAction: (action: string) => void
   onEdit?: () => void
   onDelete?: () => void
+  /** Upserts the reassigned route and its cascaded open pickups; absent hides Reassign. */
+  onReassign?: (updated: BusinessRecord, pickups: BusinessRecord[]) => void
   /** Hides every lifecycle and mutation control, e.g. for contractor scopes. */
   readOnly?: boolean
 }) {
+  const [reassignOpen, setReassignOpen] = useState(false)
+  // Reassign is a scheme-route affordance (spec FR-12): the override-vs-default
+  // semantics only exist on routes generation stamped with a scheme identity.
+  const isSchemeGenerated = Boolean(stringValueOf(record, "schemeId"))
   const primaryAction =
     record.status === "Active"
       ? "Pause"
@@ -1172,6 +1321,12 @@ export function RouteDetailsPage({
                   <DropdownMenuItem onSelect={onEdit}>
                     <PencilSimple className="h-4 w-4" />
                     Edit route
+                  </DropdownMenuItem>
+                )}
+                {!readOnly && onReassign && isSchemeGenerated && (
+                  <DropdownMenuItem onSelect={() => setReassignOpen(true)}>
+                    <UserSwitch className="h-4 w-4" />
+                    Reassign driver or vehicle
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem
@@ -1248,6 +1403,14 @@ export function RouteDetailsPage({
           <SessionsTab sessions={sessions} />
         </TabsContent>
       </Tabs>
+
+      {reassignOpen && onReassign && (
+        <ReassignRouteDialog
+          record={record}
+          onClose={() => setReassignOpen(false)}
+          onReassign={onReassign}
+        />
+      )}
     </div>
   )
 }

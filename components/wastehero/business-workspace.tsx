@@ -169,6 +169,7 @@ import {
 } from "@/components/wastehero/scheme-create-flow"
 import { SchemeRecordRouteMapSection } from "@/components/wastehero/scheme-route-map"
 import {
+  SchemeGeneratedRoutesSection,
   SchemeGenerateRoutesDialog,
   schemeCanGenerateRoutes,
 } from "@/components/wastehero/scheme-generate-routes"
@@ -3812,6 +3813,17 @@ export function BusinessWorkspace({
           onAction={requestRecordAction}
           onEdit={canEditRecords ? () => openEditRecord(selectedRecord) : undefined}
           onDelete={canDeleteRecords ? () => requestRecordDelete(selectedRecord) : undefined}
+          onReassign={
+            canRunRecordActions
+              ? (updated, reassignedPickups) => {
+                  upsertRecord(workspace.id, activeModule.id, updated)
+                  for (const pickup of reassignedPickups) {
+                    upsertRecord("route-studio", "pickups", pickup)
+                  }
+                  setSelectedRecord(updated)
+                }
+              : undefined
+          }
           readOnly={!canRunRecordActions}
         />
       ) : isContractorDetails && selectedRecord ? (
@@ -4755,7 +4767,10 @@ function RecordDetailsDialog({
               </section>
 
               {module.id === "schemes" && (
-                <SchemeRecordRouteMapSection record={record} />
+                <>
+                  <SchemeRecordRouteMapSection record={record} />
+                  <SchemeGeneratedRoutesSection record={record} />
+                </>
               )}
 
               <section className="space-y-4">

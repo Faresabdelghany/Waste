@@ -103,6 +103,8 @@ export function runPlanAhead(input: {
   deviationRecords: readonly BusinessRecord[]
   containers: readonly BusinessRecord[]
   actorName: string
+  /** ISO datetime stamped on every written route (FR-13's "Last generated"). */
+  generatedAt?: string
 }): PlanAheadRunResult {
   const window = planAheadWindow(input.today)
   const deviations = approvedDeviationsFromRecords(input.deviationRecords)
@@ -131,6 +133,7 @@ export function runPlanAhead(input: {
       existingPickups: input.existingPickups,
       containers: input.containers,
       actorName: input.actorName,
+      ...(input.generatedAt ? { generatedAt: input.generatedAt } : {}),
     })
     summary.created += result.summary.created
     summary.refreshed += result.summary.refreshed

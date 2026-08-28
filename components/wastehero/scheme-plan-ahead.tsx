@@ -42,6 +42,7 @@ export function SchemePlanAheadRunner({ actorName }: { actorName: string }) {
       deviationRecords,
       containers,
       actorName: `Plan Ahead (${actorName})`,
+      generatedAt: new Date().toISOString(),
     })
     for (const route of routes) upsertRecord("route-studio", "routes", route)
     for (const pickup of pickups) upsertRecord("route-studio", "pickups", pickup)
