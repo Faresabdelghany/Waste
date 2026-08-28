@@ -143,7 +143,7 @@ export function formatServiceDate(iso: string): string {
   })
 }
 
-function sortServiceDays(days: readonly ServiceDay[]): ServiceDay[] {
+export function sortServiceDays(days: readonly ServiceDay[]): ServiceDay[] {
   return [...days].sort((a, b) => SERVICE_DAYS.indexOf(a) - SERVICE_DAYS.indexOf(b))
 }
 

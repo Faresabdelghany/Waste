@@ -41,6 +41,11 @@ import {
   recurrenceFromValues,
   recurrenceSentence,
 } from "@/lib/route-schemes/recurrence"
+import {
+  dayPlanCountSummary,
+  dayPlansToValues,
+  effectiveDayPlans,
+} from "@/lib/route-schemes/validation"
 import type {
   BusinessFormField,
   BusinessFormOption,
@@ -149,6 +154,12 @@ import {
   RouteCreateEntry,
   type GuidedRouteData,
 } from "@/components/wastehero/route-create-flow"
+import {
+  SchemeCreateEntry,
+  schemeDayPlans,
+  validateGuidedScheme,
+  type GuidedSchemeData,
+} from "@/components/wastehero/scheme-create-flow"
 import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
 import { useActiveRoutes } from "@/components/wastehero/active-routes-store"
 import {
@@ -1148,6 +1159,9 @@ export function BusinessWorkspace({
   // Routes get a chooser between Quick create and the Guided Setup wizard.
   const isRouteCreateFlow =
     activeModuleFormSchema?.key === "route-studio.routes"
+  // Route Schemes get the same chooser with their own six-step wizard.
+  const isSchemeCreateFlow =
+    activeModuleFormSchema?.key === "route-studio.schemes"
   const activeRecords = useMemo(() => {
     const records = getRecords(
       workspace.id,
@@ -3396,6 +3410,202 @@ export function BusinessWorkspace({
     })
   }
 
+  // Guided Setup for Route Schemes (spec FR-2/FR-5/FR-14): builds the record
+  // from the wizard draft, decides Validated vs Draft with the blocking
+  // checks, and keeps submittedValues in the shape the recurrence engine and
+  // per-day plan readers consume.
+  const handleGuidedSchemeCreate = (data: GuidedSchemeData) => {
+    const now = Date.now()
+    const relationRefs: NonNullable<BusinessRecord["relationRefs"]> = []
+    const linkRecord = (
+      fieldId: string,
+      workspaceId: WorkspaceId,
+      moduleId: string,
+      recordId?: string,
+    ) => {
+      if (!recordId) return undefined
+      const resolved = resolveFormModule(workspaceId, moduleId)
+      if (!resolved) return undefined
+      const record = getRecords(
+        resolved.workspaceId,
+        resolved.module.id,
+        resolved.module.records,
+      ).find((candidate) => candidate.id === recordId)
+      if (!record) return undefined
+      relationRefs.push({
+        fieldId,
+        workspaceId: resolved.workspaceId,
+        moduleId: resolved.module.id,
+        recordId,
+        label: record.name,
+      })
+      return record
+    }
+
+    const project = linkRecord("projectId", "configure", "organization", data.projectId)
+    const area = linkRecord("planningAreaId", "plan", "areas", data.planningAreaId)
+    const calendar = linkRecord("calendarId", "plan", "calendars", data.calendarId)
+    const contractor = linkRecord(
+      "contractorId",
+      "contractors",
+      "contractors",
+      data.contractorId,
+    )
+    const vehicle = linkRecord("plannedVehicleId", "fleet", "vehicles", data.plannedVehicleId)
+    const driver = linkRecord("plannedDriverId", "fleet", "drivers", data.plannedDriverId)
+    const depot = linkRecord("depotId", "resources", "depots", data.depotId)
+    const unloadingStation = linkRecord(
+      "unloadingStationId",
+      "resources",
+      "depots",
+      data.unloadingStationId,
+    )
+
+    const normalizedPlans = schemeDayPlans(data)
+    const dayPlans = effectiveDayPlans(data.serviceDays, normalizedPlans)
+    for (const containerId of new Set(
+      dayPlans.flatMap((plan) => plan.containerIds),
+    )) {
+      linkRecord("containerIds", "resources", "containers", containerId)
+    }
+
+    // Conflicts (FR-5d) are checked against every scheme, not just the ones a
+    // contractor-scoped view can see — a double-booked default is real either
+    // way, and the review step's preview uses the same unscoped set.
+    const validation = validateGuidedScheme(
+      data,
+      getRecords(workspace.id, activeModule.id, activeModule.records),
+    )
+
+    const submittedValues: NonNullable<BusinessRecord["submittedValues"]> = {
+      schemeName: data.schemeName.trim(),
+      projectId: data.projectId ?? "",
+      planningAreaId: data.planningAreaId ?? "",
+      calendarId: data.calendarId ?? "",
+      frequency: data.frequency,
+      weekRotation: data.frequency === "every-2-weeks" ? data.weekRotation : "",
+      serviceDays: data.serviceDays.join(", "),
+      effectiveFrom: data.effectiveFrom,
+      effectiveTo: data.effectiveTo,
+      plannedStartTime: data.plannedStartTime,
+      contractorId: data.contractorId ?? "",
+      plannedVehicleId: data.plannedVehicleId ?? "",
+      plannedDriverId: data.plannedDriverId ?? "",
+      depotId: data.depotId ?? "",
+      unloadingStationId: data.unloadingStationId ?? "",
+      ...dayPlansToValues(normalizedPlans),
+    }
+    const recurrence = recurrenceFromValues(submittedValues)
+
+    const projectIds = selectedProjectIds(projectScope, {
+      projectId: data.projectId ?? "",
+    })
+    // Vehicle names carry the registration plate; facts show the callsign.
+    const vehicleName = vehicle?.name.split(" · ")[0]
+    const totalStops = dayPlans.reduce(
+      (sum, plan) => sum + plan.containerIds.length,
+      0,
+    )
+    const facts: Record<string, string> = {
+      Scope: projectScopeLabel(projectIds),
+      "Record kind": "Route Scheme",
+      "Execution policy": "create record",
+      "Submitted by": actorName,
+      Version: "v1",
+      ...(project ? { Project: project.name } : {}),
+      ...(area ? { "Planning area": area.name } : {}),
+      ...(calendar ? { "Collection calendar": calendar.name } : {}),
+      ...(recurrence ? { Recurrence: recurrenceSentence(recurrence) } : {}),
+      ...(data.effectiveFrom && data.effectiveTo
+        ? { Effective: `${data.effectiveFrom} → ${data.effectiveTo}` }
+        : {}),
+      "Planned start": data.plannedStartTime,
+      ...(contractor ? { Contractor: contractor.name } : {}),
+      Vehicle: vehicleName ?? "Unassigned",
+      Driver: driver?.name ?? "Unassigned",
+      ...(depot ? { "Departure depot": depot.name } : {}),
+      ...(unloadingStation
+        ? { "Unloading station": unloadingStation.name }
+        : {}),
+      "Container selection": normalizedPlans.sameAllDays
+        ? "Same containers every day"
+        : "Different per day",
+      Containers: dayPlanCountSummary(dayPlans),
+      ...(validation.issues.length > 0
+        ? { "Validation issues": validation.issues.join(" · ") }
+        : {}),
+    }
+
+    const newRecord: BusinessRecord = {
+      id: `${activeModule.id}-route-scheme-${now}`,
+      name: data.schemeName.trim() || "Untitled scheme",
+      context:
+        [project?.name, area?.name].filter(Boolean).join(" · ") ||
+        projectScopeLabel(projectIds),
+      status: validation.status,
+      owner: actorName,
+      value: `${totalStops} planned stops`,
+      updated: "Now",
+      description:
+        "Created with Guided Setup covering scope, recurrence, assignment defaults, and per-day container plans.",
+      facts,
+      related: [
+        ...relationRefs.map((relation) => relation.label),
+        "Audit history created",
+      ],
+      source: "Office workspace",
+      freshness: "Now",
+      allowedTransitions: activeModule.lifecycle.slice(1, 3),
+      companyId: FIXTURE_COMPANY_ID,
+      projectIds,
+      contractorId: data.contractorId ?? contractorScopeId,
+      recordKind: "Route Scheme",
+      submittedValues,
+      relationRefs,
+    }
+    const creationEvent: AuditEvent = {
+      id: `audit-guided-scheme-${now}`,
+      action: "Create route scheme · Guided Setup",
+      actor: actorName,
+      at: "Now",
+      reason: "Guided Setup",
+      before: "Absent",
+      after: newRecord.status,
+      evidence: `${relationRefs.length} linked records · ${projectScopeLabel(
+        projectIds,
+      )} scope validated`,
+    }
+
+    upsertRecord(workspace.id, activeModule.id, newRecord)
+    setAuditEvents((current) => ({
+      ...current,
+      [newRecord.id]: [creationEvent],
+    }))
+    setSelectedRecord(newRecord)
+    router.push(
+      getWorkspaceNavigationHref(
+        navigationBasePath,
+        workspace.id,
+        activeModule.id,
+        newRecord.id,
+      ),
+      { scroll: false },
+    )
+    toast.success(
+      validation.status === "Validated"
+        ? "Route scheme created as Validated"
+        : "Route scheme created as Draft",
+      {
+        description:
+          validation.status === "Validated"
+            ? `${newRecord.name} passed all blocking checks.`
+            : `${newRecord.name} has ${validation.issues.length} open issue${
+                validation.issues.length === 1 ? "" : "s"
+              }: ${validation.issues.join(" · ")}`,
+      },
+    )
+  }
+
   const requestContractorRelatedCreate = (
     target: "user" | "vehicle" | "driver" | "contract-area" | "contractor-price",
   ) => {
@@ -3636,6 +3846,12 @@ export function BusinessWorkspace({
                     submitLabel={formSchema.submitLabel}
                     onQuickCreate={() => setIsCreateOpen(true)}
                     onGuidedCreate={handleGuidedRouteCreate}
+                  />
+                ) : isSchemeCreateFlow ? (
+                  <SchemeCreateEntry
+                    submitLabel={formSchema.submitLabel}
+                    onQuickCreate={() => setIsCreateOpen(true)}
+                    onGuidedCreate={handleGuidedSchemeCreate}
                   />
                 ) : (
                   <Button size="sm" onClick={() => setIsCreateOpen(true)}>
