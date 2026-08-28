@@ -14,6 +14,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import {
   ArrowSquareOut,
+  CalendarCheck,
   CaretDown,
   ArrowsClockwise,
   DownloadSimple,
@@ -37,6 +38,10 @@ import {
   type WorkspaceId,
 } from "@/lib/data/business-modules"
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
+import {
+  isPlanAheadEnabled,
+  setPlanAhead,
+} from "@/lib/route-schemes/plan-ahead"
 import {
   parseServiceDays,
   recurrenceFromValues,
@@ -167,6 +172,7 @@ import {
   SchemeGenerateRoutesDialog,
   schemeCanGenerateRoutes,
 } from "@/components/wastehero/scheme-generate-routes"
+import { SchemePlanAheadRunner } from "@/components/wastehero/scheme-plan-ahead"
 import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
 import { useActiveRoutes } from "@/components/wastehero/active-routes-store"
 import {
@@ -1551,8 +1557,9 @@ export function BusinessWorkspace({
     hasGrant("edit")
   const canDeleteRecords = isRichRecordView && hasGrant("delete")
   const canRunRecordActions = hasGrant("edit")
-  // Generate routes on a scheme (spec FR-6, ticket #7): row menu + detail
-  // view, only for schemes whose recurrence is structured enough to generate.
+  // Generate routes (spec FR-6, ticket #7) and the Plan Ahead toggle (FR-11,
+  // ticket #8) on a scheme: row menu + detail view, only for schemes whose
+  // recurrence is structured enough to generate.
   const isSchemesView = activeModule.id === "schemes"
   const schemeExtraActions = useCallback(
     (record: BusinessRecord): RecordExtraAction[] | undefined =>
@@ -1563,9 +1570,27 @@ export function BusinessWorkspace({
               icon: <ArrowsClockwise className="h-4 w-4" />,
               onSelect: (target: BusinessRecord) => setGenerateSchemeRecord(target),
             },
+            {
+              label: isPlanAheadEnabled(record)
+                ? "Turn off Plan Ahead"
+                : "Turn on Plan Ahead",
+              icon: <CalendarCheck className="h-4 w-4" />,
+              onSelect: (target: BusinessRecord) => {
+                const enabled = !isPlanAheadEnabled(target)
+                upsertRecord("route-studio", "schemes", setPlanAhead(target, enabled))
+                toast.success(
+                  enabled ? "Plan Ahead turned on" : "Plan Ahead turned off",
+                  {
+                    description: enabled
+                      ? `${target.name} generates its next 7 days automatically when Route Studio loads.`
+                      : `${target.name} stops auto-generating; already-generated routes remain.`,
+                  },
+                )
+              },
+            },
           ]
         : undefined,
-    [canRunRecordActions, isSchemesView],
+    [canRunRecordActions, isSchemesView, upsertRecord],
   )
   const factColumnOptions = useMemo(() => {
     if (!isRichRecordView) return []
@@ -4658,6 +4683,13 @@ export function BusinessWorkspace({
           resolveRecord={resolveWorkspaceRecord}
         />
       </Suspense>
+      {/* Plan Ahead auto-generation fires when Route Studio loads (FR-11) —
+          operator-side automation, so never inside a contractor scope, and
+          never on behalf of a viewer whose role could not run the manual
+          Generate routes action. */}
+      {workspace.id === "route-studio" &&
+        !contractorScopeId &&
+        canRunRecordActions && <SchemePlanAheadRunner actorName={actorName} />}
     </div>
   )
 }

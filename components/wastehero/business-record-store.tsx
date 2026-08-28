@@ -34,10 +34,22 @@ type BusinessRecordStoreValue = {
   ) => void
 }
 
-// The context carries the stable store handle, never the state itself — see
+type BusinessRecordStores = {
+  records: ExternalStore<StoredRecords>
+  /**
+   * Flips to true once the provider has loaded localStorage. Effects that
+   * write derived records (Plan Ahead auto-generation) must wait for it:
+   * child effects run before the provider's load effect on mount, and a
+   * write planned against fixture-only state would be clobbered by the load.
+   */
+  hydrated: ExternalStore<boolean>
+}
+
+// The context carries the stable store handles, never the state itself — see
 // lib/external-store.ts for why (hydration safety under streaming SSR).
-const BusinessRecordStoreContext =
-  createContext<ExternalStore<StoredRecords> | null>(null)
+const BusinessRecordStoreContext = createContext<BusinessRecordStores | null>(
+  null,
+)
 
 // The server (and every hydrating component) sees fixtures only.
 const EMPTY_STORED_RECORDS: StoredRecords = {}
@@ -66,11 +78,13 @@ export function BusinessRecordStoreProvider({
 }: {
   children: ReactNode
 }) {
-  const [store] = useState(() =>
-    createExternalStore<StoredRecords>(EMPTY_STORED_RECORDS),
-  )
+  const [stores] = useState<BusinessRecordStores>(() => ({
+    records: createExternalStore<StoredRecords>(EMPTY_STORED_RECORDS),
+    hydrated: createExternalStore(false),
+  }))
 
   useEffect(() => {
+    const store = stores.records
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY)
       const parsed: unknown = raw ? JSON.parse(raw) : null
@@ -78,6 +92,7 @@ export function BusinessRecordStoreProvider({
     } catch {
       // A corrupt or unavailable browser store should not block the workspace.
     }
+    stores.hydrated.set(true)
     const persist = () => {
       try {
         window.localStorage.setItem(
@@ -90,22 +105,38 @@ export function BusinessRecordStoreProvider({
     }
     persist()
     return store.subscribe(persist)
-  }, [store])
+  }, [stores])
 
   return (
-    <BusinessRecordStoreContext.Provider value={store}>
+    <BusinessRecordStoreContext.Provider value={stores}>
       {children}
     </BusinessRecordStoreContext.Provider>
   )
 }
 
+/** True once stored records have been loaded — see BusinessRecordStores. */
+export function useBusinessRecordsHydrated(): boolean {
+  const stores = useContext(BusinessRecordStoreContext)
+  if (!stores) {
+    throw new Error(
+      "useBusinessRecordsHydrated must be used within BusinessRecordStoreProvider",
+    )
+  }
+  return useSyncExternalStore(
+    stores.hydrated.subscribe,
+    stores.hydrated.getSnapshot,
+    stores.hydrated.getServerSnapshot,
+  )
+}
+
 export function useBusinessRecordStore(): BusinessRecordStoreValue {
-  const store = useContext(BusinessRecordStoreContext)
-  if (!store) {
+  const stores = useContext(BusinessRecordStoreContext)
+  if (!stores) {
     throw new Error(
       "useBusinessRecordStore must be used within BusinessRecordStoreProvider",
     )
   }
+  const store = stores.records
   const storedRecords = useSyncExternalStore(
     store.subscribe,
     store.getSnapshot,
