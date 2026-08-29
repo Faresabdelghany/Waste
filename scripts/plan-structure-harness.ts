@@ -294,6 +294,31 @@ check(
   true,
 )
 
+/* ---------- pickup facts renamed off retired terminology (issue #16) ------- */
+// Spec follow-up 7 execution note: Route Studio pickup fixtures predate the
+// #13 container rename and carried capital-S "Pickup Setting" facts. The key
+// was fixture-only — pickups have no create/edit form (schema mode
+// "disabled"), so unlike containers no read-side legacy fallback exists or
+// is needed for either casing.
+
+const pickupRecords =
+  businessWorkspaces["route-studio"].modules.find(
+    (module) => module.id === "pickups",
+  )?.records ?? []
+check(
+  "no pickup fixture carries the retired 'Pickup Setting' fact key (either casing)",
+  pickupRecords.filter(
+    (record) =>
+      "Pickup Setting" in record.facts || "Pickup setting" in record.facts,
+  ).length,
+  0,
+)
+check(
+  "the 12 collection pickup fixtures carry a 'Service frequency' fact; depot/unloading stops carry none",
+  pickupRecords.filter((record) => "Service frequency" in record.facts).length,
+  12,
+)
+
 /* ---------- Settings pane reconciled off retired terminology (issue #14) --- */
 // Spec Q18 / follow-up 7: Settings keeps owning configuration *defaults*
 // (localStorage "wastehero.settings.v1"); only the naming was reconciled.
