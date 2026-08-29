@@ -436,26 +436,26 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
     ],
   },
   calendars: {
-    title: "Calendars and pickup settings",
-    description: "Working days, collection weeks, holidays, service promises, deviations, and route generation defaults.",
+    title: "Calendars and working days",
+    description: "Week numbering, default working days, holidays, service promises, and deviation communication defaults.",
     groups: [
       {
         title: "Working calendar",
         controls: [
           {
             id: "calendar-week",
-            label: "Collection-week system",
-            description: "Week numbering and recurring service generation.",
+            label: "Week numbering system",
+            description: "Default week interpretation for calendars and planning views; Route Schemes own recurrence.",
             scope: "Project",
             type: "select",
             value: "iso",
             options: [
               { value: "iso", label: "ISO weeks · Monday start" },
-              { value: "custom", label: "Custom collection weeks" },
+              { value: "custom", label: "Custom week numbering" },
             ],
           },
           {
-            id: "calendar-days",
+            id: "calendar-working-days",
             label: "Default working days",
             description: "Holiday and deviation rules can replace individual service dates.",
             scope: "Project",
@@ -1308,7 +1308,7 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   "operations-setup": {
     title: "Operations setup",
     description:
-      "Calendars, pickup rules, operational master data, maps, areas, zones, and location behavior.",
+      "Calendars, working-day defaults, operational master data, maps, areas, zones, and location behavior.",
     groups: [
       ...paneDefinitions.calendars.groups,
       ...paneDefinitions["master-data"].groups,
@@ -1415,6 +1415,13 @@ function initialSettingValues(): Record<string, SettingValue> {
   )
 }
 
+// Control ids renamed since values were first persisted (issue #14: the
+// working-days id collided with the retired plan.calendar-days module).
+// Stored values under the old id keep loading; the next save writes the new id.
+const legacySettingIds: Record<string, string> = {
+  "calendar-days": "calendar-working-days",
+}
+
 function mergeStoredSettingValues(
   defaults: Record<string, SettingValue>,
   rawValue: string,
@@ -1422,8 +1429,14 @@ function mergeStoredSettingValues(
   const parsed: unknown = JSON.parse(rawValue)
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return defaults
 
+  const storedEntries = Object.entries(parsed).map(([controlId, value]) => {
+    const renamedId = legacySettingIds[controlId]
+    return renamedId && !(renamedId in parsed)
+      ? ([renamedId, value] as const)
+      : ([controlId, value] as const)
+  })
   const storedValues = Object.fromEntries(
-    Object.entries(parsed).filter(([controlId, value]) => {
+    storedEntries.filter(([controlId, value]) => {
       const defaultValue = defaults[controlId]
       return (
         defaultValue !== undefined &&

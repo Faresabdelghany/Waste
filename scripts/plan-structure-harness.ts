@@ -7,6 +7,8 @@
 // exercises its import-time integrity gates (domain ↔ schema lockstep and
 // relation targets).
 // Run: npx tsx scripts/plan-structure-harness.ts
+import { readFileSync } from "node:fs"
+
 import { publicModuleDomains, publicWorkspaceDomains } from "../lib/data/business-domain"
 import {
   businessFormSchemas,
@@ -289,6 +291,35 @@ check(
       record.facts["Collection calendar"] ===
       calendars.find((calendar) => calendar.id === "calendar-central")?.name,
   ),
+  true,
+)
+
+/* ---------- Settings pane reconciled off retired terminology (issue #14) --- */
+// Spec Q18 / follow-up 7: Settings keeps owning configuration *defaults*
+// (localStorage "wastehero.settings.v1"); only the naming was reconciled.
+// Text-scan, not import: the pane copy lives in a client component.
+
+const settingsDialogSource = readFileSync(
+  new URL("../components/settings/SettingsDialog.tsx", import.meta.url),
+  "utf8",
+)
+check(
+  "SettingsDialog carries no retired 'pickup setting' / 'collection week' / 'pickup rules' copy",
+  [
+    /pickup[ -]setting/i.test(settingsDialogSource),
+    /collection[ -]week/i.test(settingsDialogSource),
+    /pickup[ -]rules/i.test(settingsDialogSource),
+  ],
+  [false, false, false],
+)
+check(
+  "no Settings control id collides with the retired plan.calendar-days module",
+  settingsDialogSource.includes('id: "calendar-days"'),
+  false,
+)
+check(
+  "the renamed working-days control keeps a legacy read mapping for saved settings",
+  settingsDialogSource.includes('"calendar-days": "calendar-working-days"'),
   true,
 )
 
