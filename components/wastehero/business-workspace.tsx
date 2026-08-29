@@ -604,6 +604,16 @@ function nextAllowedTransitions(module: ModuleDefinition, status: string): strin
     "retired",
     "terminated",
   ])
+  // Collection Deviations continue past Approved (Approved → Notified →
+  // Executed); the generic approved-is-terminal heuristic would strand them
+  // with an empty action list — and, since the portal shows Approved
+  // deviations, a permanently un-notifiable customer notice.
+  if (
+    module.id === "collection-deviations" &&
+    status.toLowerCase() === "approved"
+  ) {
+    return ["Notified", "Cancelled"]
+  }
   if (terminalStates.has(status.toLowerCase())) return []
 
   const currentIndex = module.lifecycle.findIndex(

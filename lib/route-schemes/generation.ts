@@ -129,7 +129,7 @@ const FACT_DATE_MONTHS: Record<string, string> = {
 }
 
 /** "24 Dec 2026" (the deviation facts format) or ISO → ISO, else null. */
-function parseDeviationDate(value: string | undefined): string | null {
+export function parseDeviationDate(value: string | undefined): string | null {
   if (!value) return null
   const trimmed = value.trim()
   if (isIsoDate(trimmed)) return trimmed
@@ -140,7 +140,8 @@ function parseDeviationDate(value: string | undefined): string | null {
   return `${match[3]}-${month}-${match[1].padStart(2, "0")}`
 }
 
-const APPROVED_DEVIATION_STATUSES = new Set(["Approved", "Notified"])
+/** Actionable deviation statuses — shared with the portal notice derivation. */
+export const APPROVED_DEVIATION_STATUSES = new Set(["Approved", "Notified"])
 
 /**
  * The approved replacement dates generation must honor (FR-10). Draft

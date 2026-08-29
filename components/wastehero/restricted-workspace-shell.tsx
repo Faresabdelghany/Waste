@@ -1,6 +1,7 @@
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { BusinessWorkspace } from "@/components/wastehero/business-workspace"
 import { ContractorDashboard } from "@/components/wastehero/contractor-dashboard"
+import { PortalDeviationNotices } from "@/components/wastehero/portal-deviation-notices"
 import {
   RestrictedPersonaSidebar,
   type RestrictedPersona,
@@ -32,6 +33,8 @@ type RestrictedWorkspaceDefinition = {
   permissionsRoleId?: string
   /** Signed-in identity written to audit events and created records. */
   actorName?: string
+  /** customers.contacts record whose customer-scoped deviations the portal shows. */
+  portalCustomerId?: string
   pages: readonly RestrictedWorkspacePage[]
 }
 
@@ -42,6 +45,7 @@ const restrictedWorkspaceDefinitions: Record<
   citizen: {
     fixedProjectScope: "copenhagen",
     fixedScopeLabel: "Østerbro Housing · Parkvej 18",
+    portalCustomerId: "company-osterbro-housing",
     pages: [
       {
         id: "portal",
@@ -148,6 +152,9 @@ export function RestrictedWorkspaceShell({
     <SidebarProvider>
       <RestrictedPersonaSidebar persona={persona} />
       <SidebarInset>
+        {definition.portalCustomerId ? (
+          <PortalDeviationNotices customerId={definition.portalCustomerId} />
+        ) : null}
         <BusinessWorkspace
           workspaceId={page.workspaceId}
           initialModuleId={page.moduleId}

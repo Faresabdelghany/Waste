@@ -90,7 +90,7 @@ Two relation edits in `business-form-schemas-commercial-improve.ts` (Q16).
 
 ## Follow-ups (for ticketing — not in this change)
 
-1. **Customer-scoped deviations**: excluded from route-date remapping; intended portal/notification behavior (customer-facing calendar exceptions, notices) needs product definition.
+1. **Customer-scoped deviations**: excluded from route-date remapping; intended portal/notification behavior (customer-facing calendar exceptions, notices) needs product definition. *Implemented (issue #10)*: a customer-scoped deviation is a promise-level notice for one customer — `lib/route-schemes/customer-deviations.ts` derives Approved/Notified notices per `customerId`, the citizen portal shows them as a "Collection date changes" banner (`portal-deviation-notices.tsx`), and generation keeps ignoring customer scope (guarded in `scripts/customer-deviation-harness.ts`).
 2. **`contractors.contract-areas.zoneIds` → `plan.areas`**: deliberate cross-domain reference today; revisit if the contractor domain gets its own zone concept.
 3. **Container fact labels** `"Pickup setting"` / `"Collection calendar"` on Resources → rename/re-source once container service cadence has a canonical home (Agreement/Subscription).
 4. **Vehicle/driver conflict checking** remains split: scheme-default conflicts checked at scheme save (FR-5d) vs Vehicle Planning allocations — generation does **not** consult `fleet.vehicle-planning`. Unifying planned-assignment conflict detection is open.

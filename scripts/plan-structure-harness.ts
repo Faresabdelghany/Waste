@@ -194,7 +194,7 @@ const deviationRecords =
     (module) => module.id === "collection-deviations",
   )?.records ?? []
 check(
-  "the two actionable fixture deviations parse with calendar and scope; the draft is excluded",
+  "the three actionable fixture deviations parse with calendar and scope; the draft is excluded",
   approvedDeviationsFromRecords(deviationRecords).map((deviation) => [
     deviation.originalDate,
     deviation.replacementDate,
@@ -204,6 +204,7 @@ check(
   [
     ["2026-12-24", "2026-12-27", "calendar-central", "project"],
     ["2026-12-26", "2026-12-28", "calendar-central", "project"],
+    ["2026-09-10", "2026-09-11", "calendar-central", "customer"],
   ],
 )
 
