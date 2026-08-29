@@ -461,8 +461,11 @@ export const commercialImproveBusinessFormSchemas = [
             relation: { workspaceId: "commercial", moduleId: "products" },
           },
           {
+            // Deliberate cross-domain reference (issue #12): a Contract Area's
+            // geographic scope is a set of operator-owned Planning Areas; the
+            // contractor domain has no zone concept of its own.
             id: "zoneIds",
-            label: "Zones",
+            label: "Planning areas",
             type: "multiselect",
             relation: { workspaceId: "plan", moduleId: "areas" },
           },

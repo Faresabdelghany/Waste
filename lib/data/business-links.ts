@@ -63,6 +63,7 @@ const fallbackModules: Array<ModuleLocation & { terms: string[] }> = [
   { workspaceId: "commercial", moduleId: "invoices", terms: ["invoice", "invoices", "credit note", "credit notes"] },
   { workspaceId: "contractors", moduleId: "contractors", terms: ["contractor", "contractors"] },
   { workspaceId: "contractors", moduleId: "contract-areas", terms: ["contract area", "contract areas"] },
+  { workspaceId: "plan", moduleId: "areas", terms: ["planning area", "planning areas"] },
   { workspaceId: "contractors", moduleId: "activities", terms: ["contractor activity", "contractor activities"] },
   { workspaceId: "customers", moduleId: "properties", terms: ["property", "properties"] },
   { workspaceId: "resources", moduleId: "containers", terms: ["container", "containers", "asset", "assets"] },

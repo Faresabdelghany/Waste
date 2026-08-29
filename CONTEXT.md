@@ -171,8 +171,8 @@ An effective-dated set of explainable customer pricing rules and price rows.
 _Avoid_: Contractor price, invoice
 
 **Contract Area**:
-An effective-dated geographic and service responsibility awarded to a contractor.
-_Avoid_: Operational area, route
+An effective-dated geographic and service responsibility awarded to a contractor. Its geographic scope references operator-owned Planning Areas — the contractor domain has no zone concept of its own — while the contract's own boundary text stays the authoritative legal boundary.
+_Avoid_: Operational area, route, contractor zone
 
 **Contract Area Assignment**:
 The effective-dated relationship that links an existing Contract Area to one contractor. Assigning or transferring it changes the relationship and preserves the Contract Area itself.

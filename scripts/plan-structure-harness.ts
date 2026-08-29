@@ -130,9 +130,42 @@ check(
   { workspaceId: "contractors", moduleId: "contract-areas" },
 )
 check(
-  "contract-areas' Zones stays a deliberate reference to plan geography",
+  "contract-areas' Planning areas stays a deliberate reference to plan geography (issue #12: kept)",
   relationOf("contractors.contract-areas", "zoneIds"),
   { workspaceId: "plan", moduleId: "areas" },
+)
+
+/* -------------- contract-area fixtures exercise zoneIds (issue #12) -------- */
+
+const planAreaIds = new Set(
+  (businessWorkspaces.plan.modules.find((module) => module.id === "areas")
+    ?.records ?? []).map((record) => record.id),
+)
+const contractAreaRecords =
+  businessWorkspaces.contractors.modules.find(
+    (module) => module.id === "contract-areas",
+  )?.records ?? []
+check(
+  "both contract-area fixtures reference existing planning areas via zoneIds",
+  contractAreaRecords.map((record) => {
+    const zoneRefs = (record.relationRefs ?? []).filter(
+      (ref) => ref.fieldId === "zoneIds",
+    )
+    return [
+      record.id,
+      zoneRefs.length > 0 &&
+        zoneRefs.every(
+          (ref) =>
+            ref.workspaceId === "plan" &&
+            ref.moduleId === "areas" &&
+            planAreaIds.has(ref.recordId),
+        ),
+    ]
+  }),
+  [
+    ["contract-area-osterbro-2", true],
+    ["contract-area-amager-1", true],
+  ],
 )
 
 /* ----------------------------- fixtures (Q14/Q5) --------------------------- */
