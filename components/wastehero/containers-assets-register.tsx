@@ -69,6 +69,7 @@ import {
 import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAssetManagementStore } from "@/components/settings/asset-management-store"
+import { canonicalCalendarName } from "@/components/wastehero/business-filter-popover"
 
 export type ContainerProjectScope = "copenhagen" | "harbor" | "all"
 
@@ -89,7 +90,7 @@ type ContainerProfile = {
   property: string
   project: string
   pickupMethod: string
-  pickupSetting: string
+  serviceFrequency: string
   calendar: string
   routeScheme: string
   fillLevel: string
@@ -209,8 +210,10 @@ function profileFor(record: BusinessRecord): ContainerProfile {
       ),
     ),
     pickupMethod: fact(record, "Pickup method", text("pickupMethod") || "Disabled"),
-    pickupSetting: fact(record, "Pickup setting", text("pickupSetting")),
-    calendar: fact(record, "Collection calendar", text("collectionCalendar")),
+    // Legacy fallback chain: pre-rename records keep the retired "Pickup
+    // setting" fact key; older form submissions only have submittedValues.
+    serviceFrequency: fact(record, "Service frequency", fact(record, "Pickup setting", text("pickupSetting"))),
+    calendar: canonicalCalendarName(fact(record, "Collection calendar", text("collectionCalendar"))) ?? "—",
     routeScheme: fact(record, "Route scheme", text("routeScheme")),
     fillLevel: fact(record, "Fill level", record.value),
     sensor: fact(record, "Sensor", text("sensorIdentifier") || "None"),
@@ -578,7 +581,7 @@ export function ContainersAssetsRegister({
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Funnel className="h-3.5 w-3.5" />
-              Project · type · fraction · vehicle · pickup setting · route scheme · calendar · status · property · sensor freshness
+              Project · type · fraction · vehicle · service frequency · route scheme · calendar · status · property · sensor freshness
             </div>
           </section>
 
@@ -682,7 +685,7 @@ function ContainerTable({
               <TableHead>Waste fractions</TableHead>
               <TableHead>Container type</TableHead>
               <TableHead>Address</TableHead>
-              <TableHead>Pickup setting</TableHead>
+              <TableHead>Service frequency</TableHead>
               <TableHead>Route scheme</TableHead>
               <TableHead>Fill level</TableHead>
               <TableHead>Sensor</TableHead>
@@ -720,7 +723,7 @@ function ContainerTable({
                     <TableCell className="min-w-[140px]">{profile.fractions}</TableCell>
                     <TableCell className="min-w-[190px] text-muted-foreground">{profile.type}</TableCell>
                     <TableCell className="min-w-[230px] text-muted-foreground">{profile.address}</TableCell>
-                    <TableCell className="min-w-[185px] text-muted-foreground">{profile.pickupSetting}</TableCell>
+                    <TableCell className="min-w-[185px] text-muted-foreground">{profile.serviceFrequency}</TableCell>
                     <TableCell className="min-w-[170px] text-muted-foreground">{profile.routeScheme}</TableCell>
                     <TableCell>
                       <div className="flex min-w-[90px] items-center gap-2">
@@ -863,13 +866,26 @@ function GroupsTable({ groups }: { groups: ContainerGroup[] }) {
   )
 }
 
+// Pre-rename user-created records keep facts under retired keys and drifted
+// calendar names (issue #13).
+const legacyFactKeys: Record<string, string> = {
+  "Service frequency": "Pickup setting",
+}
+
+function factWithLegacyFallback(record: BusinessRecord, label: string) {
+  const value = legacyFactKeys[label]
+    ? fact(record, label, fact(record, legacyFactKeys[label]))
+    : fact(record, label)
+  return label === "Collection calendar" ? canonicalCalendarName(value) ?? "—" : value
+}
+
 function FactGrid({ record, labels }: { record: BusinessRecord; labels: readonly string[] }) {
   return (
     <dl className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
       {labels.map((label) => (
         <div key={label} className="min-w-0 border-b border-border/60 pb-3">
           <dt className="text-xs text-muted-foreground">{label}</dt>
-          <dd className="mt-1 break-words text-sm font-medium">{fact(record, label)}</dd>
+          <dd className="mt-1 break-words text-sm font-medium">{factWithLegacyFallback(record, label)}</dd>
         </div>
       ))}
     </dl>
@@ -941,7 +957,7 @@ export function ContainerDetailsSheet({
                     <FactGrid record={record} labels={["Address", "Curb location", "Property", "Property number", "Property type", "Group", "Storage depot"]} />
                   </DetailSection>
                   <DetailSection title="Pickup">
-                    <FactGrid record={record} labels={["Pickup method", "Pickup setting", "Collection calendar", "Last collection", "Next collection"]} />
+                    <FactGrid record={record} labels={["Pickup method", "Service frequency", "Collection calendar", "Last collection", "Next collection"]} />
                   </DetailSection>
                   <DetailSection title="Route">
                     <FactGrid record={record} labels={["Route scheme", "Vehicle"]} />

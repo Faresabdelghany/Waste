@@ -36,7 +36,7 @@ export type BusinessFilters = {
   containerTypes: string[]
   wasteFractions: string[]
   vehicles: string[]
-  pickupSettings: string[]
+  serviceFrequencies: string[]
   routeSchemes: string[]
   collectionCalendars: string[]
   propertyTypes: string[]
@@ -58,7 +58,7 @@ const emptyFilters: BusinessFilters = {
   containerTypes: [],
   wasteFractions: [],
   vehicles: [],
-  pickupSettings: [],
+  serviceFrequencies: [],
   routeSchemes: [],
   collectionCalendars: [],
   propertyTypes: [],
@@ -81,6 +81,17 @@ type FilterDefinition = {
    * order) instead of deriving the options from the loaded records.
    */
   options?: readonly string[]
+}
+
+// Pre-rename user-created records carry the drifted calendar name that the
+// issue #13 fixture alignment retired; read sides fold it onto the real
+// calendar record's name so the facet stays one option and filters match.
+const legacyCalendarNames: Record<string, string> = {
+  "Copenhagen 2026": "Copenhagen Central 2026",
+}
+
+export function canonicalCalendarName(value: string | undefined) {
+  return value ? legacyCalendarNames[value] ?? value : value
 }
 
 function singleValue(value: string | undefined) {
@@ -119,10 +130,12 @@ const containerCategories: FilterDefinition[] = [
     values: (record) => singleValue(record.facts.Vehicle),
   },
   {
-    id: "pickupSettings",
-    label: "Pickup setting",
+    id: "serviceFrequencies",
+    label: "Service frequency",
     icon: Database,
-    values: (record) => singleValue(record.facts["Pickup setting"]),
+    // Legacy fallback: user-created records from before the rename still
+    // carry the fact under the retired "Pickup setting" key.
+    values: (record) => singleValue(record.facts["Service frequency"] ?? record.facts["Pickup setting"]),
   },
   {
     id: "routeSchemes",
@@ -134,7 +147,7 @@ const containerCategories: FilterDefinition[] = [
     id: "collectionCalendars",
     label: "Collection calendar",
     icon: CalendarBlank,
-    values: (record) => singleValue(record.facts["Collection calendar"]),
+    values: (record) => singleValue(canonicalCalendarName(record.facts["Collection calendar"])),
   },
   {
     id: "propertyTypes",

@@ -1167,7 +1167,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
         id: "collection-routing",
         title: "Pickup, calendar, and route",
         description:
-          "Static and Dynamic are routable. Disabled containers are excluded. Route selection also validates status, fractions, type, pickup setting, and route-scheme membership.",
+          "Static and Dynamic are routable. Disabled containers are excluded. Route selection also validates status, fractions, type, service frequency, and route-scheme membership.",
         fields: [
           {
             id: "pickupMethod",
@@ -1183,7 +1183,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
           },
           {
             id: "pickupSetting",
-            label: "Pickup setting",
+            label: "Service frequency",
             type: "select",
             options: [
               { value: "organic-14", label: "Organic · 14-day service" },
@@ -1197,7 +1197,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             label: "Collection calendar",
             type: "select",
             options: [
-              { value: "copenhagen-2026", label: "Copenhagen 2026" },
+              { value: "copenhagen-2026", label: "Copenhagen Central 2026" },
               { value: "commercial-2026", label: "Commercial 2026" },
               { value: "glass-2026", label: "Commercial Glass 2026" },
             ],

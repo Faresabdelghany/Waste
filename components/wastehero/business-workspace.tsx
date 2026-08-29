@@ -140,6 +140,7 @@ import { TaskRowBase } from "@/components/tasks/TaskRowBase"
 import {
   BusinessFilterPopover,
   type BusinessFilters,
+  canonicalCalendarName,
 } from "@/components/wastehero/business-filter-popover"
 import {
   BusinessViewOptionsPopover,
@@ -240,7 +241,7 @@ const emptyBusinessFilters: BusinessFilters = {
   containerTypes: [],
   wasteFractions: [],
   vehicles: [],
-  pickupSettings: [],
+  serviceFrequencies: [],
   routeSchemes: [],
   collectionCalendars: [],
   propertyTypes: [],
@@ -260,7 +261,7 @@ const filterFieldByChipLabel: Record<string, keyof BusinessFilters> = {
   "Container type": "containerTypes",
   "Waste fraction": "wasteFractions",
   Vehicle: "vehicles",
-  "Pickup setting": "pickupSettings",
+  "Service frequency": "serviceFrequencies",
   "Route scheme": "routeSchemes",
   "Collection calendar": "collectionCalendars",
   "Property type": "propertyTypes",
@@ -466,15 +467,20 @@ function recordProject(record: BusinessRecord): ProjectScope {
 function matchesFactFilter(
   record: BusinessRecord,
   selections: readonly string[],
-  factLabel: string,
+  factLabel: string | readonly string[],
   splitValues = false,
+  normalizeValue?: (value: string) => string | undefined,
 ) {
   if (selections.length === 0) return true
-  const factValue = record.facts[factLabel]
+  const factLabels = typeof factLabel === "string" ? [factLabel] : factLabel
+  const factValue = factLabels
+    .map((label) => record.facts[label])
+    .find(Boolean)
   if (!factValue) return false
-  const values = splitValues
+  const values = (splitValues
     ? factValue.split(" · ").map((value) => value.trim())
     : [factValue]
+  ).map((value) => normalizeValue?.(value) ?? value)
   return selections.some((selection) => values.includes(selection))
 }
 
@@ -1362,10 +1368,11 @@ export function BusinessWorkspace({
         businessFilters.vehicles,
         "Vehicle",
       )
-      const matchesPickupSetting = matchesFactFilter(
+      const matchesServiceFrequency = matchesFactFilter(
         record,
-        businessFilters.pickupSettings,
-        "Pickup setting",
+        businessFilters.serviceFrequencies,
+        // Legacy fallback: pre-rename user-created records keep the retired key.
+        ["Service frequency", "Pickup setting"],
       )
       const matchesRouteScheme = matchesFactFilter(
         record,
@@ -1376,6 +1383,9 @@ export function BusinessWorkspace({
         record,
         businessFilters.collectionCalendars,
         "Collection calendar",
+        false,
+        // Legacy fallback: pre-rename records carry the drifted calendar name.
+        canonicalCalendarName,
       )
       const matchesPropertyType = matchesFactFilter(
         record,
@@ -1444,7 +1454,7 @@ export function BusinessWorkspace({
         matchesContainerType &&
         matchesWasteFraction &&
         matchesVehicle &&
-        matchesPickupSetting &&
+        matchesServiceFrequency &&
         matchesRouteScheme &&
         matchesCollectionCalendar &&
         matchesPropertyType &&
@@ -1490,8 +1500,8 @@ export function BusinessWorkspace({
     businessFilters.vehicles.forEach((value) =>
       chips.push({ key: "Vehicle", value }),
     )
-    businessFilters.pickupSettings.forEach((value) =>
-      chips.push({ key: "Pickup setting", value }),
+    businessFilters.serviceFrequencies.forEach((value) =>
+      chips.push({ key: "Service frequency", value }),
     )
     businessFilters.routeSchemes.forEach((value) =>
       chips.push({ key: "Route scheme", value }),
@@ -3138,6 +3148,20 @@ export function BusinessWorkspace({
       }
     }
 
+    // Containers migrated their cadence fact off the retired "Pickup
+    // setting" key (issue #13); the edit merge would otherwise carry the
+    // stale retired key (and the drifted calendar name) forward forever.
+    const normalizeContainerRecord = (record: BusinessRecord): BusinessRecord => {
+      const nextFacts = { ...record.facts }
+      if (nextFacts["Pickup setting"] && !nextFacts["Service frequency"]) {
+        nextFacts["Service frequency"] = nextFacts["Pickup setting"]
+      }
+      delete nextFacts["Pickup setting"]
+      const calendar = canonicalCalendarName(nextFacts["Collection calendar"])
+      if (calendar) nextFacts["Collection calendar"] = calendar
+      return { ...record, facts: nextFacts }
+    }
+
     if (editingRecord) {
       let updatedRecord: BusinessRecord = {
         ...editingRecord,
@@ -3170,6 +3194,9 @@ export function BusinessWorkspace({
       }
       if (resolvedTarget.module.id === "schemes") {
         updatedRecord = normalizeRouteSchemeRecord(updatedRecord)
+      }
+      if (resolvedTarget.module.id === "containers") {
+        updatedRecord = normalizeContainerRecord(updatedRecord)
       }
       const editEvent: AuditEvent = {
         id: `audit-edit-${now}`,

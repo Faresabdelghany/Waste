@@ -249,5 +249,48 @@ check(
   ],
 )
 
+/* ------------- container facts renamed off retired terminology ------------ */
+// Issue #13 (spec follow-up 3): the container cadence fact is "Service
+// frequency" — "Pickup setting" survives only as a read-side legacy
+// fallback for pre-rename localStorage records, never in fixtures.
+
+const containerRecords =
+  businessWorkspaces.resources.modules.find(
+    (module) => module.id === "containers",
+  )?.records ?? []
+check(
+  "no container fixture carries the retired 'Pickup setting' fact key",
+  containerRecords.filter((record) => "Pickup setting" in record.facts).length,
+  0,
+)
+check(
+  "every container fixture carries a 'Service frequency' fact",
+  containerRecords.every((record) => "Service frequency" in record.facts),
+  true,
+)
+check(
+  "the container form keeps field id pickupSetting (localStorage compat) under the new label",
+  getBusinessFormSchema("resources", "containers")
+    ?.sections.flatMap((section) => section.fields)
+    .find((field) => field.id === "pickupSetting")?.label,
+  "Service frequency",
+)
+check(
+  "no container fixture references the drifted 'Copenhagen 2026' calendar name",
+  containerRecords.filter(
+    (record) => record.facts["Collection calendar"] === "Copenhagen 2026",
+  ).length,
+  0,
+)
+check(
+  "Copenhagen containers name the real central calendar record",
+  containerRecords.some(
+    (record) =>
+      record.facts["Collection calendar"] ===
+      calendars.find((calendar) => calendar.id === "calendar-central")?.name,
+  ),
+  true,
+)
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)
