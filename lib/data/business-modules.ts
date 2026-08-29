@@ -2407,21 +2407,36 @@ const plan: WorkspaceDefinition = {
         "Contractor-owned resources expose ownership and permitted visibility.",
       ],
       records: [
-        record(
-          "allocation-2026-07-26-24",
-          "26 Jul · WH-24",
-          "Mads Jensen · RC-1062",
-          "Confirmed",
-          "Fleet Team",
-          "18 t · residual",
-          "1 hour ago",
-          "Rear-loader allocated to Central residual route with a qualified driver.",
-          { Depot: "Nordhavn", Availability: "05:30–16:00", Skills: "Matched", Ownership: "WasteHero" },
-          ["Route RC-1062", "Driver Mads Jensen", "Vehicle WH-24"],
-          "Fleet planning",
-          "1 hour",
-          ["Release", "Change driver"],
-        ),
+        // Carries the typed allocation references the scheme-save conflict
+        // check reads (issue #11) — the same submittedValues shape the
+        // "Plan allocation" form writes. The WH-17 record below stays
+        // display-only: no typed ids means it can never conflict.
+        {
+          ...record(
+            "allocation-2026-07-26-24",
+            "26 Jul · WH-24",
+            "Mads Jensen · RC-1062",
+            "Confirmed",
+            "Fleet Team",
+            "18 t · residual",
+            "1 hour ago",
+            "Rear-loader allocated to Central residual route with a qualified driver.",
+            { Depot: "Nordhavn", Availability: "05:30–16:00", Skills: "Matched", Ownership: "WasteHero" },
+            ["Route RC-1062", "Driver Mads Jensen", "Vehicle WH-24"],
+            "Fleet planning",
+            "1 hour",
+            ["Release", "Change driver"],
+          ),
+          // No allocationAction key: it is the form's nameField, and a
+          // fixture value there would trip the create dialog's uniqueness
+          // check for the first user-created allocation.
+          submittedValues: {
+            vehicleId: "vehicle-wh24",
+            driverId: "driver-mads",
+            plannedStart: "2026-07-26T05:30",
+            plannedEnd: "2026-07-26T16:00",
+          },
+        },
         record(
           "allocation-2026-07-26-17",
           "26 Jul · WH-17",

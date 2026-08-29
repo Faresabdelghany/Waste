@@ -3526,11 +3526,18 @@ export function BusinessWorkspace({
 
     // Conflicts (FR-5d) are checked against every scheme, not just the ones a
     // contractor-scoped view can see — a double-booked default is real either
-    // way, and the review step's preview uses the same unscoped set.
+    // way, and the review step's preview uses the same unscoped set. Vehicle
+    // Planning allocations join the check the same way (issue #11).
+    const allocationModule = businessWorkspaces.fleet.modules.find(
+      (candidate) => candidate.id === "vehicle-planning",
+    )
     const validation = validateGuidedScheme(
       data,
       getRecords(workspace.id, activeModule.id, activeModule.records),
       calendarFromRecord(calendar),
+      allocationModule
+        ? getRecords("fleet", allocationModule.id, allocationModule.records)
+        : [],
     )
 
     const submittedValues: NonNullable<BusinessRecord["submittedValues"]> = {

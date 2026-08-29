@@ -44,7 +44,7 @@ Extend Route Scheme creation with the existing Guided Setup wizard pattern (choo
 
 ### Validation — Draft → Validated
 
-- **FR-5**: Blocking checks at the review step: (a) ≥ 1 service day selected; (b) effective from and to both set, with to ≥ from; (c) every service day has ≥ 1 container (per-day mode names the empty days, e.g. "Pick containers for Wed"); (d) default driver or vehicle is not already the default on another scheme sharing a service day. All pass → scheme created as **Validated**; any fail → **Draft** with named issues on the record.
+- **FR-5**: Blocking checks at the review step: (a) ≥ 1 service day selected; (b) effective from and to both set, with to ≥ from; (c) every service day has ≥ 1 container (per-day mode names the empty days, e.g. "Pick containers for Wed"); (d) default driver or vehicle is not already the default on another scheme sharing a service day within an overlapping effective period; (e) default driver or vehicle has no **Confirmed** Vehicle Planning allocation whose planned window touches the scheme — overlaps the effective period on a service day, with missing/unparseable windows conservatively treated as touching (issue #11). Any non-Confirmed, non-Released allocation status produces a non-blocking warning. Released allocations never conflict; because the Plan allocation form is append-event, confirm/release/change event records are folded back onto their target allocation (supersession) before checking. An allocation targeting the scheme being validated is exempt (takes effect once a revalidation path supplies the scheme's own id — create flows have none). All pass → scheme created as **Validated**; any fail → **Draft** with named issues on the record.
 
 ### Generation
 

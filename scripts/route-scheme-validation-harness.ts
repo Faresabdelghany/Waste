@@ -1,15 +1,19 @@
 // Headless checks for the Route Scheme guided-setup validation (spec FR-5,
 // ticket #5): per-day service plans, blocking checks at review, and the
-// submittedValues round trip the generation engine will read.
+// submittedValues round trip the generation engine will read. Issue #11 adds
+// the Vehicle Planning allocation cross-check and effective-period overlap.
 // Run: npx tsx scripts/route-scheme-validation-harness.ts
 import type { CollectionCalendar } from "../lib/route-schemes/calendar"
 import {
+  allocationConflictSourceFromValues,
+  allocationConflictSources,
   dayPlanCountSummary,
   dayPlansFromValues,
   dayPlansToValues,
   effectiveDayPlans,
   schemeDefaultsFromValues,
   validateScheme,
+  type AllocationConflictSource,
   type SchemeDayPlans,
   type SchemeValidationInput,
 } from "../lib/route-schemes/validation"
@@ -219,6 +223,350 @@ check(
     ],
     warnings: [],
   },
+)
+
+check(
+  "provably disjoint effective periods → no conflict despite shared day + vehicle",
+  validateScheme(validInput, [
+    { ...otherScheme, effectiveFrom: "2027-01-01", effectiveTo: "2027-06-30" },
+  ]),
+  { status: "Validated", issues: [], warnings: [] },
+)
+
+check(
+  "overlapping effective periods still conflict",
+  validateScheme(validInput, [
+    { ...otherScheme, effectiveFrom: "2026-12-01", effectiveTo: "2027-06-30" },
+  ]).status,
+  "Draft",
+)
+
+check(
+  "other scheme without period info conservatively conflicts",
+  validateScheme(validInput, [otherScheme]).status,
+  "Draft",
+)
+
+check(
+  "open-ended other scheme starting before the draft ends conflicts",
+  validateScheme(validInput, [
+    { ...otherScheme, effectiveFrom: "2026-01-01", effectiveTo: "" },
+  ]).status,
+  "Draft",
+)
+
+check(
+  "datetime-shaped period values still prove disjointness at date level",
+  validateScheme(validInput, [
+    { ...otherScheme, effectiveFrom: "2027-01-01T00:00", effectiveTo: "2027-06-30" },
+  ]).status,
+  "Validated",
+)
+
+check(
+  "malformed period values never prove disjointness → conservative conflict",
+  validateScheme(validInput, [
+    { ...otherScheme, effectiveFrom: "next spring", effectiveTo: "someday" },
+  ]).status,
+  "Draft",
+)
+
+/* ---------------- Vehicle Planning allocation cross-check ---------------- */
+// Issue #11: scheme validation consults fleet.vehicle-planning. Confirmed
+// allocations block; Draft/Allocated warn; Released and scheme-own never do.
+
+const confirmedAllocation: AllocationConflictSource = {
+  allocationName: "26 Jul · WH-24",
+  status: "Confirmed",
+  vehicleId: "vehicle-1",
+  driverId: "driver-9",
+  plannedStart: "2026-08-30T05:30",
+  plannedEnd: "2026-08-30T16:00",
+}
+
+check(
+  "confirmed allocation of the default vehicle in the effective period → Draft, named issue",
+  // 2026-08-30 is a Sunday; validInput serves Wed + Sun from 2026-08-28.
+  validateScheme(validInput, [], [confirmedAllocation]),
+  {
+    status: "Draft",
+    issues: [
+      'Default vehicle conflicts with confirmed Vehicle Planning allocation "26 Jul · WH-24" (2026-08-30)',
+    ],
+    warnings: [],
+  },
+)
+
+check(
+  "confirmed allocation of the default driver → Draft, named issue",
+  validateScheme(validInput, [], [
+    { ...confirmedAllocation, vehicleId: "vehicle-9", driverId: "driver-1" },
+  ]),
+  {
+    status: "Draft",
+    issues: [
+      'Default driver conflicts with confirmed Vehicle Planning allocation "26 Jul · WH-24" (2026-08-30)',
+    ],
+    warnings: [],
+  },
+)
+
+check(
+  "unconfirmed allocation → warning only, still Validated",
+  validateScheme(validInput, [], [{ ...confirmedAllocation, status: "Allocated" }]),
+  {
+    status: "Validated",
+    issues: [],
+    warnings: [
+      'Default vehicle is planned on Vehicle Planning allocation "26 Jul · WH-24" (Allocated · 2026-08-30) — confirm or release it in Fleet',
+    ],
+  },
+)
+
+check(
+  "released allocation never conflicts",
+  validateScheme(validInput, [], [{ ...confirmedAllocation, status: "Released" }]),
+  { status: "Validated", issues: [], warnings: [] },
+)
+
+check(
+  "allocation window before the effective period → no conflict",
+  validateScheme(validInput, [], [
+    {
+      ...confirmedAllocation,
+      plannedStart: "2026-07-26T05:30",
+      plannedEnd: "2026-07-26T16:00",
+    },
+  ]),
+  { status: "Validated", issues: [], warnings: [] },
+)
+
+check(
+  "allocation window inside the period but on a non-service weekday → no conflict",
+  // 2026-08-31 is a Monday; validInput serves only Wed + Sun.
+  validateScheme(validInput, [], [
+    {
+      ...confirmedAllocation,
+      plannedStart: "2026-08-31T05:30",
+      plannedEnd: "2026-08-31T16:00",
+    },
+  ]),
+  { status: "Validated", issues: [], warnings: [] },
+)
+
+check(
+  "week-long allocation window always touches some service day",
+  validateScheme(validInput, [], [
+    {
+      ...confirmedAllocation,
+      plannedStart: "2026-08-31T00:00",
+      plannedEnd: "2026-09-08T23:59",
+    },
+  ]).status,
+  "Draft",
+)
+
+check(
+  "allocation without parseable window dates conservatively conflicts",
+  validateScheme(validInput, [], [
+    { ...confirmedAllocation, plannedStart: undefined, plannedEnd: undefined },
+  ]).status,
+  "Draft",
+)
+
+check(
+  "missing plannedEnd means open-ended: a start inside the period conflicts",
+  // Start Monday 2026-08-31 (not a service day) but the open window reaches
+  // Wed 2026-09-02.
+  validateScheme(validInput, [], [
+    { ...confirmedAllocation, plannedStart: "2026-08-31T05:30", plannedEnd: undefined },
+  ]).status,
+  "Draft",
+)
+
+check(
+  "missing plannedEnd with a start after the effective period → no conflict",
+  validateScheme(validInput, [], [
+    { ...confirmedAllocation, plannedStart: "2027-01-05T05:30", plannedEnd: undefined },
+  ]).status,
+  "Validated",
+)
+
+check(
+  "allocation targeting the scheme itself is exempt",
+  validateScheme({ ...validInput, schemeId: "scheme-own" }, [], [
+    { ...confirmedAllocation, schemeId: "scheme-own" },
+  ]),
+  { status: "Validated", issues: [], warnings: [] },
+)
+
+check(
+  "allocation targeting another scheme still conflicts",
+  validateScheme({ ...validInput, schemeId: "scheme-own" }, [], [
+    { ...confirmedAllocation, schemeId: "scheme-other" },
+  ]).status,
+  "Draft",
+)
+
+check(
+  "vehicle and driver both allocated → one issue per resource",
+  validateScheme(validInput, [], [
+    { ...confirmedAllocation, driverId: "driver-1" },
+  ]).issues,
+  [
+    'Default vehicle conflicts with confirmed Vehicle Planning allocation "26 Jul · WH-24" (2026-08-30)',
+    'Default driver conflicts with confirmed Vehicle Planning allocation "26 Jul · WH-24" (2026-08-30)',
+  ],
+)
+
+check(
+  "allocation warnings stack after calendar warnings",
+  validateScheme(
+    {
+      ...validInput,
+      calendar: {
+        id: "calendar-x",
+        name: "Cal X",
+        status: "Active",
+        workingDays: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+        holidayDates: [],
+        validFrom: "2026-01-01",
+        validTo: "2027-12-31",
+      },
+    },
+    [],
+    [{ ...confirmedAllocation, status: "Draft" }],
+  ).warnings,
+  [
+    "Sun is not a working day on Cal X — those dates are skipped at generation",
+    'Default vehicle is planned on Vehicle Planning allocation "26 Jul · WH-24" (Draft · 2026-08-30) — confirm or release it in Fleet',
+  ],
+)
+
+check(
+  "allocationConflictSourceFromValues reads the fleet.vehicle-planning value shape",
+  allocationConflictSourceFromValues("26 Jul · WH-24", "Confirmed", {
+    vehicleId: "vehicle-wh24",
+    driverId: "driver-mads",
+    plannedStart: "2026-07-26T05:30",
+    plannedEnd: "2026-07-26T16:00",
+    schemeId: "",
+  }),
+  {
+    allocationName: "26 Jul · WH-24",
+    status: "Confirmed",
+    vehicleId: "vehicle-wh24",
+    driverId: "driver-mads",
+    plannedStart: "2026-07-26T05:30",
+    plannedEnd: "2026-07-26T16:00",
+  },
+)
+
+check(
+  "allocationConflictSourceFromValues → null without typed vehicle or driver",
+  allocationConflictSourceFromValues("26 Jul · WH-17", "Conflict", {
+    plannedStart: "2026-07-26T00:00",
+  }),
+  null,
+)
+
+check(
+  "allocationConflictSourceFromValues → null for missing values",
+  allocationConflictSourceFromValues("Legacy", "Confirmed", undefined),
+  null,
+)
+
+/* -------------- allocation supersession (append-event form) --------------- */
+// The Plan allocation form's confirm/release/change submissions create NEW
+// event records pointing at the original via existingAllocationId; the
+// supersession pass folds them back onto their targets.
+
+const baseAllocationRecord = {
+  id: "alloc-1",
+  name: "26 Jul · WH-24",
+  status: "Confirmed",
+  submittedValues: {
+    vehicleId: "vehicle-1",
+    plannedStart: "2026-08-30T05:30",
+    plannedEnd: "2026-08-30T16:00",
+  },
+}
+
+check(
+  "allocationConflictSources passes plain allocations through",
+  allocationConflictSources([baseAllocationRecord]).map((s) => s.status),
+  ["Confirmed"],
+)
+
+check(
+  "a release event retires its target and never conflicts itself",
+  validateScheme(validInput, [], allocationConflictSources([
+    baseAllocationRecord,
+    {
+      id: "alloc-2",
+      name: "Vehicle allocation · Release allocation",
+      status: "Released",
+      submittedValues: { allocationAction: "release", existingAllocationId: "alloc-1" },
+    },
+  ])),
+  { status: "Validated", issues: [], warnings: [] },
+)
+
+check(
+  "a confirm event promotes its Draft target to blocking",
+  validateScheme(validInput, [], allocationConflictSources([
+    { ...baseAllocationRecord, status: "Draft" },
+    {
+      id: "alloc-3",
+      name: "Vehicle allocation · Confirm allocation",
+      status: "Confirmed",
+      submittedValues: { allocationAction: "confirm", existingAllocationId: "alloc-1" },
+    },
+  ])).status,
+  "Draft",
+)
+
+check(
+  "a change event retires the original; the change record is the active source",
+  allocationConflictSources([
+    baseAllocationRecord,
+    {
+      id: "alloc-4",
+      name: "Vehicle allocation · Change allocation",
+      status: "Allocated",
+      submittedValues: {
+        allocationAction: "change",
+        existingAllocationId: "alloc-1",
+        vehicleId: "vehicle-2",
+        plannedStart: "2026-09-06T05:30",
+        plannedEnd: "2026-09-06T16:00",
+      },
+    },
+  ]).map((s) => `${s.allocationName}:${s.status}:${s.vehicleId}`),
+  [
+    "26 Jul · WH-24:Released:vehicle-1",
+    "Vehicle allocation · Change allocation:Allocated:vehicle-2",
+  ],
+)
+
+check(
+  "later events override earlier ones in store order",
+  allocationConflictSources([
+    { ...baseAllocationRecord, status: "Draft" },
+    {
+      id: "alloc-5",
+      name: "Vehicle allocation · Confirm allocation",
+      status: "Confirmed",
+      submittedValues: { allocationAction: "confirm", existingAllocationId: "alloc-1" },
+    },
+    {
+      id: "alloc-6",
+      name: "Vehicle allocation · Release allocation",
+      status: "Released",
+      submittedValues: { allocationAction: "release", existingAllocationId: "alloc-1" },
+    },
+  ]).map((s) => s.status),
+  ["Released"],
 )
 
 /* -------------------- record extraction & serialization ------------------ */

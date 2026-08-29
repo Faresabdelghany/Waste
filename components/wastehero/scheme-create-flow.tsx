@@ -55,6 +55,7 @@ import {
 } from "@/lib/route-schemes/recurrence"
 import { sortServiceDays } from "@/lib/route-schemes/recurrence"
 import {
+  allocationConflictSources,
   dayPlanCountSummary,
   effectiveDayPlans,
   schemeDefaultsFromValues,
@@ -98,13 +99,15 @@ export function schemeDayPlans(data: GuidedSchemeData): SchemeDayPlans {
 }
 
 /**
- * FR-5 over the wizard draft plus every existing scheme's defaults; the
- * selected Collection Calendar adds non-blocking warnings (Q6/Q7).
+ * FR-5 over the wizard draft plus every existing scheme's defaults and the
+ * Vehicle Planning allocations (issue #11); the selected Collection Calendar
+ * adds non-blocking warnings (Q6/Q7).
  */
 export function validateGuidedScheme(
   data: GuidedSchemeData,
   existingSchemes: readonly BusinessRecord[],
   calendar?: CollectionCalendar | null,
+  allocations: readonly BusinessRecord[] = [],
 ): SchemeValidationResult {
   return validateScheme(
     {
@@ -119,6 +122,7 @@ export function validateGuidedScheme(
     existingSchemes
       .map((record) => schemeDefaultsFromValues(record.name, record.submittedValues))
       .filter((source): source is NonNullable<typeof source> => source !== null),
+    allocationConflictSources(allocations),
   )
 }
 
@@ -937,11 +941,12 @@ function StepSchemeReview({
   const drivers = useModuleRecords("fleet", "drivers")
   const depots = useModuleRecords("resources", "depots")
   const existingSchemes = useModuleRecords("route-studio", "schemes")
+  const allocations = useModuleRecords("fleet", "vehicle-planning")
 
   const calendar = calendarFromRecord(
     calendars.find((record) => record.id === data.calendarId),
   )
-  const validation = validateGuidedScheme(data, existingSchemes, calendar)
+  const validation = validateGuidedScheme(data, existingSchemes, calendar, allocations)
   const recurrence = draftRecurrence(data)
   const normalizedPlans = schemeDayPlans(data)
   const plans = effectiveDayPlans(data.serviceDays, normalizedPlans)
@@ -1062,8 +1067,8 @@ function StepSchemeReview({
             The scheme will be created as Draft
           </p>
           <ul className="list-disc space-y-1 pl-5 text-xs text-amber-700 dark:text-amber-400">
-            {validation.issues.map((issue) => (
-              <li key={issue}>{issue}</li>
+            {validation.issues.map((issue, index) => (
+              <li key={`${index}-${issue}`}>{issue}</li>
             ))}
           </ul>
         </div>
@@ -1072,11 +1077,11 @@ function StepSchemeReview({
       {validation.warnings.length > 0 && (
         <div className="space-y-1.5 rounded-2xl border border-amber-500/40 bg-amber-500/5 p-4">
           <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-            Calendar warnings — the scheme can still be created
+            Warnings — the scheme can still be created
           </p>
           <ul className="list-disc space-y-1 pl-5 text-xs text-amber-700 dark:text-amber-400">
-            {validation.warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
+            {validation.warnings.map((warning, index) => (
+              <li key={`${index}-${warning}`}>{warning}</li>
             ))}
           </ul>
         </div>
