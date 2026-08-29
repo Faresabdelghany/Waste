@@ -151,6 +151,12 @@ check(
     const zoneRefs = (record.relationRefs ?? []).filter(
       (ref) => ref.fieldId === "zoneIds",
     )
+    // The edit form prefills from submittedValues, and facts/refs are
+    // re-derived from that string on save — so it must agree with the refs.
+    const submittedZoneIds = String(record.submittedValues?.zoneIds ?? "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean)
     return [
       record.id,
       zoneRefs.length > 0 &&
@@ -159,7 +165,9 @@ check(
             ref.workspaceId === "plan" &&
             ref.moduleId === "areas" &&
             planAreaIds.has(ref.recordId),
-        ),
+        ) &&
+        JSON.stringify(submittedZoneIds) ===
+          JSON.stringify(zoneRefs.map((ref) => ref.recordId)),
     ]
   }),
   [

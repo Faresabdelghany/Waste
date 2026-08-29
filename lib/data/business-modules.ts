@@ -2335,20 +2335,20 @@ const plan: WorkspaceDefinition = {
       id: "areas",
       label: "Areas & Zones",
       title: "Areas, Zones, and Service Geography",
-      description: "Operational areas, contract boundaries, notification zones, and map validation.",
+      description: "Planning areas, notification zones, and map validation.",
       entityLabel: "Area or zone",
       contextLabel: "Purpose · project",
       valueLabel: "Coverage",
       primaryAction: "New area",
       metrics: [
         { label: "Operating areas", value: "12", helper: "No uncovered project area", tone: "positive" },
-        { label: "Contract areas", value: "7", helper: "3 external haulers" },
+        { label: "Referenced by contract areas", value: "2", helper: "CA-Ø-2 · CA-AM-1" },
         { label: "Overlaps", value: "1", helper: "Effective 1 Sep", tone: "danger" },
         { label: "Notification zones", value: "9", helper: "4 customer-facing" },
       ],
       lifecycle: ["Draft", "Valid", "Upcoming", "Active", "Expired"],
       rules: [
-        "Contract-area gaps and overlaps are visible before activation.",
+        "Area boundary gaps and overlaps are visible before activation.",
         "Geographic scope is effective-dated.",
         "Notification zones and operational responsibility remain separate concepts.",
       ],
@@ -2356,7 +2356,7 @@ const plan: WorkspaceDefinition = {
         record(
           "area-indreby",
           "Indre By Operations",
-          "Operational area · Copenhagen Central",
+          "Planning area · Copenhagen Central",
           "Active",
           "Operations Admin",
           "18.4 km²",
@@ -2374,7 +2374,7 @@ const plan: WorkspaceDefinition = {
         record(
           "area-osterbro-contract",
           "Østerbro Zone 2",
-          "Operational area · Østerbro",
+          "Planning area · Østerbro",
           "Overlap",
           "Operations Admin",
           "2.1 km² overlap",
@@ -2389,7 +2389,7 @@ const plan: WorkspaceDefinition = {
         record(
           "area-amager-1",
           "Amager Zone 1",
-          "Operational area · Amager",
+          "Planning area · Amager",
           "Active",
           "Operations Admin",
           "6.8 km²",
@@ -5007,10 +5007,13 @@ const contractAreasModule: ModuleDefinition = {
     "Transfers preserve the prior award and start a new effective responsibility.",
   ],
   records: [
-    // Fixture contract areas carry the same typed payload the create form
-    // produces so the zoneIds → plan.areas reference is exercised, not just
-    // declared (issue #12). The legal boundary stays the contract's own
-    // boundary text; Planning areas name the operator geography it maps to.
+    // Fixture contract areas carry a create-form-shaped typed payload —
+    // submittedValues plus contractor/zone relationRefs — so the zoneIds →
+    // plan.areas reference is exercised, not just declared (issue #12).
+    // Per file-wide fixture convention the projectId relationRef the form
+    // would also emit is omitted; project scope comes from the fixture scope
+    // registry. The legal boundary stays the contract's own boundary text;
+    // Planning areas name the operator geography it maps to.
     {
       ...record(
         "contract-area-osterbro-2",
