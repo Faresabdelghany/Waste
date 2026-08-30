@@ -14,6 +14,7 @@ import {
   recurrenceSentence,
   routeIdentityKey,
   serviceDayOf,
+  serviceDaysFromValues,
   type SchemeRecurrence,
 } from "../lib/route-schemes/recurrence"
 
@@ -157,6 +158,10 @@ check("routeIdentityKey is deterministic", routeIdentityKey("scheme-central-a", 
 
 check("parseServiceDays: comma list, sorted Mon-first", parseServiceDays("thursday, monday"), ["monday", "thursday"])
 check("parseServiceDays: unknown tokens dropped", parseServiceDays("monday, someday"), ["monday"])
+
+check("serviceDaysFromValues: reads values.serviceDays", serviceDaysFromValues({ serviceDays: "friday, monday" }), ["monday", "friday"])
+check("serviceDaysFromValues: missing values object", serviceDaysFromValues(undefined), [])
+check("serviceDaysFromValues: non-string field dropped", serviceDaysFromValues({ serviceDays: true }), [])
 
 const formValues = {
   frequency: "every-2-weeks",

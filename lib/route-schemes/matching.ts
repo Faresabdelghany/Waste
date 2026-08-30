@@ -14,7 +14,7 @@
 import type { BusinessRecord } from "../data/business-modules"
 import {
   SERVICE_DAYS,
-  parseServiceDays,
+  serviceDaysFromValues,
   sortServiceDays,
   type ServiceDay,
 } from "./recurrence"
@@ -454,9 +454,7 @@ export function schemeStopRuleSources(
     if (stopSelectionMode(values) !== "rule" || !values) continue
     const areaId = stringValue(values, "planningAreaId")
     if (!areaId) continue
-    const serviceDays = parseServiceDays(
-      typeof values.serviceDays === "string" ? values.serviceDays : "",
-    )
+    const serviceDays = serviceDaysFromValues(values)
     if (serviceDays.length === 0) continue
     const plans = matchPlansFromValues(values)
     const fractions = Array.from(

@@ -18,7 +18,7 @@ import {
 } from "@/lib/route-schemes/matching"
 import {
   SERVICE_DAY_SHORT_LABELS,
-  parseServiceDays,
+  serviceDaysFromValues,
 } from "@/lib/route-schemes/recurrence"
 import { stringValue } from "@/lib/route-schemes/validation"
 
@@ -29,9 +29,7 @@ export function SchemeStopMatchingSection({ record }: { record: BusinessRecord }
   if (stopSelectionMode(record.submittedValues) !== "rule") return null
 
   const values = record.submittedValues ?? {}
-  const serviceDays = parseServiceDays(
-    typeof values.serviceDays === "string" ? values.serviceDays : "",
-  )
+  const serviceDays = serviceDaysFromValues(values)
   if (serviceDays.length === 0) return null
 
   const areaId = stringValue(values, "planningAreaId")

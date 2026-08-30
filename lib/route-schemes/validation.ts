@@ -11,8 +11,8 @@ import {
   SERVICE_DAY_SHORT_LABELS,
   addDays,
   isIsoDate,
-  parseServiceDays,
   serviceDayOf,
+  serviceDaysFromValues,
   sortServiceDays,
   type ServiceDay,
 } from "./recurrence"
@@ -457,9 +457,7 @@ export function schemeDefaultsFromValues(
   values: StoredValues | undefined,
 ): SchemeDefaultsSource | null {
   if (!values) return null
-  const serviceDays = parseServiceDays(
-    typeof values.serviceDays === "string" ? values.serviceDays : "",
-  )
+  const serviceDays = serviceDaysFromValues(values)
   if (serviceDays.length === 0) return null
   const plannedVehicleId = stringValue(values, "plannedVehicleId")
   const plannedDriverId = stringValue(values, "plannedDriverId")

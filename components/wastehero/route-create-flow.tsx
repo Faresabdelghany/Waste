@@ -29,22 +29,9 @@ import {
 import { Stepper } from "@/components/project-wizard/Stepper"
 import { StepMode } from "@/components/project-wizard/steps/StepMode"
 import type { ProjectMode } from "@/components/project-wizard/types"
-import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
-import {
-  businessWorkspaces,
-  type BusinessRecord,
-  type WorkspaceId,
-} from "@/lib/data/business-modules"
+import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
+import type { BusinessRecord } from "@/lib/data/business-modules"
 import { cn } from "@/lib/utils"
-
-function useModuleRecords(workspaceId: WorkspaceId, moduleId: string) {
-  const { getRecords } = useBusinessRecordStore()
-  const fixtureRecords =
-    businessWorkspaces[workspaceId]?.modules.find(
-      (candidate) => candidate.id === moduleId,
-    )?.records ?? []
-  return getRecords(workspaceId, moduleId, fixtureRecords)
-}
 
 const HOME_DEPOT_OPTIONS = [
   "Nordhavn Depot",

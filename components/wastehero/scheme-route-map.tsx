@@ -1,9 +1,12 @@
 "use client"
 
-// Route map preview for Route Schemes (spec FR-15, ticket #6): one route line
-// per service day in its stable day color, a pin per stop, an All days /
-// per-day filter, and a legend row per day (stops + fraction mix). Rendered by
-// the Guided Setup wizard's Route map step and by the scheme detail view.
+// Route map preview for Route Schemes (spec FR-15, tickets #6/#17): one route
+// line per DISTINCT day route — days sharing an identical stop list (the
+// sameAllDays default) fold into a single line, pin set, and legend row
+// labeled with all their days, so exact copies never stack and hide each
+// other. Distinct routes keep per-day colors; a stop shared between distinct
+// routes renders one neutral pin. All days / per-day filter on top. Rendered
+// by the Guided Setup wizard's Route map step and by the scheme detail view.
 
 import { useState } from "react"
 
@@ -17,11 +20,13 @@ import {
   MAP_VIEWBOX,
   SCHEME_DAY_COLORS,
   dayPolylinePoints,
-  stopPosition,
+  groupIdenticalDayPlans,
+  schemeMapPins,
+  type SchemeMapDayGroup,
 } from "@/lib/route-schemes/map"
 import {
   SERVICE_DAY_SHORT_LABELS,
-  parseServiceDays,
+  serviceDaysFromValues,
   type ServiceDay,
 } from "@/lib/route-schemes/recurrence"
 import { effectiveStopPlans } from "@/lib/route-schemes/matching"
@@ -57,6 +62,10 @@ function fractionMix(
   )
 }
 
+function groupDaysLabel(group: SchemeMapDayGroup): string {
+  return group.days.map((day) => SERVICE_DAY_SHORT_LABELS[day]).join(", ")
+}
+
 export function SchemeRouteMap({
   plans,
   containers,
@@ -68,6 +77,9 @@ export function SchemeRouteMap({
   const shownPlans = plans.filter(
     (plan) => focusDay === "all" || plan.day === focusDay,
   )
+  const shownGroups = groupIdenticalDayPlans(shownPlans)
+  const pins = schemeMapPins(shownGroups)
+  const legendGroups = groupIdenticalDayPlans(plans)
 
   return (
     <div className="space-y-3">
@@ -122,15 +134,15 @@ export function SchemeRouteMap({
           preserveAspectRatio="none"
           className="absolute inset-0 h-full w-full"
         >
-          {shownPlans.map((plan) => {
-            const linePoints = dayPolylinePoints(plan.containerIds)
+          {shownGroups.map((group) => {
+            const linePoints = dayPolylinePoints(group.containerIds)
             if (!linePoints) return null
             return (
               <polyline
-                key={plan.day}
+                key={group.days.join("-")}
                 points={linePoints}
                 fill="none"
-                stroke={SCHEME_DAY_COLORS[plan.day]}
+                stroke={group.color}
                 strokeWidth="1.75"
                 vectorEffect="non-scaling-stroke"
                 opacity="0.9"
@@ -138,43 +150,45 @@ export function SchemeRouteMap({
             )
           })}
         </svg>
-        {shownPlans.map((plan) =>
-          plan.containerIds.map((containerId, index) => {
-            const { x, y } = stopPosition(containerId)
-            return (
-              <span
-                key={`${plan.day}-${containerId}-${index}`}
-                className="absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background"
-                style={{
-                  left: `${(x / MAP_VIEWBOX.width) * 100}%`,
-                  top: `${(y / MAP_VIEWBOX.height) * 100}%`,
-                  backgroundColor: SCHEME_DAY_COLORS[plan.day],
-                }}
-              />
-            )
-          }),
-        )}
+        {pins.map((pin) => (
+          <span
+            key={pin.containerId}
+            title={pin.days.map((day) => SERVICE_DAY_SHORT_LABELS[day]).join(", ")}
+            className={cn(
+              "absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background",
+              pin.color === null && "bg-foreground",
+            )}
+            style={{
+              left: `${(pin.x / MAP_VIEWBOX.width) * 100}%`,
+              top: `${(pin.y / MAP_VIEWBOX.height) * 100}%`,
+              ...(pin.color === null ? {} : { backgroundColor: pin.color }),
+            }}
+          />
+        ))}
         <div className="absolute bottom-2 right-2 rounded bg-background/90 px-2 py-1 text-[10px] text-muted-foreground">
           Pin positions are illustrative — stop order follows the picked order.
         </div>
       </div>
 
       <div className="divide-y divide-border overflow-hidden rounded-xl border border-border/60">
-        {plans.map((plan) => (
-          <div key={plan.day} className="flex items-center gap-3 px-3 py-2 text-xs">
+        {legendGroups.map((group) => (
+          <div
+            key={group.days.join("-")}
+            className="flex items-center gap-3 px-3 py-2 text-xs"
+          >
             <span
               className="size-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: SCHEME_DAY_COLORS[plan.day] }}
+              style={{ backgroundColor: group.color }}
             />
-            <span className="w-10 font-semibold">
-              {SERVICE_DAY_SHORT_LABELS[plan.day]}
+            <span className="min-w-10 shrink-0 font-semibold">
+              {groupDaysLabel(group)}
             </span>
-            <span className="font-mono">
-              {plan.containerIds.length} stop
-              {plan.containerIds.length === 1 ? "" : "s"}
+            <span className="shrink-0 font-mono">
+              {group.containerIds.length} stop
+              {group.containerIds.length === 1 ? "" : "s"}
             </span>
             <span className="truncate text-muted-foreground">
-              {fractionMix(plan.containerIds, containers)}
+              {fractionMix(group.containerIds, containers)}
             </span>
           </div>
         ))}
@@ -194,21 +208,9 @@ export function SchemeRouteMap({
  * without structured service days (legacy free-text fixtures).
  */
 export function SchemeRecordRouteMapSection({ record }: { record: BusinessRecord }) {
-  const { getRecords } = useBusinessRecordStore()
-  const containersModule = businessWorkspaces.resources?.modules.find(
-    (module) => module.id === "containers",
-  )
-  const containers = getRecords(
-    "resources",
-    "containers",
-    containersModule?.records ?? [],
-  )
+  const containers = useModuleRecords("resources", "containers")
 
-  const serviceDays = parseServiceDays(
-    typeof record.submittedValues?.serviceDays === "string"
-      ? record.submittedValues.serviceDays
-      : "",
-  )
+  const serviceDays = serviceDaysFromValues(record.submittedValues)
   if (serviceDays.length === 0) return null
 
   // The shared stop-plan seam (issue #19): picked lists for manual schemes,

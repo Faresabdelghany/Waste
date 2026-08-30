@@ -174,6 +174,20 @@ export function parseServiceDays(value: string): ServiceDay[] {
   return sortServiceDays([...new Set(tokens)])
 }
 
+/**
+ * The shared guard for reading a record's structured `serviceDays` out of its
+ * submitted form values: the values object may be missing entirely, and the
+ * field may hold a non-string in merged or hand-edited stores. Returns []
+ * when nothing parses. Calendar working days (`values.workingDays`) keep
+ * their own read — different field.
+ */
+export function serviceDaysFromValues(
+  values: Record<string, unknown> | null | undefined,
+): ServiceDay[] {
+  const raw = values?.serviceDays
+  return parseServiceDays(typeof raw === "string" ? raw : "")
+}
+
 const isFrequency = (value: unknown): value is RecurrenceFrequency =>
   typeof value === "string" && Object.hasOwn(RECURRENCE_FREQUENCY_LABELS, value)
 
@@ -201,9 +215,7 @@ export function recurrenceFromValues(
 ): SchemeRecurrence | null {
   const frequency = values.frequency
   if (!isFrequency(frequency)) return null
-  const serviceDays = parseServiceDays(
-    typeof values.serviceDays === "string" ? values.serviceDays : "",
-  )
+  const serviceDays = serviceDaysFromValues(values)
   if (serviceDays.length === 0) return null
   const effectiveFrom = typeof values.effectiveFrom === "string" ? values.effectiveFrom : ""
   // Malformed dates (possible in hand-edited or corrupted submittedValues)

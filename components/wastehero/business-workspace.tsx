@@ -48,6 +48,7 @@ import {
   parseServiceDays,
   recurrenceFromValues,
   recurrenceSentence,
+  serviceDaysFromValues,
 } from "@/lib/route-schemes/recurrence"
 import {
   effectiveDayRules,
@@ -3138,14 +3139,7 @@ export function BusinessWorkspace({
         nextFacts["Container selection"] = "Matched by rule"
         nextFacts["Stop matching"] = matchPlans.sameAllDays
           ? stopRuleSummary(matchPlans.sharedRule)
-          : effectiveDayRules(
-              parseServiceDays(
-                typeof mergedValues.serviceDays === "string"
-                  ? mergedValues.serviceDays
-                  : "",
-              ),
-              matchPlans,
-            )
+          : effectiveDayRules(serviceDaysFromValues(mergedValues), matchPlans)
               .map(
                 ({ day, rule }) =>
                   `${SERVICE_DAY_SHORT_LABELS[day]}: ${stopRuleSummary(rule)}`,
