@@ -17,6 +17,10 @@ import {
 import { businessWorkspaces } from "../lib/data/business-modules"
 import { calendarFromRecord } from "../lib/route-schemes/calendar"
 import { approvedDeviationsFromRecords } from "../lib/route-schemes/generation"
+import {
+  effectiveStopPlans,
+  stopSelectionMode,
+} from "../lib/route-schemes/matching"
 import { recurrenceFromValues } from "../lib/route-schemes/recurrence"
 
 let passed = 0
@@ -317,6 +321,78 @@ check(
   "the 12 collection pickup fixtures carry a 'Service frequency' fact; depot/unloading stops carry none",
   pickupRecords.filter((record) => "Service frequency" in record.facts).length,
   12,
+)
+
+/* -------- container planning-area links + rule-mode fixture (issue #19) ---- */
+// Declarative stop matching resolves containers by planning area: every
+// serviceable container fixture carries the typed planningAreaId (mirrored as
+// the "Planning area" fact); storage/ended/in-transit units carry none.
+// scheme-central-a is the rule-mode fixture and must resolve real containers.
+
+const OUT_OF_SERVICE = new Set(["In storage", "Ended", "In transit"])
+check(
+  "every serviceable container fixture carries a planningAreaId into plan.areas",
+  containerRecords
+    .filter((record) => !OUT_OF_SERVICE.has(record.status))
+    .every(
+      (record) =>
+        typeof record.submittedValues?.planningAreaId === "string" &&
+        planAreaIds.has(record.submittedValues.planningAreaId) &&
+        typeof record.facts["Planning area"] === "string" &&
+        record.facts["Planning area"] !== "—",
+    ),
+  true,
+)
+check(
+  "out-of-service container fixtures carry no planning area",
+  containerRecords
+    .filter((record) => OUT_OF_SERVICE.has(record.status))
+    .every(
+      (record) =>
+        record.submittedValues?.planningAreaId === undefined &&
+        record.facts["Planning area"] === "—",
+    ),
+  true,
+)
+check(
+  "the harbor planning area exists for the harbor containers",
+  planAreaIds.has("area-harbor-1"),
+  true,
+)
+check(
+  "the container form links containers to plan.areas",
+  relationOf("resources.containers", "planningAreaId"),
+  { workspaceId: "plan", moduleId: "areas" },
+)
+
+check(
+  "scheme-central-a selects stops by rule; scheme-osterbro-b stays manual",
+  schemes.map((record) => [
+    record.id,
+    stopSelectionMode(record.submittedValues),
+  ]),
+  [
+    ["scheme-central-a", "rule"],
+    ["scheme-osterbro-b", "manual"],
+  ],
+)
+const centralScheme = schemes.find((record) => record.id === "scheme-central-a")
+check(
+  "scheme-central-a's rule resolves fixture containers in its planning area",
+  centralScheme
+    ? effectiveStopPlans(centralScheme, ["monday"], containerRecords)[0]
+        .containerIds.length > 0
+    : false,
+  true,
+)
+check(
+  "the scheme quick-create form carries the stop-matching fields",
+  ["stopSelection", "matchFractions", "matchVehicleType"].every((fieldId) =>
+    getBusinessFormSchema("route-studio", "schemes")
+      ?.sections.flatMap((section) => section.fields)
+      .some((field) => field.id === fieldId),
+  ),
+  true,
 )
 
 /* ---------- Settings pane reconciled off retired terminology (issue #14) --- */

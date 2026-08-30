@@ -140,6 +140,9 @@ export function runPlanAhead(input: {
       window,
       existingRoutes: input.existingRoutes,
       deviations,
+      // Rule-mode schemes (issue #19) resolve their stop-matching rules
+      // against these records — the same set manual generation uses.
+      containers: input.containers,
       calendar,
     })
     if (!plan) continue

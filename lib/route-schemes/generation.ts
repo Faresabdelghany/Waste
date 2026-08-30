@@ -23,6 +23,7 @@
 import type { BusinessRecord } from "../data/business-modules"
 import { calendarDayStatus, type CollectionCalendar } from "./calendar"
 import { avalancheHash } from "./hash"
+import { effectiveStopPlans, stopSelectionMode } from "./matching"
 import {
   addDays,
   formatServiceDate,
@@ -33,7 +34,7 @@ import {
   serviceDayOf,
   type ServiceDay,
 } from "./recurrence"
-import { dayPlansFromValues, effectiveDayPlans, stringValue } from "./validation"
+import { stringValue } from "./validation"
 
 export type GenerationWindow = { from: string; to: string }
 
@@ -75,6 +76,8 @@ export type PlannedRoute = {
   note?: string
   /** Non-blocking calendar caveat (uncovered date, replacement on a holiday). */
   calendarWarning?: string
+  /** Rule-mode caveat: the day's stop rule currently matches no containers. */
+  matchWarning?: string
 }
 
 export type SchemeGenerationPlan = {
@@ -255,23 +258,34 @@ function windowDates(window: GenerationWindow): string[] {
  * The optional calendar is the scheme's Collection Calendar: it invalidates
  * holiday and non-working candidate dates (Q2/Q7) unless an approved
  * deviation relocates them first; uncovered dates only warn (Q6).
+ * Stop lists come from effectiveStopPlans (issue #19): manual schemes keep
+ * their picked lists; rule schemes resolve their stop-matching rules against
+ * the supplied container records at plan time, so regeneration picks up
+ * containers added to the area since the scheme was saved.
  */
 export function planSchemeGeneration(input: {
   scheme: BusinessRecord
   window: GenerationWindow
   existingRoutes: readonly BusinessRecord[]
   deviations: readonly ApprovedDeviation[]
+  /** Container records the stop rules resolve against (and pickups enrich from). */
+  containers: readonly BusinessRecord[]
   calendar?: CollectionCalendar | null
 }): SchemeGenerationPlan | null {
   const { scheme, window, calendar } = input
   const recurrence = recurrenceFromValues(scheme.submittedValues ?? {})
   if (!recurrence) return null
 
-  const plans = effectiveDayPlans(
-    recurrence.serviceDays,
-    dayPlansFromValues(scheme.submittedValues),
-  )
+  const plans = effectiveStopPlans(scheme, recurrence.serviceDays, input.containers)
   const stopsByDay = new Map(plans.map((plan) => [plan.day, plan.containerIds]))
+  // A rule that resolves to zero stops must never look like quiet success
+  // (issue #19): the preview row says so. Manual schemes keep today's
+  // behavior — FR-5c already blocks empty manual plans at save time.
+  const matchWarningForDay = (day: ServiceDay): string | undefined =>
+    stopSelectionMode(scheme.submittedValues) === "rule" &&
+    (stopsByDay.get(day) ?? []).length === 0
+      ? "No containers currently match this day's stop rule"
+      : undefined
 
   const existingByIdentity = new Map<string, BusinessRecord>()
   for (const route of input.existingRoutes) {
@@ -395,6 +409,7 @@ export function planSchemeGeneration(input: {
         : REFRESHABLE_STATUSES.has(existing.status)
           ? "refresh"
           : "skip"
+    const matchWarning = action === "skip" ? undefined : matchWarningForDay(day)
     routes.push({
       action,
       routeId: generatedRouteId(scheme.id, date),
@@ -416,6 +431,7 @@ export function planSchemeGeneration(input: {
         ? { note: `${existing?.status} — left untouched` }
         : {}),
       ...(calendarWarning ? { calendarWarning } : {}),
+      ...(matchWarning ? { matchWarning } : {}),
     })
   }
 

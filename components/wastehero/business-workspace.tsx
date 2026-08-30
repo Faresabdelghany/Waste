@@ -44,14 +44,21 @@ import {
   setPlanAhead,
 } from "@/lib/route-schemes/plan-ahead"
 import {
+  SERVICE_DAY_SHORT_LABELS,
   parseServiceDays,
   recurrenceFromValues,
   recurrenceSentence,
 } from "@/lib/route-schemes/recurrence"
 import {
+  effectiveDayRules,
+  matchPlansFromValues,
+  matchPlansToValues,
+  stopRuleSummary,
+  stopSelectionMode,
+} from "@/lib/route-schemes/matching"
+import {
   dayPlanCountSummary,
   dayPlansToValues,
-  effectiveDayPlans,
 } from "@/lib/route-schemes/validation"
 import type {
   BusinessFormField,
@@ -165,11 +172,14 @@ import {
 } from "@/components/wastehero/route-create-flow"
 import {
   SchemeCreateEntry,
+  resolvedDraftPlans,
   schemeDayPlans,
+  schemeMatchPlans,
   validateGuidedScheme,
   type GuidedSchemeData,
 } from "@/components/wastehero/scheme-create-flow"
 import { SchemeRecordRouteMapSection } from "@/components/wastehero/scheme-route-map"
+import { SchemeStopMatchingSection } from "@/components/wastehero/scheme-stop-matching"
 import {
   SchemeGeneratedRoutesSection,
   SchemeGenerateRoutesDialog,
@@ -3111,9 +3121,45 @@ export function BusinessWorkspace({
     // lib/route-schemes/recurrence reads); the facts get the one-line summary
     // the record detail shows.
     const normalizeRouteSchemeRecord = (record: BusinessRecord): BusinessRecord => {
-      const recurrence = recurrenceFromValues(values)
-      if (!recurrence) return record
       const nextFacts = { ...record.facts }
+      // Keep the stop-selection facts in sync with the merged values
+      // (issue #19): the quick edit form can flip the mode or change the
+      // shared rule, and the facts must follow the stopSelection flag —
+      // stale rule facts on a manual scheme (or vice versa) would misstate
+      // where its stops come from.
+      const mergedValues = { ...record.submittedValues }
+      // The quick form's label-keyed facts duplicate the canonical
+      // "Container selection" / "Stop matching" keys set below.
+      delete nextFacts["Stop selection"]
+      delete nextFacts["Waste fractions to match"]
+      delete nextFacts["Vehicle type"]
+      if (stopSelectionMode(mergedValues) === "rule") {
+        const matchPlans = matchPlansFromValues(mergedValues)
+        nextFacts["Container selection"] = "Matched by rule"
+        nextFacts["Stop matching"] = matchPlans.sameAllDays
+          ? stopRuleSummary(matchPlans.sharedRule)
+          : effectiveDayRules(
+              parseServiceDays(
+                typeof mergedValues.serviceDays === "string"
+                  ? mergedValues.serviceDays
+                  : "",
+              ),
+              matchPlans,
+            )
+              .map(
+                ({ day, rule }) =>
+                  `${SERVICE_DAY_SHORT_LABELS[day]}: ${stopRuleSummary(rule)}`,
+              )
+              .join(" · ")
+      } else if (nextFacts["Stop matching"]) {
+        delete nextFacts["Stop matching"]
+        nextFacts["Container selection"] =
+          mergedValues.sameAllDays !== false
+            ? "Same containers every day"
+            : "Different per day"
+      }
+      const recurrence = recurrenceFromValues(values)
+      if (!recurrence) return { ...record, facts: nextFacts }
       // The retired free-text cadence field, and — when the frequency moved
       // away from every-2-weeks — the rotation fact the edit merge would
       // otherwise carry forward against the new Recurrence line.
@@ -3543,12 +3589,33 @@ export function BusinessWorkspace({
       data.unloadingStationId,
     )
 
+    const isRuleScheme = data.stopSelection === "rule"
+    const containersModule = businessWorkspaces.resources.modules.find(
+      (candidate) => candidate.id === "containers",
+    )
+    const containerRecords = containersModule
+      ? getRecords("resources", containersModule.id, containersModule.records)
+      : []
+    const vehiclesModule = businessWorkspaces.fleet.modules.find(
+      (candidate) => candidate.id === "vehicles",
+    )
+    const vehicleRecords = vehiclesModule
+      ? getRecords("fleet", vehiclesModule.id, vehiclesModule.records)
+      : []
+
     const normalizedPlans = schemeDayPlans(data)
-    const dayPlans = effectiveDayPlans(data.serviceDays, normalizedPlans)
-    for (const containerId of new Set(
-      dayPlans.flatMap((plan) => plan.containerIds),
-    )) {
-      linkRecord("containerIds", "resources", "containers", containerId)
+    const normalizedMatchPlans = schemeMatchPlans(data)
+    // Rule mode resolves the rule at creation time for the display counts;
+    // manual mode expands the picked lists. Only manual picks become
+    // container relationRefs — a rule-mode scheme stores the rule, never the
+    // resolved result (issue #19), so generation re-resolves each run.
+    const dayPlans = resolvedDraftPlans(data, containerRecords)
+    if (!isRuleScheme) {
+      for (const containerId of new Set(
+        dayPlans.flatMap((plan) => plan.containerIds),
+      )) {
+        linkRecord("containerIds", "resources", "containers", containerId)
+      }
     }
 
     // Conflicts (FR-5d) are checked against every scheme, not just the ones a
@@ -3565,6 +3632,8 @@ export function BusinessWorkspace({
       allocationModule
         ? getRecords("fleet", allocationModule.id, allocationModule.records)
         : [],
+      containerRecords,
+      vehicleRecords,
     )
 
     const submittedValues: NonNullable<BusinessRecord["submittedValues"]> = {
@@ -3583,7 +3652,15 @@ export function BusinessWorkspace({
       plannedDriverId: data.plannedDriverId ?? "",
       depotId: data.depotId ?? "",
       unloadingStationId: data.unloadingStationId ?? "",
-      ...dayPlansToValues(normalizedPlans),
+      stopSelection: data.stopSelection,
+      // The scheme stores the selection rule OR the picked lists, never both
+      // (issue #19) — the stopSelection flag is the single source of truth.
+      ...(isRuleScheme
+        ? {
+            sameAllDays: normalizedMatchPlans.sameAllDays,
+            ...matchPlansToValues(normalizedMatchPlans),
+          }
+        : dayPlansToValues(normalizedPlans)),
     }
     const recurrence = recurrenceFromValues(submittedValues)
 
@@ -3617,9 +3694,23 @@ export function BusinessWorkspace({
       ...(unloadingStation
         ? { "Unloading station": unloadingStation.name }
         : {}),
-      "Container selection": normalizedPlans.sameAllDays
-        ? "Same containers every day"
-        : "Different per day",
+      "Container selection": isRuleScheme
+        ? "Matched by rule"
+        : normalizedPlans.sameAllDays
+          ? "Same containers every day"
+          : "Different per day",
+      ...(isRuleScheme
+        ? {
+            "Stop matching": normalizedMatchPlans.sameAllDays
+              ? stopRuleSummary(data.matchRule)
+              : effectiveDayRules(data.serviceDays, normalizedMatchPlans)
+                  .map(
+                    ({ day, rule }) =>
+                      `${SERVICE_DAY_SHORT_LABELS[day]}: ${stopRuleSummary(rule)}`,
+                  )
+                  .join(" · "),
+          }
+        : {}),
       Containers: dayPlanCountSummary(dayPlans),
       ...(validation.issues.length > 0
         ? { "Validation issues": validation.issues.join(" · ") }
@@ -3639,8 +3730,9 @@ export function BusinessWorkspace({
       owner: actorName,
       value: `${totalStops} planned stops`,
       updated: "Now",
-      description:
-        "Created with Guided Setup covering scope, recurrence, assignment defaults, and per-day container plans.",
+      description: isRuleScheme
+        ? "Created with Guided Setup — stops are matched by the scheme's declarative rule at every generation."
+        : "Created with Guided Setup covering scope, recurrence, assignment defaults, and per-day container plans.",
       facts,
       related: [
         ...relationRefs.map((relation) => relation.label),
@@ -4810,6 +4902,7 @@ function RecordDetailsDialog({
 
               {module.id === "schemes" && (
                 <>
+                  <SchemeStopMatchingSection record={record} />
                   <SchemeRecordRouteMapSection record={record} />
                   <SchemeGeneratedRoutesSection record={record} />
                 </>

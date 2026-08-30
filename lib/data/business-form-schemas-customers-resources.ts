@@ -1132,6 +1132,14 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             ],
           },
           {
+            id: "planningAreaId",
+            label: "Planning area",
+            type: "select",
+            relation: { workspaceId: "plan", moduleId: "areas" },
+            description:
+              "The operational planning geography this container is serviced in. Route Scheme stop-matching rules resolve containers by this area (issue #19); containers in storage have none.",
+          },
+          {
             id: "serviceAddress",
             label: "Location or service address",
             type: "textarea",

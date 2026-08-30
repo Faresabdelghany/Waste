@@ -51,7 +51,7 @@ A sellable service definition with a category, unit, service level, components, 
 _Avoid_: Collection, contractor service
 
 **Container**:
-A physical bin, tank, or unit tracked at a location within a project, classified by container type and waste fraction, and optionally paired with a sensor or bound to an agreement.
+A physical bin, tank, or unit tracked at a location within a project, classified by container type and waste fraction, serviced inside a Planning Area while in service, and optionally paired with a sensor or bound to an agreement.
 _Avoid_: Container type, stock movement, inventory quantity, generic asset
 
 **Asset**:
@@ -101,8 +101,12 @@ An approved replacement of one planned service date with another, preserving the
 _Avoid_: Calendar exception, holiday rule
 
 **Route Scheme**:
-An effective-dated recurring template — geography, calendar, recurrence, and service days — from which service work is generated.
+An effective-dated recurring template — geography, calendar, recurrence, service days, and stop selection — from which service work is generated. The scheme owns the rules that determine its stops: by default a Stop Matching Rule resolves the eligible containers at every generation; an explicitly picked container list is the small-scale alternative.
 _Avoid_: Route, plan, pickup setting, collection week
+
+**Stop Matching Rule**:
+The declarative stop selection a Route Scheme stores — waste fractions plus an optional vehicle type, resolved against the containers inside the scheme's Planning Area (and project scope) each time routes are generated. The scheme stores the rule, never the resolved result, so newly eligible containers join future generations without editing the scheme.
+_Avoid_: Container list, picked containers, stop list
 
 **Planning Area**:
 A versioned geographic area used for route planning, service operations, or notifications. Operational geography, never a commercial award — that is a Contract Area.

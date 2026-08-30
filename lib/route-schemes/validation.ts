@@ -72,6 +72,50 @@ export type SchemeValidationInput = {
    * Vehicle Planning allocations targeting this scheme are then not conflicts.
    */
   schemeId?: string
+  /**
+   * Present when the scheme selects stops declaratively (issue #19): the
+   * per-day rules with their currently matched container counts, pre-resolved
+   * by the caller (lib/route-schemes/matching resolveStopMatches — validation
+   * stays pure data logic). When set, the FR-5(c) picked-container check is
+   * replaced by the rule checks: a planning area must be set, every day's
+   * rule needs at least one fraction, and a rule matching zero containers
+   * blocks — a zero-match configuration must never save as quiet success.
+   */
+  stopMatching?: SchemeStopMatchingInput
+}
+
+export type SchemeStopMatchingInput = {
+  /** The scheme's planning area (plan.areas record id); rules match inside it. */
+  areaId?: string
+  sameAllDays: boolean
+  dayRules: Array<{
+    day: ServiceDay
+    fractions: readonly string[]
+    vehicleType?: string
+    /** Containers the day's rule currently matches (resolved by the caller). */
+    matchedCount: number
+  }>
+  /**
+   * The default vehicle's canonical type when resolvable
+   * (matching vehicleTypeOfRecord); a rule requiring a different type warns.
+   */
+  plannedVehicleType?: string | null
+}
+
+/**
+ * What the rule-overlap warning needs to know about another rule-mode scheme:
+ * same planning area + shared service day + intersecting fractions +
+ * non-disjoint effective periods likely double-plan the same containers.
+ * Extracted from records by matching.ts schemeStopRuleSources.
+ */
+export type SchemeStopRuleSource = {
+  schemeName: string
+  areaId: string
+  serviceDays: readonly ServiceDay[]
+  /** Union of the scheme's day-rule fractions. */
+  fractions: readonly string[]
+  effectiveFrom?: string
+  effectiveTo?: string
 }
 
 /** What FR-5(d) needs to know about an already-existing scheme. */
@@ -173,8 +217,8 @@ const isoDatePart = (value: string | undefined): string | undefined => {
  * to the conservative overlap the pre-refinement check assumed.
  */
 const effectivePeriodsDisjoint = (
-  input: SchemeValidationInput,
-  other: SchemeDefaultsSource,
+  input: Pick<SchemeValidationInput, "effectiveFrom" | "effectiveTo">,
+  other: Pick<SchemeDefaultsSource, "effectiveFrom" | "effectiveTo">,
 ): boolean => {
   const inputFrom = isoDatePart(input.effectiveFrom)
   const inputTo = isoDatePart(input.effectiveTo)
@@ -220,20 +264,27 @@ function allocationWindowTouchesScheme(
 /**
  * The blocking checks of FR-5, in spec order: (a) ≥1 service day,
  * (b) effective from/to set with to ≥ from, (c) every service day has ≥1
- * container (per-day mode names the empty days), (d) the default vehicle or
- * driver is not already the default on another scheme sharing a service day
- * within an overlapping effective period, (e) the default vehicle or driver
- * has no Confirmed Vehicle Planning allocation whose planned window touches
- * the scheme (issue #11). All pass → Validated; any fail → Draft with the
- * issues named. Calendar caveats and unconfirmed (Draft/Allocated)
- * allocation overlaps come back as non-blocking warnings.
+ * container (per-day mode names the empty days) — replaced for rule-mode
+ * schemes (issue #19, input.stopMatching) by: planning area set, every day's
+ * rule carries ≥1 fraction, and every day's rule currently matches ≥1
+ * container, (d) the default vehicle or driver is not already the default on
+ * another scheme sharing a service day within an overlapping effective
+ * period, (e) the default vehicle or driver has no Confirmed Vehicle
+ * Planning allocation whose planned window touches the scheme (issue #11).
+ * All pass → Validated; any fail → Draft with the issues named. Calendar
+ * caveats, unconfirmed (Draft/Allocated) allocation overlaps, a rule vehicle
+ * type the default vehicle cannot serve, and rule overlaps with other
+ * rule-mode schemes come back as non-blocking warnings.
  */
 export function validateScheme(
   input: SchemeValidationInput,
   otherSchemes: readonly SchemeDefaultsSource[] = [],
   allocations: readonly AllocationConflictSource[] = [],
+  otherRuleSchemes: readonly SchemeStopRuleSource[] = [],
 ): SchemeValidationResult {
   const issues: string[] = []
+  const matchingWarnings: string[] = []
+  const matching = input.stopMatching
 
   if (input.serviceDays.length === 0) issues.push("Pick at least one service day")
 
@@ -243,7 +294,7 @@ export function validateScheme(
     issues.push("Effective to must be on or after effective from")
   }
 
-  if (input.serviceDays.length > 0) {
+  if (input.serviceDays.length > 0 && !matching) {
     const emptyDays = effectiveDayPlans(input.serviceDays, input.plans)
       .filter((plan) => plan.containerIds.length === 0)
       .map((plan) => plan.day)
@@ -253,6 +304,77 @@ export function validateScheme(
           ? "Pick at least one container"
           : `Pick containers for ${shortDays(emptyDays)}`,
       )
+    }
+  }
+
+  if (matching) {
+    if (!matching.areaId) {
+      issues.push("Pick a planning area — the stop rule matches containers inside it")
+    }
+    const ruleless = matching.dayRules
+      .filter((dayRule) => dayRule.fractions.length === 0)
+      .map((dayRule) => dayRule.day)
+    if (ruleless.length > 0) {
+      issues.push(
+        matching.sameAllDays
+          ? "Pick at least one waste fraction for the stop rule"
+          : `Pick waste fractions for ${shortDays(ruleless)}`,
+      )
+    }
+    // Zero matches only blocks once the rule is actually evaluable — the
+    // missing-area and missing-fraction issues already name the real gap.
+    if (matching.areaId) {
+      const unmatched = matching.dayRules
+        .filter(
+          (dayRule) => dayRule.fractions.length > 0 && dayRule.matchedCount === 0,
+        )
+        .map((dayRule) => dayRule.day)
+      if (unmatched.length > 0) {
+        issues.push(
+          matching.sameAllDays
+            ? "No containers currently match the stop rule"
+            : `No containers match the stop rule for ${shortDays(unmatched)}`,
+        )
+      }
+    }
+    if (matching.plannedVehicleType) {
+      const mismatched = Array.from(
+        new Set(
+          matching.dayRules
+            .map((dayRule) => dayRule.vehicleType)
+            .filter(
+              (type): type is string =>
+                Boolean(type) && type !== matching.plannedVehicleType,
+            ),
+        ),
+      )
+      for (const type of mismatched) {
+        matchingWarnings.push(
+          `Default vehicle is a ${matching.plannedVehicleType.toLowerCase()} but the stop rule requires a ${type.toLowerCase()}`,
+        )
+      }
+    }
+    if (matching.areaId) {
+      const ownFractions = Array.from(
+        new Set(matching.dayRules.flatMap((dayRule) => dayRule.fractions)),
+      )
+      for (const other of otherRuleSchemes) {
+        if (other.areaId !== matching.areaId) continue
+        if (effectivePeriodsDisjoint(input, other)) continue
+        const sharedDays = input.serviceDays.filter((day) =>
+          other.serviceDays.includes(day),
+        )
+        if (sharedDays.length === 0) continue
+        const sharedFractions = ownFractions.filter((fraction) =>
+          other.fractions.some(
+            (candidate) => candidate.toLowerCase() === fraction.toLowerCase(),
+          ),
+        )
+        if (sharedFractions.length === 0) continue
+        matchingWarnings.push(
+          `Stop rule overlaps "${other.schemeName}" — ${sharedFractions.join(", ")} containers in the same planning area are already matched on ${shortDays(sharedDays)}`,
+        )
+      }
     }
   }
 
@@ -309,7 +431,11 @@ export function validateScheme(
   return {
     status: issues.length === 0 ? "Validated" : "Draft",
     issues,
-    warnings: [...schemeCalendarWarnings(input), ...allocationWarnings],
+    warnings: [
+      ...schemeCalendarWarnings(input),
+      ...allocationWarnings,
+      ...matchingWarnings,
+    ],
   }
 }
 

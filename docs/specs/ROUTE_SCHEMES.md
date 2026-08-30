@@ -1,7 +1,8 @@
 # Route Schemes — Recurring Route Planning & Generation
 
-Status: Draft v2 · Shaped 2026-08-28 · Owner: Product (fares)
+Status: Draft v3 · Shaped 2026-08-28 · Owner: Product (fares)
 Prototype verdicts folded in (v2): Guided stepper wizard (variant A) won; per-day service plans confirmed; Route map preview step added; recurrence = effective from/to + weekly / every 2 weeks / once a month + time-of-day start. Prototypes: `docs/specs/prototypes/` + `components/wastehero/prototypes/scheme-wizard-prototype.tsx`.
+v3 (2026-08-30, issue #19 per the #15 decision): **the Route Scheme owns the rules that determine its stops.** Declarative stop matching (FR-16/FR-17) is the default stop selection — the scheme stores a matching rule (waste fractions + optional vehicle type, scoped to its planning area), and generation resolves the eligible containers each run. Explicitly picked container lists (FR-2 step 4, FR-14) remain as the manual, small-scale mode. Generated Routes and their Pickups are derived outputs of the scheme — never manually maintained children.
 
 ## Squad Routing
 
@@ -42,6 +43,13 @@ Extend Route Scheme creation with the existing Guided Setup wizard pattern (choo
 - **FR-14**: **Per-day service plans** — a scheme with several service days may carry a distinct container list per day (e.g. Wed = organic containers, Sun = glass). Generation creates one Route per service day using that day's list; with the toggle off, all days share one list. This answers weekly planning ("every day a different route for a different product") within a single scheme.
 - **FR-15**: **Route map preview** — before Review, the wizard renders the scheme's routes on a map: one polyline per service day in a stable per-day color, stop pins, day filter, and a per-day legend (stops, fractions). The same view is reusable on the scheme detail page.
 
+### Declarative stop matching (issue #19, v3)
+
+- **FR-16**: **Stop selection modes** — a scheme selects its stops either **by rule** (default) or **manually** (the FR-2 step-4 picker). The mode is an explicit flag (`stopSelection`); the scheme stores exactly one source of truth — the rule, or the picked lists — never a merge of both, so it is always decidable why a Pickup exists.
+- **FR-17**: **Stop matching rule** — in rule mode the scheme stores, per FR-14 day plan (shared or per service day), a rule of **waste fractions + optional vehicle type**, scoped to the scheme's **planning area** and project. Resolution happens **at generation time** against the live container records (`lib/route-schemes/matching.ts`, the single resolver behind Generate routes, Plan Ahead, the wizard preview, the scheme detail, and validation): a container matches when its planning area equals the scheme's, its project scope overlaps, its status is in service (Available), a fraction intersects the rule, and — when the rule names a vehicle type — its container type is compatible (`CONTAINER_VEHICLE_COMPATIBILITY`). Containers without the needed classification are **excluded with a visible reason**, never silently included. Matched stops are ordered by container name so regeneration is stable; a container newly matching the rule joins the next generation without editing the scheme, and one that stops matching has its still-planned Pickups skipped by the existing FR-9 regeneration cleanup.
+- **FR-18**: **Rule preview & zero-match behavior** — the wizard's Containers step previews the rule live (matched count and list, near-miss exclusions with reasons, loud zero-match empty state); the scheme detail shows the same as a "Matched stops" section. At save, a rule matching zero containers is a **blocking** issue (the rule-mode analog of FR-5c); at generation, a zero-match day still plans its route but the preview row carries an explicit warning. Non-blocking validation warnings: a rule vehicle type the default vehicle cannot serve, and an overlap with another rule-mode scheme (same area, intersecting fractions, shared service day, overlapping effective period).
+- Containers carry their planning area as master data (`planningAreaId` + "Planning area" fact; the container form links `plan.areas`); out-of-service containers carry none.
+
 ### Validation — Draft → Validated
 
 - **FR-5**: Blocking checks at the review step: (a) ≥ 1 service day selected; (b) effective from and to both set, with to ≥ from; (c) every service day has ≥ 1 container (per-day mode names the empty days, e.g. "Pick containers for Wed"); (d) default driver or vehicle is not already the default on another scheme sharing a service day within an overlapping effective period; (e) default driver or vehicle has no **Confirmed** Vehicle Planning allocation whose planned window touches the scheme — overlaps the effective period on a service day, with missing/unparseable windows conservatively treated as touching (issue #11). Any non-Confirmed, non-Released allocation status produces a non-blocking warning. Released allocations never conflict; because the Plan allocation form is append-event, confirm/release/change event records are folded back onto their target allocation (supersession) before checking. An allocation targeting the scheme being validated is exempt (takes effect once a revalidation path supplies the scheme's own id — create flows have none). All pass → scheme created as **Validated**; any fail → **Draft** with named issues on the record.
@@ -68,7 +76,7 @@ Entry: Route Studio → Route Schemes → **New route scheme** → chooser → G
 
 ## Cross-Squad Dependencies
 
-- **Nexus (containers/properties)**: the container picker consumes container records' project, waste fraction, container type, property, and in-service status. The container's "Route scheme" fact is an **output** stamped at generation time — never a matching input (the seeded strings dangle and reference non-existent schemes).
+- **Nexus (containers/properties)**: the container picker and the stop-match resolver (FR-17) consume container records' project, planning area, waste fraction, container type, property, and in-service status. The container's "Route scheme" fact is an **output** stamped at generation time — never a matching input (the seeded strings dangle and reference non-existent schemes).
 
 ## Out of Scope
 
@@ -77,7 +85,7 @@ Entry: Route Studio → Route Schemes → **New route scheme** → chooser → G
 - Occurrence-vs-series edit scoping ("this route / this and following / all") beyond per-route override.
 - Static dashboard performance rows for generated routes.
 - Driver-app execution changes; billing/invoicing (Ledger).
-- Full 5-class validation (holiday warnings, vehicle/container-type compatibility, week-parity vs pickup settings, master-data integrity tiers).
+- Full 5-class validation (holiday warnings, week-parity vs pickup settings, master-data integrity tiers). *Vehicle/container-type compatibility arrived with FR-17 (issue #19) as the stop-rule dimension plus a default-vehicle mismatch warning; a general fleet-compatibility validation layer stays out of scope.*
 - Scheme version history UI (version is pinned as a fact only).
 - Per-day vehicle/driver assignment — defaults are scheme-level; a day needing a different vehicle type is, for now, a separate scheme (see Open Questions).
 - Real geocoding on the Route map — pin positions are illustrative until container records carry coordinates.

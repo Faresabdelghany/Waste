@@ -1112,6 +1112,58 @@ export const operationsBusinessFormSchemas = [
         ],
       },
       {
+        id: "stop-matching",
+        title: "Stop selection",
+        description:
+          "Match stops by rule (recommended): the scheme stores which containers belong to it — waste fractions plus an optional vehicle type, resolved inside the planning area every time routes generate. Manual container lists are picked in Guided Setup.",
+        fields: [
+          {
+            id: "stopSelection",
+            label: "Stop selection",
+            type: "select",
+            required: true,
+            defaultValue: "rule",
+            options: [
+              { value: "rule", label: "Match containers by rule" },
+              { value: "manual", label: "Pick containers manually" },
+            ],
+          },
+          {
+            id: "matchFractions",
+            label: "Waste fractions to match",
+            type: "multiselect",
+            visibleWhen: { fieldId: "stopSelection", equals: "rule" },
+            requiredWhen: { fieldId: "stopSelection", equals: "rule" },
+            options: [
+              { value: "Residual", label: "Residual" },
+              { value: "Organic", label: "Organic" },
+              { value: "Paper", label: "Paper" },
+              { value: "Cardboard", label: "Cardboard" },
+              { value: "Glass", label: "Glass" },
+              { value: "Plastic", label: "Plastic" },
+              { value: "Metal", label: "Metal" },
+              { value: "Mixed", label: "Mixed" },
+              { value: "Wastewater", label: "Wastewater" },
+            ],
+          },
+          {
+            id: "matchVehicleType",
+            label: "Vehicle type",
+            type: "select",
+            description:
+              "Only containers this vehicle type can service are matched. Leave empty to match any.",
+            visibleWhen: { fieldId: "stopSelection", equals: "rule" },
+            options: [
+              { value: "Rear loader", label: "Rear loader" },
+              { value: "Organic sealed", label: "Organic sealed" },
+              { value: "Paper compactor", label: "Paper compactor" },
+              { value: "Glass crane", label: "Glass crane" },
+              { value: "Vacuum tanker", label: "Vacuum tanker" },
+            ],
+          },
+        ],
+      },
+      {
         id: "service-demand",
         title: "Service demand and stop pattern",
         fields: [

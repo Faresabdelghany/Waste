@@ -108,6 +108,9 @@ export function SchemeGenerateRoutesDialog({
       window: { from: fromDate, to: toDate },
       existingRoutes,
       deviations: approvedDeviationsFromRecords(deviationRecords),
+      // Rule-mode schemes (issue #19) resolve their stop-matching rules
+      // against the live container records at plan time.
+      containers,
       calendar,
     })
     if (!plan) return null
@@ -283,6 +286,12 @@ export function SchemeGenerateRoutesDialog({
                         {planned.calendarWarning && (
                           <span className="basis-full pl-[92px] text-xs text-amber-700 dark:text-amber-400">
                             {planned.calendarWarning}
+                          </span>
+                        )}
+                        {planned.matchWarning && (
+                          <span className="basis-full pl-[92px] text-xs text-amber-700 dark:text-amber-400">
+                            {planned.matchWarning} — add matching containers or
+                            adjust the scheme&apos;s stop rule
                           </span>
                         )}
                       </div>

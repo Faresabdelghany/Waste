@@ -102,6 +102,7 @@ function generate(input: {
   generatedAt?: string
 }) {
   const plan = planSchemeGeneration({
+    containers: [],
     scheme: input.schemeRecord ?? scheme,
     window: WINDOW,
     existingRoutes: input.existingRoutes,

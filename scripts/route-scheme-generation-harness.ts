@@ -165,6 +165,7 @@ check(
 /* ------------------------- canonical create plan -------------------------- */
 
 const createPlan = planSchemeGeneration({
+  containers: [],
   scheme,
   window: WINDOW,
   existingRoutes: [],
@@ -283,6 +284,7 @@ check("pickups start Planned", wedPickups?.every((pickup) => pickup.status === "
 /* --------------------------- idempotent re-run ---------------------------- */
 
 const rerunPlan = planSchemeGeneration({
+  containers: [],
   scheme,
   window: WINDOW,
   existingRoutes: applied?.routes ?? [],
@@ -326,6 +328,7 @@ const overriddenWed: BusinessRecord = {
   owner: "Freja Nielsen",
 }
 const overriddenPlan = planSchemeGeneration({
+  containers: [],
   scheme,
   window: WINDOW,
   existingRoutes: [overriddenWed, ...(applied?.routes.filter((r) => r.id !== overriddenWed.id) ?? [])],
@@ -357,6 +360,7 @@ check(
 
 const activeWed: BusinessRecord = { ...(overriddenWed as BusinessRecord), status: "Active" }
 const skipPlan = planSchemeGeneration({
+  containers: [],
   scheme,
   window: WINDOW,
   existingRoutes: [activeWed],
@@ -391,6 +395,7 @@ const wedOnlyScheme: BusinessRecord = {
   },
 }
 const cancelPlan = planSchemeGeneration({
+  containers: [],
   scheme: wedOnlyScheme,
   window: WINDOW,
   existingRoutes: applied?.routes ?? [],
@@ -431,6 +436,7 @@ const completedSun: BusinessRecord = {
   status: "Completed",
 }
 const completedCancelPlan = planSchemeGeneration({
+  containers: [],
   scheme: wedOnlyScheme,
   window: WINDOW,
   existingRoutes: [completedSun],
@@ -452,6 +458,7 @@ const shrunkScheme: BusinessRecord = {
   },
 }
 const shrunkPlan = planSchemeGeneration({
+  containers: [],
   scheme: shrunkScheme,
   window: WINDOW,
   existingRoutes: applied?.routes ?? [],
@@ -482,6 +489,7 @@ const wedDeviation: ApprovedDeviation = {
   reason: "Blocked street access",
 }
 const deviationPlan = planSchemeGeneration({
+  containers: [],
   scheme,
   window: WINDOW,
   existingRoutes: [],
@@ -524,6 +532,7 @@ const otherProjectDeviation: ApprovedDeviation = {
 check(
   "a deviation scoped to another project does not remap",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: WINDOW,
     existingRoutes: [],
@@ -534,6 +543,7 @@ check(
 check(
   "a deviation sharing the scheme's project remaps",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: WINDOW,
     existingRoutes: [],
@@ -544,6 +554,7 @@ check(
 check(
   "a deviation without recorded scope applies project-wide",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: WINDOW,
     existingRoutes: [],
@@ -619,6 +630,7 @@ check(
 check(
   "a window past the effective-to date plans nothing",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: { from: "2027-01-05", to: "2027-01-11" },
     existingRoutes: [],
@@ -630,6 +642,7 @@ check(
 check(
   "a scheme without structured recurrence cannot plan",
   planSchemeGeneration({
+    containers: [],
     scheme: { ...scheme, submittedValues: undefined },
     window: WINDOW,
     existingRoutes: [],
@@ -662,6 +675,7 @@ const baseCalendar: CollectionCalendar = {
 
 // Holiday: the Wednesday is a holiday → no route, preview-visible omit row.
 const holidayPlan = planSchemeGeneration({
+  containers: [],
   scheme,
   window: WINDOW,
   existingRoutes: [],
@@ -698,6 +712,7 @@ check(
 check(
   "a non-working service day is skipped with the reason",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: WINDOW,
     existingRoutes: [],
@@ -717,6 +732,7 @@ check(
 check(
   "an approved deviation outranks the holiday skip and remaps the date",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: WINDOW,
     existingRoutes: [],
@@ -730,6 +746,7 @@ check(
 check(
   "a replacement date on a holiday generates with a calendar warning",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: WINDOW,
     existingRoutes: [],
@@ -743,6 +760,7 @@ check(
 check(
   "dates outside calendar validity generate with a warning, not a skip",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: WINDOW,
     existingRoutes: [],
@@ -778,6 +796,7 @@ const plannedOnHoliday: BusinessRecord = {
   },
 }
 const holidayCancelPlan = planSchemeGeneration({
+  containers: [],
   scheme,
   window: WINDOW,
   existingRoutes: [plannedOnHoliday],
@@ -804,6 +823,7 @@ check(
 check(
   "an already-executing route on a holiday date is left untouched",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: WINDOW,
     existingRoutes: [{ ...plannedOnHoliday, status: "Active" }],
@@ -816,6 +836,7 @@ check(
 // Idempotency with a calendar: re-planning against the produced routes
 // refreshes instead of duplicating, and the omit stays an omit.
 const idemFirst = planSchemeGeneration({
+  containers: [],
   scheme,
   window: WINDOW,
   existingRoutes: [],
@@ -833,6 +854,7 @@ const idemWritten = idemFirst
 check(
   "regeneration with a calendar refreshes instead of duplicating",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: WINDOW,
     existingRoutes: idemWritten?.routes ?? [],
@@ -850,6 +872,7 @@ check(
 check(
   "a customer-scoped deviation never remaps route generation",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: WINDOW,
     existingRoutes: [],
@@ -861,6 +884,7 @@ check(
 check(
   "a scheme-scoped deviation remaps only its exact scheme",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: WINDOW,
     existingRoutes: [],
@@ -872,6 +896,7 @@ check(
 check(
   "a scheme-scoped deviation for another scheme has no effect",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: WINDOW,
     existingRoutes: [],
@@ -885,6 +910,7 @@ check(
 check(
   "a scheme-scoped deviation with no schemeId never falls back to project-wide",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: WINDOW,
     existingRoutes: [],
@@ -901,6 +927,7 @@ const schemeOnCentralCalendar: BusinessRecord = {
 check(
   "a deviation on the scheme's calendar remaps",
   planSchemeGeneration({
+    containers: [],
     scheme: schemeOnCentralCalendar,
     window: WINDOW,
     existingRoutes: [],
@@ -912,6 +939,7 @@ check(
 check(
   "a deviation on a different calendar never remaps, even with matching projects",
   planSchemeGeneration({
+    containers: [],
     scheme: schemeOnCentralCalendar,
     window: WINDOW,
     existingRoutes: [],
@@ -929,6 +957,7 @@ check(
 check(
   "a deviation with a calendar does not affect a scheme without one",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: WINDOW,
     existingRoutes: [],
@@ -940,6 +969,7 @@ check(
 check(
   "a legacy deviation without calendarId keeps project-overlap behavior",
   planSchemeGeneration({
+    containers: [],
     scheme: schemeOnCentralCalendar,
     window: WINDOW,
     existingRoutes: [],
@@ -990,6 +1020,7 @@ check(
   true,
 )
 const resurrectPlan = planSchemeGeneration({
+  containers: [],
   scheme,
   window: WINDOW,
   existingRoutes: tombstone ? [tombstone] : [],
@@ -1007,6 +1038,7 @@ check(
 check(
   "removing the holiday also resurrects the cancelled route",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: WINDOW,
     existingRoutes: tombstone ? [tombstone] : [],
@@ -1018,6 +1050,7 @@ check(
 check(
   "an operational cancel (no marker) is never resurrected",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: WINDOW,
     existingRoutes: [
@@ -1036,6 +1069,7 @@ check(
 check(
   "a skip row keeps the stored operating date despite a matching deviation",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: WINDOW,
     existingRoutes: [{ ...plannedOnHoliday, status: "Active" }],
@@ -1046,6 +1080,7 @@ check(
 check(
   "a calendar-branch skip row still shows the day's planned stops",
   planSchemeGeneration({
+    containers: [],
     scheme,
     window: WINDOW,
     existingRoutes: [{ ...plannedOnHoliday, status: "Active" }],
@@ -1073,12 +1108,14 @@ check(
   "with several matching deviations the scheme-scoped one wins, in either order",
   [
     planSchemeGeneration({
+      containers: [],
       scheme,
       window: WINDOW,
       existingRoutes: [],
       deviations: [projectWide, schemeScoped],
     })?.routes.find((route) => route.serviceDate === WED)?.actualDate,
     planSchemeGeneration({
+      containers: [],
       scheme,
       window: WINDOW,
       existingRoutes: [],
@@ -1093,6 +1130,7 @@ const farFutureMonday = "2027-06-07"
 check(
   "an over-long window never cancels still-served routes past the walk cap",
   planSchemeGeneration({
+    containers: [],
     scheme: {
       ...scheme,
       submittedValues: {

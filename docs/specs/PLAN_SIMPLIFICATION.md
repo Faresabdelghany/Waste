@@ -7,7 +7,7 @@ Builds on: `docs/specs/ROUTE_SCHEMES.md` (Draft v2) — this spec supersedes its
 
 - **Areas & Zones** — reusable planning geography. Referenced, never embedded.
 - **Collection Calendar** — the working days, holidays, and validity period that determine whether a normal planned date is operationally valid.
-- **Route Scheme** — where and how often service should happen (geography + calendar reference + recurrence + service days + period + operational defaults); generates dated Routes.
+- **Route Scheme** — where and how often service should happen (geography + calendar reference + recurrence + service days + period + operational defaults + stop selection); generates dated Routes. Stop selection is a declarative matching rule by default (fractions + optional vehicle type resolved inside the scheme's planning area at generation — issue #19), with explicitly picked container lists as the manual mode.
 - **Collection Deviation** — an approved replacement of one planned service date with another, preserving the original service promise.
 
 Runtime flow: Area/Zone + Calendar → Route Scheme → candidate service dates → calendar validity filtering → applicable Approved Deviations → generated Routes.

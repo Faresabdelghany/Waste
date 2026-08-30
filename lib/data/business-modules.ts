@@ -194,6 +194,7 @@ const harborFixtureRecordIds = [
   "price-row-glass-harbor",
   "ticket-8812",
   "calendar-harbor",
+  "area-harbor-1",
   "property-dock-4",
   "shared-point-23",
   "company-harbor",
@@ -580,6 +581,18 @@ function buildSeededPropertyRecords(): BusinessRecord[] {
   })
 }
 
+// Planning-area links for declarative stop matching (issue #19): every
+// in-service container belongs to one plan.areas record, mirrored as the
+// "Planning area" display fact plus the typed submittedValues.planningAreaId
+// the stop-match resolver reads. Copenhagen containers rotate across the
+// three Copenhagen areas; Harbor containers all sit in the harbor area.
+const SEEDED_COPENHAGEN_AREAS: ReadonlyArray<{ id: string; name: string }> = [
+  { id: "area-indreby", name: "Indre By Operations" },
+  { id: "area-osterbro-contract", name: "Østerbro Zone 2" },
+  { id: "area-amager-1", name: "Amager Zone 1" },
+]
+const SEEDED_HARBOR_AREA = { id: "area-harbor-1", name: "Nordhavn Harbor Area" }
+
 function buildSeededContainerRecords(): BusinessRecord[] {
   return Array.from({ length: SEEDED_CONTAINER_COUNT }, (_, index) => {
     const inCopenhagen = index < SEEDED_CONTAINER_COPENHAGEN_COUNT
@@ -611,7 +624,12 @@ function buildSeededContainerRecords(): BusinessRecord[] {
     const network = SEEDED_SENSOR_NETWORKS[index % SEEDED_SENSOR_NETWORKS.length]
     const updated = SEEDED_UPDATED_LABELS[index % SEEDED_UPDATED_LABELS.length]
     const agreementNumber = 2600 + propertyIndex
-    return record(
+    const planningArea = inService
+      ? inCopenhagen
+        ? SEEDED_COPENHAGEN_AREAS[index % SEEDED_COPENHAGEN_AREAS.length]
+        : SEEDED_HARBOR_AREA
+      : null
+    const seeded = record(
       seededContainerRecordId(index),
       name,
       inService ? `${property.name} · ${property.project}` : "Warehouse West · seeded stock",
@@ -631,6 +649,7 @@ function buildSeededContainerRecords(): BusinessRecord[] {
         "Waste fractions": fraction,
         Ownership: index % 5 === 4 ? "Customer owned" : "Company owned",
         Project: property.project,
+        "Planning area": planningArea?.name ?? "—",
         Address: inService ? property.address : "Warehouse West · aisle C2",
         "Curb location": inService ? (index % 2 === 0 ? "Curbside" : "Courtyard") : "—",
         Property: inService ? property.name : "—",
@@ -681,6 +700,9 @@ function buildSeededContainerRecords(): BusinessRecord[] {
         ? ["Available", "In transit", "Create container ticket", "Delete container"]
         : ["Defect", "In transit", "Create container ticket", "Delete container"],
     )
+    return planningArea
+      ? { ...seeded, submittedValues: { planningAreaId: planningArea.id } }
+      : seeded
   })
 }
 
@@ -2170,7 +2192,11 @@ const plan: WorkspaceDefinition = {
       records: [
         // Fixture schemes carry the same structured recurrence submittedValues
         // the Guided Setup wizard writes (PLAN_SIMPLIFICATION Q14), so the
-        // default data can generate routes out of the box.
+        // default data can generate routes out of the box. scheme-central-a
+        // selects stops declaratively (issue #19): a stop-matching rule
+        // (fractions + vehicle type inside its planning area) instead of a
+        // picked container list; scheme-osterbro-b keeps the explicit list,
+        // exercising the manual mode.
         {
           ...record(
             "scheme-central-a",
@@ -2180,7 +2206,7 @@ const plan: WorkspaceDefinition = {
             "Planning Team",
             "214 stops/week",
             "2 days ago",
-            "Residual and mixed-waste recurring service template for Central Week A.",
+            "Residual recurring service template for Central Week A — stops are matched by rule, not picked by hand.",
             {
               Version: "v14",
               Recurrence: "Every week on Mon, Tue, Wed, Thu, Fri",
@@ -2190,6 +2216,8 @@ const plan: WorkspaceDefinition = {
               "Planned start": "06:00",
               Hauler: "WasteHero",
               Vehicle: "Rear loader 18t",
+              "Container selection": "Matched by rule",
+              "Stop matching": "Residual · Rear loader",
             },
             ["9 route days", "214 pickup orders", "Nordhavn depot"],
             "Operational master data",
@@ -2206,8 +2234,10 @@ const plan: WorkspaceDefinition = {
             effectiveTo: "",
             plannedStartTime: "06:00",
             sameAllDays: true,
-            containerIds:
-              "asset-seed-91001,asset-seed-91002,asset-seed-91003,asset-seed-91004,asset-seed-91005",
+            stopSelection: "rule",
+            matchFractions: "Residual",
+            matchVehicleType: "Rear loader",
+            matchRulesByDay: "{}",
           },
         },
         {
@@ -2399,6 +2429,21 @@ const plan: WorkspaceDefinition = {
           ["Contract area CA-AM-1", "2 notification zones"],
           "Project geography",
           "2 weeks",
+          ["Create version", "Archive"],
+        ),
+        record(
+          "area-harbor-1",
+          "Nordhavn Harbor Area",
+          "Planning area · Harbor Commercial",
+          "Active",
+          "Operations Admin",
+          "3.2 km²",
+          "1 week ago",
+          "Planning geography for the Harbor Commercial dockside collections.",
+          { Code: "OP-HAR-01", Boundary: "Valid", Properties: "212", Routes: "2 weekly" },
+          ["Harbor warehouse", "1 notification zone"],
+          "Project geography",
+          "1 week",
           ["Create version", "Archive"],
         ),
       ],
@@ -2907,7 +2952,12 @@ const resources: WorkspaceDefinition = {
         "Container identity, ordered waste fractions, location, routing inputs, sensor pairing, and audit history remain distinct.",
       ],
       records: [
-        record(
+        // Explicit container fixtures carry the same planning-area link the
+        // seeded ones do (issue #19): a "Planning area" display fact plus the
+        // typed submittedValues.planningAreaId the stop-match resolver reads.
+        // Out-of-service units (storage, ended, in transit) have none.
+        {
+        ...record(
           "asset-82014",
           "BIN-82014",
           "Parkvej 18 · Copenhagen Central",
@@ -2925,6 +2975,7 @@ const resources: WorkspaceDefinition = {
             "Waste fractions": "Organic",
             Ownership: "Company owned",
             Project: "Copenhagen Central",
+            "Planning area": "Østerbro Zone 2",
             Address: "Parkvej 18, 2100 Copenhagen Ø",
             "Curb location": "Courtyard · gate B",
             Property: "Parkvej 18",
@@ -2955,7 +3006,10 @@ const resources: WorkspaceDefinition = {
           "18 minutes",
           ["Defect", "In transit", "Create container ticket", "Delete container"],
         ),
-        record(
+        submittedValues: { planningAreaId: "area-osterbro-contract" },
+        },
+        {
+        ...record(
           "asset-44831",
           "BIN-44831",
           "Sundbyvej 91 · Copenhagen Central",
@@ -2973,6 +3027,7 @@ const resources: WorkspaceDefinition = {
             "Waste fractions": "Glass",
             Ownership: "Customer owned",
             Project: "Copenhagen Central",
+            "Planning area": "Amager Zone 1",
             Address: "Sundbyvej 91, 2300 Copenhagen S",
             "Curb location": "Loading bay",
             Property: "Sundbyvej 91",
@@ -3003,6 +3058,8 @@ const resources: WorkspaceDefinition = {
           "45 minutes",
           ["Available", "In transit", "Create container ticket", "Delete container"],
         ),
+        submittedValues: { planningAreaId: "area-amager-1" },
+        },
         record(
           "asset-99017",
           "BIN-99017",
@@ -3021,6 +3078,7 @@ const resources: WorkspaceDefinition = {
             "Waste fractions": "Residual",
             Ownership: "Company owned",
             Project: "Copenhagen Central",
+            "Planning area": "—",
             Address: "Warehouse West · aisle B4",
             "Curb location": "—",
             Property: "—",
@@ -3051,7 +3109,8 @@ const resources: WorkspaceDefinition = {
           "3 days",
           ["In transit", "Defect", "Create container ticket", "Delete container"],
         ),
-        record(
+        {
+        ...record(
           "asset-77104",
           "BIN-77104",
           "Harbor Offices · Dock 4",
@@ -3063,7 +3122,8 @@ const resources: WorkspaceDefinition = {
           {
             "Container ID": "BIN-77104", Barcode: "WH77104", RFID: "E20077104", "Serial number": "SULO-26-77104",
             "Container type": "Four-wheel bin · 1,100 L", "Waste fractions": "Cardboard", Ownership: "Company owned",
-            Project: "Harbor Commercial", Address: "Harbor Offices, Dock 4", "Curb location": "Service yard", Property: "Harbor Offices",
+            Project: "Harbor Commercial", "Planning area": "Nordhavn Harbor Area",
+            Address: "Harbor Offices, Dock 4", "Curb location": "Service yard", Property: "Harbor Offices",
             "Property number": "CPH-004201", "Property type": "Commercial", "Pickup method": "Static", "Service frequency": "Cardboard · weekly",
             "Collection calendar": "Harbor Commercial 2026", "Route scheme": "Harbor Cardboard", Vehicle: "WH-24", Sensor: "S-774 · NB-IoT",
             Battery: "88%", RSSI: "-94 dBm", "Fill level": "42%", "Last measurement": "2 hours ago", "Full threshold": "95%",
@@ -3075,7 +3135,10 @@ const resources: WorkspaceDefinition = {
           "2 hours",
           ["Defect", "Create container ticket", "Delete container"],
         ),
-        record(
+        submittedValues: { planningAreaId: "area-harbor-1" },
+        },
+        {
+        ...record(
           "asset-66420",
           "BIN-66420",
           "Nørrebrogade 144 · Copenhagen Central",
@@ -3087,7 +3150,8 @@ const resources: WorkspaceDefinition = {
           {
             "Container ID": "BIN-66420", Barcode: "WH66420", RFID: "Not recorded", "Serial number": "SSI-23-66420",
             "Container type": "Four-wheel bin · 660 L", "Waste fractions": "Residual · Mixed", Ownership: "Unrecorded",
-            Project: "Copenhagen Central", Address: "Nørrebrogade 144, 2200 Copenhagen N", "Curb location": "Rear gate", Property: "Nørrebrogade 144",
+            Project: "Copenhagen Central", "Planning area": "Indre By Operations",
+            Address: "Nørrebrogade 144, 2200 Copenhagen N", "Curb location": "Rear gate", Property: "Nørrebrogade 144",
             "Property number": "CPH-014420", "Property type": "Mixed use", "Pickup method": "Dynamic", "Service frequency": "Mixed · weekly",
             "Collection calendar": "Copenhagen Central 2026", "Route scheme": "Nørrebro Mixed", Vehicle: "WH-24", Sensor: "S-620 · Sigfox",
             Battery: "54%", RSSI: "-101 dBm", "Fill level": "63%", "Last measurement": "Yesterday", "Full threshold": "92%",
@@ -3099,6 +3163,8 @@ const resources: WorkspaceDefinition = {
           "Yesterday",
           ["Defect", "Create container ticket", "Delete container"],
         ),
+        submittedValues: { planningAreaId: "area-indreby" },
+        },
         record(
           "asset-50318",
           "BIN-50318",
@@ -3111,7 +3177,8 @@ const resources: WorkspaceDefinition = {
           {
             "Container ID": "BIN-50318", Barcode: "WH50318", RFID: "E20050318", "Serial number": "OTTO-18-50318",
             "Container type": "Two-wheel bin · 240 L", "Waste fractions": "Paper", Ownership: "Customer owned",
-            Project: "Copenhagen Central", Address: "Formerly Vesterbrogade 72", "Curb location": "—", Property: "Vesterbrogade 72",
+            Project: "Copenhagen Central", "Planning area": "—",
+            Address: "Formerly Vesterbrogade 72", "Curb location": "—", Property: "Vesterbrogade 72",
             "Property number": "CPH-007272", "Property type": "Residential", "Pickup method": "Disabled", "Service frequency": "—",
             "Collection calendar": "—", "Route scheme": "—", Vehicle: "—", Sensor: "None", Battery: "—", RSSI: "—",
             "Fill level": "100% · no sensor default", "Last measurement": "Never", "Full threshold": "95%",
@@ -3135,7 +3202,8 @@ const resources: WorkspaceDefinition = {
           {
             "Container ID": "BIN-11862", Barcode: "WH11862", RFID: "E20011862", "Serial number": "WTT-25-11862",
             "Container type": "Wastewater tank · 3,000 L", "Waste fractions": "Wastewater", Ownership: "Company owned",
-            Project: "Copenhagen Central", Address: "In transit to Nordhavn Warehouse", "Curb location": "—", Property: "—",
+            Project: "Copenhagen Central", "Planning area": "—",
+            Address: "In transit to Nordhavn Warehouse", "Curb location": "—", Property: "—",
             "Property number": "—", "Property type": "No property", "Pickup method": "Disabled", "Service frequency": "—",
             "Collection calendar": "—", "Route scheme": "—", Vehicle: "WH-TR-12", Sensor: "Not fitted", Battery: "—", RSSI: "—",
             "Fill level": "100% · no sensor default", "Last measurement": "Never", "Full threshold": "95%",

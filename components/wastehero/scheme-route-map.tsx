@@ -24,11 +24,8 @@ import {
   parseServiceDays,
   type ServiceDay,
 } from "@/lib/route-schemes/recurrence"
-import {
-  dayPlansFromValues,
-  effectiveDayPlans,
-  type SchemeDayPlan,
-} from "@/lib/route-schemes/validation"
+import { effectiveStopPlans } from "@/lib/route-schemes/matching"
+import type { SchemeDayPlan } from "@/lib/route-schemes/validation"
 import { cn } from "@/lib/utils"
 
 /** Store-merged records of one module — fixtures plus user-created. */
@@ -214,10 +211,10 @@ export function SchemeRecordRouteMapSection({ record }: { record: BusinessRecord
   )
   if (serviceDays.length === 0) return null
 
-  const plans = effectiveDayPlans(
-    serviceDays,
-    dayPlansFromValues(record.submittedValues),
-  )
+  // The shared stop-plan seam (issue #19): picked lists for manual schemes,
+  // live rule matches for rule-mode schemes — the map always previews what
+  // generation would produce now.
+  const plans = effectiveStopPlans(record, serviceDays, containers)
   return (
     <section className="space-y-4">
       <h3 className="text-sm font-semibold">Route map</h3>
