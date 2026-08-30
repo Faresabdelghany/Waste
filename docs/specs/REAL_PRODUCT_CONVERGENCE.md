@@ -1,6 +1,12 @@
 # Real-Product Convergence — Scheme-Owned Recurrence vs the Three-Layer Chain
 
-Status: Decision-support draft · 2026-08-30 · Owner: Product (fares) · Issue: [#15](https://github.com/Faresabdelghany/Waste/issues/15) · Updated same day with public-source research (`docs/research/PICKUP_SETTING_CHAIN.md`) answering open questions 1–5
+Status: **Decided 2026-08-30** — scheme-owned model adopted (option C core) · Owner: Product (fares) · Issue: [#15](https://github.com/Faresabdelghany/Waste/issues/15) · Includes same-day public-source research (`docs/research/PICKUP_SETTING_CHAIN.md`) answering open questions 1–5
+
+## Decision (2026-08-30, fares)
+
+**The Route Scheme is the controlling entity.** In the owner's words: the Route Scheme *generates* its routes — no create-a-scheme, then manually add routes, then manually add stops — and the scheme form therefore carries the Collection Calendar reference. Recurrence, service days, effective period, calendar reference, operational defaults, and stop plans all live on the scheme; dated Routes and their Pickups are generated from it. This is option C's core (A-core: yes), and it is the model the prototype already ships (`route-studio.schemes` form with required `calendarId` and structured recurrence; `lib/route-schemes/generation.ts` expands the scheme into Routes + Pickups; Plan Ahead automates it).
+
+Unblocked by this decision: [#19](https://github.com/Faresabdelghany/Waste/issues/19) declarative stop matching (what makes scheme-controlled stops scale), [#20](https://github.com/Faresabdelghany/Waste/issues/20) Service frequency re-sourcing (the promise attribute, at the research-corrected home), [#21](https://github.com/Faresabdelghany/Waste/issues/21) reconciliation validation. The remaining real-product unknowns (deviation record shape, full scheme field list, Plan Ahead mechanics) stay research items and do not affect this direction.
 
 Scope: **documentation only, this repo only** (PLAN_SIMPLIFICATION.md Q1). This document supports a product decision; it prescribes no implementation work — any codebase change, prototype or real product, is a separate decision and ticket for which this document is input only — and nothing in it targets the real WasteHero repositories. It covers follow-ups 5 (carried over from `docs/specs/ROUTE_SCHEMES.md`) and 6 (from locked decision Q9) of `docs/specs/PLAN_SIMPLIFICATION.md`.
 
