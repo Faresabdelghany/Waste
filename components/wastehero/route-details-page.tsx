@@ -29,8 +29,10 @@ import type {
 } from "@/lib/data/business-modules"
 import { getBusinessModuleHref } from "@/lib/data/business-links"
 import {
+  approvedDeviationsFromRecords,
   reassignRouteAssignment,
   reassignRoutePickups,
+  routeDeviationInfo,
   stringValueOf,
 } from "@/lib/route-schemes/generation"
 import { cn } from "@/lib/utils"
@@ -388,16 +390,20 @@ function ReassignRouteDialog({
 
 function RouteInformation({
   record,
-  stops,
   hasGeneratedStops,
 }: {
   record: BusinessRecord
-  stops: RouteStop[]
   hasGeneratedStops: boolean
 }) {
-  const completedStops = stops.filter(
-    (stop) => stop.status === "Completed",
-  ).length
+  // The deviation note derives from the record alone (issue #26), so a moved
+  // route shows it on the fixture/demo schedule path too — not only when the
+  // route has generated stops.
+  const deviationRecords = useModuleRecords("plan", "collection-deviations")
+  const deviationInfo = useMemo(
+    () =>
+      routeDeviationInfo(record, approvedDeviationsFromRecords(deviationRecords)),
+    [deviationRecords, record],
+  )
   const status =
     record.status === "Active"
       ? "In progress"
@@ -451,53 +457,42 @@ function RouteInformation({
     const total = end - start
     return `${Math.floor(total / 60)}h ${String(total % 60).padStart(2, "0")}m`
   })()
-  const schedule: InformationRow[] = hasGeneratedStops
-    ? [
-        [
-          "Estimated time",
-          windowStart && windowEnd
-            ? `${windowStart} → ${windowEnd}`
-            : "Not planned",
-        ],
-        [
-          "Actual time",
-          record.status === "Active"
-            ? "In progress"
-            : record.status === "Completed"
-              ? "Completed"
-              : "Not started",
-        ],
-        ...(windowDuration
-          ? [["Estimated duration", windowDuration] as InformationRow]
-          : []),
-        ...(record.facts.Deviation
-          ? [["Deviation", record.facts.Deviation] as InformationRow]
-          : []),
-      ]
-    : [
-        ["Estimated time", "06:00 → 12:50"],
-        ["Actual time", "06:10 → In progress"],
-        ["Estimated duration", "6h 50m"],
-        ["Actual duration", "2h 18m"],
-      ]
-  const progress: InformationRow[] = hasGeneratedStops
-    ? [
-        ["Completed stops", `${completedStops} of ${stops.length}`],
-        ...(record.facts.Stops
-          ? [["Planned pickups", record.facts.Stops] as InformationRow]
-          : []),
-      ]
-    : [
-        ["Completed stops", `${completedStops} of ${stops.length}`],
-        ["Estimated distance", "87.4 km"],
-        ["Actual distance", "31.2 km"],
-        ["Collected weight", "3.8 t"],
-      ]
+  const schedule: InformationRow[] = [
+    ...(hasGeneratedStops
+      ? ([
+          [
+            "Estimated time",
+            windowStart && windowEnd
+              ? `${windowStart} → ${windowEnd}`
+              : "Not planned",
+          ],
+          [
+            "Actual time",
+            record.status === "Active"
+              ? "In progress"
+              : record.status === "Completed"
+                ? "Completed"
+                : "Not started",
+          ],
+          ...(windowDuration
+            ? [["Estimated duration", windowDuration] as InformationRow]
+            : []),
+        ] as InformationRow[])
+      : ([
+          ["Estimated time", "06:00 → 12:50"],
+          ["Actual time", "06:10 → In progress"],
+          ["Estimated duration", "6h 50m"],
+        ] as InformationRow[])),
+    // The deviation row belongs to both presentation paths (issue #26).
+    ...(deviationInfo
+      ? [["Deviation", deviationInfo] as InformationRow]
+      : []),
+  ]
 
+  // Artboard 5 is authoritative for this panel (D14): Assignment + Schedule.
   const sections: { title: string; rows: InformationRow[] }[] = [
     { title: "Assignment", rows: assignment },
     { title: "Schedule", rows: schedule },
-    { title: "Progress", rows: progress },
   ]
 
   return (
@@ -591,7 +586,12 @@ function OverviewTab({
   const [search, setSearch] = useState("")
   const [attentionOnly, setAttentionOnly] = useState(false)
   const [mapExpanded, setMapExpanded] = useState(false)
-  const [rightPanel, setRightPanel] = useState<"map" | "information">("map")
+  // Artboard 5 (D14): the Map panel starts collapsed with Route information
+  // open, so Assignment/Schedule — including the deviation row — are visible
+  // on arrival.
+  const [rightPanel, setRightPanel] = useState<"map" | "information">(
+    "information",
+  )
   const [selectedStopIds, setSelectedStopIds] = useState<Set<string>>(
     () => new Set(),
   )
@@ -1110,7 +1110,6 @@ function OverviewTab({
             {rightPanel === "information" && (
               <RouteInformation
                 record={record}
-                stops={stops}
                 hasGeneratedStops={generatedStops !== null}
               />
             )}

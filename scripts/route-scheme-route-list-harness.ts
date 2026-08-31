@@ -11,7 +11,9 @@ import {
   planSchemeGeneration,
   reassignRouteAssignment,
   reassignRoutePickups,
+  routeDeviationInfo,
   schemeGeneratedRoutes,
+  type ApprovedDeviation,
 } from "../lib/route-schemes/generation"
 import { runPlanAhead } from "../lib/route-schemes/plan-ahead"
 
@@ -338,6 +340,128 @@ check(
   "generated route ids stay deterministic through the list helpers",
   schemeGeneratedRoutes(scheme.id, planAheadRun.routes)[0]?.id,
   generatedRouteId(scheme.id, WED),
+)
+
+/* ---------- deviation info on every route presentation path (#26) --------- */
+
+const roadworks: ApprovedDeviation = {
+  name: "Planned roadworks",
+  originalDate: WED,
+  replacementDate: "2026-09-03",
+  reason: "Planned roadworks",
+  projectIds: ["project-harbor"],
+}
+const movedPlan = planSchemeGeneration({
+  containers: [],
+  scheme,
+  window: WINDOW,
+  existingRoutes: [],
+  deviations: [roadworks],
+})
+if (!movedPlan) throw new Error("moved plan expected")
+const movedRun = applySchemeGeneration({
+  plan: movedPlan,
+  existingPickups: [],
+  containers,
+  actorName: "Planner",
+})
+const movedRoute = movedRun.routes.find(
+  (route) => route.submittedValues?.serviceDate === WED,
+) as BusinessRecord
+const { Deviation: _movedNote, ...movedFactsWithoutNote } = movedRoute.facts
+const unstampedMovedRoute: BusinessRecord = {
+  ...movedRoute,
+  facts: movedFactsWithoutNote,
+}
+
+check(
+  "a generated moved route surfaces its stamped deviation note",
+  routeDeviationInfo(movedRoute, []),
+  "Moved from Wed 2 Sept · Planned roadworks",
+)
+check(
+  "a generated route with no deviation gets no deviation info",
+  routeDeviationInfo(
+    firstRun.routes.find(
+      (route) => route.submittedValues?.serviceDate === WED,
+    ) as BusinessRecord,
+    [roadworks],
+  ),
+  null,
+)
+check(
+  "a moved route without the stamped fact derives the note from the deviation records",
+  routeDeviationInfo(unstampedMovedRoute, [roadworks]),
+  "Moved from Wed 2 Sept · Planned roadworks",
+)
+check(
+  "the most specific scope wins the derived note, then name order",
+  routeDeviationInfo(unstampedMovedRoute, [
+    { ...roadworks, name: "A project works", reason: "Project reason" },
+    {
+      ...roadworks,
+      name: "Z scheme closure",
+      reason: "Scheme reason",
+      scopeType: "scheme",
+      schemeId: scheme.id,
+    },
+  ]),
+  "Moved from Wed 2 Sept · Scheme reason",
+)
+check(
+  "same-scope candidates resolve by name order",
+  routeDeviationInfo(unstampedMovedRoute, [
+    { ...roadworks, name: "B works", reason: "B reason" },
+    { ...roadworks, name: "A works", reason: "A reason" },
+  ]),
+  "Moved from Wed 2 Sept · A reason",
+)
+check(
+  "a scheme-scoped deviation for another scheme never explains the move",
+  routeDeviationInfo(unstampedMovedRoute, [
+    {
+      ...roadworks,
+      scopeType: "scheme",
+      schemeId: "schemes-route-scheme-other",
+    },
+  ]),
+  null,
+)
+check(
+  "a customer-scoped deviation never explains a whole-route move",
+  routeDeviationInfo(unstampedMovedRoute, [
+    { ...roadworks, scopeType: "customer" },
+  ]),
+  null,
+)
+check(
+  "a manual date move (no matching deviation) gets no deviation row",
+  routeDeviationInfo(unstampedMovedRoute, []),
+  null,
+)
+check(
+  "a fixture route with a plain deviation fact surfaces it",
+  routeDeviationInfo(
+    {
+      ...fixtureRoute,
+      facts: { ...fixtureRoute.facts, Deviation: "Access blocked at first attempt" },
+    },
+    [],
+  ),
+  "Access blocked at first attempt",
+)
+check(
+  "a fixture route with the 'None' fact gets no deviation info",
+  routeDeviationInfo(fixtureRoute, [roadworks]),
+  null,
+)
+check(
+  "a fixture route without deviation data gets no deviation info",
+  routeDeviationInfo(
+    { ...fixtureRoute, facts: movedFactsWithoutNote, submittedValues: undefined },
+    [roadworks],
+  ),
+  null,
 )
 
 /* --------------------------------- result --------------------------------- */

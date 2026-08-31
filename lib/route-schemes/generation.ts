@@ -209,18 +209,11 @@ export function deviationMatchesScheme(
   deviation: ApprovedDeviation,
   scheme: BusinessRecord,
 ): boolean {
-  if (deviation.scopeType === "customer") return false
   if (deviation.calendarId) {
     const schemeCalendarId = stringValue(scheme.submittedValues ?? {}, "calendarId")
     if (schemeCalendarId !== deviation.calendarId) return false
   }
-  if (deviation.scopeType === "scheme") {
-    return deviation.schemeId === scheme.id
-  }
-  if (!deviation.projectIds?.length || !scheme.projectIds?.length) return true
-  return deviation.projectIds.some((projectId) =>
-    scheme.projectIds?.includes(projectId),
-  )
+  return deviationMatchesScope(deviation, scheme.id, scheme.projectIds)
 }
 
 /* -------------------------------- planning -------------------------------- */
@@ -232,6 +225,83 @@ export const stringValueOf = (
   record: BusinessRecord,
   key: string,
 ): string | undefined => stringValue(record.submittedValues ?? {}, key)
+
+/**
+ * The scope tail shared by scheme- and route-side deviation matching:
+ * customer scope never remaps whole routes; scheme scope is exact-id only;
+ * project scope (and legacy) is project overlap with an unrecorded side
+ * treated as project-wide.
+ */
+function deviationMatchesScope(
+  deviation: ApprovedDeviation,
+  schemeId: string | undefined,
+  projectIds: readonly string[] | undefined,
+): boolean {
+  if (deviation.scopeType === "customer") return false
+  if (deviation.scopeType === "scheme") {
+    return deviation.schemeId === schemeId
+  }
+  if (!deviation.projectIds?.length || !projectIds?.length) return true
+  return deviation.projectIds.some((projectId) => projectIds.includes(projectId))
+}
+
+/**
+ * Deterministic pick among several matching deviations: the most specific
+ * scope wins (scheme over project/legacy), then name order.
+ */
+export function deviationPrecedence(
+  a: ApprovedDeviation,
+  b: ApprovedDeviation,
+): number {
+  return (
+    (a.scopeType === "scheme" ? 0 : 1) - (b.scopeType === "scheme" ? 0 : 1) ||
+    a.name.localeCompare(b.name)
+  )
+}
+
+/** The route-facing note for a deviation move — one wording everywhere. */
+function deviationMovedNote(serviceDate: string, reason: string): string {
+  return `Moved from ${formatServiceDate(serviceDate)} · ${reason}`
+}
+
+/**
+ * The deviation note a route detail shows, derived from the record alone so
+ * every presentation path agrees (issue #26): a stamped `Deviation` fact
+ * other than "None" is shown verbatim; a route whose identity says it was
+ * moved (`actualDate` differs from `serviceDate`) without such a stamp gets
+ * the note derived from the approved deviation records, using generation's
+ * precedence (most specific scope, then name order). A move no approved
+ * deviation explains — a manual date edit stores exactly this shape (issue
+ * #23) — is NOT attributed to a deviation: null, so the panel renders no
+ * deviation row.
+ */
+export function routeDeviationInfo(
+  route: BusinessRecord,
+  deviations: readonly ApprovedDeviation[],
+): string | null {
+  const stamped = route.facts.Deviation?.trim()
+  const stampedInfo = stamped && stamped !== "None" ? stamped : null
+  const serviceDate = stringValueOf(route, "serviceDate")
+  const actualDate = stringValueOf(route, "actualDate")
+  if (stampedInfo || !serviceDate || !actualDate || serviceDate === actualDate) {
+    return stampedInfo
+  }
+  // The route records no calendar id, so unlike deviationMatchesScheme this
+  // display-side match cannot apply the calendar gate.
+  const match = deviations
+    .filter(
+      (candidate) =>
+        candidate.originalDate === serviceDate &&
+        candidate.replacementDate === actualDate &&
+        deviationMatchesScope(
+          candidate,
+          stringValueOf(route, "schemeId"),
+          route.projectIds,
+        ),
+    )
+    .sort(deviationPrecedence)[0]
+  return match ? deviationMovedNote(serviceDate, match.reason) : null
+}
 
 /**
  * A day-by-day walk is fine: windows are weeks, not years. The walk caps at
@@ -307,20 +377,15 @@ export function planSchemeGeneration(input: {
     if (!matchesRecurrence(recurrence, date)) continue
     servedDates.add(date)
     const day = serviceDayOf(date)
-    // Several approved deviations can match one date; pick deterministically —
-    // the most specific scope wins (scheme over project/legacy), then name —
-    // instead of whatever the store happened to enumerate first.
+    // Several approved deviations can match one date; pick deterministically
+    // (deviationPrecedence) instead of whatever the store enumerated first.
     const deviation = input.deviations
       .filter(
         (candidate) =>
           candidate.originalDate === date &&
           deviationMatchesScheme(candidate, scheme),
       )
-      .sort(
-        (a, b) =>
-          (a.scopeType === "scheme" ? 0 : 1) - (b.scopeType === "scheme" ? 0 : 1) ||
-          a.name.localeCompare(b.name),
-      )[0]
+      .sort(deviationPrecedence)[0]
     const existing = existingByIdentity.get(date)
 
     // Calendar validity filtering (Q2/Q7): without a deviation to relocate
@@ -695,7 +760,7 @@ export function applySchemeGeneration(input: {
 
     const stops = planned.containerIds.length
     const deviationNote = planned.deviation
-      ? `Moved from ${formatServiceDate(planned.serviceDate)} · ${planned.deviation.reason}`
+      ? deviationMovedNote(planned.serviceDate, planned.deviation.reason)
       : "None"
 
     routes.push({
