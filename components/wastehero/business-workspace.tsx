@@ -39,6 +39,7 @@ import {
 } from "@/lib/data/business-modules"
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
 import { calendarFromRecord } from "@/lib/route-schemes/calendar"
+import { planSchemeCreation } from "@/lib/route-schemes/creation"
 import {
   schemeAttention,
   schemeCanGenerateRoutes,
@@ -3950,8 +3951,10 @@ export function BusinessWorkspace({
       ...(area ? { "Planning area": area.name } : {}),
       ...(calendar ? { "Collection calendar": calendar.name } : {}),
       ...(recurrence ? { Recurrence: recurrenceSentence(recurrence) } : {}),
-      ...(data.effectiveFrom && data.effectiveTo
-        ? { Effective: `${data.effectiveFrom} → ${data.effectiveTo}` }
+      ...(data.effectiveFrom
+        ? {
+            Effective: `${data.effectiveFrom} → ${data.effectiveTo || "ongoing"}`,
+          }
         : {}),
       "Planned start": data.plannedStartTime,
       ...(contractor ? { Contractor: contractor.name } : {}),
@@ -4015,6 +4018,40 @@ export function BusinessWorkspace({
       submittedValues,
       relationRefs,
     }
+    // Self-contained creation (issue #28, D18/D24/D25): the orchestration
+    // planner decides everything past "Create" — a Validated scheme generates
+    // its initial window with Plan Ahead on and becomes Scheduled; this
+    // handler only applies the returned upserts.
+    const routesModule = businessWorkspaces["route-studio"].modules.find(
+      (candidate) => candidate.id === "routes",
+    )
+    const pickupsModule = businessWorkspaces["route-studio"].modules.find(
+      (candidate) => candidate.id === "pickups",
+    )
+    const deviationsModule = businessWorkspaces.plan.modules.find(
+      (candidate) => candidate.id === "collection-deviations",
+    )
+    const calendarsModule = businessWorkspaces.plan.modules.find(
+      (candidate) => candidate.id === "calendars",
+    )
+    const creation = planSchemeCreation(
+      { scheme: newRecord, today: todayIso(), actorName },
+      {
+        existingRoutes: routesModule
+          ? getRecords("route-studio", routesModule.id, routesModule.records)
+          : [],
+        existingPickups: pickupsModule
+          ? getRecords("route-studio", pickupsModule.id, pickupsModule.records)
+          : [],
+        containers: containerRecords,
+        deviationRecords: deviationsModule
+          ? getRecords("plan", deviationsModule.id, deviationsModule.records)
+          : [],
+        calendarRecords: calendarsModule
+          ? getRecords("plan", calendarsModule.id, calendarsModule.records)
+          : [],
+      },
+    )
     const creationEvent: AuditEvent = {
       id: `audit-guided-scheme-${now}`,
       action: "Create route scheme · Guided Setup",
@@ -4022,18 +4059,24 @@ export function BusinessWorkspace({
       at: "Now",
       reason: "Guided Setup",
       before: "Absent",
-      after: newRecord.status,
+      after: creation.scheme.status,
       evidence: `${relationRefs.length} linked records · ${projectScopeLabel(
         projectIds,
       )} scope validated`,
     }
 
-    upsertRecord(workspace.id, activeModule.id, newRecord)
+    upsertRecord(workspace.id, activeModule.id, creation.scheme)
+    for (const route of creation.routes) {
+      upsertRecord("route-studio", "routes", route)
+    }
+    for (const pickup of creation.pickups) {
+      upsertRecord("route-studio", "pickups", pickup)
+    }
     setAuditEvents((current) => ({
       ...current,
       [newRecord.id]: [creationEvent],
     }))
-    setSelectedRecord(newRecord)
+    setSelectedRecord(creation.scheme)
     router.push(
       getWorkspaceNavigationHref(
         navigationBasePath,
@@ -4043,19 +4086,21 @@ export function BusinessWorkspace({
       ),
       { scroll: false },
     )
-    toast.success(
-      validation.status === "Validated"
-        ? "Route scheme created as Validated"
-        : "Route scheme created as Draft",
-      {
-        description:
-          validation.status === "Validated"
-            ? `${newRecord.name} passed all blocking checks.`
-            : `${newRecord.name} has ${validation.issues.length} open issue${
-                validation.issues.length === 1 ? "" : "s"
-              }: ${validation.issues.join(" · ")}`,
-      },
-    )
+    if (creation.outcome === "scheduled") {
+      toast.success(`Route scheme created — ${newRecord.name}`, {
+        description: creation.message,
+      })
+    } else if (creation.outcome === "generation-failed") {
+      toast.warning(`Route scheme created as Validated — ${newRecord.name}`, {
+        description: creation.message,
+      })
+    } else {
+      toast.warning(`Route scheme created as Draft — ${newRecord.name}`, {
+        description: `${creation.message} ${validation.issues.length} open issue${
+          validation.issues.length === 1 ? "" : "s"
+        }: ${validation.issues.join(" · ")}`,
+      })
+    }
   }
 
   const requestContractorRelatedCreate = (

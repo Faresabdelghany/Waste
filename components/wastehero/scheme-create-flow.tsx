@@ -42,6 +42,10 @@ import {
   type CollectionCalendar,
 } from "@/lib/route-schemes/calendar"
 import {
+  SCHEME_DRAFT_CREATION_NOTICE,
+  previewSchemeCreation,
+} from "@/lib/route-schemes/creation"
+import {
   RECURRENCE_FREQUENCY_LABELS,
   SERVICE_DAYS,
   SERVICE_DAY_SHORT_LABELS,
@@ -560,13 +564,16 @@ function StepRecurrence({ data, updateData }: GuidedStepProps) {
           />
         </div>
         <div className="space-y-2">
-          <Label>Effective to</Label>
+          <Label>Effective to (optional)</Label>
           <Input
             type="date"
             value={data.effectiveTo}
             min={data.effectiveFrom || undefined}
             onChange={(event) => updateData({ effectiveTo: event.target.value })}
           />
+          <p className="text-xs text-muted-foreground">
+            Leave empty to run ongoing until the scheme is ended.
+          </p>
         </div>
       </div>
       <div className="space-y-2">
@@ -1338,6 +1345,26 @@ function StepSchemeReview({
   const nameOf = (records: BusinessRecord[], id?: string) =>
     records.find((record) => record.id === id)?.name ?? "Not specified"
 
+  // The consequence of creation (issue #28, D27): a valid scheme immediately
+  // generates its initial window, so the review step previews those dates and
+  // an estimated stop count through the same engine — labeled an estimate
+  // because rule matches re-resolve at generation time.
+  const creationPreview =
+    validation.status === "Validated"
+      ? previewSchemeCreation({
+          today: todayIso(),
+          frequency: data.frequency,
+          ...(data.frequency === "every-2-weeks"
+            ? { weekRotation: data.weekRotation }
+            : {}),
+          serviceDays: data.serviceDays,
+          effectiveFrom: data.effectiveFrom,
+          effectiveTo: data.effectiveTo,
+          dayPlans: plans,
+          calendar,
+        })
+      : null
+
   const sections: {
     title: string
     step: number
@@ -1363,10 +1390,9 @@ function StepSchemeReview({
         },
         {
           label: "Effective window",
-          value:
-            data.effectiveFrom && data.effectiveTo
-              ? `${data.effectiveFrom} → ${data.effectiveTo}`
-              : "Not specified",
+          value: data.effectiveFrom
+            ? `${data.effectiveFrom} → ${data.effectiveTo || "ongoing"}`
+            : "Not specified",
         },
         { label: "Planned start", value: data.plannedStartTime || "Not specified" },
       ],
@@ -1442,19 +1468,47 @@ function StepSchemeReview({
       {validation.status === "Validated" ? (
         <div className="flex items-start gap-3 rounded-2xl border border-green-600/30 bg-green-500/10 p-4">
           <Check className="mt-0.5 h-4 w-4 shrink-0 text-green-700 dark:text-green-400" />
-          <div>
+          <div className="space-y-1">
             <p className="text-sm font-semibold text-green-700 dark:text-green-400">
-              All checks passed
+              All checks passed — ready to schedule
             </p>
             <p className="text-xs text-green-700/80 dark:text-green-400/80">
-              The scheme will be created as Validated.
+              {creationPreview && creationPreview.routeDates.length > 0 ? (
+                <>
+                  Creating this scheme generates routes for{" "}
+                  {creationPreview.routeDates
+                    .map((date) => formatServiceDate(date))
+                    .join(" · ")}
+                  , resolves their stops (~{creationPreview.estimatedStops} stop
+                  {creationPreview.estimatedStops === 1 ? "" : "s"} — an
+                  estimate), and turns on Plan Ahead.
+                </>
+              ) : (
+                <>
+                  Creating this scheme turns on Plan Ahead
+                  {creationPreview
+                    ? ` — no service dates fall in the initial window (${formatServiceDate(
+                        creationPreview.window.from,
+                      )} → ${formatServiceDate(creationPreview.window.to)}), so future routes generate automatically`
+                    : ""}
+                  .
+                </>
+              )}
             </p>
+            {creationPreview && creationPreview.calendarSkipped > 0 && (
+              <p className="text-xs text-green-700/80 dark:text-green-400/80">
+                {creationPreview.calendarSkipped} date
+                {creationPreview.calendarSkipped === 1 ? " is" : "s are"}{" "}
+                skipped by the Collection Calendar (holiday or non-working
+                day).
+              </p>
+            )}
           </div>
         </div>
       ) : (
         <div className="space-y-1.5 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4">
           <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-            The scheme will be created as Draft
+            {SCHEME_DRAFT_CREATION_NOTICE}
           </p>
           <ul className="list-disc space-y-1 pl-5 text-xs text-amber-700 dark:text-amber-400">
             {validation.issues.map((issue, index) => (

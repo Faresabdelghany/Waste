@@ -352,7 +352,8 @@ function allocationWindowTouchesScheme(
 
 /**
  * The blocking checks of FR-5, in spec order: (a) ≥1 service day,
- * (b) effective from/to set with to ≥ from, (c) every service day has ≥1
+ * (b) effective from set — effective to is optional (issue #28, D23) but must
+ * be ≥ from when present, (c) every service day has ≥1
  * container (per-day mode names the empty days) — replaced for rule-mode
  * schemes (issue #19, input.stopMatching) by: planning area set, every day's
  * rule carries ≥1 fraction, and every day's rule currently matches ≥1
@@ -378,9 +379,11 @@ export function validateScheme(
 
   if (input.serviceDays.length === 0) issues.push("Pick at least one service day")
 
-  if (!input.effectiveFrom || !input.effectiveTo) {
-    issues.push("Set the effective from and to dates")
-  } else if (input.effectiveTo < input.effectiveFrom) {
+  // effectiveTo is optional (issue #28, D23): an omitted To means the scheme
+  // runs open-ended until explicitly ended or expired by later configuration.
+  if (!input.effectiveFrom) {
+    issues.push("Set the effective from date")
+  } else if (input.effectiveTo && input.effectiveTo < input.effectiveFrom) {
     issues.push("Effective to must be on or after effective from")
   }
 

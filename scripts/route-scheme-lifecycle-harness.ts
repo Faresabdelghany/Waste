@@ -6,6 +6,11 @@
 // Run: npx tsx scripts/route-scheme-lifecycle-harness.ts
 import type { BusinessRecord } from "../lib/data/business-modules"
 import {
+  initialGenerationWindow,
+  planSchemeCreation,
+  previewSchemeCreation,
+} from "../lib/route-schemes/creation"
+import {
   effectiveSchemeStatus,
   recordSchemeGeneration,
   schemeAttention,
@@ -14,7 +19,7 @@ import {
   schemeLiveValidation,
   withEffectiveSchemeStatus,
 } from "../lib/route-schemes/lifecycle"
-import { schemeAutoGenerates } from "../lib/route-schemes/plan-ahead"
+import { isPlanAheadEnabled, schemeAutoGenerates } from "../lib/route-schemes/plan-ahead"
 
 let passed = 0
 let failed = 0
@@ -451,6 +456,261 @@ check(
   allocationWarnings.length === 1 &&
     allocationWarnings[0]!.includes("WH-24 depot cover"),
   true,
+)
+
+/* ------------------ creation orchestration (issue #28) -------------------- */
+// SPEC.md area A, D18/D24/D25: finishing a create immediately produces a
+// working scheme — Validated generates the initial window with Plan Ahead on
+// and becomes Scheduled; Draft generates nothing; a technically successful
+// zero-route run still schedules; only a technical failure stays Validated.
+
+check(
+  "initial window starts today when effectiveFrom has passed",
+  initialGenerationWindow("2026-09-01", "2026-08-01"),
+  { from: "2026-09-01", to: "2026-09-08" },
+)
+check(
+  "initial window starts at a future effectiveFrom",
+  initialGenerationWindow("2026-09-01", "2026-09-15"),
+  { from: "2026-09-15", to: "2026-09-22" },
+)
+check(
+  "initial window falls back to today without an effectiveFrom",
+  initialGenerationWindow("2026-09-01", undefined),
+  { from: "2026-09-01", to: "2026-09-08" },
+)
+
+const creationRelated = {
+  existingRoutes: [],
+  existingPickups: [],
+  containers: [],
+}
+
+// TODAY 2026-09-01 is a Tuesday; the weekly Wed+Sun scheme serves 2 Sep and
+// 6 Sep inside the 1 Sep → 8 Sep initial window.
+const created = planSchemeCreation(
+  {
+    scheme: makeScheme({ status: "Validated", effectiveFrom: "2026-08-01" }),
+    today: TODAY,
+    actorName: "Planner",
+    generatedAt: GENERATED,
+  },
+  creationRelated,
+)
+check("create: Validated scheme schedules", created.outcome, "scheduled")
+check("create: window is max(today, effectiveFrom) + 7 days", created.window, {
+  from: "2026-09-01",
+  to: "2026-09-08",
+})
+check(
+  "create: routes generated for the window's service dates",
+  created.routes.map((route) => route.submittedValues?.serviceDate),
+  ["2026-09-02", "2026-09-06"],
+)
+check(
+  "create: each route brings its pickups",
+  created.pickups.length,
+  2,
+)
+check(
+  "create: scheme stamped Scheduled with the generation marker",
+  [created.scheme.status, created.scheme.submittedValues?.lastGeneratedAt],
+  ["Scheduled", GENERATED],
+)
+check("create: Plan Ahead on by default", isPlanAheadEnabled(created.scheme), true)
+check(
+  "create: derived status displays Effective once effectiveFrom has passed",
+  effectiveSchemeStatus(created.scheme, TODAY),
+  "Effective",
+)
+
+// Window boundary (D24, literal): `end = start + 7 days` with the engine's
+// inclusive window semantics — a scheme serving the start date's weekday
+// generates on day 0 AND day 7. This differs deliberately from the rolling
+// planAheadWindow (tomorrow → +7): the initial window includes today so a
+// scheme effective today gets today's route at creation.
+const boundaryCreated = planSchemeCreation(
+  {
+    scheme: makeScheme({
+      status: "Validated",
+      effectiveFrom: "2026-08-01",
+      submittedValues: { serviceDays: "tuesday" },
+    }),
+    today: TODAY, // 2026-09-01, a Tuesday
+    actorName: "Planner",
+    generatedAt: GENERATED,
+  },
+  creationRelated,
+)
+check(
+  "create: inclusive window end — start weekday generates on day 0 and day 7",
+  boundaryCreated.routes.map((route) => route.submittedValues?.serviceDate),
+  ["2026-09-01", "2026-09-08"],
+)
+
+const futureCreated = planSchemeCreation(
+  {
+    scheme: makeScheme({ status: "Validated", effectiveFrom: "2026-09-15" }),
+    today: TODAY,
+    actorName: "Planner",
+    generatedAt: GENERATED,
+  },
+  creationRelated,
+)
+check(
+  "create: future effectiveFrom starts the window there",
+  futureCreated.window,
+  { from: "2026-09-15", to: "2026-09-22" },
+)
+check(
+  "create: future effectiveFrom displays Scheduled, not Effective",
+  effectiveSchemeStatus(futureCreated.scheme, TODAY),
+  "Scheduled",
+)
+
+const draftCreated = planSchemeCreation(
+  { scheme: makeScheme({ status: "Draft" }), today: TODAY, actorName: "Planner" },
+  creationRelated,
+)
+check(
+  "create: Draft generates nothing",
+  [draftCreated.outcome, draftCreated.routes.length, draftCreated.pickups.length],
+  ["draft", 0, 0],
+)
+check(
+  "create: Draft keeps its record untouched — no Plan Ahead flag, no marker",
+  [
+    draftCreated.scheme.status,
+    draftCreated.scheme.submittedValues?.planAhead,
+    draftCreated.scheme.submittedValues?.lastGeneratedAt,
+  ],
+  ["Draft", undefined, undefined],
+)
+
+// A calendar working only Mondays invalidates every Wed/Sun window date: the
+// run is technically successful with zero routes → still Scheduled (D25).
+const mondayCalendar: BusinessRecord = {
+  ...makeScheme({ id: "calendar-mondays", status: "Active" }),
+  name: "Mondays only",
+  submittedValues: { workingDays: "monday", validFrom: "2026-01-01", validTo: "2026-12-31" },
+}
+const zeroRouteCreated = planSchemeCreation(
+  {
+    scheme: makeScheme({
+      status: "Validated",
+      effectiveFrom: "2026-08-01",
+      submittedValues: { calendarId: "calendar-mondays" },
+    }),
+    today: TODAY,
+    actorName: "Planner",
+    generatedAt: GENERATED,
+  },
+  { ...creationRelated, calendarRecords: [mondayCalendar] },
+)
+check(
+  "create: zero-route success still schedules",
+  [zeroRouteCreated.outcome, zeroRouteCreated.routes.length],
+  ["scheduled", 0],
+)
+check(
+  "create: zero-route success stamps the marker and keeps Plan Ahead on",
+  [
+    zeroRouteCreated.scheme.status,
+    zeroRouteCreated.scheme.submittedValues?.lastGeneratedAt,
+    isPlanAheadEnabled(zeroRouteCreated.scheme),
+  ],
+  ["Scheduled", GENERATED, true],
+)
+
+// Technical failure: a Validated record whose recurrence the engine cannot
+// read plans nothing — the scheme stays Validated (never Scheduled), with
+// Plan Ahead armed for when the configuration is repaired.
+const failedCreated = planSchemeCreation(
+  {
+    scheme: makeScheme({
+      status: "Validated",
+      submittedValues: { frequency: "someday", serviceDays: "" },
+    }),
+    today: TODAY,
+    actorName: "Planner",
+    generatedAt: GENERATED,
+  },
+  creationRelated,
+)
+check(
+  "create: technical generation failure stays Validated",
+  [
+    failedCreated.outcome,
+    failedCreated.scheme.status,
+    failedCreated.scheme.submittedValues?.lastGeneratedAt,
+    failedCreated.routes.length,
+  ],
+  ["generation-failed", "Validated", undefined, 0],
+)
+check(
+  "create: failed generation still arms Plan Ahead",
+  isPlanAheadEnabled(failedCreated.scheme),
+  true,
+)
+
+/* -------------------- review-step creation preview (D27) ------------------ */
+
+const preview = previewSchemeCreation({
+  today: TODAY,
+  frequency: "weekly",
+  serviceDays: ["wednesday", "sunday"],
+  effectiveFrom: "2026-08-01",
+  dayPlans: [
+    { day: "wednesday", containerIds: ["c1", "c2"] },
+    { day: "sunday", containerIds: ["c3"] },
+  ],
+})
+check(
+  "preview: route dates and estimated stops for the initial window",
+  preview && {
+    window: preview.window,
+    routeDates: preview.routeDates,
+    estimatedStops: preview.estimatedStops,
+  },
+  {
+    window: { from: "2026-09-01", to: "2026-09-08" },
+    routeDates: ["2026-09-02", "2026-09-06"],
+    estimatedStops: 3,
+  },
+)
+check(
+  "preview: calendar-invalidated dates counted, not listed as routes",
+  (() => {
+    const skipped = previewSchemeCreation({
+      today: TODAY,
+      frequency: "weekly",
+      serviceDays: ["wednesday", "sunday"],
+      effectiveFrom: "2026-08-01",
+      dayPlans: [{ day: "wednesday", containerIds: ["c1"] }],
+      calendar: {
+        id: "calendar-mondays",
+        name: "Mondays only",
+        status: "Active",
+        workingDays: ["monday"],
+        holidayDates: [],
+        validFrom: "2026-01-01",
+        validTo: "2026-12-31",
+      },
+    })
+    return skipped && [skipped.routeDates.length, skipped.calendarSkipped]
+  })(),
+  [0, 2],
+)
+check(
+  "preview: no structured recurrence → null",
+  previewSchemeCreation({
+    today: TODAY,
+    frequency: "weekly",
+    serviceDays: [],
+    effectiveFrom: "",
+    dayPlans: [],
+  }),
+  null,
 )
 
 console.log(`\n${passed} passed, ${failed} failed`)

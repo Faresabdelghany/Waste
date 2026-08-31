@@ -92,16 +92,18 @@ check(
   { status: "Draft", issues: ["Pick at least one service day"], warnings: [] },
 )
 
+// Issue #28 (D23): effectiveTo is optional — an omitted To means the scheme
+// runs open-ended; only a To before From still blocks.
 check(
-  "missing effective to → Draft, named issue",
+  "missing effective to → Validated (open-ended scheme)",
   validateScheme({ ...validInput, effectiveTo: "" }, []),
-  { status: "Draft", issues: ["Set the effective from and to dates"], warnings: [] },
+  { status: "Validated", issues: [], warnings: [] },
 )
 
 check(
   "missing effective from → Draft, named issue",
   validateScheme({ ...validInput, effectiveFrom: "" }, []),
-  { status: "Draft", issues: ["Set the effective from and to dates"], warnings: [] },
+  { status: "Draft", issues: ["Set the effective from date"], warnings: [] },
 )
 
 check(
@@ -725,7 +727,7 @@ check(
 )
 
 check(
-  "open-ended scheme with a bounded calendar → validity warning stacks with blocking issues",
+  "open-ended scheme with a bounded calendar → Validated with a validity warning",
   validateScheme(
     {
       ...validInput,
@@ -736,8 +738,8 @@ check(
     [],
   ),
   {
-    status: "Draft",
-    issues: ["Set the effective from and to dates"],
+    status: "Validated",
+    issues: [],
     warnings: [
       "Scheme effective period extends outside Copenhagen Central 2026 validity — uncovered dates generate without calendar rules",
     ],

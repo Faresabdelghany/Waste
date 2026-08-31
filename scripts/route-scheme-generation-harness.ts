@@ -5,6 +5,7 @@
 // Run: npx tsx scripts/route-scheme-generation-harness.ts
 import type { BusinessRecord } from "../lib/data/business-modules"
 import type { CollectionCalendar } from "../lib/route-schemes/calendar"
+import { initialGenerationWindow } from "../lib/route-schemes/creation"
 import { formatServiceDate } from "../lib/route-schemes/recurrence"
 import {
   applySchemeGeneration,
@@ -1154,6 +1155,54 @@ check(
     deviations: [],
   })?.routes.filter((route) => route.action === "cancel").length,
   0,
+)
+
+/* ------------- optional effectiveTo + initial window (issue #28) ----------- */
+// D23: an omitted effectiveTo means open-ended — generation plans normally.
+// D24: the creation path's initial window is max(today, effectiveFrom) + 7
+// days, resolved by initialGenerationWindow and fed to this same engine.
+
+const openEndedScheme: BusinessRecord = {
+  ...scheme,
+  submittedValues: { ...scheme.submittedValues, effectiveTo: "" },
+}
+check(
+  "open-ended scheme (no effectiveTo) plans the window's service dates",
+  planSchemeGeneration({
+    scheme: openEndedScheme,
+    window: WINDOW,
+    existingRoutes: [],
+    deviations: [],
+    containers,
+  })?.routes.map((planned) => [planned.action, planned.serviceDate]),
+  [
+    ["create", WED],
+    ["create", SUN],
+  ],
+)
+check(
+  "open-ended scheme still generates far in the future",
+  planSchemeGeneration({
+    scheme: openEndedScheme,
+    window: { from: "2030-09-02", to: "2030-09-08" },
+    existingRoutes: [],
+    deviations: [],
+    containers,
+  })?.routes.map((planned) => planned.serviceDate),
+  ["2030-09-04", "2030-09-08"],
+)
+
+check(
+  "initial window feeds the engine: past effectiveFrom starts at today",
+  planSchemeGeneration({
+    scheme: openEndedScheme,
+    window: initialGenerationWindow("2026-09-01", "2026-08-01"),
+    existingRoutes: [],
+    deviations: [],
+    containers,
+  })?.routes.map((planned) => planned.serviceDate),
+  // 2026-09-01 → 2026-09-08 serves Wed 2 Sep and Sun 6 Sep.
+  [WED, SUN],
 )
 
 /* --------------------------------- result --------------------------------- */
