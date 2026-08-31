@@ -36,3 +36,5 @@ next-env.d.ts
 
 # brainstorming companion mockups
 .superpowers/
+# Finder metadata
+.DS_Store

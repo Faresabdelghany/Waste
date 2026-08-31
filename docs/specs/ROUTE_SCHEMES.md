@@ -85,7 +85,7 @@ Entry: Route Studio → Route Schemes → **New route scheme** → chooser → G
 - Occurrence-vs-series edit scoping ("this route / this and following / all") beyond per-route override.
 - Static dashboard performance rows for generated routes.
 - Driver-app execution changes; billing/invoicing (Ledger).
-- Full 5-class validation (holiday warnings, week-parity vs pickup settings, master-data integrity tiers). *Vehicle/container-type compatibility arrived with FR-17 (issue #19) as the stop-rule dimension plus a default-vehicle mismatch warning; a general fleet-compatibility validation layer stays out of scope.*
+- Full 5-class validation (holiday warnings, week-parity vs pickup settings, master-data integrity tiers). *Vehicle/container-type compatibility arrived with FR-17 (issue #19) as the stop-rule dimension plus a default-vehicle mismatch warning; a general fleet-compatibility validation layer stays out of scope. The week-parity-vs-pickup-settings class arrived with issue #21 (2026-08-31), re-founded on the typed Service frequency home (issue #20): `validateScheme` warns — non-blocking, like calendar warnings — when the scheme's recurrence under- or over-serves a linked container's promised service frequency, compared on a collections-per-week scale (`schemeFrequencyReconciliationWarnings`).*
 - Scheme version history UI (version is pinned as a fact only).
 - Per-day vehicle/driver assignment — defaults are scheme-level; a day needing a different vehicle type is, for now, a separate scheme (see Open Questions).
 - Real geocoding on the Route map — pin positions are illustrative until container records carry coordinates.

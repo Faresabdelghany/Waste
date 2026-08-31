@@ -43,6 +43,22 @@ export const RECURRENCE_FREQUENCY_LABELS: Record<RecurrenceFrequency, string> = 
   monthly: "Once a month",
 }
 
+/**
+ * Nominal collections per week each cadence delivers on one service day —
+ * the shared scale the reconciliation validation (issue #21) compares scheme
+ * recurrence against promised service frequencies on. Monthly is 12
+ * collections across a 52-week year, not 1/4: the first-weekday rule serves
+ * calendar months. The promise side derives its rate from the interval
+ * vocabulary (lib/data/service-frequencies promisedCollectionsPerWeek), so
+ * every-N-weeks promises order naturally against these without needing a
+ * scheme-cadence counterpart.
+ */
+export const RECURRENCE_WEEKLY_RATES: Record<RecurrenceFrequency, number> = {
+  weekly: 1,
+  "every-2-weeks": 1 / 2,
+  monthly: 12 / 52,
+}
+
 export type WeekRotation = "odd" | "even"
 
 export type SchemeRecurrence = {

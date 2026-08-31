@@ -12,9 +12,11 @@ import {
   dayPlansToValues,
   effectiveDayPlans,
   schemeDefaultsFromValues,
+  schemeFrequencyReconciliationWarnings,
   validateScheme,
   type AllocationConflictSource,
   type SchemeDayPlans,
+  type SchemeFrequencyPromise,
   type SchemeValidationInput,
 } from "../lib/route-schemes/validation"
 
@@ -746,6 +748,160 @@ check(
   "no calendar → no warnings",
   validateScheme(validInput, []).warnings,
   [],
+)
+
+/* ----------------------- frequency reconciliation ------------------------- */
+// Issue #21: scheme recurrence vs promised service frequency, compared on the
+// collections-per-week scale. Under- and over-service both warn; neither
+// demotes status.
+
+const weeklyPromise = (containerName: string): SchemeFrequencyPromise => ({
+  containerName,
+  promisedName: "Every week",
+  promisedRate: 1,
+})
+const fortnightPromise = (containerName: string): SchemeFrequencyPromise => ({
+  containerName,
+  promisedName: "Every 2 weeks",
+  promisedRate: 1 / 2,
+})
+const monthlyPromise = (containerName: string): SchemeFrequencyPromise => ({
+  containerName,
+  promisedName: "Once a month",
+  promisedRate: 12 / 52,
+})
+
+check(
+  "promise matches the recurrence → no reconciliation warnings",
+  schemeFrequencyReconciliationWarnings({
+    frequency: "every-2-weeks",
+    promises: [fortnightPromise("BIN-1"), fortnightPromise("BIN-2")],
+  }),
+  [],
+)
+
+check(
+  "no promises → no reconciliation warnings",
+  schemeFrequencyReconciliationWarnings({ frequency: "weekly", promises: [] }),
+  [],
+)
+
+check(
+  "weekly promise on an every-2-weeks scheme → under-served",
+  schemeFrequencyReconciliationWarnings({
+    frequency: "every-2-weeks",
+    promises: [weeklyPromise("BIN-1")],
+  }),
+  [
+    "Recurrence Every 2 weeks under-serves 1 container promised Every week (BIN-1) — raise the frequency or adjust the promised service frequency",
+  ],
+)
+
+check(
+  "monthly promise on a weekly scheme → over-served",
+  schemeFrequencyReconciliationWarnings({
+    frequency: "weekly",
+    promises: [monthlyPromise("GL-1"), monthlyPromise("GL-2")],
+  }),
+  [
+    "Recurrence Every week over-serves 2 containers promised Once a month (GL-1, GL-2) — collections run more often than the promised service frequency",
+  ],
+)
+
+check(
+  "monthly promise on a monthly scheme → equal rates, no warning (12/52 both sides)",
+  schemeFrequencyReconciliationWarnings({
+    frequency: "monthly",
+    promises: [monthlyPromise("GL-1")],
+  }),
+  [],
+)
+
+check(
+  "an every-3-weeks interval promise orders without a scheme-cadence counterpart",
+  schemeFrequencyReconciliationWarnings({
+    frequency: "every-2-weeks",
+    promises: [
+      { containerName: "BIN-3W", promisedName: "Every 3 weeks", promisedRate: 1 / 3 },
+    ],
+  }),
+  [
+    "Recurrence Every 2 weeks over-serves 1 container promised Every 3 weeks (BIN-3W) — collections run more often than the promised service frequency",
+  ],
+)
+
+check(
+  "grouped per promised cadence, names sorted and capped at three",
+  schemeFrequencyReconciliationWarnings({
+    frequency: "monthly",
+    promises: [
+      weeklyPromise("BIN-4"),
+      weeklyPromise("BIN-2"),
+      weeklyPromise("BIN-1"),
+      weeklyPromise("BIN-3"),
+    ],
+  }),
+  [
+    "Recurrence Once a month under-serves 4 containers promised Every week (BIN-1, BIN-2, BIN-3, +1 more) — raise the frequency or adjust the promised service frequency",
+  ],
+)
+
+check(
+  "under-served groups lead over-served ones, most frequent promise first",
+  schemeFrequencyReconciliationWarnings({
+    frequency: "every-2-weeks",
+    promises: [monthlyPromise("GL-1"), weeklyPromise("BIN-1")],
+  }),
+  [
+    "Recurrence Every 2 weeks under-serves 1 container promised Every week (BIN-1) — raise the frequency or adjust the promised service frequency",
+    "Recurrence Every 2 weeks over-serves 1 container promised Once a month (GL-1) — collections run more often than the promised service frequency",
+  ],
+)
+
+check(
+  "reconciliation warnings never demote status (through validateScheme)",
+  validateScheme(
+    {
+      ...validInput,
+      frequencyReconciliation: {
+        frequency: "every-2-weeks",
+        promises: [weeklyPromise("BIN-1")],
+      },
+    },
+    [],
+  ),
+  {
+    status: "Validated",
+    issues: [],
+    warnings: [
+      "Recurrence Every 2 weeks under-serves 1 container promised Every week (BIN-1) — raise the frequency or adjust the promised service frequency",
+    ],
+  },
+)
+
+check(
+  "reconciliation warnings stack after calendar warnings",
+  validateScheme(
+    {
+      ...validInput,
+      calendar: centralCalendar,
+      frequencyReconciliation: {
+        frequency: "weekly",
+        promises: [monthlyPromise("GL-1")],
+      },
+    },
+    [],
+  ).warnings,
+  [
+    "Sun is not a working day on Copenhagen Central 2026 — those dates are skipped at generation",
+    "Recurrence Every week over-serves 1 container promised Once a month (GL-1) — collections run more often than the promised service frequency",
+  ],
+)
+
+check(
+  "no reconciliation input → previous behavior unchanged",
+  validateScheme(validInput, []),
+  { status: "Validated", issues: [], warnings: [] },
 )
 
 console.log(`\n${passed} passed, ${failed} failed`)

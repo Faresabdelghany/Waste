@@ -36,6 +36,7 @@ import {
   useModuleRecords,
 } from "@/components/wastehero/scheme-route-map"
 import type { BusinessRecord } from "@/lib/data/business-modules"
+import { schemeFrequencyPromiseOfRecord } from "@/lib/data/service-frequencies"
 import {
   calendarFromRecord,
   type CollectionCalendar,
@@ -74,6 +75,7 @@ import {
   validateScheme,
   type SchemeDayPlan,
   type SchemeDayPlans,
+  type SchemeFrequencyPromise,
   type SchemeValidationResult,
 } from "@/lib/route-schemes/validation"
 import { cn } from "@/lib/utils"
@@ -162,6 +164,9 @@ export function resolvedDraftPlans(
  * adds non-blocking warnings (Q6/Q7). Rule-mode drafts (issue #19) validate
  * their stop-matching rules instead of picked lists — the containers and
  * vehicles are needed to resolve the matches and the default vehicle's type.
+ * The resolved per-day stops also feed the promised-service-frequency
+ * reconciliation (issue #21): every linked container with a standing promise
+ * is compared against the draft's recurrence cadence.
  */
 export function validateGuidedScheme(
   data: GuidedSchemeData,
@@ -172,6 +177,14 @@ export function validateGuidedScheme(
   vehicles: readonly BusinessRecord[],
 ): SchemeValidationResult {
   const matchPlans = schemeMatchPlans(data)
+  // In rule mode these are the rule matches, day-aligned with
+  // effectiveDayRules (resolvedDraftPlans maps that same list).
+  const dayPlans = resolvedDraftPlans(data, containers)
+  const linkedContainerIds = new Set(dayPlans.flatMap((plan) => plan.containerIds))
+  const promises = containers
+    .filter((container) => linkedContainerIds.has(container.id))
+    .map((container) => schemeFrequencyPromiseOfRecord(container))
+    .filter((promise): promise is SchemeFrequencyPromise => promise !== null)
   return validateScheme(
     {
       serviceDays: data.serviceDays,
@@ -181,22 +194,18 @@ export function validateGuidedScheme(
       plannedVehicleId: data.plannedVehicleId,
       plannedDriverId: data.plannedDriverId,
       calendar,
+      frequencyReconciliation: { frequency: data.frequency, promises },
       ...(data.stopSelection === "rule"
         ? {
             stopMatching: {
               areaId: data.planningAreaId,
               sameAllDays: matchPlans.sameAllDays,
               dayRules: effectiveDayRules(data.serviceDays, matchPlans).map(
-                ({ day, rule }) => ({
+                ({ day, rule }, index) => ({
                   day,
                   fractions: rule.fractions,
                   vehicleType: rule.vehicleType,
-                  matchedCount: resolveStopMatches({
-                    rule,
-                    areaId: data.planningAreaId,
-                    projectIds: draftProjectIds(data),
-                    containers,
-                  }).matched.length,
+                  matchedCount: dayPlans[index]?.containerIds.length ?? 0,
                 }),
               ),
               plannedVehicleType: vehicleTypeOfRecord(

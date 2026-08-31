@@ -12,18 +12,22 @@
 //
 // Vocabulary follows the real interval model (collections/week plus
 // weeks-between or days-between — every-N-weeks is natively expressible by
-// shape even where no definition is seeded). Each definition also names the
-// scheme RecurrenceFrequency it corresponds to, which is the comparison hook
-// the reconciliation validation (issue #21) needs: scheme recurrence vs
-// promised frequency. The prototype's `monthly` has no real-vocabulary
-// counterpart (no weeks-between value is faithful), so that definition carries
-// only the scheme mapping.
+// shape even where no definition is seeded). The interval fields are what the
+// reconciliation validation (issue #21) actually compares against scheme
+// recurrence, via promisedCollectionsPerWeek. Each definition also names the
+// scheme RecurrenceFrequency its display label corresponds to; that mapping
+// is a vocabulary link, and the rate fallback for `monthly` only — the
+// prototype's `monthly` has no real-vocabulary counterpart (no weeks-between
+// value is faithful), so that definition carries only the scheme mapping.
 //
 // This module must stay dependency-light: business-modules.ts derives fixture
 // facts from it, so it must not import fixture data back (type-only imports
 // are fine).
 
-import type { RecurrenceFrequency } from "../route-schemes/recurrence"
+import {
+  RECURRENCE_WEEKLY_RATES,
+  type RecurrenceFrequency,
+} from "../route-schemes/recurrence"
 
 export type ServiceFrequencyDefinition = {
   id: string
@@ -37,8 +41,10 @@ export type ServiceFrequencyDefinition = {
   /** Days between collections when collectionsPerWeek is above 1. */
   daysBetween: number | null
   /**
-   * The scheme cadence this promise corresponds to — the issue #21
-   * reconciliation comparison hook. null = no scheme equivalent.
+   * The scheme cadence this promise's label corresponds to — a vocabulary
+   * link, and the reconciliation rate fallback for the interval-less monthly
+   * definition only (the issue #21 comparison itself runs on the interval
+   * fields, promisedCollectionsPerWeek). null = no scheme equivalent.
    */
   schemeFrequency: RecurrenceFrequency | null
   /** Project-scoped like the real record. Ids match FIXTURE_PROJECT_IDS. */
@@ -184,4 +190,44 @@ export function canonicalServiceFrequencyName(value: string | undefined) {
 /** Derived fact value for a typed reference; "—" when there is none. */
 export function serviceFrequencyFactValue(id: string | null | undefined) {
   return (id && serviceFrequencyById.get(id)?.name) || "—"
+}
+
+/**
+ * A promise's nominal collections per week — the interval-vocabulary side of
+ * the reconciliation comparison (issue #21; REAL_PRODUCT_CONVERGENCE.md option
+ * C step 4 asks for interval comparison, not a hard-coded cadence ladder).
+ * weeks-between divides; days-between promises already state a weekly count.
+ * The monthly definition carries no faithful interval fields by design, so it
+ * reads the scheme-cadence rate. null = on demand — no standing cadence to
+ * reconcile.
+ */
+export function promisedCollectionsPerWeek(
+  definition: ServiceFrequencyDefinition,
+): number | null {
+  if (definition.collectionsPerWeek === null) return null
+  if (definition.weeksBetween !== null) {
+    return definition.collectionsPerWeek / definition.weeksBetween
+  }
+  if (definition.schemeFrequency === "monthly") {
+    return RECURRENCE_WEEKLY_RATES.monthly
+  }
+  return definition.collectionsPerWeek
+}
+
+/**
+ * What the reconciliation validation needs to know about one linked
+ * container: its name (for the warning copy), the promised cadence's display
+ * name, and the promised rate on the shared collections-per-week scale.
+ * Mirrors validation.ts SchemeFrequencyPromise structurally — validation
+ * stays free of this module. null when the container carries no resolvable
+ * standing promise (no frequency recorded, free text, or on demand).
+ */
+export function schemeFrequencyPromiseOfRecord(
+  record: ServiceFrequencySource & { name: string },
+): { containerName: string; promisedName: string; promisedRate: number } | null {
+  const definition = serviceFrequencyOfRecord(record)
+  if (!definition) return null
+  const promisedRate = promisedCollectionsPerWeek(definition)
+  if (promisedRate === null) return null
+  return { containerName: record.name, promisedName: definition.name, promisedRate }
 }

@@ -346,7 +346,7 @@ check(
   SERVICE_FREQUENCIES.length,
 )
 check(
-  "every catalog schemeFrequency is a real scheme cadence or null (issue #21 hook)",
+  "every catalog schemeFrequency is a real scheme cadence or null (label link + monthly rate fallback)",
   SERVICE_FREQUENCIES.every(
     (definition) =>
       definition.schemeFrequency === null ||

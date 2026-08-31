@@ -7,6 +7,8 @@
 
 import type { CollectionCalendar } from "./calendar"
 import {
+  RECURRENCE_FREQUENCY_LABELS,
+  RECURRENCE_WEEKLY_RATES,
   SERVICE_DAYS,
   SERVICE_DAY_SHORT_LABELS,
   addDays,
@@ -14,6 +16,7 @@ import {
   serviceDayOf,
   serviceDaysFromValues,
   sortServiceDays,
+  type RecurrenceFrequency,
   type ServiceDay,
 } from "./recurrence"
 
@@ -82,6 +85,32 @@ export type SchemeValidationInput = {
    * blocks — a zero-match configuration must never save as quiet success.
    */
   stopMatching?: SchemeStopMatchingInput
+  /**
+   * Present when the caller can resolve the linked containers' promised
+   * service frequencies (issue #21): the scheme's recurrence cadence plus one
+   * pre-resolved promise per linked container that carries one — resolved by
+   * the caller (lib/data/service-frequencies schemeFrequencyPromiseOfRecord;
+   * validation stays pure data logic). Containers whose promise the scheme's
+   * cadence under- or over-serves come back as non-blocking warnings — the
+   * deferred "week-parity vs pickup settings" reconciliation class, which
+   * like calendar warnings never demotes status.
+   */
+  frequencyReconciliation?: SchemeFrequencyReconciliationInput
+}
+
+/** One linked container's promised cadence, on the collections-per-week scale. */
+export type SchemeFrequencyPromise = {
+  containerName: string
+  /** Catalog display name of the promised cadence ("Every week"). */
+  promisedName: string
+  /** Promised collections per week — the interval-model comparison value. */
+  promisedRate: number
+}
+
+export type SchemeFrequencyReconciliationInput = {
+  /** The scheme's recurrence cadence. */
+  frequency: RecurrenceFrequency
+  promises: SchemeFrequencyPromise[]
 }
 
 export type SchemeStopMatchingInput = {
@@ -205,6 +234,66 @@ export function schemeCalendarWarnings(input: {
   return warnings
 }
 
+// Rates are quotients of small integers from one shared constant table, so
+// genuine equality is exact; the epsilon only absorbs float noise.
+const RATE_EPSILON = 1e-9
+
+const namedContainers = (names: readonly string[]): string => {
+  const sorted = [...names].sort((a, b) => a.localeCompare(b))
+  const shown = sorted.slice(0, 3)
+  const more = sorted.length - shown.length
+  return more > 0 ? `${shown.join(", ")}, +${more} more` : shown.join(", ")
+}
+
+/**
+ * The reconciliation caveats of issue #21 (REAL_PRODUCT_CONVERGENCE.md option
+ * C step 4), compared on the collections-per-week scale so every-N-weeks
+ * promises order without a scheme-cadence counterpart. Under-service — the
+ * scheme's cadence falls short of a linked container's promise — is the
+ * promise-breaking direction and leads; over-service also warns (decided
+ * here: it is visible scheme-vs-agreement drift and usually a configuration
+ * or cost error, not a promise kept extra well), phrased as such. One warning
+ * per promised cadence, containers named up to three. All non-blocking.
+ */
+export function schemeFrequencyReconciliationWarnings(
+  reconciliation: SchemeFrequencyReconciliationInput,
+): string[] {
+  const schemeRate = RECURRENCE_WEEKLY_RATES[reconciliation.frequency]
+  const schemeLabel = RECURRENCE_FREQUENCY_LABELS[reconciliation.frequency]
+  const groups = new Map<string, { promisedRate: number; names: string[] }>()
+  for (const promise of reconciliation.promises) {
+    const group = groups.get(promise.promisedName)
+    if (group) group.names.push(promise.containerName)
+    else {
+      groups.set(promise.promisedName, {
+        promisedRate: promise.promisedRate,
+        names: [promise.containerName],
+      })
+    }
+  }
+  // Under-served promises first (most frequent promise first), then
+  // over-served — deterministic regardless of caller record order.
+  const ordered = Array.from(groups.entries()).sort(
+    (a, b) => b[1].promisedRate - a[1].promisedRate || a[0].localeCompare(b[0]),
+  )
+  const underServed: string[] = []
+  const overServed: string[] = []
+  for (const [promisedName, group] of ordered) {
+    const count = group.names.length
+    const containers = `${count} container${count === 1 ? "" : "s"} promised ${promisedName} (${namedContainers(group.names)})`
+    if (schemeRate < group.promisedRate - RATE_EPSILON) {
+      underServed.push(
+        `Recurrence ${schemeLabel} under-serves ${containers} — raise the frequency or adjust the promised service frequency`,
+      )
+    } else if (schemeRate > group.promisedRate + RATE_EPSILON) {
+      overServed.push(
+        `Recurrence ${schemeLabel} over-serves ${containers} — collections run more often than the promised service frequency`,
+      )
+    }
+  }
+  return [...underServed, ...overServed]
+}
+
 const isoDatePart = (value: string | undefined): string | undefined => {
   if (!value) return undefined
   const date = value.slice(0, 10)
@@ -273,8 +362,9 @@ function allocationWindowTouchesScheme(
  * Planning allocation whose planned window touches the scheme (issue #11).
  * All pass → Validated; any fail → Draft with the issues named. Calendar
  * caveats, unconfirmed (Draft/Allocated) allocation overlaps, a rule vehicle
- * type the default vehicle cannot serve, and rule overlaps with other
- * rule-mode schemes come back as non-blocking warnings.
+ * type the default vehicle cannot serve, rule overlaps with other rule-mode
+ * schemes, and promised-service-frequency reconciliation mismatches
+ * (issue #21) come back as non-blocking warnings.
  */
 export function validateScheme(
   input: SchemeValidationInput,
@@ -435,6 +525,9 @@ export function validateScheme(
       ...schemeCalendarWarnings(input),
       ...allocationWarnings,
       ...matchingWarnings,
+      ...(input.frequencyReconciliation
+        ? schemeFrequencyReconciliationWarnings(input.frequencyReconciliation)
+        : []),
     ],
   }
 }

@@ -9,11 +9,14 @@
 import {
   canonicalServiceFrequencyName,
   LEGACY_FREQUENCY_OPTION_IDS,
+  promisedCollectionsPerWeek,
   resolveServiceFrequencyValue,
   SERVICE_FREQUENCIES,
+  schemeFrequencyPromiseOfRecord,
   serviceFrequencyById,
   serviceFrequencyFactValue,
   serviceFrequencyOfRecord,
+  type ServiceFrequencyDefinition,
 } from "../lib/data/service-frequencies"
 
 let passed = 0
@@ -180,6 +183,87 @@ check(
   "serviceFrequencyById covers the catalog",
   SERVICE_FREQUENCIES.every((definition) => serviceFrequencyById.get(definition.id) === definition),
   true,
+)
+
+/* --------------------- promised collections per week ----------------------- */
+// Issue #21: the interval-vocabulary side of the reconciliation comparison.
+
+check(
+  "catalog rates on the collections-per-week scale (monthly = 12/52, on demand = null)",
+  SERVICE_FREQUENCIES.map((definition) => [
+    definition.id,
+    promisedCollectionsPerWeek(definition),
+  ]),
+  [
+    ["freq-weekly", 1],
+    ["freq-every-2-weeks", 1 / 2],
+    ["freq-monthly", 12 / 52],
+    ["freq-on-demand", null],
+  ],
+)
+
+const every3Weeks: ServiceFrequencyDefinition = {
+  id: "freq-every-3-weeks",
+  name: "Every 3 weeks",
+  description: "Hypothetical every-N-weeks shape — natively expressible.",
+  collectionsPerWeek: 1,
+  weeksBetween: 3,
+  daysBetween: null,
+  schemeFrequency: null,
+  projectIds: [],
+}
+check(
+  "an every-N-weeks shape rates without a scheme-cadence counterpart",
+  promisedCollectionsPerWeek(every3Weeks),
+  1 / 3,
+)
+
+const twicePerWeek: ServiceFrequencyDefinition = {
+  ...every3Weeks,
+  id: "freq-twice-weekly",
+  name: "Twice a week",
+  collectionsPerWeek: 2,
+  weeksBetween: null,
+  daysBetween: 3,
+}
+check(
+  "a days-between shape already states its weekly count",
+  promisedCollectionsPerWeek(twicePerWeek),
+  2,
+)
+
+check(
+  "a typed reference yields a reconciliation promise",
+  schemeFrequencyPromiseOfRecord({
+    name: "BIN-91016",
+    facts: {},
+    submittedValues: { serviceFrequencyId: "freq-every-2-weeks" },
+  }),
+  { containerName: "BIN-91016", promisedName: "Every 2 weeks", promisedRate: 1 / 2 },
+)
+
+check(
+  "a legacy fused fact string still yields a promise",
+  schemeFrequencyPromiseOfRecord({
+    name: "BIN-90210",
+    facts: { "Pickup setting": "Organic · 14-day service" },
+  }),
+  { containerName: "BIN-90210", promisedName: "Every 2 weeks", promisedRate: 1 / 2 },
+)
+
+check(
+  "on demand carries no standing promise",
+  schemeFrequencyPromiseOfRecord({
+    name: "TANK-1",
+    facts: { "Service frequency": "On demand" },
+  }),
+  null,
+)
+
+check(
+  "no recorded frequency → no promise",
+  schemeFrequencyPromiseOfRecord({ name: "BIN-EMPTY", facts: {} }),
+  null,
 )
 
 console.log(`\n${passed} passed, ${failed} failed`)
