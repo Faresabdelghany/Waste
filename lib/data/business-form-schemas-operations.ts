@@ -1074,10 +1074,11 @@ export const operationsBusinessFormSchemas = [
             ],
           },
           {
+            // Optional (issue #32): a scheme without a planned start time
+            // generates routes with no estimated start — display shows "—".
             id: "plannedStartTime",
             label: "Planned start time",
             type: "time",
-            required: true,
             defaultValue: "06:30",
           },
           {

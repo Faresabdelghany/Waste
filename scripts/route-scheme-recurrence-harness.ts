@@ -222,6 +222,16 @@ check(
   null,
 )
 check(
+  "recurrenceFromValues: empty plannedStartTime carries no startTime (issue #32 — no fallback)",
+  recurrenceFromValues({ ...formValues, frequency: "weekly", plannedStartTime: "" }),
+  {
+    frequency: "weekly",
+    serviceDays: ["sunday"],
+    effectiveFrom: "2026-08-28",
+    effectiveTo: "2026-12-31",
+  },
+)
+check(
   "recurrenceFromValues: open-ended effectiveTo is allowed",
   recurrenceFromValues({ ...formValues, frequency: "weekly", effectiveTo: "" }),
   {

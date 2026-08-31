@@ -21,7 +21,11 @@
 //   Route identity is (schemeId, serviceDate) — deterministic ids, never Date.now().
 
 import type { BusinessRecord } from "../data/business-modules"
-import { calendarDayStatus, type CollectionCalendar } from "./calendar"
+import {
+  calendarDayStatus,
+  dayStatusSkipsGeneration,
+  type CollectionCalendar,
+} from "./calendar"
 import { avalancheHash } from "./hash"
 import { effectiveStopPlans, stopSelectionMode } from "./matching"
 import {
@@ -227,6 +231,22 @@ export const stringValueOf = (
 ): string | undefined => stringValue(record.submittedValues ?? {}, key)
 
 /**
+ * The scheme's planned start time, or undefined when it has none (issue
+ * #32): submittedValues win over the legacy "Planned start" fact, both are
+ * trimmed, and the "—" display placeholder counts as absent. Shared by
+ * generation and the scheme detail page so the two never disagree — a scheme
+ * without one shows "—" and generates routes with no estimated start.
+ */
+export function schemePlannedStartTime(
+  scheme: BusinessRecord,
+): string | undefined {
+  const raw =
+    stringValueOf(scheme, "plannedStartTime")?.trim() ||
+    scheme.facts?.["Planned start"]?.trim()
+  return raw && raw !== "—" ? raw : undefined
+}
+
+/**
  * The scope tail shared by scheme- and route-side deviation matching:
  * customer scope never remaps whole routes; scheme scope is exact-id only;
  * project scope (and legacy) is project overlap with an unrecorded side
@@ -395,7 +415,7 @@ export function planSchemeGeneration(input: {
     // scheme no longer serves.
     if (!deviation && calendar) {
       const dayStatus = calendarDayStatus(calendar, date)
-      if (dayStatus === "holiday" || dayStatus === "non-working") {
+      if (dayStatusSkipsGeneration(dayStatus)) {
         const reason =
           dayStatus === "holiday"
             ? `Holiday on ${calendar.name}`
@@ -651,8 +671,9 @@ export function applySchemeGeneration(input: {
   const { plan } = input
   const scheme = plan.scheme
   const schemeFacts = scheme.facts ?? {}
-  const startTime =
-    stringValueOf(scheme, "plannedStartTime") ?? schemeFacts["Planned start"] ?? "06:00"
+  // No planned start time → the routes carry no estimated start (issue #32):
+  // no Time window fact and unscheduled pickups, never a fabricated 06:00.
+  const startTime = schemePlannedStartTime(scheme)
   const containersById = new Map(
     input.containers.map((container) => [container.id, container]),
   )
@@ -789,7 +810,11 @@ export function applySchemeGeneration(input: {
         ...(schemeFacts["Unloading station"]
           ? { Unloading: schemeFacts["Unloading station"] }
           : {}),
-        "Time window": `${startTime}–${addMinutes(startTime, stops * MINUTES_PER_STOP + CLOSEOUT_MINUTES)}`,
+        ...(startTime
+          ? {
+              "Time window": `${startTime}–${addMinutes(startTime, stops * MINUTES_PER_STOP + CLOSEOUT_MINUTES)}`,
+            }
+          : {}),
         "Operating date": formatServiceDate(planned.actualDate),
         "Route scheme": scheme.name,
         "Scheme version": plan.schemeVersion,
@@ -833,14 +858,18 @@ export function applySchemeGeneration(input: {
         }`,
         status: "Planned",
         owner: driver,
-        value: `${addMinutes(startTime, index * MINUTES_PER_STOP)} · Scheduled`,
+        value: startTime
+          ? `${addMinutes(startTime, index * MINUTES_PER_STOP)} · Scheduled`
+          : "Scheduled",
         updated: "Now",
         description: `Generated with ${planned.routeName} from route scheme ${scheme.name}.`,
         facts: {
           Route: planned.routeName,
           Stop: String(index + 1),
           Type: "Collection",
-          Scheduled: addMinutes(startTime, index * MINUTES_PER_STOP),
+          ...(startTime
+            ? { Scheduled: addMinutes(startTime, index * MINUTES_PER_STOP) }
+            : {}),
           ...(facts.Address ? { Address: facts.Address } : {}),
           ...(container ? { "Container ID": container.name } : {}),
           ...(facts["Container type"]

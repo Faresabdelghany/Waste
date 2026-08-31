@@ -36,6 +36,7 @@ import {
   lastGeneratedAt,
   routeDeviationInfo,
   schemeGeneratedRoutes,
+  schemePlannedStartTime,
   schemeVersionOf,
   stringValueOf,
   type ApprovedDeviation,
@@ -510,9 +511,9 @@ function SchemeDetailsTab({
     )?.name ?? facts.Driver
   const effectiveFrom = stringValue(values, "effectiveFrom")
   // D16: display "—" for legacy schemes without a planned start time —
-  // never invent a default.
-  const plannedStartTime =
-    stringValue(values, "plannedStartTime") ?? facts["Planned start"] ?? "—"
+  // never invent a default. Resolved through the same helper generation
+  // uses (issue #32) so the page and the engine cannot disagree.
+  const plannedStartTime = schemePlannedStartTime(record) ?? "—"
 
   const mode = stopSelectionMode(values)
   const matchPlans = matchPlansFromValues(values)

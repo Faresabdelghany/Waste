@@ -13,6 +13,7 @@ import {
   generatedRouteId,
   generatedRouteName,
   planSchemeGeneration,
+  schemePlannedStartTime,
   schemeVersionOf,
   type ApprovedDeviation,
 } from "../lib/route-schemes/generation"
@@ -1203,6 +1204,109 @@ check(
   })?.routes.map((planned) => planned.serviceDate),
   // 2026-09-01 → 2026-09-08 serves Wed 2 Sep and Sun 6 Sep.
   [WED, SUN],
+)
+
+/* ------------------- planned start time (issue #32) ----------------------- */
+
+// A scheme WITH a planned start time stamps it as the routes' estimated start.
+check(
+  "planned start time flows into the route's Time window and pickup schedule",
+  [
+    wedRoute?.facts["Time window"]?.startsWith("06:30–"),
+    wedPickups?.[0]?.facts.Scheduled,
+    wedPickups?.[0]?.value,
+  ],
+  [true, "06:30", "06:30 · Scheduled"],
+)
+
+// A legacy scheme WITHOUT one generates routes with no estimated start at all —
+// the old hard-coded 06:00 fallback is removed (issue #32).
+const noStartTimeScheme: BusinessRecord = {
+  ...scheme,
+  facts: Object.fromEntries(
+    Object.entries(scheme.facts).filter(([key]) => key !== "Planned start"),
+  ),
+  submittedValues: { ...scheme.submittedValues, plannedStartTime: "" },
+}
+const noStartTimePlan = planSchemeGeneration({
+  scheme: noStartTimeScheme,
+  window: WINDOW,
+  existingRoutes: [],
+  deviations: [],
+  containers,
+})
+const noStartTimeApplied = noStartTimePlan
+  ? applySchemeGeneration({
+      plan: noStartTimePlan,
+      existingPickups: [],
+      containers,
+      actorName: "Planner",
+    })
+  : null
+const noStartWedRoute = noStartTimeApplied?.routes.find(
+  (route) => route.submittedValues?.serviceDate === WED,
+)
+check(
+  "no planned start time → route carries no Time window fact (no 06:00 fallback)",
+  ["Time window" in (noStartWedRoute?.facts ?? {}), noStartWedRoute?.status],
+  [false, "Planned"],
+)
+check(
+  "no planned start time → pickups carry no scheduled times",
+  noStartTimeApplied?.pickups.map((pickup) => [
+    "Scheduled" in pickup.facts,
+    pickup.value,
+  ]),
+  [
+    [false, "Scheduled"],
+    [false, "Scheduled"],
+    [false, "Scheduled"],
+  ],
+)
+// The shared resolution (schemePlannedStartTime): values win over the fact,
+// both trimmed, whitespace and the "—" placeholder count as absent.
+check(
+  "schemePlannedStartTime: values over fact, trimmed, whitespace absent",
+  [
+    schemePlannedStartTime(scheme),
+    schemePlannedStartTime({
+      ...noStartTimeScheme,
+      facts: { ...noStartTimeScheme.facts, "Planned start": " 07:00 " },
+    }),
+    schemePlannedStartTime({
+      ...noStartTimeScheme,
+      submittedValues: { ...noStartTimeScheme.submittedValues, plannedStartTime: "  " },
+    }),
+  ],
+  ["06:30", "07:00", undefined],
+)
+
+// A "—" display placeholder that leaked into a stored fact is not a time.
+const dashStartPlan = planSchemeGeneration({
+  scheme: {
+    ...noStartTimeScheme,
+    facts: { ...noStartTimeScheme.facts, "Planned start": "—" },
+  },
+  window: WINDOW,
+  existingRoutes: [],
+  deviations: [],
+  containers,
+})
+const dashStartApplied = dashStartPlan
+  ? applySchemeGeneration({
+      plan: dashStartPlan,
+      existingPickups: [],
+      containers,
+      actorName: "Planner",
+    })
+  : null
+check(
+  "a '—' Planned start fact is treated as absent",
+  [
+    dashStartApplied !== null,
+    "Time window" in (dashStartApplied?.routes[0]?.facts ?? {}),
+  ],
+  [true, false],
 )
 
 /* --------------------------------- result --------------------------------- */

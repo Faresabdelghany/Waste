@@ -33,6 +33,16 @@ export type CollectionCalendar = {
 
 export type CalendarDayStatus = "working" | "holiday" | "non-working" | "uncovered"
 
+/**
+ * Whether generation skips a date with this status (Q2/Q7): holidays and
+ * non-working days get no route unless an approved deviation relocates them.
+ * One predicate shared by the engine and the wizard's next-dates preview so
+ * the preview never promises what generation won't do.
+ */
+export function dayStatusSkipsGeneration(status: CalendarDayStatus): boolean {
+  return status === "holiday" || status === "non-working"
+}
+
 // Pre-rename user-created records carry the drifted calendar name that the
 // issue #13 fixture alignment retired; read sides fold it onto the real
 // calendar record's name so facets and derived cells stay one value and

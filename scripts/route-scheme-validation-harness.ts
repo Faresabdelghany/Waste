@@ -994,7 +994,7 @@ check(
 )
 
 check(
-  "wizard defaults fill unknown frequency, rotation, and start time",
+  "wizard defaults fill unknown frequency and rotation; an empty start time stays empty (issue #32)",
   (() => {
     const draft = quickSchemeDraftFromValues({
       schemeName: "Fallbacks",
@@ -1004,7 +1004,7 @@ check(
     })
     return [draft.frequency, draft.weekRotation, draft.plannedStartTime]
   })(),
-  ["weekly", "odd", "06:30"],
+  ["weekly", "odd", ""],
 )
 
 // The domain rules over a mapped quick draft — the same validateScheme the

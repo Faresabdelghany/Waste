@@ -1269,7 +1269,7 @@ export function BusinessWorkspace({
   // Routes get a chooser between Quick create and the Guided Setup wizard.
   const isRouteCreateFlow =
     activeModuleFormSchema?.key === "route-studio.routes"
-  // Route Schemes get the same chooser with their own six-step wizard.
+  // Route Schemes get the same chooser with their own guided wizard.
   const isSchemeCreateFlow =
     activeModuleFormSchema?.key === "route-studio.schemes"
   const activeRecords = useMemo(() => {
@@ -2516,6 +2516,13 @@ export function BusinessWorkspace({
         if (seeded.frequency === "four-week" || seeded.frequency === "calendar-rule") {
           seeded.frequency = ""
         }
+        // A legacy scheme without a planned start time must stay without one
+        // (issue #32): seed the empty value explicitly, or the schema's
+        // create-time default ("06:30") would silently re-inject a time the
+        // planner never chose on any unrelated edit.
+        if (typeof seeded.plannedStartTime !== "string") {
+          seeded.plannedStartTime = ""
+        }
       }
       // The frequency select keeps the retired `pickupSetting` field id
       // (issue #13) while records store the typed serviceFrequencyId (issue
@@ -3459,10 +3466,20 @@ export function BusinessWorkspace({
       // where its stops come from.
       const mergedValues = { ...record.submittedValues }
       // The quick form's label-keyed facts duplicate the canonical
-      // "Container selection" / "Stop matching" keys set below.
+      // "Container selection" / "Stop matching" / "Planned start" keys.
       delete nextFacts["Stop selection"]
       delete nextFacts["Waste fractions to match"]
       delete nextFacts["Vehicle type"]
+      delete nextFacts["Planned start time"]
+      // Keep the canonical fact in step with the merged value: an edit that
+      // clears the planned start time really clears it (issue #32) — a stale
+      // fact would resurrect the old time in generation and the detail page.
+      const plannedStartTime =
+        typeof mergedValues.plannedStartTime === "string"
+          ? mergedValues.plannedStartTime.trim()
+          : ""
+      if (plannedStartTime) nextFacts["Planned start"] = plannedStartTime
+      else delete nextFacts["Planned start"]
       if (stopSelectionMode(mergedValues) === "rule") {
         const matchPlans = matchPlansFromValues(mergedValues)
         nextFacts["Container selection"] = "Matched by rule"
@@ -4170,7 +4187,10 @@ export function BusinessWorkspace({
             Effective: `${data.effectiveFrom} → ${data.effectiveTo || "ongoing"}`,
           }
         : {}),
-      "Planned start": data.plannedStartTime,
+      // Absent = no estimated start (issue #32) — the detail page shows "—".
+      ...(data.plannedStartTime.trim()
+        ? { "Planned start": data.plannedStartTime.trim() }
+        : {}),
       ...(contractor ? { Contractor: contractor.name } : {}),
       Vehicle: vehicleName ?? "Unassigned",
       Driver: driver?.name ?? "Unassigned",

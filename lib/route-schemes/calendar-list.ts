@@ -148,7 +148,8 @@ export function withDerivedCalendarValue(
   return { ...record, value: derived }
 }
 
-function plural(count: number, noun: string): string {
+/** "1 date", "11 dates" — the count phrasing shared by the list, KPI tiles, and the wizard's calendar context (issue #32). */
+export function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`
 }
 

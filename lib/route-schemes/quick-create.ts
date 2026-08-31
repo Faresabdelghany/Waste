@@ -123,7 +123,9 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
     // Optional (D23): an omitted To means the scheme runs open-ended until
     // explicitly ended or expired through later configuration.
     effectiveTo: stringOf(values, "effectiveTo"),
-    plannedStartTime: stringOf(values, "plannedStartTime") || "06:30",
+    // No silent time injection (issue #32): a scheme without a planned start
+    // time stays without one — its routes then carry no estimated start.
+    plannedStartTime: stringOf(values, "plannedStartTime"),
     contractorId: optionalId(values, "contractorId"),
     plannedVehicleId: optionalId(values, "plannedVehicleId"),
     plannedDriverId: optionalId(values, "plannedDriverId"),
