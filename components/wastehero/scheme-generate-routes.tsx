@@ -81,6 +81,7 @@ export function SchemeGenerateRoutesDialog({
 
   const existingRoutes = useModuleRecords("route-studio", "routes")
   const existingPickups = useModuleRecords("route-studio", "pickups")
+  const schemeRecords = useModuleRecords("route-studio", "schemes")
   const deviationRecords = useModuleRecords("plan", "collection-deviations")
   const calendarRecords = useModuleRecords("plan", "calendars")
   const containers = useModuleRecords("resources", "containers")
@@ -157,11 +158,16 @@ export function SchemeGenerateRoutesDialog({
     }
     // First successful generation → Scheduled (D25/issue #25): the persisted
     // marker the derived lifecycle status reads. Later runs never restamp.
+    // Stamp the stored record, not the derived display row callers pass in —
+    // the status/context seams (issues #25/#30) are render-time and must
+    // never be frozen into the store.
     if (!schemeGenerationRecorded(scheme)) {
+      const stored =
+        schemeRecords.find((candidate) => candidate.id === scheme.id) ?? scheme
       upsertRecord(
         "route-studio",
         "schemes",
-        recordSchemeGeneration(scheme, generatedAt),
+        recordSchemeGeneration(stored, generatedAt),
       )
     }
     const { summary } = stamped

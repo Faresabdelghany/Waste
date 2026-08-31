@@ -170,16 +170,27 @@ export function sortServiceDays(days: readonly ServiceDay[]): ServiceDay[] {
   return [...days].sort((a, b) => SERVICE_DAYS.indexOf(a) - SERVICE_DAYS.indexOf(b))
 }
 
+/**
+ * The cadence alone — "Every week", "Every 2 weeks (even ISO weeks)",
+ * "Once a month" — shared by recurrenceSentence and the schemes list's
+ * Recurrence column (issue #30), so the fortnight-rotation copy lives once.
+ */
+export function recurrenceCadenceLabel(
+  recurrence: Pick<SchemeRecurrence, "frequency" | "weekRotation">,
+): string {
+  const label = RECURRENCE_FREQUENCY_LABELS[recurrence.frequency]
+  return recurrence.frequency === "every-2-weeks"
+    ? `${label} (${recurrence.weekRotation} ISO weeks)`
+    : label
+}
+
 export function recurrenceSentence(recurrence: SchemeRecurrence): string {
   if (recurrence.serviceDays.length === 0) return "No service days selected"
   const days = sortServiceDays(recurrence.serviceDays)
     .map((day) => SERVICE_DAY_SHORT_LABELS[day])
     .join(", ")
   if (recurrence.frequency === "monthly") return `Once a month (first ${days} of the month)`
-  if (recurrence.frequency === "every-2-weeks") {
-    return `Every 2 weeks (${recurrence.weekRotation} ISO weeks) on ${days}`
-  }
-  return `Every week on ${days}`
+  return `${recurrenceCadenceLabel(recurrence)} on ${days}`
 }
 
 export function parseServiceDays(value: string): ServiceDay[] {

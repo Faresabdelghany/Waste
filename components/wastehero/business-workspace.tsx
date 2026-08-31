@@ -57,6 +57,11 @@ import {
   setPlanAhead,
 } from "@/lib/route-schemes/plan-ahead"
 import {
+  schemeRowSummary,
+  withDerivedSchemeContext,
+  type SchemeRowSummary,
+} from "@/lib/route-schemes/scheme-list"
+import {
   SERVICE_DAY_SHORT_LABELS,
   formatServiceDate,
   parseServiceDays,
@@ -705,7 +710,10 @@ const contractorOperatedRelationModuleIds = new Set([
 
 const richViewFactColumnDefaults: Record<string, readonly string[]> = {
   routes: ["Vehicle", "Driver"],
-  schemes: ["Version", "Effective", "Vehicle"],
+  // Schemes default to the five artboard-1 columns (issue #30, D15) —
+  // Recurrence and Collection calendar render as derived cells, so no fact
+  // columns are seeded; users can still add them via view options.
+  schemes: [],
   pickups: ["Address", "Container ID", "Container Type", "Waste fraction", "Weight"],
   weights: ["Gross", "Tare", "Difference"],
   products: ["Type", "Container", "Container type", "Customer", "Waste fraction", "VAT", "Variations", "Price list"],
@@ -740,6 +748,14 @@ const excludedColumnFacts = new Set([
 // Routes render Project and Area as dedicated table columns, so they are not
 // offered as fact columns there.
 const routesExcludedColumnFacts = new Set(["Project", "Area"])
+// The schemes table renders these as derived dedicated columns (issue #30,
+// D15); offering the stored display facts as extra columns again would put a
+// stale duplicate beside the derived truth.
+const schemesExcludedColumnFacts = new Set([
+  "Recurrence",
+  "Collection calendar",
+  "Planning area",
+])
 
 // Contractor tickets join the rich record view; these are the fact columns
 // seeded when the module opens.
@@ -1260,10 +1276,27 @@ export function BusinessWorkspace({
     )
     // Scheme status is always the derived lifecycle status (issue #25) —
     // no surface renders the raw stored string, so every downstream reader
-    // (table, filters, grouping, detail, row actions) sees one truth.
+    // (table, filters, grouping, detail, row actions) sees one truth. The
+    // row context is likewise derived (issue #30, D15): real stored
+    // area/project names plus structured service days, never the fixture
+    // display copy.
     if (activeModule.id === "schemes") {
       const today = todayIso()
-      records = records.map((record) => withEffectiveSchemeStatus(record, today))
+      const areasModule = getWorkspaceDefinition("plan").modules.find(
+        (candidate) => candidate.id === "areas",
+      )
+      const areas = areasModule
+        ? getRecords("plan", areasModule.id, areasModule.records)
+        : []
+      records = records.map((record) =>
+        withDerivedSchemeContext(
+          withEffectiveSchemeStatus(record, today),
+          areas,
+          // No stored project scope → no invented one (D22-style honesty);
+          // the context then falls back to the structured service days.
+          record.projectIds?.length ? projectScopeLabel(record.projectIds) : "",
+        ),
+      )
     }
     // A calendar's "Next holiday" value is always derived from its structured
     // holiday dates plus today (issue #27, D13) — stored display copies and
@@ -1672,11 +1705,17 @@ export function BusinessWorkspace({
   // ticket #8) on a scheme: row menu + detail view, only for schemes whose
   // recurrence is structured enough to generate.
   const isSchemesView = activeModule.id === "schemes"
-  // The live Attention warnings per scheme (issue #25, D5/D20): recomputed
-  // from canonical stored configuration plus current related records at
-  // render time — never read from persisted "Validation warnings" facts.
-  const schemeAttentionById = useMemo(() => {
-    if (!isSchemesView) return new Map<string, string[]>()
+  // Per-scheme derived row presentation, one pass over one related-records
+  // load: the live Attention warnings (issue #25, D5/D20 — recomputed from
+  // canonical stored configuration, never read from persisted "Validation
+  // warnings" facts) plus the Recurrence / Collection calendar cells (issue
+  // #30, D15 — derived from structured submittedValues and the live calendar
+  // records, so editing a scheme changes them with no stored display string
+  // involved).
+  const schemeRowsById = useMemo(() => {
+    if (!isSchemesView) {
+      return new Map<string, SchemeRowSummary & { attention: string[] }>()
+    }
     const relatedModuleRecords = (workspaceId: WorkspaceId, moduleId: string) => {
       const module = getWorkspaceDefinition(workspaceId).modules.find(
         (candidate) => candidate.id === moduleId,
@@ -1691,7 +1730,13 @@ export function BusinessWorkspace({
       vehicles: relatedModuleRecords("fleet", "vehicles"),
     }
     return new Map(
-      activeRecords.map((record) => [record.id, schemeAttention(record, related)]),
+      activeRecords.map((record) => [
+        record.id,
+        {
+          ...schemeRowSummary(record, related.calendars),
+          attention: schemeAttention(record, related),
+        },
+      ]),
     )
   }, [activeRecords, getRecords, isSchemesView])
   // Derived Collection Calendars presentation (issue #27, D13/D28iii): the
@@ -1727,7 +1772,14 @@ export function BusinessWorkspace({
               icon: <CalendarCheck className="h-4 w-4" />,
               onSelect: (target: BusinessRecord) => {
                 const enabled = !isPlanAheadEnabled(target)
-                upsertRecord("route-studio", "schemes", setPlanAhead(target, enabled))
+                // Persist against the stored record, not the derived display
+                // row: the status/context seams (issues #25/#30) are
+                // render-time and must never be frozen into the store.
+                const stored =
+                  getRecords("route-studio", "schemes", activeModule.records).find(
+                    (candidate) => candidate.id === target.id,
+                  ) ?? target
+                upsertRecord("route-studio", "schemes", setPlanAhead(stored, enabled))
                 toast.success(
                   enabled ? "Plan Ahead turned on" : "Plan Ahead turned off",
                   {
@@ -1740,7 +1792,7 @@ export function BusinessWorkspace({
             },
           ]
         : undefined,
-    [canRunRecordActions, isSchemesView, upsertRecord],
+    [activeModule.records, canRunRecordActions, getRecords, isSchemesView, upsertRecord],
   )
   const factColumnOptions = useMemo(() => {
     if (!isRichRecordView) return []
@@ -1752,6 +1804,7 @@ export function BusinessWorkspace({
       for (const label of Object.keys(record.facts)) {
         if (excludedColumnFacts.has(label)) continue
         if (isRoutesView && routesExcludedColumnFacts.has(label)) continue
+        if (isSchemesView && schemesExcludedColumnFacts.has(label)) continue
         if (isContractorTicketsView && ticketExcludedColumnFacts.has(label))
           continue
         if (!labels.includes(label)) labels.push(label)
@@ -1763,6 +1816,7 @@ export function BusinessWorkspace({
     isContractorUsersView,
     isRichRecordView,
     isRoutesView,
+    isSchemesView,
     visibleScopedRecords,
   ])
   const activeStaticColumns = useMemo(
@@ -1838,6 +1892,8 @@ export function BusinessWorkspace({
       Number(viewOptions.showProject)
     : isRichRecordView
       ? 3 +
+        // Recurrence + Collection calendar replace the value column (#30).
+        (isSchemesView ? 1 : 0) +
         Number(showRouteStarColumn) +
         (isRoutesView
           ? Number(viewOptions.showProject) + Number(viewOptions.showArea)
@@ -1972,9 +2028,20 @@ export function BusinessWorkspace({
         getRecords(workspace.id, module.id, module.records).find(
           (candidate) => candidate.id === recordId,
         ) ?? null
-      // Deep-linked schemes show the derived lifecycle status too (issue #25).
+      // Deep-linked schemes show the derived lifecycle status (issue #25)
+      // and derived row context (issue #30) too.
       if (record && module.id === "schemes") {
         record = withEffectiveSchemeStatus(record, todayIso())
+        const areasModule = getWorkspaceDefinition("plan").modules.find(
+          (candidate) => candidate.id === "areas",
+        )
+        record = withDerivedSchemeContext(
+          record,
+          areasModule
+            ? getRecords("plan", areasModule.id, areasModule.records)
+            : [],
+          record.projectIds?.length ? projectScopeLabel(record.projectIds) : "",
+        )
       }
       // Deep-linked calendars show the derived Next holiday too (issue #27).
       if (record && module.id === "calendars") {
@@ -4842,8 +4909,18 @@ export function BusinessWorkspace({
                                 <TableHead>Validity</TableHead>
                               </>
                             )}
-                            {!isContractorUsersView && (
-                              <TableHead>{activeModule.valueLabel}</TableHead>
+                            {/* Schemes swap the generic value column (Demand)
+                                for the derived Recurrence / Collection
+                                calendar pair (issue #30, D15). */}
+                            {isSchemesView ? (
+                              <>
+                                <TableHead>Recurrence</TableHead>
+                                <TableHead>Collection calendar</TableHead>
+                              </>
+                            ) : (
+                              !isContractorUsersView && (
+                                <TableHead>{activeModule.valueLabel}</TableHead>
+                              )
                             )}
                             {isRichRecordView &&
                               activeFactColumns.map((column) => (
@@ -5123,7 +5200,7 @@ export function BusinessWorkspace({
                                       {record.status}
                                     </Badge>
                                     <SchemeAttentionBadge
-                                      warnings={schemeAttentionById.get(record.id)}
+                                      warnings={schemeRowsById.get(record.id)?.attention}
                                     />
                                   </div>
                                 </TableCell>
@@ -5140,10 +5217,21 @@ export function BusinessWorkspace({
                                     </TableCell>
                                   </>
                                 )}
-                                {!isContractorUsersView && (
-                                  <TableCell className="min-w-[150px]">
-                                    <RecordValue record={record} />
-                                  </TableCell>
+                                {isSchemesView ? (
+                                  <>
+                                    <TableCell className="min-w-[170px] whitespace-nowrap text-sm text-muted-foreground">
+                                      {schemeRowsById.get(record.id)?.recurrence ?? "—"}
+                                    </TableCell>
+                                    <TableCell className="min-w-[180px] whitespace-nowrap text-sm text-muted-foreground">
+                                      {schemeRowsById.get(record.id)?.calendar ?? "—"}
+                                    </TableCell>
+                                  </>
+                                ) : (
+                                  !isContractorUsersView && (
+                                    <TableCell className="min-w-[150px]">
+                                      <RecordValue record={record} />
+                                    </TableCell>
+                                  )
                                 )}
                                 {isRichRecordView &&
                                   activeFactColumns.map((column) => (
@@ -5216,7 +5304,7 @@ export function BusinessWorkspace({
           extraActions={selectedRecord ? schemeExtraActions(selectedRecord) : undefined}
           attention={
             isSchemesView && selectedRecord
-              ? schemeAttentionById.get(selectedRecord.id)
+              ? schemeRowsById.get(selectedRecord.id)?.attention
               : undefined
           }
         />

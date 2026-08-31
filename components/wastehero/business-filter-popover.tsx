@@ -84,16 +84,10 @@ type FilterDefinition = {
   options?: readonly string[]
 }
 
-// Pre-rename user-created records carry the drifted calendar name that the
-// issue #13 fixture alignment retired; read sides fold it onto the real
-// calendar record's name so the facet stays one option and filters match.
-const legacyCalendarNames: Record<string, string> = {
-  "Copenhagen 2026": "Copenhagen Central 2026",
-}
-
-export function canonicalCalendarName(value: string | undefined) {
-  return value ? legacyCalendarNames[value] ?? value : value
-}
+// The legacy-name fold moved to the pure lib (issue #30) so derived list
+// cells share it; re-exported here for the existing component importers.
+import { canonicalCalendarName } from "@/lib/route-schemes/calendar"
+export { canonicalCalendarName }
 
 function singleValue(value: string | undefined) {
   return value && value !== "—" ? [value] : []

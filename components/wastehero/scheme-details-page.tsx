@@ -54,6 +54,7 @@ import {
   stopSelectionMode,
 } from "@/lib/route-schemes/matching"
 import { isPlanAheadEnabled, setPlanAhead } from "@/lib/route-schemes/plan-ahead"
+import { schemeAreaName } from "@/lib/route-schemes/scheme-list"
 import {
   SERVICE_DAY_SHORT_LABELS,
   formatServiceDate,
@@ -293,7 +294,11 @@ export function SchemeDetailsPage({
 
   const togglePlanAhead = () => {
     const enabled = !planAheadOn
-    upsertRecord("route-studio", "schemes", setPlanAhead(record, enabled))
+    // Persist against the stored record, not the derived display record —
+    // the status/context seams (issues #25/#30) are render-time and must
+    // never be frozen into the store.
+    const stored = schemes.find((candidate) => candidate.id === record.id) ?? record
+    upsertRecord("route-studio", "schemes", setPlanAhead(stored, enabled))
     toast.success(enabled ? "Plan Ahead turned on" : "Plan Ahead turned off", {
       description: enabled
         ? `${record.name} generates its next 7 days automatically when Route Studio loads.`
@@ -491,10 +496,10 @@ function SchemeDetailsTab({
 
   // Canonical reads with legacy-fact fallbacks (D28i): structured
   // submittedValues and live related records first; the stored display fact
-  // only where a legacy record has no structured value at all.
+  // only where a legacy record has no structured value at all. Area
+  // resolution is the shared list/detail policy (issue #30).
   const areaId = stringValue(values, "planningAreaId")
-  const areaName =
-    areas.find((area) => area.id === areaId)?.name ?? facts["Planning area"]
+  const areaName = schemeAreaName(record, areas)
   const plannedVehicle =
     vehicles.find(
       (vehicle) => vehicle.id === stringValue(values, "plannedVehicleId"),

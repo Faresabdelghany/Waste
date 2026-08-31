@@ -2189,7 +2189,9 @@ const plan: WorkspaceDefinition = {
       title: "Route Schemes",
       description: "Effective-dated recurring templates for generating executable routes.",
       entityLabel: "Route scheme",
-      contextLabel: "Project · service day",
+      // Rendered as the derived "area/project · service days" context (issue
+      // #30, D15) — see lib/route-schemes/scheme-list.ts.
+      contextLabel: "Project · service days",
       valueLabel: "Demand",
       primaryAction: "New route scheme",
       metrics: [

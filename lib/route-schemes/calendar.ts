@@ -33,6 +33,19 @@ export type CollectionCalendar = {
 
 export type CalendarDayStatus = "working" | "holiday" | "non-working" | "uncovered"
 
+// Pre-rename user-created records carry the drifted calendar name that the
+// issue #13 fixture alignment retired; read sides fold it onto the real
+// calendar record's name so facets and derived cells stay one value and
+// filters match. Lives here (not in the filter popover) so pure lib readers
+// share the fold too.
+const legacyCalendarNames: Record<string, string> = {
+  "Copenhagen 2026": "Copenhagen Central 2026",
+}
+
+export function canonicalCalendarName(value: string | undefined) {
+  return value ? legacyCalendarNames[value] ?? value : value
+}
+
 /** "2026-12-25, 2026-12-26" or newline-separated → valid ISO dates only. */
 export function parseHolidayDates(value: string | undefined): string[] {
   if (!value) return []
