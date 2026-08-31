@@ -6,7 +6,7 @@
 // labeled with all their days, so exact copies never stack and hide each
 // other. Distinct routes keep per-day colors; a stop shared between distinct
 // routes renders one neutral pin. All days / per-day filter on top. Rendered
-// by the Guided Setup wizard's Route map step and by the scheme detail view.
+// by the Guided Setup wizard's Route map step.
 
 import { useState } from "react"
 
@@ -26,10 +26,8 @@ import {
 } from "@/lib/route-schemes/map"
 import {
   SERVICE_DAY_SHORT_LABELS,
-  serviceDaysFromValues,
   type ServiceDay,
 } from "@/lib/route-schemes/recurrence"
-import { effectiveStopPlans } from "@/lib/route-schemes/matching"
 import type { SchemeDayPlan } from "@/lib/route-schemes/validation"
 import { cn } from "@/lib/utils"
 
@@ -199,28 +197,5 @@ export function SchemeRouteMap({
         )}
       </div>
     </div>
-  )
-}
-
-/**
- * The same map as a scheme detail section, reading the record's service days
- * and per-day plans back from submittedValues. Renders nothing for schemes
- * without structured service days (legacy free-text fixtures).
- */
-export function SchemeRecordRouteMapSection({ record }: { record: BusinessRecord }) {
-  const containers = useModuleRecords("resources", "containers")
-
-  const serviceDays = serviceDaysFromValues(record.submittedValues)
-  if (serviceDays.length === 0) return null
-
-  // The shared stop-plan seam (issue #19): picked lists for manual schemes,
-  // live rule matches for rule-mode schemes — the map always previews what
-  // generation would produce now.
-  const plans = effectiveStopPlans(record, serviceDays, containers)
-  return (
-    <section className="space-y-4">
-      <h3 className="text-sm font-semibold">Route map</h3>
-      <SchemeRouteMap plans={plans} containers={containers} />
-    </section>
   )
 }

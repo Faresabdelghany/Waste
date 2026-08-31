@@ -123,7 +123,8 @@ export const EMPTY_MATCH_PLANS: SchemeMatchPlans = {
   rulesByDay: {},
 }
 
-const splitList = (value: string | undefined): string[] =>
+/** Comma-separated stored list → trimmed non-empty items (e.g. containerIds). */
+export const splitList = (value: string | undefined): string[] =>
   (value ?? "")
     .split(",")
     .map((item) => item.trim())

@@ -200,12 +200,8 @@ import {
   validateGuidedScheme,
   type GuidedSchemeData,
 } from "@/components/wastehero/scheme-create-flow"
-import { SchemeRecordRouteMapSection } from "@/components/wastehero/scheme-route-map"
-import { SchemeStopMatchingSection } from "@/components/wastehero/scheme-stop-matching"
-import {
-  SchemeGeneratedRoutesSection,
-  SchemeGenerateRoutesDialog,
-} from "@/components/wastehero/scheme-generate-routes"
+import { SchemeGenerateRoutesDialog } from "@/components/wastehero/scheme-generate-routes"
+import { SchemeDetailsPage } from "@/components/wastehero/scheme-details-page"
 import { SchemePlanAheadRunner } from "@/components/wastehero/scheme-plan-ahead"
 import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
 import { useActiveRoutes } from "@/components/wastehero/active-routes-store"
@@ -1297,6 +1293,17 @@ export function BusinessWorkspace({
     workspace.id === "route-studio" &&
     activeModule.id === "routes" &&
     Boolean(selectedRecord)
+  // Scheme detail is a dedicated full page (issue #29, D8) — same routing
+  // contract as the record sheet (?module=schemes&record=), rendered instead
+  // of it. Re-resolved from activeRecords so the page always shows the live
+  // canonical record (derived status included), never a stale click snapshot.
+  const schemeDetailRecord =
+    workspace.id === "route-studio" &&
+    activeModule.id === "schemes" &&
+    selectedRecord
+      ? (activeRecords.find((candidate) => candidate.id === selectedRecord.id) ??
+        selectedRecord)
+      : null
   const isContractorDetails =
     workspace.id === "contractors" &&
     activeModule.id === "contractors" &&
@@ -4324,7 +4331,27 @@ export function BusinessWorkspace({
 
   return (
     <div className="flex flex-1 flex-col min-h-0 bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
-      {isRouteDetails && selectedRecord ? (
+      {schemeDetailRecord ? (
+        <SchemeDetailsPage
+          module={activeModule}
+          record={schemeDetailRecord}
+          onBack={closeRecord}
+          onEdit={
+            canEditRecords ? () => openEditRecord(schemeDetailRecord) : undefined
+          }
+          onDelete={
+            canDeleteRecords
+              ? () => requestRecordDelete(schemeDetailRecord)
+              : undefined
+          }
+          onGenerateRoutes={
+            canRunRecordActions
+              ? () => setGenerateSchemeRecord(schemeDetailRecord)
+              : undefined
+          }
+          readOnly={!canRunRecordActions}
+        />
+      ) : isRouteDetails && selectedRecord ? (
         <RouteDetailsPage
           module={activeModule}
           record={selectedRecord}
@@ -5194,13 +5221,15 @@ export function BusinessWorkspace({
           }
         />
       )}
+        </>
+      )}
+      {/* Shared with the scheme detail page (issue #29) — rendered outside
+          the list branch so both surfaces can open it. */}
       <SchemeGenerateRoutesDialog
         scheme={generateSchemeRecord}
         actorName={actorName}
         onClose={() => setGenerateSchemeRecord(null)}
       />
-        </>
-      )}
       <ActionDecisionDialog
         module={activeModule}
         pendingAction={pendingAction}
@@ -5351,14 +5380,6 @@ function RecordDetailsDialog({
                   ))}
                 </div>
               </section>
-
-              {module.id === "schemes" && (
-                <>
-                  <SchemeStopMatchingSection record={record} />
-                  <SchemeRecordRouteMapSection record={record} />
-                  <SchemeGeneratedRoutesSection record={record} />
-                </>
-              )}
 
               <section className="space-y-4">
                 <h3 className="text-sm font-semibold">Lifecycle</h3>
