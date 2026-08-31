@@ -34,11 +34,18 @@ import {
   getWorkspaceDefinition,
   type BusinessRecord,
   type ModuleDefinition,
+  type ModuleMetric,
   type WorkspaceDefinition,
   type WorkspaceId,
 } from "@/lib/data/business-modules"
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
 import { calendarFromRecord } from "@/lib/route-schemes/calendar"
+import {
+  calendarKpis,
+  calendarRowSummary,
+  withDerivedCalendarValue,
+  type CalendarRowSummary,
+} from "@/lib/route-schemes/calendar-list"
 import { planSchemeCreation } from "@/lib/route-schemes/creation"
 import {
   schemeAttention,
@@ -805,6 +812,43 @@ function ContainerSensorState({ record }: { record: BusinessRecord }) {
   )
 }
 
+// The derived KPI tile row above the Collection Calendars list (issue #27,
+// D13). Values arrive already computed from real records — this component
+// only lays them out; tones follow the status-badge palette.
+const KPI_TONE_CLASSES: Record<NonNullable<ModuleMetric["tone"]>, string> = {
+  positive: "text-teal-700 dark:text-teal-300",
+  warning: "text-amber-700 dark:text-amber-300",
+  danger: "text-rose-700 dark:text-rose-300",
+  neutral: "text-muted-foreground",
+}
+
+function ModuleKpiTiles({ tiles }: { tiles: ModuleMetric[] }) {
+  if (tiles.length === 0) return null
+  return (
+    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {tiles.map((tile) => (
+        <div
+          key={tile.label}
+          className="rounded-xl border border-border/60 bg-card px-4 py-3"
+        >
+          <p className="text-xs text-muted-foreground">{tile.label}</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
+            {tile.value}
+          </p>
+          <p
+            className={cn(
+              "mt-1 text-xs",
+              KPI_TONE_CLASSES[tile.tone ?? "neutral"],
+            )}
+          >
+            {tile.helper}
+          </p>
+        </div>
+      ))}
+    </section>
+  )
+}
+
 function resolveFormModule(workspaceId: WorkspaceId, moduleId: string) {
   const requestedWorkspace = getWorkspaceDefinition(workspaceId)
   const directModule = requestedWorkspace.modules.find(
@@ -1225,6 +1269,13 @@ export function BusinessWorkspace({
       const today = todayIso()
       records = records.map((record) => withEffectiveSchemeStatus(record, today))
     }
+    // A calendar's "Next holiday" value is always derived from its structured
+    // holiday dates plus today (issue #27, D13) — stored display copies and
+    // form-submit placeholders are never rendered.
+    if (activeModule.id === "calendars") {
+      const today = todayIso()
+      records = records.map((record) => withDerivedCalendarValue(record, today))
+    }
     // Contractor isolation covers user-created records too, which a static
     // fixture-id allowlist cannot.
     return contractorScopeId
@@ -1583,6 +1634,9 @@ export function BusinessWorkspace({
   const isQueueView =
     queueModuleIds.has(activeModule.id) && !isContractorTicketsView
   const isRoutesView = activeModule.id === "routes"
+  // Collection Calendars list (issue #27, D28iii): artboard columns with
+  // Working days / Holidays / Validity / Next holiday derived per record.
+  const isCalendarsView = activeModule.id === "calendars"
   // Operators and contractor managers pin route days to their own sidebar's
   // Active Routes group from a star column on the routes table.
   const showRouteStarColumn = isRoutesView
@@ -1633,6 +1687,21 @@ export function BusinessWorkspace({
       activeRecords.map((record) => [record.id, schemeAttention(record, related)]),
     )
   }, [activeRecords, getRecords, isSchemesView])
+  // Derived Collection Calendars presentation (issue #27, D13/D28iii): the
+  // KPI tiles compute from the same records the list shows — scope-filtered
+  // but not search-filtered — and the table's Working days / Holidays /
+  // Validity cells derive from each record's structured submittedValues.
+  const calendarRowsById = useMemo(() => {
+    if (!isCalendarsView) return new Map<string, CalendarRowSummary>()
+    const today = todayIso()
+    return new Map(
+      activeRecords.map((record) => [record.id, calendarRowSummary(record, today)]),
+    )
+  }, [activeRecords, isCalendarsView])
+  const calendarKpiTiles = useMemo(
+    () => (isCalendarsView ? calendarKpis(visibleScopedRecords, todayIso()) : null),
+    [isCalendarsView, visibleScopedRecords],
+  )
   const schemeExtraActions = useCallback(
     (record: BusinessRecord): RecordExtraAction[] | undefined =>
       isSchemesView &&
@@ -1775,6 +1844,8 @@ export function BusinessWorkspace({
         activeFactColumns.length +
         1
       : 3 +
+        // Working days / Holidays / Validity on the calendars table (#27).
+        (isCalendarsView ? 3 : 0) +
         Number(viewOptions.showContext) +
         Number(viewOptions.showUpdated)
   const isFleetPlanningView =
@@ -1897,6 +1968,10 @@ export function BusinessWorkspace({
       // Deep-linked schemes show the derived lifecycle status too (issue #25).
       if (record && module.id === "schemes") {
         record = withEffectiveSchemeStatus(record, todayIso())
+      }
+      // Deep-linked calendars show the derived Next holiday too (issue #27).
+      if (record && module.id === "calendars") {
+        record = withDerivedCalendarValue(record, todayIso())
       }
       // Deep links cannot escape a contractor scope.
       if (
@@ -4562,6 +4637,8 @@ export function BusinessWorkspace({
               )}
           </section>
 
+          {calendarKpiTiles && <ModuleKpiTiles tiles={calendarKpiTiles} />}
+
           <section className="overflow-hidden rounded-xl border border-border/60">
             <div className="border-b border-border px-4 py-2">
               <p className="text-xs text-muted-foreground">
@@ -4731,6 +4808,13 @@ export function BusinessWorkspace({
                               )
                             )}
                             <TableHead>Status</TableHead>
+                            {isCalendarsView && (
+                              <>
+                                <TableHead>Working days</TableHead>
+                                <TableHead>Holidays</TableHead>
+                                <TableHead>Validity</TableHead>
+                              </>
+                            )}
                             {!isContractorUsersView && (
                               <TableHead>{activeModule.valueLabel}</TableHead>
                             )}
@@ -4982,6 +5066,17 @@ export function BusinessWorkspace({
                                       )}
                                     </TableCell>
                                   </>
+                                ) : isCalendarsView ? (
+                                  // Calendars are project-scoped (D22): the
+                                  // context cell renders the real project
+                                  // scope, never an invented customer split.
+                                  viewOptions.showContext && (
+                                    <TableCell className="min-w-[160px] whitespace-nowrap text-sm text-muted-foreground">
+                                      {record.projectIds?.length
+                                        ? projectScopeLabel(record.projectIds)
+                                        : "—"}
+                                    </TableCell>
+                                  )
                                 ) : (
                                   viewOptions.showContext && (
                                     <TableCell className="min-w-[220px] text-sm text-muted-foreground">
@@ -5005,6 +5100,19 @@ export function BusinessWorkspace({
                                     />
                                   </div>
                                 </TableCell>
+                                {isCalendarsView && (
+                                  <>
+                                    <TableCell className="min-w-[110px] whitespace-nowrap text-sm text-muted-foreground">
+                                      {calendarRowsById.get(record.id)?.workingDays ?? "—"}
+                                    </TableCell>
+                                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                                      {calendarRowsById.get(record.id)?.holidays ?? "—"}
+                                    </TableCell>
+                                    <TableCell className="min-w-[170px] whitespace-nowrap text-sm text-muted-foreground">
+                                      {calendarRowsById.get(record.id)?.validity ?? "—"}
+                                    </TableCell>
+                                  </>
+                                )}
                                 {!isContractorUsersView && (
                                   <TableCell className="min-w-[150px]">
                                     <RecordValue record={record} />

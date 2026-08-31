@@ -2308,15 +2308,15 @@ const plan: WorkspaceDefinition = {
       title: "Collection Calendars",
       description: "Working days, holidays, and validity periods that decide which planned service dates are valid.",
       entityLabel: "Calendar",
-      contextLabel: "Customer · project",
+      // Calendars are project-scoped (D22) — there is no customer or service
+      // scoping in the model, so the list never claims one.
+      contextLabel: "Project",
       valueLabel: "Next holiday",
       primaryAction: "New calendar",
-      metrics: [
-        { label: "Active calendars", value: "16", helper: "5 project · 11 customer" },
-        { label: "Upcoming holidays", value: "2", helper: "Within 60 days" },
-        { label: "Working-day rules", value: "16", helper: "All calendars configured", tone: "positive" },
-        { label: "Expiring within 90d", value: "1", helper: "Create next year", tone: "warning" },
-      ],
+      // The rendered KPI tiles derive from real calendar records at render
+      // time (issue #27, D13) — see lib/route-schemes/calendar-list.ts.
+      // Static illustrative metrics are deliberately absent.
+      metrics: [],
       lifecycle: ["Draft", "Active", "Superseded", "Archived"],
       rules: [
         "Working days, holidays, and the validity period decide whether a planned date is valid; replacement dates live in Collection Deviations.",
@@ -2327,7 +2327,10 @@ const plan: WorkspaceDefinition = {
         // Fixture calendars carry the structured operational data the
         // generation engine consumes (PLAN_SIMPLIFICATION Q5) — 11 Danish
         // holidays of 2026 (the 10 statutory public holidays plus
-        // Grundlovsdag), kept in sync with the Holidays display fact.
+        // Grundlovsdag). The list's Holidays / Next holiday columns and KPI
+        // tiles derive from these structured values at render time (issue
+        // #27, D13/D28iii); the display facts below are legacy copies shown
+        // only in the record detail.
         {
           ...record(
             "calendar-central",
@@ -2359,13 +2362,15 @@ const plan: WorkspaceDefinition = {
           ...record(
             "calendar-harbor",
             "Harbor Offices service calendar",
-            "Harbor Offices ApS · Nordhavn",
+            // Project-scoped context (D22): customer-scoped calendars are a
+            // flagged future capability, not part of the current model.
+            "Harbor Commercial · Nordhavn",
             "Draft",
             "Contract Team",
             "Not published",
             "Yesterday",
-            "Customer-specific calendar awaiting agreement activation.",
-            { WeekStart: "Monday", Holidays: "Project defaults", WorkingDays: "Tue/Fri", Timezone: "Europe/Copenhagen", Validity: "1 Sep 2026 – 31 Aug 2027" },
+            "Draft project calendar for Harbor Offices service, awaiting agreement activation.",
+            { WeekStart: "Monday", Holidays: "None scheduled", WorkingDays: "Tue/Fri", Timezone: "Europe/Copenhagen", Validity: "1 Sep 2026 – 31 Aug 2027" },
             ["Draft agreement AGR-2512", "6 properties", "1 route scheme draft"],
             "Draft agreement",
             "Yesterday",

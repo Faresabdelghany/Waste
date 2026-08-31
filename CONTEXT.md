@@ -97,7 +97,7 @@ _Avoid_: Customer, project
 ## Planning and execution
 
 **Collection Calendar**:
-The working days, holidays, and validity period that determine which planned service dates are valid for a project, customer, or service.
+The working days, holidays, and validity period that determine which planned service dates are valid. A shared, project-scoped calendar that Route Schemes select; customer- or service-scoped calendars are a flagged future capability, not part of the current model (D22).
 _Avoid_: Route scheme, route, deviation list
 
 **Collection Deviation**:
