@@ -44,6 +44,10 @@ _Avoid_: Subscription, invoice
 A recurring customer entitlement to a product or collection service under an agreement.
 _Avoid_: Agreement, route scheme
 
+**Service frequency**:
+The promised collection cadence — a small reusable, project-scoped frequency record (collections per week plus weeks or days between) referenced by containers and products; agreements store none of their own and display what the assigned container inherits. It constrains scheme recurrence, never generates dates.
+_Avoid_: Pickup setting, billing frequency, recurrence (the scheme's cadence)
+
 ## Service and resources
 
 **Product / Service**:

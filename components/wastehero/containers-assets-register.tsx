@@ -22,6 +22,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr"
 
 import type { BusinessRecord, ModuleDefinition } from "@/lib/data/business-modules"
+import { serviceFrequencyOfRecord } from "@/lib/data/service-frequencies"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -210,9 +211,12 @@ function profileFor(record: BusinessRecord): ContainerProfile {
       ),
     ),
     pickupMethod: fact(record, "Pickup method", text("pickupMethod") || "Disabled"),
-    // Legacy fallback chain: pre-rename records keep the retired "Pickup
-    // setting" fact key; older form submissions only have submittedValues.
-    serviceFrequency: fact(record, "Service frequency", fact(record, "Pickup setting", text("pickupSetting"))),
+    // Typed frequency reference first (issue #20); the legacy fallback chain
+    // then covers pre-rename records (retired "Pickup setting" fact key) and
+    // older form submissions that only have submittedValues (issue #13).
+    serviceFrequency:
+      serviceFrequencyOfRecord(record)?.name ??
+      fact(record, "Service frequency", fact(record, "Pickup setting", text("pickupSetting"))),
     calendar: canonicalCalendarName(fact(record, "Collection calendar", text("collectionCalendar"))) ?? "—",
     routeScheme: fact(record, "Route scheme", text("routeScheme")),
     fillLevel: fact(record, "Fill level", record.value),
@@ -873,6 +877,11 @@ const legacyFactKeys: Record<string, string> = {
 }
 
 function factWithLegacyFallback(record: BusinessRecord, label: string) {
+  // The typed frequency reference outranks any stored fact string (issue #20).
+  if (label === "Service frequency") {
+    const definition = serviceFrequencyOfRecord(record)
+    if (definition) return definition.name
+  }
   const value = legacyFactKeys[label]
     ? fact(record, label, fact(record, legacyFactKeys[label]))
     : fact(record, label)

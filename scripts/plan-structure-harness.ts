@@ -14,14 +14,23 @@ import {
   businessFormSchemas,
   getBusinessFormSchema,
 } from "../lib/data/business-form-schemas"
-import { businessWorkspaces } from "../lib/data/business-modules"
+import { businessWorkspaces, FIXTURE_PROJECT_IDS } from "../lib/data/business-modules"
+import {
+  LEGACY_FREQUENCY_OPTION_IDS,
+  SERVICE_FREQUENCIES,
+  serviceFrequencyById,
+  serviceFrequencyOfRecord,
+} from "../lib/data/service-frequencies"
 import { calendarFromRecord } from "../lib/route-schemes/calendar"
 import { approvedDeviationsFromRecords } from "../lib/route-schemes/generation"
 import {
   effectiveStopPlans,
   stopSelectionMode,
 } from "../lib/route-schemes/matching"
-import { recurrenceFromValues } from "../lib/route-schemes/recurrence"
+import {
+  RECURRENCE_FREQUENCY_LABELS,
+  recurrenceFromValues,
+} from "../lib/route-schemes/recurrence"
 
 let passed = 0
 let failed = 0
@@ -321,6 +330,155 @@ check(
   "the 12 collection pickup fixtures carry a 'Service frequency' fact; depot/unloading stops carry none",
   pickupRecords.filter((record) => "Service frequency" in record.facts).length,
   12,
+)
+
+/* ------------- typed service-frequency re-sourcing (issue #20) ------------- */
+// Spec follow-up 3's deferred half: the cadence promise is a small reusable,
+// project-scoped frequency record (lib/data/service-frequencies.ts) in the
+// real product's vocabulary. Containers reference it via typed
+// submittedValues.serviceFrequencyId with the display fact DERIVED from it;
+// agreements carry a typed containerId relation and display the frequency
+// they inherit from that container — never a frequency of their own.
+
+check(
+  "frequency catalog ids are unique",
+  new Set(SERVICE_FREQUENCIES.map((definition) => definition.id)).size,
+  SERVICE_FREQUENCIES.length,
+)
+check(
+  "every catalog schemeFrequency is a real scheme cadence or null (issue #21 hook)",
+  SERVICE_FREQUENCIES.every(
+    (definition) =>
+      definition.schemeFrequency === null ||
+      definition.schemeFrequency in RECURRENCE_FREQUENCY_LABELS,
+  ),
+  true,
+)
+check(
+  "catalog project scoping names only real fixture projects",
+  SERVICE_FREQUENCIES.every((definition) =>
+    definition.projectIds.every((projectId) =>
+      Object.values(FIXTURE_PROJECT_IDS).includes(
+        projectId as (typeof FIXTURE_PROJECT_IDS)[keyof typeof FIXTURE_PROJECT_IDS],
+      ),
+    ),
+  ),
+  true,
+)
+check(
+  "every legacy container-form option id folds onto an existing definition",
+  Object.values(LEGACY_FREQUENCY_OPTION_IDS).every((id) => serviceFrequencyById.has(id)),
+  true,
+)
+check(
+  "every serviced container fixture derives its fact from its typed frequency reference",
+  containerRecords
+    .filter((record) => record.facts["Service frequency"] !== "—")
+    .every((record) => {
+      const id = record.submittedValues?.serviceFrequencyId
+      const definition = typeof id === "string" ? serviceFrequencyById.get(id) : undefined
+      return Boolean(definition) && record.facts["Service frequency"] === definition?.name
+    }),
+  true,
+)
+check(
+  "out-of-service container fixtures promise no cadence (no typed reference, '—' fact)",
+  containerRecords
+    .filter((record) => record.facts["Service frequency"] === "—")
+    .every((record) => record.submittedValues?.serviceFrequencyId === undefined),
+  true,
+)
+check(
+  "no container fixture stores a fused pre-#20 frequency string",
+  containerRecords.filter((record) =>
+    (record.facts["Service frequency"] ?? "").includes(" · "),
+  ).length,
+  0,
+)
+
+const agreementRecords =
+  businessWorkspaces.customers.modules.find((module) => module.id === "agreements")
+    ?.records ?? []
+const containerIdsInFixtures = new Set(containerRecords.map((record) => record.id))
+check(
+  "both agreement fixtures carry an agreeing typed containerId relation to a real container",
+  agreementRecords.map((record) => {
+    const refs = (record.relationRefs ?? []).filter((ref) => ref.fieldId === "containerId")
+    return [
+      record.id,
+      refs.length === 1 &&
+        refs.every(
+          (ref) =>
+            ref.workspaceId === "resources" &&
+            ref.moduleId === "containers" &&
+            containerIdsInFixtures.has(ref.recordId),
+        ) &&
+        // The edit form prefills from submittedValues, and facts/refs are
+        // re-derived from it on save — so it must agree with the ref.
+        record.submittedValues?.containerId === refs[0]?.recordId,
+    ]
+  }),
+  [
+    ["agreement-2408", true],
+    ["agreement-2512", true],
+  ],
+)
+check(
+  "each agreement's 'Service frequency' fact is the one its assigned container derives",
+  agreementRecords.every((record) => {
+    const containerId = record.submittedValues?.containerId
+    const container = containerRecords.find((candidate) => candidate.id === containerId)
+    return (
+      Boolean(container) &&
+      record.facts["Service frequency"] === serviceFrequencyOfRecord(container!)?.name
+    )
+  }),
+  true,
+)
+check(
+  "agreements store no frequency of their own — the free-text form field is gone",
+  getBusinessFormSchema("customers", "agreements")
+    ?.sections.flatMap((section) => section.fields)
+    .some((field) => field.id === "serviceFrequency"),
+  false,
+)
+check(
+  "the agreement form's assigned-container field is the typed containers relation",
+  (() => {
+    const field = getBusinessFormSchema("customers", "agreements")
+      ?.sections.flatMap((section) => section.fields)
+      .find((candidate) => candidate.id === "containerId")
+    return field?.relation?.workspaceId === "resources" && field.relation.moduleId === "containers"
+  })(),
+  true,
+)
+check(
+  "the container form's retained pickupSetting field offers exactly the catalog",
+  getBusinessFormSchema("resources", "containers")
+    ?.sections.flatMap((section) => section.fields)
+    .find((field) => field.id === "pickupSetting")
+    ?.options?.map((option) => option.value),
+  SERVICE_FREQUENCIES.map((definition) => definition.id),
+)
+check(
+  "the product form carries the typed catalogue-side frequency reference",
+  getBusinessFormSchema("commercial", "products")
+    ?.sections.flatMap((section) => section.fields)
+    .find((field) => field.id === "serviceFrequencyId")
+    ?.options?.map((option) => option.value),
+  SERVICE_FREQUENCIES.map((definition) => definition.id),
+)
+check(
+  "the exemplar product derives its frequency fact from its typed reference",
+  (() => {
+    const product = businessWorkspaces.commercial.modules
+      .find((module) => module.id === "products")
+      ?.records.find((record) => record.id === "product-res-240")
+    const id = product?.submittedValues?.serviceFrequencyId
+    const definition = typeof id === "string" ? serviceFrequencyById.get(id) : undefined
+    return Boolean(definition) && product?.facts["Service frequency"] === definition?.name
+  })(),
+  true,
 )
 
 /* -------- container planning-area links + rule-mode fixture (issue #19) ---- */

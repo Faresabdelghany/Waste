@@ -151,6 +151,12 @@ import {
   canonicalCalendarName,
 } from "@/components/wastehero/business-filter-popover"
 import {
+  canonicalServiceFrequencyName,
+  resolveServiceFrequencyValue,
+  serviceFrequencyById,
+  serviceFrequencyOfRecord,
+} from "@/lib/data/service-frequencies"
+import {
   BusinessViewOptionsPopover,
   defaultBusinessViewOptions,
   type BusinessGroupOption,
@@ -1384,6 +1390,10 @@ export function BusinessWorkspace({
         businessFilters.serviceFrequencies,
         // Legacy fallback: pre-rename user-created records keep the retired key.
         ["Service frequency", "Pickup setting"],
+        false,
+        // Legacy fallback: pre-#20 records carry fused display strings
+        // ("Organic · 14-day service") — fold them onto catalog names.
+        canonicalServiceFrequencyName,
       )
       const matchesRouteScheme = matchesFactFilter(
         record,
@@ -2312,6 +2322,19 @@ export function BusinessWorkspace({
           seeded.frequency = ""
         }
       }
+      // The frequency select keeps the retired `pickupSetting` field id
+      // (issue #13) while records store the typed serviceFrequencyId (issue
+      // #20) — and pre-#20 records hold option ids the select no longer
+      // offers. Seed the select from whatever resolves so the dialog shows
+      // the stored cadence instead of an empty select.
+      if (activeModuleFormSchema.key === "resources.containers") {
+        const stored =
+          typeof seeded.pickupSetting === "string" ? seeded.pickupSetting : ""
+        if (!serviceFrequencyById.has(stored)) {
+          const definition = serviceFrequencyOfRecord(editingRecord)
+          seeded.pickupSetting = definition?.id ?? ""
+        }
+      }
       return seeded
     }
 
@@ -3191,6 +3214,10 @@ export function BusinessWorkspace({
     // Containers migrated their cadence fact off the retired "Pickup
     // setting" key (issue #13); the edit merge would otherwise carry the
     // stale retired key (and the drifted calendar name) forward forever.
+    // Since issue #20 the cadence is a typed reference: saving also resolves
+    // whatever shape the record carries (the form's retained `pickupSetting`
+    // value, a legacy option id, or a legacy fact string) onto
+    // submittedValues.serviceFrequencyId and re-derives the display fact.
     const normalizeContainerRecord = (record: BusinessRecord): BusinessRecord => {
       const nextFacts = { ...record.facts }
       if (nextFacts["Pickup setting"] && !nextFacts["Service frequency"]) {
@@ -3199,7 +3226,83 @@ export function BusinessWorkspace({
       delete nextFacts["Pickup setting"]
       const calendar = canonicalCalendarName(nextFacts["Collection calendar"])
       if (calendar) nextFacts["Collection calendar"] = calendar
-      return { ...record, facts: nextFacts }
+      const nextValues = { ...record.submittedValues }
+      // The just-submitted form value wins over a stale serviceFrequencyId
+      // carried forward by the edit merge; the fact string recovers records
+      // whose select prefilled empty (pre-#20 option ids are not options).
+      const submittedFrequency =
+        typeof values.pickupSetting === "string" ? values.pickupSetting : ""
+      const definition =
+        resolveServiceFrequencyValue(submittedFrequency) ??
+        resolveServiceFrequencyValue(nextFacts["Service frequency"]) ??
+        serviceFrequencyOfRecord({ facts: nextFacts, submittedValues: nextValues })
+      if (definition) {
+        nextValues.serviceFrequencyId = definition.id
+        // The retained form field id mirrors the typed key so the edit
+        // dialog's select prefills on the next open.
+        nextValues.pickupSetting = definition.id
+        nextFacts["Service frequency"] = definition.name
+      }
+      return { ...record, facts: nextFacts, submittedValues: nextValues }
+    }
+
+    // Agreements store no frequency of their own (issue #20): the promise
+    // lives on the assigned container's frequency record, and the agreement
+    // displays what it inherits. Saving derives the fact from the linked
+    // container — "—" when that container promises no cadence, so a
+    // reassignment never carries the previous container's promise forward —
+    // and drops the retired free-text value. Records whose link cannot be
+    // resolved (no container, or a deleted one) keep their stored fact.
+    const normalizeAgreementRecord = (record: BusinessRecord): BusinessRecord => {
+      const containerId =
+        (typeof record.submittedValues?.containerId === "string"
+          ? record.submittedValues.containerId
+          : "") ||
+        record.relationRefs?.find((ref) => ref.fieldId === "containerId")?.recordId
+      if (!containerId) return record
+      const resolved = resolveFormModule("resources", "containers")
+      const container = resolved
+        ? getRecords(resolved.workspaceId, resolved.module.id, resolved.module.records).find(
+            (candidate) => candidate.id === containerId,
+          )
+        : undefined
+      if (!container) return record
+      const nextValues = { ...record.submittedValues }
+      delete nextValues.serviceFrequency
+      return {
+        ...record,
+        facts: {
+          ...record.facts,
+          "Service frequency": serviceFrequencyOfRecord(container)?.name ?? "—",
+        },
+        submittedValues: nextValues,
+      }
+    }
+
+    // The inherited fact would otherwise go stale when the container's own
+    // frequency changes: a container save re-derives it on every agreement
+    // linked to that container (the updated copy shadows a fixture record).
+    const syncAgreementsForContainer = (container: BusinessRecord) => {
+      const resolved = resolveFormModule("customers", "agreements")
+      if (!resolved) return
+      const derived = serviceFrequencyOfRecord(container)?.name ?? "—"
+      for (const agreement of getRecords(
+        resolved.workspaceId,
+        resolved.module.id,
+        resolved.module.records,
+      )) {
+        const linkedId =
+          (typeof agreement.submittedValues?.containerId === "string"
+            ? agreement.submittedValues.containerId
+            : "") ||
+          agreement.relationRefs?.find((ref) => ref.fieldId === "containerId")?.recordId
+        if (linkedId !== container.id) continue
+        if (agreement.facts["Service frequency"] === derived) continue
+        upsertRecord(resolved.workspaceId, resolved.module.id, {
+          ...agreement,
+          facts: { ...agreement.facts, "Service frequency": derived },
+        })
+      }
     }
 
     if (editingRecord) {
@@ -3238,6 +3341,9 @@ export function BusinessWorkspace({
       if (resolvedTarget.module.id === "containers") {
         updatedRecord = normalizeContainerRecord(updatedRecord)
       }
+      if (resolvedTarget.module.id === "agreements") {
+        updatedRecord = normalizeAgreementRecord(updatedRecord)
+      }
       const editEvent: AuditEvent = {
         id: `audit-edit-${now}`,
         action: `Edit ${activeModule.entityLabel.toLowerCase()}`,
@@ -3258,6 +3364,9 @@ export function BusinessWorkspace({
       )
       if (resolvedTarget.module.id === "price-rows") {
         syncProductForRow(updatedRecord)
+      }
+      if (resolvedTarget.module.id === "containers") {
+        syncAgreementsForContainer(updatedRecord)
       }
       setAuditEvents((current) => ({
         ...current,
@@ -3330,6 +3439,12 @@ export function BusinessWorkspace({
     }
     if (resolvedTarget.module.id === "schemes") {
       newRecord = normalizeRouteSchemeRecord(newRecord)
+    }
+    if (resolvedTarget.module.id === "containers") {
+      newRecord = normalizeContainerRecord(newRecord)
+    }
+    if (resolvedTarget.module.id === "agreements") {
+      newRecord = normalizeAgreementRecord(newRecord)
     }
     const creationEvent: AuditEvent = {
       id: `audit-form-${now}`,

@@ -1,4 +1,5 @@
 import type { BusinessFormSchema } from "@/lib/data/business-form-types"
+import { SERVICE_FREQUENCIES } from "@/lib/data/service-frequencies"
 
 /**
  * Commercial, Improve, and Control Center creation contracts.
@@ -91,6 +92,18 @@ export const commercialImproveBusinessFormSchemas = [
               { value: "Glass", label: "Glass" },
               { value: "Organic", label: "Organic" },
             ],
+          },
+          {
+            // Typed reference to the reusable frequency catalog (issue #20):
+            // the catalogue side of the frequency promise. Not a price-row
+            // condition — that extension stays a conscious cut.
+            id: "serviceFrequencyId",
+            label: "Service frequency",
+            type: "select",
+            options: SERVICE_FREQUENCIES.map((definition) => ({
+              value: definition.id,
+              label: definition.name,
+            })),
           },
           {
             id: "serviceLevels",

@@ -19,6 +19,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr"
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
+import { serviceFrequencyOfRecord } from "@/lib/data/service-frequencies"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -133,9 +134,16 @@ const containerCategories: FilterDefinition[] = [
     id: "serviceFrequencies",
     label: "Service frequency",
     icon: Database,
-    // Legacy fallback: user-created records from before the rename still
-    // carry the fact under the retired "Pickup setting" key.
-    values: (record) => singleValue(record.facts["Service frequency"] ?? record.facts["Pickup setting"]),
+    // Typed reference first (issue #20); the fact chain is the legacy
+    // fallback — pre-rename records keep the retired "Pickup setting" key
+    // (issue #13), and pre-#20 fused strings fold onto catalog names so the
+    // facet stays one option per cadence.
+    values: (record) =>
+      singleValue(
+        serviceFrequencyOfRecord(record)?.name ??
+          record.facts["Service frequency"] ??
+          record.facts["Pickup setting"],
+      ),
   },
   {
     id: "routeSchemes",

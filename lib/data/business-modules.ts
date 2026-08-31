@@ -1,3 +1,5 @@
+import { serviceFrequencyFactValue } from "./service-frequencies"
+
 export type WorkspaceId =
   | "operate"
   | "plan"
@@ -629,6 +631,13 @@ function buildSeededContainerRecords(): BusinessRecord[] {
         ? SEEDED_COPENHAGEN_AREAS[index % SEEDED_COPENHAGEN_AREAS.length]
         : SEEDED_HARBOR_AREA
       : null
+    // Typed frequency reference (issue #20); the display fact is derived from
+    // it, never authored. Out-of-service units promise no cadence.
+    const serviceFrequencyId = inService
+      ? index % 2 === 0
+        ? "freq-every-2-weeks"
+        : "freq-weekly"
+      : null
     const seeded = record(
       seededContainerRecordId(index),
       name,
@@ -656,7 +665,7 @@ function buildSeededContainerRecords(): BusinessRecord[] {
         "Property number": inService ? property.propertyNumber : "—",
         "Property type": inService ? property.propertyType : "No property",
         "Pickup method": inService ? (index % 2 === 0 ? "Dynamic" : "Static") : "Disabled",
-        "Service frequency": inService ? `${fraction} · ${index % 2 === 0 ? "14-day service" : "weekly"}` : "—",
+        "Service frequency": serviceFrequencyFactValue(serviceFrequencyId),
         "Collection calendar": inService
           ? property.inCopenhagen
             ? "Copenhagen Central 2026"
@@ -701,7 +710,13 @@ function buildSeededContainerRecords(): BusinessRecord[] {
         : ["Defect", "In transit", "Create container ticket", "Delete container"],
     )
     return planningArea
-      ? { ...seeded, submittedValues: { planningAreaId: planningArea.id } }
+      ? {
+          ...seeded,
+          submittedValues: {
+            planningAreaId: planningArea.id,
+            ...(serviceFrequencyId ? { serviceFrequencyId } : {}),
+          },
+        }
       : seeded
   })
 }
@@ -2799,36 +2814,72 @@ const customers: WorkspaceDefinition = {
         "Activation validates required product fields, price, payer, and responsibility.",
       ],
       records: [
-        record(
-          "agreement-2408",
-          "AGR-2408 · Østerbro Housing",
-          "Østerbro Housing · same payer",
-          "Active",
-          "Contract Team",
-          "1 Jan–31 Dec 2026",
-          "2 weeks ago",
-          "Municipal housing agreement covering organic, paper, and residual subscriptions.",
-          { Template: "Municipal Housing v4", Currency: "DKK", Billing: "Monthly", PriceList: "PL-Copenhagen-2026" },
-          ["64 properties", "192 subscriptions", "184 containers", "3 route schemes"],
-          "Contract management",
-          "2 weeks",
-          ["Create amendment", "Terminate"],
-        ),
-        record(
-          "agreement-2512",
-          "AGR-2512 · Harbor Offices",
-          "Harbor Offices ApS · payer unconfirmed",
-          "Draft",
-          "Katrine Holm",
-          "Start date pending",
-          "Yesterday",
-          "Commercial cardboard agreement blocked by payer and container-capacity inputs.",
-          { Template: "Commercial Cardboard v2", Currency: "DKK", Billing: "Monthly", PriceList: "PL-Commercial-2026" },
-          ["6 properties", "4 draft subscriptions", "Ticket T-8812", "2 blocking issues"],
-          "Contract management",
-          "Yesterday",
-          ["Pending", "Reject"],
-        ),
+        // Fixture agreements carry a typed container reference (issue #20):
+        // submittedValues.containerId plus a containerId relationRef to a real
+        // resources.containers record. The agreement stores NO frequency of
+        // its own — its "Service frequency" fact is derived from the assigned
+        // container's typed frequency reference, mirroring the real product
+        // (the agreement displays what it inherits). "Billing" stays separate:
+        // billing cadence is not pickup frequency. Guarded in
+        // scripts/plan-structure-harness.ts.
+        {
+          ...record(
+            "agreement-2408",
+            "AGR-2408 · Østerbro Housing",
+            "Østerbro Housing · same payer",
+            "Active",
+            "Contract Team",
+            "1 Jan–31 Dec 2026",
+            "2 weeks ago",
+            "Municipal housing agreement covering organic, paper, and residual subscriptions.",
+            {
+              Template: "Municipal Housing v4",
+              Currency: "DKK",
+              Billing: "Monthly",
+              PriceList: "PL-Copenhagen-2026",
+              "Assigned container": "BIN-82014",
+              "Service frequency": serviceFrequencyFactValue("freq-every-2-weeks"),
+            },
+            ["64 properties", "192 subscriptions", "184 containers", "3 route schemes"],
+            "Contract management",
+            "2 weeks",
+            ["Create amendment", "Terminate"],
+          ),
+          recordKind: "Agreement",
+          submittedValues: { containerId: "asset-82014" },
+          relationRefs: [
+            { fieldId: "containerId", workspaceId: "resources", moduleId: "containers", recordId: "asset-82014", label: "BIN-82014" },
+          ],
+        },
+        {
+          ...record(
+            "agreement-2512",
+            "AGR-2512 · Harbor Offices",
+            "Harbor Offices ApS · payer unconfirmed",
+            "Draft",
+            "Katrine Holm",
+            "Start date pending",
+            "Yesterday",
+            "Commercial cardboard agreement blocked by payer and container-capacity inputs.",
+            {
+              Template: "Commercial Cardboard v2",
+              Currency: "DKK",
+              Billing: "Monthly",
+              PriceList: "PL-Commercial-2026",
+              "Assigned container": "BIN-77104",
+              "Service frequency": serviceFrequencyFactValue("freq-weekly"),
+            },
+            ["6 properties", "4 draft subscriptions", "Ticket T-8812", "2 blocking issues"],
+            "Contract management",
+            "Yesterday",
+            ["Pending", "Reject"],
+          ),
+          recordKind: "Agreement",
+          submittedValues: { containerId: "asset-77104" },
+          relationRefs: [
+            { fieldId: "containerId", workspaceId: "resources", moduleId: "containers", recordId: "asset-77104", label: "BIN-77104" },
+          ],
+        },
       ],
     },
     {
@@ -2955,7 +3006,11 @@ const resources: WorkspaceDefinition = {
         // Explicit container fixtures carry the same planning-area link the
         // seeded ones do (issue #19): a "Planning area" display fact plus the
         // typed submittedValues.planningAreaId the stop-match resolver reads.
-        // Out-of-service units (storage, ended, in transit) have none.
+        // They likewise carry the typed frequency promise (issue #20):
+        // submittedValues.serviceFrequencyId referencing SERVICE_FREQUENCIES,
+        // with the "Service frequency" fact derived from it (guarded in
+        // scripts/plan-structure-harness.ts). Out-of-service units (storage,
+        // ended, in transit) have neither.
         {
         ...record(
           "asset-82014",
@@ -2982,7 +3037,7 @@ const resources: WorkspaceDefinition = {
             "Property number": "CPH-001882",
             "Property type": "Residential",
             "Pickup method": "Dynamic",
-            "Service frequency": "Organic · 14-day service",
+            "Service frequency": "Every 2 weeks",
             "Collection calendar": "Copenhagen Central 2026",
             "Route scheme": "Østerbro Organic B",
             Vehicle: "WH-18",
@@ -3006,7 +3061,10 @@ const resources: WorkspaceDefinition = {
           "18 minutes",
           ["Defect", "In transit", "Create container ticket", "Delete container"],
         ),
-        submittedValues: { planningAreaId: "area-osterbro-contract" },
+        submittedValues: {
+          planningAreaId: "area-osterbro-contract",
+          serviceFrequencyId: "freq-every-2-weeks",
+        },
         },
         {
         ...record(
@@ -3034,7 +3092,7 @@ const resources: WorkspaceDefinition = {
             "Property number": "CPH-009114",
             "Property type": "Commercial",
             "Pickup method": "Static",
-            "Service frequency": "Glass · monthly",
+            "Service frequency": "Once a month",
             "Collection calendar": "Commercial Glass 2026",
             "Route scheme": "Amager Glass",
             Vehicle: "WH-31",
@@ -3058,7 +3116,10 @@ const resources: WorkspaceDefinition = {
           "45 minutes",
           ["Available", "In transit", "Create container ticket", "Delete container"],
         ),
-        submittedValues: { planningAreaId: "area-amager-1" },
+        submittedValues: {
+          planningAreaId: "area-amager-1",
+          serviceFrequencyId: "freq-monthly",
+        },
         },
         record(
           "asset-99017",
@@ -3124,7 +3185,7 @@ const resources: WorkspaceDefinition = {
             "Container type": "Four-wheel bin · 1,100 L", "Waste fractions": "Cardboard", Ownership: "Company owned",
             Project: "Harbor Commercial", "Planning area": "Nordhavn Harbor Area",
             Address: "Harbor Offices, Dock 4", "Curb location": "Service yard", Property: "Harbor Offices",
-            "Property number": "CPH-004201", "Property type": "Commercial", "Pickup method": "Static", "Service frequency": "Cardboard · weekly",
+            "Property number": "CPH-004201", "Property type": "Commercial", "Pickup method": "Static", "Service frequency": "Every week",
             "Collection calendar": "Harbor Commercial 2026", "Route scheme": "Harbor Cardboard", Vehicle: "WH-24", Sensor: "S-774 · NB-IoT",
             Battery: "88%", RSSI: "-94 dBm", "Fill level": "42%", "Last measurement": "2 hours ago", "Full threshold": "95%",
             "Last collection": "Never", "Next collection": "3 Sep 2026", Agreement: "AGR-2512 · Future", Condition: "New",
@@ -3135,7 +3196,10 @@ const resources: WorkspaceDefinition = {
           "2 hours",
           ["Defect", "Create container ticket", "Delete container"],
         ),
-        submittedValues: { planningAreaId: "area-harbor-1" },
+        submittedValues: {
+          planningAreaId: "area-harbor-1",
+          serviceFrequencyId: "freq-weekly",
+        },
         },
         {
         ...record(
@@ -3152,7 +3216,7 @@ const resources: WorkspaceDefinition = {
             "Container type": "Four-wheel bin · 660 L", "Waste fractions": "Residual · Mixed", Ownership: "Unrecorded",
             Project: "Copenhagen Central", "Planning area": "Indre By Operations",
             Address: "Nørrebrogade 144, 2200 Copenhagen N", "Curb location": "Rear gate", Property: "Nørrebrogade 144",
-            "Property number": "CPH-014420", "Property type": "Mixed use", "Pickup method": "Dynamic", "Service frequency": "Mixed · weekly",
+            "Property number": "CPH-014420", "Property type": "Mixed use", "Pickup method": "Dynamic", "Service frequency": "Every week",
             "Collection calendar": "Copenhagen Central 2026", "Route scheme": "Nørrebro Mixed", Vehicle: "WH-24", Sensor: "S-620 · Sigfox",
             Battery: "54%", RSSI: "-101 dBm", "Fill level": "63%", "Last measurement": "Yesterday", "Full threshold": "92%",
             "Last collection": "3 Aug 2026 · failed access", "Next collection": "On hold", Agreement: "AGR-2331 · Paused", Condition: "Good",
@@ -3163,7 +3227,10 @@ const resources: WorkspaceDefinition = {
           "Yesterday",
           ["Defect", "Create container ticket", "Delete container"],
         ),
-        submittedValues: { planningAreaId: "area-indreby" },
+        submittedValues: {
+          planningAreaId: "area-indreby",
+          serviceFrequencyId: "freq-weekly",
+        },
         },
         record(
           "asset-50318",
@@ -3706,6 +3773,10 @@ const commercial: WorkspaceDefinition = {
               Materials: "240L bin (rental)",
               "Included services": "Bin cleaning · monthly",
               "Service levels": "Standard kerbside, Backdoor service",
+              // Derived from the typed reference below (issue #20): the
+              // catalogue side of the frequency promise, as the real product
+              // links products to the same reusable frequency record.
+              "Service frequency": serviceFrequencyFactValue("freq-every-2-weeks"),
             },
             [
               "History · 2026-06-15 · Mette Holm · Price change scheduled · +3% for 1 Jan 2027 — Default price €18.50 → €19.06 (scheduled)",
@@ -3716,6 +3787,7 @@ const commercial: WorkspaceDefinition = {
             "Live",
           ),
           recordKind: "Product",
+          submittedValues: { serviceFrequencyId: "freq-every-2-weeks" },
         },
         {
           ...record(

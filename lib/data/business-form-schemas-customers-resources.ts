@@ -1,4 +1,5 @@
 import type { BusinessFormSchema } from "@/lib/data/business-form-types"
+import { SERVICE_FREQUENCIES } from "@/lib/data/service-frequencies"
 
 const projectRelation = {
   workspaceId: "configure",
@@ -822,15 +823,14 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             ],
           },
           {
-            id: "serviceFrequency",
-            label: "Service frequency",
-            type: "text",
-            placeholder: "Weekly, every second Thursday, or on demand",
-          },
-          {
+            // The agreement stores no frequency of its own (issue #20): the
+            // promise lives on the frequency record the assigned container
+            // references, and the agreement displays what it inherits.
             id: "containerId",
             label: "Assigned container",
             type: "select",
+            description:
+              "Service frequency is inherited from the assigned container's frequency record.",
             relation: {
               workspaceId: "resources",
               moduleId: "containers",
@@ -1190,15 +1190,17 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             ],
           },
           {
+            // Field id retained from the retired term for localStorage
+            // compatibility (issue #13); options are the typed frequency
+            // catalog (issue #20) — save migrates the value onto
+            // submittedValues.serviceFrequencyId (normalizeContainerRecord).
             id: "pickupSetting",
             label: "Service frequency",
             type: "select",
-            options: [
-              { value: "organic-14", label: "Organic · 14-day service" },
-              { value: "mixed-weekly", label: "Mixed · weekly" },
-              { value: "glass-monthly", label: "Glass · monthly" },
-              { value: "cardboard-weekly", label: "Cardboard · weekly" },
-            ],
+            options: SERVICE_FREQUENCIES.map((definition) => ({
+              value: definition.id,
+              label: definition.name,
+            })),
           },
           {
             id: "collectionCalendar",
