@@ -39,19 +39,18 @@ import {
   type PlannedRouteAction,
 } from "@/lib/route-schemes/generation"
 import {
+  recordSchemeGeneration,
+  schemeCanGenerateRoutes,
+  schemeGenerationRecorded,
+} from "@/lib/route-schemes/lifecycle"
+import {
   SERVICE_DAY_SHORT_LABELS,
   addDays,
   formatServiceDate,
-  recurrenceFromValues,
   serviceDayOf,
   todayIso,
 } from "@/lib/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
-
-/** Only schemes with structured recurrence can generate (legacy fixtures cannot). */
-export function schemeCanGenerateRoutes(record: BusinessRecord): boolean {
-  return recurrenceFromValues(record.submittedValues ?? {}) !== null
-}
 
 const ACTION_LABELS: Record<PlannedRouteAction, string> = {
   create: "Create",
@@ -145,21 +144,31 @@ export function SchemeGenerateRoutesDialog({
     : 0
 
   const confirm = () => {
-    if (!generation) return
+    if (!generation || !scheme) return
     // Same plan the preview showed, re-applied with the confirm-time stamp
     // (deterministic inputs, so only generatedAt differs from the preview).
+    const generatedAt = new Date().toISOString()
     const stamped = applySchemeGeneration({
       plan: generation.plan,
       existingPickups,
       containers,
       actorName,
-      generatedAt: new Date().toISOString(),
+      generatedAt,
     })
     for (const route of stamped.routes) {
       upsertRecord("route-studio", "routes", route)
     }
     for (const pickup of stamped.pickups) {
       upsertRecord("route-studio", "pickups", pickup)
+    }
+    // First successful generation → Scheduled (D25/issue #25): the persisted
+    // marker the derived lifecycle status reads. Later runs never restamp.
+    if (!schemeGenerationRecorded(scheme)) {
+      upsertRecord(
+        "route-studio",
+        "schemes",
+        recordSchemeGeneration(scheme, generatedAt),
+      )
     }
     const { summary } = stamped
     toast.success(
@@ -408,7 +417,9 @@ export function SchemeGeneratedRoutesSection({
 }) {
   const allRoutes = useModuleRecords("route-studio", "routes")
   const routes = schemeGeneratedRoutes(record.id, allRoutes)
-  if (routes.length === 0 && !schemeCanGenerateRoutes(record)) return null
+  if (routes.length === 0 && !schemeCanGenerateRoutes(record, todayIso())) {
+    return null
+  }
 
   // Group and order by the operating date the rows display (deviation-remapped),
   // not the identity serviceDate — a remap across today must not file a future

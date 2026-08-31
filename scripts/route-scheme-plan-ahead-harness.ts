@@ -168,12 +168,26 @@ check(
   false,
 )
 check(
-  "Expired never runs",
+  "Expired never runs (derived: effectiveTo has passed)",
+  schemeAutoGenerates(
+    makeScheme({
+      id: "s",
+      status: "Scheduled",
+      planAhead: true,
+      effectiveFrom: "2026-01-01",
+      effectiveTo: "2026-06-30",
+    }),
+    TODAY,
+  ),
+  false,
+)
+check(
+  "stale persisted Expired inside its effective window is distrusted and runs (issue #25)",
   schemeAutoGenerates(
     makeScheme({ id: "s", status: "Expired", planAhead: true }),
     TODAY,
   ),
-  false,
+  true,
 )
 check(
   "Validation issue never runs",

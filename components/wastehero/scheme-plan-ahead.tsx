@@ -35,7 +35,12 @@ export function SchemePlanAheadRunner({ actorName }: { actorName: string }) {
   useEffect(() => {
     if (!hydrated || hasRun.current) return
     hasRun.current = true
-    const { routes, pickups, summary } = runPlanAhead({
+    const {
+      routes,
+      pickups,
+      schemes: schemeStamps,
+      summary,
+    } = runPlanAhead({
       schemes,
       today: todayIso(),
       existingRoutes,
@@ -48,6 +53,12 @@ export function SchemePlanAheadRunner({ actorName }: { actorName: string }) {
     })
     for (const route of routes) upsertRecord("route-studio", "routes", route)
     for (const pickup of pickups) upsertRecord("route-studio", "pickups", pickup)
+    // First-generation lifecycle stamps (issue #25): Validated → Scheduled
+    // plus the persisted marker. Only unrecorded schemes come back, so this
+    // cannot re-write (and re-loop) on later visits.
+    for (const scheme of schemeStamps) {
+      upsertRecord("route-studio", "schemes", scheme)
+    }
     // Quiet refreshes stay quiet — a toast on every visit would be noise.
     if (summary.created > 0 || summary.cancelled > 0) {
       toast.info("Plan Ahead generated routes", {

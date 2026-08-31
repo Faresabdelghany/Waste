@@ -57,7 +57,7 @@ Runtime flow: Area/Zone + Calendar → Route Scheme → candidate service dates 
 `runPlanAhead` accepts `calendarRecords`, resolves each scheme's calendar by `calendarId`, passes it through. Toast mentions holiday-skipped count.
 
 ### 4. Validation (`lib/route-schemes/validation.ts`)
-`validateScheme` returns non-blocking `warnings` alongside blocking `issues`: service day outside calendar working days; calendar not Active; scheme effective window outside calendar validity. Shown in wizard review; stored as a `Validation warnings` fact.
+`validateScheme` returns non-blocking `warnings` alongside blocking `issues`: service day outside calendar working days; calendar not Active; scheme effective window outside calendar validity. Shown in wizard review; stored as a `Validation warnings` fact. *Superseded in part (issue #25, 2026-08-31): the stored fact remains for history/debugging only — the authoritative current warnings are derived live per render via `schemeAttention` (`lib/route-schemes/lifecycle.ts`) and shown as the amber Attention badge; see `docs/new-changes/SPEC.md` area B.*
 
 ### 5. Registry removal
 - `business-modules.ts`: delete `pickup-settings`, `calendar-days`, `collection-weeks` modules; update Plan copy; retarget calendars module (`primaryAction: "New calendar"`, rules); scrub dangling `related[]` strings; backfill scheme/calendar/deviation fixtures with `submittedValues`.

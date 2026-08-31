@@ -40,6 +40,11 @@ import {
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
 import { calendarFromRecord } from "@/lib/route-schemes/calendar"
 import {
+  schemeAttention,
+  schemeCanGenerateRoutes,
+  withEffectiveSchemeStatus,
+} from "@/lib/route-schemes/lifecycle"
+import {
   isPlanAheadEnabled,
   setPlanAhead,
 } from "@/lib/route-schemes/plan-ahead"
@@ -50,6 +55,7 @@ import {
   recurrenceFromValues,
   recurrenceSentence,
   serviceDaysFromValues,
+  todayIso,
 } from "@/lib/route-schemes/recurrence"
 import {
   effectiveDayRules,
@@ -191,7 +197,6 @@ import { SchemeStopMatchingSection } from "@/components/wastehero/scheme-stop-ma
 import {
   SchemeGeneratedRoutesSection,
   SchemeGenerateRoutesDialog,
-  schemeCanGenerateRoutes,
 } from "@/components/wastehero/scheme-generate-routes"
 import { SchemePlanAheadRunner } from "@/components/wastehero/scheme-plan-ahead"
 import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
@@ -1207,11 +1212,18 @@ export function BusinessWorkspace({
   const isSchemeCreateFlow =
     activeModuleFormSchema?.key === "route-studio.schemes"
   const activeRecords = useMemo(() => {
-    const records = getRecords(
+    let records = getRecords(
       workspace.id,
       activeModule.id,
       activeModule.records,
     )
+    // Scheme status is always the derived lifecycle status (issue #25) —
+    // no surface renders the raw stored string, so every downstream reader
+    // (table, filters, grouping, detail, row actions) sees one truth.
+    if (activeModule.id === "schemes") {
+      const today = todayIso()
+      records = records.map((record) => withEffectiveSchemeStatus(record, today))
+    }
     // Contractor isolation covers user-created records too, which a static
     // fixture-id allowlist cannot.
     return contractorScopeId
@@ -1598,9 +1610,33 @@ export function BusinessWorkspace({
   // ticket #8) on a scheme: row menu + detail view, only for schemes whose
   // recurrence is structured enough to generate.
   const isSchemesView = activeModule.id === "schemes"
+  // The live Attention warnings per scheme (issue #25, D5/D20): recomputed
+  // from canonical stored configuration plus current related records at
+  // render time — never read from persisted "Validation warnings" facts.
+  const schemeAttentionById = useMemo(() => {
+    if (!isSchemesView) return new Map<string, string[]>()
+    const relatedModuleRecords = (workspaceId: WorkspaceId, moduleId: string) => {
+      const module = getWorkspaceDefinition(workspaceId).modules.find(
+        (candidate) => candidate.id === moduleId,
+      )
+      return module ? getRecords(workspaceId, module.id, module.records) : []
+    }
+    const related = {
+      schemes: activeRecords,
+      calendars: relatedModuleRecords("plan", "calendars"),
+      allocations: relatedModuleRecords("fleet", "vehicle-planning"),
+      containers: relatedModuleRecords("resources", "containers"),
+      vehicles: relatedModuleRecords("fleet", "vehicles"),
+    }
+    return new Map(
+      activeRecords.map((record) => [record.id, schemeAttention(record, related)]),
+    )
+  }, [activeRecords, getRecords, isSchemesView])
   const schemeExtraActions = useCallback(
     (record: BusinessRecord): RecordExtraAction[] | undefined =>
-      isSchemesView && canRunRecordActions && schemeCanGenerateRoutes(record)
+      isSchemesView &&
+      canRunRecordActions &&
+      schemeCanGenerateRoutes(record, todayIso())
         ? [
             {
               label: "Generate routes",
@@ -1853,10 +1889,14 @@ export function BusinessWorkspace({
         (candidate) => candidate.id === moduleId,
       )
       if (!module) return null
-      const record =
+      let record =
         getRecords(workspace.id, module.id, module.records).find(
           (candidate) => candidate.id === recordId,
         ) ?? null
+      // Deep-linked schemes show the derived lifecycle status too (issue #25).
+      if (record && module.id === "schemes") {
+        record = withEffectiveSchemeStatus(record, todayIso())
+      }
       // Deep links cannot escape a contractor scope.
       if (
         record &&
@@ -4905,15 +4945,20 @@ export function BusinessWorkspace({
                                   )
                                 )}
                                 <TableCell>
-                                  <Badge
-                                    variant="outline"
-                                    className={cn(
-                                      "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                                      statusClasses(record.status),
-                                    )}
-                                  >
-                                    {record.status}
-                                  </Badge>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <Badge
+                                      variant="outline"
+                                      className={cn(
+                                        "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                                        statusClasses(record.status),
+                                      )}
+                                    >
+                                      {record.status}
+                                    </Badge>
+                                    <SchemeAttentionBadge
+                                      warnings={schemeAttentionById.get(record.id)}
+                                    />
+                                  </div>
                                 </TableCell>
                                 {!isContractorUsersView && (
                                   <TableCell className="min-w-[150px]">
@@ -4989,6 +5034,11 @@ export function BusinessWorkspace({
           onDelete={canDeleteRecords ? requestRecordDelete : undefined}
           showActions={canRunRecordActions}
           extraActions={selectedRecord ? schemeExtraActions(selectedRecord) : undefined}
+          attention={
+            isSchemesView && selectedRecord
+              ? schemeAttentionById.get(selectedRecord.id)
+              : undefined
+          }
         />
       )}
       <SchemeGenerateRoutesDialog
@@ -5067,6 +5117,24 @@ export function BusinessWorkspace({
   )
 }
 
+/**
+ * The live Attention overlay (issue #25, D5/D20): an amber badge beside the
+ * lifecycle status when current validation/reconciliation warnings exist.
+ * A warning condition, never a status value.
+ */
+function SchemeAttentionBadge({ warnings }: { warnings?: string[] }) {
+  if (!warnings || warnings.length === 0) return null
+  return (
+    <Badge
+      variant="outline"
+      title={warnings.join("\n")}
+      className="rounded-full border-transparent bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-100"
+    >
+      Attention
+    </Badge>
+  )
+}
+
 function RecordDetailsDialog({
   module,
   record,
@@ -5077,6 +5145,7 @@ function RecordDetailsDialog({
   onDelete,
   showActions = true,
   extraActions,
+  attention,
 }: {
   module: ModuleDefinition
   record: BusinessRecord | null
@@ -5087,6 +5156,8 @@ function RecordDetailsDialog({
   onDelete?: (record: BusinessRecord) => void
   showActions?: boolean
   extraActions?: RecordExtraAction[]
+  /** Live scheme Attention warnings; renders the amber overlay badge. */
+  attention?: string[]
 }) {
   return (
     <Sheet open={Boolean(record)} onOpenChange={(open) => !open && onClose()}>
@@ -5101,6 +5172,7 @@ function RecordDetailsDialog({
                 >
                   {record.status}
                 </Badge>
+                <SchemeAttentionBadge warnings={attention} />
                 <Badge variant="outline" className="rounded-full text-[11px] font-normal">
                   {record.id}
                 </Badge>

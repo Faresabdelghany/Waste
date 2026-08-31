@@ -2211,13 +2211,19 @@ const plan: WorkspaceDefinition = {
         // selects stops declaratively (issue #19): a stop-matching rule
         // (fractions + vehicle type inside its planning area) instead of a
         // picked container list; scheme-osterbro-b keeps the explicit list,
-        // exercising the manual mode.
+        // exercising the manual mode. Statuses are the persisted lifecycle
+        // shape (issue #25): scheme-central-a is Scheduled with the recorded
+        // generation marker (lastGeneratedAt), so it DISPLAYS as Effective
+        // through the derived status; scheme-osterbro-b is Validated. Both
+        // present a live Attention badge from real derived warnings —
+        // central-a's open effective period and over-served promises,
+        // osterbro-b's under-served promises — never a fake status string.
         {
           ...record(
             "scheme-central-a",
             "RS-Central · Week A",
             "Copenhagen Central · Mon–Fri",
-            "Effective",
+            "Scheduled",
             "Planning Team",
             "214 stops/week",
             "2 days ago",
@@ -2253,6 +2259,7 @@ const plan: WorkspaceDefinition = {
             matchFractions: "Residual",
             matchVehicleType: "Rear loader",
             matchRulesByDay: "{}",
+            lastGeneratedAt: "2026-08-29T05:10:00.000Z",
           },
         },
         {
@@ -2260,21 +2267,21 @@ const plan: WorkspaceDefinition = {
             "scheme-osterbro-b",
             "RS-Østerbro · Organic B",
             "Østerbro Housing · Tue/Thu",
-            "Validation issue",
+            "Validated",
             "Katrine Holm",
             "96 stops/week",
             "4 hours ago",
-            "Two service points conflict with a holiday deviation and one vehicle compatibility rule.",
+            "Fortnightly template whose cadence under-serves two linked containers' promised service frequency — review the recurrence or the promises.",
             {
-              Version: "v6 draft",
+              Version: "v6",
               Recurrence: "Every 2 weeks (even ISO weeks) on Tue, Thu",
-              Effective: "4 Aug 2026",
+              Effective: "4 Aug – 31 Dec 2026",
               "Collection calendar": "Copenhagen Central 2026",
               "Planned start": "06:30",
               Hauler: "NordRen ApS",
               Vehicle: "Organic sealed 12t",
             },
-            ["2 validation issues", "Contract area CA-Ø-2", "96 pickup orders"],
+            ["2 under-served frequency promises", "Contract area CA-Ø-2", "96 pickup orders"],
             "Planning draft",
             "4 hours",
             ["Resolve issues", "Submit proposal"],
@@ -2286,7 +2293,7 @@ const plan: WorkspaceDefinition = {
             weekRotation: "even",
             serviceDays: "tuesday, thursday",
             effectiveFrom: "2026-08-04",
-            effectiveTo: "",
+            effectiveTo: "2026-12-31",
             plannedStartTime: "06:30",
             sameAllDays: true,
             containerIds:

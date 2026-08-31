@@ -20,16 +20,14 @@ import {
   stringValueOf,
   type GenerationWindow,
 } from "./generation"
+import {
+  effectiveSchemeStatus,
+  recordSchemeGeneration,
+  schemeGenerationRecorded,
+} from "./lifecycle"
 import { addDays, recurrenceFromValues } from "./recurrence"
 
 const PLAN_AHEAD_DAYS = 7
-
-/**
- * "Validated or later" from the scheme lifecycle (Draft, Validated,
- * Scheduled, Effective, Expired) — Expired schemes are past their window and
- * fixture-only statuses like "Validation issue" are not yet promises.
- */
-const PLAN_AHEAD_STATUSES = new Set(["Validated", "Scheduled", "Effective"])
 
 /** Tomorrow through the next 7 days — today's routes are already operating. */
 export function planAheadWindow(today: string): GenerationWindow {
@@ -66,7 +64,11 @@ export function schemeAutoGenerates(
   today: string,
 ): boolean {
   if (!isPlanAheadEnabled(scheme)) return false
-  if (!PLAN_AHEAD_STATUSES.has(scheme.status)) return false
+  // "Validated or later, never Draft, never Expired" — through the canonical
+  // derived status (issue #25), so a stale persisted status string can
+  // neither qualify nor disqualify a scheme.
+  const status = effectiveSchemeStatus(scheme, today)
+  if (status === "Draft" || status === "Expired") return false
   const recurrence = recurrenceFromValues(scheme.submittedValues ?? {})
   if (!recurrence) return false
   const window = planAheadWindow(today)
@@ -90,6 +92,13 @@ export type PlanAheadSummary = {
 export type PlanAheadRunResult = {
   routes: BusinessRecord[]
   pickups: BusinessRecord[]
+  /**
+   * Scheme records to upsert: schemes whose FIRST successful generation this
+   * run performed, stamped by recordSchemeGeneration (Validated → Scheduled
+   * plus the persisted marker). Already-recorded schemes are never restamped,
+   * so applying these writes cannot retrigger a run loop.
+   */
+  schemes: BusinessRecord[]
   summary: PlanAheadSummary
 }
 
@@ -117,6 +126,7 @@ export function runPlanAhead(input: {
   const calendarRecords = input.calendarRecords ?? []
   const routes: BusinessRecord[] = []
   const pickups: BusinessRecord[] = []
+  const schemes: BusinessRecord[] = []
   const summary: PlanAheadSummary = {
     schemes: 0,
     created: 0,
@@ -153,6 +163,17 @@ export function runPlanAhead(input: {
       actorName: input.actorName,
       ...(input.generatedAt ? { generatedAt: input.generatedAt } : {}),
     })
+    // First successful generation → Scheduled (D25). A run that plans zero
+    // writes is still a successful generation; only the structural inability
+    // above (no plan) is not.
+    if (!schemeGenerationRecorded(scheme)) {
+      schemes.push(
+        recordSchemeGeneration(
+          scheme,
+          input.generatedAt ?? new Date().toISOString(),
+        ),
+      )
+    }
     summary.created += result.summary.created
     summary.refreshed += result.summary.refreshed
     summary.cancelled += result.summary.cancelled
@@ -165,5 +186,5 @@ export function runPlanAhead(input: {
     pickups.push(...result.pickups)
   }
 
-  return { routes, pickups, summary }
+  return { routes, pickups, schemes, summary }
 }
