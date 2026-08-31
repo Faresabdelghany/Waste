@@ -132,6 +132,10 @@ _Avoid_: Planned assignment
 One stop-level service action generated inside a dated Route. It exists from planning through execution, and its outcome and proof are recorded on that same Pickup.
 _Avoid_: Pickup history, separate service event, property, route
 
+**Session**:
+A driver-app work session on an assigned route, tracking the driver's device state, connectivity, queued actions, and proof progress from assignment to completion.
+_Avoid_: Route, actual assignment, pickup
+
 **Scenario**:
 An editable planning hypothesis containing selected assumptions and constraints.
 _Avoid_: Plan, production configuration
