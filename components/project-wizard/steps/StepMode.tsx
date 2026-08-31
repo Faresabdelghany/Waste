@@ -51,9 +51,11 @@ interface StepModeProps {
   onCancel?: () => void;
   onContinue?: () => void;
   onClose?: () => void;
+  /** What the chooser sets up ("route", "route scheme") — the copy is shared across flows. */
+  entityLabel?: string;
 }
 
-export function StepMode({ selected, onSelect, onCancel, onContinue, onClose }: StepModeProps) {
+export function StepMode({ selected, onSelect, onCancel, onContinue, onClose, entityLabel = "route" }: StepModeProps) {
   return (
     <div className="bg-muted relative rounded-3xl size-full" data-name="Card">
       <div className="size-full">
@@ -63,7 +65,7 @@ export function StepMode({ selected, onSelect, onCancel, onContinue, onClose }: 
           <div className="relative shrink-0 w-full">
             <div className="flex flex-row items-center justify-center size-full">
               <div className="flex items-center justify-center px-2 py-0 relative w-full">
-                <p className="basis-0 font-normal grow leading-5 min-h-px min-w-px relative shrink-0 text-muted-foreground text-sm">{`Choose how you'd like to set up your route`}</p>
+                <p className="basis-0 font-normal grow leading-5 min-h-px min-w-px relative shrink-0 text-muted-foreground text-sm">{`Choose how you'd like to set up your ${entityLabel}`}</p>
               </div>
             </div>
           </div>
@@ -80,7 +82,7 @@ export function StepMode({ selected, onSelect, onCancel, onContinue, onClose }: 
               <div className="content-stretch flex flex-col items-start relative shrink-0 w-full">
                 <div className="content-stretch flex items-center relative shrink-0 w-full" data-name="Card / Header">
                   <div className="basis-0 content-stretch flex grow items-start min-h-px min-w-px relative shrink-0">
-                    <Helper text="Quick create" text1="Create a route with minimal setup" />
+                    <Helper text="Quick create" text1={`Create a ${entityLabel} with minimal setup`} />
                   </div>
                 </div>
               </div>

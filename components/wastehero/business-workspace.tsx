@@ -45,6 +45,7 @@ import {
 } from "@/lib/route-schemes/plan-ahead"
 import {
   SERVICE_DAY_SHORT_LABELS,
+  formatServiceDate,
   parseServiceDays,
   recurrenceFromValues,
   recurrenceSentence,
@@ -2335,6 +2336,69 @@ export function BusinessWorkspace({
           seeded.pickupSetting = definition?.id ?? ""
         }
       }
+      // Scheme-generated routes store generation stamps (schemeId/serviceDate/
+      // actualDate/appliedVehicle/appliedDriver — generation.ts), not the
+      // quick form's field ids, so every field but Route Scheme would open
+      // empty — and Project would show the workspace scope default instead of
+      // the route's own project (issue #23). Map the stamps and the current
+      // assignment facts onto the form fields; quick-created routes already
+      // carry the form keys and are left alone.
+      if (activeModuleFormSchema.key === "route-studio.routes") {
+        if (typeof seeded.operatingDate !== "string" || !seeded.operatingDate) {
+          const stampedDate =
+            (typeof seeded.actualDate === "string" && seeded.actualDate) ||
+            (typeof seeded.serviceDate === "string" && seeded.serviceDate) ||
+            ""
+          if (stampedDate) seeded.operatingDate = stampedDate
+        }
+        if (
+          !editingRecord.submittedValues.projectId &&
+          editingRecord.projectIds?.length
+        ) {
+          seeded.projectId = editingRecord.projectIds[0]
+        }
+        const resolveFleetRecordId = (
+          moduleId: "vehicles" | "drivers",
+          label: string | undefined,
+        ) => {
+          if (!label || /^unassigned$/i.test(label)) return ""
+          const resolved = resolveFormModule("fleet", moduleId)
+          if (!resolved) return ""
+          // Route facts hold the vehicle callsign ("WH-31"), the registry
+          // name carries the plate after it.
+          return (
+            getRecords(
+              resolved.workspaceId,
+              resolved.module.id,
+              resolved.module.records,
+            ).find(
+              (candidate) =>
+                candidate.name === label ||
+                candidate.name.split(" · ")[0] === label,
+            )?.id ?? ""
+          )
+        }
+        // The facts are the current assignment — a Reassign writes facts
+        // only, on purpose, so a previously-edited route's stored
+        // vehicleId/driverId can be stale. Resolve from facts first and fall
+        // back to whatever the record stored.
+        const vehicleId = resolveFleetRecordId(
+          "vehicles",
+          editingRecord.facts.Vehicle ??
+            (typeof seeded.appliedVehicle === "string"
+              ? seeded.appliedVehicle
+              : undefined),
+        )
+        if (vehicleId) seeded.vehicleId = vehicleId
+        const driverId = resolveFleetRecordId(
+          "drivers",
+          editingRecord.facts.Driver ??
+            (typeof seeded.appliedDriver === "string"
+              ? seeded.appliedDriver
+              : undefined),
+        )
+        if (driverId) seeded.driverId = driverId
+      }
       return seeded
     }
 
@@ -2437,6 +2501,7 @@ export function BusinessWorkspace({
     editingRecord,
     formInitialValues,
     getFormRelationOptions,
+    getRecords,
     isPriceEngineProducts,
   ])
 
@@ -3188,6 +3253,52 @@ export function BusinessWorkspace({
       }
     }
 
+    // Route facts use the generation keys ("Operating date", "Route scheme" —
+    // generation.ts); the quick form writes its own field labels ("Date",
+    // "Route Scheme") beside them, so an edited generated route would carry
+    // both spellings with diverging values (issue #23). Fold the label-keyed
+    // facts onto the canonical keys and keep the generated "Project · Area"
+    // context line instead of the form's full field dump.
+    const normalizeRouteRecord = (record: BusinessRecord): BusinessRecord => {
+      const nextFacts = { ...record.facts }
+      const nextValues = { ...record.submittedValues }
+      if (nextFacts.Date) {
+        nextFacts["Operating date"] = /^\d{4}-\d{2}-\d{2}$/.test(nextFacts.Date)
+          ? formatServiceDate(nextFacts.Date)
+          : nextFacts.Date
+        delete nextFacts.Date
+      }
+      if (nextFacts["Route Scheme"]) {
+        nextFacts["Route scheme"] = nextFacts["Route Scheme"]
+        delete nextFacts["Route Scheme"]
+      }
+      const operatingDate =
+        typeof values.operatingDate === "string" ? values.operatingDate : ""
+      const isSchemeGenerated =
+        typeof nextValues.schemeId === "string" &&
+        typeof nextValues.serviceDate === "string" &&
+        Boolean(nextValues.serviceDate)
+      // The (schemeId, serviceDate) pair is the regeneration identity and the
+      // record id encodes it, so serviceDate must never move — regeneration
+      // would otherwise resurrect the old date under this route's id and
+      // cancel the edited one. An edited date is a manual move of when the
+      // route actually runs, the same shape as a deviation: actualDate only.
+      if (operatingDate && isSchemeGenerated) {
+        nextValues.actualDate = operatingDate
+      }
+      const generatedContext = [nextFacts.Project, nextFacts.Area]
+        .filter(Boolean)
+        .join(" · ")
+      return {
+        ...record,
+        ...(isSchemeGenerated && generatedContext
+          ? { context: generatedContext }
+          : {}),
+        facts: nextFacts,
+        submittedValues: nextValues,
+      }
+    }
+
     // Tickets keep their classification facts under the fixture keys (Type,
     // Team) so table columns and filters read one shape regardless of whether
     // a ticket was seeded or submitted, and the record description is the
@@ -3335,6 +3446,9 @@ export function BusinessWorkspace({
       if (resolvedTarget.module.id === "tickets") {
         updatedRecord = normalizeTicketRecord(updatedRecord)
       }
+      if (resolvedTarget.module.id === "routes") {
+        updatedRecord = normalizeRouteRecord(updatedRecord)
+      }
       if (resolvedTarget.module.id === "schemes") {
         updatedRecord = normalizeRouteSchemeRecord(updatedRecord)
       }
@@ -3436,6 +3550,9 @@ export function BusinessWorkspace({
     }
     if (resolvedTarget.module.id === "tickets") {
       newRecord = normalizeTicketRecord(newRecord)
+    }
+    if (resolvedTarget.module.id === "routes") {
+      newRecord = normalizeRouteRecord(newRecord)
     }
     if (resolvedTarget.module.id === "schemes") {
       newRecord = normalizeRouteSchemeRecord(newRecord)
@@ -3553,7 +3670,8 @@ export function BusinessWorkspace({
       "Execution policy": "create record",
       "Submitted by": actorName,
       ...(project ? { Project: project.name } : {}),
-      ...(data.date ? { Date: data.date } : {}),
+      // The canonical date fact key routes share with generation (issue #23).
+      ...(data.date ? { "Operating date": formatServiceDate(data.date) } : {}),
       ...(contractor ? { Contractor: contractor.name } : {}),
       ...(data.homeDepot ? { "Home depot": data.homeDepot } : {}),
       ...(data.wasteStation ? { "Waste station": data.wasteStation } : {}),

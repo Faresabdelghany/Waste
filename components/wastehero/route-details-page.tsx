@@ -146,6 +146,82 @@ const initialStops: RouteStop[] = [
   },
 ]
 
+function pickupStopNumber(pickup: BusinessRecord): number {
+  const value = Number(pickup.facts.Stop)
+  return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER
+}
+
+function pickupStopStatus(status: string): RouteStop["status"] {
+  if (/completed/i.test(status)) return "Completed"
+  if (/skipped|failed|attention/i.test(status)) return "Attention"
+  return "Planned"
+}
+
+/**
+ * A generated route's stop table comes from its own generated pickups
+ * (issue #23) — the demo list above stays only as the fallback for fixture
+ * routes that never had pickups written. Depot and unloading legs are
+ * bracketed from the route facts, timed by the generated Time window.
+ */
+function generatedRouteStops(
+  record: BusinessRecord,
+  pickups: readonly BusinessRecord[],
+): RouteStop[] | null {
+  const routePickups = pickups
+    .filter((pickup) => stringValueOf(pickup, "routeId") === record.id)
+    .sort((a, b) => pickupStopNumber(a) - pickupStopNumber(b))
+  // A scheme-generated route with zero pickups (a stop rule that matched no
+  // containers) is still a generated route: it must show its real, empty
+  // plan — the demo fallback is only for records that never had pickups
+  // written (fixture and quick-created routes carry no serviceDate stamp).
+  const isSchemeGenerated = Boolean(
+    stringValueOf(record, "schemeId") && stringValueOf(record, "serviceDate"),
+  )
+  if (routePickups.length === 0 && !isSchemeGenerated) return null
+  const [windowStart, windowEnd] = (record.facts["Time window"] ?? "").split("–")
+  const stops: RouteStop[] = []
+  if (record.facts.Depot) {
+    stops.push({
+      id: `${record.id}-depot`,
+      sequence: stops.length + 1,
+      name: record.facts.Depot,
+      kind: "Depot",
+      arrival: windowStart || "—",
+      service: "Start and vehicle check",
+      status: /active|completed/i.test(record.status) ? "Completed" : "Planned",
+    })
+  }
+  for (const pickup of routePickups) {
+    stops.push({
+      id: pickup.id,
+      sequence: stops.length + 1,
+      name:
+        pickup.facts.Address?.split(",")[0] ??
+        pickup.facts["Container ID"] ??
+        pickup.name,
+      kind: "Collection",
+      arrival: pickup.facts.Scheduled ?? "—",
+      service:
+        [pickup.facts["Waste fraction"], pickup.facts["Container Type"]]
+          .filter(Boolean)
+          .join(" · ") || "Container collection",
+      status: pickupStopStatus(pickup.status),
+    })
+  }
+  if (record.facts.Unloading) {
+    stops.push({
+      id: `${record.id}-unloading`,
+      sequence: stops.length + 1,
+      name: record.facts.Unloading,
+      kind: "Unloading",
+      arrival: windowEnd || "—",
+      service: "Planned unloading",
+      status: /completed/i.test(record.status) ? "Completed" : "Planned",
+    })
+  }
+  return stops
+}
+
 function routeStatusClasses(status: string) {
   if (/active|completed|ready/i.test(status)) {
     return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
@@ -313,9 +389,11 @@ function ReassignRouteDialog({
 function RouteInformation({
   record,
   stops,
+  hasGeneratedStops,
 }: {
   record: BusinessRecord
   stops: RouteStop[]
+  hasGeneratedStops: boolean
 }) {
   const completedStops = stops.filter(
     (stop) => stop.status === "Completed",
@@ -346,20 +424,75 @@ function RouteInformation({
       record.facts.Contractor ?? "Copenhagen Municipal Operations",
       true,
     ],
+    ...(record.facts.Depot
+      ? [["Depot", record.facts.Depot, true] as InformationRow]
+      : []),
+    ...(record.facts.Unloading
+      ? [["Unloading station", record.facts.Unloading, true] as InformationRow]
+      : []),
     ["Route scheme", routeScheme(record), true],
+    ...(record.facts["Scheme version"]
+      ? [["Scheme version", record.facts["Scheme version"]] as InformationRow]
+      : []),
   ]
-  const schedule: InformationRow[] = [
-    ["Estimated time", "06:00 → 12:50"],
-    ["Actual time", "06:10 → In progress"],
-    ["Estimated duration", "6h 50m"],
-    ["Actual duration", "2h 18m"],
-  ]
-  const progress: InformationRow[] = [
-    ["Completed stops", `${completedStops} of ${stops.length}`],
-    ["Estimated distance", "87.4 km"],
-    ["Actual distance", "31.2 km"],
-    ["Collected weight", "3.8 t"],
-  ]
+  // Generated routes carry their real Time window fact ("06:00–12:50"); the
+  // hardcoded demo values stay only for fixture routes without generated
+  // pickups (issue #23).
+  const [windowStart, windowEnd] = (record.facts["Time window"] ?? "").split("–")
+  const windowDuration = (() => {
+    const toMinutes = (time: string | undefined) => {
+      if (!time || !/^\d{1,2}:\d{2}$/.test(time.trim())) return null
+      const [hours, minutes] = time.trim().split(":").map(Number)
+      return hours * 60 + minutes
+    }
+    const start = toMinutes(windowStart)
+    const end = toMinutes(windowEnd)
+    if (start === null || end === null || end <= start) return null
+    const total = end - start
+    return `${Math.floor(total / 60)}h ${String(total % 60).padStart(2, "0")}m`
+  })()
+  const schedule: InformationRow[] = hasGeneratedStops
+    ? [
+        [
+          "Estimated time",
+          windowStart && windowEnd
+            ? `${windowStart} → ${windowEnd}`
+            : "Not planned",
+        ],
+        [
+          "Actual time",
+          record.status === "Active"
+            ? "In progress"
+            : record.status === "Completed"
+              ? "Completed"
+              : "Not started",
+        ],
+        ...(windowDuration
+          ? [["Estimated duration", windowDuration] as InformationRow]
+          : []),
+        ...(record.facts.Deviation
+          ? [["Deviation", record.facts.Deviation] as InformationRow]
+          : []),
+      ]
+    : [
+        ["Estimated time", "06:00 → 12:50"],
+        ["Actual time", "06:10 → In progress"],
+        ["Estimated duration", "6h 50m"],
+        ["Actual duration", "2h 18m"],
+      ]
+  const progress: InformationRow[] = hasGeneratedStops
+    ? [
+        ["Completed stops", `${completedStops} of ${stops.length}`],
+        ...(record.facts.Stops
+          ? [["Planned pickups", record.facts.Stops] as InformationRow]
+          : []),
+      ]
+    : [
+        ["Completed stops", `${completedStops} of ${stops.length}`],
+        ["Estimated distance", "87.4 km"],
+        ["Actual distance", "31.2 km"],
+        ["Collected weight", "3.8 t"],
+      ]
 
   const sections: { title: string; rows: InformationRow[] }[] = [
     { title: "Assignment", rows: assignment },
@@ -430,7 +563,31 @@ function OverviewTab({
   onDelete?: () => void
   readOnly?: boolean
 }) {
-  const [stops, setStops] = useState<RouteStop[]>(initialStops)
+  // Stops derive from the route's own generated pickups; the demo list is
+  // the fallback for fixture routes (issue #23). Manual stop edits sit in an
+  // overlay so the store-backed derivation stays hydration-safe, and "Reset
+  // route" simply clears the overlay back to the source of truth.
+  const pickupRecords = useModuleRecords("route-studio", "pickups")
+  const generatedStops = useMemo(
+    () => generatedRouteStops(record, pickupRecords),
+    [pickupRecords, record],
+  )
+  const baseStops = generatedStops ?? initialStops
+  const [editedStops, setEditedStops] = useState<RouteStop[] | null>(null)
+  // When the store-derived stops actually change (a lifecycle action, a
+  // reassignment, a regeneration), the manual overlay is a stale snapshot of
+  // the old derivation — drop it and re-derive.
+  const derivedKey = generatedStops
+    ? generatedStops.map((stop) => `${stop.id}:${stop.status}`).join("|")
+    : "demo"
+  const [lastDerivedKey, setLastDerivedKey] = useState(derivedKey)
+  if (lastDerivedKey !== derivedKey) {
+    setLastDerivedKey(derivedKey)
+    setEditedStops(null)
+  }
+  const stops = editedStops ?? baseStops
+  const setStops = (updater: (current: RouteStop[]) => RouteStop[]) =>
+    setEditedStops((current) => updater(current ?? baseStops))
   const [search, setSearch] = useState("")
   const [attentionOnly, setAttentionOnly] = useState(false)
   const [mapExpanded, setMapExpanded] = useState(false)
@@ -632,7 +789,7 @@ function OverviewTab({
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onSelect={() => {
-                    setStops(initialStops)
+                    setEditedStops(null)
                     setSelectedStopIds(new Set())
                     setLastDelete(null)
                     toast.success("Route reset")
@@ -713,7 +870,7 @@ function OverviewTab({
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    setStops(lastDelete.stops)
+                    setEditedStops(lastDelete.stops)
                     setLastDelete(null)
                     toast.success("Stops restored")
                   }}
@@ -951,7 +1108,11 @@ function OverviewTab({
             </button>
 
             {rightPanel === "information" && (
-              <RouteInformation record={record} stops={stops} />
+              <RouteInformation
+                record={record}
+                stops={stops}
+                hasGeneratedStops={generatedStops !== null}
+              />
             )}
           </section>
 
@@ -1390,6 +1551,7 @@ export function RouteDetailsPage({
         </div>
         <TabsContent value="overview" className="mt-0 min-h-0 flex-1">
           <OverviewTab
+            key={record.id}
             record={record}
             onAction={onAction}
             onDelete={onDelete}

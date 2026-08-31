@@ -302,6 +302,7 @@ function SchemeModeChooserOverlay({
           onSelect={setMode}
           onCancel={onClose}
           onClose={onClose}
+          entityLabel="route scheme"
           onContinue={() => {
             if (mode === "quick") onQuick()
             if (mode === "guided") onGuided()
