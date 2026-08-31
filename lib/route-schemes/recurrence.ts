@@ -215,7 +215,9 @@ export function serviceDaysFromValues(
   return parseServiceDays(typeof raw === "string" ? raw : "")
 }
 
-const isFrequency = (value: unknown): value is RecurrenceFrequency =>
+export const isRecurrenceFrequency = (
+  value: unknown,
+): value is RecurrenceFrequency =>
   typeof value === "string" && Object.hasOwn(RECURRENCE_FREQUENCY_LABELS, value)
 
 // Shape alone is not enough: "9999-99-99" matches the pattern but parses to
@@ -241,7 +243,7 @@ export function recurrenceFromValues(
   values: Record<string, string | boolean | undefined>,
 ): SchemeRecurrence | null {
   const frequency = values.frequency
-  if (!isFrequency(frequency)) return null
+  if (!isRecurrenceFrequency(frequency)) return null
   const serviceDays = serviceDaysFromValues(values)
   if (serviceDays.length === 0) return null
   const effectiveFrom = typeof values.effectiveFrom === "string" ? values.effectiveFrom : ""

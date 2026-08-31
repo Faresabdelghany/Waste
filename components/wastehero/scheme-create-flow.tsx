@@ -69,7 +69,6 @@ import {
   vehicleTypeOfRecord,
   type SchemeMatchPlans,
   type StopMatchRule,
-  type StopSelectionMode,
 } from "@/lib/route-schemes/matching"
 import {
   allocationConflictSources,
@@ -82,36 +81,13 @@ import {
   type SchemeFrequencyPromise,
   type SchemeValidationResult,
 } from "@/lib/route-schemes/validation"
+import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
 import { cn } from "@/lib/utils"
 
-export interface GuidedSchemeData {
-  schemeName: string
-  projectId?: string
-  planningAreaId?: string
-  calendarId?: string
-  frequency: RecurrenceFrequency
-  weekRotation: WeekRotation
-  serviceDays: ServiceDay[]
-  effectiveFrom: string
-  effectiveTo: string
-  plannedStartTime: string
-  contractorId?: string
-  plannedVehicleId?: string
-  plannedDriverId?: string
-  depotId?: string
-  unloadingStationId?: string
-  /**
-   * Stop selection (issue #19): "rule" stores a declarative matching rule
-   * (fractions + optional vehicle type inside the scheme's planning area);
-   * "manual" keeps the explicitly picked container lists.
-   */
-  stopSelection: StopSelectionMode
-  sameAllDays: boolean
-  sharedContainerIds: string[]
-  containersByDay: Partial<Record<ServiceDay, string[]>>
-  matchRule: StopMatchRule
-  matchRulesByDay: Partial<Record<ServiceDay, StopMatchRule>>
-}
+// The wizard's draft shape lives in lib/route-schemes/quick-create (issue
+// #31) so Quick Create's value mapping and the harness share it without
+// pulling in UI code; re-exported here for the existing import sites.
+export type { GuidedSchemeData }
 
 export function schemeDayPlans(data: GuidedSchemeData): SchemeDayPlans {
   return {

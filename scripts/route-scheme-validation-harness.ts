@@ -5,6 +5,10 @@
 // Run: npx tsx scripts/route-scheme-validation-harness.ts
 import type { CollectionCalendar } from "../lib/route-schemes/calendar"
 import {
+  quickSchemeDraftFromValues,
+  type GuidedSchemeData,
+} from "../lib/route-schemes/quick-create"
+import {
   allocationConflictSourceFromValues,
   allocationConflictSources,
   dayPlanCountSummary,
@@ -904,6 +908,177 @@ check(
   "no reconciliation input → previous behavior unchanged",
   validateScheme(validInput, []),
   { status: "Validated", issues: [], warnings: [] },
+)
+
+/* ------------- Quick Create parity (issue #31, D19/D23/D29, P1) ----------- */
+
+// Quick Create maps its form values onto the wizard's draft shape
+// (quickSchemeDraftFromValues) and shares record creation from there, so
+// parity is asserted at the mapping seam plus the domain rules over mapped
+// drafts — there is no second create path to compare against.
+
+const quickValues: Record<string, string | boolean | undefined> = {
+  schemeName: " Nørrebro glass ",
+  projectId: "project-cph",
+  planningAreaId: "area-norrebro",
+  calendarId: "calendar-central",
+  frequency: "every-2-weeks",
+  weekRotation: "even",
+  serviceDays: "sunday, wednesday",
+  effectiveFrom: "2026-09-01",
+  effectiveTo: "",
+  plannedStartTime: "07:00",
+  contractorId: "",
+  plannedVehicleId: "vehicle-1",
+  plannedDriverId: "driver-1",
+  depotId: "depot-1",
+  unloadingStationId: "depot-2",
+  stopSelection: "rule",
+  matchFractions: "Glass, Metal",
+  matchVehicleType: "Glass crane",
+  // Quick-only descriptor fields — never part of the draft.
+  endBehavior: "depot",
+  proposalSource: "internal",
+}
+
+const quickDraft = quickSchemeDraftFromValues(quickValues)
+
+check("quick values map onto the wizard draft shape", quickDraft, {
+  schemeName: "Nørrebro glass",
+  projectId: "project-cph",
+  planningAreaId: "area-norrebro",
+  calendarId: "calendar-central",
+  frequency: "every-2-weeks",
+  weekRotation: "even",
+  serviceDays: ["wednesday", "sunday"],
+  effectiveFrom: "2026-09-01",
+  effectiveTo: "",
+  plannedStartTime: "07:00",
+  plannedVehicleId: "vehicle-1",
+  plannedDriverId: "driver-1",
+  depotId: "depot-1",
+  unloadingStationId: "depot-2",
+  stopSelection: "rule",
+  sameAllDays: true,
+  sharedContainerIds: [],
+  containersByDay: {},
+  matchRule: { fractions: ["Glass", "Metal"], vehicleType: "Glass crane" },
+  matchRulesByDay: {},
+} satisfies GuidedSchemeData)
+
+check(
+  "single-rule by design (D29): per-day and manual stray values are ignored",
+  quickSchemeDraftFromValues({
+    ...quickValues,
+    sameAllDays: false,
+    matchRulesByDay: JSON.stringify({ sunday: { fractions: ["Paper"] } }),
+    containerIds: "c1,c2",
+    containersByDay: JSON.stringify({ sunday: ["c1"] }),
+  }),
+  quickDraft,
+)
+
+check(
+  "manual stop selection is preserved with empty lists, never converted to a rule",
+  (() => {
+    const draft = quickSchemeDraftFromValues({
+      ...quickValues,
+      stopSelection: "manual",
+    })
+    return {
+      stopSelection: draft.stopSelection,
+      sharedContainerIds: draft.sharedContainerIds,
+    }
+  })(),
+  { stopSelection: "manual", sharedContainerIds: [] },
+)
+
+check(
+  "wizard defaults fill unknown frequency, rotation, and start time",
+  (() => {
+    const draft = quickSchemeDraftFromValues({
+      schemeName: "Fallbacks",
+      frequency: "four-week",
+      weekRotation: "",
+      plannedStartTime: "",
+    })
+    return [draft.frequency, draft.weekRotation, draft.plannedStartTime]
+  })(),
+  ["weekly", "odd", "06:30"],
+)
+
+// The domain rules over a mapped quick draft — the same validateScheme the
+// wizard runs, composed the way the create path composes it (one shared rule
+// across every service day, matches pre-resolved by the caller).
+const quickValidation = (
+  draft: GuidedSchemeData,
+  matchedCount: number,
+) =>
+  validateScheme(
+    {
+      serviceDays: draft.serviceDays,
+      effectiveFrom: draft.effectiveFrom,
+      effectiveTo: draft.effectiveTo,
+      plans: {
+        sameAllDays: draft.sameAllDays,
+        sharedContainerIds: draft.sharedContainerIds,
+        containersByDay: draft.containersByDay,
+      },
+      plannedVehicleId: draft.plannedVehicleId,
+      plannedDriverId: draft.plannedDriverId,
+      ...(draft.stopSelection === "rule"
+        ? {
+            stopMatching: {
+              areaId: draft.planningAreaId,
+              sameAllDays: true,
+              dayRules: draft.serviceDays.map((day) => ({
+                day,
+                fractions: draft.matchRule.fractions,
+                vehicleType: draft.matchRule.vehicleType,
+                matchedCount,
+              })),
+            },
+          }
+        : {}),
+    },
+    [],
+  )
+
+check(
+  "valid quick draft with an open-ended effective period → Validated (D23)",
+  quickValidation(quickDraft, 3),
+  { status: "Validated", issues: [], warnings: [] },
+)
+
+check(
+  "quick draft with effective to before from → Draft, named issue",
+  quickValidation({ ...quickDraft, effectiveTo: "2026-08-31" }, 3).issues,
+  ["Effective to must be on or after effective from"],
+)
+
+check(
+  "quick draft whose rule matches zero containers → Draft, blocking (FR-18)",
+  quickValidation(quickDraft, 0),
+  {
+    status: "Draft",
+    issues: ["No containers currently match the stop rule"],
+    warnings: [],
+  },
+)
+
+check(
+  "quick draft without a planning area → Draft, named issue",
+  quickValidation({ ...quickDraft, planningAreaId: undefined }, 3).issues,
+  ["Pick a planning area — the stop rule matches containers inside it"],
+)
+
+check(
+  "manual quick draft blocks with the wizard's missing-containers issue",
+  quickValidation(
+    quickSchemeDraftFromValues({ ...quickValues, stopSelection: "manual" }),
+    0,
+  ).issues,
+  ["Pick at least one container"],
 )
 
 console.log(`\n${passed} passed, ${failed} failed`)

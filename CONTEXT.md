@@ -105,7 +105,7 @@ An approved replacement of one planned service date with another, preserving the
 _Avoid_: Calendar exception, holiday rule
 
 **Route Scheme**:
-An effective-dated recurring template — geography, calendar, recurrence, service days, and stop selection — from which service work is generated. The scheme owns the rules that determine its stops: by default a Stop Matching Rule resolves the eligible containers at every generation; an explicitly picked container list is the small-scale alternative.
+An effective-dated recurring template — geography, calendar, recurrence, service days, stop selection, default assignment (vehicle, driver, depot, unloading station), and a planned start time — from which service work is generated. The effective period may be open-ended: an omitted effective-to means the scheme continues per its recurrence and calendar until explicitly ended or expired through later configuration. The scheme owns the rules that determine its stops: by default a Stop Matching Rule resolves the eligible containers at every generation; an explicitly picked container list is the small-scale alternative.
 _Avoid_: Route, plan, pickup setting, collection week
 
 **Stop Matching Rule**:

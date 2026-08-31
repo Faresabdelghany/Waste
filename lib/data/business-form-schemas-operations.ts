@@ -1021,10 +1021,13 @@ export const operationsBusinessFormSchemas = [
             required: true,
           },
           {
+            // Optional (issue #31, D23): an omitted To means the scheme runs
+            // open-ended until explicitly ended or expired through later
+            // configuration.
             id: "effectiveTo",
             label: "Effective to",
             type: "date",
-            required: true,
+            description: "Leave empty to run ongoing until the scheme is ended.",
           },
         ],
       },

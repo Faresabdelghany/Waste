@@ -57,6 +57,10 @@ import {
   setPlanAhead,
 } from "@/lib/route-schemes/plan-ahead"
 import {
+  QUICK_SCHEME_DRAFT_FIELD_IDS,
+  quickSchemeDraftFromValues,
+} from "@/lib/route-schemes/quick-create"
+import {
   schemeRowSummary,
   withDerivedSchemeContext,
   type SchemeRowSummary,
@@ -3156,6 +3160,53 @@ export function BusinessWorkspace({
       return relationRecordName(field, value) ?? optionLabel(value)
     }
 
+    // Quick Create parity for Route Schemes (issue #31, D19/D29/P1): map the
+    // form values onto the wizard's draft shape and share the guided path
+    // end-to-end — same validateScheme, same canonical record shape, same
+    // creation orchestration — instead of the generic record builder below
+    // (whose facts/relations prelude is skipped entirely; the guided builder
+    // writes the canonical shape itself). Every schema field the draft does
+    // not consume is a quick-only extra carried onto the record verbatim:
+    // submitted value, display fact, and relation ref.
+    if (
+      !editingRecord &&
+      formSchema.key === "route-studio.schemes" &&
+      activeModule.id === "schemes"
+    ) {
+      const extraValues: BusinessFormValues = {}
+      const extraFacts: Record<string, string> = {}
+      const extraRelations: NonNullable<BusinessRecord["relationRefs"]> = []
+      for (const field of fields) {
+        if (QUICK_SCHEME_DRAFT_FIELD_IDS.has(field.id)) continue
+        const value = values[field.id]
+        if (value === undefined || value === "") continue
+        extraValues[field.id] = value
+        extraFacts[field.label] = displayFormValue(field, value)
+        if (field.relation && typeof value === "string") {
+          const relationTarget = resolveFormModule(
+            field.relation.workspaceId,
+            field.relation.moduleId,
+          )
+          extraRelations.push({
+            fieldId: field.id,
+            workspaceId: relationTarget?.workspaceId ?? field.relation.workspaceId,
+            moduleId: relationTarget?.module.id ?? field.relation.moduleId,
+            recordId: value,
+            label: relationRecordName(field, value) ?? value,
+          })
+        }
+      }
+      createSchemeFromDraft(quickSchemeDraftFromValues(values), {
+        method: "Quick create",
+        extraValues,
+        extraFacts,
+        extraRelations,
+      })
+      setIsCreateOpen(false)
+      setRelatedCreateTarget(null)
+      return
+    }
+
     for (const field of fields) {
       const value = values[field.id]
       if (value === undefined || value === "") continue
@@ -3955,11 +4006,23 @@ export function BusinessWorkspace({
     })
   }
 
-  // Guided Setup for Route Schemes (spec FR-2/FR-5/FR-14): builds the record
-  // from the wizard draft, decides Validated vs Draft with the blocking
-  // checks, and keeps submittedValues in the shape the recurrence engine and
-  // per-day plan readers consume.
-  const handleGuidedSchemeCreate = (data: GuidedSchemeData) => {
+  // Route Scheme creation shared by both create paths (spec FR-2/FR-5/FR-14;
+  // issue #31, D19/P1): builds the record from the draft, decides Validated vs
+  // Draft with the blocking checks, keeps submittedValues in the shape the
+  // recurrence engine and per-day plan readers consume, and applies the
+  // creation orchestration. Guided Setup hands the wizard draft in directly;
+  // Quick Create maps its form values onto the same draft shape
+  // (quickSchemeDraftFromValues) — one path, so the two cannot drift.
+  const createSchemeFromDraft = (
+    data: GuidedSchemeData,
+    origin: {
+      method: "Guided Setup" | "Quick create"
+      /** Quick-form fields outside the canonical draft, carried verbatim. */
+      extraValues?: BusinessFormValues
+      extraFacts?: Record<string, string>
+      extraRelations?: NonNullable<BusinessRecord["relationRefs"]>
+    },
+  ) => {
     const now = Date.now()
     const relationRefs: NonNullable<BusinessRecord["relationRefs"]> = []
     const linkRecord = (
@@ -4034,6 +4097,7 @@ export function BusinessWorkspace({
         linkRecord("containerIds", "resources", "containers", containerId)
       }
     }
+    if (origin.extraRelations) relationRefs.push(...origin.extraRelations)
 
     // Conflicts (FR-5d) are checked against every scheme, not just the ones a
     // contractor-scoped view can see — a double-booked default is real either
@@ -4054,6 +4118,7 @@ export function BusinessWorkspace({
     )
 
     const submittedValues: NonNullable<BusinessRecord["submittedValues"]> = {
+      ...(origin.extraValues ?? {}),
       schemeName: data.schemeName.trim(),
       projectId: data.projectId ?? "",
       planningAreaId: data.planningAreaId ?? "",
@@ -4131,6 +4196,7 @@ export function BusinessWorkspace({
           }
         : {}),
       Containers: dayPlanCountSummary(dayPlans),
+      ...(origin.extraFacts ?? {}),
       ...(validation.issues.length > 0
         ? { "Validation issues": validation.issues.join(" · ") }
         : {}),
@@ -4150,8 +4216,10 @@ export function BusinessWorkspace({
       value: `${totalStops} planned stops`,
       updated: "Now",
       description: isRuleScheme
-        ? "Created with Guided Setup — stops are matched by the scheme's declarative rule at every generation."
-        : "Created with Guided Setup covering scope, recurrence, assignment defaults, and per-day container plans.",
+        ? `Created with ${origin.method} — stops are matched by the scheme's declarative rule at every generation.`
+        : origin.method === "Guided Setup"
+          ? "Created with Guided Setup covering scope, recurrence, assignment defaults, and per-day container plans."
+          : "Created with Quick create — manual container lists are picked in Guided Setup.",
       facts,
       related: [
         ...relationRefs.map((relation) => relation.label),
@@ -4202,11 +4270,11 @@ export function BusinessWorkspace({
       },
     )
     const creationEvent: AuditEvent = {
-      id: `audit-guided-scheme-${now}`,
-      action: "Create route scheme · Guided Setup",
+      id: `audit-scheme-create-${now}`,
+      action: `Create route scheme · ${origin.method}`,
       actor: actorName,
       at: "Now",
-      reason: "Guided Setup",
+      reason: origin.method,
       before: "Absent",
       after: creation.scheme.status,
       evidence: `${relationRefs.length} linked records · ${projectScopeLabel(
@@ -4251,6 +4319,9 @@ export function BusinessWorkspace({
       })
     }
   }
+
+  const handleGuidedSchemeCreate = (data: GuidedSchemeData) =>
+    createSchemeFromDraft(data, { method: "Guided Setup" })
 
   const requestContractorRelatedCreate = (
     target: "user" | "vehicle" | "driver" | "contract-area" | "contractor-price",
