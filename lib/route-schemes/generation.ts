@@ -649,6 +649,60 @@ function generatedPickupId(routeId: string, containerId: string): string {
 }
 
 /**
+ * The one generation-authored cancel shape (shared with edit-save
+ * reconciliation, issue #33): the route is rewritten Cancelled — never
+ * deleted — carrying the `cancelledByGeneration` marker that lets a later
+ * run re-create it when the scheme serves the date again. Everything that
+ * cancels on generation's behalf must write exactly this shape, or the
+ * resurrection pass above would not recognize its own bookkeeping.
+ */
+export function cancelledByGenerationRoute(
+  existing: BusinessRecord,
+  note: string,
+  generatedAt?: string,
+): BusinessRecord {
+  return {
+    ...existing,
+    status: "Cancelled",
+    updated: "Now",
+    freshness: "Now",
+    description: `Cancelled by regeneration — ${note}.`,
+    facts: { ...existing.facts, Deviation: note },
+    allowedTransitions: [],
+    submittedValues: {
+      ...existing.submittedValues,
+      // Marks this cancel as generation bookkeeping so a later run may
+      // re-create the route when the scheme serves the date again.
+      cancelledByGeneration: true,
+      ...(generatedAt ? { generatedAt } : {}),
+    },
+  }
+}
+
+/**
+ * A still-open pickup rewritten Skipped because regeneration invalidated it
+ * (its route was cancelled, or its container left the day plan). Null when
+ * the pickup already records operational reality (Completed/Skipped/Failed)
+ * — those are never rewritten.
+ */
+export function staleGenerationPickup(
+  pickup: BusinessRecord,
+  reason: string,
+): BusinessRecord | null {
+  if (pickup.status !== "Planned" && pickup.status !== "Next") return null
+  return {
+    ...pickup,
+    status: "Skipped",
+    value: "Skipped · regeneration",
+    updated: "Now",
+    freshness: "Now",
+    description: reason,
+    facts: { ...pickup.facts, Deviation: reason },
+    allowedTransitions: [],
+  }
+}
+
+/**
  * Materializes a plan into the route and pickup records to upsert. Skip rows
  * write nothing; cancel rows rewrite the existing route as Cancelled and skip
  * its still-planned pickups; refresh rows keep a dispatcher-overridden
@@ -699,17 +753,8 @@ export function applySchemeGeneration(input: {
   }
 
   const skipStalePickup = (pickup: BusinessRecord, reason: string) => {
-    if (pickup.status !== "Planned" && pickup.status !== "Next") return
-    pickups.push({
-      ...pickup,
-      status: "Skipped",
-      value: "Skipped · regeneration",
-      updated: "Now",
-      freshness: "Now",
-      description: reason,
-      facts: { ...pickup.facts, Deviation: reason },
-      allowedTransitions: [],
-    })
+    const skipped = staleGenerationPickup(pickup, reason)
+    if (skipped) pickups.push(skipped)
   }
 
   for (const planned of plan.routes) {
@@ -728,25 +773,13 @@ export function applySchemeGeneration(input: {
       const existing = planned.existing
       if (!existing) continue
       summary.cancelled += 1
-      routes.push({
-        ...existing,
-        status: "Cancelled",
-        updated: "Now",
-        freshness: "Now",
-        description: `Cancelled by regeneration — ${planned.note ?? "no longer served"}.`,
-        facts: {
-          ...existing.facts,
-          Deviation: planned.note ?? "Scheme no longer serves this date",
-        },
-        allowedTransitions: [],
-        submittedValues: {
-          ...existing.submittedValues,
-          // Marks this cancel as generation bookkeeping so a later run may
-          // re-create the route when the scheme serves the date again.
-          cancelledByGeneration: true,
-          ...(input.generatedAt ? { generatedAt: input.generatedAt } : {}),
-        },
-      })
+      routes.push(
+        cancelledByGenerationRoute(
+          existing,
+          planned.note ?? "Scheme no longer serves this date",
+          input.generatedAt,
+        ),
+      )
       for (const pickup of pickupsByRoute.get(existing.id) ?? []) {
         skipStalePickup(pickup, planned.note ?? "Route cancelled by regeneration")
       }

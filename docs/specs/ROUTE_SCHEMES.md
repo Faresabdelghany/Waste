@@ -18,7 +18,7 @@ Planners can only create routes one at a time for a single date (Quick create or
 - [ ] A planner creates a Route Scheme in a Guided Setup wizard specifying recurrence structurally (e.g. every week on Sunday) — no free-text day entry.
 - [ ] Generating a 7-day window creates exactly one Route per service day, each carrying one Pickup per scheme container, visible in Route Studio → Routes.
 - [ ] Re-running generation for the same window creates zero duplicate routes (idempotent upsert).
-- [ ] Editing a scheme updates only future routes still in Draft/Planned; Ready/Active/Completed/Cancelled routes are never modified.
+- [ ] Editing a scheme updates only future routes still in Draft/Planned; Ready/Active/Completed/Cancelled routes are never modified. **[Clarified by issue #33, `docs/new-changes/SPEC.md` area G (D31): edit-save runs this reconciliation automatically — no manual Generate routes — and generation-authored cancellation is part of it. "Cancelled routes are never modified" means operationally cancelled routes; a route generation itself cancelled carries the `cancelledByGeneration` resurrection marker and IS re-created when the scheme serves its date again.]**
 - [ ] A generated date matching an approved Collection Deviation lands on the replacement date, visibly marked.
 - [ ] A generated route's driver/vehicle can be overridden on that route alone, without changing the scheme or sibling routes.
 
@@ -97,7 +97,7 @@ Entry: Route Studio → Route Schemes → **New route scheme** → chooser → G
 - [ ] Should Plan Ahead run for **Validated** schemes or only **Effective** ones (lifecycle: Draft → Validated → Scheduled → Effective → Expired)?
 - [ ] When a scheme is deleted or expires, are its future Draft/Planned routes auto-cancelled?
 - [ ] Contractor persona: can a contractor manager create/generate schemes for their scope, or stay read-only like their routes today?
-- [ ] When a scheme edit removes a service day, should still-Planned routes on that day be auto-cancelled? (The logic prototype implements yes — walkthrough 2; confirm before it becomes an FR.)
+- [x] When a scheme edit removes a service day, should still-Planned routes on that day be auto-cancelled? (The logic prototype implements yes — walkthrough 2; confirm before it becomes an FR.) **Resolved by D31 / issue #33: yes — edit-save reconciliation cancels them with the `cancelledByGeneration` resurrection marker.**
 - [ ] Per-day assignment: if one day's fraction needs a different vehicle type (organic sealed vs rear loader), do we extend per-day plans with assignment, or split into separate schemes?
 
 ## Research Basis (condensed)

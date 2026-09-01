@@ -126,6 +126,18 @@ export function recordSchemeGeneration(
 }
 
 /**
+ * Whether the scheme detail should explain that future planning stopped
+ * (issue #33, SPEC G): the scheme is Draft — an edit invalidated it — yet
+ * generation evidence shows it planned before, so edit-save reconciliation
+ * cancelled its future refreshable routes with the resurrection marker.
+ * Derived, never persisted: the state clears itself the moment a valid save
+ * moves the scheme off Draft.
+ */
+export function schemeFuturePlanningStopped(record: SchemeStatusSource): boolean {
+  return record.status === "Draft" && schemeGenerationRecorded(record)
+}
+
+/**
  * Generation eligibility, re-expressed through the derived status (SPEC B):
  * a scheme can generate when its recurrence is structured enough for the
  * engine AND it is not Draft — blocking issues generate nothing (D18/D26).

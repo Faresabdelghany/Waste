@@ -15,10 +15,15 @@ import {
   recordSchemeGeneration,
   schemeAttention,
   schemeCanGenerateRoutes,
+  schemeFuturePlanningStopped,
   schemeGenerationRecorded,
   schemeLiveValidation,
   withEffectiveSchemeStatus,
 } from "../lib/route-schemes/lifecycle"
+import {
+  editReconciliationWindow,
+  planSchemeEditReconciliation,
+} from "../lib/route-schemes/edit"
 import { isPlanAheadEnabled, schemeAutoGenerates } from "../lib/route-schemes/plan-ahead"
 
 let passed = 0
@@ -711,6 +716,378 @@ check(
     dayPlans: [],
   }),
   null,
+)
+
+/* ---------------- edit-save reconciliation (issue #33, D31) ---------------- */
+// SPEC.md area G: Edit → Validate → Save → Reconcile future planning window.
+// The fixture chain is behavioral: create a Wed+Sun scheme (routes 2 Sep and
+// 6 Sep with pickups), then edit it and reconcile against those records.
+
+const editBase = planSchemeCreation(
+  {
+    scheme: makeScheme({ id: "scheme-edit", status: "Validated", effectiveFrom: "2026-08-01" }),
+    today: TODAY,
+    actorName: "Planner",
+    generatedAt: GENERATED,
+  },
+  creationRelated,
+)
+
+const withValues = (
+  record: BusinessRecord,
+  values: NonNullable<BusinessRecord["submittedValues"]>,
+): BusinessRecord => ({
+  ...record,
+  submittedValues: { ...record.submittedValues, ...values },
+})
+
+// Edit: drop Sunday. Window = tomorrow (2 Sep) → today+7 (8 Sep): the kept
+// Wednesday (2 Sep) refreshes, the dropped Sunday (6 Sep) cancels with the
+// generation-authored resurrection marker; its pickup is skipped.
+const dropSunday = planSchemeEditReconciliation(
+  {
+    before: editBase.scheme,
+    after: withValues(editBase.scheme, { serviceDays: "wednesday" }),
+    today: TODAY,
+    actorName: "Planner",
+    generatedAt: GENERATED,
+  },
+  {
+    schemes: [editBase.scheme],
+    existingRoutes: editBase.routes,
+    existingPickups: editBase.pickups,
+    containers: [],
+  },
+)
+check("edit: valid edit reconciles", dropSunday.outcome, "reconciled")
+check(
+  "edit: kept date refreshes, dropped date cancels",
+  dropSunday.routes.map((route) => [
+    route.submittedValues?.serviceDate,
+    route.status,
+  ]),
+  [
+    ["2026-09-02", "Planned"],
+    ["2026-09-06", "Cancelled"],
+  ],
+)
+check(
+  "edit: the cancel carries the resurrection marker",
+  dropSunday.routes[1]?.submittedValues?.cancelledByGeneration,
+  true,
+)
+check(
+  "edit: the cancelled route's pickup is skipped, not deleted",
+  dropSunday.pickups
+    .filter((pickup) => pickup.submittedValues?.serviceDate === "2026-09-06")
+    .map((pickup) => pickup.status),
+  ["Skipped"],
+)
+check(
+  "edit: scheme keeps Scheduled and restamps the generation marker",
+  [dropSunday.scheme.status, dropSunday.scheme.submittedValues?.lastGeneratedAt],
+  ["Scheduled", GENERATED],
+)
+
+// Touchability (SPEC G): only Draft/Planned routes are rewritten. An Active
+// route on the dropped Sunday is left completely untouched, and a dispatcher
+// vehicle override on the kept Wednesday survives the refresh.
+const activeSunday = editBase.routes.map((route) =>
+  route.submittedValues?.serviceDate === "2026-09-06"
+    ? { ...route, status: "Active" }
+    : { ...route, facts: { ...route.facts, Vehicle: "Spare truck WH-99" } },
+)
+const touchability = planSchemeEditReconciliation(
+  {
+    before: editBase.scheme,
+    after: withValues(editBase.scheme, { serviceDays: "wednesday" }),
+    today: TODAY,
+    actorName: "Planner",
+    generatedAt: GENERATED,
+  },
+  {
+    schemes: [editBase.scheme],
+    existingRoutes: activeSunday,
+    existingPickups: editBase.pickups,
+    containers: [],
+  },
+)
+check(
+  "edit: an Active route on a dropped date is never rewritten",
+  touchability.routes.map((route) => route.submittedValues?.serviceDate),
+  ["2026-09-02"],
+)
+check(
+  "edit: a dispatcher vehicle override survives the refresh",
+  touchability.routes[0]?.facts.Vehicle,
+  "Spare truck WH-99",
+)
+
+// Window bounds: the window reaches the scheme's furthest future route so
+// prior coverage cannot drift, and stays bounded by the engine's walked-range
+// cap — a route past the 367-date truncation point is never judged.
+check(
+  "edit: window is tomorrow → today+7 when no routes reach further",
+  editReconciliationWindow(TODAY, "scheme-edit", editBase.routes),
+  { from: "2026-09-02", to: "2026-09-08" },
+)
+const farRoute = {
+  ...editBase.routes[1]!,
+  id: "route-gen-scheme-edit-2026-09-20",
+  submittedValues: {
+    ...editBase.routes[1]!.submittedValues,
+    serviceDate: "2026-09-20",
+    actualDate: "2026-09-20",
+  },
+}
+check(
+  "edit: window extends to the furthest future generated route",
+  editReconciliationWindow(TODAY, "scheme-edit", [...editBase.routes, farRoute]),
+  { from: "2026-09-02", to: "2026-09-20" },
+)
+const beyondWalkCap = {
+  ...farRoute,
+  id: "route-gen-scheme-edit-2027-10-30",
+  submittedValues: {
+    ...farRoute.submittedValues,
+    serviceDate: "2027-10-30",
+    actualDate: "2027-10-30",
+  },
+}
+const boundedEdit = planSchemeEditReconciliation(
+  {
+    before: editBase.scheme,
+    after: withValues(editBase.scheme, { serviceDays: "wednesday" }),
+    today: TODAY,
+    actorName: "Planner",
+    generatedAt: GENERATED,
+  },
+  {
+    schemes: [editBase.scheme],
+    existingRoutes: [...editBase.routes, farRoute, beyondWalkCap],
+    existingPickups: editBase.pickups,
+    containers: [],
+  },
+)
+check(
+  "edit: a dropped-day route beyond the rolling window is still cancelled",
+  boundedEdit.routes.find(
+    (route) => route.submittedValues?.serviceDate === "2026-09-20",
+  )?.status,
+  "Cancelled",
+)
+check(
+  "edit: a route past the walk cap is never judged (walked-range bound)",
+  boundedEdit.routes.some(
+    (route) => route.submittedValues?.serviceDate === "2027-10-30",
+  ),
+  false,
+)
+
+// Edit → Draft (SPEC G): an invalidating edit cancels — never deletes —
+// future refreshable routes with the resurrection marker, and the scheme
+// gains the future-planning-stopped explanation state the detail page shows.
+const emptied = withValues(editBase.scheme, { containerIds: "" })
+const invalidEdit = planSchemeEditReconciliation(
+  {
+    before: editBase.scheme,
+    after: emptied,
+    today: TODAY,
+    actorName: "Planner",
+    generatedAt: GENERATED,
+  },
+  {
+    schemes: [editBase.scheme],
+    existingRoutes: editBase.routes,
+    existingPickups: editBase.pickups,
+    containers: [],
+  },
+)
+check("edit: invalidating edit saves as Draft", invalidEdit.scheme.status, "Draft")
+check(
+  "edit: Draft transition cancels every future refreshable route with the marker",
+  invalidEdit.routes.map((route) => [
+    route.status,
+    route.submittedValues?.cancelledByGeneration,
+  ]),
+  [
+    ["Cancelled", true],
+    ["Cancelled", true],
+  ],
+)
+check(
+  "edit: Draft cancels skip the routes' open pickups",
+  invalidEdit.pickups.map((pickup) => pickup.status),
+  ["Skipped", "Skipped"],
+)
+check(
+  "edit: Draft transition restamps the validation issues fact",
+  Boolean(invalidEdit.scheme.facts["Validation issues"]),
+  true,
+)
+check(
+  "edit: the detail page can explain that future planning stopped",
+  schemeFuturePlanningStopped(invalidEdit.scheme),
+  true,
+)
+check(
+  "edit: a never-generated Draft does not claim future planning stopped",
+  schemeFuturePlanningStopped(makeScheme({ status: "Draft" })),
+  false,
+)
+// The Draft-transition cancel honors the same walk cap as re-materialization:
+// a cancel the fixing save could never resurrect would be a one-way door.
+const cappedInvalidEdit = planSchemeEditReconciliation(
+  {
+    before: editBase.scheme,
+    after: emptied,
+    today: TODAY,
+    actorName: "Planner",
+    generatedAt: GENERATED,
+  },
+  {
+    schemes: [editBase.scheme],
+    existingRoutes: [...editBase.routes, beyondWalkCap],
+    existingPickups: [],
+    containers: [],
+  },
+)
+check(
+  "edit: the Draft-transition cancel never reaches past the walk cap",
+  cappedInvalidEdit.routes.some(
+    (route) => route.submittedValues?.serviceDate === "2027-10-30",
+  ),
+  false,
+)
+
+// Resurrection: fixing the scheme re-materializes the marked cancels under
+// their original identities, while an operational cancel (no marker) stays
+// cancelled forever.
+const operationalCancel = {
+  ...editBase.routes[1]!,
+  status: "Cancelled",
+}
+const fixedEdit = planSchemeEditReconciliation(
+  {
+    before: invalidEdit.scheme,
+    after: withValues(invalidEdit.scheme, { containerIds: "asset-1" }),
+    today: TODAY,
+    actorName: "Planner",
+    generatedAt: GENERATED,
+  },
+  {
+    schemes: [invalidEdit.scheme],
+    existingRoutes: [invalidEdit.routes[0]!, operationalCancel],
+    existingPickups: [],
+    containers: [],
+  },
+)
+check(
+  "edit: fixing the scheme re-materializes the marked cancel idempotently",
+  fixedEdit.routes.map((route) => [
+    route.id,
+    route.submittedValues?.serviceDate,
+    route.status,
+  ]),
+  [[editBase.routes[0]!.id, "2026-09-02", "Planned"]],
+)
+check(
+  "edit: an operationally cancelled route is never resurrected",
+  fixedEdit.routes.some(
+    (route) => route.submittedValues?.serviceDate === "2026-09-06",
+  ),
+  false,
+)
+check(
+  "edit: the fixed scheme validates and re-records generation",
+  [fixedEdit.scheme.status, fixedEdit.outcome],
+  ["Scheduled", "reconciled"],
+)
+
+// Self-id exemption: a scheme holding its own Confirmed Vehicle Planning
+// allocation must not flip to Draft on save; the same allocation on another
+// scheme's save is a blocking issue.
+const confirmedAllocation: BusinessRecord = {
+  ...makeScheme({ id: "allocation-own", status: "Confirmed" }),
+  name: "WH-24 scheme cover",
+  submittedValues: {
+    vehicleId: "vehicle-wh-24",
+    plannedStart: "2026-09-02",
+    plannedEnd: "2026-09-02",
+    schemeId: "scheme-edit",
+  },
+}
+const ownAllocationEdit = planSchemeEditReconciliation(
+  {
+    before: editBase.scheme,
+    after: withValues(editBase.scheme, { plannedVehicleId: "vehicle-wh-24" }),
+    today: TODAY,
+    actorName: "Planner",
+    generatedAt: GENERATED,
+  },
+  {
+    schemes: [editBase.scheme],
+    existingRoutes: editBase.routes,
+    existingPickups: editBase.pickups,
+    containers: [],
+    allocations: [confirmedAllocation],
+  },
+)
+check(
+  "edit: saving with the scheme's own Confirmed allocation stays valid",
+  [ownAllocationEdit.outcome, ownAllocationEdit.scheme.status],
+  ["reconciled", "Scheduled"],
+)
+const foreignAllocationEdit = planSchemeEditReconciliation(
+  {
+    before: editBase.scheme,
+    after: withValues(editBase.scheme, { plannedVehicleId: "vehicle-wh-24" }),
+    today: TODAY,
+    actorName: "Planner",
+    generatedAt: GENERATED,
+  },
+  {
+    schemes: [editBase.scheme],
+    existingRoutes: editBase.routes,
+    existingPickups: editBase.pickups,
+    containers: [],
+    allocations: [
+      {
+        ...confirmedAllocation,
+        submittedValues: {
+          ...confirmedAllocation.submittedValues,
+          schemeId: "scheme-other",
+        },
+      },
+    ],
+  },
+)
+check(
+  "edit: another scheme's Confirmed allocation still blocks the save",
+  foreignAllocationEdit.outcome,
+  "draft",
+)
+
+// Legacy records without structured recurrence save unchanged — nothing to
+// validate or reconcile, no routes touched.
+const legacyEdit = planSchemeEditReconciliation(
+  {
+    before: { ...editBase.scheme, submittedValues: undefined },
+    after: { ...editBase.scheme, submittedValues: undefined },
+    today: TODAY,
+    actorName: "Planner",
+  },
+  {
+    schemes: [],
+    existingRoutes: editBase.routes,
+    existingPickups: editBase.pickups,
+    containers: [],
+  },
+)
+check(
+  "edit: a legacy scheme saves unchanged with no route writes",
+  [legacyEdit.outcome, legacyEdit.routes.length, legacyEdit.pickups.length],
+  ["legacy", 0, 0],
 )
 
 console.log(`\n${passed} passed, ${failed} failed`)

@@ -48,6 +48,10 @@ import {
 } from "@/lib/route-schemes/calendar-list"
 import { planSchemeCreation } from "@/lib/route-schemes/creation"
 import {
+  planSchemeEditReconciliation,
+  type SchemeEditReconciliationPlan,
+} from "@/lib/route-schemes/edit"
+import {
   schemeAttention,
   schemeCanGenerateRoutes,
   withEffectiveSchemeStatus,
@@ -3707,8 +3711,44 @@ export function BusinessWorkspace({
       if (resolvedTarget.module.id === "routes") {
         updatedRecord = normalizeRouteRecord(updatedRecord)
       }
+      let schemeEdit: SchemeEditReconciliationPlan | null = null
       if (resolvedTarget.module.id === "schemes") {
         updatedRecord = normalizeRouteSchemeRecord(updatedRecord)
+        // Edit-save reconciliation (issue #33, D31): the lifecycle seam
+        // revalidates the edited scheme and reshapes the future planning
+        // window — this handler only applies the returned upserts.
+        const moduleRecords = (
+          workspaceId: WorkspaceId,
+          moduleId: string,
+        ): BusinessRecord[] => {
+          const module = businessWorkspaces[workspaceId].modules.find(
+            (candidate) => candidate.id === moduleId,
+          )
+          return module ? getRecords(workspaceId, module.id, module.records) : []
+        }
+        schemeEdit = planSchemeEditReconciliation(
+          {
+            before: editingRecord,
+            after: updatedRecord,
+            today: todayIso(),
+            actorName,
+          },
+          {
+            schemes: getRecords(
+              resolvedTarget.workspaceId,
+              resolvedTarget.module.id,
+              resolvedTarget.module.records,
+            ),
+            existingRoutes: moduleRecords("route-studio", "routes"),
+            existingPickups: moduleRecords("route-studio", "pickups"),
+            containers: moduleRecords("resources", "containers"),
+            vehicles: moduleRecords("fleet", "vehicles"),
+            allocations: moduleRecords("fleet", "vehicle-planning"),
+            calendarRecords: moduleRecords("plan", "calendars"),
+            deviationRecords: moduleRecords("plan", "collection-deviations"),
+          },
+        )
+        updatedRecord = schemeEdit.scheme
       }
       if (resolvedTarget.module.id === "containers") {
         updatedRecord = normalizeContainerRecord(updatedRecord)
@@ -3734,6 +3774,14 @@ export function BusinessWorkspace({
         resolvedTarget.module.id,
         updatedRecord,
       )
+      if (schemeEdit) {
+        for (const route of schemeEdit.routes) {
+          upsertRecord("route-studio", "routes", route)
+        }
+        for (const pickup of schemeEdit.pickups) {
+          upsertRecord("route-studio", "pickups", pickup)
+        }
+      }
       if (resolvedTarget.module.id === "price-rows") {
         syncProductForRow(updatedRecord)
       }
@@ -3748,6 +3796,24 @@ export function BusinessWorkspace({
         setSelectedRecord(updatedRecord)
       }
       setEditingRecord(null)
+      if (schemeEdit) {
+        // The reconciliation consequence line replaces the generic edit toast
+        // (issue #33): saving IS the action that reshaped future routes.
+        if (schemeEdit.outcome === "draft") {
+          toast.warning(`${updatedRecord.name} saved as Draft`, {
+            description: schemeEdit.message,
+          })
+        } else if (schemeEdit.outcome === "generation-failed") {
+          toast.warning(`${updatedRecord.name} updated`, {
+            description: schemeEdit.message,
+          })
+        } else {
+          toast.success(`${updatedRecord.name} updated`, {
+            description: schemeEdit.message,
+          })
+        }
+        return
+      }
       toast.success(`${formSchema.recordKind} updated`, {
         description: `${updatedRecord.name} was updated and its audit history extended.`,
       })

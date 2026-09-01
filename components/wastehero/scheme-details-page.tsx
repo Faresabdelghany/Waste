@@ -43,6 +43,7 @@ import {
 } from "@/lib/route-schemes/generation"
 import {
   schemeCanGenerateRoutes,
+  schemeFuturePlanningStopped,
   schemeLiveValidation,
   type SchemeRelatedRecords,
 } from "@/lib/route-schemes/lifecycle"
@@ -526,6 +527,14 @@ function SchemeDetailsTab({
     (id) => containers.find((candidate) => candidate.id === id)?.name ?? id,
   )
 
+  // Edit-save reconciliation aftermath (issue #33, SPEC G): a Draft with
+  // generation evidence had its future refreshable routes cancelled by the
+  // invalidating save — explain why future planning stopped and that a valid
+  // save re-creates them.
+  const futurePlanningStopped = schemeFuturePlanningStopped(record)
+  const futurePlanningStoppedNote =
+    "Future planning stopped when this scheme became invalid: its future planned routes were cancelled but kept as records, and a valid save re-creates them automatically."
+
   return (
     <div className="space-y-4 p-4">
       {blockingIssues.length > 0 && (
@@ -542,6 +551,11 @@ function SchemeDetailsTab({
                     <li key={issue}>{issue}</li>
                   ))}
                 </ul>
+                {futurePlanningStopped && (
+                  <p className="mt-2 text-xs text-red-700/90 dark:text-red-300/90">
+                    {futurePlanningStoppedNote}
+                  </p>
+                )}
               </div>
             </div>
             {onEdit && (
@@ -564,9 +578,15 @@ function SchemeDetailsTab({
                   Draft — configuration now passes validation
                 </p>
                 <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-300/90">
-                  Save the scheme via Edit to validate it; route generation
-                  stays off until then.
+                  Save the scheme via Edit to validate it — a valid save
+                  reconciles its future routes automatically; generation stays
+                  off until then.
                 </p>
+                {futurePlanningStopped && (
+                  <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-300/90">
+                    {futurePlanningStoppedNote}
+                  </p>
+                )}
               </div>
             </div>
             {onEdit && (
