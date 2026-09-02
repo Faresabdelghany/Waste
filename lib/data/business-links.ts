@@ -71,7 +71,6 @@ const fallbackModules: Array<ModuleLocation & { terms: string[] }> = [
   { workspaceId: "configure", moduleId: "integrations", terms: ["integration", "integrations"] },
   { workspaceId: "improve", moduleId: "intelligence", terms: ["insight", "insights", "metric", "metrics"] },
   { workspaceId: "improve", moduleId: "autopilot", terms: ["flow", "flows", "suggestion", "suggestions"] },
-  { workspaceId: "plan", moduleId: "collection-deviations", terms: ["deviation", "deviations", "collection deviation", "collection deviations"] },
   { workspaceId: "resources", moduleId: "warehouses", terms: ["warehouse", "warehouses", "stock movement", "stock movements"] },
   { workspaceId: "resources", moduleId: "inventory", terms: ["stock item", "stock items", "inventory"] },
   { workspaceId: "commercial", moduleId: "products", terms: ["product", "products", "price list", "price lists", "pricing"] },

@@ -17,7 +17,6 @@ import { isSoftDeleted } from "../data/record-visibility"
 import { calendarFromRecord } from "./calendar"
 import {
   applySchemeGeneration,
-  approvedDeviationsFromRecords,
   planSchemeGeneration,
   stringValueOf,
   type GenerationWindow,
@@ -118,7 +117,6 @@ export function runPlanAhead(input: {
   today: string
   existingRoutes: readonly BusinessRecord[]
   existingPickups: readonly BusinessRecord[]
-  deviationRecords: readonly BusinessRecord[]
   /** Collection Calendar records; each scheme's calendarId resolves here. */
   calendarRecords?: readonly BusinessRecord[]
   containers: readonly BusinessRecord[]
@@ -127,7 +125,6 @@ export function runPlanAhead(input: {
   generatedAt?: string
 }): PlanAheadRunResult {
   const window = planAheadWindow(input.today)
-  const deviations = approvedDeviationsFromRecords(input.deviationRecords)
   const calendarRecords = input.calendarRecords ?? []
   const routes: BusinessRecord[] = []
   const pickups: BusinessRecord[] = []
@@ -154,7 +151,6 @@ export function runPlanAhead(input: {
       scheme,
       window,
       existingRoutes: input.existingRoutes,
-      deviations,
       // Rule-mode schemes (issue #19) resolve their stop-matching rules
       // against these records — the same set manual generation uses.
       containers: input.containers,

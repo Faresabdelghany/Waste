@@ -685,16 +685,6 @@ function nextAllowedTransitions(module: ModuleDefinition, status: string): strin
     "retired",
     "terminated",
   ])
-  // Collection Deviations continue past Approved (Approved → Notified →
-  // Executed); the generic approved-is-terminal heuristic would strand them
-  // with an empty action list — and, since the portal shows Approved
-  // deviations, a permanently un-notifiable customer notice.
-  if (
-    module.id === "collection-deviations" &&
-    status.toLowerCase() === "approved"
-  ) {
-    return ["Notified", "Cancelled"]
-  }
   if (terminalStates.has(status.toLowerCase())) return []
 
   const currentIndex = module.lifecycle.findIndex(
@@ -748,7 +738,7 @@ const serviceProviderOperatedRelationModuleIds = new Set([
 
 const primaryModuleIdsByWorkspace: Partial<Record<WorkspaceId, readonly string[]>> = {
   operate: ["tickets", "exceptions"],
-  plan: ["collection-deviations", "calendars", "areas"],
+  plan: ["calendars", "areas"],
   "route-studio": ["live", "schemes", "routes", "pickups", "weights"],
   customers: ["properties", "groups", "shared", "agreements"],
   resources: ["containers", "inventory", "warehouses", "depots"],
@@ -932,7 +922,6 @@ function preferredReason(values: BusinessFormValues) {
     "changeReason",
     "overrideReason",
     "exceptionReason",
-    "deviationReason",
     "reason",
     "notes",
     "message",
@@ -3528,7 +3517,7 @@ export function BusinessWorkspace({
       // record id encodes it, so serviceDate must never move — regeneration
       // would otherwise resurrect the old date under this route's id and
       // cancel the edited one. An edited date is a manual move of when the
-      // route actually runs, the same shape as a deviation: actualDate only.
+      // route actually runs: actualDate only.
       if (operatingDate && isSchemeGenerated) {
         nextValues.actualDate = operatingDate
       }
@@ -3720,7 +3709,6 @@ export function BusinessWorkspace({
             vehicles: moduleRecords("fleet", "vehicles"),
             allocations: moduleRecords("fleet", "vehicle-planning"),
             calendarRecords: moduleRecords("plan", "calendars"),
-            deviationRecords: moduleRecords("plan", "collection-deviations"),
           },
         )
         updatedRecord = schemeEdit.scheme
@@ -4306,9 +4294,6 @@ export function BusinessWorkspace({
     const pickupsModule = businessWorkspaces["route-studio"].modules.find(
       (candidate) => candidate.id === "pickups",
     )
-    const deviationsModule = businessWorkspaces.plan.modules.find(
-      (candidate) => candidate.id === "collection-deviations",
-    )
     const calendarsModule = businessWorkspaces.plan.modules.find(
       (candidate) => candidate.id === "calendars",
     )
@@ -4322,9 +4307,6 @@ export function BusinessWorkspace({
           ? getRecords("route-studio", pickupsModule.id, pickupsModule.records)
           : [],
         containers: containerRecords,
-        deviationRecords: deviationsModule
-          ? getRecords("plan", deviationsModule.id, deviationsModule.records)
-          : [],
         calendarRecords: calendarsModule
           ? getRecords("plan", calendarsModule.id, calendarsModule.records)
           : [],

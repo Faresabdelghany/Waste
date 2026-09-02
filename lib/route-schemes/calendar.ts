@@ -4,8 +4,8 @@
 // operationally valid on this calendar".
 //
 // Semantics (decisions Q2/Q5/Q6/Q7):
-//   the calendar decides whether a normal planned date is valid; a Collection
-//   Deviation decides where exceptional service moves to. A date the calendar
+//   the calendar decides whether a normal planned date is valid — holidays and
+//   non-working days are skipped, never moved. A date the calendar
 //   does not cover (outside validFrom/validTo, or no structured data at all)
 //   is "uncovered": generation proceeds and the preview warns — uncovered is
 //   never treated as non-working. Timezone is display-only (Q9): all date
@@ -35,7 +35,7 @@ export type CalendarDayStatus = "working" | "holiday" | "non-working" | "uncover
 
 /**
  * Whether generation skips a date with this status (Q2/Q7): holidays and
- * non-working days get no route unless an approved deviation relocates them.
+ * non-working days get no route.
  * One predicate shared by the engine and the wizard's next-dates preview so
  * the preview never promises what generation won't do.
  */

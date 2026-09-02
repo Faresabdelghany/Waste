@@ -6,11 +6,8 @@
 //
 // Upsert rules (validated in the prototype on branch prototype/route-schemes):
 //   for each service date in the window:
-//     an approved deviation matching the scheme's calendar and scope remaps
-//       the operating date (deviations outrank calendar filtering — they exist
-//       to relocate a holiday's service);
-//     otherwise a holiday or non-working date on the scheme's Collection
-//       Calendar is skipped: no route is written, the preview shows why, and a
+//     a holiday or non-working date on the scheme's Collection Calendar is
+//       skipped: no route is written, the preview shows why, and a
 //       still-Planned previously generated route on that date is cancelled;
 //     no route for (scheme, serviceDate)       → create Planned with scheme defaults
 //     route still Draft/Planned                → refresh date/stops/version;
@@ -42,25 +39,6 @@ import { stringValue } from "./validation"
 
 export type GenerationWindow = { from: string; to: string }
 
-export type DeviationScopeType = "project" | "scheme" | "customer"
-
-export type ApprovedDeviation = {
-  name: string
-  /** ISO date the scheme originally serves. */
-  originalDate: string
-  /** ISO date the route actually operates on. */
-  replacementDate: string
-  reason: string
-  /** The deviation record's project scope; absent = applies project-wide. */
-  projectIds?: string[]
-  /** Calendar the deviation changes a date on; absent = legacy, project-matched. */
-  calendarId?: string
-  /** Declared scope; absent = legacy, treated as project scope. */
-  scopeType?: DeviationScopeType
-  /** The one scheme a scheme-scoped deviation affects. */
-  schemeId?: string
-}
-
 /** "omit" rows are calendar skips: preview-visible, but never written. */
 export type PlannedRouteAction = "create" | "refresh" | "skip" | "cancel" | "omit"
 
@@ -70,11 +48,10 @@ export type PlannedRoute = {
   routeName: string
   /** The scheme's service date — the identity half that never remaps. */
   serviceDate: string
-  /** The operating date after deviation remap. */
+  /** The date the route operates on — the service date for generated rows; a skip row keeps the stored route's own. */
   actualDate: string
   day: ServiceDay
   containerIds: string[]
-  deviation?: ApprovedDeviation
   /** The stored route this action refreshes, skips, or cancels. */
   existing?: BusinessRecord
   note?: string
@@ -128,98 +105,6 @@ export function schemeVersionOf(scheme: BusinessRecord): string {
   return version || "v1"
 }
 
-/* ------------------------------ deviations -------------------------------- */
-
-const FACT_DATE_MONTHS: Record<string, string> = {
-  jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
-  jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
-}
-
-/** "24 Dec 2026" (the deviation facts format) or ISO → ISO, else null. */
-export function parseDeviationDate(value: string | undefined): string | null {
-  if (!value) return null
-  const trimmed = value.trim()
-  if (isIsoDate(trimmed)) return trimmed
-  const match = /^(\d{1,2})\s+([A-Za-z]{3})\w*\s+(\d{4})$/.exec(trimmed)
-  if (!match) return null
-  const month = FACT_DATE_MONTHS[match[2].toLowerCase()]
-  if (!month) return null
-  return `${match[3]}-${month}-${match[1].padStart(2, "0")}`
-}
-
-/** Actionable deviation statuses — shared with the portal notice derivation. */
-export const APPROVED_DEVIATION_STATUSES = new Set(["Approved", "Notified"])
-
-/**
- * The approved replacement dates generation must honor (FR-10). Draft
- * deviations are not yet promises and Executed/Cancelled ones no longer
- * remap. Form-created records carry ISO dates in submittedValues; fixtures
- * carry "24 Dec 2026" facts — both are read.
- */
-export function approvedDeviationsFromRecords(
-  records: readonly BusinessRecord[],
-): ApprovedDeviation[] {
-  const deviations: ApprovedDeviation[] = []
-  for (const record of records) {
-    if (!APPROVED_DEVIATION_STATUSES.has(record.status)) continue
-    const values = record.submittedValues
-    const originalDate =
-      parseDeviationDate(
-        typeof values?.originalDate === "string" ? values.originalDate : undefined,
-      ) ?? parseDeviationDate(record.facts?.["Original date"])
-    const replacementDate =
-      parseDeviationDate(
-        typeof values?.replacementDate === "string" ? values.replacementDate : undefined,
-      ) ?? parseDeviationDate(record.facts?.["Replacement date"])
-    if (!originalDate || !replacementDate) continue
-    const scopeType = stringValue(values ?? {}, "scopeType")
-    deviations.push({
-      name: record.name,
-      originalDate,
-      replacementDate,
-      reason:
-        record.facts?.Reason ??
-        stringValue(values ?? {}, "deviationReason") ??
-        "Approved deviation",
-      ...(record.projectIds?.length ? { projectIds: [...record.projectIds] } : {}),
-      ...(stringValue(values ?? {}, "calendarId")
-        ? { calendarId: stringValue(values ?? {}, "calendarId") }
-        : {}),
-      ...(scopeType === "project" || scopeType === "scheme" || scopeType === "customer"
-        ? { scopeType }
-        : {}),
-      ...(stringValue(values ?? {}, "schemeId")
-        ? { schemeId: stringValue(values ?? {}, "schemeId") }
-        : {}),
-    })
-  }
-  return deviations
-}
-
-/**
- * Authoritative deviation matching (Q8/Q13): a deviation changes a date on a
- * Collection Calendar, and schemes subscribed to that calendar inherit it
- * according to the deviation's scope.
- *   customer scope → never remaps whole-route generation;
- *   a recorded calendarId must equal the scheme's calendarId (a mismatched
- *     calendar never matches merely because projects overlap);
- *   scheme scope → exact schemeId only — a missing or wrong schemeId means no
- *     effect, never a silent fallback to project-wide;
- *   project scope (and legacy records without scope) → project overlap, where
- *     a side without recorded projects is scope-unknown and treated as
- *     project-wide — the deviation-preserving default.
- */
-export function deviationMatchesScheme(
-  deviation: ApprovedDeviation,
-  scheme: BusinessRecord,
-): boolean {
-  if (deviation.calendarId) {
-    const schemeCalendarId = stringValue(scheme.submittedValues ?? {}, "calendarId")
-    if (schemeCalendarId !== deviation.calendarId) return false
-  }
-  return deviationMatchesScope(deviation, scheme.id, scheme.projectIds)
-}
-
 /* -------------------------------- planning -------------------------------- */
 
 const REFRESHABLE_STATUSES = new Set(["Draft", "Planned"])
@@ -247,80 +132,15 @@ export function schemePlannedStartTime(
 }
 
 /**
- * The scope tail shared by scheme- and route-side deviation matching:
- * customer scope never remaps whole routes; scheme scope is exact-id only;
- * project scope (and legacy) is project overlap with an unrecorded side
- * treated as project-wide.
+ * The note a route detail shows for its `Deviation` fact (issue #26): the
+ * stamped fact other than "None", read from the record alone so every
+ * presentation path agrees — fixture execution notes ("Access blocked at
+ * first attempt") and generation's cancellation reasons alike. A route with
+ * the "None" placeholder or no fact renders no deviation row.
  */
-function deviationMatchesScope(
-  deviation: ApprovedDeviation,
-  schemeId: string | undefined,
-  projectIds: readonly string[] | undefined,
-): boolean {
-  if (deviation.scopeType === "customer") return false
-  if (deviation.scopeType === "scheme") {
-    return deviation.schemeId === schemeId
-  }
-  if (!deviation.projectIds?.length || !projectIds?.length) return true
-  return deviation.projectIds.some((projectId) => projectIds.includes(projectId))
-}
-
-/**
- * Deterministic pick among several matching deviations: the most specific
- * scope wins (scheme over project/legacy), then name order.
- */
-export function deviationPrecedence(
-  a: ApprovedDeviation,
-  b: ApprovedDeviation,
-): number {
-  return (
-    (a.scopeType === "scheme" ? 0 : 1) - (b.scopeType === "scheme" ? 0 : 1) ||
-    a.name.localeCompare(b.name)
-  )
-}
-
-/** The route-facing note for a deviation move — one wording everywhere. */
-function deviationMovedNote(serviceDate: string, reason: string): string {
-  return `Moved from ${formatServiceDate(serviceDate)} · ${reason}`
-}
-
-/**
- * The deviation note a route detail shows, derived from the record alone so
- * every presentation path agrees (issue #26): a stamped `Deviation` fact
- * other than "None" is shown verbatim; a route whose identity says it was
- * moved (`actualDate` differs from `serviceDate`) without such a stamp gets
- * the note derived from the approved deviation records, using generation's
- * precedence (most specific scope, then name order). A move no approved
- * deviation explains — a manual date edit stores exactly this shape (issue
- * #23) — is NOT attributed to a deviation: null, so the panel renders no
- * deviation row.
- */
-export function routeDeviationInfo(
-  route: BusinessRecord,
-  deviations: readonly ApprovedDeviation[],
-): string | null {
+export function routeDeviationNote(route: BusinessRecord): string | null {
   const stamped = route.facts.Deviation?.trim()
-  const stampedInfo = stamped && stamped !== "None" ? stamped : null
-  const serviceDate = stringValueOf(route, "serviceDate")
-  const actualDate = stringValueOf(route, "actualDate")
-  if (stampedInfo || !serviceDate || !actualDate || serviceDate === actualDate) {
-    return stampedInfo
-  }
-  // The route records no calendar id, so unlike deviationMatchesScheme this
-  // display-side match cannot apply the calendar gate.
-  const match = deviations
-    .filter(
-      (candidate) =>
-        candidate.originalDate === serviceDate &&
-        candidate.replacementDate === actualDate &&
-        deviationMatchesScope(
-          candidate,
-          stringValueOf(route, "schemeId"),
-          route.projectIds,
-        ),
-    )
-    .sort(deviationPrecedence)[0]
-  return match ? deviationMovedNote(serviceDate, match.reason) : null
+  return stamped && stamped !== "None" ? stamped : null
 }
 
 /**
@@ -354,8 +174,8 @@ function windowDates(window: GenerationWindow): string[] {
  * preview shows and applySchemeGeneration writes. Returns null for schemes
  * without structured recurrence (legacy free-text records cannot generate).
  * The optional calendar is the scheme's Collection Calendar: it invalidates
- * holiday and non-working candidate dates (Q2/Q7) unless an approved
- * deviation relocates them first; uncovered dates only warn (Q6).
+ * holiday and non-working candidate dates (Q2/Q7); uncovered dates only warn
+ * (Q6).
  * Stop lists come from effectiveStopPlans (issue #19): manual schemes keep
  * their picked lists; rule schemes resolve their stop-matching rules against
  * the supplied container records at plan time, so regeneration picks up
@@ -365,7 +185,6 @@ export function planSchemeGeneration(input: {
   scheme: BusinessRecord
   window: GenerationWindow
   existingRoutes: readonly BusinessRecord[]
-  deviations: readonly ApprovedDeviation[]
   /** Container records the stop rules resolve against (and pickups enrich from). */
   containers: readonly BusinessRecord[]
   calendar?: CollectionCalendar | null
@@ -405,23 +224,13 @@ export function planSchemeGeneration(input: {
     if (!matchesRecurrence(recurrence, date)) continue
     servedDates.add(date)
     const day = serviceDayOf(date)
-    // Several approved deviations can match one date; pick deterministically
-    // (deviationPrecedence) instead of whatever the store enumerated first.
-    const deviation = input.deviations
-      .filter(
-        (candidate) =>
-          candidate.originalDate === date &&
-          deviationMatchesScheme(candidate, scheme),
-      )
-      .sort(deviationPrecedence)[0]
     const existing = existingByIdentity.get(date)
 
-    // Calendar validity filtering (Q2/Q7): without a deviation to relocate
-    // it, a holiday or non-working date gets no route. The date stays in the
-    // preview so the planner sees why, and a still-Planned route generation
-    // previously wrote there is cancelled — the same rule as a date the
-    // scheme no longer serves.
-    if (!deviation && calendar) {
+    // Calendar validity filtering (Q2/Q7): a holiday or non-working date gets
+    // no route. The date stays in the preview so the planner sees why, and a
+    // still-Planned route generation previously wrote there is cancelled — the
+    // same rule as a date the scheme no longer serves.
+    if (calendar) {
       const dayStatus = calendarDayStatus(calendar, date)
       if (dayStatusSkipsGeneration(dayStatus)) {
         const reason =
@@ -470,28 +279,16 @@ export function planSchemeGeneration(input: {
     }
 
     // Non-blocking calendar caveats (Q6): uncovered dates generate normally
-    // but warn; a deviation's replacement date is honored even on a holiday
-    // or non-working day (the planner chose it explicitly) but flagged.
+    // but warn.
     let calendarWarning: string | undefined
-    if (calendar) {
-      if (deviation) {
-        const replacementStatus = calendarDayStatus(calendar, deviation.replacementDate)
-        if (replacementStatus === "holiday") {
-          calendarWarning = `Replacement date is a holiday on ${calendar.name}`
-        } else if (replacementStatus === "non-working") {
-          calendarWarning = `Replacement date is not a working day on ${calendar.name}`
-        } else if (replacementStatus === "uncovered") {
-          calendarWarning = `Replacement date is outside ${calendar.name} validity`
-        }
-      } else if (calendarDayStatus(calendar, date) === "uncovered") {
-        calendarWarning = `Outside ${calendar.name} validity — calendar rules not applied`
-      }
+    if (calendar && calendarDayStatus(calendar, date) === "uncovered") {
+      calendarWarning = `Outside ${calendar.name} validity — calendar rules not applied`
     }
 
     // A Cancelled route that generation itself authored (calendar skip or
     // unserved-date cleanup) is bookkeeping, not operational reality: once the
-    // scheme serves the date again — a deviation now relocates it, the holiday
-    // left the calendar, the service day returned — the route is re-created.
+    // scheme serves the date again — the holiday left the calendar, the service
+    // day returned — the route is re-created.
     // An operationally cancelled route (no marker) stays untouched.
     const resurrect =
       existing?.status === "Cancelled" &&
@@ -509,16 +306,13 @@ export function planSchemeGeneration(input: {
       routeName: generatedRouteName(scheme.id, date),
       serviceDate: date,
       // A skip row is display-only — show where the stored route actually
-      // operates, not where a new deviation would move a route it never writes.
+      // operates, not where a fresh write would put it.
       actualDate:
         action === "skip"
           ? (stringValueOf(existing!, "actualDate") ?? date)
-          : deviation
-            ? deviation.replacementDate
-            : date,
+          : date,
       day,
       containerIds: stopsByDay.get(day) ?? [],
-      ...(deviation ? { deviation } : {}),
       ...(existing && !resurrect ? { existing } : {}),
       ...(action === "skip"
         ? { note: `${existing?.status} — left untouched` }
@@ -868,9 +662,6 @@ export function applySchemeGeneration(input: {
     const driver = keepDriver ? (existing?.facts.Driver as string) : schemeDriver
 
     const stops = planned.containerIds.length
-    const deviationNote = planned.deviation
-      ? deviationMovedNote(planned.serviceDate, planned.deviation.reason)
-      : "None"
 
     routes.push({
       id: planned.routeId,
@@ -907,13 +698,12 @@ export function applySchemeGeneration(input: {
         "Route scheme": scheme.name,
         "Scheme version": plan.schemeVersion,
         Stops: String(stops),
-        Deviation: deviationNote,
+        Deviation: "None",
         "Generated by": input.actorName,
       },
       related: [
         `Route scheme ${scheme.name}`,
         `${stops} pickups`,
-        ...(planned.deviation ? [`Deviation ${planned.deviation.name}`] : []),
       ],
       source: `Route scheme ${scheme.name}`,
       freshness: "Now",
@@ -968,7 +758,7 @@ export function applySchemeGeneration(input: {
             : {}),
           ...(schemeFacts.Project ? { Project: schemeFacts.Project } : {}),
           Driver: driver,
-          Deviation: deviationNote,
+          Deviation: "None",
         },
         related: [
           `Route ${planned.routeName}`,

@@ -1279,7 +1279,6 @@ check(
       today: TODAY,
       existingRoutes: [],
       existingPickups: [],
-      deviationRecords: [],
       containers: [],
       actorName: "Plan Ahead",
     })
@@ -1445,7 +1444,6 @@ check(
       today: TODAY,
       existingRoutes: expiredHistory,
       existingPickups: [],
-      deviationRecords: [],
       containers: [],
       actorName: "Plan Ahead",
     })

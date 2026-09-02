@@ -69,7 +69,8 @@ silently preserved.
   Cancelled` stay; the artifact's "Planned → Ready → Active → Completed" is the happy
   path only.
 - **D12 (Q12) — Plan workspace tabs unchanged**: Collection Deviations · Collection
-  Calendars · Areas & Zones (per PLAN_SIMPLIFICATION Q11). Vehicle Planning already lives
+  Calendars · Areas & Zones (per PLAN_SIMPLIFICATION Q11). *Superseded 2026-09-03:
+  Collection Deviations removed; Plan = Collection Calendars · Areas & Zones.* Vehicle Planning already lives
   in Fleet, not Plan, so the artifact's omission of it from Plan matches the implemented
   structure. *(Corrected in the contradiction pass — the original decision text wrongly
   claimed Vehicle Planning stays in Plan.)*
@@ -140,8 +141,8 @@ silently preserved.
   scoping model to reproduce illustrative artifact numbers. KPI tiles use only values
   derivable from the existing Collection Calendar model/store; labels/helper text change
   accordingly (no fake project/customer splits). Real customer-scoped calendars are
-  flagged as a future capability; the Collection Deviation `scopeType` pattern is noted
-  as a potential modeling direction, not implemented.
+  flagged as a future capability (the Collection Deviation `scopeType` pattern once noted
+  as a modeling direction was removed with that module on 2026-09-03).
 - **D23 (Q23) — `effectiveTo` is optional everywhere** (Guided Setup behavior is
   canonical; Quick Create stops requiring it). An omitted `effectiveTo` means the scheme
   continues per its recurrence/calendar until explicitly ended, expired through later

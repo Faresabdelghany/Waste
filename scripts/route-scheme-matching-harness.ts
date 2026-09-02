@@ -499,7 +499,6 @@ const plan = planSchemeGeneration({
   scheme: ruleScheme,
   window: WINDOW,
   existingRoutes: [],
-  deviations: [],
   containers: CONTAINERS,
 })!
 
@@ -556,7 +555,6 @@ const rerunPlan = planSchemeGeneration({
   scheme: ruleScheme,
   window: WINDOW,
   existingRoutes: applied.routes,
-  deviations: [],
   containers: [...CONTAINERS, newBin],
 })!
 check(
@@ -596,7 +594,6 @@ const shrunkPlan = planSchemeGeneration({
   scheme: ruleScheme,
   window: WINDOW,
   existingRoutes: applied.routes,
-  deviations: [],
   containers: CONTAINERS.filter((container) => container.id !== "cont-b"),
 })!
 const shrunkApplied = applySchemeGeneration({
@@ -620,7 +617,6 @@ const zeroPlan = planSchemeGeneration({
   scheme: zeroScheme,
   window: WINDOW,
   existingRoutes: [],
-  deviations: [],
   containers: CONTAINERS,
 })!
 check(
@@ -648,7 +644,6 @@ check(
     },
     window: WINDOW,
     existingRoutes: [],
-    deviations: [],
     containers: CONTAINERS,
   })!.routes.every((route) => route.matchWarning === undefined),
   true,
@@ -667,7 +662,6 @@ const planAheadResult = runPlanAhead({
   today: "2026-09-01",
   existingRoutes: [],
   existingPickups: [],
-  deviationRecords: [],
   containers: CONTAINERS,
   actorName: "Harness",
 })

@@ -1,6 +1,6 @@
 // Headless checks for the simplified Plan structure (spec
 // docs/specs/PLAN_SIMPLIFICATION.md, decisions Q11/Q12/Q14/Q16): the Plan
-// workspace exposes only Deviations / Calendars / Areas, Route Schemes stays
+// workspace exposes only Calendars / Areas, Route Schemes stays
 // in Route Studio, the retired modules are gone everywhere, fixtures carry
 // the structured data generation needs, and the service-area selectors
 // point at the service provider domain. Importing the schema registry also
@@ -22,7 +22,6 @@ import {
   serviceFrequencyOfRecord,
 } from "../lib/data/service-frequencies"
 import { calendarFromRecord } from "../lib/route-schemes/calendar"
-import { approvedDeviationsFromRecords } from "../lib/route-schemes/generation"
 import {
   effectiveStopPlans,
   stopSelectionMode,
@@ -46,9 +45,9 @@ function check(name: string, actual: unknown, expected: unknown) {
 /* ------------------------------- navigation ------------------------------- */
 
 check(
-  "Plan exposes exactly Deviations, Calendars, Areas (Q11)",
+  "Plan exposes exactly Calendars, Areas (Q11; Collection Deviations removed 2026-09-03)",
   businessWorkspaces.plan.modules.map((module) => module.id),
-  ["collection-deviations", "calendars", "areas"],
+  ["calendars", "areas"],
 )
 check(
   "Route Schemes stays in Route Studio, not reintroduced into Plan",
@@ -64,12 +63,12 @@ check(
   "the domain registry agrees with the Plan module list",
   publicWorkspaceDomains.find((workspace) => workspace.workspaceId === "plan")
     ?.moduleIds,
-  ["collection-deviations", "calendars", "areas"],
+  ["calendars", "areas"],
 )
 check(
   "no module domain entry survives for the retired modules",
   publicModuleDomains.filter((module) =>
-    ["pickup-settings", "calendar-days", "collection-weeks"].includes(
+    ["pickup-settings", "calendar-days", "collection-weeks", "collection-deviations"].includes(
       module.moduleId,
     ),
   ).length,
@@ -85,6 +84,7 @@ check(
       "plan.pickup-settings",
       "plan.calendar-days",
       "plan.collection-weeks",
+      "plan.collection-deviations",
     ].includes(schema.key),
   ).length,
   0,
@@ -107,19 +107,16 @@ check(
   true,
 )
 check(
-  "Collection Deviations keeps its create form — the one deviation path",
-  [
-    getBusinessFormSchema("plan", "collection-deviations")?.mode,
-    getBusinessFormSchema("plan", "collection-deviations")?.recordKind,
-  ],
-  ["create", "Collection deviation"],
+  "no Collection Deviations form survives (removed 2026-09-03)",
+  getBusinessFormSchema("plan", "collection-deviations") === undefined,
+  true,
 )
 check(
   "no surviving relation points at a retired module",
   businessFormSchemas
     .flatMap((schema) => schema.sections.flatMap((section) => section.fields))
     .filter((field) =>
-      ["pickup-settings", "calendar-days", "collection-weeks"].includes(
+      ["pickup-settings", "calendar-days", "collection-weeks", "collection-deviations"].includes(
         field.relation?.moduleId ?? "",
       ),
     ).length,
@@ -245,24 +242,6 @@ check(
   ["tuesday", "friday"],
 )
 
-const deviationRecords =
-  businessWorkspaces.plan.modules.find(
-    (module) => module.id === "collection-deviations",
-  )?.records ?? []
-check(
-  "the three actionable fixture deviations parse with calendar and scope; the draft is excluded",
-  approvedDeviationsFromRecords(deviationRecords).map((deviation) => [
-    deviation.originalDate,
-    deviation.replacementDate,
-    deviation.calendarId,
-    deviation.scopeType,
-  ]),
-  [
-    ["2026-12-24", "2026-12-27", "calendar-central", "project"],
-    ["2026-12-26", "2026-12-28", "calendar-central", "project"],
-    ["2026-09-10", "2026-09-11", "calendar-central", "customer"],
-  ],
-)
 
 /* ------------- container facts renamed off retired terminology ------------ */
 // Issue #13 (spec follow-up 3): the container cadence fact is "Service

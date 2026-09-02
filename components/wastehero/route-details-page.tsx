@@ -29,10 +29,9 @@ import type {
 } from "@/lib/data/business-modules"
 import { getBusinessModuleHref } from "@/lib/data/business-links"
 import {
-  approvedDeviationsFromRecords,
   reassignRouteAssignment,
   reassignRoutePickups,
-  routeDeviationInfo,
+  routeDeviationNote,
   stringValueOf,
 } from "@/lib/route-schemes/generation"
 import { cn } from "@/lib/utils"
@@ -253,7 +252,7 @@ function routeReference(record: BusinessRecord) {
 
 function routeDate(record: BusinessRecord) {
   // Wizard-created routes submit operatingDate; scheme-generated routes carry
-  // the deviation-remapped actualDate instead.
+  // actualDate instead.
   const submittedDate =
     stringValueOf(record, "operatingDate") ?? stringValueOf(record, "actualDate")
   if (submittedDate) {
@@ -395,15 +394,10 @@ function RouteInformation({
   record: BusinessRecord
   hasGeneratedStops: boolean
 }) {
-  // The deviation note derives from the record alone (issue #26), so a moved
-  // route shows it on the fixture/demo schedule path too — not only when the
-  // route has generated stops.
-  const deviationRecords = useModuleRecords("plan", "collection-deviations")
-  const deviationInfo = useMemo(
-    () =>
-      routeDeviationInfo(record, approvedDeviationsFromRecords(deviationRecords)),
-    [deviationRecords, record],
-  )
+  // The deviation note derives from the record alone (issue #26), so it shows
+  // on the fixture/demo schedule path too — not only when the route has
+  // generated stops.
+  const deviationInfo = routeDeviationNote(record)
   const status =
     record.status === "Active"
       ? "In progress"

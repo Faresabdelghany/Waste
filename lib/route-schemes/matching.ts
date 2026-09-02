@@ -317,8 +317,7 @@ const projectsOverlap = (
   a: readonly string[] | undefined,
   b: readonly string[] | undefined,
 ): boolean => {
-  // A side without recorded projects is scope-unknown and treated as wide —
-  // the same convention deviationMatchesScheme uses.
+  // A side without recorded projects is scope-unknown and treated as wide.
   if (!a?.length || !b?.length) return true
   return a.some((id) => b.includes(id))
 }

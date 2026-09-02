@@ -790,8 +790,7 @@ function StepRecurrence({ data, updateData }: GuidedStepProps) {
               <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
                 {plural(skippedCount, "struck-through date")}{" "}
                 {skippedCount === 1 ? "is" : "are"} skipped by {calendar.name}{" "}
-                (holiday or non-working day) — no routes generate there unless
-                an approved deviation moves the service.
+                (holiday or non-working day) — no routes generate there.
               </p>
             )}
           </>

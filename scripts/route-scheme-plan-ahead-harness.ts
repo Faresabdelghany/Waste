@@ -269,7 +269,6 @@ const firstRun = runPlanAhead({
   today: TODAY,
   existingRoutes: [],
   existingPickups: [],
-  deviationRecords: [],
   containers,
   actorName: "Plan Ahead",
 })
@@ -292,7 +291,6 @@ const secondRun = runPlanAhead({
   today: TODAY,
   existingRoutes: firstRun.routes,
   existingPickups: firstRun.pickups,
-  deviationRecords: [],
   containers,
   actorName: "Plan Ahead",
 })
@@ -314,7 +312,6 @@ const executedRun = runPlanAhead({
     route.id === readyRoute?.id ? { ...route, status: "Ready" } : route,
   ),
   existingPickups: firstRun.pickups,
-  deviationRecords: [],
   containers,
   actorName: "Plan Ahead",
 })
@@ -330,7 +327,6 @@ const disabledRun = runPlanAhead({
   today: TODAY,
   existingRoutes: firstRun.routes,
   existingPickups: firstRun.pickups,
-  deviationRecords: [],
   containers,
   actorName: "Plan Ahead",
 })
@@ -376,7 +372,6 @@ const calendarRun = runPlanAhead({
   today: TODAY,
   existingRoutes: [],
   existingPickups: [],
-  deviationRecords: [],
   calendarRecords: [centralCalendarRecord],
   containers,
   actorName: "Plan Ahead",
@@ -398,7 +393,6 @@ check(
     today: TODAY,
     existingRoutes: [],
     existingPickups: [],
-    deviationRecords: [],
     calendarRecords: [centralCalendarRecord],
     containers,
     actorName: "Plan Ahead",
@@ -413,7 +407,6 @@ check(
     today: TODAY,
     existingRoutes: [],
     existingPickups: [],
-    deviationRecords: [],
     calendarRecords: [],
     containers,
     actorName: "Plan Ahead",

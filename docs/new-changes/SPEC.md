@@ -75,7 +75,7 @@ Around that core:
 15. As an operations planner, I want a Draft scheme's detail page to lead with a callout listing the current blocking issues and a "Resolve via Edit" action, and its Routes/Stops tabs to explain that generation is blocked, so that the path to fixing it is obvious (D26).
 16. As an operations planner, I want the scheme detail as a full page with Details, Routes, Stops, and Collection Calendar tabs, so that I can inspect everything the scheme produces in one place (D8).
 17. As an operations planner, I want the Details tab organized as five cards — Scheme & scope, Collection calendar, Recurrence, Assignment, Containers & stop rule — reading live canonical data, so that the detail never shows stale display copies (D28i).
-18. As an operations planner, I want the Routes tab to list the scheme's generated routes as Service date · Route ID · Status · Stops · Vehicle · Driver, with the *actual* date including approved Collection Deviation moves, so that I see what will really run (D17).
+18. As an operations planner, I want the Routes tab to list the scheme's generated routes as Service date · Route ID · Status · Stops · Vehicle · Driver, with the *actual* date, so that I see what will really run (D17).
 19. As an operations planner, I want the Stops tab to show the generated Stops of the scheme's dated routes, filterable by route and date, so that I can verify what each service day serves (D9, D28ii).
 20. As an operations planner, I want the Stops tab to be empty before generation — rule matches are a preview, never presented as Stops — so that I never mistake a rule's current matches for planned work (D9).
 21. As an operations planner, I want the Collection Calendar tab to show the shared calendar read-only with an "Open in Plan" link, so that scheme editing never forks or redefines a shared calendar (D10).
@@ -89,7 +89,7 @@ Around that core:
 29. As an operations planner, I want an expired scheme to stop generating beyond its end date without retroactively cancelling valid routes inside its effective period, so that expiry is a boundary, not an eraser (D32).
 30. As an operations planner, I want "Generate routes" to remain available as an explicit manual/backfill/regeneration action, so that I can extend or repair windows on demand — it's just never *required* for normal creation (D8, D18).
 31. As a dispatcher, I want the route detail Overview to show the stops table (# / Stop / Arrival / Service / Status), a collapsible map, and a Route information panel with Assignment and Schedule sections, so that a route is readable at a glance (D14).
-32. As a dispatcher, I want the Route information panel to show deviation info whenever the route's date was moved by an approved Collection Deviation, so that "why is this route on Thursday?" answers itself (D14).
+32. ~~As a dispatcher, I want the Route information panel to show deviation info whenever the route's date was moved by an approved Collection Deviation~~ *(Collection Deviations removed 2026-09-03; the panel keeps the stamped `Deviation` fact row)*, so that "why is this route on Thursday?" answers itself (D14).
 33. As an operations manager, I want the Collection Calendars list KPI tiles computed from real calendar data (statuses, holiday dates, validity), so that dashboards never show invented numbers (D13, D22, D28iii).
 34. As an operations manager, I want the Collection Calendars table to adopt the redesigned columns with holidays and next-holiday derived from each calendar's holiday dates and today, so that calendar health is visible in the list (D28iii).
 35. As a service provider manager, I want scheme statuses and generated routes shown in my scoped views to use the same canonical derived status, so that my read-only picture matches operations' (D30).
@@ -214,8 +214,8 @@ Draft, requires `effectiveTo`, and never generates or enables Plan Ahead.
     data at render time (D28i). For Draft schemes, a prominent validation callout lists
     current blocking issues from live validation with "Resolve via Edit" (D26).
   - **Routes** — the scheme's generated routes: `Service date | Route ID | Status |
-    Stops | Vehicle | Driver`; service date is the actual generated route date including
-    approved Collection Deviation moves (D17). Scheme-constant columns (Project, Area)
+    Stops | Vehicle | Driver`; service date is the actual generated route date (D17;
+    Collection Deviation moves removed 2026-09-03). Scheme-constant columns (Project, Area)
     are omitted.
   - **Stops** — generated Stops of the generated dated routes, columns `Service date /
     Route | # | Stop | Service | Status`, filterable by route/date (D9, D28ii). Rule
@@ -294,12 +294,11 @@ routes are left dangling with no cancellation or explanation.
   (the artifact's Planned → Ready → Active → Completed is the happy path only).
 - Route detail Overview adopts the artifact layout: stops table `# / Stop / Arrival /
   Service / Status`, collapsed/collapsible Map panel, Route information panel with
-  ASSIGNMENT + SCHEDULE sections. The panel shows **Deviation info whenever the route's
-  date was moved by an approved Collection Deviation** — including for any route
-  presentation path that currently omits the deviation row.
-- Deviation precedence rules are unchanged and carried: an approved deviation outranks
-  calendar filtering; holidays are skipped, never auto-moved; deviation matching uses
-  most-specific scope then name order.
+  ASSIGNMENT + SCHEDULE sections. The panel shows the route's stamped **Deviation** fact
+  when it is not "None" (Collection Deviations were removed 2026-09-03, so no route is
+  date-moved by one anymore).
+- Holidays are skipped, never auto-moved; there is no deviation remap (removed
+  2026-09-03).
 
 **Changes from current:** route detail already exists as a full page with the
 Assignment/Schedule panel; the change is layout alignment to the artifact and closing the
@@ -307,8 +306,8 @@ gap where non-generated/fixture route presentations render no deviation row.
 
 ### J. Collection Calendars surfaces and Plan workspace (D12, D13, D22, D28iii)
 
-- Plan workspace tabs **unchanged**: Collection Deviations · Collection Calendars ·
-  Areas & Zones. Vehicle Planning lives in Fleet (the artifact's omission is correct).
+- Plan workspace tabs: Collection Calendars · Areas & Zones (Collection Deviations
+  removed 2026-09-03). Vehicle Planning lives in Fleet (the artifact's omission is correct).
 - Collection Calendars list adopts the artboard's table columns, with two constraints:
   "Customer · project" renders **only context that exists in the current model** (no
   fake customer splits, D22); Holidays / Next holiday are derived from each calendar's
@@ -367,8 +366,8 @@ KPI tiles for calendars. The calendars table currently renders generic module co
 ## Out of Scope
 
 - **Customer- or service-scoped Collection Calendars** (D22) — flagged future
-  capability; the Collection Deviation `scopeType` pattern is a noted modeling direction
-  only.
+  capability (the former Collection Deviation `scopeType` pattern was removed with that
+  module on 2026-09-03).
 - **Route favorites/star column** from the artifact's routes list (D28iv).
 - Occurrence-scoped edit prompts ("this route / this and following / all") — edits
   silently reconcile the whole future window; per-route overrides remain the only

@@ -20,7 +20,6 @@ import type { BusinessRecord } from "../data/business-modules"
 import { calendarFromRecord, type CollectionCalendar } from "./calendar"
 import {
   applySchemeGeneration,
-  approvedDeviationsFromRecords,
   planSchemeGeneration,
   stringValueOf,
   type GenerationSummary,
@@ -74,8 +73,6 @@ export type SchemeCreationRelated = {
   existingPickups: readonly BusinessRecord[]
   /** Container records — rule resolution and pickup enrichment. */
   containers: readonly BusinessRecord[]
-  /** Collection Deviation records; approved ones remap window dates. */
-  deviationRecords?: readonly BusinessRecord[]
   /** Collection Calendar records; the scheme's calendarId resolves here. */
   calendarRecords?: readonly BusinessRecord[]
 }
@@ -164,7 +161,6 @@ export function planSchemeCreation(
       scheme,
       window,
       existingRoutes: related.existingRoutes,
-      deviations: approvedDeviationsFromRecords(related.deviationRecords ?? []),
       containers: related.containers,
       calendar,
     })
@@ -232,7 +228,7 @@ export type SchemeCreationPreview = {
  * (D27): the initial window's route dates and an estimated stop count. Runs
  * the real generation engine over a synthetic record carrying the draft's
  * already-resolved day plans — composition, not a re-implementation — against
- * empty route/deviation sets (a new scheme has none; the numbers are labeled
+ * an empty route set (a new scheme has none; the numbers are labeled
  * estimates). Null when the draft has no structured recurrence yet.
  */
 export function previewSchemeCreation(
@@ -277,7 +273,6 @@ export function previewSchemeCreation(
     scheme,
     window,
     existingRoutes: [],
-    deviations: [],
     containers: [],
     calendar: input.calendar ?? null,
   })

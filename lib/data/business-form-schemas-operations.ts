@@ -1203,7 +1203,7 @@ export const operationsBusinessFormSchemas = [
     recordKind: "Collection Calendar",
     title: "Create collection calendar",
     description:
-      "Define the working days, holidays, and validity period that decide which planned service dates are valid. Exceptional replacement dates are Collection Deviations, created in that module.",
+      "Define the working days, holidays, and validity period that decide which planned service dates are valid.",
     submitLabel: "Create calendar",
     nameField: "calendarName",
     contextFieldIds: ["projectId", "validFrom", "validTo"],
@@ -1264,7 +1264,7 @@ export const operationsBusinessFormSchemas = [
         id: "service-days",
         title: "Working days and holidays",
         description:
-          "Holiday and non-working dates are skipped at generation; moving service to another date requires an approved Collection Deviation.",
+          "Holiday and non-working dates are skipped at generation; service is never moved to another date.",
         fields: [
           {
             id: "workingDays",
@@ -1408,122 +1408,6 @@ export const operationsBusinessFormSchemas = [
           {
             id: "geometryConfirmed",
             label: "Geometry, effective dates, and Project scope passed validation",
-            type: "checkbox",
-            required: true,
-            defaultValue: false,
-          },
-        ],
-      },
-    ],
-  },
-  {
-    key: "plan.collection-deviations",
-    mode: "create",
-    recordKind: "Collection deviation",
-    title: "Add collection deviation",
-    description:
-      "Record a governed replacement date for a holiday or disruption. The original service promise stays visible, and executed Routes are never rescheduled.",
-    submitLabel: "Add deviation",
-    nameField: "deviationName",
-    contextFieldIds: ["calendarId", "originalDate", "replacementDate"],
-    validationRules: [
-      {
-        type: "different-values",
-        firstField: "originalDate",
-        secondField: "replacementDate",
-        message: "Replacement date must differ from the original date.",
-      },
-    ],
-    sections: [
-      {
-        id: "deviation-scope",
-        title: "Calendar and affected scope",
-        description:
-          "Eligibility: the calendar must be active for the Project and original date, and the replacement cannot collide with another approved deviation.",
-        fields: [
-          {
-            id: "deviationName",
-            label: "Deviation name",
-            type: "text",
-            required: true,
-            placeholder: "Christmas Eve 2026",
-          },
-          {
-            id: "calendarId",
-            label: "Collection calendar",
-            type: "select",
-            required: true,
-            relation: { workspaceId: "plan", moduleId: "calendars" },
-          },
-          {
-            id: "projectId",
-            label: "Project",
-            type: "select",
-            required: true,
-            relation: { workspaceId: "configure", moduleId: "organization" },
-          },
-          {
-            id: "scopeType",
-            label: "Deviation scope",
-            type: "select",
-            required: true,
-            options: [
-              { value: "project", label: "Entire Project" },
-              { value: "scheme", label: "Selected Route Scheme" },
-              { value: "customer", label: "Selected customer scope" },
-            ],
-          },
-          {
-            id: "schemeId",
-            label: "Affected route scheme",
-            type: "select",
-            relation: { workspaceId: "route-studio", moduleId: "schemes" },
-            description: "Required when the deviation is limited to a Scheme.",
-            requiredWhen: { fieldId: "scopeType", equals: "scheme" },
-          },
-          {
-            id: "customerId",
-            label: "Affected customer",
-            type: "select",
-            relation: { workspaceId: "customers", moduleId: "contacts" },
-            description: "Required when the deviation is customer-specific.",
-            requiredWhen: { fieldId: "scopeType", equals: "customer" },
-          },
-        ],
-      },
-      {
-        id: "dates-reason",
-        title: "Dates, reason, and notification",
-        description:
-          "Validation previews affected future pickups and customer promises. Customers must be notified before the original date.",
-        fields: [
-          {
-            id: "originalDate",
-            label: "Original service date",
-            type: "date",
-            required: true,
-          },
-          {
-            id: "replacementDate",
-            label: "Replacement service date",
-            type: "date",
-            required: true,
-          },
-          {
-            id: "deviationReason",
-            label: "Deviation reason",
-            type: "textarea",
-            required: true,
-          },
-          {
-            id: "notificationPlan",
-            label: "Customer notification plan",
-            type: "textarea",
-            description: "How and when affected customers are notified before the original date.",
-          },
-          {
-            id: "preserveOriginalConfirmed",
-            label: "Preserve the original date and apply this as an audited deviation",
             type: "checkbox",
             required: true,
             defaultValue: false,

@@ -438,7 +438,7 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
   },
   calendars: {
     title: "Calendars and working days",
-    description: "Week numbering, default working days, holidays, service promises, and deviation communication defaults.",
+    description: "Week numbering, default working days, holidays, and service promises.",
     groups: [
       {
         title: "Working calendar",
@@ -458,7 +458,7 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
           {
             id: "calendar-working-days",
             label: "Default working days",
-            description: "Holiday and deviation rules can replace individual service dates.",
+            description: "Holiday dates skip individual service dates.",
             scope: "Project",
             type: "select",
             value: "mon-fri",
@@ -477,14 +477,6 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
             value: "2 validation issues",
             tone: "danger",
             action: "Resolve issues",
-          },
-          {
-            id: "calendar-notify",
-            label: "Require customer communication plan",
-            description: "Deviations affecting customer-visible collection dates need an approved message plan.",
-            scope: "Project",
-            type: "switch",
-            checked: true,
           },
         ],
       },
@@ -584,7 +576,7 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
           {
             id: "comm-templates",
             label: "Message and notification templates",
-            description: "Email, SMS, push, portal, route deviation, and service-change messages.",
+            description: "Email, SMS, push, portal, and service-change messages.",
             scope: "Project",
             type: "status",
             value: "42 templates · 3 preview issues",

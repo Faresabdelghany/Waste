@@ -20,7 +20,6 @@ import type { BusinessRecord } from "../data/business-modules"
 import { calendarFromRecord } from "./calendar"
 import {
   applySchemeGeneration,
-  approvedDeviationsFromRecords,
   cancelSchemeFutureRoutes,
   planSchemeGeneration,
   stringValueOf,
@@ -92,8 +91,6 @@ export type SchemeEditReconciliationRelated = {
   allocations?: readonly BusinessRecord[]
   /** Collection Calendar records; the scheme's calendarId resolves here. */
   calendarRecords?: readonly BusinessRecord[]
-  /** Collection Deviation records; approved ones remap window dates. */
-  deviationRecords?: readonly BusinessRecord[]
 }
 
 export type SchemeEditReconciliationOutcome =
@@ -258,7 +255,6 @@ export function planSchemeEditReconciliation(
       scheme: validated,
       window,
       existingRoutes: related.existingRoutes,
-      deviations: approvedDeviationsFromRecords(related.deviationRecords ?? []),
       containers: related.containers,
       calendar,
     })

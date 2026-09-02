@@ -2,7 +2,7 @@
 
 // Generate routes action for Route Schemes (spec FR-6–FR-10, ticket #7):
 // pick a window (default next 7 days), preview every planned upsert (create /
-// refresh / leave untouched / cancel) with stops, assignment, and deviation
+// refresh / leave untouched / cancel) with stops, assignment, and calendar
 // notes, then confirm. Confirmation writes the dated Routes and their Pickups
 // through the shared record store under the canonical Route Studio keys, so
 // the results are visible in Route Studio → Routes / Pickups. The scheme
@@ -29,7 +29,6 @@ import type { BusinessRecord } from "@/lib/data/business-modules"
 import { calendarFromRecord } from "@/lib/route-schemes/calendar"
 import {
   applySchemeGeneration,
-  approvedDeviationsFromRecords,
   planSchemeGeneration,
   stringValueOf,
   type PlannedRouteAction,
@@ -82,7 +81,6 @@ export function SchemeGenerateRoutesDialog({
   const existingRoutes = useModuleRecords("route-studio", "routes")
   const existingPickups = useModuleRecords("route-studio", "pickups")
   const schemeRecords = useModuleRecords("route-studio", "schemes")
-  const deviationRecords = useModuleRecords("plan", "collection-deviations")
   const calendarRecords = useModuleRecords("plan", "calendars")
   const containers = useModuleRecords("resources", "containers")
   const { upsertRecord } = useBusinessRecordStore()
@@ -101,7 +99,6 @@ export function SchemeGenerateRoutesDialog({
       scheme,
       window: { from: fromDate, to: toDate },
       existingRoutes,
-      deviations: approvedDeviationsFromRecords(deviationRecords),
       // Rule-mode schemes (issue #19) resolve their stop-matching rules
       // against the live container records at plan time.
       containers,
@@ -123,7 +120,6 @@ export function SchemeGenerateRoutesDialog({
     toDate,
     existingRoutes,
     existingPickups,
-    deviationRecords,
     calendarRecords,
     containers,
     actorName,
@@ -276,8 +272,7 @@ export function SchemeGenerateRoutesDialog({
                         )}
                         {planned.action === "omit" && planned.note && (
                           <span className="text-xs text-amber-700 dark:text-amber-400">
-                            {planned.note} — create a Collection Deviation to
-                            move this service
+                            {planned.note}
                           </span>
                         )}
                         {planned.action === "cancel" && (
@@ -315,8 +310,7 @@ export function SchemeGenerateRoutesDialog({
                 Scheme version {generation.plan.schemeVersion} is pinned on every
                 generated route. Ready, Active, Completed, and Cancelled routes
                 are never touched. Holiday and non-working dates on the
-                scheme&apos;s Collection Calendar are skipped unless an approved
-                deviation moves them.
+                scheme&apos;s Collection Calendar are skipped.
               </p>
             )}
 

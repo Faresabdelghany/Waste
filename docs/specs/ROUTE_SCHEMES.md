@@ -19,7 +19,7 @@ Planners can only create routes one at a time for a single date (Quick create or
 - [ ] Generating a 7-day window creates exactly one Route per service day, each carrying one Pickup per scheme container, visible in Route Studio → Routes.
 - [ ] Re-running generation for the same window creates zero duplicate routes (idempotent upsert).
 - [ ] Editing a scheme updates only future routes still in Draft/Planned; Ready/Active/Completed/Cancelled routes are never modified. **[Clarified by issue #33, `docs/new-changes/SPEC.md` area G (D31): edit-save runs this reconciliation automatically — no manual Generate routes — and generation-authored cancellation is part of it. "Cancelled routes are never modified" means operationally cancelled routes; a route generation itself cancelled carries the `cancelledByGeneration` resurrection marker and IS re-created when the scheme serves its date again.]**
-- [ ] A generated date matching an approved Collection Deviation lands on the replacement date, visibly marked.
+- [ ] ~~A generated date matching an approved Collection Deviation lands on the replacement date, visibly marked.~~ *Removed 2026-09-03 with the Collection Deviations module.*
 - [ ] A generated route's driver/vehicle can be overridden on that route alone, without changing the scheme or sibling routes.
 
 ## Solution Overview
@@ -64,7 +64,7 @@ Extend Route Scheme creation with the existing Guided Setup wizard pattern (choo
 - **FR-7**: Each generated Route: RC-numbered name, status **Planned**, operating date, typed scheme relation, inherited default driver/vehicle, populated facts (Project, Area, Vehicle, Driver, Depot, Unloading, Time window), and the scheme version pinned at generation time.
 - **FR-8**: One **Pickup** per container in that day's service plan (FR-14) per generated route, status Planned, sequenced in picked order, deep-linked to its route, carrying container facts (address, container ID/type, fraction).
 - **FR-9**: **Idempotency** — route identity is keyed on (scheme, operating date). Regeneration upserts: refreshes routes still Draft/Planned; skips Ready/Active/Completed/Cancelled untouched. (Explicitly not the existing `Date.now()` ID pattern, which duplicates.)
-- **FR-10**: **Deviation remap** — a generated date equal to an approved Collection Deviation's original date (matching scope) generates on the replacement date instead, with a Deviation fact naming the original date and reason.
+- **FR-10**: ~~**Deviation remap**~~ *Removed 2026-09-03 — the Collection Deviations module was deleted; holiday and non-working dates are skipped at generation and never moved. Generated routes still stamp the `Deviation` fact as "None".*
 - **FR-11**: **Plan Ahead** — per-scheme toggle; when on, the next 7 days are generated/refreshed automatically when Route Studio loads, using the same engine and idempotency rules. Applies to schemes in Validated or later, within their effective window. **[Amended by issue #28, `docs/new-changes/SPEC.md` area A (D18): Plan Ahead is on by default for schemes created generation-ready; automatic future generation is conceptually a property of the scheme, not of visiting a page — the page-load runner remains only as the prototype's technical trigger and is documented as debt.]**
 
 ### Surfacing & override

@@ -212,12 +212,12 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
   {
     workspaceId: "plan",
     canonicalPurpose:
-      "Maintain collection calendars, governed deviations, and planning geography. Route Schemes own recurrence and service days and live in Route Studio.",
+      "Maintain collection calendars and planning geography. Route Schemes own recurrence and service days and live in Route Studio.",
     blueprintModules: ["M09", "M23"],
     personas: ["Route planner", "Operations administrator"],
-    moduleIds: ["collection-deviations", "calendars", "areas"],
+    moduleIds: ["calendars", "areas"],
     boundaryNote:
-      "Plan owns operational planning areas; Commercial owns Service Areas and their service provider awards. Pickup Settings, Collection Weeks, and Collection Calendar Days are retired — Route Schemes own recurrence.",
+      "Plan owns operational planning areas; Commercial owns Service Areas and their service provider awards. Pickup Settings, Collection Weeks, and Collection Calendar Days are retired — Route Schemes own recurrence. Collection Deviations were removed 2026-09-03 — holiday and non-working dates are skipped at generation, never moved.",
   },
   {
     workspaceId: "route-studio",
@@ -451,19 +451,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
       "The driver application is a restricted mobile shell and must not expose the office Operate navigation.",
   },
   {
-    key: "plan.collection-deviations",
-    workspaceId: "plan",
-    moduleId: "collection-deviations",
-    primaryBlueprintModule: "M09",
-    supportingBlueprintModules: ["M17", "M21", "M23"],
-    canonicalOwner: "Plan · Collection Deviations",
-    personas: ["Route planner", "Operations administrator", "Customer-service agent"],
-    upstream: ["M02", "M03", "M09"],
-    downstream: ["M09", "M11", "M17", "M21", "M23"],
-    boundaryNote:
-      "A deviation preserves the original service promise and its replacement date; executed Routes are never rescheduled. This module is the only creation path for deviations, and generation consumes it.",
-  },
-  {
     key: "route-studio.schemes",
     workspaceId: "route-studio",
     moduleId: "schemes",
@@ -487,7 +474,7 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     upstream: ["M02", "M03", "M04", "M05"],
     downstream: ["M09", "M10", "M11", "M17", "M21", "M23"],
     boundaryNote:
-      "Settings owns working-calendar defaults; Plan owns effective calendar records — working days, holidays, and validity. Replacement dates are Collection Deviations, never calendar records.",
+      "Settings owns working-calendar defaults; Plan owns effective calendar records — working days, holidays, and validity. Holiday and non-working dates are skipped at generation, never moved.",
   },
   {
     key: "plan.areas",

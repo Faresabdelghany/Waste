@@ -32,14 +32,12 @@ import {
   type CollectionCalendar,
 } from "@/lib/route-schemes/calendar"
 import {
-  approvedDeviationsFromRecords,
   lastGeneratedAt,
-  routeDeviationInfo,
+  routeDeviationNote,
   schemeGeneratedRoutes,
   schemePlannedStartTime,
   schemeVersionOf,
   stringValueOf,
-  type ApprovedDeviation,
 } from "@/lib/route-schemes/generation"
 import {
   schemeCanGenerateRoutes,
@@ -111,7 +109,7 @@ const GENERATED_AT_FORMAT = new Intl.DateTimeFormat("en-GB", {
   minute: "2-digit",
 })
 
-/** The date a generated route operates on — deviation-remapped when one applies (D17). */
+/** The date a generated route operates on (D17). */
 function routeOperatingDate(route: BusinessRecord): string | undefined {
   return stringValueOf(route, "actualDate") ?? stringValueOf(route, "serviceDate")
 }
@@ -198,7 +196,6 @@ export function SchemeDetailsPage({
   const allPickups = useModuleRecords("route-studio", "pickups")
   const calendarRecords = useModuleRecords("plan", "calendars")
   const areas = useModuleRecords("plan", "areas")
-  const deviationRecords = useModuleRecords("plan", "collection-deviations")
   const allocations = useModuleRecords("fleet", "vehicle-planning")
   const containers = useModuleRecords("resources", "containers")
   const vehicles = useModuleRecords("fleet", "vehicles")
@@ -242,13 +239,8 @@ export function SchemeDetailsPage({
   const canGenerate =
     schemeCanGenerateRoutes(record, today) && blockingIssues.length === 0
   const planAheadOn = isPlanAheadEnabled(record)
-  const approvedDeviations = useMemo(
-    () => approvedDeviationsFromRecords(deviationRecords),
-    [deviationRecords],
-  )
 
-  // The scheme's generated routes, ordered by the date they operate on —
-  // the actual date including approved Collection Deviation moves (D17).
+  // The scheme's generated routes, ordered by the date they operate on (D17).
   const schemeRoutes = useMemo(
     () =>
       schemeGeneratedRoutes(record.id, allRoutes)
@@ -443,7 +435,6 @@ export function SchemeDetailsPage({
           <SchemeRoutesTab
             routes={schemeRoutes}
             generationBlocked={!canGenerate}
-            deviations={approvedDeviations}
           />
         </TabsContent>
         <TabsContent value="stops" className="mt-0 min-h-0 flex-1 overflow-y-auto">
@@ -761,12 +752,10 @@ function SchemeDetailsTab({
 function SchemeRoutesTab({
   routes,
   generationBlocked,
-  deviations,
 }: {
   routes: readonly BusinessRecord[]
   /** Generation cannot run right now — blocking issues or unsaved Draft. */
   generationBlocked: boolean
-  deviations: readonly ApprovedDeviation[]
 }) {
   const { page, setPage, pageCount, pageRows, totalCount } =
     useTablePagination(routes)
@@ -832,9 +821,8 @@ function SchemeRoutesTab({
               ) : (
                 pageRows.map((route) => {
                   const operatingDate = routeOperatingDate(route)
-                  // The shared deviation seam (issue #26): stamped note or a
-                  // derived one for unstamped remaps — never raw facts reads.
-                  const deviationNote = routeDeviationInfo(route, deviations)
+                  // The shared deviation seam (issue #26) — never raw facts reads.
+                  const deviationNote = routeDeviationNote(route)
                   return (
                     <TableRow key={route.id} className="hover:bg-muted/60">
                       <TableCell className="min-w-[180px] py-3">
@@ -898,7 +886,7 @@ function SchemeRoutesTab({
 type SchemeStopRow = {
   pickup: BusinessRecord
   route: BusinessRecord | undefined
-  /** The operating date of the stop's route (deviation-remapped). */
+  /** The operating date of the stop's route. */
   date: string
 }
 
@@ -1199,8 +1187,7 @@ function SchemeCalendarTab({
               </div>
             )}
             <p className="text-xs text-muted-foreground">
-              Holiday and non-working dates are skipped at generation — moving
-              service requires an approved Collection Deviation.
+              Holiday and non-working dates are skipped at generation.
             </p>
           </div>
         ) : (
