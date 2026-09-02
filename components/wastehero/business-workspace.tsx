@@ -43,6 +43,7 @@ import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
 import {
   collectFactColumnOptions,
   defaultFactColumns,
+  moduleOffersRowActions,
   resolveModuleViewKind,
 } from "@/lib/data/business-view-kinds"
 import { calendarFromRecord } from "@/lib/route-schemes/calendar"
@@ -1665,11 +1666,15 @@ export function BusinessWorkspace({
     canOpenBusinessForm &&
     Boolean(formSchema) &&
     !isPriceEngineProducts
+  // Generic row Edit/Delete: a rich module that exposes them (tickets do not —
+  // they are worked through lifecycle transitions and the details view), the
+  // viewer's grants, and for edits a form execution policy.
+  const offersRowActions = moduleOffersRowActions(activeModule.id)
   const canEditRecords =
-    isRichRecordView &&
+    offersRowActions &&
     Boolean(activeModuleFormSchema?.execution) &&
     hasGrant("edit")
-  const canDeleteRecords = isRichRecordView && hasGrant("delete")
+  const canDeleteRecords = offersRowActions && hasGrant("delete")
   const canRunRecordActions = hasGrant("edit")
   // Generate routes (spec FR-6, ticket #7) and the Plan Ahead toggle (FR-11,
   // ticket #8) on a scheme: row menu + detail view, only for schemes whose
