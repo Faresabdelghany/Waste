@@ -45,6 +45,7 @@ import { OrganizationAccessManagement } from "@/components/settings/organization
 import { CompanyProjectsManagement } from "@/components/settings/company-projects-management"
 import { AssetManagementSettings } from "@/components/settings/asset-management-settings"
 import { CommercialDefaultsExtras, CommercialSectionPane } from "@/components/settings/commercial-settings"
+import { migrateLegacyId } from "@/lib/data/legacy-ids"
 
 type SettingControl =
   | {
@@ -245,7 +246,7 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
           {
             id: "notify-approvals",
             label: "Approval requests",
-            description: "Plans, contractor proposals, automation actions, and protected changes awaiting your decision.",
+            description: "Plans, service provider proposals, automation actions, and protected changes awaiting your decision.",
             scope: "Personal",
             type: "switch",
             checked: true,
@@ -296,7 +297,7 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
   },
   access: {
     title: "Users, roles, and teams",
-    description: "Invitations, explicit project grants, granular permissions, contractor links, sessions, and access history.",
+    description: "Invitations, explicit project grants, granular permissions, service provider links, sessions, and access history.",
     groups: [
       {
         title: "User access",
@@ -635,7 +636,7 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
           {
             id: "map-layers",
             label: "Operational layers",
-            description: "Properties, containers, routes, contract areas, zones, depots, and facilities.",
+            description: "Properties, containers, routes, service areas, zones, depots, and facilities.",
             scope: "Project",
             type: "status",
             value: "18 layers · 2 restricted",
@@ -644,7 +645,7 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
           },
           {
             id: "map-overlap",
-            label: "Contract-area validation",
+            label: "Service area validation",
             description: "Upcoming Østerbro area overlaps an existing responsibility for five properties.",
             scope: "Project",
             type: "status",
@@ -784,8 +785,8 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
           },
           {
             id: "pricing-separate",
-            label: "Separate contractor compensation",
-            description: "Customer pricing and contractor-specific prices use separate confidential records.",
+            label: "Separate service provider compensation",
+            description: "Customer pricing and service provider-specific prices use separate confidential records.",
             scope: "Company",
             type: "switch",
             checked: true,
@@ -794,33 +795,33 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
       },
     ],
   },
-  contractors: {
-    title: "Contractors",
-    description: "Contract-area responsibility, proposals, compliance, visibility, prices, settlements, and protected changes.",
+  "service-providers": {
+    title: "Service providers",
+    description: "Service area responsibility, proposals, compliance, visibility, prices, settlements, and protected changes.",
     groups: [
       {
-        title: "Contractor governance",
+        title: "Service provider governance",
         controls: [
           {
-            id: "contractors-active",
-            label: "Active contractors and areas",
-            description: "Three contractors across seven effective contract areas.",
+            id: "service-providers-active",
+            label: "Active service providers and areas",
+            description: "Three service providers across seven effective service areas.",
             scope: "Company",
             type: "status",
             value: "1 overlap · 2 compliance issues",
             tone: "warning",
-            action: "Open contractor setup",
+            action: "Open service provider setup",
           },
           {
-            id: "contractors-proposal",
+            id: "service-providers-proposal",
             label: "Protect route-scheme master data",
-            description: "Contractor route-day and interval changes become office proposals.",
+            description: "Service provider route-day and interval changes become office proposals.",
             scope: "Company",
             type: "switch",
             checked: true,
           },
           {
-            id: "contractors-money",
+            id: "service-providers-money",
             label: "Restrict price and settlement visibility",
             description: "Foremen and drivers cannot access prices, settlements, or customer financial data.",
             scope: "Company",
@@ -828,7 +829,7 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
             checked: true,
           },
           {
-            id: "contractors-close",
+            id: "service-providers-close",
             label: "Settlement close control",
             description: "Closing freezes a snapshot; reopening needs permission, reason, and audit.",
             scope: "Company",
@@ -1090,7 +1091,7 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
           {
             id: "portal-internal",
             label: "Hide internal and restricted information",
-            description: "Internal comments, contractor data, financial data, and unrelated routes never enter portal payloads.",
+            description: "Internal comments, service provider data, financial data, and unrelated routes never enter portal payloads.",
             scope: "Company",
             type: "status",
             value: "Enforced",
@@ -1328,7 +1329,7 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
           {
             id: "pricing-currency",
             label: "Currency",
-            description: "Currency for all product prices and contractor fees.",
+            description: "Currency for all product prices and service provider fees.",
             scope: "Company",
             type: "select",
             value: "EUR",
@@ -1418,8 +1419,15 @@ function initialSettingValues(): Record<string, SettingValue> {
 // Control ids renamed since values were first persisted (issue #14: the
 // working-days id collided with the retired plan.calendar-days module).
 // Stored values under the old id keep loading; the next save writes the new id.
+// Ids renamed on 2026-09-02 (the `service-providers-*` governance switches)
+// resolve through `migrateLegacyId` first, so the retired ids stay out of here.
 const legacySettingIds: Record<string, string> = {
   "calendar-days": "calendar-working-days",
+}
+
+function migrateSettingId(controlId: string): string {
+  const migratedId = migrateLegacyId(controlId)
+  return legacySettingIds[migratedId] ?? migratedId
 }
 
 function mergeStoredSettingValues(
@@ -1430,8 +1438,8 @@ function mergeStoredSettingValues(
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return defaults
 
   const storedEntries = Object.entries(parsed).map(([controlId, value]) => {
-    const renamedId = legacySettingIds[controlId]
-    return renamedId && !(renamedId in parsed)
+    const renamedId = migrateSettingId(controlId)
+    return renamedId !== controlId && !(renamedId in parsed)
       ? ([renamedId, value] as const)
       : ([controlId, value] as const)
   })

@@ -84,7 +84,7 @@ import {
 } from "@/components/settings/commercial-registries-store"
 import { SURCHARGE_RULES } from "@/lib/commercial/price-resolution"
 import {
-  CONTRACTOR_PERFORMANCE,
+  SERVICE_PROVIDER_PERFORMANCE,
   PRICING_REFERENCE_DATE,
   PRODUCT_FACTS,
   defaultRowOf,
@@ -221,10 +221,10 @@ export function CommercialDefaultsExtras() {
   }, [productRecords])
 
   const performanceRows: Array<[string, string]> = [
-    ["a — performance weight", String(CONTRACTOR_PERFORMANCE.a)],
-    ["b — target complaint share", CONTRACTOR_PERFORMANCE.targetComplaintShare],
-    ["Reliability gate", CONTRACTOR_PERFORMANCE.reliabilityGate],
-    ["Cap", `${CONTRACTOR_PERFORMANCE.cap}× — the coefficient never exceeds this`],
+    ["a — performance weight", String(SERVICE_PROVIDER_PERFORMANCE.a)],
+    ["b — target complaint share", SERVICE_PROVIDER_PERFORMANCE.targetComplaintShare],
+    ["Reliability gate", SERVICE_PROVIDER_PERFORMANCE.reliabilityGate],
+    ["Cap", `${SERVICE_PROVIDER_PERFORMANCE.cap}× — the coefficient never exceeds this`],
   ]
 
   return (
@@ -289,13 +289,13 @@ export function CommercialDefaultsExtras() {
         </section>
       </div>
 
-      {/* 3. Contractor performance — read-only card (spec §6 cut: no editor) */}
+      {/* 3. Service provider performance — read-only card (spec §6 cut: no editor) */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Contractor performance</h3>
+        <h3 className="text-sm font-semibold text-foreground">Service provider performance</h3>
         <section className="overflow-hidden rounded-xl border border-border/60">
           <div className="border-b border-border bg-muted/40 px-4 py-3">
             <p className="font-mono text-sm text-foreground">
-              {CONTRACTOR_PERFORMANCE.formula}
+              {SERVICE_PROVIDER_PERFORMANCE.formula}
             </p>
           </div>
           <dl className="divide-y divide-border/60">

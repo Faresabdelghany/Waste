@@ -928,7 +928,7 @@ const quickValues: Record<string, string | boolean | undefined> = {
   effectiveFrom: "2026-09-01",
   effectiveTo: "",
   plannedStartTime: "07:00",
-  contractorId: "",
+  serviceProviderId: "",
   plannedVehicleId: "vehicle-1",
   plannedDriverId: "driver-1",
   depotId: "depot-1",

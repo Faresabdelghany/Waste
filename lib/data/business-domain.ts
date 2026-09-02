@@ -109,8 +109,8 @@ export const blueprintModuleCatalog: Record<
   },
   M15: {
     id: "M15",
-    name: "Contractors and haulers",
-    primaryHref: "/contractors",
+    name: "Service providers and haulers",
+    primaryHref: "/service-providers",
   },
   M16: {
     id: "M16",
@@ -166,7 +166,7 @@ export type PublicBusinessWorkspaceId =
   | "fleet"
   | "customers"
   | "resources"
-  | "contractors"
+  | "service-providers"
   | "commercial"
   | "improve"
   | "control-center"
@@ -217,7 +217,7 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
     personas: ["Route planner", "Operations administrator"],
     moduleIds: ["collection-deviations", "calendars", "areas"],
     boundaryNote:
-      "Plan owns operational planning areas; Commercial owns contractor Contract Areas and their awards. Pickup Settings, Collection Weeks, and Collection Calendar Days are retired — Route Schemes own recurrence.",
+      "Plan owns operational planning areas; Commercial owns Service Areas and their service provider awards. Pickup Settings, Collection Weeks, and Collection Calendar Days are retired — Route Schemes own recurrence.",
   },
   {
     workspaceId: "route-studio",
@@ -239,7 +239,7 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
     canonicalPurpose:
       "Maintain vehicles, drivers, compatibility, availability, and planned allocation.",
     blueprintModules: ["M08"],
-    personas: ["Fleet manager", "Dispatcher", "Route planner", "Contractor manager"],
+    personas: ["Fleet manager", "Dispatcher", "Route planner", "Service provider manager"],
     moduleIds: ["vehicles", "drivers", "vehicle-planning"],
     boundaryNote:
       "Keep the three top-level Fleet tabs. Depot management is a subordinate Fleet planning capability, while unloading destinations are route master data.",
@@ -277,24 +277,24 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Resources should become Assets & Inventory. Depot records belong to Fleet; warehouses remain separate even when colocated.",
   },
   {
-    workspaceId: "contractors",
+    workspaceId: "service-providers",
     canonicalPurpose:
-      "Manage contractor companies, awarded contract areas, and operational contractor activity.",
+      "Manage service provider companies, awarded service areas, and operational service provider activity.",
     blueprintModules: ["M15"],
     personas: [
       "Office contract manager",
       "Operations manager",
-      "Contractor manager",
-      "Contractor foreman",
+      "Service provider manager",
+      "Service provider foreman",
     ],
     moduleIds: [
-      "contractors",
-      "contract-areas",
+      "service-providers",
+      "service-areas",
       "activities",
-      "contractor-workspace",
+      "service-provider-workspace",
     ],
     boundaryNote:
-      "Office contractor management is separate from the restricted contractor application and from confidential settlement processing.",
+      "Office service provider management is separate from the restricted service provider application and from confidential settlement processing.",
   },
   {
     workspaceId: "commercial",
@@ -305,19 +305,19 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Contract and pricing manager",
       "Finance specialist",
       "Billing administrator",
-      "Contractor manager",
+      "Service provider manager",
     ],
     moduleIds: [
       "products",
       "price-rows",
-      "contractor-prices",
+      "service-provider-prices",
       "settlements",
       "events",
       "billing",
       "invoices",
     ],
     boundaryNote:
-      "The contractor workspace must be a restricted shell, not another tab inside the full office Commercial workspace.",
+      "The service provider workspace must be a restricted shell, not another tab inside the full office Commercial workspace.",
   },
   {
     workspaceId: "improve",
@@ -403,7 +403,7 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
       "Customer-service agent",
       "Operations user",
       "Driver",
-      "Contractor user",
+      "Service provider user",
       "Citizen",
     ],
     upstream: ["M01", "M02", "M03", "M04", "M06", "M11", "M12", "M17", "M21", "M22"],
@@ -444,7 +444,7 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     primaryBlueprintModule: "M22",
     supportingBlueprintModules: ["M11", "M17", "M23"],
     canonicalOwner: "Driver application",
-    personas: ["Driver", "Contractor driver"],
+    personas: ["Driver", "Service provider driver"],
     upstream: ["M01", "M02", "M03", "M08", "M11", "M15", "M17", "M20", "M23"],
     downstream: ["M11", "M12", "M13", "M16", "M17", "M18", "M23"],
     boundaryNote:
@@ -500,7 +500,7 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     upstream: ["M01", "M02", "M03", "M15", "M20"],
     downstream: ["M09", "M10", "M11", "M12", "M15", "M17", "M18"],
     boundaryNote:
-      "Plan owns operational planning and notification geography. Commercial owns awarded contractor Contract Areas.",
+      "Plan owns operational planning and notification geography. Commercial owns Service Areas awarded to service providers.",
   },
   {
     key: "fleet.vehicles",
@@ -509,7 +509,7 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     primaryBlueprintModule: "M08",
     supportingBlueprintModules: ["M15", "M20"],
     canonicalOwner: "Fleet · Vehicles",
-    personas: ["Fleet manager", "Dispatcher", "Route planner", "Contractor manager"],
+    personas: ["Fleet manager", "Dispatcher", "Route planner", "Service provider manager"],
     upstream: ["M01", "M02", "M05", "M15", "M20", "M23"],
     downstream: ["M08", "M09", "M10", "M11", "M12", "M18", "M22"],
     boundaryNote:
@@ -522,7 +522,7 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     primaryBlueprintModule: "M08",
     supportingBlueprintModules: ["M01", "M15", "M22"],
     canonicalOwner: "Fleet · Drivers",
-    personas: ["Fleet manager", "Dispatcher", "Route planner", "Contractor manager"],
+    personas: ["Fleet manager", "Dispatcher", "Route planner", "Service provider manager"],
     upstream: ["M01", "M02", "M15", "M23"],
     downstream: ["M08", "M09", "M11", "M12", "M18", "M22", "M23"],
     boundaryNote:
@@ -708,69 +708,69 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
       "One price model: every sellable price (default, variation, negotiated) is a row; the default price is a row with no conditions.",
   },
   {
-    key: "commercial.contractor-prices",
+    key: "commercial.service-provider-prices",
     workspaceId: "commercial",
-    moduleId: "contractor-prices",
+    moduleId: "service-provider-prices",
     primaryBlueprintModule: "M15",
     supportingBlueprintModules: ["M05", "M23"],
-    canonicalOwner: "Commercial · Contractor Prices",
-    personas: ["Office contract manager", "Finance specialist", "Contractor manager"],
+    canonicalOwner: "Commercial · Service Provider Prices",
+    personas: ["Office contract manager", "Finance specialist", "Service provider manager"],
     upstream: ["M05", "M08", "M15"],
     downstream: ["M15", "M18", "M20", "M23"],
     boundaryNote:
-      "The bid is contractually immutable; indexation changes only the current fee. Contractor Price and Settlement remain separate records.",
+      "The bid is contractually immutable; indexation changes only the current fee. Service Provider Price and Settlement remain separate records.",
   },
   {
-    key: "contractors.contractors",
-    workspaceId: "contractors",
-    moduleId: "contractors",
+    key: "service-providers.service-providers",
+    workspaceId: "service-providers",
+    moduleId: "service-providers",
     primaryBlueprintModule: "M15",
     supportingBlueprintModules: ["M08", "M09", "M23"],
-    canonicalOwner: "Contractors · Companies",
+    canonicalOwner: "Service Providers · Companies",
     personas: ["Office contract manager", "Operations manager"],
     upstream: ["M01", "M02", "M05", "M08", "M09", "M20", "M23"],
     downstream: ["M08", "M09", "M10", "M11", "M12", "M13", "M15", "M18"],
     boundaryNote:
-      "Contractor companies are distinct from their effective-dated Contract Area awards.",
+      "Service provider companies are distinct from their effective-dated Service Area awards.",
   },
   {
-    key: "contractors.contract-areas",
-    workspaceId: "contractors",
-    moduleId: "contract-areas",
+    key: "service-providers.service-areas",
+    workspaceId: "service-providers",
+    moduleId: "service-areas",
     primaryBlueprintModule: "M15",
     supportingBlueprintModules: ["M08", "M09", "M23"],
-    canonicalOwner: "Contractors · Contract Areas",
+    canonicalOwner: "Service Providers · Service Areas",
     personas: ["Office contract manager", "Operations manager"],
     upstream: ["M01", "M02", "M05", "M08", "M09", "M20", "M23"],
     downstream: ["M08", "M09", "M10", "M11", "M12", "M13", "M15", "M18"],
     boundaryNote:
-      "Contractors owns awarded Contract Areas; Plan consumes responsibility without owning the commercial award.",
+      "Service Providers owns awarded Service Areas; Plan consumes responsibility without owning the commercial award.",
   },
   {
-    key: "contractors.activities",
-    workspaceId: "contractors",
+    key: "service-providers.activities",
+    workspaceId: "service-providers",
     moduleId: "activities",
     primaryBlueprintModule: "M15",
     supportingBlueprintModules: ["M08", "M11", "M13", "M23"],
-    canonicalOwner: "Contractors · Activities",
-    personas: ["Office contract manager", "Operations manager", "Contractor manager"],
+    canonicalOwner: "Service Providers · Activities",
+    personas: ["Office contract manager", "Operations manager", "Service provider manager"],
     upstream: ["M08", "M09", "M11", "M13", "M15", "M17", "M23"],
     downstream: ["M11", "M13", "M15", "M18", "M23"],
     boundaryNote:
       "Activities link operational assignments, proposals, compliance, and follow-up without replacing their source records.",
   },
   {
-    key: "contractors.contractor-workspace",
-    workspaceId: "contractors",
-    moduleId: "contractor-workspace",
+    key: "service-providers.service-provider-workspace",
+    workspaceId: "service-providers",
+    moduleId: "service-provider-workspace",
     primaryBlueprintModule: "M15",
     supportingBlueprintModules: ["M08", "M11", "M13"],
-    canonicalOwner: "Restricted contractor application",
-    personas: ["Contractor manager", "Contractor foreman"],
+    canonicalOwner: "Restricted service provider application",
+    personas: ["Service provider manager", "Service provider foreman"],
     upstream: ["M01", "M08", "M09", "M11", "M13", "M15", "M17", "M23"],
     downstream: ["M08", "M11", "M13", "M15", "M17", "M18", "M23"],
     boundaryNote:
-      "This must not expose unrelated contractors, customer prices, office billing, or office structural controls.",
+      "This must not expose unrelated service providers, customer prices, office billing, or office structural controls.",
   },
   {
     key: "commercial.settlements",
@@ -778,12 +778,12 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     moduleId: "settlements",
     primaryBlueprintModule: "M15",
     supportingBlueprintModules: ["M05", "M23"],
-    canonicalOwner: "Commercial · Contractor Prices & Settlements",
-    personas: ["Office contract manager", "Finance specialist", "Contractor manager"],
+    canonicalOwner: "Commercial · Service Provider Prices & Settlements",
+    personas: ["Office contract manager", "Finance specialist", "Service provider manager"],
     upstream: ["M05", "M08", "M11", "M13", "M15", "M18"],
     downstream: ["M15", "M18", "M20", "M23"],
     boundaryNote:
-      "Contractor Price and Settlement are separate records. Closing Settlement freezes a reproducible period snapshot.",
+      "Service Provider Price and Settlement are separate records. Closing Settlement freezes a reproducible period snapshot.",
   },
   {
     key: "commercial.events",

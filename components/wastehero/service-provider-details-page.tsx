@@ -65,18 +65,18 @@ function InformationItem({
   )
 }
 
-function ContractorInformation({
+function ServiceProviderInformation({
   record,
   users,
   vehicles,
   drivers,
-  contractAreas,
+  serviceAreas,
 }: {
   record: BusinessRecord
   users: readonly BusinessRecord[]
   vehicles: readonly BusinessRecord[]
   drivers: readonly BusinessRecord[]
-  contractAreas: readonly BusinessRecord[]
+  serviceAreas: readonly BusinessRecord[]
 }) {
   const submitted = record.submittedValues ?? {}
   const submittedText = (fieldId: string) => {
@@ -95,7 +95,7 @@ function ContractorInformation({
     ["Relationship state", record.status],
   ] as const
   const relationshipInformation = [
-    ["Contract areas", String(contractAreas.length)],
+    ["Service areas", String(serviceAreas.length)],
     ["Users", String(users.length)],
     ["Vehicles", String(vehicles.length)],
     ["Drivers", String(drivers.length)],
@@ -121,7 +121,7 @@ function ContractorInformation({
           </section>
 
           <section className="border-t border-border py-6 lg:border-l lg:border-t-0 lg:pl-12">
-            <h2 className="text-sm font-semibold">Contractor relationship</h2>
+            <h2 className="text-sm font-semibold">Service provider relationship</h2>
             <dl className="mt-3 grid grid-cols-1 divide-y divide-border/60 sm:grid-cols-2 sm:gap-x-8 sm:divide-y-0">
               {relationshipInformation.map(([label, value]) => (
                 <InformationItem key={label} label={label} value={value} />
@@ -266,13 +266,13 @@ function RelatedRecordsTable({
   )
 }
 
-export function ContractorDetailsPage({
+export function ServiceProviderDetailsPage({
   record,
   users,
   vehicles,
   drivers,
-  contractAreas,
-  contractorPrices,
+  serviceAreas,
+  serviceProviderPrices,
   onBack,
   onCreate,
 }: {
@@ -280,11 +280,11 @@ export function ContractorDetailsPage({
   users: readonly BusinessRecord[]
   vehicles: readonly BusinessRecord[]
   drivers: readonly BusinessRecord[]
-  contractAreas: readonly BusinessRecord[]
-  contractorPrices: readonly BusinessRecord[]
+  serviceAreas: readonly BusinessRecord[]
+  serviceProviderPrices: readonly BusinessRecord[]
   onBack: () => void
   onCreate: (
-    target: "user" | "vehicle" | "driver" | "contract-area" | "contractor-price",
+    target: "user" | "vehicle" | "driver" | "service-area" | "service-provider-price",
   ) => void
 }) {
   return (
@@ -297,7 +297,7 @@ export function ContractorDetailsPage({
               <div className="flex flex-wrap items-center gap-2">
                 <Breadcrumbs
                   items={[
-                    { label: "Contractors", onClick: onBack },
+                    { label: "Service providers", onClick: onBack },
                     { label: record.name },
                   ]}
                 />
@@ -322,7 +322,7 @@ export function ContractorDetailsPage({
           <div className="overflow-x-auto">
             <TabsList className="inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs">
               <TabsTrigger value="information" className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background">
-                Contractor information
+                Service provider information
               </TabsTrigger>
               <TabsTrigger value="users" className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background">
                 Users <span className="ml-1.5 text-[10px] text-muted-foreground">{users.length}</span>
@@ -333,23 +333,23 @@ export function ContractorDetailsPage({
               <TabsTrigger value="drivers" className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background">
                 Drivers <span className="ml-1.5 text-[10px] text-muted-foreground">{drivers.length}</span>
               </TabsTrigger>
-              <TabsTrigger value="contract-areas" className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background">
-                Contract Areas <span className="ml-1.5 text-[10px] text-muted-foreground">{contractAreas.length}</span>
+              <TabsTrigger value="service-areas" className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background">
+                Service areas <span className="ml-1.5 text-[10px] text-muted-foreground">{serviceAreas.length}</span>
               </TabsTrigger>
               <TabsTrigger value="prices" className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background">
-                Prices <span className="ml-1.5 text-[10px] text-muted-foreground">{contractorPrices.length}</span>
+                Prices <span className="ml-1.5 text-[10px] text-muted-foreground">{serviceProviderPrices.length}</span>
               </TabsTrigger>
             </TabsList>
           </div>
         </div>
 
         <TabsContent value="information" className="mt-0 min-h-0 flex-1">
-          <ContractorInformation
+          <ServiceProviderInformation
             record={record}
             users={users}
             vehicles={vehicles}
             drivers={drivers}
-            contractAreas={contractAreas}
+            serviceAreas={serviceAreas}
           />
         </TabsContent>
         <TabsContent value="users" className="mt-0 min-h-0 flex-1">
@@ -358,7 +358,7 @@ export function ContractorDetailsPage({
             entityLabel="User"
             contextLabel="Role and scope"
             valueLabel="Access"
-            emptyLabel="No contractor users"
+            emptyLabel="No service provider users"
             actionLabel="Add User"
             onCreate={() => onCreate("user")}
           />
@@ -369,7 +369,7 @@ export function ContractorDetailsPage({
             entityLabel="Vehicle"
             contextLabel="Type and assignment"
             valueLabel="Availability"
-            emptyLabel="No contractor vehicles"
+            emptyLabel="No service provider vehicles"
             actionLabel="Add Vehicle"
             onCreate={() => onCreate("vehicle")}
             workspaceId="fleet"
@@ -382,37 +382,37 @@ export function ContractorDetailsPage({
             entityLabel="Driver"
             contextLabel="Employment and access"
             valueLabel="Availability"
-            emptyLabel="No contractor drivers"
+            emptyLabel="No service provider drivers"
             actionLabel="Add Driver"
             onCreate={() => onCreate("driver")}
             workspaceId="fleet"
             moduleId="drivers"
           />
         </TabsContent>
-        <TabsContent value="contract-areas" className="mt-0 min-h-0 flex-1">
+        <TabsContent value="service-areas" className="mt-0 min-h-0 flex-1">
           <RelatedRecordsTable
-            records={contractAreas}
-            entityLabel="Contract area"
+            records={serviceAreas}
+            entityLabel="Service area"
             contextLabel="Service scope"
             valueLabel="Effective period"
-            emptyLabel="No assigned contract areas"
-            actionLabel="Assign Contract Area"
-            onCreate={() => onCreate("contract-area")}
-            workspaceId="contractors"
-            moduleId="contract-areas"
+            emptyLabel="No assigned service areas"
+            actionLabel="Assign service area"
+            onCreate={() => onCreate("service-area")}
+            workspaceId="service-providers"
+            moduleId="service-areas"
           />
         </TabsContent>
         <TabsContent value="prices" className="mt-0 min-h-0 flex-1">
           <RelatedRecordsTable
-            records={contractorPrices}
-            entityLabel="Contractor price"
-            contextLabel="Contract area · validity"
+            records={serviceProviderPrices}
+            entityLabel="Service provider price"
+            contextLabel="Service area · validity"
             valueLabel="Current fee"
-            emptyLabel="No contractor prices"
-            actionLabel="New contractor price"
-            onCreate={() => onCreate("contractor-price")}
+            emptyLabel="No service provider prices"
+            actionLabel="New service provider price"
+            onCreate={() => onCreate("service-provider-price")}
             workspaceId="commercial"
-            moduleId="contractor-prices"
+            moduleId="service-provider-prices"
           />
         </TabsContent>
       </Tabs>

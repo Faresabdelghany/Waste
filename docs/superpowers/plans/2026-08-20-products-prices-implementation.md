@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the verified Variant A Products & Prices prototype with the real implementation inside the app's canonical machinery — products, price rows and contractor prices become registry-backed `BusinessRecord`s persisted through the record store, rendered by the **generic workspace views the whole system already uses**; product management moves to Settings; the Commercial workspace is relabeled **Price Engine**; the prototype folder is deleted at the end.
+**Goal:** Replace the verified Variant A Products & Prices prototype with the real implementation inside the app's canonical machinery — products, price rows and service provider prices become registry-backed `BusinessRecord`s persisted through the record store, rendered by the **generic workspace views the whole system already uses**; product management moves to Settings; the Commercial workspace is relabeled **Price Engine**; the prototype folder is deleted at the end.
 
-**Architecture:** Three layers. (1) `lib/commercial/` — a typed price model with record⇄model converters plus the ported §4.4 resolution engine, gated by an in-repo tsx harness. (2) A single atomic registry cutover in `lib/data/` — the `products` module reworked, `pricing` retired, `price-rows` and `contractor-prices` modules added, form schemas swapped in the same commit (the schema integrity gate requires exactly one schema per public module). (3) Flows through existing machinery only — the generic module table (fact columns), the generic record detail sheet, `BusinessRecordFormDialog` for every form (create, edit, Adjust prices, Apply index), `recordKind` branches in `handleFormSubmit` for the two flows that compute money (the established "Contract area assignment" pattern), and `RelatedRecordsTable` for the contractor Prices tab.
+**Architecture:** Three layers. (1) `lib/commercial/` — a typed price model with record⇄model converters plus the ported §4.4 resolution engine, gated by an in-repo tsx harness. (2) A single atomic registry cutover in `lib/data/` — the `products` module reworked, `pricing` retired, `price-rows` and `service-provider-prices` modules added, form schemas swapped in the same commit (the schema integrity gate requires exactly one schema per public module). (3) Flows through existing machinery only — the generic module table (fact columns), the generic record detail sheet, `BusinessRecordFormDialog` for every form (create, edit, Adjust prices, Apply index), `recordKind` branches in `handleFormSubmit` for the two flows that compute money (the established "Service area assignment" pattern), and `RelatedRecordsTable` for the service provider Prices tab.
 
 **Tech stack:** Next.js App Router, TypeScript, Tailwind CSS v4, shadcn/ui, `tsx` for the harness. No test framework exists — the gates are `npx tsc --noEmit`, `npx tsx scripts/price-resolution-harness.ts`, and a browser walkthrough.
 
@@ -14,7 +14,7 @@
 
 Binding for every task:
 
-1. **Generic views only.** Fares, verbatim: *"we will use the UI components that we have and all what we have already — don't add new components, don't create new things; we will use the same list, same filters, views that we have in all system."* Concretely: the workspace modules render through the standard `BusinessWorkspace` table, search, view options and record detail sheet — no custom module bodies, no custom filter bars, no custom full-page product detail, no row-selection checkboxes, no bespoke dialogs. The prototype's custom UI (catalogue table, detail page, Vary/Schedule/Negotiate/Adjust dialogs, contractor lane, rate sheet) is **not ported**; its data model and flows are re-expressed through records, schemas and the existing form dialog.
+1. **Generic views only.** Fares, verbatim: *"we will use the UI components that we have and all what we have already — don't add new components, don't create new things; we will use the same list, same filters, views that we have in all system."* Concretely: the workspace modules render through the standard `BusinessWorkspace` table, search, view options and record detail sheet — no custom module bodies, no custom filter bars, no custom full-page product detail, no row-selection checkboxes, no bespoke dialogs. The prototype's custom UI (catalogue table, detail page, Vary/Schedule/Negotiate/Adjust dialogs, service provider lane, rate sheet) is **not ported**; its data model and flows are re-expressed through records, schemas and the existing form dialog.
 2. **Settings owns the product catalogue.** Settings → Commercial → Products is the management surface: users **add and edit products there** (identity, attributes, invoice & tax, born-priced default price). The workspace consumes those products.
 3. **The workspace is renamed "Price Engine"** (sidebar + workspace label). Label-only: workspace id stays `commercial`, route stays `/commercial`, module ids unchanged. Name swappable at review.
 4. Standing spec decisions stay: **Explain-a-price UI stays cut** (engine survives in `lib/` + harness), the products table carries the **four attribute columns** (Container, Container type, Customer, Waste fraction — as facts), price lists remain **tags + a derived settings index**, and the Settings **Commercial section** (Products / Zones / Service / Customer types) exists alongside Commercial defaults.
@@ -23,17 +23,17 @@ Consequences worth naming so nobody "fixes" them:
 - **Price rows become a visible module** ("Price rows" tab in Price Engine). With no custom product detail page, rows must be workable through the standard views; §4.1 supports this (rows are adjusted repeatedly → workspace). Vary this price / Negotiated deal collapse into the module's generic **New price row** form; Schedule a change is the generic **edit** of a row's scheduled fields.
 - **Adjust prices** and **Apply index** are schema-driven dialogs (existing `BusinessRecordFormDialog`, review step via the existing `reviewBeforeSubmit` mechanism) with the math in `handleFormSubmit` `recordKind` branches. Bulk scope is chosen **inside the form** (tag / product multiselect), not by table checkboxes.
 - The product's **Customer** and **Variations** columns are denormalized facts on the product record, kept in sync by the write paths (generic fact columns can't join across modules).
-- **Bid immutability falls out of the machinery**: the contractor-prices module's registered schema is the Apply-index action schema, so the generic edit path never opens for those records.
+- **Bid immutability falls out of the machinery**: the service-provider-prices module's registered schema is the Apply-index action schema, so the generic edit path never opens for those records.
 
-**Still deferred** (spec §6 + handoff, do not build): guided-setup stepper, Agreement surfacing of negotiated deals, per-row invoice override disclosure, group-by-tag, New-contractor-price creation flow, xlsx import/export, margin strip, named change sets, performance-formula editing. The real `invoices` module is **untouched**.
+**Still deferred** (spec §6 + handoff, do not build): guided-setup stepper, Agreement surfacing of negotiated deals, per-row invoice override disclosure, group-by-tag, New-service-provider-price creation flow, xlsx import/export, margin strip, named change sets, performance-formula editing. The real `invoices` module is **untouched**.
 
 ## Global Constraints
 
 - **Generic views only** (decision 1 above) — the strongest constraint in this plan. New client code is limited to: the `lib/commercial/` logic, schema/registry data, `handleFormSubmit` branches, small wiring (header-button swap, related-tab data plumbing), and the Settings pane (Settings has its own established custom-pane idiom — `AssetManagementSettings` precedent — and Fares explicitly asked for product management there).
-- **Domain language** per `CONTEXT.md`: Agreement (never Subscription), **Contractor price** (never "rates" in UI copy), Contract Area, Price list (a tag on rows + a derived index), Billable Event.
+- **Domain language** per `CONTEXT.md`: Agreement (never Subscription), **Service provider price** (never "rates" in UI copy), Service Area, Price list (a tag on rows + a derived index), Billable Event.
 - **§4.4 resolution rule** (exact copy, shown in module rules and enforced by the engine): "The row matching the most conditions wins. A negotiated row for the specific customer always wins. Remaining ties go to the row with the newest effective-from date."
 - **Negotiated rows are excluded by default** from bulk adjustments (opt-in checkbox with warning copy). **The bid is contractually immutable.**
-- **Registry mechanics** (spec §5): every fixture record id must be registered in a scope array in `lib/data/business-modules.ts` (`copenhagenFixtureRecordIds` / `harborFixtureRecordIds` / `companyWideFixtureRecordIds`) or `record()` throws; contractor-owned records also map in `fixtureContractorIdByRecordId`. The schema gate in `lib/data/business-form-schemas.ts` demands exactly one schema per `workspaceId.moduleId` in `publicWorkspaceDomains` — **`business-domain.ts`, `business-modules.ts` and the schema files change in the same task**.
+- **Registry mechanics** (spec §5): every fixture record id must be registered in a scope array in `lib/data/business-modules.ts` (`copenhagenFixtureRecordIds` / `harborFixtureRecordIds` / `companyWideFixtureRecordIds`) or `record()` throws; service-provider-owned records also map in `fixtureServiceProviderIdByRecordId`. The schema gate in `lib/data/business-form-schemas.ts` demands exactly one schema per `workspaceId.moduleId` in `publicWorkspaceDomains` — **`business-domain.ts`, `business-modules.ts` and the schema files change in the same task**.
 - **Gates:** `npx tsc --noEmit` exit 0 is the only type gate (`pnpm build` ignores TS errors; eslint is broken; no test suite). Plus `npx tsx scripts/price-resolution-harness.ts` (added by Task 1) and browser verification per task. A dev server is usually already on :3000 (`curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/`); if the volta pnpm shim fails, `npm run dev` works.
 - **Persistence:** only via `BusinessRecordStoreProvider` (`getRecords`/`upsertRecord`, localStorage key `wastehero-business-records-v1`). No new storage keys. Client-created records may omit companyId/projectIds.
 - **Money display:** `€` two decimals (`money()`), unit suffixes `/pickup`, `/mo`, `/job`.
@@ -51,11 +51,11 @@ Consequences worth naming so nobody "fixes" them:
 | `scripts/price-resolution-harness.ts` | In-repo harness (replaces `/tmp/resolution-scenarios.ts`): engine scenarios + registry/converter/adjust checks; exit 1 on failure |
 | `components/settings/commercial-settings.tsx` | `CommercialDefaultsExtras` + `CommercialSectionPane` incl. the Products management pane (settings-pane idiom, `AssetManagementSettings` precedent) |
 
-**Modify:** `lib/data/business-domain.ts` · `lib/data/business-modules.ts` · `lib/data/business-form-schemas-commercial-improve.ts` · `lib/data/business-form-schemas.ts` · `lib/data/business-form-schemas-customers-resources.ts` · `lib/data/business-links.ts` · `lib/data/sidebar.ts` · `components/wastehero/business-workspace.tsx` · `components/wastehero/contractor-details-page.tsx` · `components/settings/SettingsDialog.tsx` · `app/commercial/page.tsx`
+**Modify:** `lib/data/business-domain.ts` · `lib/data/business-modules.ts` · `lib/data/business-form-schemas-commercial-improve.ts` · `lib/data/business-form-schemas.ts` · `lib/data/business-form-schemas-customers-resources.ts` · `lib/data/business-links.ts` · `lib/data/sidebar.ts` · `components/wastehero/business-workspace.tsx` · `components/wastehero/service-provider-details-page.tsx` · `components/settings/SettingsDialog.tsx` · `app/commercial/page.tsx`
 
 **Delete (final task only):** `components/wastehero/products-prices-prototype/` (all 7 files).
 
-**Explicitly NOT created** (decision 1): no products-catalogue component, no product-details page, no price-row dialogs, no contractor-prices lane/sheet, no contractor-prices-tab component, no shared badge/chip atoms.
+**Explicitly NOT created** (decision 1): no products-catalogue component, no product-details page, no price-row dialogs, no service-provider-prices lane/sheet, no service-provider-prices-tab component, no shared badge/chip atoms.
 
 ---
 
@@ -70,9 +70,9 @@ Consequences worth naming so nobody "fixes" them:
 **Interfaces:**
 - Consumes: `BusinessRecord` type from `@/lib/data/business-modules` (type-only import).
 - Produces (used by Tasks 2–4 — exact names):
-  - Types: `ProductType`, `PriceUnit`, `PriceConditions`, `ScheduledChange`, `PriceRowModel`, `ProductModel`, `ContractorPriceModel`, `HistoryEntry`, `ResolveInput`, `RowVerdict`, `Resolution`
-  - Constants: `PRICING_REFERENCE_DATE`, `ZONES`, `CUSTOMER_TYPES`, `CONTAINER_TYPES`, `WASTE_FRACTIONS`, `PRICE_LIST_TAGS`, `KNOWN_CUSTOMERS`, `COMMERCIAL_DEFAULTS`, `CONTRACTOR_PERFORMANCE`, `RESOLUTION_RULE`, `ROW_FACTS`, `PRODUCT_FACTS`, `RATE_FACTS`, `COMPONENT_FACT_PREFIX`, `HISTORY_PREFIX`, `INDEXED_PREFIX`
-  - Functions: `money`, `unitSuffix`, `computeAdjusted`, `conditionLabels`, `rowDisplayName`, `rowsOf`, `defaultRowOf`, `variationsOf`, `negotiatedCustomersOf`, `priceListIndex`, `recordToPriceRow`, `priceRowToRecord`, `recordToProduct`, `recordToContractorPrice`, `contractorPriceToRecord`, `encodeHistory`, `decodeHistory`, `encodeIndexation`, `decodeIndexation`, `applyIndexToRate`; from price-resolution: `resolvePrice`, `SURCHARGE_RULES`
+  - Types: `ProductType`, `PriceUnit`, `PriceConditions`, `ScheduledChange`, `PriceRowModel`, `ProductModel`, `ServiceProviderPriceModel`, `HistoryEntry`, `ResolveInput`, `RowVerdict`, `Resolution`
+  - Constants: `PRICING_REFERENCE_DATE`, `ZONES`, `CUSTOMER_TYPES`, `CONTAINER_TYPES`, `WASTE_FRACTIONS`, `PRICE_LIST_TAGS`, `KNOWN_CUSTOMERS`, `COMMERCIAL_DEFAULTS`, `SERVICE_PROVIDER_PERFORMANCE`, `RESOLUTION_RULE`, `ROW_FACTS`, `PRODUCT_FACTS`, `RATE_FACTS`, `COMPONENT_FACT_PREFIX`, `HISTORY_PREFIX`, `INDEXED_PREFIX`
+  - Functions: `money`, `unitSuffix`, `computeAdjusted`, `conditionLabels`, `rowDisplayName`, `rowsOf`, `defaultRowOf`, `variationsOf`, `negotiatedCustomersOf`, `priceListIndex`, `recordToPriceRow`, `priceRowToRecord`, `recordToProduct`, `recordToServiceProviderPrice`, `serviceProviderPriceToRecord`, `encodeHistory`, `decodeHistory`, `encodeIndexation`, `decodeIndexation`, `applyIndexToRate`; from price-resolution: `resolvePrice`, `SURCHARGE_RULES`
 
 - [ ] **Step 1: Write the failing harness**
 
@@ -237,12 +237,12 @@ export type ProductModel = {
   serviceLevels: string[]
 }
 
-export type ContractorPriceModel = {
+export type ServiceProviderPriceModel = {
   id: string
-  contractor: string
+  serviceProvider: string
   productId: string
   productName: string
-  contractArea: string
+  serviceArea: string
   bid: number
   currentFee: number
   unit: PriceUnit
@@ -264,7 +264,7 @@ export const WASTE_FRACTIONS = ["Residual", "Paper & cardboard", "Glass", "Organ
 export const PRICE_LIST_TAGS = ["PL-Copenhagen-2026", "PL-Harbor-2026"] as const
 export const KNOWN_CUSTOMERS = ["Østerbro Housing Association", "Nørrebro CoWork ApS"] as const
 export const COMMERCIAL_DEFAULTS = { currency: "EUR", defaultVatRate: 0.25, invoiceCodePrefix: "WH-" }
-export const CONTRACTOR_PERFORMANCE = {
+export const SERVICE_PROVIDER_PERFORMANCE = {
   formula: "coefficient = 1 + a × (b − complaint share)",
   a: 0.5,
   targetComplaintShare: "4%",
@@ -293,7 +293,7 @@ export const PRODUCT_FACTS = {
   serviceLevels: "Service levels",
 } as const
 export const RATE_FACTS = {
-  contractor: "Contractor", product: "Product", contractArea: "Contract area",
+  serviceProvider: "Service provider", product: "Product", serviceArea: "Service area",
   bid: "Bid (locked)", currentFee: "Current fee", unit: "Unit", validFrom: "Valid from",
   validUntil: "Valid until", lastIndexed: "Last indexed", lastIndexNote: "Last index note",
 } as const
@@ -346,10 +346,10 @@ export function decodeHistory(related: readonly string[]): HistoryEntry[] {
     })
 }
 // `Indexed · <at> · <note> · €<from> → €<to> · base: <bid|current fee>`
-export function encodeIndexation(entry: ContractorPriceModel["indexation"][number]): string {
+export function encodeIndexation(entry: ServiceProviderPriceModel["indexation"][number]): string {
   return `${INDEXED_PREFIX}${entry.at} · ${entry.note} · ${money(entry.from)} → ${money(entry.to)} · base: ${entry.base}`
 }
-export function decodeIndexation(related: readonly string[]): ContractorPriceModel["indexation"] {
+export function decodeIndexation(related: readonly string[]): ServiceProviderPriceModel["indexation"] {
   return related
     .filter((item) => item.startsWith(INDEXED_PREFIX))
     .map((item) => {
@@ -449,14 +449,14 @@ export function recordToProduct(record: BusinessRecord): ProductModel {
   }
 }
 
-export function recordToContractorPrice(record: BusinessRecord): ContractorPriceModel {
+export function recordToServiceProviderPrice(record: BusinessRecord): ServiceProviderPriceModel {
   const productRef = record.relationRefs?.find((ref) => ref.fieldId === "productId")
   return {
     id: record.id,
-    contractor: record.facts[RATE_FACTS.contractor] || "",
+    serviceProvider: record.facts[RATE_FACTS.serviceProvider] || "",
     productId: productRef?.recordId ?? "",
     productName: record.facts[RATE_FACTS.product] || productRef?.label || "",
-    contractArea: record.facts[RATE_FACTS.contractArea] || "",
+    serviceArea: record.facts[RATE_FACTS.serviceArea] || "",
     bid: Number(record.facts[RATE_FACTS.bid] || 0),
     currentFee: Number(record.facts[RATE_FACTS.currentFee] || 0),
     unit: (record.facts[RATE_FACTS.unit] as PriceUnit) || "pickup",
@@ -473,7 +473,7 @@ export function recordToContractorPrice(record: BusinessRecord): ContractorPrice
 
 // Serializes an indexed rate back over its existing record: keeps identity,
 // rewrites the money facts, replaces the Indexed· entries. Never touches Bid.
-export function contractorPriceToRecord(rate: ContractorPriceModel, existing: BusinessRecord): BusinessRecord {
+export function serviceProviderPriceToRecord(rate: ServiceProviderPriceModel, existing: BusinessRecord): BusinessRecord {
   return {
     ...existing,
     updated: "Now",
@@ -494,7 +494,7 @@ export function contractorPriceToRecord(rate: ContractorPriceModel, existing: Bu
 
 // Indexation run (spec §4.3): recompute the current fee from the chosen base,
 // append to the indexation history. The bid itself never changes.
-export function applyIndexToRate(rate: ContractorPriceModel, opts: { label: string; percent: number; from: string; base: "bid" | "current fee" }): ContractorPriceModel {
+export function applyIndexToRate(rate: ServiceProviderPriceModel, opts: { label: string; percent: number; from: string; base: "bid" | "current fee" }): ServiceProviderPriceModel {
   const baseAmount = opts.base === "bid" ? rate.bid : rate.currentFee
   const to = Math.round(baseAmount * (1 + opts.percent / 100) * 100) / 100
   return {
@@ -583,18 +583,18 @@ Everything here lands in **one commit**: the schema integrity gate throws unless
 
 **Files:**
 - Modify: `lib/data/business-domain.ts` (commercial `moduleIds` ~line 317; module domain entries ~742–754)
-- Modify: `lib/data/business-modules.ts` (scope arrays 35–196; `fixtureContractorIdByRecordId` 198; commercial workspace from 2917)
+- Modify: `lib/data/business-modules.ts` (scope arrays 35–196; `fixtureServiceProviderIdByRecordId` 198; commercial workspace from 2917)
 - Modify: `lib/data/business-form-schemas-commercial-improve.ts` (products schema 13–173; pricing schema 174–~370)
 - Modify: `lib/data/business-form-schemas.ts` (field hooks ~135, ~395–410; `actionExecutions` line 22)
 - Modify: `lib/data/business-form-schemas-customers-resources.ts` (~814–822)
 - Modify: `lib/data/business-links.ts` (~79–80)
 - Modify: `lib/data/sidebar.ts` (line 43)
 - Modify: `components/wastehero/business-workspace.tsx` (line 552 only)
-- Reference (read-only): `prototype-data.ts` — fixture values: products 462–597, price rows 599–770, contractor prices 772–856
+- Reference (read-only): `prototype-data.ts` — fixture values: products 462–597, price rows 599–770, service provider prices 772–856
 
 **Interfaces:**
 - Consumes: Task 1's fact-key strings (fixtures must match `ROW_FACTS`/`PRODUCT_FACTS`/`RATE_FACTS` exactly) and id scheme.
-- Produces: modules `commercial.products` (reworked), `commercial.price-rows` (visible), `commercial.contractor-prices`; fixture ids `product-*` (7), `price-row-*` (20), `contractor-price-*` (5); schemas `commercial.products` (create — hosted by Settings in Task 4), `commercial.price-rows` (create — "New price row"), `commercial.contractor-prices` (**action** — "Apply index"); an exported non-registered `adjustPricesFormSchema`; workspace label **Price Engine**.
+- Produces: modules `commercial.products` (reworked), `commercial.price-rows` (visible), `commercial.service-provider-prices`; fixture ids `product-*` (7), `price-row-*` (20), `service-provider-price-*` (5); schemas `commercial.products` (create — hosted by Settings in Task 4), `commercial.price-rows` (create — "New price row"), `commercial.service-provider-prices` (**action** — "Apply index"); an exported non-registered `adjustPricesFormSchema`; workspace label **Price Engine**.
 
 - [ ] **Step 1: Extend the harness with failing registry-integration checks**
 
@@ -603,21 +603,21 @@ Append to `scripts/price-resolution-harness.ts`:
 ```ts
 // --- Registry integration (Task 2): fixtures → converters → engine ---
 import { businessWorkspaces } from "../lib/data/business-modules"
-import { recordToContractorPrice, recordToPriceRow, recordToProduct } from "../lib/commercial/price-model"
+import { recordToServiceProviderPrice, recordToPriceRow, recordToProduct } from "../lib/commercial/price-model"
 {
   const commercial = businessWorkspaces.commercial
   const productRecords = commercial.modules.find((m) => m.id === "products")?.records ?? []
   const rowRecords = commercial.modules.find((m) => m.id === "price-rows")?.records ?? []
-  const rateRecords = commercial.modules.find((m) => m.id === "contractor-prices")?.records ?? []
+  const rateRecords = commercial.modules.find((m) => m.id === "service-provider-prices")?.records ?? []
   const registryRows = rowRecords.map(recordToPriceRow).filter((row): row is NonNullable<typeof row> => row !== null)
-  check("fixtures: 7 products, 20 rows, 5 contractor prices", [productRecords.length, registryRows.length, rateRecords.length], [7, 20, 5])
+  check("fixtures: 7 products, 20 rows, 5 service provider prices", [productRecords.length, registryRows.length, rateRecords.length], [7, 20, 5])
   check("fixtures: 2 negotiated rows, 1 scheduled change", [registryRows.filter((r) => r.negotiatedCustomer).length, registryRows.filter((r) => r.scheduled).length], [2, 1])
   const res240 = registryRows.filter((r) => r.productId === "product-res-240")
   const vat = recordToProduct(productRecords.find((r) => r.id === "product-res-240")!).vatRate
   const negotiated = resolvePrice(res240, vat, { zone: "Zone North", customerType: "Household", customer: "Østerbro Housing Association", date: "2026-08-19" })
   check("registry: negotiated €15.90 wins via converters", [negotiated.winner?.row.id, negotiated.base, vat], ["price-row-res-osterbro", 15.9, 0.25])
-  const nordrenRes = rateRecords.find((r) => r.id === "contractor-price-nordren-res")
-  const rate = nordrenRes ? recordToContractorPrice(nordrenRes) : null
+  const nordrenRes = rateRecords.find((r) => r.id === "service-provider-price-nordren-res")
+  const rate = nordrenRes ? recordToServiceProviderPrice(nordrenRes) : null
   check("registry: NordRen residual bid locked €11.20, fee €11.76, 1 indexation", [rate?.bid, rate?.currentFee, rate?.indexation.length], [11.2, 11.76, 1])
 }
 ```
@@ -632,7 +632,7 @@ Commercial workspace entry (~317), new `moduleIds`:
     moduleIds: [
       "products",
       "price-rows",
-      "contractor-prices",
+      "service-provider-prices",
       "settlements",
       "events",
       "billing",
@@ -657,17 +657,17 @@ Replace the `commercial.pricing` module-domain entry (742–754) with:
       "One price model: every sellable price (default, variation, negotiated) is a row; the default price is a row with no conditions.",
   },
   {
-    key: "commercial.contractor-prices",
+    key: "commercial.service-provider-prices",
     workspaceId: "commercial",
-    moduleId: "contractor-prices",
+    moduleId: "service-provider-prices",
     primaryBlueprintModule: "M15",
     supportingBlueprintModules: ["M05", "M23"],
-    canonicalOwner: "Commercial · Contractor Prices",
-    personas: ["Office contract manager", "Finance specialist", "Contractor manager"],
+    canonicalOwner: "Commercial · Service Provider Prices",
+    personas: ["Office contract manager", "Finance specialist", "Service provider manager"],
     upstream: ["M05", "M08", "M15"],
     downstream: ["M15", "M18", "M20", "M23"],
     boundaryNote:
-      "The bid is contractually immutable; indexation changes only the current fee. Contractor Price and Settlement remain separate records.",
+      "The bid is contractually immutable; indexation changes only the current fee. Service Provider Price and Settlement remain separate records.",
   },
 ```
 
@@ -677,20 +677,20 @@ Update `commercial.products` boundaryNote (~739) to: `"A Product is the sellable
 
 3a. Scope arrays — remove `"price-cph-2026"`, `"price-commercial-2026"`, `"product-organic-240"`, `"product-recollection"`, `"product-sensor"`. Add:
 - `companyWideFixtureRecordIds`: `"product-res-240", "product-card-660", "product-glass-igloo", "product-clean-monthly", "product-bulky", "product-bagtag", "product-xmas"`
-- `copenhagenFixtureRecordIds`: all 20 `price-row-*` ids except `price-row-glass-harbor`, plus the 5 `contractor-price-*` ids
+- `copenhagenFixtureRecordIds`: all 20 `price-row-*` ids except `price-row-glass-harbor`, plus the 5 `service-provider-price-*` ids
 - `harborFixtureRecordIds`: `"price-row-glass-harbor"`
 
-3b. `fixtureContractorIdByRecordId` additions:
+3b. `fixtureServiceProviderIdByRecordId` additions:
 
 ```ts
-  "contractor-price-nordren-res": FIXTURE_CONTRACTOR_IDS.nordren,
-  "contractor-price-nordren-card": FIXTURE_CONTRACTOR_IDS.nordren,
-  "contractor-price-nordren-glass": FIXTURE_CONTRACTOR_IDS.nordren,
-  "contractor-price-cityhaul-res": FIXTURE_CONTRACTOR_IDS.cityhaul,
-  "contractor-price-cityhaul-bulky": FIXTURE_CONTRACTOR_IDS.cityhaul,
+  "service-provider-price-nordren-res": FIXTURE_SERVICE_PROVIDER_IDS.nordren,
+  "service-provider-price-nordren-card": FIXTURE_SERVICE_PROVIDER_IDS.nordren,
+  "service-provider-price-nordren-glass": FIXTURE_SERVICE_PROVIDER_IDS.nordren,
+  "service-provider-price-cityhaul-res": FIXTURE_SERVICE_PROVIDER_IDS.cityhaul,
+  "service-provider-price-cityhaul-bulky": FIXTURE_SERVICE_PROVIDER_IDS.cityhaul,
 ```
 
-3c. Workspace label (2918): `label: "Price Engine"`; description: `"Price the sellable catalogue, manage contractor prices and settlement, and convert delivered work into auditable money flows."`
+3c. Workspace label (2918): `label: "Price Engine"`; description: `"Price the sellable catalogue, manage service provider prices and settlement, and convert delivered work into auditable money flows."`
 
 3d. Replace the `products` module definition (2921–2989):
 
@@ -751,17 +751,17 @@ Update `commercial.products` boundaryNote (~739) to: `"A Product is the sellable
       records: [ /* 20 price-row records — step 3g */ ],
     },
     {
-      id: "contractor-prices",
-      label: "Contractor prices",
-      title: "Contractor Prices",
+      id: "service-provider-prices",
+      label: "Service provider prices",
+      title: "Service Provider Prices",
       description:
-        "What we pay per contractor × product × contract area: the contractually locked bid and the indexed current fee.",
-      entityLabel: "Contractor price",
-      contextLabel: "Contract area · validity",
+        "What we pay per service provider × product × service area: the contractually locked bid and the indexed current fee.",
+      entityLabel: "Service provider price",
+      contextLabel: "Service area · validity",
       valueLabel: "Current fee",
       primaryAction: "Apply index",
       metrics: [
-        { label: "Contractor prices", value: "5", helper: "2 contractors · 2 contract areas" },
+        { label: "Service provider prices", value: "5", helper: "2 service providers · 2 service areas" },
         { label: "Indexed in 2026", value: "2", helper: "CPI +5% · Fuel +3%" },
         { label: "Bids locked", value: "5", helper: "Contractually immutable" },
         { label: "Expiring", value: "2", helper: "CA-AM-1 ends 31 Dec 2026", tone: "warning" },
@@ -769,17 +769,17 @@ Update `commercial.products` boundaryNote (~739) to: `"A Product is the sellable
       lifecycle: ["Upcoming", "Active", "Expiring", "Expired"],
       rules: [
         "The bid is contractually immutable; indexation changes only the current fee.",
-        "Customer and contractor prices are separate confidential records.",
-        "Each Apply index run appends to the contractor price's indexation history.",
+        "Customer and service provider prices are separate confidential records.",
+        "Each Apply index run appends to the service provider price's indexation history.",
       ],
-      records: [ /* 5 contractor-price records — step 3g */ ],
+      records: [ /* 5 service-provider-price records — step 3g */ ],
     },
 ```
 
 3f. Fact-key contract (must equal Task 1's maps exactly; the harness enforces it):
 - **Product facts**, in this insertion order (fact order drives the generic table's column candidates): `Type`, `Container`, `Container type`, `Customer` (comma-joined negotiated customers, or omitted), `Waste fraction`, `VAT` (e.g. `"25%"`), `Variations` (count as string), `Price list` (the default row's tag), `Unit`, `Invoice name`, `Invoice code`, then when present `Materials` / `Included services` / `Service levels` (comma-joined). History entries go into `related` as `History · <date> · <who> · <what>`.
 - **Price-row facts:** `Amount` (`"18.50"`), `Unit`, `Effective from`, plus when present `Zone`, `Customer type`, `Container type`, `Waste fraction`, `Negotiated customer`, `Effective to`, `Price list`, `Scheduled amount`, `Scheduled from`, `Scheduled revert on`, `Scheduled note`. RelationRef `{ fieldId: "productId", workspaceId: "commercial", moduleId: "products", recordId, label }`. `record()` doesn't take relationRefs — spread: `{ ...record(...), recordKind: "Price row", relationRefs: [...] }`.
-- **Contractor-price facts:** `Contractor` (canonical names `NordRen ApS` / `CityHaul A/S`), `Product`, `Contract area`, `Bid (locked)`, `Current fee`, `Unit`, `Valid from`, `Valid until`, optional `Last indexed` / `Last index note`, one fact per component keyed `Component · <label>`. Indexation entries in `related` as `Indexed · <at> · <note> · €<from> → €<to> · base: <bid|current fee>`. RelationRefs: productId ref + `{ fieldId: "contractorId", workspaceId: "contractors", moduleId: "contractors", recordId: "contractor-nordren" | "contractor-cityhaul", label }`.
+- **Service provider price facts:** `Service provider` (canonical names `NordRen ApS` / `CityHaul A/S`), `Product`, `Service area`, `Bid (locked)`, `Current fee`, `Unit`, `Valid from`, `Valid until`, optional `Last indexed` / `Last index note`, one fact per component keyed `Component · <label>`. Indexation entries in `related` as `Indexed · <at> · <note> · €<from> → €<to> · base: <bid|current fee>`. RelationRefs: productId ref + `{ fieldId: "serviceProviderId", workspaceId: "service-providers", moduleId: "service-providers", recordId: "service-provider-nordren" | "service-provider-cityhaul", label }`.
 
 3g. Fixture inventory — port every value from `prototype-data.ts` (products 462–597, rows 599–770, rates 772–856) under the id mapping:
 
@@ -787,9 +787,9 @@ Update `commercial.products` boundaryNote (~739) to: `"A Product is the sellable
 |---|---|
 | p-res-240 / p-card-660 / p-glass / p-clean / p-bulky / p-bagtag / p-xmas | product-res-240 / product-card-660 / product-glass-igloo / product-clean-monthly / product-bulky / product-bagtag / product-xmas |
 | row-* (20) | same slug with `price-row-` prefix (row-res-default → price-row-res-default, row-glass-igloo3 → price-row-glass-igloo3, row-bulky-cowork → price-row-bulky-cowork, …) |
-| cp-nordren-res / cp-nordren-card / cp-nordren-glass / cp-cityhaul-res / cp-cityhaul-bulky | contractor-price-nordren-res / -nordren-card / -nordren-glass / -cityhaul-res / -cityhaul-bulky |
+| cp-nordren-res / cp-nordren-card / cp-nordren-glass / cp-cityhaul-res / cp-cityhaul-bulky | service-provider-price-nordren-res / -nordren-card / -nordren-glass / -cityhaul-res / -cityhaul-bulky |
 
-Statuses: rows all `"Active"` except `price-row-xmas-default` → `"Scheduled"`. Products all `"Active"` except `product-xmas` → `"Draft"`. Contractor prices: NordRen three `"Active"`, CityHaul two `"Expiring"`.
+Statuses: rows all `"Active"` except `price-row-xmas-default` → `"Scheduled"`. Products all `"Active"` except `product-xmas` → `"Draft"`. Service provider prices: NordRen three `"Active"`, CityHaul two `"Expiring"`.
 
 Three fully-written examples that set the pattern (all remaining records copy it with their own prototype values):
 
@@ -865,18 +865,18 @@ Three fully-written examples that set the pattern (all remaining records copy it
 ```ts
         {
           ...record(
-            "contractor-price-nordren-res",
+            "service-provider-price-nordren-res",
             "NordRen ApS · Residual waste · 240L bin",
             "CA-Ø-2 · 2025-01-01 → 2027-12-31",
             "Active",
             "Contract Team",
             "€11.76/pickup",
             "2026-03-01",
-            "Contractor price: locked bid €11.20, current fee indexed CPI +5% on 2026-03-01.",
+            "Service provider price: locked bid €11.20, current fee indexed CPI +5% on 2026-03-01.",
             {
-              Contractor: "NordRen ApS",
+              "Service provider": "NordRen ApS",
               Product: "Residual waste · 240L bin",
-              "Contract area": "CA-Ø-2",
+              "Service area": "CA-Ø-2",
               "Bid (locked)": "11.20",
               "Current fee": "11.76",
               Unit: "pickup",
@@ -892,10 +892,10 @@ Three fully-written examples that set the pattern (all remaining records copy it
             "Contract management",
             "Live",
           ),
-          recordKind: "Contractor price",
+          recordKind: "Service provider price",
           relationRefs: [
             { fieldId: "productId", workspaceId: "commercial", moduleId: "products", recordId: "product-res-240", label: "Residual waste · 240L bin" },
-            { fieldId: "contractorId", workspaceId: "contractors", moduleId: "contractors", recordId: "contractor-nordren", label: "NordRen ApS" },
+            { fieldId: "serviceProviderId", workspaceId: "service-providers", moduleId: "service-providers", recordId: "service-provider-nordren", label: "NordRen ApS" },
           ],
         },
 ```
@@ -1127,16 +1127,16 @@ The other products' `Customer` fact: `product-bulky` → `"Nørrebro CoWork ApS"
   },
 ```
 
-**`commercial.contractor-prices` (action — Apply index).** Because it's the module's registered schema, the workspace's primary-action button opens it through the completely standard plumbing, and the generic edit path never opens for these records (bid immutability for free):
+**`commercial.service-provider-prices` (action — Apply index).** Because it's the module's registered schema, the workspace's primary-action button opens it through the completely standard plumbing, and the generic edit path never opens for these records (bid immutability for free):
 
 ```ts
   {
-    key: "commercial.contractor-prices",
+    key: "commercial.service-provider-prices",
     mode: "action",
-    recordKind: "Contractor price indexation",
+    recordKind: "Service provider price indexation",
     title: "Apply index",
     description:
-      "Recompute current fees for the selected contractor prices. The base is the original bid or the current fee (current compounds earlier changes; the bid never moves). Each run appends to the indexation history.",
+      "Recompute current fees for the selected service provider prices. The base is the original bid or the current fee (current compounds earlier changes; the bid never moves). Each run appends to the indexation history.",
     submitLabel: "Apply index",
     contextFieldIds: ["indexLabel", "percent", "effectiveFrom"],
     sections: [
@@ -1146,11 +1146,11 @@ The other products' `Customer` fact: `product-bulky` → `"Nørrebro CoWork ApS"
         fields: [
           {
             id: "rateIds",
-            label: "Contractor prices",
+            label: "Service provider prices",
             type: "multiselect",
             required: true,
-            relation: { workspaceId: "commercial", moduleId: "contractor-prices" },
-            description: "Pick the rows to index — filter by contractor or contract area as you select.",
+            relation: { workspaceId: "commercial", moduleId: "service-provider-prices" },
+            description: "Pick the rows to index — filter by service provider or service area as you select.",
           },
         ],
       },
@@ -1273,7 +1273,7 @@ export const adjustPricesFormSchema: BusinessFormSchema = {
     reviewBeforeSubmit: true,
     completionMessage: "Price row created — resolution follows the most-conditions rule.",
   },
-  "commercial.contractor-prices": {
+  "commercial.service-provider-prices": {
     kind: "start-workflow",
     reviewBeforeSubmit: true,
     completionMessage: "Index applied — current fees recomputed, bids untouched.",
@@ -1300,20 +1300,20 @@ export const adjustPricesFormSchema: BusinessFormSchema = {
 - [ ] **Step 5: Navigation + rename touches**
 
 - `lib/data/sidebar.ts:43`: `{ id: "commercial", label: "Price Engine", href: "/commercial", badge: 14 }`
-- `business-workspace.tsx:552`: `commercial: ["products", "price-rows", "contractor-prices", "settlements", "events"],` (billing/invoices stay in the More menu; no `workspace-page-shell.tsx` allowlist needed — every commercial module is public now)
+- `business-workspace.tsx:552`: `commercial: ["products", "price-rows", "service-provider-prices", "settlements", "events"],` (billing/invoices stay in the More menu; no `workspace-page-shell.tsx` allowlist needed — every commercial module is public now)
 - `lib/data/business-links.ts` (~79–80): merge into one entry, delete the pricing line: `{ workspaceId: "commercial", moduleId: "products", terms: ["product", "products", "price list", "price lists", "pricing"] },`
 
 - [ ] **Step 6: Run the gates**
 
 - `npx tsx scripts/price-resolution-harness.ts` → all pass (15 engine + registry block). A "Missing explicit fixture scope" / schema-gate error names the missing id — fix it.
 - `npx tsc --noEmit` → exit 0.
-- Browser: `/commercial?module=products` → generic table shows the 7 products with fact columns (open the view options / column picker and confirm Container, Container type, Customer, Waste fraction, VAT, Variations, Price list are available; set the visible set to Type · Container · Container type · Customer · Waste fraction · VAT · Variations · Price list if the default set differs — note in the task report how many columns show by default). Breadcrumb + sidebar say **Price Engine**. Module pills: Products / Price rows / Contractor prices / Settlements / Events. `?module=price-rows` lists 20 rows; `?module=contractor-prices` lists 5; record detail sheets show the facts and the `History ·`/`Indexed ·` related entries. `/commercial?variant=a` still renders the prototype (untouched until the final task).
+- Browser: `/commercial?module=products` → generic table shows the 7 products with fact columns (open the view options / column picker and confirm Container, Container type, Customer, Waste fraction, VAT, Variations, Price list are available; set the visible set to Type · Container · Container type · Customer · Waste fraction · VAT · Variations · Price list if the default set differs — note in the task report how many columns show by default). Breadcrumb + sidebar say **Price Engine**. Module pills: Products / Price rows / Service provider prices / Settlements / Events. `?module=price-rows` lists 20 rows; `?module=service-provider-prices` lists 5; record detail sheets show the facts and the `History ·`/`Indexed ·` related entries. `/commercial?variant=a` still renders the prototype (untouched until the final task).
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add lib/data/ components/wastehero/business-workspace.tsx scripts/price-resolution-harness.ts
-git commit -m "Cut over commercial registry: products/price-rows/contractor-prices modules, pricing retired, Price Engine rename"
+git commit -m "Cut over commercial registry: products/price-rows/service-provider-prices modules, pricing retired, Price Engine rename"
 ```
 
 ---
@@ -1322,10 +1322,10 @@ git commit -m "Cut over commercial registry: products/price-rows/contractor-pric
 
 **Files:**
 - Modify: `components/wastehero/business-workspace.tsx` (header-button swap for `commercial.products`; two `recordKind` branches in `handleFormSubmit` at line 1965; write-sync helper)
-- Reference: the `"Contract area assignment"` branch (1968–2058) — the established pattern for bespoke submits; `RouteCreateEntry` usage (~2668) — the established pattern for swapping a module's header button.
+- Reference: the `"Service area assignment"` branch (1968–2058) — the established pattern for bespoke submits; `RouteCreateEntry` usage (~2668) — the established pattern for swapping a module's header button.
 
 **Interfaces:**
-- Consumes: Task 1 (`recordToPriceRow`, `priceRowToRecord`, `computeAdjusted`, `applyIndexToRate`, `recordToContractorPrice`, `contractorPriceToRecord`, `encodeHistory`, `money`, `unitSuffix`, `PRICING_REFERENCE_DATE`, `PRODUCT_FACTS`, fact keys), Task 2 schemas (`adjustPricesFormSchema` import; registered contractor-prices action schema resolves via the normal `activeModuleFormSchema` path).
+- Consumes: Task 1 (`recordToPriceRow`, `priceRowToRecord`, `computeAdjusted`, `applyIndexToRate`, `recordToServiceProviderPrice`, `serviceProviderPriceToRecord`, `encodeHistory`, `money`, `unitSuffix`, `PRICING_REFERENCE_DATE`, `PRODUCT_FACTS`, fact keys), Task 2 schemas (`adjustPricesFormSchema` import; registered service-provider-prices action schema resolves via the normal `activeModuleFormSchema` path).
 - Produces: working bulk flows writing through `upsertRecord`; a `syncProductPricingFacts(productRecord, rows)` helper other tasks reuse.
 
 - [ ] **Step 1: Add the products header-button swap**
@@ -1334,7 +1334,7 @@ In the header action area (~2667, next to the `isRouteCreateFlow` ternary): when
 
 - [ ] **Step 2: Write the `"Price adjustment"` submit branch**
 
-At the top of `handleFormSubmit` (pattern: the Contract-area-assignment branch), keyed on `formSchema.recordKind === "Price adjustment"`:
+At the top of `handleFormSubmit` (pattern: the Service-area-assignment branch), keyed on `formSchema.recordKind === "Price adjustment"`:
 
 ```tsx
 const rowsModule = workspace.modules.find((m) => m.id === "price-rows")
@@ -1366,7 +1366,7 @@ for (const rowRecord of rowRecords) {
     { ...row, scheduled: { newAmount, from, revertOn, note: `Adjust prices ${note}` } },
     { id: row.productId, name: product?.name ?? rowRecord.context },
   )
-  upsertRecord("commercial", "price-rows", { ...rowRecord, ...updated, related: rowRecord.related, companyId: rowRecord.companyId, projectIds: rowRecord.projectIds, contractorId: rowRecord.contractorId })
+  upsertRecord("commercial", "price-rows", { ...rowRecord, ...updated, related: rowRecord.related, companyId: rowRecord.companyId, projectIds: rowRecord.projectIds, serviceProviderId: rowRecord.serviceProviderId })
   adjusted += 1
   const diffs = touchedProducts.get(row.productId) ?? []
   diffs.push(`${rowDisplayName(row)} ${money(row.amount)} → ${money(newAmount)} (scheduled)`)
@@ -1386,30 +1386,30 @@ toast.success("Adjustment scheduled", { description: `${adjusted} price row${adj
 return
 ```
 
-- [ ] **Step 3: Write the `"Contractor price indexation"` submit branch**
+- [ ] **Step 3: Write the `"Service provider price indexation"` submit branch**
 
-Keyed on `formSchema.recordKind === "Contractor price indexation"`:
+Keyed on `formSchema.recordKind === "Service provider price indexation"`:
 
 ```tsx
-const ratesModule = workspace.modules.find((m) => m.id === "contractor-prices")
+const ratesModule = workspace.modules.find((m) => m.id === "service-provider-prices")
 if (!ratesModule) return
-const rateRecords = getRecords("commercial", "contractor-prices", ratesModule.records)
+const rateRecords = getRecords("commercial", "service-provider-prices", ratesModule.records)
 const pickedIds = typeof values.rateIds === "string" && values.rateIds ? values.rateIds.split(",") : []
 const label = typeof values.indexLabel === "string" ? values.indexLabel.trim() : ""
 const percent = Number(values.percent)
 const base = values.base === "bid" ? ("bid" as const) : ("current fee" as const)
 const from = typeof values.effectiveFrom === "string" ? values.effectiveFrom : PRICING_REFERENCE_DATE
-if (pickedIds.length === 0 || !label || !Number.isFinite(percent)) { toast.error("Pick contractor prices, an index label, and a percent."); return }
+if (pickedIds.length === 0 || !label || !Number.isFinite(percent)) { toast.error("Pick service provider prices, an index label, and a percent."); return }
 let indexed = 0
 for (const rateRecord of rateRecords) {
   if (!pickedIds.includes(rateRecord.id)) continue
-  const updated = applyIndexToRate(recordToContractorPrice(rateRecord), { label, percent, from, base })
-  upsertRecord("commercial", "contractor-prices", contractorPriceToRecord(updated, rateRecord))
+  const updated = applyIndexToRate(recordToServiceProviderPrice(rateRecord), { label, percent, from, base })
+  upsertRecord("commercial", "service-provider-prices", serviceProviderPriceToRecord(updated, rateRecord))
   indexed += 1
 }
 setIsCreateOpen(false)
 setRelatedCreateTarget(null)
-toast.success("Index applied", { description: `${indexed} contractor price${indexed === 1 ? "" : "s"} recomputed from ${base} (${label} +${percent}%). Bids untouched.` })
+toast.success("Index applied", { description: `${indexed} service provider price${indexed === 1 ? "" : "s"} recomputed from ${base} (${label} +${percent}%). Bids untouched.` })
 return
 ```
 
@@ -1447,7 +1447,7 @@ Also call it in the **generic create path** when a `commercial.price-rows` recor
 - With "Include negotiated rows" checked, the negotiated rows are included (toast says so).
 - `?module=price-rows` → **New price row**: create a City Centre variation for Bin cleaning → review → create; the row lists with the right name/facts; the product's Variations fact bumps and History shows "Variation added". Create a row with a Negotiated customer → product's Customer fact updates.
 - Edit a price row (generic edit) → change Scheduled amount/date → facts update (Schedule-a-change flow).
-- `?module=contractor-prices` → **Apply index**: pick the two CityHaul rows, Fuel +2%, base current fee → review → confirm → Current fee facts recompute (€12.77 → €13.03, €31.00 → €31.62), `Indexed ·` entries appear in related, bids untouched. Reload → persisted.
+- `?module=service-provider-prices` → **Apply index**: pick the two CityHaul rows, Fuel +2%, base current fee → review → confirm → Current fee facts recompute (€12.77 → €13.03, €31.00 → €31.62), `Indexed ·` entries appear in related, bids untouched. Reload → persisted.
 - `npx tsc --noEmit` exit 0; harness green. Clear localStorage afterwards.
 
 - [ ] **Step 6: Commit**
@@ -1483,7 +1483,7 @@ const rowRecords = getRecords("commercial", "price-rows", fixturesOf("price-rows
 const rows = rowRecords.map(recordToPriceRow).filter((r): r is NonNullable<typeof r> => r !== null)
 ```
 
-- `CommercialDefaultsExtras`: Materials registry (counts from product `Materials` facts), surcharge-rules table (`SURCHARGE_RULES`), contractor-performance read-only card (`CONTRACTOR_PERFORMANCE`), price-lists index (`priceListIndex(rows)`) with links to `/commercial?module=products` and the caption using `PRICING_REFERENCE_DATE`. Keep `RegistryCard` / `usageLabel` / `Registry` (ported as-is — they follow the existing settings-card idiom). Rename/Retire stubs keep a toast with honest copy: `toast("Not in v1", { description: "Rename / merge / retire is deferred." })`.
+- `CommercialDefaultsExtras`: Materials registry (counts from product `Materials` facts), surcharge-rules table (`SURCHARGE_RULES`), service-provider-performance read-only card (`SERVICE_PROVIDER_PERFORMANCE`), price-lists index (`priceListIndex(rows)`) with links to `/commercial?module=products` and the caption using `PRICING_REFERENCE_DATE`. Keep `RegistryCard` / `usageLabel` / `Registry` (ported as-is — they follow the existing settings-card idiom). Rename/Retire stubs keep a toast with honest copy: `toast("Not in v1", { description: "Rename / merge / retire is deferred." })`.
 - `CommercialSectionPane`: Zones / Service / Customer types panes as prototyped (usage counts from `rows` / product facts). The **Products pane becomes the management surface**:
   - Table as prototyped (Name · Type · Container · Container type · Customer · Waste fraction · Price · Status) — Customer/price cells now derive from `rows` — plus an Edit button per row and a **New product** header button; "Open in Price Engine" links to `/commercial`.
   - **New product** opens `BusinessRecordFormDialog` with `schema={getBusinessFormSchema("commercial", "products")!}` and `relationOptions={() => []}`. `onSubmit` performs the born-priced double write:
@@ -1554,66 +1554,66 @@ git commit -m "Make Settings the product management surface; Commercial panes pe
 
 ---
 
-### Task 5: Contractor details Prices tab (existing RelatedRecordsTable)
+### Task 5: Service provider details Prices tab (existing RelatedRecordsTable)
 
 **Files:**
-- Modify: `components/wastehero/contractor-details-page.tsx` (prototype import + gate at 28–33; tab trigger 322–327; tab content 391–396; props)
-- Modify: `components/wastehero/business-workspace.tsx` (pass contractor-price records to `ContractorDetailsPage`, call site ~2607)
+- Modify: `components/wastehero/service-provider-details-page.tsx` (prototype import + gate at 28–33; tab trigger 322–327; tab content 391–396; props)
+- Modify: `components/wastehero/business-workspace.tsx` (pass service-provider-price records to `ServiceProviderDetailsPage`, call site ~2607)
 
 **Interfaces:**
-- Consumes: `commercial.contractor-prices` records (already scoped with `contractorId` by `record()`); existing `RelatedRecordsTable` in contractor-details-page.tsx.
-- Produces: `ContractorDetailsPage` gains a `contractorPrices: readonly BusinessRecord[]` prop.
+- Consumes: `commercial.service-provider-prices` records (already scoped with `serviceProviderId` by `record()`); existing `RelatedRecordsTable` in service-provider-details-page.tsx.
+- Produces: `ServiceProviderDetailsPage` gains a `serviceProviderPrices: readonly BusinessRecord[]` prop.
 
 - [ ] **Step 1: Replace the prototype tab with a RelatedRecordsTable**
 
-In `contractor-details-page.tsx`: delete the prototype import and `SHOW_PRICES_TAB` (28–33); add `contractorPrices` to the component props; render the trigger unconditionally with the count (`Prices <span …>{contractorPrices.length}</span>`, same markup as the other triggers); replace the prototype TabsContent with:
+In `service-provider-details-page.tsx`: delete the prototype import and `SHOW_PRICES_TAB` (28–33); add `serviceProviderPrices` to the component props; render the trigger unconditionally with the count (`Prices <span …>{serviceProviderPrices.length}</span>`, same markup as the other triggers); replace the prototype TabsContent with:
 
 ```tsx
         <TabsContent value="prices" className="mt-0 min-h-0 flex-1">
           <RelatedRecordsTable
-            records={contractorPrices}
-            entityLabel="Contractor price"
-            contextLabel="Contract area · validity"
+            records={serviceProviderPrices}
+            entityLabel="Service provider price"
+            contextLabel="Service area · validity"
             valueLabel="Current fee"
-            emptyLabel="No contractor prices"
+            emptyLabel="No service provider prices"
             actionLabel="Apply index"
-            onCreate={() => onCreate("contractor-price")}
+            onCreate={() => onCreate("service-provider-price")}
             workspaceId="commercial"
-            moduleId="contractor-prices"
+            moduleId="service-provider-prices"
           />
         </TabsContent>
 ```
 
-(If `RelatedRecordsTable`'s props require `onCreate`, wire `"contractor-price"` through the page's `onCreate` kind union; in BusinessWorkspace's `requestContractorRelatedCreate`, map that kind to the `commercial.contractor-prices` module so the button opens the standard **Apply index** dialog. If the plumbing resists a non-create action there, drop `actionLabel`/`onCreate` and keep the tab read-only with deep links — the module header remains the Apply-index entry point.)
+(If `RelatedRecordsTable`'s props require `onCreate`, wire `"service-provider-price"` through the page's `onCreate` kind union; in BusinessWorkspace's `requestServiceProviderRelatedCreate`, map that kind to the `commercial.service-provider-prices` module so the button opens the standard **Apply index** dialog. If the plumbing resists a non-create action there, drop `actionLabel`/`onCreate` and keep the tab read-only with deep links — the module header remains the Apply-index entry point.)
 
 - [ ] **Step 2: Plumb the data**
 
-In `business-workspace.tsx`, next to the other contractor-related memos (~904–940), add:
+In `business-workspace.tsx`, next to the other service-provider-related memos (~904–940), add:
 
 ```tsx
-const relatedContractorPrices = useMemo(() => {
-  if (!selectedContractorId) return []
+const relatedServiceProviderPrices = useMemo(() => {
+  if (!selectedServiceProviderId) return []
   const commercialWorkspace = getWorkspaceDefinition("commercial")
-  const ratesModule = commercialWorkspace.modules.find((module) => module.id === "contractor-prices")
+  const ratesModule = commercialWorkspace.modules.find((module) => module.id === "service-provider-prices")
   if (!ratesModule) return []
   return getRecords("commercial", ratesModule.id, ratesModule.records).filter(
-    (record) => record.contractorId === selectedContractorId,
+    (record) => record.serviceProviderId === selectedServiceProviderId,
   )
-}, [getRecords, selectedContractorId])
+}, [getRecords, selectedServiceProviderId])
 ```
 
-Pass `contractorPrices={relatedContractorPrices}` at the `ContractorDetailsPage` call site (~2607).
+Pass `serviceProviderPrices={relatedServiceProviderPrices}` at the `ServiceProviderDetailsPage` call site (~2607).
 
 - [ ] **Step 3: Verify in the browser**
 
-- `/contractors?module=contractors&record=contractor-nordren` → Prices tab shows exactly the 3 NordRen rows (locked-bid fact visible in each record's sheet); `contractor-cityhaul` shows its 2 Expiring rows. After an Apply index run in Price Engine, the tab reflects the new fees (same records). No `NODE_ENV` gating remains in the file.
+- `/service-providers?module=service-providers&record=service-provider-nordren` → Prices tab shows exactly the 3 NordRen rows (locked-bid fact visible in each record's sheet); `service-provider-cityhaul` shows its 2 Expiring rows. After an Apply index run in Price Engine, the tab reflects the new fees (same records). No `NODE_ENV` gating remains in the file.
 - `npx tsc --noEmit` exit 0; harness green.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add components/wastehero/contractor-details-page.tsx components/wastehero/business-workspace.tsx
-git commit -m "Show contractor prices on the contractor details page via RelatedRecordsTable"
+git add components/wastehero/service-provider-details-page.tsx components/wastehero/business-workspace.tsx
+git commit -m "Show service provider prices on the service provider details page via RelatedRecordsTable"
 ```
 
 ---
@@ -1659,7 +1659,7 @@ Expected: zero hits. Fix any straggler.
   2. Products table: attribute fact columns visible; record sheet shows Invoice & tax facts + History entries; module rules show the §4.4 sentence.
   3. **Adjust prices** end-to-end with review, negotiated exclusion; price-rows facts update; persists on reload.
   4. **New price row** (variation + negotiated) and generic row edit (schedule change); product Customer/Variations facts sync.
-  5. **Apply index** from the module; contractor record → Prices tab shows the same updated records.
+  5. **Apply index** from the module; service provider record → Prices tab shows the same updated records.
   6. Settings: create + edit product round-trip into Price Engine; defaults pane; zones/service/customer-types; price-list index link.
   7. `?module=settlements|events|billing|invoices` render unchanged; `?record=product-res-240` opens the product sheet; old `?variant=a` now just renders the workspace.
   8. Console: no new errors (radix-useId warning is pre-existing).
@@ -1676,10 +1676,10 @@ git commit -m "Retire Products & Prices prototype; Price Engine is the real Comm
 
 ## Self-review notes (kept for executors)
 
-- **Spec coverage:** §4.2 SELL lane → Tasks 2–4 (creation in Settings per the 2026-08-20 decision; table = generic module table; Vary/Schedule/Negotiate = price-rows create/edit; Adjust = schema dialog; guided setup deferred per §6). §4.3 PAY lane → Tasks 2–3 + 5 (Apply index = registered action schema; components/indexation as facts/related; creation flow deferred). §4.4 → Task 1 engine + module rules copy. §4.5 Explain → deliberately absent (§10 rev 1). §4.6 tags → row facts + settings index. §4.1 → Settings/Price Engine split per the amended lane boundary. §5 constraints → Task 2. §8 mitigations → negotiated exclusion (Task 3), tie-break (Task 1), price-list survival (Tasks 2/4), contractor-first entry (Task 5).
+- **Spec coverage:** §4.2 SELL lane → Tasks 2–4 (creation in Settings per the 2026-08-20 decision; table = generic module table; Vary/Schedule/Negotiate = price-rows create/edit; Adjust = schema dialog; guided setup deferred per §6). §4.3 PAY lane → Tasks 2–3 + 5 (Apply index = registered action schema; components/indexation as facts/related; creation flow deferred). §4.4 → Task 1 engine + module rules copy. §4.5 Explain → deliberately absent (§10 rev 1). §4.6 tags → row facts + settings index. §4.1 → Settings/Price Engine split per the amended lane boundary. §5 constraints → Task 2. §8 mitigations → negotiated exclusion (Task 3), tie-break (Task 1), price-list survival (Tasks 2/4), service-provider-first entry (Task 5).
 - **Fares's generic-views constraint** is honored by construction: zero new workspace UI components; the only new component file is the Settings pane (his explicit ask, following the existing settings-pane idiom). The prototype's custom catalogue/detail/dialog/lane UI is consciously not ported.
-- **Type consistency:** names in Interfaces blocks are the contract; fact-key strings live once in Task 1 (`ROW_FACTS`/`PRODUCT_FACTS`/`RATE_FACTS`) and the harness registry block fails if fixtures drift. `rowDisplayName`, `syncProductPricingFacts`, `applyIndexToRate`, `contractorPriceToRecord` are each defined once and reused.
-- **Known intentional oddities:** `price-rows` is a visible module (no custom product page to host rows); the products header button is swapped to Adjust prices (RouteCreateEntry precedent) while creation lives in Settings; contractor-prices' action-mode schema doubles as the bid lock; denormalized `Customer`/`Variations`/`Price list` product facts are maintained by every row write; `PRICING_REFERENCE_DATE` fixed at 2026-08-20 for determinism; invoices module untouched.
+- **Type consistency:** names in Interfaces blocks are the contract; fact-key strings live once in Task 1 (`ROW_FACTS`/`PRODUCT_FACTS`/`RATE_FACTS`) and the harness registry block fails if fixtures drift. `rowDisplayName`, `syncProductPricingFacts`, `applyIndexToRate`, `serviceProviderPriceToRecord` are each defined once and reused.
+- **Known intentional oddities:** `price-rows` is a visible module (no custom product page to host rows); the products header button is swapped to Adjust prices (RouteCreateEntry precedent) while creation lives in Settings; service-provider-prices' action-mode schema doubles as the bid lock; denormalized `Customer`/`Variations`/`Price list` product facts are maintained by every row write; `PRICING_REFERENCE_DATE` fixed at 2026-08-20 for determinism; invoices module untouched.
 - **Executor verify-first spots (existing machinery whose exact behavior the plan depends on):** multiselect value encoding in `BusinessRecordFormDialog` (Task 3 branches), the generic create path's fact-building for `price-rows` (Task 3 step 4), `RelatedRecordsTable` required props (Task 5), the fact-column picker's default column set (Task 2 step 6). Each is called out inline where it matters.
 
 ---
@@ -1689,7 +1689,7 @@ git commit -m "Retire Products & Prices prototype; Price Engine is the real Comm
 Executed on `recovered-wastehero` (12 task commits `6a66c76..742cd14` + final fix wave `f6f151a`). Final review verdict: merge with fixes → all fixed and re-verified (tsc 0, harness 19/19 exit 0/1-on-failure, build exit 0).
 
 - Signed-percent formatting: negative percents persist as "+-2%" in toasts AND indexation history notes — one signed-format helper fixes both flows.
-- `rateIds` picker in Apply index offers every contractor's rows even from a contractor's own Prices tab — scope via `relation.allowedRecordIds` schemaOverride. (Superseded 2026-08-21: the Prices tab now launches New contractor price with the contractor prefilled; Apply index lives only on the Price Engine module header, where all rows is the intended scope — see below.)
+- `rateIds` picker in Apply index offers every service provider's rows even from a service provider's own Prices tab — scope via `relation.allowedRecordIds` schemaOverride. (Superseded 2026-08-21: the Prices tab now launches New service provider price with the service provider prefilled; Apply index lives only on the Price Engine module header, where all rows is the intended scope — see below.)
 - Adjust prices header button uses a `Plus` icon — it is a bulk action, not a create.
 - Workspace-created price rows get status "Scheduled" regardless of effectiveFrom — derive status in `normalizePriceRowRecord` (shared helper with `priceRowToRecord`).
 - Generic edit rewrites `context` in the contextFieldIds join format, diverging from fixture/Settings formats (price rows; products now derived, fixed in f6f151a).
@@ -1716,23 +1716,23 @@ derived price-lists index in Commercial defaults (spec §4.6) and its
 usage per list instead, with the same in-use delete guard as Zones. Stored
 registries state predating the slice hydrates with the seeds backfilled.
 
-## New contractor price + hydration-safe stores (2026-08-21, second wave)
+## New service provider price + hydration-safe stores (2026-08-21, second wave)
 
-- **New contractor price is a real create flow.** `commercial.contractor-prices`
-  now resolves to a create schema — contractor, product, and contract area are
-  explicit required selects (we are adding a price *for* a contractor), plus
+- **New service provider price is a real create flow.** `commercial.service-provider-prices`
+  now resolves to a create schema — service provider, product, and service area are
+  explicit required selects (we are adding a price *for* a service provider), plus
   locked bid, unit, and validity. The generic create path shapes the record via
-  `normalizeContractorPriceRecord` (raw `PriceUnit` fact, current fee = bid
+  `normalizeServiceProviderPriceRecord` (raw `PriceUnit` fact, current fee = bid
   until the first indexation, fixture-shaped name/context/value, status via
-  `deriveContractorPriceStatus`). Overlap validation rejects a second live row
-  for the same contractor × product × contract area (fixture rows store the
+  `deriveServiceProviderPriceStatus`). Overlap validation rejects a second live row
+  for the same service provider × product × service area (fixture rows store the
   area code, created rows the area name — compared by code); a date-order rule
-  guards the validity window. The contract-area select offers only the chosen
-  contractor's Upcoming/Active/Expiring awards. Entry points: the Price Engine
-  module header (primary button) and the contractor page's Prices tab, which
-  prefills the contractor.
+  guards the validity window. The service-area select offers only the chosen
+  service provider's Upcoming/Active/Expiring awards. Entry points: the Price Engine
+  module header (primary button) and the service provider page's Prices tab, which
+  prefills the service provider.
 - **Apply index moved out of the registry** to
-  `contractorPriceIndexationFormSchema`, opened via schemaOverride from the
+  `serviceProviderPriceIndexationFormSchema`, opened via schemaOverride from the
   module header's secondary button. Behavior is unchanged and the bid lock
   holds: rates remain non-row-editable (not a rich view), so creation fixes
   the bid and Apply index is still the only write to the current fee.

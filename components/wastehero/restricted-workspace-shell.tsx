@@ -1,13 +1,13 @@
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { BusinessWorkspace } from "@/components/wastehero/business-workspace"
-import { ContractorDashboard } from "@/components/wastehero/contractor-dashboard"
+import { ServiceProviderDashboard } from "@/components/wastehero/service-provider-dashboard"
 import { PortalDeviationNotices } from "@/components/wastehero/portal-deviation-notices"
 import {
   RestrictedPersonaSidebar,
   type RestrictedPersona,
 } from "@/components/wastehero/restricted-persona-sidebar"
 import {
-  FIXTURE_CONTRACTOR_IDS,
+  FIXTURE_SERVICE_PROVIDER_IDS,
   type WorkspaceId,
 } from "@/lib/data/business-modules"
 
@@ -27,8 +27,8 @@ type RestrictedWorkspacePage = {
 type RestrictedWorkspaceDefinition = {
   fixedProjectScope: "copenhagen" | "harbor" | "all"
   fixedScopeLabel: string
-  /** Every record and relation option is isolated to this contractor. */
-  contractorScopeId?: string
+  /** Every record and relation option is isolated to this service provider. */
+  serviceProviderScopeId?: string
   /** Module capabilities resolve from this role's Settings permission matrix. */
   permissionsRoleId?: string
   /** Signed-in identity written to audit events and created records. */
@@ -62,11 +62,11 @@ const restrictedWorkspaceDefinitions: Record<
       },
     ],
   },
-  contractor: {
+  "service-provider": {
     fixedProjectScope: "copenhagen",
     fixedScopeLabel: "NordRen ApS · CA-Ø-2",
-    contractorScopeId: FIXTURE_CONTRACTOR_IDS.nordren,
-    permissionsRoleId: "role-contractor-manager",
+    serviceProviderScopeId: FIXTURE_SERVICE_PROVIDER_IDS.nordren,
+    permissionsRoleId: "role-service-provider-manager",
     actorName: "Lars Mikkelsen",
     pages: [
       {
@@ -77,7 +77,7 @@ const restrictedWorkspaceDefinitions: Record<
         workspaceLabel: "Routes",
         workspaceDescription:
           "NordRen ApS route days and their generated Pickups — read-only.",
-        navigationBasePath: "/contractor-workspace/routes",
+        navigationBasePath: "/service-provider-workspace/routes",
         showWorkspaceActions: true,
         showFilters: true,
       },
@@ -89,7 +89,7 @@ const restrictedWorkspaceDefinitions: Record<
         workspaceLabel: "Fleet",
         workspaceDescription:
           "NordRen ApS vehicles and drivers — fully self-managed.",
-        navigationBasePath: "/contractor-workspace/fleet",
+        navigationBasePath: "/service-provider-workspace/fleet",
         showWorkspaceActions: true,
         showFilters: true,
       },
@@ -101,19 +101,19 @@ const restrictedWorkspaceDefinitions: Record<
         workspaceLabel: "Tickets",
         workspaceDescription:
           "Tickets on NordRen ApS work — raise new ones for the office to resolve.",
-        navigationBasePath: "/contractor-workspace/tickets",
+        navigationBasePath: "/service-provider-workspace/tickets",
         showWorkspaceActions: true,
         showFilters: true,
       },
       {
         id: "team",
-        workspaceId: "contractors",
-        moduleId: "contractor-workspace",
-        moduleIds: ["contractor-workspace"],
+        workspaceId: "service-providers",
+        moduleId: "service-provider-workspace",
+        moduleIds: ["service-provider-workspace"],
         workspaceLabel: "Team",
         workspaceDescription:
           "NordRen ApS workspace users — invite managers, foremen, and drivers.",
-        navigationBasePath: "/contractor-workspace/team",
+        navigationBasePath: "/service-provider-workspace/team",
         showWorkspaceActions: true,
         showFilters: true,
       },
@@ -132,13 +132,13 @@ export function RestrictedWorkspaceShell({
 }: RestrictedWorkspaceShellProps) {
   const definition = restrictedWorkspaceDefinitions[persona]
 
-  // The contractor landing page is a bespoke dashboard, not a module list.
-  if (persona === "contractor" && pageId === "dashboard") {
+  // The service provider landing page is a bespoke dashboard, not a module list.
+  if (persona === "service-provider" && pageId === "dashboard") {
     return (
       <SidebarProvider>
         <RestrictedPersonaSidebar persona={persona} />
         <SidebarInset>
-          <ContractorDashboard />
+          <ServiceProviderDashboard />
         </SidebarInset>
       </SidebarProvider>
     )
@@ -169,7 +169,7 @@ export function RestrictedWorkspaceShell({
           showExportAction={false}
           showPrimaryAction={page.showWorkspaceActions}
           showFilters={page.showFilters}
-          contractorScopeId={definition.contractorScopeId}
+          serviceProviderScopeId={definition.serviceProviderScopeId}
           permissionsRoleId={definition.permissionsRoleId}
           actorName={definition.actorName}
         />

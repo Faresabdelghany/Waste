@@ -20,23 +20,26 @@ pnpm is the package manager (pnpm-lock.yaml). If the volta pnpm shim fails ("Cou
 
 ### Workspace shell — the core pattern
 
-Nearly every top-level route in `app/` (`/operate`, `/plan`, `/fleet`, `/customers`, `/resources`, `/commercial`, `/improve`, `/configure`, `/control-center`, `/route-studio`, plus aliases like `/routes` and `/tickets`) is a thin server component that renders `WorkspacePageShell` (`components/wastehero/workspace-page-shell.tsx`) with a `workspaceId` and optional `initialModuleId`. Navigation inside a workspace is driven by `?module=` and `?record=` search params; some pages redirect specific module params to dedicated routes (e.g. `/?module=driver-app` → `/driver`).
+Nearly every top-level route in `app/` (`/operate`, `/plan`, `/fleet`, `/customers`, `/resources`, `/commercial`, `/improve`, `/configure`, `/control-center`, `/route-studio`, `/service-providers`, plus aliases like `/routes` and `/tickets`) is a thin server component that renders `WorkspacePageShell` (`components/wastehero/workspace-page-shell.tsx`) with a `workspaceId` and optional `initialModuleId`. Navigation inside a workspace is driven by `?module=` and `?record=` search params; some pages redirect specific module params to dedicated routes (e.g. `/?module=driver-app` → `/driver`).
 
 The shell machinery lives in `components/wastehero/`:
 - `business-workspace.tsx` — the generic module list/table/detail rendering used by every workspace
 - `business-record-form-dialog.tsx` — create/edit dialogs generated from form schemas
-- `restricted-workspace-shell.tsx` — separate restricted shells for the driver, portal, contractor, and control-center personas (`/driver`, `/portal`, `/contractor-workspace`, `/control-center`)
+- `restricted-workspace-shell.tsx` — separate restricted shells for the driver, portal, service provider, and control-center personas (`/driver`, `/portal`, `/service-provider-workspace`, `/control-center`)
 
 ### Data registries (`lib/data/`)
 
-- `business-modules.ts` (~4200 lines) — the central registry: workspaces → modules → fixture records, plus fixture company/project/contractor IDs and per-record scoping (`FIXTURE_COMPANY_ID`, `FIXTURE_PROJECT_IDS`).
+- `business-modules.ts` (~4200 lines) — the central registry: workspaces → modules → fixture records, plus the fixture company, project, and service provider IDs used for per-record scoping (`FIXTURE_COMPANY_ID`, `FIXTURE_PROJECT_IDS`, `FIXTURE_SERVICE_PROVIDER_IDS`).
 - `business-domain.ts` — machine-readable map of every UI surface to canonical business modules M01–M24 (owners, personas, dependencies, boundaries). Human-readable companion: `docs/BUSINESS_MODULE_MAP.md`. Consult these before moving features between workspaces — they define canonical ownership and known boundary corrections.
 - `business-form-types.ts` + `business-form-schemas*.ts` — form field schemas per module, split across files by domain area.
+- `legacy-ids.ts` — old → new id maps and `migrateLegacy*` helpers from the 2026-09-02 terminology rename (see Client-side state below). The only place the retired ids are defined; the stores import it and carry only their own `LEGACY_*` display-string maps and legacy shape guards (the full list of sanctioned exceptions is under Client-side state).
 - `projects.ts`, `clients.ts`, `project-details.ts`, `sidebar.ts` — fixture data for the legacy dashboard surfaces.
 
 ### Client-side state
 
 `app/layout.tsx` wires the global providers: `BusinessRecordStoreProvider` (merges fixture records with user-created records per `workspace.module`, persisted to localStorage under `wastehero-business-records-v1`), `OrganizationStoreProvider` and `AssetManagementStoreProvider` (settings state), plus theme providers. All persistence is browser-local.
+
+**Terminology rename (2026-09-02): Contractor → Service provider, Contract area → Service area.** The rename changed the workspace id (`contractors` → `service-providers`), module ids (`contract-areas` → `service-areas`, `contractor-workspace` → `service-provider-workspace`, `contractor-prices` → `service-provider-prices`), record-id prefixes, enum literals, and routes (`/contractors` → `/service-providers`, `/contractor-workspace/*` → `/service-provider-workspace/*`). Fixtures and code use the new ids only, but browser-local state and bookmarks written before the rename still carry the old ones, so: stores that persist ids must run loaded state through `migrateLegacyState` (or `migrateLegacyRecordBuckets` for record buckets) from `lib/data/legacy-ids.ts`; `business-workspace.tsx` normalises `?module=`/`?record=` params through `migrateLegacyModuleId`/`migrateLegacyId`; and `next.config.mjs` redirects the old routes. Do not reintroduce the old terms anywhere else — the only sanctioned exceptions are: `lib/data/legacy-ids.ts` (the sole definition of the retired ids) and its harness `scripts/legacy-ids-harness.ts`; the redirect sources in `next.config.mjs`; the store-local `LEGACY_*` maps and shape guards that feed the migrate helpers (`LEGACY_ROLE_NAMES`/`LEGACY_ROLE_SCOPES` in `components/settings/organization-store.tsx`, `LEGACY_SCOPE_KEYS` in `components/wastehero/active-routes-store.tsx`, `LEGACY_RECORD_KEY_RENAMES` in `components/wastehero/business-record-store.tsx`); the legacy `wastehero-contractor-active-routes-v1` storage key that `active-routes-store.tsx` keeps for backward-compatible reads; and explicit historical notes that say the term was renamed. Do not strip those maps — the stores need them to migrate persisted state.
 
 ### Legacy vs canonical surfaces
 

@@ -16,8 +16,27 @@ import type {
   BusinessRecord,
   WorkspaceId,
 } from "@/lib/data/business-modules"
+import {
+  hasLegacyIds,
+  migrateLegacyRecordBuckets,
+} from "@/lib/data/legacy-ids"
 
 const STORAGE_KEY = "wastehero-business-records-v1"
+
+/**
+ * Key renames specific to this store's records, on top of the shared map in
+ * lib/data/legacy-ids.ts. Defensive only: no shipped form schema ever had a
+ * bare `contractor` field (the access form's field is `serviceProviderId`,
+ * which the shared map already covers), so no browser is known to hold this
+ * key. It is kept because `organizationForRecord` in
+ * components/settings/organization-access-management.tsx reads
+ * `submittedValues.serviceProvider`, and without an explicit entry a bare
+ * `contractor` key would fall through to the token rewrite and become
+ * `"service-provider"`, which nothing reads.
+ */
+const LEGACY_RECORD_KEY_RENAMES: Readonly<Record<string, string>> = {
+  contractor: "serviceProvider",
+}
 
 type StoredRecords = Record<string, BusinessRecord[]>
 
@@ -88,7 +107,18 @@ export function BusinessRecordStoreProvider({
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY)
       const parsed: unknown = raw ? JSON.parse(raw) : null
-      if (isStoredRecords(parsed)) store.set(parsed)
+      if (isStoredRecords(parsed)) {
+        // Browsers that wrote records before the Contractor → Service provider
+        // rename still hold the old bucket keys ("contractors.contract-areas")
+        // and old ids inside records. Migrate once on load; the migration is
+        // idempotent and returns the parsed object itself when nothing is
+        // legacy, and the persist below writes the migrated payload back.
+        store.set(
+          raw && hasLegacyIds(raw)
+            ? migrateLegacyRecordBuckets(parsed, LEGACY_RECORD_KEY_RENAMES)
+            : parsed,
+        )
+      }
     } catch {
       // A corrupt or unavailable browser store should not block the workspace.
     }

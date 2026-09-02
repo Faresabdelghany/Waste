@@ -58,7 +58,7 @@ refute); none were refuted.
    (`business-workspace.tsx:3934–3956`), although the exact lookup already exists in the same file
    (ReassignRouteDialog's `useModuleRecords("route-studio","pickups")`, line 219, filtered by
    `routeId` per `generation.ts:536–539`). The generated facts (written at `generation.ts:713–732`)
-   are rendered nowhere — RouteInformation reads only Vehicle/Driver/Trailer/Contractor (334–350)
+   are rendered nowhere — RouteInformation reads only Vehicle/Driver/Trailer/Service provider (334–350)
    and the generic all-facts renderer is bypassed for routes (`business-workspace.tsx:1225–1228`).
    Minimal fix stays inside `route-details-page.tsx`.
 2. **Edit route dialog loses current values on generated routes** (FR-12). "Edit route" on

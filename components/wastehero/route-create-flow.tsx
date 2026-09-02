@@ -65,7 +65,7 @@ const CONTAINER_TYPE_OPTIONS = [
 export interface GuidedRouteData {
   projectId?: string
   date?: string
-  contractorId?: string
+  serviceProviderId?: string
   homeDepot?: string
   wasteStation?: string
   vehicleId?: string
@@ -292,24 +292,24 @@ function StepProjectDate({ data, updateData }: GuidedStepProps) {
   )
 }
 
-// Step 2 — Responsibility (contractor list)
+// Step 2 — Responsibility (service provider list)
 
 function StepResponsibility({ data, updateData }: GuidedStepProps) {
-  const contractors = useModuleRecords("contractors", "contractors")
+  const serviceProviders = useModuleRecords("service-providers", "service-providers")
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Select the contractor responsible for executing this route.
+        Select the service provider responsible for executing this route.
       </p>
       <div className="space-y-2">
-        {contractors.map((contractor) => {
-          const isSelected = data.contractorId === contractor.id
+        {serviceProviders.map((serviceProvider) => {
+          const isSelected = data.serviceProviderId === serviceProvider.id
           return (
             <button
-              key={contractor.id}
+              key={serviceProvider.id}
               type="button"
-              onClick={() => updateData({ contractorId: contractor.id })}
+              onClick={() => updateData({ serviceProviderId: serviceProvider.id })}
               className={cn(
                 "flex w-full items-center justify-between rounded-2xl border border-border/60 bg-background p-4 text-left transition-all hover:shadow-md/5",
                 isSelected && "border-green-600 ring-1 ring-green-600",
@@ -317,10 +317,10 @@ function StepResponsibility({ data, updateData }: GuidedStepProps) {
             >
               <div className="min-w-0 pr-4">
                 <p className="truncate text-sm font-semibold text-foreground">
-                  {contractor.name}
+                  {serviceProvider.name}
                 </p>
                 <p className="truncate text-sm text-muted-foreground">
-                  {contractor.context}
+                  {serviceProvider.context}
                 </p>
               </div>
               <span
@@ -613,7 +613,7 @@ function StepRouteReview({
   onEditStep: (step: number) => void
 }) {
   const projects = useModuleRecords("configure", "organization")
-  const contractors = useModuleRecords("contractors", "contractors")
+  const serviceProviders = useModuleRecords("service-providers", "service-providers")
   const vehicles = useModuleRecords("fleet", "vehicles")
   const drivers = useModuleRecords("fleet", "drivers")
   const containers = useModuleRecords("resources", "containers")
@@ -638,7 +638,7 @@ function StepRouteReview({
       title: "Responsibility",
       step: 2,
       rows: [
-        { label: "Contractor", value: nameOf(contractors, data.contractorId) },
+        { label: "Service provider", value: nameOf(serviceProviders, data.serviceProviderId) },
       ],
     },
     {

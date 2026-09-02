@@ -804,7 +804,7 @@ function StepRecurrence({ data, updateData }: GuidedStepProps) {
 // Step 4 — Assignment
 
 function StepAssignment({ data, updateData }: GuidedStepProps) {
-  const contractors = useModuleRecords("contractors", "contractors")
+  const serviceProviders = useModuleRecords("service-providers", "service-providers")
   const vehicles = useModuleRecords("fleet", "vehicles")
   const drivers = useModuleRecords("fleet", "drivers")
   const depots = useModuleRecords("resources", "depots")
@@ -815,11 +815,11 @@ function StepAssignment({ data, updateData }: GuidedStepProps) {
         Defaults only — every generated route can be reassigned individually.
       </p>
       <RecordSelect
-        label="Responsible contractor (optional)"
+        label="Responsible service provider (optional)"
         placeholder="Keep in-house"
-        records={contractors}
-        value={data.contractorId}
-        onChange={(contractorId) => updateData({ contractorId })}
+        records={serviceProviders}
+        value={data.serviceProviderId}
+        onChange={(serviceProviderId) => updateData({ serviceProviderId })}
       />
       <RecordSelect
         label="Default vehicle"
@@ -1427,7 +1427,7 @@ function StepSchemeReview({
 }) {
   const projects = useModuleRecords("configure", "organization")
   const areas = useModuleRecords("plan", "areas")
-  const contractors = useModuleRecords("contractors", "contractors")
+  const serviceProviders = useModuleRecords("service-providers", "service-providers")
   const vehicles = useModuleRecords("fleet", "vehicles")
   const drivers = useModuleRecords("fleet", "drivers")
   const depots = useModuleRecords("resources", "depots")
@@ -1536,9 +1536,9 @@ function StepSchemeReview({
       step: GUIDED_STEP.assignment,
       rows: [
         {
-          label: "Contractor",
-          value: data.contractorId
-            ? nameOf(contractors, data.contractorId)
+          label: "Service provider",
+          value: data.serviceProviderId
+            ? nameOf(serviceProviders, data.serviceProviderId)
             : "In-house",
         },
         { label: "Default vehicle", value: nameOf(vehicles, data.plannedVehicleId) },

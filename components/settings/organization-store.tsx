@@ -16,6 +16,7 @@ import {
   FIXTURE_COMPANY_ID,
   FIXTURE_PROJECT_IDS,
 } from "@/lib/data/business-modules"
+import { migrateLegacyState } from "@/lib/data/legacy-ids"
 import {
   isRoleAccessMap,
   type RoleAccessMap,
@@ -62,8 +63,8 @@ export type OrganizationUser = {
   accessMode: ProjectAccessMode
   projectIds: string[]
   isPrimaryAdministrator: boolean
-  contractorId?: string
-  contractorName?: string
+  serviceProviderId?: string
+  serviceProviderName?: string
   createdAt: string
 }
 
@@ -134,8 +135,8 @@ export type CreateOrganizationUserInput = {
   role: string
   accessMode: ProjectAccessMode
   projectIds: string[]
-  contractorId?: string
-  contractorName?: string
+  serviceProviderId?: string
+  serviceProviderName?: string
 }
 
 export type CreateOrganizationRoleInput = {
@@ -230,16 +231,16 @@ const fixtureRoles: OrganizationRole[] = [
     "Prices, billing, invoices, and settlements",
   ),
   fixtureRole(
-    "Contractor Manager",
+    "Service Provider Manager",
     "System",
-    "Own contractor",
-    "Contractor users, fleet, routes, and settlements",
+    "Own service provider",
+    "Service provider users, fleet, routes, and settlements",
   ),
   fixtureRole(
-    "Contractor Foreman",
+    "Service Provider Foreman",
     "Custom",
-    "Own contractor",
-    "Contractor routes, vehicles, and drivers",
+    "Own service provider",
+    "Service provider routes, vehicles, and drivers",
   ),
   fixtureRole(
     "Driver",
@@ -308,6 +309,110 @@ const fixtureState: OrganizationState = {
     },
   ],
   roles: fixtureRoles,
+}
+
+// Persisted graphs written before the Contractor → Service provider rename
+// (2026-09-02) still carry the retired role ids ("role-contractor-manager"),
+// `${workspaceId}.${moduleId}` access keys ("contractors.contractor-workspace"),
+// user fields (contractorId / contractorName), and the old fixture copy. The
+// restricted service provider workspace resolves its grants by the new role id,
+// so an unmigrated role list would silently lose them. The rewrite runs on
+// every load and is idempotent; the persist right after hydration writes the
+// migrated graph back.
+const LEGACY_ROLE_NAMES: Readonly<Record<string, string>> = {
+  "Contractor Manager": "Service Provider Manager",
+  "Contractor Foreman": "Service Provider Foreman",
+}
+
+// Scope labels are picked from a fixed list, so custom roles carry them too.
+const LEGACY_ROLE_SCOPES: Readonly<Record<string, string>> = {
+  "Own contractor": "Own service provider",
+}
+
+const fixtureRolesById = new Map(fixtureRoles.map((role) => [role.id, role]))
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value)
+}
+
+function renameLegacyLabel(
+  value: unknown,
+  renames: Readonly<Record<string, string>>,
+): unknown {
+  return typeof value === "string" &&
+    Object.prototype.hasOwnProperty.call(renames, value)
+    ? renames[value]
+    : value
+}
+
+export function migrateLegacyOrganizationState(value: unknown): unknown {
+  if (!isRecord(value)) return value
+  const next: Record<string, unknown> = { ...value }
+
+  // Users reference roles by display name, so every built-in role rename below
+  // has to re-point that role's users as well. A payload without a persisted
+  // role list hydrates the current fixture roles, so the static table applies
+  // as-is; otherwise the roles pass replaces it with the renames that actually
+  // happened, so a user is never moved onto a custom role that already holds
+  // the new fixture name.
+  let roleRenames: Readonly<Record<string, string>> = LEGACY_ROLE_NAMES
+
+  if (Array.isArray(value.roles)) {
+    // Role ids, access-map keys, and id-shaped values go through the shared
+    // rewrite; the display copy below is not id-shaped and is handled here.
+    const roles = migrateLegacyState<unknown[]>(value.roles)
+    const isFixtureRole = (role: Record<string, unknown>) =>
+      typeof role.id === "string" && fixtureRolesById.has(role.id)
+    const customRoleNames = new Set(
+      roles.flatMap((role) =>
+        isRecord(role) && !isFixtureRole(role) && typeof role.name === "string"
+          ? [normalize(role.name)]
+          : [],
+      ),
+    )
+    const appliedRenames: Record<string, string> = {}
+    next.roles = roles.map((role) => {
+      if (!isRecord(role)) return role
+      const fixture = isFixtureRole(role)
+        ? fixtureRolesById.get(role.id as string)
+        : undefined
+      if (!fixture) {
+        return { ...role, scope: renameLegacyLabel(role.scope, LEGACY_ROLE_SCOPES) }
+      }
+      // Built-in roles' display fields are not editable, so the persisted copy
+      // is whatever fixture text was current when it was saved. Adopt the
+      // current fixture copy — keeping the old name only if a custom role
+      // already took the new one, since role names must stay unique.
+      const keepsPersistedName = customRoleNames.has(normalize(fixture.name))
+      if (
+        !keepsPersistedName &&
+        typeof role.name === "string" &&
+        role.name !== fixture.name
+      ) {
+        appliedRenames[role.name] = fixture.name
+      }
+      return {
+        ...role,
+        name: keepsPersistedName ? role.name : fixture.name,
+        scope: fixture.scope,
+        permissions: fixture.permissions,
+      }
+    })
+    roleRenames = appliedRenames
+  }
+
+  if (Array.isArray(value.users)) {
+    // The shared rewrite already moved the retired contractorId /
+    // contractorName user fields to their serviceProvider* counterparts; only
+    // the role display name still needs the rename computed above.
+    next.users = migrateLegacyState<unknown[]>(value.users).map((user) =>
+      isRecord(user)
+        ? { ...user, role: renameLegacyLabel(user.role, roleRenames) }
+        : user,
+    )
+  }
+
+  return next
 }
 
 type OrganizationSnapshot = OrganizationState & { hydrated: boolean }
@@ -759,8 +864,8 @@ function createOrganizationStore(): OrganizationStoreHandle {
           ? input.projectIds
           : [],
       isPrimaryAdministrator: false,
-      contractorId: input.contractorId,
-      contractorName: input.contractorName,
+      serviceProviderId: input.serviceProviderId,
+      serviceProviderName: input.serviceProviderName,
       createdAt: new Date().toISOString(),
     }
 
@@ -856,7 +961,9 @@ export function OrganizationStoreProvider({
     let parsed: unknown = null
     try {
       const rawValue = window.localStorage.getItem(ORGANIZATION_STORAGE_KEY)
-      parsed = rawValue ? JSON.parse(rawValue) : null
+      parsed = rawValue
+        ? migrateLegacyOrganizationState(JSON.parse(rawValue))
+        : null
     } catch {
       // Keep the fixture tenant available if browser persistence is corrupt.
     }

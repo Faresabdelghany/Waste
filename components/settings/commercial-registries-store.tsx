@@ -159,7 +159,7 @@ const defaultState: CommercialRegistriesState = {
       id: "price-list-harbor-2026",
       effectiveFrom: "2026-01-01",
       ...fixture("PL-Harbor-2026", {
-        description: "Annual tariff for the Harbor contract area.",
+        description: "Annual tariff for the Harbor service area.",
       }),
     },
     {
@@ -216,6 +216,48 @@ function isCommercialRegistriesState(
     Array.isArray(candidate.serviceLevels) &&
     Array.isArray(candidate.customerTypes)
   )
+}
+
+// Persisted state carries the seeds too — the provider writes the whole state
+// back on first load — so reworded seed copy would otherwise never reach a
+// browser that stored the earlier wording (the Harbor price list's description
+// changed in the 2026-09-02 terminology rename). Untouched seeds — never saved
+// by the user, since saving stamps updatedAt — take the current seed
+// description. Names are left alone: a price list's name doubles as the tag on
+// price rows. Idempotent, so it runs on every load.
+const seedDescriptions = new Map(
+  Object.values(defaultState)
+    .flat()
+    .map((seed) => [seed.id, seed.description] as const),
+)
+
+function refreshUntouchedSeeds<
+  T extends EntityWithId & { description: string; updatedAt: string },
+>(items: T[]): T[] {
+  return items.map((item) => {
+    const seedDescription = item ? seedDescriptions.get(item.id) : undefined
+    return seedDescription !== undefined &&
+      item.updatedAt === fixtureCreatedAt &&
+      item.description !== seedDescription
+      ? { ...item, description: seedDescription }
+      : item
+  })
+}
+
+function migrateStoredState(
+  stored: CommercialRegistriesState,
+): CommercialRegistriesState {
+  return {
+    ...stored,
+    zones: refreshUntouchedSeeds(stored.zones),
+    serviceLevels: refreshUntouchedSeeds(stored.serviceLevels),
+    customerTypes: refreshUntouchedSeeds(stored.customerTypes),
+    // Absent on state persisted before price lists became managed — the
+    // provider backfills the seeds in that case.
+    priceLists: Array.isArray(stored.priceLists)
+      ? refreshUntouchedSeeds(stored.priceLists)
+      : stored.priceLists,
+  }
 }
 
 function upsert<T extends EntityWithId>(items: T[], value: T) {
@@ -295,7 +337,9 @@ export function CommercialRegistriesStoreProvider({
     } catch {
       // Safe fixture registries remain available when storage is unavailable.
     }
-    const stored = isCommercialRegistriesState(parsed) ? parsed : null
+    const stored = isCommercialRegistriesState(parsed)
+      ? migrateStoredState(parsed)
+      : null
     store.set((current) => ({
       ...current,
       ...(stored ?? {}),

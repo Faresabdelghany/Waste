@@ -34,7 +34,7 @@ Extend Route Scheme creation with the existing Guided Setup wizard pattern (choo
 - **FR-2**: Guided Setup steps (validated as prototype variant A):
   1. **Scheme & scope** — name, project, planning area, collection calendar.
   2. **Recurrence** — effective **from** and **to** dates (date pickers) **[Superseded by issue #28, `docs/new-changes/SPEC.md` (D23): `effectiveTo` is optional everywhere — omitted means the scheme runs open-ended; only `to < from` blocks]**, frequency (**Every week / Every 2 weeks / Once a month**), service-day toggles Mon–Sun, week rotation (required for Every 2 weeks), planned start time (time input); live preview of the next 8 generated dates.
-  3. **Assignment** — contractor (optional), default vehicle, default driver, departure depot, unloading station.
+  3. **Assignment** — service provider (optional), default vehicle, default driver, departure depot, unloading station.
   4. **Containers** — per-day service plans (FR-14): a *Same containers every day / Different per day* toggle; per-day mode shows one tab per selected service day, each with its own picker (project / waste fraction / container-type filters, search, select-all-filtered, picked count).
   5. **Route map** — map preview of the generated routes: one colored route line per **distinct day route** with stop pins — days sharing an identical stop list (the same-all-days default) draw once, labeled with all their days (issue #17) — an All-days/per-day filter, and a legend row per distinct route (days, stop count, fraction mix).
   6. **Review & create** — per-section summary with Edit jump-backs, validation results, create.
@@ -96,7 +96,7 @@ Entry: Route Studio → Route Schemes → **New route scheme** → chooser → G
 
 - [ ] Should Plan Ahead run for **Validated** schemes or only **Effective** ones (lifecycle: Draft → Validated → Scheduled → Effective → Expired)?
 - [ ] When a scheme is deleted or expires, are its future Draft/Planned routes auto-cancelled?
-- [ ] Contractor persona: can a contractor manager create/generate schemes for their scope, or stay read-only like their routes today?
+- [ ] Service provider persona: can a service provider manager create/generate schemes for their scope, or stay read-only like their routes today?
 - [x] When a scheme edit removes a service day, should still-Planned routes on that day be auto-cancelled? (The logic prototype implements yes — walkthrough 2; confirm before it becomes an FR.) **Resolved by D31 / issue #33: yes — edit-save reconciliation cancels them with the `cancelledByGeneration` resurrection marker.**
 - [ ] Per-day assignment: if one day's fraction needs a different vehicle type (organic sealed vs rear loader), do we extend per-day plans with assignment, or split into separate schemes?
 

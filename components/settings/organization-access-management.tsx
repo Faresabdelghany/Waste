@@ -60,7 +60,7 @@ import {
 } from "@/components/ui/tooltip"
 import {
   FIXTURE_COMPANY_ID,
-  FIXTURE_CONTRACTOR_IDS,
+  FIXTURE_SERVICE_PROVIDER_IDS,
   getWorkspaceDefinition,
   type BusinessRecord,
 } from "@/lib/data/business-modules"
@@ -80,14 +80,14 @@ const roleScopeOptions = [
   "Company",
   "Assigned projects",
   "Company or project",
-  "Own contractor",
+  "Own service provider",
 ] as const
 
 const configureAccessModule = getWorkspaceDefinition("configure").modules.find(
   (module) => module.id === "access",
 )
-const contractorAccessModule = getWorkspaceDefinition("contractors").modules.find(
-  (module) => module.id === "contractor-workspace",
+const serviceProviderAccessModule = getWorkspaceDefinition("service-providers").modules.find(
+  (module) => module.id === "service-provider-workspace",
 )
 
 function roleForRecord(record: BusinessRecord) {
@@ -95,8 +95,8 @@ function roleForRecord(record: BusinessRecord) {
   if (record.facts.Roles) return record.facts.Roles
 
   const context = record.context.toLowerCase()
-  if (context.includes("foreman")) return "Contractor Foreman"
-  if (context.includes("manager")) return "Contractor Manager"
+  if (context.includes("foreman")) return "Service Provider Foreman"
+  if (context.includes("manager")) return "Service Provider Manager"
   return "User"
 }
 
@@ -111,11 +111,11 @@ function projectAccessForRecord(record: BusinessRecord) {
 }
 
 function organizationForRecord(record: BusinessRecord) {
-  if (record.submittedValues?.contractor) {
-    return String(record.submittedValues.contractor)
+  if (record.submittedValues?.serviceProvider) {
+    return String(record.submittedValues.serviceProvider)
   }
-  if (record.facts.Contractor) {
-    return record.facts.Contractor.replace(/\s+only$/i, "")
+  if (record.facts["Service provider"]) {
+    return record.facts["Service provider"].replace(/\s+only$/i, "")
   }
   return "WasteHero Denmark"
 }
@@ -124,7 +124,7 @@ function emailForRecord(record: BusinessRecord) {
   if (record.submittedValues?.email) return String(record.submittedValues.email)
   if (record.id === "user-olivia") return "olivia.larsen@wastehero.example"
   if (record.id === "user-temp") return "integration.user@wastehero.example"
-  return "Managed contractor account"
+  return "Managed service provider account"
 }
 
 function statusClassName(status: string) {
@@ -449,7 +449,7 @@ export function OrganizationAccessManagement() {
   const [email, setEmail] = useState("")
   const [role, setRole] = useState("")
   const [projectAccess, setProjectAccess] = useState("")
-  const [contractor, setContractor] = useState("")
+  const [serviceProvider, setServiceProvider] = useState("")
 
   const [newRoleOpen, setNewRoleOpen] = useState(false)
   const [roleName, setRoleName] = useState("")
@@ -461,10 +461,10 @@ export function OrganizationAccessManagement() {
     "access",
     configureAccessModule?.records ?? [],
   )
-  const contractorAccessRecords = getRecords(
-    "contractors",
-    "contractor-workspace",
-    contractorAccessModule?.records ?? [],
+  const serviceProviderAccessRecords = getRecords(
+    "service-providers",
+    "service-provider-workspace",
+    serviceProviderAccessModule?.records ?? [],
   )
 
   const userRows = useMemo<UserRow[]>(() => {
@@ -491,7 +491,7 @@ export function OrganizationAccessManagement() {
         name: user.fullName,
         email: user.email,
         role: user.role,
-        organization: user.contractorName ?? company?.name ?? "Unknown company",
+        organization: user.serviceProviderName ?? company?.name ?? "Unknown company",
         projectAccess,
         status: user.status,
       }
@@ -521,7 +521,7 @@ export function OrganizationAccessManagement() {
         status: record.status,
       }))
 
-    const contractorUsers = contractorAccessRecords.map((record) => ({
+    const serviceProviderUsers = serviceProviderAccessRecords.map((record) => ({
       id: record.id,
       name:
         record.owner && record.owner !== "Contract Team"
@@ -534,13 +534,13 @@ export function OrganizationAccessManagement() {
       status: record.status,
     }))
 
-    return [...normalizedUsers, ...officeUsers, ...contractorUsers].sort(
+    return [...normalizedUsers, ...officeUsers, ...serviceProviderUsers].sort(
       (a, b) => a.name.localeCompare(b.name),
     )
   }, [
     accessRecords,
     companies,
-    contractorAccessRecords,
+    serviceProviderAccessRecords,
     organizationUsers,
     projects,
   ])
@@ -644,7 +644,7 @@ export function OrganizationAccessManagement() {
     setEmail("")
     setRole("")
     setProjectAccess("")
-    setContractor("")
+    setServiceProvider("")
   }
 
   const handleUserDialogOpenChange = (nextOpen: boolean) => {
@@ -655,7 +655,7 @@ export function OrganizationAccessManagement() {
   const submitUser = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const normalizedEmail = email.trim().toLowerCase()
-    const isContractorRole = role.startsWith("Contractor ")
+    const isServiceProviderRole = role.startsWith("Service Provider ")
     const selectedProject = selectedCompanyProjects.find(
       (project) => project.id === projectAccess,
     )
@@ -666,7 +666,7 @@ export function OrganizationAccessManagement() {
       !normalizedEmail ||
       !role ||
       !projectAccess ||
-      (isContractorRole && !contractor)
+      (isServiceProviderRole && !serviceProvider)
     ) {
       toast.error("Complete the required fields")
       return
@@ -688,11 +688,11 @@ export function OrganizationAccessManagement() {
           ? "none"
           : "selected-projects"
     const projectIds = selectedProject ? [selectedProject.id] : []
-    const contractorId =
-      contractor === "NordRen ApS"
-        ? FIXTURE_CONTRACTOR_IDS.nordren
-        : contractor === "CityHaul A/S"
-          ? FIXTURE_CONTRACTOR_IDS.cityhaul
+    const serviceProviderId =
+      serviceProvider === "NordRen ApS"
+        ? FIXTURE_SERVICE_PROVIDER_IDS.nordren
+        : serviceProvider === "CityHaul A/S"
+          ? FIXTURE_SERVICE_PROVIDER_IDS.cityhaul
           : undefined
     try {
       const user = createUser({
@@ -702,8 +702,8 @@ export function OrganizationAccessManagement() {
         role,
         accessMode,
         projectIds,
-        contractorId,
-        contractorName: contractor || undefined,
+        serviceProviderId,
+        serviceProviderName: serviceProvider || undefined,
       })
       handleUserDialogOpenChange(false)
       toast.success("User added", {
@@ -759,7 +759,7 @@ export function OrganizationAccessManagement() {
 
   const roleUserCount = (roleName: string) =>
     userRows.filter((user) => user.role === roleName).length
-  const isContractorRole = role.startsWith("Contractor ")
+  const isServiceProviderRole = role.startsWith("Service Provider ")
 
   const tabs = (
     <div className="flex items-center gap-1 overflow-x-auto pb-1">
@@ -827,7 +827,7 @@ export function OrganizationAccessManagement() {
             />
           }
           title="Users"
-          description="Everyone with access to the company — office users, contractor users, and machine accounts — with their role, organization, and project scope."
+          description="Everyone with access to the company — office users, service provider users, and machine accounts — with their role, organization, and project scope."
         >
           <RecordsSection shown={filteredUsers.length} total={userRows.length}>
             <Table>
@@ -919,7 +919,7 @@ export function OrganizationAccessManagement() {
             />
           }
           title="Roles"
-          description="Roles bundle permissions at a scope — company, assigned projects, or own contractor. System roles are built in; custom roles are defined by your company."
+          description="Roles bundle permissions at a scope — company, assigned projects, or own service provider. System roles are built in; custom roles are defined by your company."
         >
           <RecordsSection shown={filteredRoles.length} total={roles.length}>
             <Table>
@@ -1002,7 +1002,7 @@ export function OrganizationAccessManagement() {
                   onValueChange={(value) => {
                     setCompanyId(value)
                     setProjectAccess("")
-                    setContractor("")
+                    setServiceProvider("")
                   }}
                 >
                   <SelectTrigger id="organization-user-company">
@@ -1050,7 +1050,7 @@ export function OrganizationAccessManagement() {
                     setRole(value)
                     if (value === "Company Administrator") {
                       setProjectAccess("all")
-                      setContractor("")
+                      setServiceProvider("")
                     }
                   }}
                 >
@@ -1099,14 +1099,14 @@ export function OrganizationAccessManagement() {
                   </p>
                 )}
               </div>
-              {isContractorRole && (
+              {isServiceProviderRole && (
                 <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="organization-user-contractor">
-                    Contractor
+                  <Label htmlFor="organization-user-service-provider">
+                    Service provider
                   </Label>
-                  <Select value={contractor} onValueChange={setContractor}>
-                    <SelectTrigger id="organization-user-contractor">
-                      <SelectValue placeholder="Select contractor" />
+                  <Select value={serviceProvider} onValueChange={setServiceProvider}>
+                    <SelectTrigger id="organization-user-service-provider">
+                      <SelectValue placeholder="Select service provider" />
                     </SelectTrigger>
                     <SelectContent>
                       {companyId === FIXTURE_COMPANY_ID ? (
@@ -1115,16 +1115,16 @@ export function OrganizationAccessManagement() {
                           <SelectItem value="CityHaul A/S">CityHaul A/S</SelectItem>
                         </>
                       ) : (
-                        <SelectItem value="no-contractors" disabled>
-                          No contractors in this company
+                        <SelectItem value="no-service-providers" disabled>
+                          No service providers in this company
                         </SelectItem>
                       )}
                     </SelectContent>
                   </Select>
                   {companyId !== FIXTURE_COMPANY_ID && (
                     <p className="text-xs text-muted-foreground">
-                      Add a contractor to this company before inviting a
-                      contractor user.
+                      Add a service provider to this company before inviting a
+                      service provider user.
                     </p>
                   )}
                 </div>

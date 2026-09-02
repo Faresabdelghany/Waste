@@ -27,8 +27,8 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
     detail: "NordRen ApS · Manager",
     email: "lars.mikkelsen@nordren.dk",
     initials: "LM",
-    homePath: "/contractor-workspace",
-    viewLabel: "Contractor workspace",
+    homePath: "/service-provider-workspace",
+    viewLabel: "Service provider workspace",
   },
   {
     id: "osterbro-housing",

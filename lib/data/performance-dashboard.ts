@@ -302,9 +302,9 @@ export const TICKET_ATTENTION_ROWS: TicketAttentionRow[] = [
   },
 ]
 
-// NordRen ApS route days on contract area CA-Ø-2 (Østerbro). RC-1048 is the
-// same route day the operator sees — the contractor view is a scoped subset.
-export const CONTRACTOR_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
+// NordRen ApS route days on service area CA-Ø-2 (Østerbro). RC-1048 is the
+// same route day the operator sees — the service provider view is a scoped subset.
+export const SERVICE_PROVIDER_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
   {
     id: "RC-1052",
     name: "Østerbro Residual",
@@ -416,7 +416,7 @@ export const CONTRACTOR_ROUTE_PERFORMANCE_ROWS: RoutePerformanceRow[] = [
 ]
 
 // NordRen ApS open tickets; ticket-8831 is the same record the operator sees.
-export const CONTRACTOR_TICKET_ATTENTION_ROWS: TicketAttentionRow[] = [
+export const SERVICE_PROVIDER_TICKET_ATTENTION_ROWS: TicketAttentionRow[] = [
   {
     id: "T-8853",
     recordId: "ticket-8853",
@@ -443,8 +443,8 @@ export const CONTRACTOR_TICKET_ATTENTION_ROWS: TicketAttentionRow[] = [
   },
 ]
 
-// Sums of CONTRACTOR_ROUTE_PERFORMANCE_ROWS; on-time = routes at ≥80%.
-export const CONTRACTOR_PORTFOLIO_SUMMARY: PerformancePortfolioSummary = {
+// Sums of SERVICE_PROVIDER_ROUTE_PERFORMANCE_ROWS; on-time = routes at ≥80%.
+export const SERVICE_PROVIDER_PORTFOLIO_SUMMARY: PerformancePortfolioSummary = {
   onTimePercent: 67,
   onTimeRoutes: 4,
   totalRoutes: 6,
@@ -456,7 +456,7 @@ export const CONTRACTOR_PORTFOLIO_SUMMARY: PerformancePortfolioSummary = {
   resolvedTotal: 27,
 }
 
-export const CONTRACTOR_THROUGHPUT_SERIES: ThroughputPoint[] =
+export const SERVICE_PROVIDER_THROUGHPUT_SERIES: ThroughputPoint[] =
   THROUGHPUT_SERIES.map((point) => ({
     date: point.date,
     completed: Math.round(point.completed * 0.36),

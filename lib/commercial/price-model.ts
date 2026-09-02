@@ -38,12 +38,12 @@ export type ProductModel = {
   serviceLevels: string[]
 }
 
-export type ContractorPriceModel = {
+export type ServiceProviderPriceModel = {
   id: string
-  contractor: string
+  serviceProvider: string
   productId: string
   productName: string
-  contractArea: string
+  serviceArea: string
   bid: number
   currentFee: number
   unit: PriceUnit
@@ -67,7 +67,7 @@ export const WASTE_FRACTIONS = ["Residual", "Paper & cardboard", "Glass", "Organ
 // the list's name as its tag.
 export const KNOWN_CUSTOMERS = ["Østerbro Housing Association", "Nørrebro CoWork ApS"] as const
 export const COMMERCIAL_DEFAULTS = { currency: "EUR", defaultVatRate: 0.25, invoiceCodePrefix: "WH-" }
-export const CONTRACTOR_PERFORMANCE = {
+export const SERVICE_PROVIDER_PERFORMANCE = {
   formula: "coefficient = 1 + a × (b − complaint share)",
   a: 0.5,
   targetComplaintShare: "4%",
@@ -96,7 +96,7 @@ export const PRODUCT_FACTS = {
   serviceLevels: "Service levels",
 } as const
 export const RATE_FACTS = {
-  contractor: "Contractor", product: "Product", contractArea: "Contract area",
+  serviceProvider: "Service provider", product: "Product", serviceArea: "Service area",
   bid: "Bid (locked)", currentFee: "Current fee", unit: "Unit", validFrom: "Valid from",
   validUntil: "Valid until", lastIndexed: "Last indexed", lastIndexNote: "Last index note",
 } as const
@@ -172,10 +172,10 @@ export function decodeHistory(related: readonly string[]): HistoryEntry[] {
     })
 }
 // `Indexed · <at> · <note> · €<from> → €<to> · base: <bid|current fee>`
-export function encodeIndexation(entry: ContractorPriceModel["indexation"][number]): string {
+export function encodeIndexation(entry: ServiceProviderPriceModel["indexation"][number]): string {
   return `${INDEXED_PREFIX}${entry.at} · ${entry.note} · ${money(entry.from)} → ${money(entry.to)} · base: ${entry.base}`
 }
-export function decodeIndexation(related: readonly string[]): ContractorPriceModel["indexation"] {
+export function decodeIndexation(related: readonly string[]): ServiceProviderPriceModel["indexation"] {
   return related
     .filter((item) => item.startsWith(INDEXED_PREFIX))
     .map((item) => {
@@ -282,7 +282,7 @@ export function recordToProduct(record: BusinessRecord): ProductModel {
 
 // Contract-bound validity → lifecycle status. "Expiring" mirrors the fixture
 // convention: an end date within ~6 months of the reference date.
-export function deriveContractorPriceStatus(
+export function deriveServiceProviderPriceStatus(
   validFrom: string,
   validUntil?: string,
   referenceDate: string = PRICING_REFERENCE_DATE,
@@ -297,14 +297,14 @@ export function deriveContractorPriceStatus(
   return "Active"
 }
 
-export function recordToContractorPrice(record: BusinessRecord): ContractorPriceModel {
+export function recordToServiceProviderPrice(record: BusinessRecord): ServiceProviderPriceModel {
   const productRef = record.relationRefs?.find((ref) => ref.fieldId === "productId")
   return {
     id: record.id,
-    contractor: record.facts[RATE_FACTS.contractor] || "",
+    serviceProvider: record.facts[RATE_FACTS.serviceProvider] || "",
     productId: productRef?.recordId ?? "",
     productName: record.facts[RATE_FACTS.product] || productRef?.label || "",
-    contractArea: record.facts[RATE_FACTS.contractArea] || "",
+    serviceArea: record.facts[RATE_FACTS.serviceArea] || "",
     bid: Number(record.facts[RATE_FACTS.bid] || 0),
     currentFee: Number(record.facts[RATE_FACTS.currentFee] || 0),
     unit: (record.facts[RATE_FACTS.unit] as PriceUnit) || "pickup",
@@ -321,7 +321,7 @@ export function recordToContractorPrice(record: BusinessRecord): ContractorPrice
 
 // Serializes an indexed rate back over its existing record: keeps identity,
 // rewrites the money facts, replaces the Indexed· entries. Never touches Bid.
-export function contractorPriceToRecord(rate: ContractorPriceModel, existing: BusinessRecord): BusinessRecord {
+export function serviceProviderPriceToRecord(rate: ServiceProviderPriceModel, existing: BusinessRecord): BusinessRecord {
   return {
     ...existing,
     updated: "Now",
@@ -370,7 +370,7 @@ export function syncProductPricingFacts(product: BusinessRecord, rows: readonly 
 
 // Indexation run (spec §4.3): recompute the current fee from the chosen base,
 // append to the indexation history. The bid itself never changes.
-export function applyIndexToRate(rate: ContractorPriceModel, opts: { label: string; percent: number; from: string; base: "bid" | "current fee" }): ContractorPriceModel {
+export function applyIndexToRate(rate: ServiceProviderPriceModel, opts: { label: string; percent: number; from: string; base: "bid" | "current fee" }): ServiceProviderPriceModel {
   const baseAmount = opts.base === "bid" ? rate.bid : rate.currentFee
   const to = Math.round(baseAmount * (1 + opts.percent / 100) * 100) / 100
   return {

@@ -5,7 +5,7 @@ export type NavItemId =
   | "fleet"
   | "customers"
   | "resources"
-  | "contractors"
+  | "service-providers"
   | "commercial"
   | "improve"
 
@@ -39,7 +39,7 @@ export const navItems: NavItem[] = [
   { id: "fleet", label: "Fleet", href: "/fleet" },
   { id: "customers", label: "Customers", href: "/customers" },
   { id: "resources", label: "Assets & Inventory", href: "/resources", badge: 8 },
-  { id: "contractors", label: "Contractors", href: "/contractors" },
+  { id: "service-providers", label: "Service providers", href: "/service-providers" },
   { id: "commercial", label: "Price Engine", href: "/commercial", badge: 14 },
 ]
 
@@ -75,23 +75,23 @@ export const activeRoutes: ActiveRouteSummary[] = [
 ]
 
 /**
- * The contractor manager sidebar mirrors the operator's Active Routes group,
+ * The service provider manager sidebar mirrors the operator's Active Routes group,
  * scoped to NordRen ApS route days (RC-1048 running, RC-1052 planned).
  */
-export const contractorActiveRoutes: ActiveRouteSummary[] = [
+export const serviceProviderActiveRoutes: ActiveRouteSummary[] = [
   {
     id: "route-day-1048",
     name: "Østerbro · Organic",
     color: "var(--chart-3)",
     progress: 64,
-    href: "/contractor-workspace/routes?module=routes&record=route-day-1048",
+    href: "/service-provider-workspace/routes?module=routes&record=route-day-1048",
   },
   {
     id: "route-day-1052",
     name: "Østerbro · Paper",
     color: "var(--chart-2)",
     progress: 0,
-    href: "/contractor-workspace/routes?module=routes&record=route-day-1052",
+    href: "/service-provider-workspace/routes?module=routes&record=route-day-1052",
   },
 ]
 

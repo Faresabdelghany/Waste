@@ -836,7 +836,7 @@ export function applySchemeGeneration(input: {
           : {}),
         Vehicle: vehicle,
         Driver: driver,
-        ...(schemeFacts.Contractor ? { Contractor: schemeFacts.Contractor } : {}),
+        ...(schemeFacts["Service provider"] ? { "Service provider": schemeFacts["Service provider"] } : {}),
         ...(schemeFacts["Departure depot"]
           ? { Depot: schemeFacts["Departure depot"] }
           : {}),
@@ -865,7 +865,7 @@ export function applySchemeGeneration(input: {
       allowedTransitions: ["Ready", "Cancelled"],
       companyId: scheme.companyId,
       projectIds: scheme.projectIds ? [...scheme.projectIds] : undefined,
-      contractorId: scheme.contractorId,
+      serviceProviderId: scheme.serviceProviderId,
       recordKind: "Route",
       submittedValues: {
         schemeId: scheme.id,
@@ -925,7 +925,7 @@ export function applySchemeGeneration(input: {
         deepLink: `/route-studio?module=routes&record=${planned.routeId}`,
         companyId: scheme.companyId,
         projectIds: scheme.projectIds ? [...scheme.projectIds] : undefined,
-        contractorId: scheme.contractorId,
+        serviceProviderId: scheme.serviceProviderId,
         recordKind: "Pickup",
         submittedValues: {
           routeId: planned.routeId,

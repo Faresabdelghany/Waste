@@ -92,7 +92,7 @@ Around that core:
 32. As a dispatcher, I want the Route information panel to show deviation info whenever the route's date was moved by an approved Collection Deviation, so that "why is this route on Thursday?" answers itself (D14).
 33. As an operations manager, I want the Collection Calendars list KPI tiles computed from real calendar data (statuses, holiday dates, validity), so that dashboards never show invented numbers (D13, D22, D28iii).
 34. As an operations manager, I want the Collection Calendars table to adopt the redesigned columns with holidays and next-holiday derived from each calendar's holiday dates and today, so that calendar health is visible in the list (D28iii).
-35. As a contractor manager, I want scheme statuses and generated routes shown in my scoped views to use the same canonical derived status, so that my read-only picture matches operations' (D30).
+35. As a service provider manager, I want scheme statuses and generated routes shown in my scoped views to use the same canonical derived status, so that my read-only picture matches operations' (D30).
 36. As an operations planner, I want fixture/demo schemes to carry only legal lifecycle statuses (with warning conditions expressed as derivable Attention), so that the demo teaches the real model (D20).
 
 ## Implementation Decisions

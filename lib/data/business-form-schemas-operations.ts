@@ -223,7 +223,7 @@ export const operationsBusinessFormSchemas = [
         id: "attention-routing",
         title: "Attention and resolution route",
         description:
-          "Acknowledgement does not resolve the condition. Create or link a Ticket when owned resolution work is required; notification recipients remain inside Project and contractor privacy boundaries.",
+          "Acknowledgement does not resolve the condition. Create or link a Ticket when owned resolution work is required; notification recipients remain inside Project and service provider privacy boundaries.",
         fields: [
           {
             id: "responseDueAt",
@@ -1082,10 +1082,10 @@ export const operationsBusinessFormSchemas = [
             defaultValue: "06:30",
           },
           {
-            id: "contractorId",
-            label: "Responsible contractor",
+            id: "serviceProviderId",
+            label: "Responsible service provider",
             type: "select",
-            relation: { workspaceId: "contractors", moduleId: "contractors" },
+            relation: { workspaceId: "service-providers", moduleId: "service-providers" },
           },
           {
             id: "plannedVehicleId",
@@ -1207,7 +1207,7 @@ export const operationsBusinessFormSchemas = [
             required: true,
             options: [
               { value: "internal", label: "Internal planning" },
-              { value: "contractor", label: "Contractor proposal" },
+              { value: "service-provider", label: "Service provider proposal" },
               { value: "approved-scenario", label: "Approved scenario" },
             ],
           },
@@ -1317,7 +1317,7 @@ export const operationsBusinessFormSchemas = [
     recordKind: "Operational Planning Area version",
     title: "Create operational planning area",
     description:
-      "Create a versioned geographic area for routing, planning, or notifications. An operational Planning Area helps group work; it is not a commercial Contract Area and does not award contractor responsibility.",
+      "Create a versioned geographic area for routing, planning, or notifications. An operational Planning Area helps group work; it is not a commercial service area and does not award service provider responsibility.",
     submitLabel: "Create area version",
     nameField: "areaName",
     contextFieldIds: ["projectId", "purpose", "effectiveFrom", "effectiveTo"],
@@ -1382,7 +1382,7 @@ export const operationsBusinessFormSchemas = [
         id: "geometry-relations",
         title: "Boundary and operational relationships",
         description:
-          "Geometry must be valid, reviewable, and within permitted Project geography. Overlaps with Contract Areas are shown for impact review but never transfer commercial ownership.",
+          "Geometry must be valid, reviewable, and within permitted Project geography. Overlaps with service areas are shown for impact review but never transfer commercial ownership.",
         fields: [
           {
             id: "geometry",
@@ -1418,10 +1418,10 @@ export const operationsBusinessFormSchemas = [
           },
           {
             id: "contractBoundaryReview",
-            label: "Contract-area overlap review",
+            label: "Service area overlap review",
             type: "textarea",
             description:
-              "Document overlaps and impacts without assigning contractor responsibility.",
+              "Document overlaps and impacts without assigning service provider responsibility.",
           },
           {
             id: "geometryConfirmed",
@@ -1600,16 +1600,16 @@ export const operationsBusinessFormSchemas = [
             required: true,
             options: [
               { value: "company", label: "Company owned" },
-              { value: "contractor", label: "Contractor owned" },
+              { value: "service-provider", label: "Service provider owned" },
               { value: "leased", label: "Leased" },
             ],
           },
           {
-            id: "contractorId",
-            label: "Owning contractor",
+            id: "serviceProviderId",
+            label: "Owning service provider",
             type: "select",
-            relation: { workspaceId: "contractors", moduleId: "contractors" },
-            description: "Required when Ownership is Contractor owned.",
+            relation: { workspaceId: "service-providers", moduleId: "service-providers" },
+            description: "Required when Ownership is Service provider owned.",
           },
           {
             id: "status",
@@ -1760,15 +1760,15 @@ export const operationsBusinessFormSchemas = [
             required: true,
             options: [
               { value: "employee", label: "Employee" },
-              { value: "contractor", label: "Contractor workforce" },
+              { value: "service-provider", label: "Service provider workforce" },
               { value: "temporary", label: "Temporary workforce" },
             ],
           },
           {
-            id: "contractorId",
-            label: "Owning contractor",
+            id: "serviceProviderId",
+            label: "Owning service provider",
             type: "select",
-            relation: { workspaceId: "contractors", moduleId: "contractors" },
+            relation: { workspaceId: "service-providers", moduleId: "service-providers" },
           },
           {
             id: "projectId",
@@ -1913,7 +1913,7 @@ export const operationsBusinessFormSchemas = [
         id: "resources",
         title: "Planned resources and operating base",
         description:
-          "Validation: Vehicle and Driver must be available for the full period, share permitted Project or contractor scope, and meet licence, skill, fraction, compartment, trailer, capacity, depot, and unloading requirements.",
+          "Validation: Vehicle and Driver must be available for the full period, share permitted Project or service provider scope, and meet licence, skill, fraction, compartment, trailer, capacity, depot, and unloading requirements.",
         fields: [
           {
             id: "vehicleId",
@@ -1958,10 +1958,10 @@ export const operationsBusinessFormSchemas = [
             unit: "kg",
           },
           {
-            id: "contractorId",
-            label: "Responsible contractor",
+            id: "serviceProviderId",
+            label: "Responsible service provider",
             type: "select",
-            relation: { workspaceId: "contractors", moduleId: "contractors" },
+            relation: { workspaceId: "service-providers", moduleId: "service-providers" },
           },
         ],
       },
@@ -1998,7 +1998,7 @@ export const operationsBusinessFormSchemas = [
           },
           {
             id: "ownershipVisibilityConfirmed",
-            label: "Contractor ownership and Project visibility are respected",
+            label: "Service provider ownership and Project visibility are respected",
             type: "checkbox",
             required: true,
             defaultValue: false,

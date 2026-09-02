@@ -3,6 +3,18 @@
 Explored live on `app-development.wastehero.io` (2026-08-19), impersonating company **Provas2**
 (projects: *Provas*, *Provas Sommerhusområde*). Screenshots in this folder (`pp-*.png`).
 
+> **Terminology note (2026-09-02).** The live product labels these entities **Contractors**,
+> **Contractor prices** and **Contract areas**. This prototype renamed them to **Service providers**,
+> **Service provider prices** and **Service areas** on 2026-09-02 (see `CONTEXT.md`), so every
+> "service provider" / "service area" in the prose below corresponds to the live product's
+> "contractor" / "contract area". Quoted UI labels, route paths, column headers and wizard step
+> names are reproduced exactly as the live product shows them (Contractor …); the screenshot
+> `pp-service-provider-prices.png` is the live Contractor prices tab under its renamed file name.
+> The **Domain model (for implementation)** sketch at the end is the one exception: it is written
+> in this prototype's vocabulary (`ServiceProviderPrice`, `scope company|service-provider|area`),
+> whereas the live entity is `HaulerPriceDef` and the live scope enum reads Company/Contractor/Area,
+> as the Contractor performance section reports.
+
 ## What it is
 
 The **product catalogue and pricing engine** of the platform: "Set up what you offer and what it
@@ -12,7 +24,7 @@ redirected to the older **Legacy pricing** module (pricing categories Containers
 plus "Agreement template"), which this module replaces.
 
 Backend: its own REST microservice (`https://dev-platform-api.wastehero.io/product/api/v1/…`,
-ULID entity ids, audit-logged) — unlike most of the app, which is GraphQL. Contractor prices are
+ULID entity ids, audit-logged) — unlike most of the app, which is GraphQL. Service provider prices are
 the exception: they resolve to GraphQL global ids (`HaulerPriceDef:<n>`).
 
 ## Business goal
@@ -24,13 +36,13 @@ the exception: they resolve to GraphQL global ids (`HaulerPriceDef:<n>`).
    product can cost different amounts by zone, customer type, service responsibility, property
    type etc. A deterministic **price-determination engine** resolves the right price at
    order/agreement time.
-3. **Contractor pricing** — record what the company *pays* haulers per agreement/contract area,
+3. **Service provider pricing** — record what the company *pays* haulers per agreement/service area,
    with itemised components, indexation, metered lines, and performance-based bonus/penalty
    settlement.
 4. **Governance** — everything effective-dated, schedulable, previewable, and fully audited.
 
 Direction concept ties it together: products are **Outgoing** (sold to customers), **Incoming**
-(bought/paid to contractors) or **Transfer**.
+(bought/paid to service providers) or **Transfer**.
 
 ## Information architecture
 
@@ -195,16 +207,16 @@ Mechanics: **best-match row** — rows are scored by how many conditions match (
 more specific wins); service-level surcharge and bill-of-materials lines are added on top.
 Error when nothing resolves: 422 `product.price_determination.product_not_priced`.
 
-### Contractor prices (`/prices/contractor`)
+### Contractor prices (`/prices/contractor`) — "Service provider prices" in this prototype
 What the company **pays** haulers. Columns: Contractor (link) · Agreement (= the product) ·
-Area (contract area link, e.g. "Haderslev North") · Period (validity range) · **Base fee** (bid) ·
+Area (service area link, e.g. "Haderslev North") · Period (validity range) · **Base fee** (bid) ·
 **Current fee** (after indexation) · **Components** (e.g. "Base lift rate: 680,00 € · Fuel index
 uplift: 9.5%", "Rural distance supplement: 95,00 €", "Seasonal uplift (Apr–Oct): 9.3%") · Status.
 Toolbar: **Adjust prices**, Action → **+ Contractor price**. Row: Edit · ⋮.
 
 **Contractor price wizard** (5 steps — `/contractor-prices/:gid`):
 1. *Contractor* (immutable on edit — "create a new price to move an agreement").
-2. *Agreement* — pick a catalogue product; already-priced ones grouped by contract area with
+2. *Agreement* — pick a catalogue product; already-priced ones grouped by service area with
    "Bid X € · Current Y €", the rest listed as "Not priced for this contractor yet".
 3. *Scope & price* — Area, Period (start/end), Fee, Label, optional **Specific customer /
    property** ("Leave empty for the normal area price. Pick a property to set a deviating
@@ -218,7 +230,7 @@ Toolbar: **Adjust prices**, Action → **+ Contractor price**. Row: Edit · ⋮.
      immediately, independent of this wizard." Auto-counted computations: `per_round`,
      `per_emptying`; manual-quantity bases (per tonne, per hour, haul distance, reversing
      distance) are greyed out until data flows.
-   - **Measured quantities**: office types monthly figures per contract area (tonnes, hours, haul
+   - **Measured quantities**: office types monthly figures per service area (tonnes, hours, haul
      km, reversing km) — "no automatic sensor/weighbridge feed"; metered lines pay
      rate × entered figure.
 5. *Review*.
@@ -228,7 +240,7 @@ Toolbar: **Adjust prices**, Action → **+ Contractor price**. Row: Edit · ⋮.
   **Apply on** ("The old price row is ended the day before; the new fee applies from this date"),
   optional **Revert to original price on**, **Apply to pricing level**: Parent areas / Carve-outs /
   Both ("Parent = top-level contract areas. Carve-outs = nested areas that override their
-  parent."), optional limits to contract area / agreements, Note (shown in history). Preview
+  parent."), optional limits to service area / agreements, Note (shown in history). Preview
   table before apply.
 - *Index change* (CPI/fuel): Index change %, **Computed from: Base price (original bid) or
   Current price ("compounds earlier changes")**, same apply/revert/scope fields. "The bid price
@@ -263,7 +275,7 @@ Tabs: **Product templates | Materials | Service Levels | Surcharge Rules**.
 Same index as above ("The lists themselves: status, validity window, minimum charge and
 customer-override inheritance. Prices live on the Prices tab.").
 
-### Contractor performance (`/compensation-models`)
+### Contractor performance (`/compensation-models`) — no module in this prototype; its counterpart is the read-only "Service provider performance" card under Settings → Administration → Commercial defaults
 Tabs: **Bonus & penalty | Exception pay effects**.
 - *Bonus & penalty models*: Name · Contractor · Contract area · Type (Bonus only / Bonus and
   penalty) · Scope (Company/Contractor/Area — "in settlement the most specific matching model
@@ -293,6 +305,9 @@ changed", expandable to per-field `old → new` diffs).
 
 ## Domain model (for implementation)
 
+Sketched in this prototype's vocabulary — see the terminology note at the top for the live
+product's names.
+
 ```
 ProductTemplate (type: container|recurring|additional; field schema, sys-required + optional)
   └─ Product (internal name/code, status, direction, waste fraction(s), container type,
@@ -307,10 +322,10 @@ PriceList (name, description, status draft|scheduled|active|inactive, effective-
            negotiated flag) — zone-overlap tie-break, bulk adjust, xlsx import
 PriceDetermination: best-match scoring over condition columns → base line + service-level
            + surcharge + BOM lines; preview API, warnings/skips
-ContractorPrice / HaulerPriceDef (contractor, agreement=product, contract area (parent or
+ServiceProviderPrice / HaulerPriceDef (service provider, agreement=product, service area (parent or
            carve-out), period, bid fee vs current fee, named components flat|percent,
            metered lines per_round|per_emptying|manual bases, monthly measured quantities)
-CompensationModel (scope company|contractor|area, bonus/penalty coefficient formula, caps)
+CompensationModel (scope company|service-provider|area, bonus/penalty coefficient formula, caps)
 ExceptionPayEffect (per exception type, pay + reliability effect, effective-dated)
 AuditLog (every entity, field diffs)
 ```
@@ -318,6 +333,6 @@ AuditLog (every entity, field diffs)
 Cross-module dependencies: Zones come from Settings → Map layers & zones; waste fractions,
 container types, pickup settings, property types from Asset management; VAT rates and pricing
 units are named per-account lists; customers/properties and agreements consume the catalogue
-(negotiated lists, specific-property contractor prices); Invoicing consumes invoice names/codes
-and resolved prices; contractor settlement consumes components, metered lines, bonus models and
+(negotiated lists, specific-property service provider prices); Invoicing consumes invoice names/codes
+and resolved prices; service provider settlement consumes components, metered lines, bonus models and
 exception effects.

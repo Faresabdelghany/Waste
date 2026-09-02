@@ -681,7 +681,7 @@ function SchemeDetailsTab({
           <StatRow label="Driver" value={plannedDriver ?? "Not assigned"} />
           <StatRow
             label="Hauler"
-            value={facts.Hauler ?? facts.Contractor ?? "—"}
+            value={facts.Hauler ?? facts["Service provider"] ?? "—"}
           />
           {facts["Departure depot"] && (
             <StatRow label="Departure depot" value={facts["Departure depot"]} />

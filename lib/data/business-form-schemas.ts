@@ -76,11 +76,11 @@ const actionExecutions: Record<string, BusinessFormExecution> = {
     reviewBeforeSubmit: true,
     completionMessage: "Price added — resolution follows the most-conditions rule.",
   },
-  "commercial.contractor-prices": {
+  "commercial.service-provider-prices": {
     kind: "create-record",
     reviewBeforeSubmit: true,
     completionMessage:
-      "Contractor price created — the bid is locked; Apply index moves the current fee from here.",
+      "Service provider price created — the bid is locked; Apply index moves the current fee from here.",
   },
 }
 
@@ -118,8 +118,8 @@ const conditionalFields: Record<
   "customers.contacts.connectedCompanyId": {
     condition: { fieldId: "partyType", equals: "person" },
   },
-  "resources.depots.contractorId": {
-    condition: { fieldId: "ownership", equals: "contractor" },
+  "resources.depots.serviceProviderId": {
+    condition: { fieldId: "ownership", equals: "service-provider" },
     required: true,
   },
   "resources.depots.acceptedFractionId": {
@@ -166,15 +166,15 @@ const conditionalFields: Record<
     condition: { fieldId: "runMode", equals: "date-range" },
     required: true,
   },
-  "improve.performance.contractorId": {
+  "improve.performance.serviceProviderId": {
     condition: {
       fieldId: "subjectType",
-      oneOf: ["contractor", "contract-area"],
+      oneOf: ["service-provider", "service-area"],
     },
     required: true,
   },
-  "improve.performance.contractAreaId": {
-    condition: { fieldId: "subjectType", equals: "contract-area" },
+  "improve.performance.serviceAreaId": {
+    condition: { fieldId: "subjectType", equals: "service-area" },
     required: true,
   },
   "route-studio.live.actualVehicleId": {
@@ -236,7 +236,7 @@ const conditionalFields: Record<
   "route-studio.schemes.approvalId": {
     condition: {
       fieldId: "proposalSource",
-      oneOf: ["contractor", "approved-scenario"],
+      oneOf: ["service-provider", "approved-scenario"],
     },
     required: true,
   },
@@ -321,7 +321,7 @@ const conditionalFields: Record<
     },
     required: true,
   },
-  "fleet.vehicle-planning.contractorId": {
+  "fleet.vehicle-planning.serviceProviderId": {
     condition: {
       fieldId: "allocationAction",
       oneOf: ["allocate", "change"],
@@ -337,8 +337,8 @@ const conditionalFields: Record<
   "fleet.vehicle-planning.overrideReason": {
     condition: { fieldId: "compatibilitySummary", hasValue: true },
   },
-  "fleet.drivers.contractorId": {
-    condition: { fieldId: "employmentType", equals: "contractor" },
+  "fleet.drivers.serviceProviderId": {
+    condition: { fieldId: "employmentType", equals: "service-provider" },
     required: true,
   },
   "fleet.drivers.linkedUserId": {
@@ -506,7 +506,7 @@ function enhanceSchema(schema: BusinessFormSchema): BusinessFormSchema {
           },
         ]
       : []),
-    ...(schema.key === "commercial.contractor-prices"
+    ...(schema.key === "commercial.service-provider-prices"
       ? [
           {
             type: "date-order" as const,

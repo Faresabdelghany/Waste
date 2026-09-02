@@ -56,7 +56,7 @@ const navItemIcons: Record<NavItemId, React.ComponentType<{ className?: string }
   fleet: Truck,
   customers: Users,
   resources: Layout,
-  contractors: Buildings,
+  "service-providers": Buildings,
   commercial: CreditCard,
   improve: ChartBar,
 }
@@ -104,8 +104,8 @@ export function AppSidebar() {
         pathname.startsWith("/portal")
       )
     if (id === "resources") return pathname.startsWith("/resources")
-    if (id === "contractors")
-      return pathname.startsWith("/contractors") || pathname.startsWith("/contractor-workspace")
+    if (id === "service-providers")
+      return pathname.startsWith("/service-providers") || pathname.startsWith("/service-provider-workspace")
     if (id === "commercial")
       return pathname.startsWith("/commercial")
     if (id === "improve") return pathname.startsWith("/improve") || pathname.startsWith("/performance")

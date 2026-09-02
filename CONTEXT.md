@@ -37,7 +37,7 @@ A physical collection location whose services and containers are shared by sever
 _Avoid_: Property group, warehouse
 
 **Agreement**:
-An effective-dated commercial or service entitlement between a provider and a customer.
+An effective-dated commercial or service entitlement between the company and a customer.
 _Avoid_: Subscription, invoice
 
 **Subscription**:
@@ -52,7 +52,7 @@ _Avoid_: Pickup setting, billing frequency, recurrence (the scheme's cadence)
 
 **Product / Service**:
 A sellable service definition with a category, unit, service level, components, and pricing behavior.
-_Avoid_: Collection, contractor service
+_Avoid_: Collection, service provider offering
 
 **Container**:
 A physical bin, tank, or unit tracked at a location within a project, classified by container type and waste fraction, serviced inside a Planning Area while in service, and optionally paired with a sensor or bound to an agreement.
@@ -90,9 +90,9 @@ _Avoid_: Depot, warehouse
 An append-only record of receipt, issue, return, transfer, adjustment, or decommission.
 _Avoid_: Inventory quantity, balance edit
 
-**Hauler / Contractor**:
-An external service provider that delivers work for a company.
-_Avoid_: Customer, project
+**Hauler / Service Provider**:
+An external organization, typically a hauler, that delivers collection work for a company within awarded Service Areas and is settled for it through Settlements.
+_Avoid_: Contractor, customer, project
 
 ## Planning and execution
 
@@ -113,19 +113,19 @@ The declarative stop selection a Route Scheme stores — waste fractions plus an
 _Avoid_: Container list, picked containers, stop list
 
 **Planning Area**:
-A versioned geographic area used for route planning, service operations, or notifications. Operational geography, never a commercial award — that is a Contract Area.
-_Avoid_: Contract area, zone (unqualified)
+A versioned geographic area used for route planning, service operations, or notifications. Operational geography, never a commercial award — that is a Service Area.
+_Avoid_: Service area, contract area, zone (unqualified)
 
 **Route**:
 A dated, executable unit of work assigned to vehicles and drivers.
 _Avoid_: Route scheme, scenario
 
 **Planned Assignment**:
-The driver, vehicle, trailer, depot, or contractor expected to execute a route before work starts.
+The driver, vehicle, trailer, depot, or service provider expected to execute a route before work starts.
 _Avoid_: Actual assignment
 
 **Actual Assignment**:
-The driver, vehicle, trailer, depot, or contractor that performed the route.
+The driver, vehicle, trailer, depot, or service provider that performed the route.
 _Avoid_: Planned assignment
 
 **Pickup**:
@@ -179,20 +179,20 @@ An issued customer financial document.
 _Avoid_: Settlement, billable event
 
 **Settlement**:
-The period calculation and record of amounts due to or from a contractor.
-_Avoid_: Invoice, contractor price
+The period calculation and record of amounts due to or from a service provider.
+_Avoid_: Invoice, service provider price
 
 **Price List**:
 An effective-dated set of explainable customer pricing rules and price rows.
-_Avoid_: Contractor price, invoice
+_Avoid_: Service provider price, invoice
 
-**Contract Area**:
-An effective-dated geographic and service responsibility awarded to a contractor. Its geographic scope references operator-owned Planning Areas — the contractor domain has no zone concept of its own — while the contract's own boundary text stays the authoritative legal boundary.
-_Avoid_: Operational area, route, contractor zone
+**Service Area**:
+An effective-dated geographic and service responsibility awarded to a service provider. Its geographic scope references operator-owned Planning Areas — the service provider domain has no zone concept of its own — while the contract's own boundary text stays the authoritative legal boundary.
+_Avoid_: Contract area, operational area, route, service provider zone
 
-**Contract Area Assignment**:
-The effective-dated relationship that links an existing Contract Area to one contractor. Assigning or transferring it changes the relationship and preserves the Contract Area itself.
-_Avoid_: Create contract area, contractor area
+**Service Area Assignment**:
+The effective-dated relationship that links an existing Service Area to one service provider. Assigning or transferring it changes the relationship and preserves the Service Area itself.
+_Avoid_: Contract area assignment, create service area, service provider area
 
 ## Intelligence and automation
 

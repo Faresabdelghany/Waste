@@ -41,7 +41,7 @@ export type BusinessFilters = {
   routeSchemes: string[]
   collectionCalendars: string[]
   propertyTypes: string[]
-  contractAreas: string[]
+  serviceAreas: string[]
   serviceScopes: string[]
   reliabilityBands: string[]
   roles: string[]
@@ -63,7 +63,7 @@ const emptyFilters: BusinessFilters = {
   routeSchemes: [],
   collectionCalendars: [],
   propertyTypes: [],
-  contractAreas: [],
+  serviceAreas: [],
   serviceScopes: [],
   reliabilityBands: [],
   roles: [],
@@ -159,13 +159,13 @@ const containerCategories: FilterDefinition[] = [
   },
 ]
 
-const contractorCategories: FilterDefinition[] = [
+const serviceProviderCategories: FilterDefinition[] = [
   { id: "statuses", label: "Status", icon: Spinner, values: (record) => [record.status] },
   {
-    id: "contractAreas",
-    label: "Contract area",
+    id: "serviceAreas",
+    label: "Service area",
     icon: MapTrifold,
-    values: (record) => singleValue(record.facts["Contract area"]),
+    values: (record) => singleValue(record.facts["Service area"]),
   },
   {
     id: "serviceScopes",
@@ -181,13 +181,13 @@ const contractorCategories: FilterDefinition[] = [
   },
 ]
 
-// Contractor users are filtered by the data the Add User form captures: the
+// Service provider users are filtered by the data the Add User form captures: the
 // enumerable Role plus the lifecycle Status. Name, phone, and email are
-// free-text and stay searchable instead. The "Contractor role" key covers
+// free-text and stay searchable instead. The "Service provider role" key covers
 // records created before the field was renamed. Both categories offer the
 // full fixed value set, matching the user lifecycle and the form's roles,
 // even when no loaded record currently holds a value.
-const contractorUserCategories: FilterDefinition[] = [
+const serviceProviderUserCategories: FilterDefinition[] = [
   {
     id: "statuses",
     label: "Status",
@@ -200,8 +200,8 @@ const contractorUserCategories: FilterDefinition[] = [
     label: "Role",
     icon: IdentificationBadge,
     values: (record) =>
-      singleValue(record.facts.Role ?? record.facts["Contractor role"]),
-    options: ["Contractor manager", "Foreman", "Driver", "Read-only viewer"],
+      singleValue(record.facts.Role ?? record.facts["Service provider role"]),
+    options: ["Service provider manager", "Foreman", "Driver", "Read-only viewer"],
   },
 ]
 
@@ -255,7 +255,7 @@ export function BusinessFilterPopover({
   records: BusinessRecord[]
   value: BusinessFilters
   onChange: (filters: BusinessFilters) => void
-  variant?: "default" | "containers" | "contractors" | "contractor-users" | "tickets"
+  variant?: "default" | "containers" | "service-providers" | "service-provider-users" | "tickets"
 }) {
   const [open, setOpen] = useState(false)
   const [activeCategory, setActiveCategory] =
@@ -267,10 +267,10 @@ export function BusinessFilterPopover({
   const categories =
     variant === "containers"
       ? containerCategories
-      : variant === "contractors"
-        ? contractorCategories
-        : variant === "contractor-users"
-          ? contractorUserCategories
+      : variant === "service-providers"
+        ? serviceProviderCategories
+        : variant === "service-provider-users"
+          ? serviceProviderUserCategories
           : variant === "tickets"
             ? ticketCategories
             : defaultCategories

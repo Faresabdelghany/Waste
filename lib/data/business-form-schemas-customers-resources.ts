@@ -412,7 +412,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
               { value: "municipal", label: "Municipal shared service" },
               { value: "member-funded", label: "Member-funded service" },
               { value: "company-operated", label: "Shared-service company" },
-              { value: "contractor-operated", label: "Contractor operated" },
+              { value: "service-provider-operated", label: "Service provider operated" },
             ],
           },
           {
@@ -1721,7 +1721,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
         id: "ownership-operation",
         title: "Ownership and operation",
         description:
-          "Contractor is required when ownership is Contractor. An unloading station requires accepted fractions and operating hours; a Depot requires route-resource capacity.",
+          "Owning service provider is required when Ownership is Service provider owned. An unloading station requires accepted fractions and operating hours; a Depot requires route-resource capacity.",
         fields: [
           {
             id: "ownership",
@@ -1730,17 +1730,17 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             required: true,
             options: [
               { value: "company", label: "Company owned" },
-              { value: "contractor", label: "Contractor owned" },
+              { value: "service-provider", label: "Service provider owned" },
               { value: "external", label: "External facility" },
             ],
           },
           {
-            id: "contractorId",
-            label: "Owning contractor",
+            id: "serviceProviderId",
+            label: "Owning service provider",
             type: "select",
             relation: {
-              workspaceId: "contractors",
-              moduleId: "contractors",
+              workspaceId: "service-providers",
+              moduleId: "service-providers",
             },
           },
           {

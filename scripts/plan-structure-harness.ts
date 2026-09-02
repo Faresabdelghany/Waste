@@ -2,8 +2,8 @@
 // docs/specs/PLAN_SIMPLIFICATION.md, decisions Q11/Q12/Q14/Q16): the Plan
 // workspace exposes only Deviations / Calendars / Areas, Route Schemes stays
 // in Route Studio, the retired modules are gone everywhere, fixtures carry
-// the structured data generation needs, and the contract-area selectors
-// point at the contractor domain. Importing the schema registry also
+// the structured data generation needs, and the service-area selectors
+// point at the service provider domain. Importing the schema registry also
 // exercises its import-time integrity gates (domain ↔ schema lockstep and
 // relation targets).
 // Run: npx tsx scripts/plan-structure-harness.ts
@@ -126,7 +126,7 @@ check(
   0,
 )
 
-/* -------------------- contract-area selectors (Q16) ----------------------- */
+/* -------------------- service-area selectors (Q16) ----------------------- */
 
 const relationOf = (key: string, fieldId: string) =>
   businessFormSchemas
@@ -135,34 +135,34 @@ const relationOf = (key: string, fieldId: string) =>
     .find((field) => field.id === fieldId)?.relation
 
 check(
-  "settlements' Contract area points at the contractor domain",
-  relationOf("commercial.settlements", "contractAreaId"),
-  { workspaceId: "contractors", moduleId: "contract-areas" },
+  "settlements' Service area points at the service provider domain",
+  relationOf("commercial.settlements", "serviceAreaId"),
+  { workspaceId: "service-providers", moduleId: "service-areas" },
 )
 check(
-  "performance's Contract area points at the contractor domain",
-  relationOf("improve.performance", "contractAreaId"),
-  { workspaceId: "contractors", moduleId: "contract-areas" },
+  "performance's Service area points at the service provider domain",
+  relationOf("improve.performance", "serviceAreaId"),
+  { workspaceId: "service-providers", moduleId: "service-areas" },
 )
 check(
-  "contract-areas' Planning areas stays a deliberate reference to plan geography (issue #12: kept)",
-  relationOf("contractors.contract-areas", "zoneIds"),
+  "service-areas' Planning areas stays a deliberate reference to plan geography (issue #12: kept)",
+  relationOf("service-providers.service-areas", "zoneIds"),
   { workspaceId: "plan", moduleId: "areas" },
 )
 
-/* -------------- contract-area fixtures exercise zoneIds (issue #12) -------- */
+/* -------------- service-area fixtures exercise zoneIds (issue #12) -------- */
 
 const planAreaIds = new Set(
   (businessWorkspaces.plan.modules.find((module) => module.id === "areas")
     ?.records ?? []).map((record) => record.id),
 )
-const contractAreaRecords =
-  businessWorkspaces.contractors.modules.find(
-    (module) => module.id === "contract-areas",
+const serviceAreaRecords =
+  businessWorkspaces["service-providers"].modules.find(
+    (module) => module.id === "service-areas",
   )?.records ?? []
 check(
-  "both contract-area fixtures reference existing planning areas via zoneIds",
-  contractAreaRecords.map((record) => {
+  "both service-area fixtures reference existing planning areas via zoneIds",
+  serviceAreaRecords.map((record) => {
     const zoneRefs = (record.relationRefs ?? []).filter(
       (ref) => ref.fieldId === "zoneIds",
     )
@@ -186,8 +186,8 @@ check(
     ]
   }),
   [
-    ["contract-area-osterbro-2", true],
-    ["contract-area-amager-1", true],
+    ["service-area-osterbro-2", true],
+    ["service-area-amager-1", true],
   ],
 )
 

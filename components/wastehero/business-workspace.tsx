@@ -10,7 +10,7 @@ import {
   useRef,
   useState,
 } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import {
   ArrowSquareOut,
@@ -38,6 +38,7 @@ import {
   type WorkspaceDefinition,
   type WorkspaceId,
 } from "@/lib/data/business-modules"
+import { migrateLegacyId, migrateLegacyModuleId } from "@/lib/data/legacy-ids"
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
 import { calendarFromRecord } from "@/lib/route-schemes/calendar"
 import {
@@ -97,8 +98,8 @@ import type {
 } from "@/lib/data/business-form-types"
 import {
   applyIndexToRate,
-  contractorPriceToRecord,
-  deriveContractorPriceStatus,
+  serviceProviderPriceToRecord,
+  deriveServiceProviderPriceStatus,
   encodeHistory,
   isSoftDeleted,
   money,
@@ -106,7 +107,7 @@ import {
   priceRowToRecord,
   PRODUCT_FACTS,
   RATE_FACTS,
-  recordToContractorPrice,
+  recordToServiceProviderPrice,
   recordToPriceRow,
   ROW_FACTS,
   rowDisplayName,
@@ -231,7 +232,7 @@ import {
   type PricingZone,
   type ServiceLevel,
 } from "@/components/settings/commercial-registries-store"
-import { ContractorDetailsPage } from "@/components/wastehero/contractor-details-page"
+import { ServiceProviderDetailsPage } from "@/components/wastehero/service-provider-details-page"
 import { ContainerDetailsSheet } from "@/components/wastehero/containers-assets-register"
 import { RouteDetailsPage } from "@/components/wastehero/route-details-page"
 import { TicketDetailsDialog } from "@/components/tickets/TicketDetailsDialog"
@@ -257,11 +258,11 @@ type BusinessWorkspaceProps = {
   showFilters?: boolean
   navigationBasePath?: string
   /**
-   * Isolates the workspace to one contractor: only records attributed to it
+   * Isolates the workspace to one service provider: only records attributed to it
    * are visible, created records are stamped with it, and relation options
-   * belonging to other contractors are excluded.
+   * belonging to other service providers are excluded.
    */
-  contractorScopeId?: string
+  serviceProviderScopeId?: string
   /**
    * Resolves view/edit/create/delete per module from this organization
    * role's effective access map (Settings → role permissions). Absent means
@@ -285,7 +286,7 @@ const emptyBusinessFilters: BusinessFilters = {
   routeSchemes: [],
   collectionCalendars: [],
   propertyTypes: [],
-  contractAreas: [],
+  serviceAreas: [],
   serviceScopes: [],
   reliabilityBands: [],
   roles: [],
@@ -305,7 +306,7 @@ const filterFieldByChipLabel: Record<string, keyof BusinessFilters> = {
   "Route scheme": "routeSchemes",
   "Collection calendar": "collectionCalendars",
   "Property type": "propertyTypes",
-  "Contract area": "contractAreas",
+  "Service area": "serviceAreas",
   "Service scope": "serviceScopes",
   Reliability: "reliabilityBands",
   Role: "roles",
@@ -462,9 +463,16 @@ function WorkspaceQuerySync({
   onRecordOpen: (record: BusinessRecord | null) => void
   resolveRecord: (moduleId: string, recordId: string) => BusinessRecord | null
 }) {
+  const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
-  const requestedModuleId = searchParams.get("module")
-  const requestedRecordId = searchParams.get("record")
+  // Old bookmarks may still carry pre-rename ids (see lib/data/legacy-ids.ts).
+  const rawModuleId = searchParams.get("module")
+  const rawRecordId = searchParams.get("record")
+  const requestedModuleId = rawModuleId ? migrateLegacyModuleId(rawModuleId) : rawModuleId
+  const requestedRecordId = rawRecordId ? migrateLegacyId(rawRecordId) : rawRecordId
+  const hasLegacyParams =
+    requestedModuleId !== rawModuleId || requestedRecordId !== rawRecordId
 
   useEffect(() => {
     const requestedModule = requestedModuleId
@@ -492,6 +500,25 @@ function WorkspaceQuerySync({
     requestedModuleId,
     requestedRecordId,
     workspace,
+  ])
+
+  // Once retired ids have resolved, rewrite the address bar so a URL
+  // bookmarked or shared from here carries the canonical ids only. Other
+  // params are preserved; the replace re-renders with canonical params, where
+  // nothing is left to rewrite.
+  useEffect(() => {
+    if (!hasLegacyParams) return
+    const params = new URLSearchParams(searchParams.toString())
+    if (requestedModuleId) params.set("module", requestedModuleId)
+    if (requestedRecordId) params.set("record", requestedRecordId)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }, [
+    hasLegacyParams,
+    pathname,
+    requestedModuleId,
+    requestedRecordId,
+    router,
+    searchParams,
   ])
 
   return null
@@ -702,18 +729,18 @@ const queueModuleIds = new Set(["exceptions", "tickets"])
 // Modules that get the richer record views introduced for Routes: table with
 // configurable fact columns and grouping, list/board/timeline layouts, and
 // row-level edit/delete actions. The value is the module's default fact columns.
-// Records of these modules are operated by a specific party, so a contractor
+// Records of these modules are operated by a specific party, so a service provider
 // scope offers only its own — unlike shared registries (projects, depots,
 // ticket types), where unattributed records stay selectable.
-const contractorOperatedRelationModuleIds = new Set([
+const serviceProviderOperatedRelationModuleIds = new Set([
   "routes",
   "vehicles",
   "drivers",
-  "contractor-workspace",
-  "contract-areas",
-  "contractor-prices",
+  "service-provider-workspace",
+  "service-areas",
+  "service-provider-prices",
   "settlements",
-  "contractors",
+  "service-providers",
 ])
 
 const richViewFactColumnDefaults: Record<string, readonly string[]> = {
@@ -729,13 +756,13 @@ const richViewFactColumnDefaults: Record<string, readonly string[]> = {
   // membership; price rows need the edit path for the schedule-a-change
   // flow, so they join the rich view like products did.
   "price-rows": ["Zone", "Customer type", "Container type", "Waste fraction", "Negotiated customer", "Price list", "Effective from"],
-  // Fleet resources are self-managed by contractor managers, so both need
+  // Fleet resources are self-managed by service provider managers, so both need
   // the rich view's edit and delete paths.
   vehicles: ["Ownership", "Capacity", "Fractions", "Fuel"],
   drivers: ["Licence", "AppAccess", "Employer"],
-  // Contractor users render Email and Role as dedicated table columns, so no
+  // Service provider users render Email and Role as dedicated table columns, so no
   // fact columns are seeded; membership still unlocks edit/delete actions.
-  "contractor-workspace": [],
+  "service-provider-workspace": [],
 }
 
 // Governance facts are shown in record details, never offered as table columns.
@@ -765,9 +792,9 @@ const schemesExcludedColumnFacts = new Set([
   "Planning area",
 ])
 
-// Contractor tickets join the rich record view; these are the fact columns
+// Service provider tickets join the rich record view; these are the fact columns
 // seeded when the module opens.
-const contractorTicketsFactColumnDefaults = ["Type", "Priority", "Team"] as const
+const serviceProviderTicketsFactColumnDefaults = ["Type", "Priority", "Team"] as const
 
 // Ticket facts written from form fields that duplicate the table's own
 // columns (subject/description) or hold long free text, so they are never
@@ -787,8 +814,8 @@ const primaryModuleIdsByWorkspace: Partial<Record<WorkspaceId, readonly string[]
   customers: ["properties", "groups", "shared", "agreements"],
   resources: ["containers", "inventory", "warehouses", "depots"],
   fleet: ["vehicles", "drivers", "vehicle-planning"],
-  contractors: ["contractors", "contract-areas", "activities"],
-  commercial: ["products", "price-rows", "contractor-prices", "settlements", "events"],
+  "service-providers": ["service-providers", "service-areas", "activities"],
+  commercial: ["products", "price-rows", "service-provider-prices", "settlements", "events"],
   improve: ["intelligence", "analytics", "autopilot", "performance"],
   configure: ["organization", "access", "master", "finance"],
 }
@@ -977,23 +1004,23 @@ function preferredReason(values: BusinessFormValues) {
   return "Submitted through the governed module form"
 }
 
-// A contractor-scoped workspace already knows which contractor, project,
-// contract area, and signed-in manager it belongs to, so the invite form must
+// A service provider-scoped workspace already knows which service provider, project,
+// service area, and signed-in manager it belongs to, so the invite form must
 // not ask for any of them: all four are stamped from the account and its
 // fixed scope at submit time, leaving only the person's own details.
-const CONTRACTOR_ACCOUNT_FIELD_IDS = [
-  "contractorId",
+const SERVICE_PROVIDER_ACCOUNT_FIELD_IDS = [
+  "serviceProviderId",
   "projectId",
-  "contractAreaId",
+  "serviceAreaId",
   "invitedBy",
 ] as const
 
-// A contractor manager raises tickets on their own work for the office to
+// A service provider manager raises tickets on their own work for the office to
 // resolve, so the office-side fields disappear: Project and Source are known
 // from the account, response SLAs, parent tickets, and the customer/internal
 // communication split are the office's to manage, and Category comes from the
 // selected Ticket type. Evidence is uploaded directly instead of referenced.
-const CONTRACTOR_TICKET_HIDDEN_FIELD_IDS: readonly string[] = [
+const SERVICE_PROVIDER_TICKET_HIDDEN_FIELD_IDS: readonly string[] = [
   "projectId",
   "responseDueAt",
   "occurredAt",
@@ -1004,7 +1031,7 @@ const CONTRACTOR_TICKET_HIDDEN_FIELD_IDS: readonly string[] = [
   "category",
 ]
 
-const contractorTicketSectionDescriptions: Record<string, string> = {
+const serviceProviderTicketSectionDescriptions: Record<string, string> = {
   classification:
     "Validation: a configured Ticket type and priority are required. New Tickets start Created; the office drives later states.",
   "business-context":
@@ -1013,16 +1040,16 @@ const contractorTicketSectionDescriptions: Record<string, string> = {
     "Describe the case and upload photos or documents as evidence.",
 }
 
-function contractorScopedFormSchema(
+function serviceProviderScopedFormSchema(
   schema: BusinessFormSchema | undefined,
-  contractorScopeId: string | undefined,
+  serviceProviderScopeId: string | undefined,
 ): BusinessFormSchema | undefined {
-  if (!schema || !contractorScopeId) return schema
-  if (schema.key === "contractors.contractor-workspace") {
-    const hiddenFieldIds: readonly string[] = CONTRACTOR_ACCOUNT_FIELD_IDS
+  if (!schema || !serviceProviderScopeId) return schema
+  if (schema.key === "service-providers.service-provider-workspace") {
+    const hiddenFieldIds: readonly string[] = SERVICE_PROVIDER_ACCOUNT_FIELD_IDS
     return {
       ...schema,
-      description: "Add a user with access limited to your contractor.",
+      description: "Add a user with access limited to your service provider.",
       contextFieldIds: schema.contextFieldIds?.filter(
         (fieldId) => !hiddenFieldIds.includes(fieldId),
       ),
@@ -1040,15 +1067,15 @@ function contractorScopedFormSchema(
       description:
         "Raise a scoped case on your own work for the office to resolve. Assignment and resolution history remain separate parts of the Ticket.",
       contextFieldIds: schema.contextFieldIds?.filter(
-        (fieldId) => !CONTRACTOR_TICKET_HIDDEN_FIELD_IDS.includes(fieldId),
+        (fieldId) => !SERVICE_PROVIDER_TICKET_HIDDEN_FIELD_IDS.includes(fieldId),
       ),
       sections: schema.sections.map((section) => ({
         ...section,
         description:
-          contractorTicketSectionDescriptions[section.id] ?? section.description,
+          serviceProviderTicketSectionDescriptions[section.id] ?? section.description,
         fields: section.fields
           .filter(
-            (field) => !CONTRACTOR_TICKET_HIDDEN_FIELD_IDS.includes(field.id),
+            (field) => !SERVICE_PROVIDER_TICKET_HIDDEN_FIELD_IDS.includes(field.id),
           )
           .map((field) =>
             field.id === "attachmentReferences"
@@ -1080,14 +1107,14 @@ export function BusinessWorkspace({
   showPrimaryAction = true,
   showFilters = true,
   navigationBasePath,
-  contractorScopeId,
+  serviceProviderScopeId,
   permissionsRoleId,
   actorName = "Olivia Larsen",
 }: BusinessWorkspaceProps) {
   const sourceWorkspace = getWorkspaceDefinition(workspaceId)
   const { getRecords, upsertRecord } = useBusinessRecordStore()
   const { isRouteStarred, toggleRouteStarred } = useActiveRoutes(
-    contractorScopeId ? "contractor" : "operator",
+    serviceProviderScopeId ? "service-provider" : "operator",
   )
   const { containerTypes, wasteFractions, measurementSettings } =
     useAssetManagementStore()
@@ -1191,7 +1218,7 @@ export function BusinessWorkspace({
   )
   const activeModuleFormSchema = useMemo(
     () =>
-      contractorScopedFormSchema(
+      serviceProviderScopedFormSchema(
         configuredCommercialFormSchema(
           configuredAssetFormSchema(
             getBusinessFormSchema(workspace.id, activeModule.id),
@@ -1205,12 +1232,12 @@ export function BusinessWorkspace({
           customerTypes,
           priceLists,
         ),
-        contractorScopeId,
+        serviceProviderScopeId,
       ),
     [
       activeModule.id,
       containerTypes,
-      contractorScopeId,
+      serviceProviderScopeId,
       customerTypes,
       measurementSettings,
       priceLists,
@@ -1313,12 +1340,12 @@ export function BusinessWorkspace({
       const today = todayIso()
       records = records.map((record) => withDerivedCalendarValue(record, today))
     }
-    // Contractor isolation covers user-created records too, which a static
+    // Service provider isolation covers user-created records too, which a static
     // fixture-id allowlist cannot.
-    return contractorScopeId
-      ? records.filter((record) => record.contractorId === contractorScopeId)
+    return serviceProviderScopeId
+      ? records.filter((record) => record.serviceProviderId === serviceProviderScopeId)
       : records
-  }, [activeModule, contractorScopeId, getRecords, workspace.id])
+  }, [activeModule, serviceProviderScopeId, getRecords, workspace.id])
   const formTargetRecords = useMemo(
     () =>
       relatedCreateModule
@@ -1345,9 +1372,9 @@ export function BusinessWorkspace({
       ? (activeRecords.find((candidate) => candidate.id === selectedRecord.id) ??
         selectedRecord)
       : null
-  const isContractorDetails =
-    workspace.id === "contractors" &&
-    activeModule.id === "contractors" &&
+  const isServiceProviderDetails =
+    workspace.id === "service-providers" &&
+    activeModule.id === "service-providers" &&
     Boolean(selectedRecord)
   const isTicketDetails =
     workspace.id === "operate" &&
@@ -1385,25 +1412,25 @@ export function BusinessWorkspace({
         .includes(selectedRouteReference),
     )
   }, [getRecords, selectedRouteReference])
-  const selectedContractorId = isContractorDetails ? selectedRecord?.id ?? "" : ""
-  const relatedContractorUsers = useMemo(() => {
-    if (!selectedContractorId) return []
-    const contractorWorkspace = getWorkspaceDefinition("contractors")
-    const usersModule = contractorWorkspace.modules.find(
-      (module) => module.id === "contractor-workspace",
+  const selectedServiceProviderId = isServiceProviderDetails ? selectedRecord?.id ?? "" : ""
+  const relatedServiceProviderUsers = useMemo(() => {
+    if (!selectedServiceProviderId) return []
+    const serviceProviderWorkspace = getWorkspaceDefinition("service-providers")
+    const usersModule = serviceProviderWorkspace.modules.find(
+      (module) => module.id === "service-provider-workspace",
     )
     if (!usersModule) return []
     return getRecords(
-      "contractors",
+      "service-providers",
       usersModule.id,
       usersModule.records,
     ).filter(
       (record) =>
-        record.contractorId === selectedContractorId && !isSoftDeleted(record),
+        record.serviceProviderId === selectedServiceProviderId && !isSoftDeleted(record),
     )
-  }, [getRecords, selectedContractorId])
-  const relatedContractorVehicles = useMemo(() => {
-    if (!selectedContractorId) return []
+  }, [getRecords, selectedServiceProviderId])
+  const relatedServiceProviderVehicles = useMemo(() => {
+    if (!selectedServiceProviderId) return []
     const fleetWorkspace = getWorkspaceDefinition("fleet")
     const vehiclesModule = fleetWorkspace.modules.find(
       (module) => module.id === "vehicles",
@@ -1411,11 +1438,11 @@ export function BusinessWorkspace({
     if (!vehiclesModule) return []
     return getRecords("fleet", vehiclesModule.id, vehiclesModule.records).filter(
       (record) =>
-        record.contractorId === selectedContractorId && !isSoftDeleted(record),
+        record.serviceProviderId === selectedServiceProviderId && !isSoftDeleted(record),
     )
-  }, [getRecords, selectedContractorId])
-  const relatedContractorDrivers = useMemo(() => {
-    if (!selectedContractorId) return []
+  }, [getRecords, selectedServiceProviderId])
+  const relatedServiceProviderDrivers = useMemo(() => {
+    if (!selectedServiceProviderId) return []
     const fleetWorkspace = getWorkspaceDefinition("fleet")
     const driversModule = fleetWorkspace.modules.find(
       (module) => module.id === "drivers",
@@ -1423,35 +1450,35 @@ export function BusinessWorkspace({
     if (!driversModule) return []
     return getRecords("fleet", driversModule.id, driversModule.records).filter(
       (record) =>
-        record.contractorId === selectedContractorId && !isSoftDeleted(record),
+        record.serviceProviderId === selectedServiceProviderId && !isSoftDeleted(record),
     )
-  }, [getRecords, selectedContractorId])
-  const relatedContractAreas = useMemo(() => {
-    if (!selectedContractorId) return []
-    const contractorWorkspace = getWorkspaceDefinition("contractors")
-    const contractAreasModule = contractorWorkspace.modules.find(
-      (module) => module.id === "contract-areas",
+  }, [getRecords, selectedServiceProviderId])
+  const relatedServiceAreas = useMemo(() => {
+    if (!selectedServiceProviderId) return []
+    const serviceProviderWorkspace = getWorkspaceDefinition("service-providers")
+    const serviceAreasModule = serviceProviderWorkspace.modules.find(
+      (module) => module.id === "service-areas",
     )
-    if (!contractAreasModule) return []
+    if (!serviceAreasModule) return []
     return getRecords(
-      "contractors",
-      contractAreasModule.id,
-      contractAreasModule.records,
+      "service-providers",
+      serviceAreasModule.id,
+      serviceAreasModule.records,
     ).filter(
       (record) =>
-        record.contractorId === selectedContractorId && !isSoftDeleted(record),
+        record.serviceProviderId === selectedServiceProviderId && !isSoftDeleted(record),
     )
-  }, [getRecords, selectedContractorId])
-  const relatedContractorPrices = useMemo(() => {
-    if (!selectedContractorId) return []
+  }, [getRecords, selectedServiceProviderId])
+  const relatedServiceProviderPrices = useMemo(() => {
+    if (!selectedServiceProviderId) return []
     const commercialWorkspace = getWorkspaceDefinition("commercial")
-    const ratesModule = commercialWorkspace.modules.find((module) => module.id === "contractor-prices")
+    const ratesModule = commercialWorkspace.modules.find((module) => module.id === "service-provider-prices")
     if (!ratesModule) return []
     return getRecords("commercial", ratesModule.id, ratesModule.records).filter(
       (record) =>
-        record.contractorId === selectedContractorId && !isSoftDeleted(record),
+        record.serviceProviderId === selectedServiceProviderId && !isSoftDeleted(record),
     )
-  }, [getRecords, selectedContractorId])
+  }, [getRecords, selectedServiceProviderId])
   const scopedRecords = useMemo(
     () =>
       projectScope === "all"
@@ -1526,10 +1553,10 @@ export function BusinessWorkspace({
         businessFilters.propertyTypes,
         "Property type",
       )
-      const matchesContractArea = matchesFactFilter(
+      const matchesServiceArea = matchesFactFilter(
         record,
-        businessFilters.contractAreas,
-        "Contract area",
+        businessFilters.serviceAreas,
+        "Service area",
       )
       const matchesServiceScope = matchesFactFilter(
         record,
@@ -1542,12 +1569,12 @@ export function BusinessWorkspace({
         businessFilters.reliabilityBands,
         "Reliability band",
       )
-      // Contractor users created before the Role field rename carry the fact
-      // under "Contractor role", so check both keys.
+      // Service provider users created before the Role field rename carry the fact
+      // under "Service provider role", so check both keys.
       const matchesRole =
         businessFilters.roles.length === 0 ||
         businessFilters.roles.includes(
-          (record.facts.Role ?? record.facts["Contractor role"] ?? "").trim(),
+          (record.facts.Role ?? record.facts["Service provider role"] ?? "").trim(),
         )
       // Fixture tickets store classification as Type/Team; tickets created
       // through the form store the field labels Ticket type/Assigned team.
@@ -1592,7 +1619,7 @@ export function BusinessWorkspace({
         matchesRouteScheme &&
         matchesCollectionCalendar &&
         matchesPropertyType &&
-        matchesContractArea &&
+        matchesServiceArea &&
         matchesServiceScope &&
         matchesReliability &&
         matchesRole &&
@@ -1646,8 +1673,8 @@ export function BusinessWorkspace({
     businessFilters.propertyTypes.forEach((value) =>
       chips.push({ key: "Property type", value }),
     )
-    businessFilters.contractAreas.forEach((value) =>
-      chips.push({ key: "Contract area", value }),
+    businessFilters.serviceAreas.forEach((value) =>
+      chips.push({ key: "Service area", value }),
     )
     businessFilters.serviceScopes.forEach((value) =>
       chips.push({ key: "Service scope", value }),
@@ -1675,22 +1702,22 @@ export function BusinessWorkspace({
     }
     return chips
   }, [businessFilters, fixedProjectScope, projectScope])
-  // Inside a contractor scope, tickets render as the standard record table
+  // Inside a service provider scope, tickets render as the standard record table
   // (like Routes and Fleet) instead of the operator's triage queue.
-  const isContractorTicketsView =
-    activeModule.id === "tickets" && Boolean(contractorScopeId)
+  const isServiceProviderTicketsView =
+    activeModule.id === "tickets" && Boolean(serviceProviderScopeId)
   const isQueueView =
-    queueModuleIds.has(activeModule.id) && !isContractorTicketsView
+    queueModuleIds.has(activeModule.id) && !isServiceProviderTicketsView
   const isRoutesView = activeModule.id === "routes"
   // Collection Calendars list (issue #27, D28iii): artboard columns with
   // Working days / Holidays / Validity / Next holiday derived per record.
   const isCalendarsView = activeModule.id === "calendars"
-  // Operators and contractor managers pin route days to their own sidebar's
+  // Operators and service provider managers pin route days to their own sidebar's
   // Active Routes group from a star column on the routes table.
   const showRouteStarColumn = isRoutesView
-  const isContractorUsersView = activeModule.id === "contractor-workspace"
+  const isServiceProviderUsersView = activeModule.id === "service-provider-workspace"
   const isRichRecordView =
-    activeModule.id in richViewFactColumnDefaults || isContractorTicketsView
+    activeModule.id in richViewFactColumnDefaults || isServiceProviderTicketsView
   const moduleViewTypes: readonly BusinessViewType[] = isRichRecordView
     ? ["table", "list", "board", "timeline"]
     : ["table"]
@@ -1804,24 +1831,24 @@ export function BusinessWorkspace({
   )
   const factColumnOptions = useMemo(() => {
     if (!isRichRecordView) return []
-    // The contractor users table shows a fixed column set (Full name, Email,
+    // The service provider users table shows a fixed column set (Full name, Email,
     // Phone number, Role, Status, Updated); no extra fact columns are offered.
-    if (isContractorUsersView) return []
+    if (isServiceProviderUsersView) return []
     const labels: string[] = []
     for (const record of visibleScopedRecords) {
       for (const label of Object.keys(record.facts)) {
         if (excludedColumnFacts.has(label)) continue
         if (isRoutesView && routesExcludedColumnFacts.has(label)) continue
         if (isSchemesView && schemesExcludedColumnFacts.has(label)) continue
-        if (isContractorTicketsView && ticketExcludedColumnFacts.has(label))
+        if (isServiceProviderTicketsView && ticketExcludedColumnFacts.has(label))
           continue
         if (!labels.includes(label)) labels.push(label)
       }
     }
     return labels
   }, [
-    isContractorTicketsView,
-    isContractorUsersView,
+    isServiceProviderTicketsView,
+    isServiceProviderUsersView,
     isRichRecordView,
     isRoutesView,
     isSchemesView,
@@ -1863,7 +1890,7 @@ export function BusinessWorkspace({
       },
       ...(isRoutesView
         ? ["Project", "Area"]
-        : isContractorUsersView
+        : isServiceProviderUsersView
           ? ["Role"]
           : []
       ).map((label) => ({
@@ -1884,7 +1911,7 @@ export function BusinessWorkspace({
       })),
     ]
   }, [
-    isContractorUsersView,
+    isServiceProviderUsersView,
     isRichRecordView,
     isRoutesView,
     factColumnOptions,
@@ -1907,7 +1934,7 @@ export function BusinessWorkspace({
           ? Number(viewOptions.showProject) + Number(viewOptions.showArea)
           : // Email, Phone number, and Role replace the context and value
             // columns (net +2).
-            isContractorUsersView
+            isServiceProviderUsersView
             ? 2
             : Number(viewOptions.showContext)) +
         Number(viewOptions.showUpdated) +
@@ -1983,14 +2010,14 @@ export function BusinessWorkspace({
       groupBy: "none",
       factColumns: [
         ...(richViewFactColumnDefaults[activeModuleId] ??
-          (activeModuleId === "tickets" && contractorScopeId
-            ? contractorTicketsFactColumnDefaults
+          (activeModuleId === "tickets" && serviceProviderScopeId
+            ? serviceProviderTicketsFactColumnDefaults
             : defaultBusinessViewOptions.factColumns)),
       ],
       staticColumns: [],
     }))
     setTablePage(1)
-  }, [activeModuleId, contractorScopeId])
+  }, [activeModuleId, serviceProviderScopeId])
 
   const removeFilterChip = (key: string, value: string) => {
     const filterField = filterFieldByChipLabel[key]
@@ -2055,17 +2082,17 @@ export function BusinessWorkspace({
       if (record && module.id === "calendars") {
         record = withDerivedCalendarValue(record, todayIso())
       }
-      // Deep links cannot escape a contractor scope.
+      // Deep links cannot escape a service provider scope.
       if (
         record &&
-        contractorScopeId &&
-        record.contractorId !== contractorScopeId
+        serviceProviderScopeId &&
+        record.serviceProviderId !== serviceProviderScopeId
       ) {
         return null
       }
       return record
     },
-    [contractorScopeId, getRecords, workspace],
+    [serviceProviderScopeId, getRecords, workspace],
   )
 
   const openRecord = (record: BusinessRecord) => {
@@ -2259,7 +2286,7 @@ export function BusinessWorkspace({
         companyId: record.companyId ?? FIXTURE_COMPANY_ID,
         projectIds:
           record.projectIds ?? selectedProjectIds(projectScope, {}),
-        contractorId: record.contractorId ?? contractorScopeId,
+        serviceProviderId: record.serviceProviderId ?? serviceProviderScopeId,
         recordKind: isCorrection ? "Correction" : "Controlled child record",
         relationRefs: [
           {
@@ -2353,22 +2380,22 @@ export function BusinessWorkspace({
       return relationRecords
         .filter((record) => {
           if (
-            formSchema?.recordKind === "Contract area assignment" &&
-            field.id === "contractAreaId"
+            formSchema?.recordKind === "Service area assignment" &&
+            field.id === "serviceAreaId"
           ) {
-            const assignedContractorId =
-              typeof values.contractorId === "string" ? values.contractorId : ""
-            return record.contractorId !== assignedContractorId
+            const assignedServiceProviderId =
+              typeof values.serviceProviderId === "string" ? values.serviceProviderId : ""
+            return record.serviceProviderId !== assignedServiceProviderId
           }
-          // A contractor price belongs inside one of the contractor's own
-          // awarded areas; until a contractor is picked, every area shows.
+          // A service provider price belongs inside one of the service provider's own
+          // awarded areas; until a service provider is picked, every area shows.
           if (
-            formSchema?.recordKind === "Contractor price" &&
-            field.id === "contractAreaId"
+            formSchema?.recordKind === "Service provider price" &&
+            field.id === "serviceAreaId"
           ) {
-            const selectedContractorId =
-              typeof values.contractorId === "string" ? values.contractorId : ""
-            return !selectedContractorId || record.contractorId === selectedContractorId
+            const selectedServiceProviderId =
+              typeof values.serviceProviderId === "string" ? values.serviceProviderId : ""
+            return !selectedServiceProviderId || record.serviceProviderId === selectedServiceProviderId
           }
           return true
         })
@@ -2378,17 +2405,17 @@ export function BusinessWorkspace({
             !permittedStatuses ||
             permittedStatuses.has(record.status.toLowerCase()),
         )
-        // Inside a contractor scope, records attributed to another contractor
-        // are never offered. Contractor-operated entities must match the
-        // scope exactly — company-operated ones are not the contractor's to
+        // Inside a service provider scope, records attributed to another service provider
+        // are never offered. Service provider-operated entities must match the
+        // scope exactly — company-operated ones are not the service provider's to
         // reference — while shared registries without attribution remain.
         .filter((record) => {
-          if (!contractorScopeId) return true
-          if (contractorOperatedRelationModuleIds.has(resolved.module.id)) {
-            return record.contractorId === contractorScopeId
+          if (!serviceProviderScopeId) return true
+          if (serviceProviderOperatedRelationModuleIds.has(resolved.module.id)) {
+            return record.serviceProviderId === serviceProviderScopeId
           }
           return (
-            !record.contractorId || record.contractorId === contractorScopeId
+            !record.serviceProviderId || record.serviceProviderId === serviceProviderScopeId
           )
         })
         .filter((record) => {
@@ -2480,7 +2507,7 @@ export function BusinessWorkspace({
           label: record.name,
         }))
     },
-    [contractorScopeId, formSchema?.recordKind, getRecords, projectScope],
+    [serviceProviderScopeId, formSchema?.recordKind, getRecords, projectScope],
   )
 
   const formInitialValues = useMemo<BusinessFormValues>(
@@ -2494,12 +2521,12 @@ export function BusinessWorkspace({
                 ? FIXTURE_PROJECT_IDS.harbor
                 : FIXTURE_PROJECT_IDS.copenhagen,
           }),
-      ...(contractorScopeId
-        ? { contractorId: contractorScopeId, invitedBy: actorName }
+      ...(serviceProviderScopeId
+        ? { serviceProviderId: serviceProviderScopeId, invitedBy: actorName }
         : {}),
       ...(relatedCreateTarget?.initialValues ?? {}),
     }),
-    [actorName, contractorScopeId, projectScope, relatedCreateTarget],
+    [actorName, serviceProviderScopeId, projectScope, relatedCreateTarget],
   )
 
   const editInitialValues = useMemo<BusinessFormValues>(() => {
@@ -2825,17 +2852,17 @@ export function BusinessWorkspace({
         }
       }
 
-      if (formSchema.key === "commercial.contractor-prices") {
-        const selectedContractorId =
-          typeof values.contractorId === "string" ? values.contractorId : ""
+      if (formSchema.key === "commercial.service-provider-prices") {
+        const selectedServiceProviderId =
+          typeof values.serviceProviderId === "string" ? values.serviceProviderId : ""
         const selectedRateProductId =
           typeof values.productId === "string" ? values.productId : ""
         const selectedAreaId =
-          typeof values.contractAreaId === "string" ? values.contractAreaId : ""
+          typeof values.serviceAreaId === "string" ? values.serviceAreaId : ""
         const validFrom = typeof values.validFrom === "string" ? values.validFrom : ""
         const validUntil = typeof values.validUntil === "string" ? values.validUntil : ""
-        if (selectedContractorId && selectedRateProductId && selectedAreaId && validFrom) {
-          const areasTarget = resolveFormModule("contractors", "contract-areas")
+        if (selectedServiceProviderId && selectedRateProductId && selectedAreaId && validFrom) {
+          const areasTarget = resolveFormModule("service-providers", "service-areas")
           const areaName = areasTarget
             ? getRecords(
                 areasTarget.workspaceId,
@@ -2848,14 +2875,14 @@ export function BusinessWorkspace({
           const areaCode = areaName?.split(" · ")[0]?.trim()
           const overlapping = formTargetRecords.find((record) => {
             if (record.id === editingRecord?.id) return false
-            if (record.recordKind !== "Contractor price") return false
+            if (record.recordKind !== "Service provider price") return false
             if (isSoftDeleted(record)) return false
-            if (record.contractorId !== selectedContractorId) return false
+            if (record.serviceProviderId !== selectedServiceProviderId) return false
             const recordProductId = record.relationRefs?.find(
               (ref) => ref.fieldId === "productId",
             )?.recordId
             if (recordProductId !== selectedRateProductId) return false
-            const recordAreaCode = record.facts[RATE_FACTS.contractArea]
+            const recordAreaCode = record.facts[RATE_FACTS.serviceArea]
               ?.split(" · ")[0]
               ?.trim()
             if (!areaCode || !recordAreaCode || recordAreaCode !== areaCode) return false
@@ -2871,7 +2898,7 @@ export function BusinessWorkspace({
               overlapping.facts[RATE_FACTS.validFrom] ?? "?"
             } → ${
               overlapping.facts[RATE_FACTS.validUntil] ?? "open"
-            }) for the same contractor, product, and contract area.`
+            }) for the same service provider, product, and service area.`
           }
         }
       }
@@ -2974,10 +3001,10 @@ export function BusinessWorkspace({
   const handleFormSubmit = (values: BusinessFormValues) => {
     if (!formSchema?.execution) return
 
-    if (formSchema.recordKind === "Contractor price indexation") {
-      const ratesTarget = resolveFormModule("commercial", "contractor-prices")
+    if (formSchema.recordKind === "Service provider price indexation") {
+      const ratesTarget = resolveFormModule("commercial", "service-provider-prices")
       if (!ratesTarget) return
-      const rateRecords = getRecords("commercial", "contractor-prices", ratesTarget.module.records)
+      const rateRecords = getRecords("commercial", "service-provider-prices", ratesTarget.module.records)
       const pickedIds =
         typeof values.rateIds === "string" && values.rateIds
           ? values.rateIds.split(",").map((item) => item.trim()).filter(Boolean)
@@ -2987,112 +3014,112 @@ export function BusinessWorkspace({
       const base = values.base === "bid" ? ("bid" as const) : ("current fee" as const)
       const from = typeof values.effectiveFrom === "string" ? values.effectiveFrom : PRICING_REFERENCE_DATE
       if (pickedIds.length === 0 || !label || !Number.isFinite(percent)) {
-        toast.error("Pick contractor prices, an index label, and a percent.")
+        toast.error("Pick service provider prices, an index label, and a percent.")
         return
       }
       let indexed = 0
       for (const rateRecord of rateRecords) {
         if (!pickedIds.includes(rateRecord.id)) continue
-        const updated = applyIndexToRate(recordToContractorPrice(rateRecord), { label, percent, from, base })
-        upsertRecord("commercial", "contractor-prices", contractorPriceToRecord(updated, rateRecord))
+        const updated = applyIndexToRate(recordToServiceProviderPrice(rateRecord), { label, percent, from, base })
+        upsertRecord("commercial", "service-provider-prices", serviceProviderPriceToRecord(updated, rateRecord))
         indexed += 1
       }
       setIsCreateOpen(false)
       setRelatedCreateTarget(null)
       toast.success("Index applied", {
-        description: `${indexed} contractor price${indexed === 1 ? "" : "s"} recomputed from ${base} (${label} +${percent}%). Bids untouched.`,
+        description: `${indexed} service provider price${indexed === 1 ? "" : "s"} recomputed from ${base} (${label} +${percent}%). Bids untouched.`,
       })
       return
     }
 
-    if (formSchema.recordKind === "Contract area assignment") {
-      const contractAreaId =
-        typeof values.contractAreaId === "string" ? values.contractAreaId : ""
-      const contractorId =
-        typeof values.contractorId === "string" ? values.contractorId : ""
-      const contractAreaTarget = resolveFormModule("contractors", "contract-areas")
-      const contractorTarget = resolveFormModule("contractors", "contractors")
-      const contractArea = contractAreaTarget
+    if (formSchema.recordKind === "Service area assignment") {
+      const serviceAreaId =
+        typeof values.serviceAreaId === "string" ? values.serviceAreaId : ""
+      const serviceProviderId =
+        typeof values.serviceProviderId === "string" ? values.serviceProviderId : ""
+      const serviceAreaTarget = resolveFormModule("service-providers", "service-areas")
+      const serviceProviderTarget = resolveFormModule("service-providers", "service-providers")
+      const serviceArea = serviceAreaTarget
         ? getRecords(
-            contractAreaTarget.workspaceId,
-            contractAreaTarget.module.id,
-            contractAreaTarget.module.records,
-          ).find((record) => record.id === contractAreaId)
+            serviceAreaTarget.workspaceId,
+            serviceAreaTarget.module.id,
+            serviceAreaTarget.module.records,
+          ).find((record) => record.id === serviceAreaId)
         : undefined
-      const contractor = contractorTarget
+      const serviceProvider = serviceProviderTarget
         ? getRecords(
-            contractorTarget.workspaceId,
-            contractorTarget.module.id,
-            contractorTarget.module.records,
-          ).find((record) => record.id === contractorId)
+            serviceProviderTarget.workspaceId,
+            serviceProviderTarget.module.id,
+            serviceProviderTarget.module.records,
+          ).find((record) => record.id === serviceProviderId)
         : undefined
 
-      if (!contractAreaTarget || !contractArea || !contractor) {
-        toast.error("Select an available contract area.")
+      if (!serviceAreaTarget || !serviceArea || !serviceProvider) {
+        toast.error("Select an available service area.")
         return
       }
 
-      const previousContractor = contractArea.facts.Contractor || "Unassigned"
+      const previousServiceProvider = serviceArea.facts["Service provider"] || "Unassigned"
       const effectiveFrom =
         typeof values.effectiveFrom === "string" ? values.effectiveFrom : "Now"
       const assignmentReason =
         typeof values.reason === "string" ? values.reason : "Contract assignment"
       const updatedArea: BusinessRecord = {
-        ...contractArea,
-        context: contractArea.context.replace(previousContractor, contractor.name),
+        ...serviceArea,
+        context: serviceArea.context.replace(previousServiceProvider, serviceProvider.name),
         updated: "Now",
         freshness: "Now",
-        contractorId,
+        serviceProviderId,
         facts: {
-          ...contractArea.facts,
-          Contractor: contractor.name,
-          "Previous contractor": previousContractor,
+          ...serviceArea.facts,
+          "Service provider": serviceProvider.name,
+          "Previous service provider": previousServiceProvider,
           "Assignment effective from": effectiveFrom,
           "Assignment reason": assignmentReason,
         },
         related: [
-          `Contractor ${contractor.name}`,
-          ...contractArea.related.filter((item) => !item.startsWith("Contractor ")),
+          `Service provider ${serviceProvider.name}`,
+          ...serviceArea.related.filter((item) => !item.startsWith("Service provider ")),
         ],
         submittedValues: {
-          ...contractArea.submittedValues,
-          contractorId,
+          ...serviceArea.submittedValues,
+          serviceProviderId,
           effectiveFrom: values.effectiveFrom,
           reason: values.reason,
         },
         relationRefs: [
-          ...(contractArea.relationRefs ?? []).filter(
-            (relation) => relation.fieldId !== "contractorId",
+          ...(serviceArea.relationRefs ?? []).filter(
+            (relation) => relation.fieldId !== "serviceProviderId",
           ),
           {
-            fieldId: "contractorId",
-            workspaceId: "contractors",
-            moduleId: "contractors",
-            recordId: contractor.id,
-            label: contractor.name,
+            fieldId: "serviceProviderId",
+            workspaceId: "service-providers",
+            moduleId: "service-providers",
+            recordId: serviceProvider.id,
+            label: serviceProvider.name,
           },
         ],
       }
       const assignmentEvent: AuditEvent = {
-        id: `audit-contract-area-assignment-${Date.now()}`,
-        action: "Assign contract area",
+        id: `audit-service-area-assignment-${Date.now()}`,
+        action: "Assign service area",
         actor: actorName,
         at: "Now",
         reason: assignmentReason,
-        before: previousContractor,
-        after: contractor.name,
-        evidence: `Effective ${effectiveFrom} · existing Contract Area retained`,
+        before: previousServiceProvider,
+        after: serviceProvider.name,
+        evidence: `Effective ${effectiveFrom} · existing service area retained`,
       }
 
-      upsertRecord("contractors", "contract-areas", updatedArea)
+      upsertRecord("service-providers", "service-areas", updatedArea)
       setAuditEvents((current) => ({
         ...current,
         [updatedArea.id]: [assignmentEvent, ...(current[updatedArea.id] ?? [])],
       }))
       setIsCreateOpen(false)
       setRelatedCreateTarget(null)
-      toast.success("Contract area assigned", {
-        description: `${contractArea.name} is now assigned to ${contractor.name}.`,
+      toast.success("Service area assigned", {
+        description: `${serviceArea.name} is now assigned to ${serviceProvider.name}.`,
       })
       return
     }
@@ -3248,50 +3275,50 @@ export function BusinessWorkspace({
       }
     }
 
-    // The contractor-scoped invite form omits Contractor, Allowed contract
-    // area, and Invited by, so stamp them onto the record from the signed-in
+    // The service provider-scoped invite form omits Service provider, Allowed
+    // service area, and Invited by, so stamp them onto the record from the signed-in
     // account instead. The project comes from the fixed workspace scope via
     // selectedProjectIds below.
     if (
-      contractorScopeId &&
-      formSchema.key === "contractors.contractor-workspace" &&
+      serviceProviderScopeId &&
+      formSchema.key === "service-providers.service-provider-workspace" &&
       !editingRecord &&
-      !values.contractorId
+      !values.serviceProviderId
     ) {
-      const contractorTarget = resolveFormModule("contractors", "contractors")
-      const contractorName = contractorTarget
+      const serviceProviderTarget = resolveFormModule("service-providers", "service-providers")
+      const serviceProviderName = serviceProviderTarget
         ? getRecords(
-            contractorTarget.workspaceId,
-            contractorTarget.module.id,
-            contractorTarget.module.records,
-          ).find((record) => record.id === contractorScopeId)?.name
+            serviceProviderTarget.workspaceId,
+            serviceProviderTarget.module.id,
+            serviceProviderTarget.module.records,
+          ).find((record) => record.id === serviceProviderScopeId)?.name
         : undefined
-      if (contractorName) {
-        facts["Contractor"] = contractorName
+      if (serviceProviderName) {
+        facts["Service provider"] = serviceProviderName
         relationRefs.push({
-          fieldId: "contractorId",
-          workspaceId: "contractors",
-          moduleId: "contractors",
-          recordId: contractorScopeId,
-          label: contractorName,
+          fieldId: "serviceProviderId",
+          workspaceId: "service-providers",
+          moduleId: "service-providers",
+          recordId: serviceProviderScopeId,
+          label: serviceProviderName,
         })
       }
-      const areaTarget = resolveFormModule("contractors", "contract-areas")
-      const contractorAreas = areaTarget
+      const areaTarget = resolveFormModule("service-providers", "service-areas")
+      const serviceProviderAreas = areaTarget
         ? getRecords(
             areaTarget.workspaceId,
             areaTarget.module.id,
             areaTarget.module.records,
-          ).filter((record) => record.contractorId === contractorScopeId)
+          ).filter((record) => record.serviceProviderId === serviceProviderScopeId)
         : []
-      if (contractorAreas.length === 1) {
-        facts["Allowed contract area"] = contractorAreas[0].name
+      if (serviceProviderAreas.length === 1) {
+        facts["Allowed service area"] = serviceProviderAreas[0].name
         relationRefs.push({
-          fieldId: "contractAreaId",
-          workspaceId: "contractors",
-          moduleId: "contract-areas",
-          recordId: contractorAreas[0].id,
-          label: contractorAreas[0].name,
+          fieldId: "serviceAreaId",
+          workspaceId: "service-providers",
+          moduleId: "service-areas",
+          recordId: serviceProviderAreas[0].id,
+          label: serviceProviderAreas[0].name,
         })
       }
       facts["Invited by"] = actorName
@@ -3305,10 +3332,10 @@ export function BusinessWorkspace({
       nameField && values[nameField.id] !== undefined
         ? displayFormValue(nameField, values[nameField.id])
         : ""
-    // Contractor users are captured as First/Last name fields; the record
+    // Service provider users are captured as First/Last name fields; the record
     // name is the composed full name.
-    const contractorUserName =
-      formSchema.key === "contractors.contractor-workspace"
+    const serviceProviderUserName =
+      formSchema.key === "service-providers.service-provider-workspace"
         ? [values.firstName, values.lastName]
             .filter(
               (part): part is string =>
@@ -3319,7 +3346,7 @@ export function BusinessWorkspace({
         : ""
     const nameValue =
       submittedNameValue ||
-      contractorUserName ||
+      serviceProviderUserName ||
       (formSchema.key === "resources.containers"
         ? `BIN-${String(now).slice(-5)}`
         : "")
@@ -3415,11 +3442,11 @@ export function BusinessWorkspace({
       }
     }
 
-    // Contractor prices get the same treatment: the Unit fact must stay the
+    // Service provider prices get the same treatment: the Unit fact must stay the
     // raw PriceUnit enum, the current fee tracks the locked bid until the
     // first Apply index run, and name/context/status/value are derived the
     // way the fixture rates shape them.
-    const normalizeContractorPriceRecord = (
+    const normalizeServiceProviderPriceRecord = (
       record: BusinessRecord,
     ): BusinessRecord => {
       const submittedUnit = typeof values.unit === "string" ? values.unit : undefined
@@ -3433,25 +3460,25 @@ export function BusinessWorkspace({
           nextFacts[RATE_FACTS.currentFee] = bid.toFixed(2)
         }
       }
-      const rate = recordToContractorPrice({ ...record, facts: nextFacts })
+      const rate = recordToServiceProviderPrice({ ...record, facts: nextFacts })
       return {
         ...record,
         name:
-          rate.contractor && rate.productName
-            ? `${rate.contractor} · ${rate.productName}`
+          rate.serviceProvider && rate.productName
+            ? `${rate.serviceProvider} · ${rate.productName}`
             : record.name,
         context: [
-          rate.contractArea,
+          rate.serviceArea,
           rate.validUntil ? `${rate.validFrom} → ${rate.validUntil}` : rate.validFrom,
         ]
           .filter(Boolean)
           .join(" · "),
-        status: deriveContractorPriceStatus(
+        status: deriveServiceProviderPriceStatus(
           rate.validFrom,
           rate.validUntil || undefined,
         ),
         value: `${money(rate.currentFee)}${unitSuffix(rate.unit)}`,
-        description: `Contractor price: locked bid ${money(rate.bid)}, current fee ${money(rate.currentFee)}.`,
+        description: `Service provider price: locked bid ${money(rate.bid)}, current fee ${money(rate.currentFee)}.`,
         source: "Contract management",
         facts: nextFacts,
       }
@@ -3684,7 +3711,7 @@ export function BusinessWorkspace({
         // Only user-named records can be renamed; system-issued and
         // action-derived names stay untouched.
         name:
-          contractorUserName ||
+          serviceProviderUserName ||
           (nameField?.type === "text" && submittedNameValue
             ? submittedNameValue
             : editingRecord.name),
@@ -3702,8 +3729,8 @@ export function BusinessWorkspace({
       if (resolvedTarget.module.id === "products") {
         updatedRecord = normalizeProductRecord(updatedRecord)
       }
-      if (resolvedTarget.module.id === "contractor-prices") {
-        updatedRecord = normalizeContractorPriceRecord(updatedRecord)
+      if (resolvedTarget.module.id === "service-provider-prices") {
+        updatedRecord = normalizeServiceProviderPriceRecord(updatedRecord)
       }
       if (resolvedTarget.module.id === "tickets") {
         updatedRecord = normalizeTicketRecord(updatedRecord)
@@ -3855,10 +3882,10 @@ export function BusinessWorkspace({
       allowedTransitions: resolvedTarget.module.lifecycle.slice(1, 3),
       companyId: FIXTURE_COMPANY_ID,
       projectIds,
-      contractorId:
-        typeof values.contractorId === "string" && values.contractorId
-          ? values.contractorId
-          : contractorScopeId,
+      serviceProviderId:
+        typeof values.serviceProviderId === "string" && values.serviceProviderId
+          ? values.serviceProviderId
+          : serviceProviderScopeId,
       recordKind: formSchema.recordKind,
       submittedValues: values,
       relationRefs,
@@ -3869,8 +3896,8 @@ export function BusinessWorkspace({
     if (resolvedTarget.module.id === "products") {
       newRecord = normalizeProductRecord(newRecord)
     }
-    if (resolvedTarget.module.id === "contractor-prices") {
-      newRecord = normalizeContractorPriceRecord(newRecord)
+    if (resolvedTarget.module.id === "service-provider-prices") {
+      newRecord = normalizeServiceProviderPriceRecord(newRecord)
     }
     if (resolvedTarget.module.id === "tickets") {
       newRecord = normalizeTicketRecord(newRecord)
@@ -3969,11 +3996,11 @@ export function BusinessWorkspace({
     }
 
     const project = linkRecord("projectId", "configure", "organization", data.projectId)
-    const contractor = linkRecord(
-      "contractorId",
-      "contractors",
-      "contractors",
-      data.contractorId,
+    const serviceProvider = linkRecord(
+      "serviceProviderId",
+      "service-providers",
+      "service-providers",
+      data.serviceProviderId,
     )
     const vehicle = linkRecord("vehicleId", "fleet", "vehicles", data.vehicleId)
     const driver = linkRecord("driverId", "fleet", "drivers", data.driverId)
@@ -3996,7 +4023,7 @@ export function BusinessWorkspace({
       ...(project ? { Project: project.name } : {}),
       // The canonical date fact key routes share with generation (issue #23).
       ...(data.date ? { "Operating date": formatServiceDate(data.date) } : {}),
-      ...(contractor ? { Contractor: contractor.name } : {}),
+      ...(serviceProvider ? { "Service provider": serviceProvider.name } : {}),
       ...(data.homeDepot ? { "Home depot": data.homeDepot } : {}),
       ...(data.wasteStation ? { "Waste station": data.wasteStation } : {}),
       Vehicle: vehicleName ?? "Unassigned",
@@ -4017,7 +4044,7 @@ export function BusinessWorkspace({
       // Routes carry no user-entered name; the system issues the Route ID.
       name: `RC-${String(now).slice(-4)}`,
       context:
-        [project?.name, data.date, contractor?.name].filter(Boolean).join(" · ") ||
+        [project?.name, data.date, serviceProvider?.name].filter(Boolean).join(" · ") ||
         projectScopeLabel(projectIds),
       status:
         activeModuleFormSchema?.execution?.initialStatus ??
@@ -4040,12 +4067,12 @@ export function BusinessWorkspace({
       allowedTransitions: activeModule.lifecycle.slice(1, 3),
       companyId: FIXTURE_COMPANY_ID,
       projectIds,
-      contractorId: data.contractorId ?? contractorScopeId,
+      serviceProviderId: data.serviceProviderId ?? serviceProviderScopeId,
       recordKind: "Route",
       submittedValues: {
         projectId: data.projectId ?? "",
         operatingDate: data.date ?? "",
-        contractorId: data.contractorId ?? "",
+        serviceProviderId: data.serviceProviderId ?? "",
         homeDepot: data.homeDepot ?? "",
         wasteStation: data.wasteStation ?? "",
         vehicleId: data.vehicleId ?? "",
@@ -4136,11 +4163,11 @@ export function BusinessWorkspace({
     const project = linkRecord("projectId", "configure", "organization", data.projectId)
     const area = linkRecord("planningAreaId", "plan", "areas", data.planningAreaId)
     const calendar = linkRecord("calendarId", "plan", "calendars", data.calendarId)
-    const contractor = linkRecord(
-      "contractorId",
-      "contractors",
-      "contractors",
-      data.contractorId,
+    const serviceProvider = linkRecord(
+      "serviceProviderId",
+      "service-providers",
+      "service-providers",
+      data.serviceProviderId,
     )
     const vehicle = linkRecord("plannedVehicleId", "fleet", "vehicles", data.plannedVehicleId)
     const driver = linkRecord("plannedDriverId", "fleet", "drivers", data.plannedDriverId)
@@ -4183,7 +4210,7 @@ export function BusinessWorkspace({
     if (origin.extraRelations) relationRefs.push(...origin.extraRelations)
 
     // Conflicts (FR-5d) are checked against every scheme, not just the ones a
-    // contractor-scoped view can see — a double-booked default is real either
+    // service provider-scoped view can see — a double-booked default is real either
     // way, and the review step's preview uses the same unscoped set. Vehicle
     // Planning allocations join the check the same way (issue #11).
     const allocationModule = businessWorkspaces.fleet.modules.find(
@@ -4212,7 +4239,7 @@ export function BusinessWorkspace({
       effectiveFrom: data.effectiveFrom,
       effectiveTo: data.effectiveTo,
       plannedStartTime: data.plannedStartTime,
-      contractorId: data.contractorId ?? "",
+      serviceProviderId: data.serviceProviderId ?? "",
       plannedVehicleId: data.plannedVehicleId ?? "",
       plannedDriverId: data.plannedDriverId ?? "",
       depotId: data.depotId ?? "",
@@ -4257,7 +4284,7 @@ export function BusinessWorkspace({
       ...(data.plannedStartTime.trim()
         ? { "Planned start": data.plannedStartTime.trim() }
         : {}),
-      ...(contractor ? { Contractor: contractor.name } : {}),
+      ...(serviceProvider ? { "Service provider": serviceProvider.name } : {}),
       Vehicle: vehicleName ?? "Unassigned",
       Driver: driver?.name ?? "Unassigned",
       ...(depot ? { "Departure depot": depot.name } : {}),
@@ -4316,7 +4343,7 @@ export function BusinessWorkspace({
       allowedTransitions: activeModule.lifecycle.slice(1, 3),
       companyId: FIXTURE_COMPANY_ID,
       projectIds,
-      contractorId: data.contractorId ?? contractorScopeId,
+      serviceProviderId: data.serviceProviderId ?? serviceProviderScopeId,
       recordKind: "Route Scheme",
       submittedValues,
       relationRefs,
@@ -4409,19 +4436,19 @@ export function BusinessWorkspace({
   const handleGuidedSchemeCreate = (data: GuidedSchemeData) =>
     createSchemeFromDraft(data, { method: "Guided Setup" })
 
-  const requestContractorRelatedCreate = (
-    target: "user" | "vehicle" | "driver" | "contract-area" | "contractor-price",
+  const requestServiceProviderRelatedCreate = (
+    target: "user" | "vehicle" | "driver" | "service-area" | "service-provider-price",
   ) => {
     if (!selectedRecord) return
-    const contractorId = selectedRecord.id
+    const serviceProviderId = selectedRecord.id
 
     if (target === "user") {
       setRelatedCreateTarget({
-        workspaceId: "contractors",
-        moduleId: "contractor-workspace",
+        workspaceId: "service-providers",
+        moduleId: "service-provider-workspace",
         initialValues: {
-          contractorId,
-          contractAreaId: relatedContractAreas[0]?.id ?? "",
+          serviceProviderId,
+          serviceAreaId: relatedServiceAreas[0]?.id ?? "",
           invitedBy: actorName,
         },
       })
@@ -4433,8 +4460,8 @@ export function BusinessWorkspace({
         workspaceId: "fleet",
         moduleId: "vehicles",
         initialValues: {
-          contractorId,
-          ownershipType: "contractor",
+          serviceProviderId,
+          ownershipType: "service-provider",
           resourceKind: "powered-vehicle",
         },
       })
@@ -4446,23 +4473,23 @@ export function BusinessWorkspace({
         workspaceId: "fleet",
         moduleId: "drivers",
         initialValues: {
-          contractorId,
-          employmentType: "contractor",
+          serviceProviderId,
+          employmentType: "service-provider",
         },
       })
       return
     }
 
-    if (target === "contractor-price") {
-      // Opens the module's New contractor price create form with the
-      // contractor fixed from the current page — we are adding a price for
-      // this contractor. The bulk Apply index workflow stays on the Price
+    if (target === "service-provider-price") {
+      // Opens the module's New service provider price create form with the
+      // service provider fixed from the current page — we are adding a price for
+      // this service provider. The bulk Apply index workflow stays on the Price
       // Engine module header.
       setRelatedCreateTarget({
         workspaceId: "commercial",
-        moduleId: "contractor-prices",
+        moduleId: "service-provider-prices",
         initialValues: {
-          contractorId,
+          serviceProviderId,
           validFrom: localDateInputValue(),
         },
       })
@@ -4470,48 +4497,48 @@ export function BusinessWorkspace({
     }
 
     setRelatedCreateTarget({
-      workspaceId: "contractors",
-      moduleId: "contract-areas",
+      workspaceId: "service-providers",
+      moduleId: "service-areas",
       initialValues: {
-        contractorId,
+        serviceProviderId,
         effectiveFrom: localDateInputValue(),
       },
       schemaOverride: {
-        key: "contractors.contract-areas",
+        key: "service-providers.service-areas",
         mode: "action",
-        recordKind: "Contract area assignment",
-        title: "Assign contract area",
+        recordKind: "Service area assignment",
+        title: "Assign service area",
         description:
-          `Link an existing contract area to ${selectedRecord.name}. The contract area remains the same record; this updates its effective contractor relationship.`,
-        submitLabel: "Assign contract area",
-        contextFieldIds: ["contractorId", "contractAreaId", "effectiveFrom"],
+          `Link an existing service area to ${selectedRecord.name}. The service area remains the same record; this updates its effective service provider relationship.`,
+        submitLabel: "Assign service area",
+        contextFieldIds: ["serviceProviderId", "serviceAreaId", "effectiveFrom"],
         execution: {
           kind: "append-event",
-          sourceField: "contractAreaId",
+          sourceField: "serviceAreaId",
           reviewBeforeSubmit: true,
-          completionMessage: "The contract area relationship was updated with audit history.",
+          completionMessage: "The service area relationship was updated with audit history.",
         },
         sections: [
           {
             id: "assignment",
-            title: "Contract area relationship",
+            title: "Service area relationship",
             description:
-              "The contractor is fixed from the current page. Choose an existing area that is not already assigned to this contractor.",
+              "The service provider is fixed from the current page. Choose an existing area that is not already assigned to this service provider.",
             fields: [
               {
-                id: "contractorId",
-                label: "Contractor",
+                id: "serviceProviderId",
+                label: "Service provider",
                 type: "select",
                 required: true,
                 readOnly: true,
-                relation: { workspaceId: "contractors", moduleId: "contractors" },
+                relation: { workspaceId: "service-providers", moduleId: "service-providers" },
               },
               {
-                id: "contractAreaId",
-                label: "Contract area",
+                id: "serviceAreaId",
+                label: "Service area",
                 type: "select",
                 required: true,
-                relation: { workspaceId: "contractors", moduleId: "contract-areas" },
+                relation: { workspaceId: "service-providers", moduleId: "service-areas" },
               },
               {
                 id: "effectiveFrom",
@@ -4598,16 +4625,16 @@ export function BusinessWorkspace({
           }
           readOnly={!canRunRecordActions}
         />
-      ) : isContractorDetails && selectedRecord ? (
-        <ContractorDetailsPage
+      ) : isServiceProviderDetails && selectedRecord ? (
+        <ServiceProviderDetailsPage
           record={selectedRecord}
-          users={relatedContractorUsers}
-          vehicles={relatedContractorVehicles}
-          drivers={relatedContractorDrivers}
-          contractAreas={relatedContractAreas}
-          contractorPrices={relatedContractorPrices}
+          users={relatedServiceProviderUsers}
+          vehicles={relatedServiceProviderVehicles}
+          drivers={relatedServiceProviderDrivers}
+          serviceAreas={relatedServiceAreas}
+          serviceProviderPrices={relatedServiceProviderPrices}
           onBack={closeRecord}
-          onCreate={requestContractorRelatedCreate}
+          onCreate={requestServiceProviderRelatedCreate}
         />
       ) : (
         <>
@@ -4770,12 +4797,12 @@ export function BusinessWorkspace({
                   variant={
                     isContainersAssetsView
                       ? "containers"
-                      : workspace.id === "contractors" &&
-                          activeModule.id === "contractors"
-                        ? "contractors"
-                        : isContractorUsersView
-                          ? "contractor-users"
-                          : isContractorTicketsView
+                      : workspace.id === "service-providers" &&
+                          activeModule.id === "service-providers"
+                        ? "service-providers"
+                        : isServiceProviderUsersView
+                          ? "service-provider-users"
+                          : isServiceProviderTicketsView
                             ? "tickets"
                             : "default"
                   }
@@ -4797,13 +4824,13 @@ export function BusinessWorkspace({
                     activeModule.id === "pickups" ? "display" : "chips"
                   }
                   fixedColumnChips={
-                    isContractorUsersView
+                    isServiceProviderUsersView
                       ? ["Full name", "Email", "Phone number", "Role", "Status"]
                       : undefined
                   }
                   builtinColumnChips={
                     isRichRecordView && !isRoutesView
-                      ? isContractorUsersView
+                      ? isServiceProviderUsersView
                         ? // Full name, Email, Phone number, Role, and Status
                           // are fixed columns and the description is never
                           // shown, so only Updated toggles.
@@ -5021,7 +5048,7 @@ export function BusinessWorkspace({
                             <TableHead>
                               {isRoutesView
                                 ? "Route ID"
-                                : isContractorUsersView
+                                : isServiceProviderUsersView
                                   ? "Full name"
                                   : activeModule.entityLabel}
                             </TableHead>
@@ -5047,7 +5074,7 @@ export function BusinessWorkspace({
                                 )}
                                 {viewOptions.showArea && <TableHead>Area</TableHead>}
                               </>
-                            ) : isContractorUsersView ? (
+                            ) : isServiceProviderUsersView ? (
                               <>
                                 <TableHead>Email</TableHead>
                                 <TableHead>Phone number</TableHead>
@@ -5075,7 +5102,7 @@ export function BusinessWorkspace({
                                 <TableHead>Collection calendar</TableHead>
                               </>
                             ) : (
-                              !isContractorUsersView && (
+                              !isServiceProviderUsersView && (
                                 <TableHead>{activeModule.valueLabel}</TableHead>
                               )
                             )}
@@ -5274,7 +5301,7 @@ export function BusinessWorkspace({
                                   <div className="space-y-1">
                                     <p className="text-sm font-medium text-foreground">{record.name}</p>
                                     {viewOptions.showDescription &&
-                                      !isContractorUsersView && (
+                                      !isServiceProviderUsersView && (
                                         <p className="max-w-[340px] truncate text-xs text-muted-foreground">
                                           {record.description}
                                         </p>
@@ -5307,7 +5334,7 @@ export function BusinessWorkspace({
                                       </TableCell>
                                     )}
                                   </>
-                                ) : isContractorUsersView ? (
+                                ) : isServiceProviderUsersView ? (
                                   <>
                                     <TableCell className="min-w-[200px] whitespace-nowrap text-sm text-muted-foreground">
                                       {recordFactValue(
@@ -5323,7 +5350,7 @@ export function BusinessWorkspace({
                                       {recordFactValue(
                                         record,
                                         "Role",
-                                        recordFactValue(record, "Contractor role"),
+                                        recordFactValue(record, "Service provider role"),
                                       )}
                                     </TableCell>
                                   </>
@@ -5384,7 +5411,7 @@ export function BusinessWorkspace({
                                     </TableCell>
                                   </>
                                 ) : (
-                                  !isContractorUsersView && (
+                                  !isServiceProviderUsersView && (
                                     <TableCell className="min-w-[150px]">
                                       <RecordValue record={record} />
                                     </TableCell>
@@ -5534,11 +5561,11 @@ export function BusinessWorkspace({
         />
       </Suspense>
       {/* Plan Ahead auto-generation fires when Route Studio loads (FR-11) —
-          operator-side automation, so never inside a contractor scope, and
+          operator-side automation, so never inside a service provider scope, and
           never on behalf of a viewer whose role could not run the manual
           Generate routes action. */}
       {workspace.id === "route-studio" &&
-        !contractorScopeId &&
+        !serviceProviderScopeId &&
         canRunRecordActions && <SchemePlanAheadRunner actorName={actorName} />}
     </div>
   )

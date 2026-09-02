@@ -22,7 +22,7 @@ const publicWorkspaceIds = new Set<WorkspaceId>([
   "fleet",
   "customers",
   "resources",
-  "contractors",
+  "service-providers",
   "commercial",
   "improve",
   "control-center",

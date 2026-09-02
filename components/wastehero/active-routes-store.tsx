@@ -16,29 +16,38 @@ import {
   getWorkspaceDefinition,
   type BusinessRecord,
 } from "@/lib/data/business-modules"
+import { migrateLegacyState } from "@/lib/data/legacy-ids"
 import {
   activeRoutes,
-  contractorActiveRoutes,
+  serviceProviderActiveRoutes,
   type ActiveRouteSummary,
 } from "@/lib/data/sidebar"
 
 const STORAGE_KEY = "wastehero-active-routes-v1"
-// The contractor pins shipped first under their own key; keep reading it so
-// stars saved before the operator scope existed survive the upgrade.
-const LEGACY_CONTRACTOR_STORAGE_KEY = "wastehero-contractor-active-routes-v1"
+// The service provider pins shipped first under their own key; keep reading it
+// so stars saved before the operator scope existed survive the upgrade. The
+// key literal predates the Contractor → Service provider rename and stays as
+// written — it names what browsers already hold.
+const LEGACY_SERVICE_PROVIDER_STORAGE_KEY = "wastehero-contractor-active-routes-v1"
+// State persisted before that rename keyed the second scope by the old
+// persona name. lib/data/legacy-ids.ts leaves this bare key to each store
+// (it means a scope here and a field elsewhere), so the mapping lives here.
+const LEGACY_SCOPE_KEYS: Readonly<Record<string, string>> = {
+  contractor: "service-provider",
+}
 
 /**
  * Each signed-in persona pins routes to its own sidebar: the operator
- * (Operations manager) and the contractor manager star independently.
+ * (Operations manager) and the service provider manager star independently.
  */
-export type ActiveRoutesScope = "operator" | "contractor"
+export type ActiveRoutesScope = "operator" | "service-provider"
 
 type StarredRoutesState = Record<ActiveRoutesScope, string[]>
 
 // The server (and every hydrating component) sees the fixture pins only.
 const DEFAULT_STARRED_ROUTES: StarredRoutesState = {
   operator: activeRoutes.map((route) => route.id),
-  contractor: contractorActiveRoutes.map((route) => route.id),
+  "service-provider": serviceProviderActiveRoutes.map((route) => route.id),
 }
 
 type ActiveRoutesValue = {
@@ -60,17 +69,20 @@ function isRouteIdList(value: unknown): value is string[] {
 function isStarredRoutesState(value: unknown): value is StarredRoutesState {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
   const state = value as Partial<StarredRoutesState>
-  return isRouteIdList(state.operator) && isRouteIdList(state.contractor)
+  return isRouteIdList(state.operator) && isRouteIdList(state["service-provider"])
 }
 
 function loadStoredState(): StarredRoutesState | null {
   const raw = window.localStorage.getItem(STORAGE_KEY)
   const parsed: unknown = raw ? JSON.parse(raw) : null
-  if (isStarredRoutesState(parsed)) return parsed
-  const legacyRaw = window.localStorage.getItem(LEGACY_CONTRACTOR_STORAGE_KEY)
+  // Idempotent: state already in the current shape passes through unchanged,
+  // so this runs on every load rather than behind a version flag.
+  const migrated = migrateLegacyState(parsed, LEGACY_SCOPE_KEYS)
+  if (isStarredRoutesState(migrated)) return migrated
+  const legacyRaw = window.localStorage.getItem(LEGACY_SERVICE_PROVIDER_STORAGE_KEY)
   const legacyParsed: unknown = legacyRaw ? JSON.parse(legacyRaw) : null
   if (isRouteIdList(legacyParsed)) {
-    return { ...DEFAULT_STARRED_ROUTES, contractor: legacyParsed }
+    return { ...DEFAULT_STARRED_ROUTES, "service-provider": legacyParsed }
   }
   return null
 }
@@ -101,6 +113,8 @@ export function ActiveRoutesStoreProvider({
         // In-memory stars remain usable when persistence is blocked.
       }
     }
+    // Persist once right after loading — so a migrated legacy shape is written
+    // back in the current shape immediately — and then on every change.
     persist()
     return store.subscribe(persist)
   }, [store])
@@ -160,12 +174,12 @@ const curatedSummariesByScope: Record<
   Map<string, ActiveRouteSummary>
 > = {
   operator: new Map(activeRoutes.map((route) => [route.id, route])),
-  contractor: new Map(contractorActiveRoutes.map((route) => [route.id, route])),
+  "service-provider": new Map(serviceProviderActiveRoutes.map((route) => [route.id, route])),
 }
 
 const routesTableHrefByScope: Record<ActiveRoutesScope, string> = {
   operator: "/route-studio?module=routes&record=",
-  contractor: "/contractor-workspace/routes?module=routes&record=",
+  "service-provider": "/service-provider-workspace/routes?module=routes&record=",
 }
 
 const ROUTE_PIN_COLORS = [

@@ -214,27 +214,27 @@ export const commercialImproveBusinessFormSchemas = [
     ],
   },
   {
-    key: "commercial.contractor-prices",
+    key: "commercial.service-provider-prices",
     mode: "create",
-    recordKind: "Contractor price",
-    title: "New contractor price",
+    recordKind: "Service provider price",
+    title: "New service provider price",
     description:
-      "Create the confidential price we pay a contractor for one product inside a contract area. The bid is locked from creation and the current fee starts equal to it — Apply index is the only way to move the current fee afterwards.",
-    submitLabel: "New contractor price",
-    contextFieldIds: ["contractAreaId", "validFrom", "validUntil"],
+      "Create the confidential price we pay a service provider for one product inside a service area. The bid is locked from creation and the current fee starts equal to it — Apply index is the only way to move the current fee afterwards.",
+    submitLabel: "New service provider price",
+    contextFieldIds: ["serviceAreaId", "validFrom", "validUntil"],
     sections: [
       {
         id: "rate-target",
-        title: "Contractor, product, and contract area",
+        title: "Service provider, product, and service area",
         description:
-          "Validation: the price cannot overlap another row for the same contractor, product, and contract area. It is confidential and never copied from a customer price list.",
+          "Validation: the price cannot overlap another row for the same service provider, product, and service area. It is confidential and never copied from a customer price list.",
         fields: [
           {
-            id: "contractorId",
-            label: "Contractor",
+            id: "serviceProviderId",
+            label: "Service provider",
             type: "select",
             required: true,
-            relation: { workspaceId: "contractors", moduleId: "contractors" },
+            relation: { workspaceId: "service-providers", moduleId: "service-providers" },
           },
           {
             id: "productId",
@@ -244,14 +244,14 @@ export const commercialImproveBusinessFormSchemas = [
             relation: { workspaceId: "commercial", moduleId: "products" },
           },
           {
-            id: "contractAreaId",
-            label: "Contract area",
+            id: "serviceAreaId",
+            label: "Service area",
             type: "select",
             required: true,
-            description: "Only the selected contractor's awarded areas are offered.",
+            description: "Only the selected service provider's awarded areas are offered.",
             relation: {
-              workspaceId: "contractors",
-              moduleId: "contract-areas",
+              workspaceId: "service-providers",
+              moduleId: "service-areas",
               allowedStatuses: ["Upcoming", "Active", "Expiring"],
             },
           },
@@ -295,20 +295,20 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Valid until",
             type: "date",
             required: true,
-            description: "End of the awarded period — usually the contract area's end date.",
+            description: "End of the awarded period — usually the service area's end date.",
           },
         ],
       },
     ],
   },
   {
-    key: "contractors.contractors",
+    key: "service-providers.service-providers",
     mode: "create",
-    recordKind: "Contractor company",
-    title: "Add contractor",
+    recordKind: "Service provider company",
+    title: "Add service provider",
     description:
-      "Create a contractor company and its initial operating relationship. Contract-area awards, protected changes, access, vehicle links, prices, and settlements remain separate governed records.",
-    submitLabel: "Add contractor",
+      "Create a service provider company and its initial operating relationship. Service area awards, protected changes, access, vehicle links, prices, and settlements remain separate governed records.",
+    submitLabel: "Add service provider",
     nameField: "legalName",
     contextFieldIds: ["registrationNumber", "projectId", "relationshipStart"],
     sections: [
@@ -357,7 +357,7 @@ export const commercialImproveBusinessFormSchemas = [
         id: "operating-scope",
         title: "Initial operating scope",
         description:
-          "Relationship: a contractor relationship is explicit for each project. This does not award work; an effective-dated Contract Area record must be approved separately.",
+          "Relationship: a service provider relationship is explicit for each project. This does not award work; an effective-dated service area record must be approved separately.",
         fields: [
           {
             id: "projectId",
@@ -379,12 +379,12 @@ export const commercialImproveBusinessFormSchemas = [
             description: "Optional; must follow Relationship starts.",
           },
           {
-            id: "contractAreaId",
-            label: "Proposed contract area",
+            id: "serviceAreaId",
+            label: "Proposed service area",
             type: "select",
-            relation: { workspaceId: "contractors", moduleId: "contract-areas" },
+            relation: { workspaceId: "service-providers", moduleId: "service-areas" },
             description:
-              "Optional relationship only. Award dates and approval are completed in the Contract Area action.",
+              "Optional relationship only. Award dates and approval are completed in the Create service area action.",
           },
           {
             id: "documentsComplete",
@@ -392,29 +392,29 @@ export const commercialImproveBusinessFormSchemas = [
             type: "checkbox",
             defaultValue: false,
             description:
-              "A contractor can remain Draft without verification but cannot receive an Active area award.",
+              "A service provider can remain Draft without verification but cannot receive an Active area award.",
           },
         ],
       },
     ],
   },
   {
-    key: "contractors.contract-areas",
+    key: "service-providers.service-areas",
     mode: "create",
-    recordKind: "Contract area",
-    title: "Create contract area",
-    description: "Award a geographic and time-bounded service scope to a contractor.",
-    submitLabel: "Create contract area",
+    recordKind: "Service area",
+    title: "Create service area",
+    description: "Award a geographic and time-bounded service scope to a service provider.",
+    submitLabel: "Create service area",
     nameField: "areaName",
-    contextFieldIds: ["areaCode", "contractorId", "projectId", "validFrom", "validTo"],
+    contextFieldIds: ["areaCode", "serviceProviderId", "projectId", "validFrom", "validTo"],
     sections: [
       {
         id: "identity",
-        title: "Contract area",
+        title: "Service area",
         fields: [
           {
             id: "areaName",
-            label: "Contract area name",
+            label: "Service area name",
             type: "text",
             required: true,
           },
@@ -425,11 +425,11 @@ export const commercialImproveBusinessFormSchemas = [
             required: true,
           },
           {
-            id: "contractorId",
-            label: "Contractor",
+            id: "serviceProviderId",
+            label: "Service provider",
             type: "select",
             required: true,
-            relation: { workspaceId: "contractors", moduleId: "contractors" },
+            relation: { workspaceId: "service-providers", moduleId: "service-providers" },
           },
           {
             id: "projectId",
@@ -474,9 +474,9 @@ export const commercialImproveBusinessFormSchemas = [
             relation: { workspaceId: "commercial", moduleId: "products" },
           },
           {
-            // Deliberate cross-domain reference (issue #12): a Contract Area's
+            // Deliberate cross-domain reference (issue #12): a Service area's
             // geographic scope is a set of operator-owned Planning Areas; the
-            // contractor domain has no zone concept of its own.
+            // service provider domain has no zone concept of its own.
             id: "zoneIds",
             label: "Planning areas",
             type: "multiselect",
@@ -499,34 +499,34 @@ export const commercialImproveBusinessFormSchemas = [
     ],
   },
   {
-    key: "contractors.activities",
+    key: "service-providers.activities",
     mode: "disabled",
-    recordKind: "Contractor activity",
+    recordKind: "Service provider activity",
     title: "Activities come from operational workflows",
     description:
       "Route assignments, proposals, compliance follow-ups, and coordination entries appear here from their owning workflows.",
-    submitLabel: "Open contractor",
+    submitLabel: "Open service provider",
     sections: [],
   },
   {
-    key: "contractors.contractor-workspace",
+    key: "service-providers.service-provider-workspace",
     mode: "create",
-    recordKind: "Contractor user",
+    recordKind: "Service provider user",
     title: "Add User",
-    description: "Add a user with access limited to the selected contractor.",
+    description: "Add a user with access limited to the selected service provider.",
     submitLabel: "Add user",
-    contextFieldIds: ["contractorId", "projectId", "contractAreaId", "role"],
+    contextFieldIds: ["serviceProviderId", "projectId", "serviceAreaId", "role"],
     sections: [
       {
         id: "restricted-user-invite",
         title: "User access",
         fields: [
           {
-            id: "contractorId",
-            label: "Contractor",
+            id: "serviceProviderId",
+            label: "Service provider",
             type: "select",
             required: true,
-            relation: { workspaceId: "contractors", moduleId: "contractors" },
+            relation: { workspaceId: "service-providers", moduleId: "service-providers" },
           },
           {
             id: "projectId",
@@ -536,11 +536,11 @@ export const commercialImproveBusinessFormSchemas = [
             relation: { workspaceId: "configure", moduleId: "organization" },
           },
           {
-            id: "contractAreaId",
-            label: "Allowed contract area",
+            id: "serviceAreaId",
+            label: "Allowed service area",
             type: "select",
             required: true,
-            relation: { workspaceId: "contractors", moduleId: "contract-areas" },
+            relation: { workspaceId: "service-providers", moduleId: "service-areas" },
           },
           {
             id: "firstName",
@@ -572,7 +572,7 @@ export const commercialImproveBusinessFormSchemas = [
             type: "select",
             required: true,
             options: [
-              { value: "manager", label: "Contractor manager" },
+              { value: "manager", label: "Service provider manager" },
               { value: "foreman", label: "Foreman" },
               { value: "driver", label: "Driver" },
               { value: "viewer", label: "Read-only viewer" },
@@ -591,32 +591,32 @@ export const commercialImproveBusinessFormSchemas = [
   {
     key: "commercial.settlements",
     mode: "disabled",
-    recordKind: "Contractor price or settlement action",
-    title: "Use contractor pricing or settlement workflow",
+    recordKind: "Service provider price or settlement action",
+    title: "Use service provider pricing or settlement workflow",
     description:
-      "Contractor price versions, settlement calculation, close, and reopen are different records and commands. Settlement amounts must come from a reproducible calculation snapshot, not a generic form.",
+      "Service provider price versions, settlement calculation, close, and reopen are different records and commands. Settlement amounts must come from a reproducible calculation snapshot, not a generic form.",
     submitLabel: "Open settlement workflow",
-    contextFieldIds: ["contractorId", "projectId", "periodStart", "periodEnd"],
+    contextFieldIds: ["serviceProviderId", "projectId", "periodStart", "periodEnd"],
     sections: [
       {
-        id: "contractor-price-version",
-        title: "Contractor compensation price",
+        id: "service-provider-price-version",
+        title: "Service provider compensation price",
         description:
-          "Validation: price is confidential, effective-dated, and cannot overlap another active row for the same contractor, area, service, and unit. It is never copied from a customer price list.",
+          "Validation: price is confidential, effective-dated, and cannot overlap another active row for the same service provider, area, service, and unit. It is never copied from a customer price list.",
         fields: [
           {
-            id: "contractorId",
-            label: "Contractor",
+            id: "serviceProviderId",
+            label: "Service provider",
             type: "select",
             required: true,
-            relation: { workspaceId: "contractors", moduleId: "contractors" },
+            relation: { workspaceId: "service-providers", moduleId: "service-providers" },
           },
           {
-            id: "contractAreaId",
-            label: "Contract area",
+            id: "serviceAreaId",
+            label: "Service area",
             type: "select",
             required: true,
-            relation: { workspaceId: "contractors", moduleId: "contract-areas" },
+            relation: { workspaceId: "service-providers", moduleId: "service-areas" },
           },
           {
             id: "productId",
@@ -661,7 +661,7 @@ export const commercialImproveBusinessFormSchemas = [
         id: "settlement-calculation",
         title: "Calculate settlement",
         description:
-          "Relationship: contractor and contract area must match the selected period. Calculation snapshots base compensation, activities, reliability, bonuses, penalties, complaints, and coefficients.",
+          "Relationship: service provider and service area must match the selected period. Calculation snapshots base compensation, activities, reliability, bonuses, penalties, complaints, and coefficients.",
         fields: [
           {
             id: "projectId",
@@ -1393,7 +1393,7 @@ export const commercialImproveBusinessFormSchemas = [
               { value: "private", label: "Only me" },
               { value: "team", label: "Selected team" },
               { value: "project", label: "Project members" },
-              { value: "contractor", label: "Restricted contractor audience" },
+              { value: "service-provider", label: "Restricted service provider audience" },
             ],
           },
           {
@@ -1786,7 +1786,7 @@ export const commercialImproveBusinessFormSchemas = [
     recordKind: "Performance scorecard",
     title: "Create performance scorecard",
     description:
-      "Create a governed scorecard for an explicit project, team, contractor, or contract area. Metrics retain their definition versions and privacy restrictions.",
+      "Create a governed scorecard for an explicit project, team, service provider, or service area. Metrics retain their definition versions and privacy restrictions.",
     submitLabel: "Create scorecard",
     nameField: "scorecardName",
     contextFieldIds: ["projectId", "subjectType", "period", "validFrom"],
@@ -1795,7 +1795,7 @@ export const commercialImproveBusinessFormSchemas = [
         id: "scope",
         title: "Scorecard scope",
         description:
-          "Validation: project and subject are required and must be compatible. Contractor scorecards may use only awarded areas and must not expose customer prices or individual driver data without permission.",
+          "Validation: project and subject are required and must be compatible. Service provider scorecards may use only awarded areas and must not expose customer prices or individual driver data without permission.",
         fields: [
           {
             id: "scorecardName",
@@ -1818,23 +1818,23 @@ export const commercialImproveBusinessFormSchemas = [
             options: [
               { value: "project", label: "Project" },
               { value: "team", label: "Team" },
-              { value: "contractor", label: "Contractor" },
-              { value: "contract-area", label: "Contract area" },
+              { value: "service-provider", label: "Service provider" },
+              { value: "service-area", label: "Service area" },
               { value: "route-scheme", label: "Route scheme" },
             ],
           },
           {
-            id: "contractorId",
-            label: "Contractor",
+            id: "serviceProviderId",
+            label: "Service provider",
             type: "select",
-            relation: { workspaceId: "contractors", moduleId: "contractors" },
-            description: "Required for Contractor or Contract area subject.",
+            relation: { workspaceId: "service-providers", moduleId: "service-providers" },
+            description: "Required for Service provider or Service area subject.",
           },
           {
-            id: "contractAreaId",
-            label: "Contract area",
+            id: "serviceAreaId",
+            label: "Service area",
             type: "select",
-            relation: { workspaceId: "contractors", moduleId: "contract-areas" },
+            relation: { workspaceId: "service-providers", moduleId: "service-areas" },
           },
         ],
       },
@@ -2300,18 +2300,18 @@ export const commercialImproveBusinessFormSchemas = [
   },
 ] as const satisfies readonly BusinessFormSchema[]
 
-// Apply index is the contractor-prices module's bulk maintenance workflow.
-// The module key now resolves to the New contractor price create schema, so
+// Apply index is the service-provider-prices module's bulk maintenance workflow.
+// The module key now resolves to the New service provider price create schema, so
 // this action lives outside the registry and is offered via schemaOverride
 // (the Price Engine module header's secondary button). Unlike registry
 // schemas, it carries its execution policy inline.
-export const contractorPriceIndexationFormSchema: BusinessFormSchema = {
-  key: "commercial.contractor-prices.apply-index",
+export const serviceProviderPriceIndexationFormSchema: BusinessFormSchema = {
+  key: "commercial.service-provider-prices.apply-index",
   mode: "action",
-  recordKind: "Contractor price indexation",
+  recordKind: "Service provider price indexation",
   title: "Apply index",
   description:
-    "Recompute current fees for the selected contractor prices. The base is the original bid or the current fee (current compounds earlier changes; the bid never moves). Each run appends to the indexation history.",
+    "Recompute current fees for the selected service provider prices. The base is the original bid or the current fee (current compounds earlier changes; the bid never moves). Each run appends to the indexation history.",
   submitLabel: "Apply index",
   contextFieldIds: ["indexLabel", "percent", "effectiveFrom"],
   execution: {
@@ -2326,11 +2326,11 @@ export const contractorPriceIndexationFormSchema: BusinessFormSchema = {
       fields: [
         {
           id: "rateIds",
-          label: "Contractor prices",
+          label: "Service provider prices",
           type: "multiselect",
           required: true,
-          relation: { workspaceId: "commercial", moduleId: "contractor-prices" },
-          description: "Pick the rows to index — filter by contractor or contract area as you select.",
+          relation: { workspaceId: "commercial", moduleId: "service-provider-prices" },
+          description: "Pick the rows to index — filter by service provider or service area as you select.",
         },
       ],
     },

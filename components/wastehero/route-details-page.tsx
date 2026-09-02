@@ -427,7 +427,7 @@ function RouteInformation({
     ["Trailer", record.facts["Vehicle Trailer"] ?? "None", false],
     [
       "Hauler",
-      record.facts.Contractor ?? "Copenhagen Municipal Operations",
+      record.facts["Service provider"] ?? "Copenhagen Municipal Operations",
       true,
     ],
     ...(record.facts.Depot
@@ -1408,7 +1408,7 @@ export function RouteDetailsPage({
   onDelete?: () => void
   /** Upserts the reassigned route and its cascaded open pickups; absent hides Reassign. */
   onReassign?: (updated: BusinessRecord, pickups: BusinessRecord[]) => void
-  /** Hides every lifecycle and mutation control, e.g. for contractor scopes. */
+  /** Hides every lifecycle and mutation control, e.g. for service provider scopes. */
   readOnly?: boolean
 }) {
   const [reassignOpen, setReassignOpen] = useState(false)

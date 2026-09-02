@@ -47,9 +47,9 @@ import {
   useActiveRoutes,
 } from "@/components/wastehero/active-routes-store"
 
-export type RestrictedPersona = "citizen" | "contractor"
+export type RestrictedPersona = "citizen" | "service-provider"
 
-type LeanPersona = Exclude<RestrictedPersona, "contractor">
+type LeanPersona = Exclude<RestrictedPersona, "service-provider">
 
 type PersonaNavItem = {
   label: string
@@ -92,24 +92,24 @@ const personaDefinitions: Record<LeanPersona, PersonaSidebarDefinition> = {
   },
 }
 
-const contractorNavItems: PersonaNavItem[] = [
-  { label: "Dashboard", href: "/contractor-workspace", icon: ChartBar },
-  { label: "Routes", href: "/contractor-workspace/routes", icon: Path },
-  { label: "Fleet", href: "/contractor-workspace/fleet", icon: Truck },
-  { label: "Tickets", href: "/contractor-workspace/tickets", icon: Ticket },
-  { label: "Team", href: "/contractor-workspace/team", icon: UsersThree },
+const serviceProviderNavItems: PersonaNavItem[] = [
+  { label: "Dashboard", href: "/service-provider-workspace", icon: ChartBar },
+  { label: "Routes", href: "/service-provider-workspace/routes", icon: Path },
+  { label: "Fleet", href: "/service-provider-workspace/fleet", icon: Truck },
+  { label: "Tickets", href: "/service-provider-workspace/tickets", icon: Ticket },
+  { label: "Team", href: "/service-provider-workspace/team", icon: UsersThree },
 ]
 
 /**
- * The contractor manager sidebar mirrors the operator AppSidebar's layout and
+ * The service provider manager sidebar mirrors the operator AppSidebar's layout and
  * typography — compact rows, search field, Active Routes group — scoped to
  * NordRen ApS pages and route days.
  */
-function ContractorManagerSidebar() {
+function ServiceProviderManagerSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { setOpenMobile } = useSidebar()
-  const { starredRouteIds } = useActiveRoutes("contractor")
+  const { starredRouteIds } = useActiveRoutes("service-provider")
   const { getRecords } = useBusinessRecordStore()
 
   const activeRouteItems = useMemo(
@@ -117,14 +117,14 @@ function ContractorManagerSidebar() {
       resolveActiveRouteSummaries(
         starredRouteIds,
         getRecords("route-studio", "routes", routeDayFixtures),
-        "contractor",
+        "service-provider",
       ),
     [getRecords, starredRouteIds],
   )
 
   const isItemActive = (href: string): boolean =>
-    href === "/contractor-workspace"
-      ? pathname === "/contractor-workspace"
+    href === "/service-provider-workspace"
+      ? pathname === "/service-provider-workspace"
       : pathname.startsWith(href)
 
   return (
@@ -160,7 +160,7 @@ function ContractorManagerSidebar() {
         <SidebarGroup className="px-2 py-1">
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
-              {contractorNavItems.map((item) => {
+              {serviceProviderNavItems.map((item) => {
                 const ItemIcon = item.icon
                 return (
                   <SidebarMenuItem key={item.href}>
@@ -254,7 +254,7 @@ export function RestrictedPersonaSidebar({ persona }: RestrictedPersonaSidebarPr
   const pathname = usePathname()
   const router = useRouter()
 
-  if (persona === "contractor") return <ContractorManagerSidebar />
+  if (persona === "service-provider") return <ServiceProviderManagerSidebar />
 
   const definition = personaDefinitions[persona]
   const ScopeCardIcon = definition.scopeCard?.icon

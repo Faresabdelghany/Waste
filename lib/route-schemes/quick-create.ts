@@ -39,7 +39,7 @@ export interface GuidedSchemeData {
   effectiveFrom: string
   effectiveTo: string
   plannedStartTime: string
-  contractorId?: string
+  serviceProviderId?: string
   plannedVehicleId?: string
   plannedDriverId?: string
   depotId?: string
@@ -85,7 +85,7 @@ export const QUICK_SCHEME_DRAFT_FIELD_IDS: ReadonlySet<string> = new Set([
   "effectiveFrom",
   "effectiveTo",
   "plannedStartTime",
-  "contractorId",
+  "serviceProviderId",
   "plannedVehicleId",
   "plannedDriverId",
   "depotId",
@@ -126,7 +126,7 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
     // No silent time injection (issue #32): a scheme without a planned start
     // time stays without one — its routes then carry no estimated start.
     plannedStartTime: stringOf(values, "plannedStartTime"),
-    contractorId: optionalId(values, "contractorId"),
+    serviceProviderId: optionalId(values, "serviceProviderId"),
     plannedVehicleId: optionalId(values, "plannedVehicleId"),
     plannedDriverId: optionalId(values, "plannedDriverId"),
     depotId: optionalId(values, "depotId"),

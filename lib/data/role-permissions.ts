@@ -49,7 +49,7 @@ const SECTION_ORDER: WorkspaceId[] = [
   "fleet",
   "customers",
   "resources",
-  "contractors",
+  "service-providers",
   "commercial",
   "improve",
   "configure",
@@ -130,7 +130,7 @@ const DEFAULT_ROLE_ACCESS: Record<string, RoleAccessMap> = {
     workspaceGrant("route-studio", ALL_ACTIONS),
     workspaceGrant("fleet", ALL_ACTIONS),
     workspaceGrant("resources", VIEW_EDIT),
-    workspaceGrant("contractors", VIEW_EDIT),
+    workspaceGrant("service-providers", VIEW_EDIT),
     workspaceGrant("customers", VIEW_ONLY),
     workspaceGrant("commercial", VIEW_ONLY),
     workspaceGrant("improve", VIEW_ONLY),
@@ -172,29 +172,29 @@ const DEFAULT_ROLE_ACCESS: Record<string, RoleAccessMap> = {
   "role-finance-specialist": mergeAccess(
     workspaceGrant("commercial", ALL_ACTIONS),
     workspaceGrant("customers", VIEW_ONLY),
-    workspaceGrant("contractors", VIEW_ONLY),
+    workspaceGrant("service-providers", VIEW_ONLY),
     workspaceGrant("improve", VIEW_ONLY),
     { "configure.finance": VIEW_EDIT },
   ),
-  "role-contractor-manager": mergeAccess(
-    workspaceGrant("contractors", VIEW_EDIT),
+  "role-service-provider-manager": mergeAccess(
+    workspaceGrant("service-providers", VIEW_EDIT),
     workspaceGrant("fleet", VIEW_EDIT),
     workspaceGrant("route-studio", VIEW_ONLY),
     workspaceGrant("operate", VIEW_ONLY),
     {
-      // The restricted contractor workspace reads these grants live: fleet is
-      // fully self-managed, tickets can be raised, and contractor users are
+      // The restricted service provider workspace reads these grants live: fleet is
+      // fully self-managed, tickets can be raised, and service provider users are
       // fully administered by the manager — while routes stay read-only.
       "fleet.vehicles": ALL_ACTIONS,
       "fleet.drivers": ALL_ACTIONS,
       "operate.tickets": ["view", "create"],
-      "contractors.contractor-workspace": ALL_ACTIONS,
-      "commercial.contractor-prices": VIEW_ONLY,
+      "service-providers.service-provider-workspace": ALL_ACTIONS,
+      "commercial.service-provider-prices": VIEW_ONLY,
       "commercial.settlements": VIEW_ONLY,
     },
   ),
-  "role-contractor-foreman": mergeAccess(
-    workspaceGrant("contractors", VIEW_ONLY),
+  "role-service-provider-foreman": mergeAccess(
+    workspaceGrant("service-providers", VIEW_ONLY),
     workspaceGrant("fleet", VIEW_EDIT),
     workspaceGrant("route-studio", VIEW_ONLY),
     workspaceGrant("operate", VIEW_ONLY),

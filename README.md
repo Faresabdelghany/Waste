@@ -31,6 +31,7 @@ The platform is organized into role- and domain-oriented workspaces, each render
 | `/customers` | Customers — properties, agreements, service requests |
 | `/resources` | Resources — containers, assets, warehouses, staff |
 | `/commercial` | Commercial — pricing, invoicing, contracts |
+| `/service-providers` | Service providers — external haulers, awarded service areas, activity |
 | `/improve` | Improve — analytics, performance, quality |
 | `/configure` | Configure — organization and platform settings |
 | `/control-center` | Control Center — live dispatch and monitoring |
@@ -39,7 +40,7 @@ Restricted persona surfaces sit alongside the internal workspaces:
 
 - `/driver` — driver app experience
 - `/portal` — customer portal
-- `/contractor-workspace` — external contractor workspace
+- `/service-provider-workspace` — external service provider workspace
 
 ## Architecture
 
@@ -47,11 +48,12 @@ Restricted persona surfaces sit alongside the internal workspaces:
 - `components/wastehero/` — the workspace shell machinery:
   - `business-workspace.tsx` — generic module list/table/detail rendering used by every workspace
   - `business-record-form-dialog.tsx` — create/edit dialogs generated from form schemas
-  - `restricted-workspace-shell.tsx` — shells for the driver, portal, contractor, and control-center personas
+  - `restricted-workspace-shell.tsx` — shells for the driver, portal, service provider, and control-center personas
 - `lib/data/` — the data registries:
   - `business-modules.ts` — central registry: workspaces → modules → fixture records
   - `business-domain.ts` — machine-readable map of every UI surface to canonical business modules M01–M24 (owners, personas, dependencies, boundaries); human-readable companion in `docs/BUSINESS_MODULE_MAP.md`
   - `business-form-types.ts` + `business-form-schemas*.ts` — per-module form field schemas
+  - `legacy-ids.ts` — old → new id maps and `migrateLegacy*` helpers that keep browser state and bookmarks from before the 2026-09-02 terminology rename working (see `CLAUDE.md`)
 - `components/ui/` — shadcn/ui primitives (new-york style); theme tokens live in `app/globals.css` (Tailwind v4, no config file).
 
 ### Domain language
