@@ -40,6 +40,11 @@ import {
 } from "@/lib/data/business-modules"
 import { migrateLegacyId, migrateLegacyModuleId } from "@/lib/data/legacy-ids"
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
+import {
+  collectFactColumnOptions,
+  defaultFactColumns,
+  resolveModuleViewKind,
+} from "@/lib/data/business-view-kinds"
 import { calendarFromRecord } from "@/lib/route-schemes/calendar"
 import {
   calendarKpis,
@@ -724,11 +729,6 @@ function companionLabel(module: ModuleDefinition, action: string, record: Busine
   return `${action.replace(/^Create\s+/i, "")} · ${record.name}`
 }
 
-const queueModuleIds = new Set(["exceptions", "tickets"])
-
-// Modules that get the richer record views introduced for Routes: table with
-// configurable fact columns and grouping, list/board/timeline layouts, and
-// row-level edit/delete actions. The value is the module's default fact columns.
 // Records of these modules are operated by a specific party, so a service provider
 // scope offers only its own — unlike shared registries (projects, depots,
 // ticket types), where unattributed records stay selectable.
@@ -741,70 +741,6 @@ const serviceProviderOperatedRelationModuleIds = new Set([
   "service-provider-prices",
   "settlements",
   "service-providers",
-])
-
-const richViewFactColumnDefaults: Record<string, readonly string[]> = {
-  routes: ["Vehicle", "Driver"],
-  // Schemes default to the five artboard-1 columns (issue #30, D15) —
-  // Recurrence and Collection calendar render as derived cells, so no fact
-  // columns are seeded; users can still add them via view options.
-  schemes: [],
-  pickups: ["Address", "Container ID", "Container Type", "Waste fraction", "Weight"],
-  weights: ["Gross", "Tare", "Difference"],
-  products: ["Type", "Container", "Container type", "Customer", "Waste fraction", "VAT", "Variations", "Price list"],
-  // Row-level Actions (generic edit/delete) are gated on rich-view
-  // membership; price rows need the edit path for the schedule-a-change
-  // flow, so they join the rich view like products did.
-  "price-rows": ["Zone", "Customer type", "Container type", "Waste fraction", "Negotiated customer", "Price list", "Effective from"],
-  // Fleet resources are self-managed by service provider managers, so both need
-  // the rich view's edit and delete paths.
-  vehicles: ["Ownership", "Capacity", "Fractions", "Fuel"],
-  drivers: ["Licence", "AppAccess", "Employer"],
-  // Service provider users render Email and Role as dedicated table columns, so no
-  // fact columns are seeded; membership still unlocks edit/delete actions.
-  "service-provider-workspace": [],
-}
-
-// Governance facts are shown in record details, never offered as table columns.
-const excludedColumnFacts = new Set([
-  "Scope",
-  "Record kind",
-  "Execution policy",
-  "Submitted by",
-  "Last controlled action",
-  "Action reason",
-  "Action actor",
-  "Effective date",
-  "Registry visibility",
-  "Deletion reason",
-  "Deleted by",
-])
-
-// Routes render Project and Area as dedicated table columns, so they are not
-// offered as fact columns there.
-const routesExcludedColumnFacts = new Set(["Project", "Area"])
-// The schemes table renders these as derived dedicated columns (issue #30,
-// D15); offering the stored display facts as extra columns again would put a
-// stale duplicate beside the derived truth.
-const schemesExcludedColumnFacts = new Set([
-  "Recurrence",
-  "Collection calendar",
-  "Planning area",
-])
-
-// Service provider tickets join the rich record view; these are the fact columns
-// seeded when the module opens.
-const serviceProviderTicketsFactColumnDefaults = ["Type", "Priority", "Team"] as const
-
-// Ticket facts written from form fields that duplicate the table's own
-// columns (subject/description) or hold long free text, so they are never
-// offered as ticket table columns.
-const ticketExcludedColumnFacts = new Set([
-  "Subject",
-  "Case description",
-  "Attachments",
-  "Attachment references",
-  "All linked records and content visibility were checked",
 ])
 
 const primaryModuleIdsByWorkspace: Partial<Record<WorkspaceId, readonly string[]>> = {
@@ -1702,12 +1638,12 @@ export function BusinessWorkspace({
     }
     return chips
   }, [businessFilters, fixedProjectScope, projectScope])
-  // Inside a service provider scope, tickets render as the standard record table
-  // (like Routes and Fleet) instead of the operator's triage queue.
-  const isServiceProviderTicketsView =
-    activeModule.id === "tickets" && Boolean(serviceProviderScopeId)
-  const isQueueView =
-    queueModuleIds.has(activeModule.id) && !isServiceProviderTicketsView
+  // Queue vs rich vs standard table is a property of the module, never of the
+  // viewing persona (lib/data/business-view-kinds.ts) — the operator's Tickets
+  // page and the service provider workspace render the same rich record table.
+  const moduleViewKind = resolveModuleViewKind(activeModule.id)
+  const isQueueView = moduleViewKind === "queue"
+  const isTicketsView = activeModule.id === "tickets"
   const isRoutesView = activeModule.id === "routes"
   // Collection Calendars list (issue #27, D28iii): artboard columns with
   // Working days / Holidays / Validity / Next holiday derived per record.
@@ -1716,8 +1652,7 @@ export function BusinessWorkspace({
   // Active Routes group from a star column on the routes table.
   const showRouteStarColumn = isRoutesView
   const isServiceProviderUsersView = activeModule.id === "service-provider-workspace"
-  const isRichRecordView =
-    activeModule.id in richViewFactColumnDefaults || isServiceProviderTicketsView
+  const isRichRecordView = moduleViewKind === "rich"
   const moduleViewTypes: readonly BusinessViewType[] = isRichRecordView
     ? ["table", "list", "board", "timeline"]
     : ["table"]
@@ -1829,31 +1764,10 @@ export function BusinessWorkspace({
         : undefined,
     [activeModule.records, canRunRecordActions, getRecords, isSchemesView, upsertRecord],
   )
-  const factColumnOptions = useMemo(() => {
-    if (!isRichRecordView) return []
-    // The service provider users table shows a fixed column set (Full name, Email,
-    // Phone number, Role, Status, Updated); no extra fact columns are offered.
-    if (isServiceProviderUsersView) return []
-    const labels: string[] = []
-    for (const record of visibleScopedRecords) {
-      for (const label of Object.keys(record.facts)) {
-        if (excludedColumnFacts.has(label)) continue
-        if (isRoutesView && routesExcludedColumnFacts.has(label)) continue
-        if (isSchemesView && schemesExcludedColumnFacts.has(label)) continue
-        if (isServiceProviderTicketsView && ticketExcludedColumnFacts.has(label))
-          continue
-        if (!labels.includes(label)) labels.push(label)
-      }
-    }
-    return labels
-  }, [
-    isServiceProviderTicketsView,
-    isServiceProviderUsersView,
-    isRichRecordView,
-    isRoutesView,
-    isSchemesView,
-    visibleScopedRecords,
-  ])
+  const factColumnOptions = useMemo(
+    () => collectFactColumnOptions(activeModule.id, visibleScopedRecords),
+    [activeModule.id, visibleScopedRecords],
+  )
   const activeStaticColumns = useMemo(
     () =>
       viewOptions.staticColumns.filter((column) =>
@@ -2008,16 +1922,14 @@ export function BusinessWorkspace({
       ...current,
       viewType: "table",
       groupBy: "none",
-      factColumns: [
-        ...(richViewFactColumnDefaults[activeModuleId] ??
-          (activeModuleId === "tickets" && serviceProviderScopeId
-            ? serviceProviderTicketsFactColumnDefaults
-            : defaultBusinessViewOptions.factColumns)),
-      ],
+      factColumns: defaultFactColumns(
+        activeModuleId,
+        defaultBusinessViewOptions.factColumns,
+      ),
       staticColumns: [],
     }))
     setTablePage(1)
-  }, [activeModuleId, serviceProviderScopeId])
+  }, [activeModuleId])
 
   const removeFilterChip = (key: string, value: string) => {
     const filterField = filterFieldByChipLabel[key]
@@ -4802,7 +4714,7 @@ export function BusinessWorkspace({
                         ? "service-providers"
                         : isServiceProviderUsersView
                           ? "service-provider-users"
-                          : isServiceProviderTicketsView
+                          : isTicketsView
                             ? "tickets"
                             : "default"
                   }
