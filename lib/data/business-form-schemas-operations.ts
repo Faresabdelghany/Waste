@@ -1004,7 +1004,11 @@ export const operationsBusinessFormSchemas = [
             id: "planningAreaId",
             label: "Operational planning area",
             type: "select",
-            required: true,
+            // Required only when stops are matched by rule — rules resolve
+            // inside the area (validation.ts). A manual scheme (Guided Setup
+            // picks, legacy fixtures) carries its stops explicitly, so the
+            // edit dialog must not demand an area it never needed (issue #35).
+            requiredWhen: { fieldId: "stopSelection", equals: "rule" },
             relation: { workspaceId: "plan", moduleId: "areas" },
           },
           {
@@ -1099,18 +1103,20 @@ export const operationsBusinessFormSchemas = [
             type: "select",
             relation: { workspaceId: "fleet", moduleId: "drivers" },
           },
+          // Optional, as in Guided Setup (issue #35): the wizard never gates
+          // on depot or unloading station and neither generation nor
+          // validation reads them, so the quick form must not block an edit
+          // on values the domain does not require.
           {
             id: "depotId",
             label: "Departure depot",
             type: "select",
-            required: true,
             relation: { workspaceId: "resources", moduleId: "depots" },
           },
           {
             id: "unloadingStationId",
             label: "Unloading station",
             type: "select",
-            required: true,
             relation: { workspaceId: "resources", moduleId: "depots" },
           },
         ],
@@ -1183,36 +1189,12 @@ export const operationsBusinessFormSchemas = [
             type: "select",
             relation: { workspaceId: "resources", moduleId: "containers" },
           },
-          {
-            id: "endBehavior",
-            label: "Route end behavior",
-            type: "select",
-            required: true,
-            options: [
-              { value: "depot", label: "Return to depot" },
-              { value: "unloading", label: "Finish at unloading station" },
-              { value: "open", label: "End at final stop" },
-            ],
-          },
         ],
       },
-      {
-        id: "governance",
-        title: "Approval",
-        fields: [
-          {
-            id: "proposalSource",
-            label: "Scheme source",
-            type: "select",
-            required: true,
-            options: [
-              { value: "internal", label: "Internal planning" },
-              { value: "service-provider", label: "Service provider proposal" },
-              { value: "approved-scenario", label: "Approved scenario" },
-            ],
-          },
-        ],
-      },
+      // The template's "Route end behavior" (endBehavior) and "Scheme source"
+      // (proposalSource) fields were retired in issue #35: required, never
+      // written by Guided Setup or the fixtures, and read by nothing — every
+      // edit-save was blocked until the planner invented values for them.
     ],
   },
   {

@@ -233,13 +233,6 @@ const conditionalFields: Record<
     condition: { fieldId: "actionType", equals: "reschedule-stop" },
     required: true,
   },
-  "route-studio.schemes.approvalId": {
-    condition: {
-      fieldId: "proposalSource",
-      oneOf: ["service-provider", "approved-scenario"],
-    },
-    required: true,
-  },
   "fleet.vehicle-planning.existingAllocationId": {
     condition: {
       fieldId: "allocationAction",

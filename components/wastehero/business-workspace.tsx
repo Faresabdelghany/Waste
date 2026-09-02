@@ -71,6 +71,7 @@ import {
 import {
   QUICK_SCHEME_DRAFT_FIELD_IDS,
   quickSchemeDraftFromValues,
+  seedSchemeEditValues,
 } from "@/lib/route-schemes/quick-create"
 import {
   schemeRowSummary,
@@ -80,7 +81,6 @@ import {
 import {
   SERVICE_DAY_SHORT_LABELS,
   formatServiceDate,
-  parseServiceDays,
   recurrenceFromValues,
   recurrenceSentence,
   serviceDaysFromValues,
@@ -2495,29 +2495,19 @@ export function BusinessWorkspace({
   const editInitialValues = useMemo<BusinessFormValues>(() => {
     if (!editingRecord || !activeModuleFormSchema) return formInitialValues
     if (editingRecord.submittedValues) {
-      const seeded = { ...formInitialValues, ...editingRecord.submittedValues }
-      // Schemes saved before recurrence became structured hold values the
-      // form can no longer offer: capitalized textarea day names, and the
-      // retired biweekly/four-week/calendar-rule frequencies. Seed the
-      // multiselect with the tokens that survive, map biweekly onto its
-      // successor, and blank frequencies with no equivalent cadence so the
-      // planner re-picks instead of hitting an unfixable validation error.
-      if (activeModuleFormSchema.key === "route-studio.schemes") {
-        if (typeof seeded.serviceDays === "string") {
-          seeded.serviceDays = parseServiceDays(seeded.serviceDays).join(", ")
-        }
-        if (seeded.frequency === "biweekly") seeded.frequency = "every-2-weeks"
-        if (seeded.frequency === "four-week" || seeded.frequency === "calendar-rule") {
-          seeded.frequency = ""
-        }
-        // A legacy scheme without a planned start time must stay without one
-        // (issue #32): seed the empty value explicitly, or the schema's
-        // create-time default ("06:30") would silently re-inject a time the
-        // planner never chose on any unrelated edit.
-        if (typeof seeded.plannedStartTime !== "string") {
-          seeded.plannedStartTime = ""
-        }
-      }
+      // The scheme edit seed is a lib seam (issue #35): stored values are the
+      // truth and the schema's create-time defaults never speak for a record
+      // that predates a field — stop selection reads through
+      // stopSelectionMode (a scheme without the flag IS manual), retired
+      // recurrence shapes map onto today's options, and a missing planned
+      // start time stays missing (issue #32).
+      const seeded: BusinessFormValues =
+        activeModuleFormSchema.key === "route-studio.schemes"
+          ? {
+              ...formInitialValues,
+              ...seedSchemeEditValues(editingRecord.submittedValues),
+            }
+          : { ...formInitialValues, ...editingRecord.submittedValues }
       // The frequency select keeps the retired `pickupSetting` field id
       // (issue #13) while records store the typed serviceFrequencyId (issue
       // #20) — and pre-#20 records hold option ids the select no longer
@@ -3465,6 +3455,10 @@ export function BusinessWorkspace({
       delete nextFacts["Waste fractions to match"]
       delete nextFacts["Vehicle type"]
       delete nextFacts["Planned start time"]
+      // Facts of the fields retired in issue #35 — written by edit-saves
+      // before the fields were removed, read by nothing.
+      delete nextFacts["Route end behavior"]
+      delete nextFacts["Scheme source"]
       // Keep the canonical fact in step with the merged value: an edit that
       // clears the planned start time really clears it (issue #32) — a stale
       // fact would resurrect the old time in generation and the detail page.

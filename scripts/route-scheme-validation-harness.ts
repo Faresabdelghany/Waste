@@ -3,9 +3,11 @@
 // submittedValues round trip the generation engine will read. Issue #11 adds
 // the Vehicle Planning allocation cross-check and effective-period overlap.
 // Run: npx tsx scripts/route-scheme-validation-harness.ts
+import { getBusinessFormSchema } from "../lib/data/business-form-schemas"
 import type { CollectionCalendar } from "../lib/route-schemes/calendar"
 import {
   quickSchemeDraftFromValues,
+  seedSchemeEditValues,
   type GuidedSchemeData,
 } from "../lib/route-schemes/quick-create"
 import {
@@ -936,9 +938,8 @@ const quickValues: Record<string, string | boolean | undefined> = {
   stopSelection: "rule",
   matchFractions: "Glass, Metal",
   matchVehicleType: "Glass crane",
-  // Quick-only descriptor fields — never part of the draft.
-  endBehavior: "depot",
-  proposalSource: "internal",
+  // Quick-only descriptor field — never part of the draft.
+  containerId: "asset-1",
 }
 
 const quickDraft = quickSchemeDraftFromValues(quickValues)
@@ -1079,6 +1080,136 @@ check(
     0,
   ).issues,
   ["Pick at least one container"],
+)
+
+/* ---------------------- edit prefill seed (issue #35) --------------------- */
+
+// The quick form doubles as the scheme edit dialog. Its create-time defaults
+// must never overwrite what a stored scheme means: a legacy scheme without a
+// stopSelection flag IS manual (stopSelectionMode), so seeding the schema
+// default "rule" would show an empty required fractions field and, on save,
+// silently flip the scheme's stop source.
+
+const legacyManualScheme: Record<string, string | boolean | undefined> = {
+  schemeName: "RS-Østerbro · Organic B",
+  calendarId: "calendar-central",
+  frequency: "every-2-weeks",
+  weekRotation: "even",
+  serviceDays: "tuesday, thursday",
+  effectiveFrom: "2026-08-04",
+  effectiveTo: "2026-12-31",
+  plannedStartTime: "06:30",
+  sameAllDays: true,
+  containerIds: "asset-seed-91007,asset-seed-91008",
+}
+
+check(
+  "legacy scheme without a stopSelection flag seeds as manual, never the create default",
+  seedSchemeEditValues(legacyManualScheme).stopSelection,
+  "manual",
+)
+check(
+  "stored rule mode and its fractions seed untouched",
+  (() => {
+    const seeded = seedSchemeEditValues({
+      ...legacyManualScheme,
+      stopSelection: "rule",
+      matchFractions: "Residual, Organic",
+      matchVehicleType: "Rear loader",
+    })
+    return [seeded.stopSelection, seeded.matchFractions, seeded.matchVehicleType]
+  })(),
+  ["rule", "Residual, Organic", "Rear loader"],
+)
+check(
+  "unknown stopSelection values read as manual (domain rule)",
+  seedSchemeEditValues({ stopSelection: "auto" }).stopSelection,
+  "manual",
+)
+check(
+  "capitalized textarea day names normalize to the multiselect tokens",
+  seedSchemeEditValues({ serviceDays: "Monday, Wednesday" }).serviceDays,
+  "monday, wednesday",
+)
+check(
+  "retired biweekly frequency maps onto every-2-weeks",
+  seedSchemeEditValues({ frequency: "biweekly" }).frequency,
+  "every-2-weeks",
+)
+check(
+  "retired four-week / calendar-rule frequencies blank for a re-pick",
+  [
+    seedSchemeEditValues({ frequency: "four-week" }).frequency,
+    seedSchemeEditValues({ frequency: "calendar-rule" }).frequency,
+  ],
+  ["", ""],
+)
+check(
+  "missing planned start time seeds empty — no default re-injection (issue #32)",
+  seedSchemeEditValues({ schemeName: "x" }).plannedStartTime,
+  "",
+)
+check(
+  "stored planned start time is preserved",
+  seedSchemeEditValues({ plannedStartTime: "06:00" }).plannedStartTime,
+  "06:00",
+)
+check(
+  "every other stored key passes through unchanged",
+  (() => {
+    const seeded = seedSchemeEditValues({
+      calendarId: "calendar-central",
+      planAhead: true,
+      lastGeneratedAt: "2026-08-29T05:10:00.000Z",
+    })
+    return [seeded.calendarId, seeded.planAhead, seeded.lastGeneratedAt]
+  })(),
+  ["calendar-central", true, "2026-08-29T05:10:00.000Z"],
+)
+check(
+  "undefined stored entries are dropped from the seed",
+  Object.keys(seedSchemeEditValues({ depotId: undefined, schemeName: "x" })).sort(),
+  ["plannedStartTime", "schemeName", "stopSelection"],
+)
+
+// The quick form schema itself must not demand more than the domain does:
+// Guided Setup and validateScheme define what a scheme needs (P1), the quick
+// schema mirrors it, and no field survives with a writer or reader missing.
+const quickSchemaFields =
+  getBusinessFormSchema("route-studio", "schemes")?.sections.flatMap(
+    (section) => section.fields,
+  ) ?? []
+check(
+  "quick schema no longer carries the orphan endBehavior / proposalSource fields",
+  quickSchemaFields
+    .filter((field) => ["endBehavior", "proposalSource"].includes(field.id))
+    .map((field) => field.id),
+  [],
+)
+check(
+  "unconditionally required quick-schema fields are the domain's create requirements",
+  quickSchemaFields.filter((field) => field.required).map((field) => field.id),
+  [
+    "schemeName",
+    "projectId",
+    "calendarId",
+    "effectiveFrom",
+    "frequency",
+    "serviceDays",
+    "stopSelection",
+  ],
+)
+check(
+  "planning area is required only for rule-matched schemes",
+  quickSchemaFields.find((field) => field.id === "planningAreaId")?.requiredWhen,
+  { fieldId: "stopSelection", equals: "rule" },
+)
+check(
+  "depot and unloading station are optional, as in Guided Setup",
+  quickSchemaFields
+    .filter((field) => ["depotId", "unloadingStationId"].includes(field.id))
+    .map((field) => Boolean(field.required) || Boolean(field.requiredWhen)),
+  [false, false],
 )
 
 console.log(`\n${passed} passed, ${failed} failed`)

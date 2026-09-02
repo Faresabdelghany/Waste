@@ -11,6 +11,7 @@
 
 import {
   matchPlansFromValues,
+  stopSelectionMode,
   type StopMatchRule,
   type StopSelectionMode,
 } from "./matching"
@@ -138,4 +139,36 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
     matchRule: matchPlansFromValues(values).sharedRule,
     matchRulesByDay: {},
   }
+}
+
+/**
+ * Seeds the quick form for editing a stored scheme (issue #35). The stored
+ * values are the truth: the schema's create-time defaults must never speak
+ * for a record that predates a field. Stop selection is read through
+ * stopSelectionMode — a scheme without the flag IS manual (legacy fixtures),
+ * so seeding the create default "rule" would demand a matching rule the
+ * scheme never had and, on save, silently flip where its stops come from.
+ * Retired recurrence shapes (capitalized textarea day names; the biweekly /
+ * four-week / calendar-rule frequencies) map onto today's options or blank
+ * for a re-pick, and a missing planned start time stays missing (issue #32).
+ * Undefined entries are dropped so they cannot shadow the schema defaults
+ * the dialog merges underneath.
+ */
+export function seedSchemeEditValues(
+  stored: StoredValues,
+): Record<string, string | boolean> {
+  const seeded: Record<string, string | boolean> = {}
+  for (const [key, value] of Object.entries(stored)) {
+    if (value !== undefined) seeded[key] = value
+  }
+  seeded.stopSelection = stopSelectionMode(stored)
+  if (typeof seeded.serviceDays === "string") {
+    seeded.serviceDays = parseServiceDays(seeded.serviceDays).join(", ")
+  }
+  if (seeded.frequency === "biweekly") seeded.frequency = "every-2-weeks"
+  if (seeded.frequency === "four-week" || seeded.frequency === "calendar-rule") {
+    seeded.frequency = ""
+  }
+  if (typeof seeded.plannedStartTime !== "string") seeded.plannedStartTime = ""
+  return seeded
 }
