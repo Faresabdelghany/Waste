@@ -324,6 +324,14 @@ export function routeDeviationInfo(
 }
 
 /**
+ * The furthest the day walk reaches past a window's start: from + 366 days,
+ * 367 dates. Dates past it are never judged, so anything that cancels on
+ * generation's behalf and expects a later run to resurrect its cancels must
+ * bound itself to this range too (edit.ts).
+ */
+export const WALK_CAP_DAYS = 366
+
+/**
  * A day-by-day walk is fine: windows are weeks, not years. The walk caps at
  * 367 dates; everything downstream (generation AND cleanup) must bound itself
  * to the walked range, never the raw window, or an over-long window would
@@ -333,7 +341,7 @@ function windowDates(window: GenerationWindow): string[] {
   const dates: string[] = []
   for (
     let cursor = window.from;
-    cursor <= window.to && dates.length <= 366;
+    cursor <= window.to && dates.length <= WALK_CAP_DAYS;
     cursor = addDays(cursor, 1)
   ) {
     dates.push(cursor)
@@ -700,6 +708,53 @@ export function staleGenerationPickup(
     facts: { ...pickup.facts, Deviation: reason },
     allowedTransitions: [],
   }
+}
+
+/**
+ * A scheme's future refreshable routes rewritten as generation-authored
+ * cancels — cancelled, never deleted, through cancelledByGenerationRoute so
+ * the resurrection pass recognizes them — with their open pickups skipped.
+ * Shared by edit-save reconciliation (issue #33: the invalidating save) and
+ * scheme deletion (issue #34). Only routes whose service date lies in
+ * [from, to] (`to` omitted = every future route) and whose status is
+ * refreshable (Draft/Planned) are touched: Ready/Active/Completed routes,
+ * cancels without the marker, and routes outside the bound are operational
+ * reality or unjudged and stay exactly as stored.
+ */
+export function cancelSchemeFutureRoutes(input: {
+  schemeId: string
+  /** First service date judged — tomorrow by convention (today's routes operate). */
+  from: string
+  /** Last service date judged; omitted, every future route is judged. */
+  to?: string
+  existingRoutes: readonly BusinessRecord[]
+  existingPickups: readonly BusinessRecord[]
+  note: string
+  generatedAt?: string
+}): { routes: BusinessRecord[]; pickups: BusinessRecord[] } {
+  const routes: BusinessRecord[] = []
+  const pickups: BusinessRecord[] = []
+  const pickupsByRoute = new Map<string, BusinessRecord[]>()
+  for (const pickup of input.existingPickups) {
+    const routeId = stringValueOf(pickup, "routeId")
+    if (!routeId) continue
+    const list = pickupsByRoute.get(routeId) ?? []
+    list.push(pickup)
+    pickupsByRoute.set(routeId, list)
+  }
+  for (const route of input.existingRoutes) {
+    if (stringValueOf(route, "schemeId") !== input.schemeId) continue
+    const serviceDate = stringValueOf(route, "serviceDate")
+    if (!serviceDate || serviceDate < input.from) continue
+    if (input.to !== undefined && serviceDate > input.to) continue
+    if (!REFRESHABLE_STATUSES.has(route.status)) continue
+    routes.push(cancelledByGenerationRoute(route, input.note, input.generatedAt))
+    for (const pickup of pickupsByRoute.get(route.id) ?? []) {
+      const skipped = staleGenerationPickup(pickup, input.note)
+      if (skipped) pickups.push(skipped)
+    }
+  }
+  return { routes, pickups }
 }
 
 /**

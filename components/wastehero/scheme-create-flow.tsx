@@ -88,6 +88,7 @@ import {
   type SchemeFrequencyPromise,
   type SchemeValidationResult,
 } from "@/lib/route-schemes/validation"
+import { schemesInPlanning } from "@/lib/route-schemes/lifecycle"
 import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
 import { cn } from "@/lib/utils"
 
@@ -163,6 +164,10 @@ export function validateGuidedScheme(
   containers: readonly BusinessRecord[],
   vehicles: readonly BusinessRecord[],
 ): SchemeValidationResult {
+  // Soft-deleted schemes have left planning (issue #34) — the same sibling
+  // filter the edit path's schemeLiveValidation applies, so create and edit
+  // never disagree about who can conflict.
+  const siblings = schemesInPlanning(existingSchemes)
   const matchPlans = schemeMatchPlans(data)
   // In rule mode these are the rule matches, day-aligned with
   // effectiveDayRules (resolvedDraftPlans maps that same list).
@@ -202,11 +207,11 @@ export function validateGuidedScheme(
           }
         : {}),
     },
-    existingSchemes
+    siblings
       .map((record) => schemeDefaultsFromValues(record.name, record.submittedValues))
       .filter((source): source is NonNullable<typeof source> => source !== null),
     allocationConflictSources(allocations),
-    schemeStopRuleSources(existingSchemes),
+    schemeStopRuleSources(siblings),
   )
 }
 

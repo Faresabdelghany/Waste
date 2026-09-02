@@ -415,7 +415,10 @@ This spec explicitly supersedes these statements; each gets an edit-marker in pl
   never rewritten — deviation moves live in `actualDate` only.
 - Generation-authored cancels carry `cancelledByGeneration` and are the only
   resurrectable cancels.
-- 367-day walk cap; unserved-date cleanup bounded by the walked range.
+- 367-day walk cap; unserved-date cleanup bounded by the walked range. The edit-to-Draft
+  cancel (G) shares the bound because a later valid save must be able to resurrect what
+  it cancelled; the deletion cancel (H) is deliberately unbounded — nothing resurrects a
+  deleted scheme's cancels, and a dangling far-future Planned route is the bug D32 closes.
 - Deviation precedence: approved deviations outrank calendar filtering; holidays skip,
   never auto-move; scheme-scope-first, then name-order tie-break; `scheme` scope means
   exact scheme id, no project fallback; `calendarId` gates deviation applicability.

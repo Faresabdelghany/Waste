@@ -8,10 +8,12 @@
 //   fact) — flipping it never touches generated routes;
 //   an auto-run covers the next 7 days starting tomorrow (the manual
 //   dialog's default window) and only processes schemes that are enabled,
-//   in Validated or later (never Draft, never Expired), structurally able
-//   to generate, and whose effective window overlaps the run window.
+//   not soft-deleted (issue #34, D32), in Validated or later (never Draft,
+//   never Expired), structurally able to generate, and whose effective
+//   window overlaps the run window.
 
 import type { BusinessRecord } from "../data/business-modules"
+import { isSoftDeleted } from "../data/record-visibility"
 import { calendarFromRecord } from "./calendar"
 import {
   applySchemeGeneration,
@@ -64,6 +66,9 @@ export function schemeAutoGenerates(
   today: string,
 ): boolean {
   if (!isPlanAheadEnabled(scheme)) return false
+  // Deletion stops Plan Ahead (D32). The marker is the guard, not the flag:
+  // a scheme soft-deleted before deletion turned the flag off must stop too.
+  if (isSoftDeleted(scheme)) return false
   // "Validated or later, never Draft, never Expired" — through the canonical
   // derived status (issue #25), so a stale persisted status string can
   // neither qualify nor disqualify a scheme.

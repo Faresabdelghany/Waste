@@ -100,15 +100,17 @@ export const RATE_FACTS = {
   bid: "Bid (locked)", currentFee: "Current fee", unit: "Unit", validFrom: "Valid from",
   validUntil: "Valid until", lastIndexed: "Last indexed", lastIndexNote: "Last index note",
 } as const
-// Soft delete marks the record instead of removing it (written by
-// commitRecordAction in business-workspace.tsx — search "Registry
-// visibility"), so every pricing read path must skip marked records or a
-// deleted row gets counted, adjusted and resurrected.
-export const REGISTRY_VISIBILITY_FACT = "Registry visibility"
-export const SOFT_DELETED = "Soft deleted"
-export function isSoftDeleted(record: BusinessRecord): boolean {
-  return record.facts[REGISTRY_VISIBILITY_FACT] === SOFT_DELETED
-}
+// Soft delete marks the record instead of removing it (the shape lives in
+// lib/data/record-visibility.ts; commitRecordAction in business-workspace.tsx
+// writes it), so every pricing read path must skip marked records or a
+// deleted row gets counted, adjusted and resurrected. Re-exported for the
+// pricing callers that import everything from this model.
+import {
+  isSoftDeleted,
+  REGISTRY_VISIBILITY_FACT,
+  SOFT_DELETED,
+} from "@/lib/data/record-visibility"
+export { isSoftDeleted, REGISTRY_VISIBILITY_FACT, SOFT_DELETED }
 export const COMPONENT_FACT_PREFIX = "Component · "
 export const HISTORY_PREFIX = "History · "
 export const INDEXED_PREFIX = "Indexed · "

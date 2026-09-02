@@ -5,6 +5,7 @@
 // manual generation, so repeated runs never duplicate.
 // Run: npx tsx scripts/route-scheme-plan-ahead-harness.ts
 import type { BusinessRecord } from "../lib/data/business-modules"
+import { softDeletedRecord } from "../lib/data/record-visibility"
 import {
   isPlanAheadEnabled,
   planAheadWindow,
@@ -176,6 +177,18 @@ check(
       planAhead: true,
       effectiveFrom: "2026-01-01",
       effectiveTo: "2026-06-30",
+    }),
+    TODAY,
+  ),
+  false,
+)
+check(
+  "soft-deleted scheme never runs, even with Plan Ahead still on (issue #34, D32)",
+  schemeAutoGenerates(
+    softDeletedRecord(eligible, {
+      reason: "Duplicate record: superseded plan",
+      actorName: "Planner",
+      deletionLogId: "audit-delete-1",
     }),
     TODAY,
   ),

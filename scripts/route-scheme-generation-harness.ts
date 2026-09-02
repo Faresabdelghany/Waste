@@ -653,6 +653,86 @@ check(
   null,
 )
 
+// Expiry bound (issue #34, D32): a window straddling effectiveTo (2026-12-31)
+// creates routes only up to it — Wed 30 Dec is served, Sun 3 Jan 2027 is not —
+// so no generated route can ever carry a service date after effectiveTo.
+const straddling = planSchemeGeneration({
+  containers: [],
+  scheme,
+  window: { from: "2026-12-28", to: "2027-01-06" },
+  existingRoutes: [],
+  deviations: [],
+})
+check(
+  "expiry bound: a window straddling effectiveTo creates nothing past it",
+  straddling?.routes
+    .filter((route) => route.action === "create")
+    .map((route) => route.serviceDate),
+  ["2026-12-30"],
+)
+check(
+  "expiry bound: no planned row at all carries a service date after effectiveTo",
+  straddling?.routes.every((route) => route.serviceDate <= "2026-12-31"),
+  true,
+)
+
+// A Planned route generation once wrote for a date now past a shortened
+// effectiveTo is cancelled with the resurrection marker; an Active one is
+// operational history and is only skipped. The in-period route refreshes.
+const shortenedScheme: BusinessRecord = {
+  ...scheme,
+  submittedValues: { ...scheme.submittedValues, effectiveTo: "2026-09-03" },
+}
+const shortenedPlan = planSchemeGeneration({
+  containers: [],
+  scheme: shortenedScheme,
+  window: WINDOW,
+  existingRoutes: applied?.routes ?? [],
+  deviations: [],
+})
+check(
+  "expiry bound: a Planned route past the shortened effectiveTo is cancelled, the in-period one refreshed",
+  shortenedPlan?.routes.map((route) => [route.serviceDate, route.action]),
+  [
+    [WED, "refresh"],
+    [SUN, "cancel"],
+  ],
+)
+check(
+  "expiry bound: the cancel past effectiveTo carries the resurrection marker",
+  shortenedPlan
+    ? applySchemeGeneration({
+        plan: shortenedPlan,
+        existingPickups: [],
+        containers: [],
+        actorName: "Planner",
+      }).routes.map((route) => [
+        route.submittedValues?.serviceDate,
+        route.status,
+        route.submittedValues?.cancelledByGeneration ?? false,
+      ])
+    : null,
+  [
+    [WED, "Planned", false],
+    [SUN, "Cancelled", true],
+  ],
+)
+check(
+  "expiry bound: an Active route past effectiveTo is operational history — skipped, never cancelled",
+  planSchemeGeneration({
+    containers: [],
+    scheme: shortenedScheme,
+    window: WINDOW,
+    existingRoutes: (applied?.routes ?? []).map((route) =>
+      route.submittedValues?.serviceDate === SUN
+        ? { ...route, status: "Active" }
+        : route,
+    ),
+    deviations: [],
+  })?.routes.map((route) => [route.serviceDate, route.action]),
+  [[WED, "refresh"]],
+)
+
 /* -------------------- calendar consultation (Q2/Q6/Q7) -------------------- */
 
 const allDays = [

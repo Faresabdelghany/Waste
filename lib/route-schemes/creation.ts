@@ -36,6 +36,7 @@ import {
   type ServiceDay,
   type WeekRotation,
 } from "./recurrence"
+import { count } from "./text"
 import { dayPlansToValues, type SchemeDayPlan } from "./validation"
 
 const INITIAL_WINDOW_DAYS = 7
@@ -101,9 +102,6 @@ export type SchemeCreationPlan = {
   /** Human-readable consequence line for toasts. */
   message: string
 }
-
-const count = (n: number, noun: string): string =>
-  `${n} ${noun}${n === 1 ? "" : "s"}`
 
 /**
  * The Draft consequence line (D27) — one wording for the review-step preview

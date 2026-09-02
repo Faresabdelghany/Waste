@@ -54,6 +54,7 @@ import {
   type CalendarRowSummary,
 } from "@/lib/route-schemes/calendar-list"
 import { planSchemeCreation } from "@/lib/route-schemes/creation"
+import { planSchemeDeletion } from "@/lib/route-schemes/deletion"
 import {
   planSchemeEditReconciliation,
   type SchemeEditReconciliationPlan,
@@ -102,6 +103,7 @@ import type {
   BusinessFormSchema,
   BusinessFormValues,
 } from "@/lib/data/business-form-types"
+import { softDeletedRecord } from "@/lib/data/record-visibility"
 import {
   applyIndexToRate,
   serviceProviderPriceToRecord,
@@ -1050,6 +1052,20 @@ export function BusinessWorkspace({
 }: BusinessWorkspaceProps) {
   const sourceWorkspace = getWorkspaceDefinition(workspaceId)
   const { getRecords, upsertRecord } = useBusinessRecordStore()
+  // The live records of any workspace module (fixtures merged with stored
+  // records) — what the scheme lifecycle planners read their related
+  // records from.
+  const moduleRecords = useCallback(
+    (targetWorkspaceId: WorkspaceId, targetModuleId: string): BusinessRecord[] => {
+      const module = businessWorkspaces[targetWorkspaceId].modules.find(
+        (candidate) => candidate.id === targetModuleId,
+      )
+      return module
+        ? getRecords(targetWorkspaceId, module.id, module.records)
+        : []
+    },
+    [getRecords],
+  )
   const { isRouteStarred, toggleRouteStarred } = useActiveRoutes(
     serviceProviderScopeId ? "service-provider" : "operator",
   )
@@ -2140,17 +2156,47 @@ export function BusinessWorkspace({
     }))
 
     if (action.toLowerCase().includes("delete")) {
-      upsertRecord(workspace.id, activeModule.id, {
-        ...record,
-        updated: "Now",
-        facts: {
-          ...record.facts,
-          "Registry visibility": "Soft deleted",
-          "Deletion reason": reason,
-          "Deleted by": actorName,
-        },
-        related: [`Deletion log ${event.id}`, ...record.related],
-      })
+      const deletion = { reason, actorName, deletionLogId: event.id }
+      let deletionMessage =
+        "The structured reason and actor were written to the deletion log."
+      if (activeModule.id === "schemes") {
+        // Scheme deletion (issue #34, D32) goes through the lifecycle seam:
+        // Plan Ahead off, future refreshable routes cancelled (kept as
+        // records), operational history preserved — this handler only
+        // applies the returned upserts. Plan against the STORED record: the
+        // detail page's record carries render-time derived status/context
+        // that must never be frozen into the store.
+        const stored =
+          moduleRecords("route-studio", "schemes").find(
+            (candidate) => candidate.id === record.id,
+          ) ?? record
+        const plan = planSchemeDeletion(
+          {
+            scheme: stored,
+            today: todayIso(),
+            ...deletion,
+            generatedAt: new Date().toISOString(),
+          },
+          {
+            existingRoutes: moduleRecords("route-studio", "routes"),
+            existingPickups: moduleRecords("route-studio", "pickups"),
+          },
+        )
+        upsertRecord(workspace.id, activeModule.id, plan.scheme)
+        for (const route of plan.routes) {
+          upsertRecord("route-studio", "routes", route)
+        }
+        for (const pickup of plan.pickups) {
+          upsertRecord("route-studio", "pickups", pickup)
+        }
+        deletionMessage = plan.message
+      } else {
+        upsertRecord(
+          workspace.id,
+          activeModule.id,
+          softDeletedRecord(record, deletion),
+        )
+      }
       if (workspace.id === "commercial" && activeModule.id === "price-rows") {
         // Soft delete leaves the row in the store (marked, not removed), so
         // the product's derived facts must be recomputed with this row
@@ -2169,7 +2215,7 @@ export function BusinessWorkspace({
         { scroll: false },
       )
       toast.success(`${record.name} soft-deleted`, {
-        description: "The structured reason and actor were written to the deletion log.",
+        description: deletionMessage,
       })
       return
     }
@@ -3661,15 +3707,6 @@ export function BusinessWorkspace({
         // Edit-save reconciliation (issue #33, D31): the lifecycle seam
         // revalidates the edited scheme and reshapes the future planning
         // window — this handler only applies the returned upserts.
-        const moduleRecords = (
-          workspaceId: WorkspaceId,
-          moduleId: string,
-        ): BusinessRecord[] => {
-          const module = businessWorkspaces[workspaceId].modules.find(
-            (candidate) => candidate.id === moduleId,
-          )
-          return module ? getRecords(workspaceId, module.id, module.records) : []
-        }
         schemeEdit = planSchemeEditReconciliation(
           {
             before: editingRecord,
@@ -5774,6 +5811,14 @@ function ActionDecisionDialog({
                   <p className="text-xs text-muted-foreground">
                     Records are soft-deleted and the category, explanation, actor, and time are written to the central deletion log.
                   </p>
+                  {module.id === "schemes" && (
+                    <p className="text-xs text-muted-foreground">
+                      Deleting a route scheme stops Plan Ahead and future
+                      generation and cancels its future planned routes (kept
+                      as records). Executed, active and completed routes and
+                      their stops are preserved as operational history.
+                    </p>
+                  )}
                 </div>
               )}
 

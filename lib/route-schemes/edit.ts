@@ -21,15 +21,16 @@ import { calendarFromRecord } from "./calendar"
 import {
   applySchemeGeneration,
   approvedDeviationsFromRecords,
-  cancelledByGenerationRoute,
+  cancelSchemeFutureRoutes,
   planSchemeGeneration,
-  staleGenerationPickup,
   stringValueOf,
+  WALK_CAP_DAYS,
   type GenerationSummary,
   type GenerationWindow,
 } from "./generation"
 import { recordSchemeGeneration, schemeLiveValidation } from "./lifecycle"
 import { addDays } from "./recurrence"
+import { count } from "./text"
 import type { SchemeValidationResult } from "./validation"
 
 const EDIT_WINDOW_DAYS = 7
@@ -126,62 +127,6 @@ export type SchemeEditReconciliationPlan = {
 export const SCHEME_INVALID_CANCEL_NOTE =
   "Route scheme became invalid — future planning stopped"
 
-const count = (n: number, noun: string): string =>
-  `${n} ${noun}${n === 1 ? "" : "s"}`
-
-/** Statuses reconciliation may rewrite — the engine's refreshable set. */
-const REFRESHABLE_ROUTE_STATUSES = new Set(["Draft", "Planned"])
-
-/**
- * The furthest future date the engine's day walk can examine — dates past it
- * are never judged, so this pass must not touch them either.
- */
-const WALK_CAP_DAYS = 366
-
-/**
- * The scheme's future refreshable routes rewritten as generation-authored
- * cancels — cancelled, never deleted, through the engine's shared cancel
- * shape (cancelledByGenerationRoute) so a later valid save resurrects them.
- * Operational statuses (Ready/Active/Completed, and Cancelled without the
- * marker) are untouched, and so are routes past the walk cap: the fixing
- * save's re-materialization can only reach walked dates, and a cancel it
- * could never resurrect would be a one-way door. Open pickups on the
- * cancelled routes are skipped.
- */
-function cancelSchemeFutureRoutes(input: {
-  schemeId: string
-  today: string
-  existingRoutes: readonly BusinessRecord[]
-  existingPickups: readonly BusinessRecord[]
-  note: string
-  generatedAt?: string
-}): { routes: BusinessRecord[]; pickups: BusinessRecord[] } {
-  const from = addDays(input.today, 1)
-  const cap = addDays(from, WALK_CAP_DAYS)
-  const routes: BusinessRecord[] = []
-  const pickups: BusinessRecord[] = []
-  const pickupsByRoute = new Map<string, BusinessRecord[]>()
-  for (const pickup of input.existingPickups) {
-    const routeId = stringValueOf(pickup, "routeId")
-    if (!routeId) continue
-    const list = pickupsByRoute.get(routeId) ?? []
-    list.push(pickup)
-    pickupsByRoute.set(routeId, list)
-  }
-  for (const route of input.existingRoutes) {
-    if (stringValueOf(route, "schemeId") !== input.schemeId) continue
-    const serviceDate = stringValueOf(route, "serviceDate")
-    if (!serviceDate || serviceDate < from || serviceDate > cap) continue
-    if (!REFRESHABLE_ROUTE_STATUSES.has(route.status)) continue
-    routes.push(cancelledByGenerationRoute(route, input.note, input.generatedAt))
-    for (const pickup of pickupsByRoute.get(route.id) ?? []) {
-      const skipped = staleGenerationPickup(pickup, input.note)
-      if (skipped) pickups.push(skipped)
-    }
-  }
-  return { routes, pickups }
-}
-
 /** The record's facts with the validation outcome re-stamped (history/debug). */
 function factsWithValidation(
   record: BusinessRecord,
@@ -245,9 +190,15 @@ export function planSchemeEditReconciliation(
   }
 
   if (validation.issues.length > 0) {
+    // Future refreshable routes from tomorrow (today's are operating) through
+    // the engine's walk cap: the fixing save's re-materialization can only
+    // reach walked dates, and a cancel it could never resurrect would be a
+    // one-way door — so, unlike deletion, this cancel is bounded.
+    const from = addDays(today, 1)
     const cancels = cancelSchemeFutureRoutes({
       schemeId: after.id,
-      today,
+      from,
+      to: addDays(from, WALK_CAP_DAYS),
       existingRoutes: related.existingRoutes,
       existingPickups: related.existingPickups,
       note: SCHEME_INVALID_CANCEL_NOTE,

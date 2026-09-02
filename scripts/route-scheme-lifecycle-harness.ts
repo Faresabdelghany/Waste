@@ -18,13 +18,23 @@ import {
   schemeFuturePlanningStopped,
   schemeGenerationRecorded,
   schemeLiveValidation,
+  schemesInPlanning,
   withEffectiveSchemeStatus,
 } from "../lib/route-schemes/lifecycle"
 import {
   editReconciliationWindow,
   planSchemeEditReconciliation,
 } from "../lib/route-schemes/edit"
-import { isPlanAheadEnabled, schemeAutoGenerates } from "../lib/route-schemes/plan-ahead"
+import {
+  planSchemeDeletion,
+  SCHEME_DELETED_CANCEL_NOTE,
+} from "../lib/route-schemes/deletion"
+import {
+  isPlanAheadEnabled,
+  runPlanAhead,
+  schemeAutoGenerates,
+} from "../lib/route-schemes/plan-ahead"
+import { isSoftDeleted, softDeletedRecord } from "../lib/data/record-visibility"
 
 let passed = 0
 let failed = 0
@@ -1088,6 +1098,380 @@ check(
   "edit: a legacy scheme saves unchanged with no route writes",
   [legacyEdit.outcome, legacyEdit.routes.length, legacyEdit.pickups.length],
   ["legacy", 0, 0],
+)
+
+/* ---------------- deletion and expiry (issue #34, D32, SPEC H) ---------------- */
+// Deletion is a safe boundary, not an eraser: the scheme is soft-deleted with
+// Plan Ahead off, its future refreshable routes are cancelled through the
+// shared generation-authored cancel shape (kept as records), and everything
+// operational — past, Active, Completed routes and their Pickups — stays.
+
+const deletionInput = {
+  today: TODAY,
+  actorName: "Planner",
+  reason: "Created in error: duplicate of the Central plan",
+  deletionLogId: "audit-delete-1",
+  generatedAt: GENERATED,
+}
+const deleted = planSchemeDeletion(
+  { scheme: editBase.scheme, ...deletionInput },
+  { existingRoutes: editBase.routes, existingPickups: editBase.pickups },
+)
+check(
+  "delete: the scheme is soft-deleted, never removed",
+  isSoftDeleted(deleted.scheme),
+  true,
+)
+check(
+  "delete: Plan Ahead is turned off on the deleted scheme",
+  [isPlanAheadEnabled(deleted.scheme), deleted.scheme.facts["Plan ahead"]],
+  [false, "Off"],
+)
+check(
+  "delete: future refreshable routes are cancelled with the generation-authored marker",
+  deleted.routes.map((route) => [
+    route.submittedValues?.serviceDate,
+    route.status,
+    route.submittedValues?.cancelledByGeneration,
+  ]),
+  [
+    ["2026-09-02", "Cancelled", true],
+    ["2026-09-06", "Cancelled", true],
+  ],
+)
+check(
+  "delete: the cancel note says the scheme was deleted",
+  deleted.routes[0]?.facts.Deviation,
+  SCHEME_DELETED_CANCEL_NOTE,
+)
+check(
+  "delete: the cancelled routes' open pickups are skipped, not deleted",
+  deleted.pickups.map((pickup) => pickup.status),
+  ["Skipped", "Skipped"],
+)
+check(
+  "delete: the deletion reason, actor and log link are written on the scheme",
+  [
+    deleted.scheme.facts["Deletion reason"],
+    deleted.scheme.facts["Deleted by"],
+    deleted.scheme.related[0],
+  ],
+  [
+    "Created in error: duplicate of the Central plan",
+    "Planner",
+    "Deletion log audit-delete-1",
+  ],
+)
+
+// Touchability (P2): an Active route and its pickups are operational history
+// — never rewritten, counted as preserved.
+const deletedWithActive = planSchemeDeletion(
+  { scheme: editBase.scheme, ...deletionInput },
+  { existingRoutes: activeSunday, existingPickups: editBase.pickups },
+)
+check(
+  "delete: an Active route is never rewritten — it is operational history",
+  deletedWithActive.routes.map((route) => route.submittedValues?.serviceDate),
+  ["2026-09-02"],
+)
+check(
+  "delete: the Active route's pickups stay untouched",
+  deletedWithActive.pickups.map((pickup) => pickup.submittedValues?.serviceDate),
+  ["2026-09-02"],
+)
+check(
+  "delete: preserved counts the routes left as history",
+  [deleted.preserved, deletedWithActive.preserved],
+  [0, 1],
+)
+
+// History bounds: past routes, today's operating route, and an operational
+// cancel (no marker) stay as stored. Unlike the edit path, the cancel is NOT
+// capped at the walk range — nothing will ever resurrect a deleted scheme's
+// cancels, and a dangling far-future Planned route is exactly the D32 bug.
+const pastCompleted: BusinessRecord = {
+  ...editBase.routes[0]!,
+  id: "route-gen-scheme-edit-2026-08-26",
+  status: "Completed",
+  submittedValues: {
+    ...editBase.routes[0]!.submittedValues,
+    serviceDate: "2026-08-26",
+    actualDate: "2026-08-26",
+  },
+}
+const todayPlanned: BusinessRecord = {
+  ...editBase.routes[0]!,
+  id: "route-gen-scheme-edit-2026-09-01",
+  submittedValues: {
+    ...editBase.routes[0]!.submittedValues,
+    serviceDate: "2026-09-01",
+    actualDate: "2026-09-01",
+  },
+}
+const historyDeletion = planSchemeDeletion(
+  { scheme: editBase.scheme, ...deletionInput },
+  {
+    existingRoutes: [
+      pastCompleted,
+      todayPlanned,
+      operationalCancel,
+      editBase.routes[0]!,
+      beyondWalkCap,
+    ],
+    existingPickups: [],
+  },
+)
+check(
+  "delete: past, today's and operationally cancelled routes stay as stored; far-future Planned is cancelled",
+  historyDeletion.routes.map((route) => route.submittedValues?.serviceDate),
+  ["2026-09-02", "2027-10-30"],
+)
+check(
+  "delete: preserved = the scheme's routes left alone",
+  historyDeletion.preserved,
+  3,
+)
+check(
+  "delete: the consequence line names the cancels and the preserved history",
+  historyDeletion.message,
+  "Deleted — 2 future routes cancelled and kept as records; 3 routes left untouched as history. Future planning stopped.",
+)
+
+// A never-generated Draft deletes cleanly; other schemes' routes are not its business.
+const draftDeletion = planSchemeDeletion(
+  { scheme: makeScheme({ id: "scheme-never", status: "Draft" }), ...deletionInput },
+  { existingRoutes: editBase.routes, existingPickups: editBase.pickups },
+)
+check(
+  "delete: a never-generated Draft deletes with no route writes",
+  [
+    draftDeletion.routes.length,
+    draftDeletion.pickups.length,
+    draftDeletion.preserved,
+    draftDeletion.message,
+  ],
+  [0, 0, 0, "Deleted — no generated routes existed. Future planning stopped."],
+)
+
+// After deletion nothing plans for the scheme again — including a scheme
+// soft-deleted before Plan Ahead was turned off on delete (legacy browser
+// state still holds the flag on), so the guard is the marker, not the flag.
+const legacyDeleted = softDeletedRecord(editBase.scheme, {
+  reason: "Duplicate record: legacy",
+  actorName: "Planner",
+  deletionLogId: "audit-delete-0",
+})
+check(
+  "delete: a soft-deleted scheme never auto-generates, even with Plan Ahead still on",
+  [isPlanAheadEnabled(legacyDeleted), schemeAutoGenerates(legacyDeleted, TODAY)],
+  [true, false],
+)
+check(
+  "delete: a soft-deleted scheme cannot generate manually either",
+  schemeCanGenerateRoutes(legacyDeleted, TODAY),
+  false,
+)
+check(
+  "delete: a Plan Ahead run over a deleted scheme writes nothing",
+  (() => {
+    const run = runPlanAhead({
+      schemes: [legacyDeleted],
+      today: TODAY,
+      existingRoutes: [],
+      existingPickups: [],
+      deviationRecords: [],
+      containers: [],
+      actorName: "Plan Ahead",
+    })
+    return [run.routes.length, run.pickups.length, run.summary.schemes]
+  })(),
+  [0, 0, 0],
+)
+
+// A deleted scheme leaves planning entirely: its default assignment no
+// longer blocks another scheme's save (a deleted scheme is hidden from the
+// list, so a conflict with it could never be resolved).
+const defaultVehicleScheme = (id: string) =>
+  makeScheme({
+    id,
+    status: "Validated",
+    submittedValues: { plannedVehicleId: "vehicle-wh-24" },
+  })
+const rival = defaultVehicleScheme("scheme-rival")
+const liveTwin = defaultVehicleScheme("scheme-twin")
+check(
+  "delete: a live twin scheme's default vehicle blocks the save",
+  schemeLiveValidation(rival, { schemes: [rival, liveTwin] })?.issues.some((issue) =>
+    issue.includes("scheme-twin"),
+  ),
+  true,
+)
+check(
+  "delete: a soft-deleted twin no longer blocks — deleted schemes leave planning",
+  schemeLiveValidation(rival, {
+    schemes: [
+      rival,
+      softDeletedRecord(liveTwin, {
+        reason: "Duplicate record: twin",
+        actorName: "Planner",
+        deletionLogId: "audit-delete-2",
+      }),
+    ],
+  })?.issues ?? [],
+  [],
+)
+// The same filter feeds the create paths' validateGuidedScheme, so Guided
+// Setup, Quick Create and edit never disagree about who can conflict.
+check(
+  "delete: schemesInPlanning drops soft-deleted schemes and keeps the rest",
+  schemesInPlanning([
+    rival,
+    softDeletedRecord(liveTwin, {
+      reason: "Duplicate record: twin",
+      actorName: "Planner",
+      deletionLogId: "audit-delete-2",
+    }),
+  ]).map((scheme) => scheme.id),
+  ["scheme-rival"],
+)
+
+/* ------------------------------- expiry (D32) ------------------------------ */
+// Expiry is derived (today > effectiveTo) and is a boundary, not an eraser:
+// nothing is generated past effectiveTo, Plan Ahead stops extending, and
+// valid routes inside the effective period are never retroactively cancelled.
+
+// Creation with effectiveTo inside the initial window: Wed 2 Sep is served,
+// Sun 6 Sep lies past effectiveTo 2026-09-03 and is never generated.
+const endingSoon = planSchemeCreation(
+  {
+    scheme: makeScheme({
+      id: "scheme-ending",
+      status: "Validated",
+      effectiveFrom: "2026-08-01",
+      effectiveTo: "2026-09-03",
+    }),
+    today: TODAY,
+    actorName: "Planner",
+    generatedAt: GENERATED,
+  },
+  creationRelated,
+)
+check(
+  "expiry: no generated route carries a service date after effectiveTo",
+  endingSoon.routes.map((route) => route.submittedValues?.serviceDate),
+  ["2026-09-02"],
+)
+check(
+  "expiry: Effective through effectiveTo, Expired the day after",
+  [
+    effectiveSchemeStatus(endingSoon.scheme, "2026-09-03"),
+    effectiveSchemeStatus(endingSoon.scheme, "2026-09-04"),
+  ],
+  ["Effective", "Expired"],
+)
+
+// Shortening effectiveTo: the Planned route now past it is cancelled with the
+// resurrection marker (the scheme no longer serves that date); the route
+// inside the period refreshes, never cancels.
+const shortened = planSchemeEditReconciliation(
+  {
+    before: editBase.scheme,
+    after: withValues(editBase.scheme, { effectiveTo: "2026-09-03" }),
+    today: TODAY,
+    actorName: "Planner",
+    generatedAt: GENERATED,
+  },
+  {
+    schemes: [editBase.scheme],
+    existingRoutes: editBase.routes,
+    existingPickups: editBase.pickups,
+    containers: [],
+  },
+)
+check(
+  "expiry: shortening effectiveTo cancels the route past it (marked) and refreshes the one inside",
+  shortened.routes.map((route) => [
+    route.submittedValues?.serviceDate,
+    route.status,
+    route.submittedValues?.cancelledByGeneration ?? false,
+  ]),
+  [
+    ["2026-09-02", "Planned", false],
+    ["2026-09-06", "Cancelled", true],
+  ],
+)
+
+// An expired scheme: Plan Ahead stops extending, manual regeneration inside
+// the period stays available, and history inside the period is untouched.
+const expiredScheme = makeScheme({
+  id: "scheme-expired",
+  status: "Scheduled",
+  effectiveFrom: "2026-08-01",
+  effectiveTo: "2026-08-31",
+  lastGeneratedAt: GENERATED,
+  submittedValues: { planAhead: true },
+})
+const expiredHistory: BusinessRecord[] = [
+  {
+    ...pastCompleted,
+    id: "route-gen-scheme-expired-2026-08-26",
+    submittedValues: { ...pastCompleted.submittedValues, schemeId: "scheme-expired" },
+  },
+  {
+    ...editBase.routes[1]!,
+    id: "route-gen-scheme-expired-2026-08-30",
+    submittedValues: {
+      ...editBase.routes[1]!.submittedValues,
+      schemeId: "scheme-expired",
+      serviceDate: "2026-08-30",
+      actualDate: "2026-08-30",
+    },
+  },
+]
+check(
+  "expiry: Expired stops Plan Ahead but keeps manual regeneration inside the period",
+  [
+    effectiveSchemeStatus(expiredScheme, TODAY),
+    schemeAutoGenerates(expiredScheme, TODAY),
+    schemeCanGenerateRoutes(expiredScheme, TODAY),
+  ],
+  ["Expired", false, true],
+)
+check(
+  "expiry: a Plan Ahead run over an expired scheme writes nothing",
+  (() => {
+    const run = runPlanAhead({
+      schemes: [expiredScheme],
+      today: TODAY,
+      existingRoutes: expiredHistory,
+      existingPickups: [],
+      deviationRecords: [],
+      containers: [],
+      actorName: "Plan Ahead",
+    })
+    return [run.routes.length, run.summary.schemes]
+  })(),
+  [0, 0],
+)
+const expiredEdit = planSchemeEditReconciliation(
+  {
+    before: expiredScheme,
+    after: withValues(expiredScheme, { plannedStartTime: "07:00" }),
+    today: TODAY,
+    actorName: "Planner",
+    generatedAt: GENERATED,
+  },
+  {
+    schemes: [expiredScheme],
+    existingRoutes: expiredHistory,
+    existingPickups: [],
+    containers: [],
+  },
+)
+check(
+  "expiry: a valid edit of an expired scheme generates nothing and leaves in-period routes untouched",
+  [expiredEdit.outcome, expiredEdit.routes.length, expiredEdit.pickups.length],
+  ["reconciled", 0, 0],
 )
 
 console.log(`\n${passed} passed, ${failed} failed`)

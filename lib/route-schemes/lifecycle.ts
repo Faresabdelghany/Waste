@@ -16,6 +16,7 @@
 // "Validation warnings" facts remain for history/debugging only.
 
 import type { BusinessRecord } from "../data/business-modules"
+import { isSoftDeleted } from "../data/record-visibility"
 import { schemeFrequencyPromiseOfRecord } from "../data/service-frequencies"
 import { calendarFromRecord } from "./calendar"
 import {
@@ -143,13 +144,29 @@ export function schemeFuturePlanningStopped(record: SchemeStatusSource): boolean
  * engine AND it is not Draft — blocking issues generate nothing (D18/D26).
  * Expired schemes stay eligible: Generate routes remains the manual
  * regeneration/backfill action inside the effective period (D8/D32).
+ * Soft-deleted schemes never are: deletion prevents further generation
+ * (issue #34, D32).
  */
 export function schemeCanGenerateRoutes(
   record: BusinessRecord,
   today: string,
 ): boolean {
+  if (isSoftDeleted(record)) return false
   if (recurrenceFromValues(record.submittedValues ?? {}) === null) return false
   return effectiveSchemeStatus(record, today) !== "Draft"
+}
+
+/**
+ * The schemes that still take part in planning: soft-deleted schemes have
+ * left it (issue #34, D32) — their default assignment and stop rules no
+ * longer conflict with anyone's save, create or edit alike. A deleted
+ * scheme is hidden from the list, so a conflict with it could never be
+ * resolved. The one filter every validation path's sibling sources go through.
+ */
+export function schemesInPlanning(
+  records: readonly BusinessRecord[],
+): BusinessRecord[] {
+  return records.filter((record) => !isSoftDeleted(record))
 }
 
 /** The related record sets live validation resolves against. */
@@ -202,7 +219,7 @@ export function schemeLiveValidation(
     .filter((promise): promise is SchemeFrequencyPromise => promise !== null)
 
   const matchPlans = matchPlansFromValues(values)
-  const otherSchemes = related.schemes.filter(
+  const otherSchemes = schemesInPlanning(related.schemes).filter(
     (candidate) => candidate.id !== record.id,
   )
   return validateScheme(
