@@ -359,7 +359,7 @@ export function ServiceProviderDetailsPage({
             contextLabel="Role and scope"
             valueLabel="Access"
             emptyLabel="No service provider users"
-            actionLabel="Add User"
+            actionLabel="Add user"
             onCreate={() => onCreate("user")}
           />
         </TabsContent>

@@ -512,7 +512,7 @@ export const commercialImproveBusinessFormSchemas = [
     key: "service-providers.service-provider-workspace",
     mode: "create",
     recordKind: "Service provider user",
-    title: "Add User",
+    title: "Add user",
     description: "Add a user with access limited to the selected service provider.",
     submitLabel: "Add user",
     contextFieldIds: ["serviceProviderId", "projectId", "serviceAreaId", "role"],

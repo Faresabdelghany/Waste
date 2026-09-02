@@ -67,7 +67,7 @@ Runtime flow: Area/Zone + Calendar → Route Scheme → candidate service dates 
 - `business-links.ts`: drop the three retired fallback term rows.
 - `business-workspace.tsx`: Plan primary tabs → 3.
 
-### 6. Service-area selectors
+### 6. Service area selectors
 Two relation edits in `business-form-schemas-commercial-improve.ts` (Q16).
 
 ### 7. Docs & glossary

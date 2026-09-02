@@ -1334,7 +1334,7 @@ In the header action area (~2667, next to the `isRouteCreateFlow` ternary): when
 
 - [ ] **Step 2: Write the `"Price adjustment"` submit branch**
 
-At the top of `handleFormSubmit` (pattern: the Service-area-assignment branch), keyed on `formSchema.recordKind === "Price adjustment"`:
+At the top of `handleFormSubmit` (pattern: the "Service area assignment" branch), keyed on `formSchema.recordKind === "Price adjustment"`:
 
 ```tsx
 const rowsModule = workspace.modules.find((m) => m.id === "price-rows")
