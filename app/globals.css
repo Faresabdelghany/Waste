@@ -211,6 +211,50 @@
   }
 }
 
+/*
+ * Glass surfaces — the single tuning seam for the translucent treatment.
+ * `.glass` mixes its base token with transparency and blurs what sits behind it;
+ * the `glass-*` companions only say which surface token the element is made of.
+ * Keep the effect subtle: alpha stays in the 80s, blur under 24px.
+ */
+@layer components {
+  .glass {
+    --glass-base: var(--color-popover);
+    --glass-alpha: 82%;
+    --glass-blur: 16px;
+    background-color: color-mix(in oklab, var(--glass-base) var(--glass-alpha), transparent);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+  }
+
+  .glass-popover {
+    --glass-base: var(--color-popover);
+  }
+
+  .glass-canvas {
+    --glass-base: var(--color-background);
+    --glass-alpha: 88%;
+  }
+
+  .glass-card {
+    --glass-base: var(--color-card);
+    --glass-blur: 8px;
+  }
+
+  .glass-sidebar {
+    --glass-base: var(--color-sidebar);
+    --glass-alpha: 86%;
+    --glass-blur: 24px;
+  }
+}
+
+/* Browsers without backdrop-filter fall back to the solid surface token. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass {
+    background-color: var(--glass-base);
+  }
+}
+
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
