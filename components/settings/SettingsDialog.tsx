@@ -45,6 +45,8 @@ import { OrganizationAccessManagement } from "@/components/settings/organization
 import { CompanyProjectsManagement } from "@/components/settings/company-projects-management"
 import { AssetManagementSettings } from "@/components/settings/asset-management-settings"
 import { CommercialDefaultsExtras, CommercialSectionPane } from "@/components/settings/commercial-settings"
+import { PlanningAreasSettings } from "@/components/settings/planning-areas-settings"
+import { PLANNING_AREAS_SETTINGS_PANE_ID } from "@/lib/data/planning-areas"
 import { migrateLegacyId } from "@/lib/data/legacy-ids"
 
 type SettingControl =
@@ -119,6 +121,8 @@ const settingsSections: Array<{
     label: "Operations",
     items: [
       { id: "asset-management", label: "Asset management", icon: Gear },
+      // Areas & Zones moved here from the Plan workspace (2026-09-03, D37).
+      { id: PLANNING_AREAS_SETTINGS_PANE_ID, label: "Areas & Zones", icon: MapTrifold },
       { id: "operations-setup", label: "Operations setup", icon: SlidersHorizontal },
       { id: "ticket-comms", label: "Tickets & communication", icon: Bell },
     ],
@@ -1292,6 +1296,12 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
     description: "Configure the company asset libraries.",
     groups: [],
   },
+  [PLANNING_AREAS_SETTINGS_PANE_ID]: {
+    title: "Areas & Zones",
+    description:
+      "Planning areas and notification zones — the operational geography Route Schemes, containers, and Service Areas reference.",
+    groups: [],
+  },
   access: {
     title: "Users and roles",
     description:
@@ -1382,6 +1392,20 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   integrations: paneDefinitions.integrations,
   portals: paneDefinitions.portals,
   privacy: paneDefinitions.privacy,
+}
+
+/**
+ * Panes that render their own full-height panel (header, toolbar, table)
+ * instead of the centred control groups.
+ */
+function isFullPanelPane(paneId: string): boolean {
+  return (
+    paneId === "asset-management" ||
+    paneId === "access" ||
+    paneId === "company" ||
+    paneId === PLANNING_AREAS_SETTINGS_PANE_ID ||
+    paneId.startsWith("commercial-")
+  )
 }
 
 type SettingsWorkspaceProps = {
@@ -1662,10 +1686,7 @@ export function SettingsWorkspace({
       >
         <div
           className={
-            activeItemId === "asset-management" ||
-            activeItemId === "access" ||
-            activeItemId === "company" ||
-            activeItemId.startsWith("commercial-")
+            isFullPanelPane(activeItemId)
               ? "flex min-h-full w-full flex-col"
               : "mx-auto min-h-full w-full max-w-5xl px-5 py-7 sm:px-10 sm:py-10 lg:px-14"
           }
@@ -1706,14 +1727,7 @@ function SettingsPane({
 
   return (
     <div
-      className={
-        paneId === "asset-management" ||
-        paneId === "access" ||
-        paneId === "company" ||
-        paneId.startsWith("commercial-")
-          ? "flex min-w-0 flex-1 flex-col"
-          : "space-y-7"
-      }
+      className={isFullPanelPane(paneId) ? "flex min-w-0 flex-1 flex-col" : "space-y-7"}
     >
       {paneId === "company" ? (
         <>
@@ -1722,9 +1736,7 @@ function SettingsPane({
             Manage companies, company information, and projects.
           </p>
         </>
-      ) : paneId === "asset-management" ||
-        paneId === "access" ||
-        paneId.startsWith("commercial-") ? null : (
+      ) : isFullPanelPane(paneId) ? null : (
         <>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -1753,6 +1765,8 @@ function SettingsPane({
         <OrganizationAccessManagement />
       ) : paneId === "asset-management" ? (
         <AssetManagementSettings />
+      ) : paneId === PLANNING_AREAS_SETTINGS_PANE_ID ? (
+        <PlanningAreasSettings />
       ) : paneId.startsWith("commercial-") ? (
         <CommercialSectionPane paneId={paneId} />
       ) : (

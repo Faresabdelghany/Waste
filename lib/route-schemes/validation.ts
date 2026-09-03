@@ -106,7 +106,7 @@ export type SchemeValidationInput = {
   serviceDays: ServiceDay[]
   effectiveFrom: string
   effectiveTo: string
-  /** The scheme's planning area (plan.areas record id); rule groups match inside it. */
+  /** The scheme's planning area (configure.areas record id); rule groups match inside it. */
   areaId?: string
   /** The scheme's collection groups — implicit (legacy shape) or explicit. */
   groups: readonly SchemeGroupValidationInput[]

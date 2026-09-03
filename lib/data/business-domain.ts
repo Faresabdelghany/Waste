@@ -212,12 +212,12 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
   {
     workspaceId: "plan",
     canonicalPurpose:
-      "Maintain collection calendars and planning geography. Route Schemes own recurrence and service days and live in Route Studio.",
+      "Maintain collection calendars. Route Schemes own recurrence and service days and live in Route Studio; planning geography is managed in Settings → Areas & Zones.",
     blueprintModules: ["M09", "M23"],
     personas: ["Route planner", "Operations administrator"],
-    moduleIds: ["calendars", "areas"],
+    moduleIds: ["calendars"],
     boundaryNote:
-      "Plan owns operational planning areas; Commercial owns Service Areas and their service provider awards. Pickup Settings, Collection Weeks, and Collection Calendar Days are retired — Route Schemes own recurrence. Collection Deviations were removed 2026-09-03 — holiday and non-working dates are skipped at generation, never moved.",
+      "Areas & Zones moved to Settings 2026-09-03 (configure.areas, D37) — Plan consumes planning geography without owning it; Service providers owns Service Areas and their awards. Pickup Settings, Collection Weeks, and Collection Calendar Days are retired — Route Schemes own recurrence. Collection Deviations were removed 2026-09-03 — holiday and non-working dates are skipped at generation, never moved.",
   },
   {
     workspaceId: "route-studio",
@@ -475,19 +475,6 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     downstream: ["M09", "M10", "M11", "M17", "M21", "M23"],
     boundaryNote:
       "Settings owns working-calendar defaults; Plan owns effective calendar records — working days, holidays, and validity. Holiday and non-working dates are skipped at generation, never moved.",
-  },
-  {
-    key: "plan.areas",
-    workspaceId: "plan",
-    moduleId: "areas",
-    primaryBlueprintModule: "M09",
-    supportingBlueprintModules: ["M02", "M15"],
-    canonicalOwner: "Plan · Operational Areas & Zones",
-    personas: ["Route planner", "Operations administrator", "Contract manager"],
-    upstream: ["M01", "M02", "M03", "M15", "M20"],
-    downstream: ["M09", "M10", "M11", "M12", "M15", "M17", "M18"],
-    boundaryNote:
-      "Plan owns operational planning and notification geography. Commercial owns Service Areas awarded to service providers.",
   },
   {
     key: "fleet.vehicles",
@@ -929,6 +916,48 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     downstream: ["M01", "M02", "M07", "M16", "M20", "M23"],
     boundaryNote:
       "Internal customer administration, tenant self-service, and marketplace fulfillment require separate permission boundaries and typed records.",
+  },
+]
+
+/**
+ * Modules whose records are real business records — a form schema, a record
+ * store bucket, relation targets — but whose management surface is Settings
+ * rather than a public workspace. They are registered under the `configure`
+ * workspace (the registry twin of Settings: business-links resolves its
+ * modules to `/settings?pane=…`) and rendered by the named Settings pane. The
+ * schema registry's lockstep gate counts these keys as expected.
+ *
+ * Areas & Zones moved here from Plan on 2026-09-03 (D37).
+ */
+export type SettingsModuleDomain = {
+  key: `configure.${string}`
+  workspaceId: "configure"
+  moduleId: string
+  /** The SettingsDialog pane that renders the module. */
+  settingsPaneId: string
+  primaryBlueprintModule: BlueprintModuleId
+  supportingBlueprintModules: BlueprintModuleId[]
+  canonicalOwner: string
+  personas: string[]
+  upstream: BlueprintModuleId[]
+  downstream: BlueprintModuleId[]
+  boundaryNote?: string
+}
+
+export const settingsModuleDomains: readonly SettingsModuleDomain[] = [
+  {
+    key: "configure.areas",
+    workspaceId: "configure",
+    moduleId: "areas",
+    settingsPaneId: "areas",
+    primaryBlueprintModule: "M09",
+    supportingBlueprintModules: ["M02", "M15"],
+    canonicalOwner: "Settings · Areas & Zones",
+    personas: ["Operations administrator", "Route planner", "Contract manager"],
+    upstream: ["M01", "M02", "M03", "M15", "M20"],
+    downstream: ["M09", "M10", "M11", "M12", "M15", "M17", "M18"],
+    boundaryNote:
+      "Settings owns operational planning and notification geography as master data; Plan and Route Studio consume it. Service providers owns Service Areas awarded to service providers.",
   },
 ]
 

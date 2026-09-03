@@ -480,7 +480,7 @@ export const commercialImproveBusinessFormSchemas = [
             id: "zoneIds",
             label: "Planning areas",
             type: "multiselect",
-            relation: { workspaceId: "plan", moduleId: "areas" },
+            relation: { workspaceId: "configure", moduleId: "areas" },
           },
           {
             id: "validFrom",

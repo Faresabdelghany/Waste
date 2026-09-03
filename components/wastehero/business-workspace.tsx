@@ -31,6 +31,7 @@ import {
   businessWorkspaces,
   FIXTURE_COMPANY_ID,
   FIXTURE_PROJECT_IDS,
+  getModuleDefinition,
   getWorkspaceDefinition,
   type BusinessRecord,
   type ModuleDefinition,
@@ -38,6 +39,12 @@ import {
   type WorkspaceDefinition,
   type WorkspaceId,
 } from "@/lib/data/business-modules"
+import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
+import {
+  deriveFormRecord,
+  displayFormValue as displayFormRecordValue,
+  type FormRecordResolvers,
+} from "@/lib/data/business-form-records"
 import { migrateLegacyId, migrateLegacyModuleId } from "@/lib/data/legacy-ids"
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
 import {
@@ -136,7 +143,7 @@ import {
   resolveBusinessRelation,
 } from "@/lib/data/business-links"
 import type { TimelineTask } from "@/lib/data/project-details"
-import { cn } from "@/lib/utils"
+import { cn, slugify } from "@/lib/utils"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Badge } from "@/components/ui/badge"
@@ -712,7 +719,7 @@ const serviceProviderOperatedRelationModuleIds = new Set([
 
 const primaryModuleIdsByWorkspace: Partial<Record<WorkspaceId, readonly string[]>> = {
   operate: ["tickets", "exceptions"],
-  plan: ["calendars", "areas"],
+  plan: ["calendars"],
   "route-studio": ["live", "schemes", "routes", "pickups", "weights"],
   customers: ["properties", "groups", "shared", "agreements"],
   resources: ["containers", "inventory", "warehouses", "depots"],
@@ -1095,9 +1102,10 @@ export function BusinessWorkspace({
   // records from.
   const moduleRecords = useCallback(
     (targetWorkspaceId: WorkspaceId, targetModuleId: string): BusinessRecord[] => {
-      const module = businessWorkspaces[targetWorkspaceId].modules.find(
-        (candidate) => candidate.id === targetModuleId,
-      )
+      const module = getModuleDefinition({
+        workspaceId: targetWorkspaceId,
+        moduleId: targetModuleId,
+      })
       return module
         ? getRecords(targetWorkspaceId, module.id, module.records)
         : []
@@ -1310,12 +1318,10 @@ export function BusinessWorkspace({
     // display copy.
     if (activeModule.id === "schemes") {
       const today = todayIso()
-      const areasModule = getWorkspaceDefinition("plan").modules.find(
-        (candidate) => candidate.id === "areas",
+      const areas = moduleRecords(
+        PLANNING_AREAS_MODULE.workspaceId,
+        PLANNING_AREAS_MODULE.moduleId,
       )
-      const areas = areasModule
-        ? getRecords("plan", areasModule.id, areasModule.records)
-        : []
       records = records.map((record) =>
         withDerivedSchemeContext(
           withEffectiveSchemeStatus(record, today),
@@ -1338,7 +1344,7 @@ export function BusinessWorkspace({
     return serviceProviderScopeId
       ? records.filter((record) => record.serviceProviderId === serviceProviderScopeId)
       : records
-  }, [activeModule, serviceProviderScopeId, getRecords, workspace.id])
+  }, [activeModule, serviceProviderScopeId, getRecords, moduleRecords, workspace.id])
   const formTargetRecords = useMemo(
     () =>
       relatedCreateModule
@@ -1967,14 +1973,9 @@ export function BusinessWorkspace({
       // and derived row context (issue #30) too.
       if (record && module.id === "schemes") {
         record = withEffectiveSchemeStatus(record, todayIso())
-        const areasModule = getWorkspaceDefinition("plan").modules.find(
-          (candidate) => candidate.id === "areas",
-        )
         record = withDerivedSchemeContext(
           record,
-          areasModule
-            ? getRecords("plan", areasModule.id, areasModule.records)
-            : [],
+          moduleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId),
           record.projectIds?.length ? projectScopeLabel(record.projectIds) : "",
         )
       }
@@ -1992,7 +1993,7 @@ export function BusinessWorkspace({
       }
       return record
     },
-    [serviceProviderScopeId, getRecords, workspace],
+    [serviceProviderScopeId, getRecords, moduleRecords, workspace],
   )
 
   const openRecord = (record: BusinessRecord) => {
@@ -3090,14 +3091,6 @@ export function BusinessWorkspace({
 
     const fields = formSchema.sections.flatMap((section) => section.fields)
     const fieldById = new Map(fields.map((field) => [field.id, field]))
-    const relationRefs: NonNullable<BusinessRecord["relationRefs"]> = []
-    const facts: Record<string, string> = {}
-
-    const splitMultiValue = (value: string) =>
-      value
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean)
 
     // Stored facts and context show the linked record's name, not the full
     // "name · context · status" option label used inside the dropdowns.
@@ -3120,20 +3113,24 @@ export function BusinessWorkspace({
         : name
     }
 
-    const displayFormValue = (field: BusinessFormField, value: string | boolean) => {
-      if (typeof value === "boolean") return value ? "Yes" : "No"
-      const options = field.relation
-        ? getFormRelationOptions(field, values)
-        : field.options ?? []
-      const optionLabel = (item: string) =>
-        options.find((option) => option.value === item)?.label ?? item
-      if (field.type === "multiselect") {
-        return splitMultiValue(value)
-          .map((item) => relationRecordName(field, item) ?? optionLabel(item))
-          .join(" · ")
-      }
-      return relationRecordName(field, value) ?? optionLabel(value)
+    // The shared derivation (lib/data/business-form-records.ts) with what only
+    // this workspace knows: linked-record names, the live scoped relation
+    // options for labels, and where a relation target actually resolves.
+    const formRecordResolvers: FormRecordResolvers = {
+      relationRecordName,
+      optionLabel: (field, item) =>
+        (field.relation ? getFormRelationOptions(field, values) : field.options ?? []).find(
+          (option) => option.value === item,
+        )?.label,
+      resolveRelationTarget: (relation) => {
+        const resolved = resolveFormModule(relation.workspaceId, relation.moduleId)
+        return resolved
+          ? { workspaceId: resolved.workspaceId, moduleId: resolved.module.id }
+          : undefined
+      },
     }
+    const displayFormValue = (field: BusinessFormField, value: string | boolean) =>
+      displayFormRecordValue(field, value, formRecordResolvers)
 
     // Quick Create parity for Route Schemes (issue #31, D19/D29/P1): map the
     // form values onto the wizard's draft shape and share the guided path
@@ -3182,35 +3179,12 @@ export function BusinessWorkspace({
       return
     }
 
-    for (const field of fields) {
-      const value = values[field.id]
-      if (value === undefined || value === "") continue
-      const displayValue = displayFormValue(field, value)
-      facts[field.label] = displayValue
-
-      if (field.relation && typeof value === "string") {
-        const relationTarget = resolveFormModule(
-          field.relation.workspaceId,
-          field.relation.moduleId,
-        )
-        const relationOptions = getFormRelationOptions(field, values)
-        const relationRecordIds =
-          field.type === "multiselect" ? splitMultiValue(value) : [value]
-        for (const recordId of relationRecordIds) {
-          relationRefs.push({
-            fieldId: field.id,
-            workspaceId: relationTarget?.workspaceId ?? field.relation.workspaceId,
-            moduleId: relationTarget?.module.id ?? field.relation.moduleId,
-            recordId,
-            label:
-              relationRecordName(field, recordId) ??
-              relationOptions.find((option) => option.value === recordId)
-                ?.label ??
-              recordId,
-          })
-        }
-      }
-    }
+    const {
+      facts,
+      relationRefs,
+      contextValues,
+      nameValue: submittedNameValue,
+    } = deriveFormRecord(formSchema, values, formRecordResolvers)
 
     // The service provider-scoped invite form omits Service provider, Allowed
     // service area, and Invited by, so stamp them onto the record from the signed-in
@@ -3265,10 +3239,6 @@ export function BusinessWorkspace({
     const nameField = formSchema.nameField
       ? fieldById.get(formSchema.nameField)
       : undefined
-    const submittedNameValue =
-      nameField && values[nameField.id] !== undefined
-        ? displayFormValue(nameField, values[nameField.id])
-        : ""
     // Service provider users are captured as First/Last name fields; the record
     // name is the composed full name.
     const serviceProviderUserName =
@@ -3301,14 +3271,6 @@ export function BusinessWorkspace({
         : formSchema.mode === "action"
         ? `${formSchema.recordKind} · ${nameValue || "submitted"}`
         : nameValue || `${formSchema.recordKind} · ${Date.now()}`
-    const contextValues = (formSchema.contextFieldIds ?? [])
-      .map((fieldId) => {
-        const field = fieldById.get(fieldId)
-        const value = values[fieldId]
-        if (!field || value === undefined || value === "") return ""
-        return displayFormValue(field, value)
-      })
-      .filter(Boolean)
     const projectIds = selectedProjectIds(projectScope, values)
 
     // The generic path stores select-field facts as their display label
@@ -3762,10 +3724,7 @@ export function BusinessWorkspace({
     }
 
     let newRecord: BusinessRecord = {
-      id: `${resolvedTarget.module.id}-${formSchema.recordKind
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "")}-${now}`,
+      id: `${resolvedTarget.module.id}-${slugify(formSchema.recordKind)}-${now}`,
       name: recordName,
       context: contextValues.join(" · ") || projectScopeLabel(projectIds),
       status: initialFormStatus(resolvedTarget.module, formSchema, values),
@@ -4075,7 +4034,12 @@ export function BusinessWorkspace({
     }
 
     const project = linkRecord("projectId", "configure", "organization", data.projectId)
-    const area = linkRecord("planningAreaId", "plan", "areas", data.planningAreaId)
+    const area = linkRecord(
+      "planningAreaId",
+      PLANNING_AREAS_MODULE.workspaceId,
+      PLANNING_AREAS_MODULE.moduleId,
+      data.planningAreaId,
+    )
     const calendar = linkRecord("calendarId", "plan", "calendars", data.calendarId)
     const depot = linkRecord("depotId", "resources", "depots", data.depotId)
     const unloadingStation = linkRecord(

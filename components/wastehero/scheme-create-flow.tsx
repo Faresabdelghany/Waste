@@ -38,6 +38,7 @@ import {
   useModuleRecords,
 } from "@/components/wastehero/scheme-route-map"
 import type { BusinessRecord } from "@/lib/data/business-modules"
+import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import { schemeFrequencyPromiseOfRecord } from "@/lib/data/service-frequencies"
 import {
   calendarDayStatus,
@@ -423,7 +424,7 @@ interface GuidedStepProps {
 
 function StepSchemeScope({ data, updateData }: GuidedStepProps) {
   const projects = useModuleRecords("configure", "organization")
-  const areas = useModuleRecords("plan", "areas")
+  const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId)
   const depots = useModuleRecords("resources", "depots")
   const selectedCalendar = useSelectedCalendar(data.calendarId)
 
@@ -818,7 +819,7 @@ function StepSchemeReview({
   onEditStep: (step: number) => void
 }) {
   const projects = useModuleRecords("configure", "organization")
-  const areas = useModuleRecords("plan", "areas")
+  const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId)
   const serviceProviders = useModuleRecords("service-providers", "service-providers")
   const vehicles = useModuleRecords("fleet", "vehicles")
   const drivers = useModuleRecords("fleet", "drivers")

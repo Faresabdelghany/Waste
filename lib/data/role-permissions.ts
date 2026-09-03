@@ -135,6 +135,9 @@ const DEFAULT_ROLE_ACCESS: Record<string, RoleAccessMap> = {
     workspaceGrant("commercial", VIEW_ONLY),
     workspaceGrant("improve", VIEW_ONLY),
     {
+      // Areas & Zones moved from Plan to Settings (2026-09-03, D37): the
+      // roles that had full Plan access keep full access to the module.
+      "configure.areas": ALL_ACTIONS,
       "configure.master": VIEW_EDIT,
       "configure.templates": VIEW_EDIT,
     },
@@ -152,7 +155,7 @@ const DEFAULT_ROLE_ACCESS: Record<string, RoleAccessMap> = {
     workspaceGrant("fleet", VIEW_ONLY),
     workspaceGrant("customers", VIEW_ONLY),
     workspaceGrant("resources", VIEW_ONLY),
-    { "improve.analytics": VIEW_ONLY },
+    { "configure.areas": ALL_ACTIONS, "improve.analytics": VIEW_ONLY },
   ),
   "role-fleet-manager": mergeAccess(
     workspaceGrant("fleet", ALL_ACTIONS),

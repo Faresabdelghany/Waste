@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/select"
 import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
 import type { BusinessRecord } from "@/lib/data/business-modules"
+import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import {
   collectionGroupCoverage,
   collectionGroupsOfRecord,
@@ -534,7 +535,7 @@ export function CollectionGroupsEditor({
   const vehicles = useModuleRecords("fleet", "vehicles")
   const drivers = useModuleRecords("fleet", "drivers")
   const serviceProviders = useModuleRecords("service-providers", "service-providers")
-  const areas = useModuleRecords("plan", "areas")
+  const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId)
   const projects = useModuleRecords("configure", "organization")
   const days = sortServiceDays(serviceDays)
   const [selectedId, setSelectedId] = useState<string | null>(groups[0]?.id ?? null)

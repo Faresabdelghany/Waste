@@ -1,7 +1,9 @@
+import { settingsModuleDomains } from "@/lib/data/business-domain"
 import {
   businessWorkspaces,
   type BusinessRecord,
   type ModuleDefinition,
+  type ModuleLocation,
   type WorkspaceDefinition,
   type WorkspaceId,
 } from "@/lib/data/business-modules"
@@ -11,11 +13,6 @@ export type ResolvedBusinessLink = {
   workspaceId: WorkspaceId
   moduleId: string
   recordId?: string
-}
-
-type ModuleLocation = {
-  workspaceId: WorkspaceId
-  moduleId: string
 }
 
 type IndexedRecord = ModuleLocation & {
@@ -40,6 +37,9 @@ const workspacePaths: Record<Exclude<WorkspaceId, "configure">, string> = {
 }
 
 const settingsPaneByModule: Record<string, string> = {
+  ...Object.fromEntries(
+    settingsModuleDomains.map((module) => [module.moduleId, module.settingsPaneId]),
+  ),
   organization: "company",
   access: "access",
   master: "operations-setup",
@@ -63,7 +63,7 @@ const fallbackModules: Array<ModuleLocation & { terms: string[] }> = [
   { workspaceId: "commercial", moduleId: "invoices", terms: ["invoice", "invoices", "credit note", "credit notes"] },
   { workspaceId: "service-providers", moduleId: "service-providers", terms: ["service provider", "service providers"] },
   { workspaceId: "service-providers", moduleId: "service-areas", terms: ["service area", "service areas"] },
-  { workspaceId: "plan", moduleId: "areas", terms: ["planning area", "planning areas"] },
+  { workspaceId: "configure", moduleId: "areas", terms: ["planning area", "planning areas"] },
   { workspaceId: "service-providers", moduleId: "activities", terms: ["service provider activity", "service provider activities"] },
   { workspaceId: "customers", moduleId: "properties", terms: ["property", "properties"] },
   { workspaceId: "resources", moduleId: "containers", terms: ["container", "containers", "asset", "assets"] },

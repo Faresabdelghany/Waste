@@ -17,7 +17,10 @@ import {
   businessWorkspaces,
   type WorkspaceId,
 } from "@/lib/data/business-modules"
-import { publicWorkspaceDomains } from "@/lib/data/business-domain"
+import {
+  publicWorkspaceDomains,
+  settingsModuleDomains,
+} from "@/lib/data/business-domain"
 
 const actionExecutions: Record<string, BusinessFormExecution> = {
   "route-studio.routes": {
@@ -542,9 +545,14 @@ if (duplicateKeys.length > 0) {
   throw new Error(`Duplicate business form schemas: ${duplicateKeys.join(", ")}`)
 }
 
-const expectedKeys: string[] = publicWorkspaceDomains.flatMap((workspace) =>
-  workspace.moduleIds.map((moduleId) => `${workspace.workspaceId}.${moduleId}`),
-)
+// Every public module, plus the Settings-managed modules (configure.*) that
+// keep real business records behind a Settings pane.
+const expectedKeys: string[] = [
+  ...publicWorkspaceDomains.flatMap((workspace) =>
+    workspace.moduleIds.map((moduleId) => `${workspace.workspaceId}.${moduleId}`),
+  ),
+  ...settingsModuleDomains.map((module) => module.key),
+]
 const actualKeys = new Set<string>(
   businessFormSchemas.map((schema) => schema.key),
 )

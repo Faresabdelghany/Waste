@@ -113,7 +113,7 @@ The declarative stop selection a Route Scheme stores — waste fractions plus an
 _Avoid_: Container list, picked containers, stop list
 
 **Planning Area**:
-A versioned geographic area used for route planning, service operations, or notifications. Operational geography, never a commercial award — that is a Service Area.
+A versioned geographic area used for route planning, service operations, or notifications. Operational geography, never a commercial award — that is a Service Area. Managed as master data in Settings → Operations → Areas & Zones (since 2026-09-03) and referenced by Route Schemes, Containers, and Service Areas.
 _Avoid_: Service area, contract area, zone (unqualified)
 
 **Route**:

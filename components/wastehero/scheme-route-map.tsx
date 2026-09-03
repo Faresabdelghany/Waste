@@ -12,7 +12,7 @@ import { useState } from "react"
 
 import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
 import {
-  businessWorkspaces,
+  getModuleDefinition,
   type BusinessRecord,
   type WorkspaceId,
 } from "@/lib/data/business-modules"
@@ -35,10 +35,7 @@ import { cn } from "@/lib/utils"
 /** Store-merged records of one module — fixtures plus user-created. */
 export function useModuleRecords(workspaceId: WorkspaceId, moduleId: string) {
   const { getRecords } = useBusinessRecordStore()
-  const fixtureRecords =
-    businessWorkspaces[workspaceId]?.modules.find(
-      (candidate) => candidate.id === moduleId,
-    )?.records ?? []
+  const fixtureRecords = getModuleDefinition({ workspaceId, moduleId })?.records ?? []
   return getRecords(workspaceId, moduleId, fixtureRecords)
 }
 

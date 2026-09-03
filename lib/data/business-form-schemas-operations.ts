@@ -1009,7 +1009,7 @@ export const operationsBusinessFormSchemas = [
             // picks, legacy fixtures) carries its stops explicitly, so the
             // edit dialog must not demand an area it never needed (issue #35).
             requiredWhen: { fieldId: "stopSelection", equals: "rule" },
-            relation: { workspaceId: "plan", moduleId: "areas" },
+            relation: { workspaceId: "configure", moduleId: "areas" },
           },
           {
             id: "calendarId",
@@ -1297,7 +1297,7 @@ export const operationsBusinessFormSchemas = [
     ],
   },
   {
-    key: "plan.areas",
+    key: "configure.areas",
     mode: "create",
     recordKind: "Operational Planning Area version",
     title: "Create operational planning area",
@@ -1347,7 +1347,7 @@ export const operationsBusinessFormSchemas = [
             id: "previousVersionId",
             label: "Previous area version",
             type: "select",
-            relation: { workspaceId: "plan", moduleId: "areas" },
+            relation: { workspaceId: "configure", moduleId: "areas" },
           },
           {
             id: "effectiveFrom",

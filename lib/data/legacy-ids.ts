@@ -1,6 +1,8 @@
 /**
  * Legacy identifiers from the Contractor → Service provider and
- * Contract area → Service area rename (2026-09-02).
+ * Contract area → Service area rename (2026-09-02), plus the Areas & Zones
+ * move from the Plan workspace to Settings (2026-09-03, D37: the module key
+ * `plan.areas` became `configure.areas`; record ids did not change).
  *
  * Fixtures and code use the new ids only. Browser-local state (localStorage)
  * and bookmarked URLs written before the rename still carry the old ids, so
@@ -28,11 +30,15 @@ export const LEGACY_MODULE_IDS: Readonly<Record<string, string>> = {
 
 /**
  * `${workspaceId}.${moduleId}` keys (record store buckets, role access maps).
- * Listed for documentation and as harness fixtures; `migrateLegacyModuleKey`
- * also rewrites any other key token-wise (see LEGACY_ID_TOKENS), so a bucket
- * such as `contractors.settlements` resolves without an entry here.
+ * The rename entries are listed for documentation and as harness fixtures;
+ * `migrateLegacyModuleKey` also rewrites any other key token-wise (see
+ * LEGACY_ID_TOKENS), so a bucket such as `contractors.settlements` resolves
+ * without an entry here. The `plan.areas` move is a real lookup: its tokens
+ * are not legacy, only the module's home changed.
  */
 export const LEGACY_MODULE_KEYS: Readonly<Record<string, string>> = {
+  // Areas & Zones moved from Plan to Settings (2026-09-03, D37).
+  "plan.areas": "configure.areas",
   "contractors.contractors": "service-providers.service-providers",
   "contractors.contract-areas": "service-providers.service-areas",
   "contractors.activities": "service-providers.activities",
@@ -225,19 +231,38 @@ export function migrateLegacyModuleKey(key: string): string {
 }
 
 /**
+ * `/plan?module=areas[&record=…]` opened the Areas & Zones module before it
+ * moved to Settings; the same records now open through the Settings pane.
+ * Every other Plan href (calendars, the bare workspace) is left alone.
+ */
+function migratePlanAreasHref(href: string): string {
+  const match = /^\/plan\?([^#]*)(#.*)?$/.exec(href)
+  if (!match) return href
+  const params = new URLSearchParams(match[1])
+  if (params.get("module") !== "areas") return href
+  const next = new URLSearchParams({ pane: "areas" })
+  const recordId = params.get("record")
+  if (recordId) next.set("record", recordId)
+  return `/settings?${next.toString()}${match[2] ?? ""}`
+}
+
+/**
  * Rewrites app-relative hrefs: the retired `/contractors` and
- * `/contractor-workspace(/…)` paths plus `?module=` / `?record=` params.
- * Absolute URLs and non-app paths are returned untouched.
+ * `/contractor-workspace(/…)` paths plus `?module=` / `?record=` params, and
+ * the Plan deep links into the moved Areas & Zones module. Absolute URLs and
+ * non-app paths are returned untouched.
  */
 export function migrateLegacyHref(href: string): string {
   if (!href.startsWith("/")) return href
-  return href
-    .replace(/^\/contractors(?=[/?#]|$)/, "/service-providers")
-    .replace(/^\/contractor-workspace(?=[/?#]|$)/, "/service-provider-workspace")
-    .replace(
-      /([?&](?:module|record)=)([a-z0-9.-]+)/g,
-      (_, prefix: string, id: string) => `${prefix}${migrateLegacyId(id)}`,
-    )
+  return migratePlanAreasHref(
+    href
+      .replace(/^\/contractors(?=[/?#]|$)/, "/service-providers")
+      .replace(/^\/contractor-workspace(?=[/?#]|$)/, "/service-provider-workspace")
+      .replace(
+        /([?&](?:module|record)=)([a-z0-9.-]+)/g,
+        (_, prefix: string, id: string) => `${prefix}${migrateLegacyId(id)}`,
+      ),
+  )
 }
 
 /**
@@ -251,6 +276,27 @@ function migrateKey(
   return (
     lookup(extraKeys, key) ?? lookup(LEGACY_OBJECT_KEYS, key) ?? migrateLegacyId(key)
   )
+}
+
+/**
+ * A stored `{ workspaceId, moduleId }` pair (a `relationRefs` entry, a form
+ * relation target) that names a module's old home. Individual legacy tokens
+ * are already rewritten string by string; only a *moved* module — same ids,
+ * new workspace — needs the pair resolved together through LEGACY_MODULE_KEYS.
+ */
+function migrateModuleLocation(
+  node: Record<string, unknown>,
+): { workspaceId: string; moduleId: string } | undefined {
+  const { workspaceId, moduleId } = node
+  if (typeof workspaceId !== "string" || typeof moduleId !== "string") return undefined
+  const key = `${workspaceId}.${moduleId}`
+  const nextKey = migrateLegacyModuleKey(key)
+  if (nextKey === key) return undefined
+  const separator = nextKey.indexOf(".")
+  return {
+    workspaceId: nextKey.slice(0, separator),
+    moduleId: nextKey.slice(separator + 1),
+  }
 }
 
 function migrateStringValue(value: string): string {
@@ -295,6 +341,7 @@ export function migrateLegacyState<T>(
     }
     if (node && typeof node === "object") {
       const source = node as Record<string, unknown>
+      const movedModule = migrateModuleLocation(source)
       const out: Record<string, unknown> = {}
       let changed = false
       for (const [key, child] of Object.entries(source)) {
@@ -304,7 +351,10 @@ export function migrateLegacyState<T>(
           // Stored-new wins: keep the value already held under the new key.
           if (Object.prototype.hasOwnProperty.call(source, nextKey)) continue
         }
-        const nextChild = visit(child, key)
+        const nextChild =
+          movedModule && (key === "workspaceId" || key === "moduleId")
+            ? movedModule[key]
+            : visit(child, key)
         if (nextChild !== child) changed = true
         out[nextKey] = nextChild
       }
@@ -361,11 +411,15 @@ export function migrateLegacyRecordBuckets<R extends { id: string }>(
 }
 
 /**
- * True when serialized state still mentions a retired identifier. A cheap,
- * case-insensitive pre-check — it may report free text such as
- * "Subcontractor", so callers compare the migration result by reference to
- * decide whether anything actually changed.
+ * True when serialized state still mentions a retired identifier or the moved
+ * Areas & Zones module — as the `plan.areas` bucket/access key or as a stored
+ * `workspaceId: "plan"` / `moduleId: "areas"` pair. A cheap, case-insensitive
+ * pre-check — it may report free text such as "Subcontractor", so callers
+ * compare the migration result by reference to decide whether anything
+ * actually changed.
  */
 export function hasLegacyIds(serialized: string): boolean {
-  return /contractor|contract[- ]?area/i.test(serialized)
+  return /contractor|contract[- ]?area|plan\.areas|"workspaceId":\s*"plan",\s*"moduleId":\s*"areas"/i.test(
+    serialized,
+  )
 }

@@ -402,6 +402,12 @@ export type WorkspaceDefinition = {
   modules: ModuleDefinition[]
 }
 
+/** Where a module lives: the `${workspaceId}.${moduleId}` pair every store, link, and relation uses. */
+export type ModuleLocation = {
+  workspaceId: WorkspaceId
+  moduleId: string
+}
+
 function record(
   id: string,
   name: string,
@@ -580,7 +586,7 @@ function buildSeededPropertyRecords(): BusinessRecord[] {
 }
 
 // Planning-area links for declarative stop matching (issue #19): every
-// in-service container belongs to one plan.areas record, mirrored as the
+// in-service container belongs to one configure.areas record, mirrored as the
 // "Planning area" display fact plus the typed submittedValues.planningAreaId
 // the stop-match resolver reads. Copenhagen containers rotate across the
 // three Copenhagen areas; Harbor containers all sit in the harbor area.
@@ -2059,7 +2065,7 @@ const operate: WorkspaceDefinition = {
 const plan: WorkspaceDefinition = {
   id: "plan",
   label: "Plan",
-  description: "Shape recurring service through collection calendars and planning geography. Route Schemes own recurrence and live in Route Studio.",
+  description: "Shape recurring service through collection calendars. Route Schemes own recurrence and live in Route Studio; planning geography (Areas & Zones) is managed in Settings.",
   modules: [
     {
       id: "schemes",
@@ -2277,93 +2283,6 @@ const plan: WorkspaceDefinition = {
             timezone: "Europe/Copenhagen",
           },
         },
-      ],
-    },
-    {
-      id: "areas",
-      label: "Areas & Zones",
-      title: "Areas, Zones, and Service Geography",
-      description: "Planning areas, notification zones, and map validation.",
-      entityLabel: "Area or zone",
-      contextLabel: "Purpose · project",
-      valueLabel: "Coverage",
-      primaryAction: "New area",
-      metrics: [
-        { label: "Operating areas", value: "12", helper: "No uncovered project area", tone: "positive" },
-        { label: "Referenced by service areas", value: "2", helper: "CA-Ø-2 · CA-AM-1" },
-        { label: "Overlaps", value: "1", helper: "Effective 1 Sep", tone: "danger" },
-        { label: "Notification zones", value: "9", helper: "4 customer-facing" },
-      ],
-      lifecycle: ["Draft", "Valid", "Upcoming", "Active", "Expired"],
-      rules: [
-        "Area boundary gaps and overlaps are visible before activation.",
-        "Geographic scope is effective-dated.",
-        "Notification zones and operational responsibility remain separate concepts.",
-      ],
-      records: [
-        record(
-          "area-indreby",
-          "Indre By Operations",
-          "Planning area · Copenhagen Central",
-          "Active",
-          "Operations Admin",
-          "18.4 km²",
-          "3 weeks ago",
-          "Primary planning and dispatch area for Central municipal service.",
-          { Code: "OP-CEN-01", Boundary: "Valid", Properties: "1,602", Routes: "9 daily" },
-          ["Service area CA-CEN-WH", "3 notification zones", "Nordhavn depot"],
-          "Project geography",
-          "3 weeks",
-          ["Create version", "Archive"],
-        ),
-        // Operator-owned planning geography referenced by service areas
-        // (issue #12): the commercial award lives in Service providers →
-        // Service Areas; these records stay operational.
-        record(
-          "area-osterbro-contract",
-          "Østerbro Zone 2",
-          "Planning area · Østerbro",
-          "Overlap",
-          "Operations Admin",
-          "2.1 km² overlap",
-          "Today",
-          "Upcoming boundary revision overlaps a neighbouring area for five properties.",
-          { Code: "OP-Ø-02", Boundary: "Conflict", Properties: "418", Effective: "1 Sep 2026", "Referenced by": "Service area CA-Ø-2" },
-          ["Service area CA-Ø-2", "5 affected properties", "Service provider NordRen ApS"],
-          "Project geography",
-          "Today",
-          ["Resolve overlap", "Create version"],
-        ),
-        record(
-          "area-amager-1",
-          "Amager Zone 1",
-          "Planning area · Amager",
-          "Active",
-          "Operations Admin",
-          "6.8 km²",
-          "2 weeks ago",
-          "Planning geography for Amager collections.",
-          { Code: "OP-AM-01", Boundary: "Valid", Properties: "944", "Referenced by": "Service area CA-AM-1" },
-          ["Service area CA-AM-1", "2 notification zones"],
-          "Project geography",
-          "2 weeks",
-          ["Create version", "Archive"],
-        ),
-        record(
-          "area-harbor-1",
-          "Nordhavn Harbor Area",
-          "Planning area · Harbor Commercial",
-          "Active",
-          "Operations Admin",
-          "3.2 km²",
-          "1 week ago",
-          "Planning geography for the Harbor Commercial dockside collections.",
-          { Code: "OP-HAR-01", Boundary: "Valid", Properties: "212", Routes: "2 weekly" },
-          ["Harbor warehouse", "1 notification zone"],
-          "Project geography",
-          "1 week",
-          ["Create version", "Archive"],
-        ),
       ],
     },
     {
@@ -5051,7 +4970,7 @@ const serviceAreasModule: ModuleDefinition = {
   records: [
     // Fixture service areas carry a create-form-shaped typed payload —
     // submittedValues plus service provider/zone relationRefs — so the zoneIds →
-    // plan.areas reference is exercised, not just declared (issue #12).
+    // configure.areas reference is exercised, not just declared (issue #12).
     // Per file-wide fixture convention the projectId relationRef the form
     // would also emit is omitted; project scope comes from the fixture scope
     // registry. The legal boundary stays the contract's own boundary text;
@@ -5093,7 +5012,7 @@ const serviceAreasModule: ModuleDefinition = {
       },
       relationRefs: [
         { fieldId: "serviceProviderId", workspaceId: "service-providers", moduleId: "service-providers", recordId: "service-provider-nordren", label: "NordRen ApS" },
-        { fieldId: "zoneIds", workspaceId: "plan", moduleId: "areas", recordId: "area-osterbro-contract", label: "Østerbro Zone 2" },
+        { fieldId: "zoneIds", workspaceId: "configure", moduleId: "areas", recordId: "area-osterbro-contract", label: "Østerbro Zone 2" },
       ],
     },
     {
@@ -5133,7 +5052,7 @@ const serviceAreasModule: ModuleDefinition = {
       },
       relationRefs: [
         { fieldId: "serviceProviderId", workspaceId: "service-providers", moduleId: "service-providers", recordId: "service-provider-cityhaul", label: "CityHaul A/S" },
-        { fieldId: "zoneIds", workspaceId: "plan", moduleId: "areas", recordId: "area-amager-1", label: "Amager Zone 1" },
+        { fieldId: "zoneIds", workspaceId: "configure", moduleId: "areas", recordId: "area-amager-1", label: "Amager Zone 1" },
       ],
     },
   ],
@@ -5827,6 +5746,99 @@ const configure: WorkspaceDefinition = {
         ),
       ],
     },
+    // Areas & Zones moved here from Plan on 2026-09-03 (D37): planning
+    // geography is Settings-managed master data. The `configure` workspace
+    // is the registry twin of Settings — business-links resolves its
+    // modules to /settings?pane=… — and the records stay business records
+    // (bucket "configure.areas") so schemes, containers, and service areas
+    // keep referencing them.
+    {
+      id: "areas",
+      label: "Areas & Zones",
+      title: "Areas, Zones, and Service Geography",
+      description: "Planning areas, notification zones, and map validation.",
+      entityLabel: "Area or zone",
+      contextLabel: "Purpose · project",
+      valueLabel: "Coverage",
+      primaryAction: "New area",
+      metrics: [
+        { label: "Operating areas", value: "12", helper: "No uncovered project area", tone: "positive" },
+        { label: "Referenced by service areas", value: "2", helper: "CA-Ø-2 · CA-AM-1" },
+        { label: "Overlaps", value: "1", helper: "Effective 1 Sep", tone: "danger" },
+        { label: "Notification zones", value: "9", helper: "4 customer-facing" },
+      ],
+      lifecycle: ["Draft", "Valid", "Upcoming", "Active", "Expired"],
+      rules: [
+        "Area boundary gaps and overlaps are visible before activation.",
+        "Geographic scope is effective-dated.",
+        "Notification zones and operational responsibility remain separate concepts.",
+      ],
+      records: [
+        record(
+          "area-indreby",
+          "Indre By Operations",
+          "Planning area · Copenhagen Central",
+          "Active",
+          "Operations Admin",
+          "18.4 km²",
+          "3 weeks ago",
+          "Primary planning and dispatch area for Central municipal service.",
+          { Code: "OP-CEN-01", Boundary: "Valid", Properties: "1,602", Routes: "9 daily" },
+          ["Service area CA-CEN-WH", "3 notification zones", "Nordhavn depot"],
+          "Project geography",
+          "3 weeks",
+          ["Create version", "Archive"],
+        ),
+        // Operator-owned planning geography referenced by service areas
+        // (issue #12): the commercial award lives in Service providers →
+        // Service Areas; these records stay operational.
+        record(
+          "area-osterbro-contract",
+          "Østerbro Zone 2",
+          "Planning area · Østerbro",
+          "Overlap",
+          "Operations Admin",
+          "2.1 km² overlap",
+          "Today",
+          "Upcoming boundary revision overlaps a neighbouring area for five properties.",
+          { Code: "OP-Ø-02", Boundary: "Conflict", Properties: "418", Effective: "1 Sep 2026", "Referenced by": "Service area CA-Ø-2" },
+          ["Service area CA-Ø-2", "5 affected properties", "Service provider NordRen ApS"],
+          "Project geography",
+          "Today",
+          ["Resolve overlap", "Create version"],
+        ),
+        record(
+          "area-amager-1",
+          "Amager Zone 1",
+          "Planning area · Amager",
+          "Active",
+          "Operations Admin",
+          "6.8 km²",
+          "2 weeks ago",
+          "Planning geography for Amager collections.",
+          { Code: "OP-AM-01", Boundary: "Valid", Properties: "944", "Referenced by": "Service area CA-AM-1" },
+          ["Service area CA-AM-1", "2 notification zones"],
+          "Project geography",
+          "2 weeks",
+          ["Create version", "Archive"],
+        ),
+        record(
+          "area-harbor-1",
+          "Nordhavn Harbor Area",
+          "Planning area · Harbor Commercial",
+          "Active",
+          "Operations Admin",
+          "3.2 km²",
+          "1 week ago",
+          "Planning geography for the Harbor Commercial dockside collections.",
+          { Code: "OP-HAR-01", Boundary: "Valid", Properties: "212", Routes: "2 weekly" },
+          ["Harbor warehouse", "1 notification zone"],
+          "Project geography",
+          "1 week",
+          ["Create version", "Archive"],
+        ),
+      ],
+    },
     {
       id: "templates",
       label: "Tickets & Communication",
@@ -6308,4 +6320,13 @@ export const businessWorkspaceList = Object.values(businessWorkspaces).filter(
 
 export function getWorkspaceDefinition(id: WorkspaceId): WorkspaceDefinition {
   return businessWorkspaces[id]
+}
+
+export function getModuleDefinition({
+  workspaceId,
+  moduleId,
+}: ModuleLocation): ModuleDefinition | undefined {
+  return businessWorkspaces[workspaceId].modules.find(
+    (module) => module.id === moduleId,
+  )
 }

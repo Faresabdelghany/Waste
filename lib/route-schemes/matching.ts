@@ -225,7 +225,7 @@ export type ContainerMatchProfile = {
   id: string
   name: string
   status: string
-  /** plan.areas record id; absent = never matches an area-scoped rule. */
+  /** configure.areas record id; absent = never matches an area-scoped rule. */
   areaId?: string
   /** Display-vocabulary fractions ("Residual · Mixed" splits into both). */
   fractions: string[]
@@ -330,7 +330,7 @@ const fractionsIntersect = (
  */
 export function resolveStopMatches(input: {
   rule: StopMatchRule
-  /** The scheme's planning area (plan.areas record id); required to match. */
+  /** The scheme's planning area (configure.areas record id); required to match. */
   areaId: string | undefined
   /** The scheme's project scope; absent = company-wide. */
   projectIds?: readonly string[]
