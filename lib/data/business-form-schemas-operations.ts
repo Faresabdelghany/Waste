@@ -1092,6 +1092,9 @@ export const operationsBusinessFormSchemas = [
             relation: { workspaceId: "service-providers", moduleId: "service-providers" },
           },
           {
+            // Not a form gate (D34): a Validated scheme needs a vehicle and a
+            // default driver, but validateScheme blocks — the scheme saves as
+            // Draft with the issue named. Saving as Draft is always allowed.
             id: "plannedVehicleId",
             label: "Planned vehicle",
             type: "select",

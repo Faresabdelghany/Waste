@@ -22,10 +22,8 @@ import {
   serviceFrequencyOfRecord,
 } from "../lib/data/service-frequencies"
 import { calendarFromRecord } from "../lib/route-schemes/calendar"
-import {
-  effectiveStopPlans,
-  stopSelectionMode,
-} from "../lib/route-schemes/matching"
+import { effectiveStopPlans } from "../lib/route-schemes/groups"
+import { stopSelectionMode } from "../lib/route-schemes/matching"
 import {
   RECURRENCE_FREQUENCY_LABELS,
   recurrenceFromValues,

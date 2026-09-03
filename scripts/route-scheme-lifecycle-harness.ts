@@ -81,6 +81,9 @@ function makeScheme(overrides: {
       effectiveTo: overrides.effectiveTo ?? "",
       sameAllDays: true,
       containerIds: "asset-1",
+      // A Validated scheme needs a vehicle and a default driver (D34).
+      plannedVehicleId: "vehicle-wh-24",
+      plannedDriverId: "driver-x",
       ...(overrides.lastGeneratedAt
         ? { lastGeneratedAt: overrides.lastGeneratedAt }
         : {}),
@@ -675,9 +678,9 @@ const preview = previewSchemeCreation({
   frequency: "weekly",
   serviceDays: ["wednesday", "sunday"],
   effectiveFrom: "2026-08-01",
-  dayPlans: [
-    { day: "wednesday", containerIds: ["c1", "c2"] },
-    { day: "sunday", containerIds: ["c3"] },
+  groupPlans: [
+    { groupId: "default", day: "wednesday", containerIds: ["c1", "c2"] },
+    { groupId: "default", day: "sunday", containerIds: ["c3"] },
   ],
 })
 check(
@@ -685,11 +688,13 @@ check(
   preview && {
     window: preview.window,
     routeDates: preview.routeDates,
+    routeCount: preview.routeCount,
     estimatedStops: preview.estimatedStops,
   },
   {
     window: { from: "2026-09-01", to: "2026-09-08" },
     routeDates: ["2026-09-02", "2026-09-06"],
+    routeCount: 2,
     estimatedStops: 3,
   },
 )
@@ -701,7 +706,10 @@ check(
       frequency: "weekly",
       serviceDays: ["wednesday", "sunday"],
       effectiveFrom: "2026-08-01",
-      dayPlans: [{ day: "wednesday", containerIds: ["c1"] }],
+      groupPlans: [
+        { groupId: "default", day: "wednesday", containerIds: ["c1"] },
+        { groupId: "default", day: "sunday", containerIds: ["c2"] },
+      ],
       calendar: {
         id: "calendar-mondays",
         name: "Mondays only",
@@ -723,7 +731,7 @@ check(
     frequency: "weekly",
     serviceDays: [],
     effectiveFrom: "",
-    dayPlans: [],
+    groupPlans: [],
   }),
   null,
 )

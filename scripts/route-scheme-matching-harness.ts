@@ -12,20 +12,27 @@ import {
   planSchemeGeneration,
 } from "../lib/route-schemes/generation"
 import {
+  effectiveStopPlans,
+  schemeStopRuleSources,
+} from "../lib/route-schemes/groups"
+import {
   CONTAINER_VEHICLE_COMPATIBILITY,
   containerMatchProfile,
   effectiveDayRules,
-  effectiveStopPlans,
   matchPlansFromValues,
   matchPlansToValues,
   resolveStopMatches,
-  schemeStopRuleSources,
   stopRuleSummary,
   stopSelectionMode,
   vehicleTypeOfRecord,
 } from "../lib/route-schemes/matching"
 import { runPlanAhead } from "../lib/route-schemes/plan-ahead"
-import { validateScheme } from "../lib/route-schemes/validation"
+import type { ServiceDay } from "../lib/route-schemes/recurrence"
+import {
+  validateScheme,
+  type SchemeGroupValidationInput,
+  type SchemeValidationInput,
+} from "../lib/route-schemes/validation"
 
 let passed = 0
 let failed = 0
@@ -690,80 +697,118 @@ check(
 
 /* ------------------------- rule-mode validation ---------------------------- */
 
-const VALID_BASE = {
-  serviceDays: ["wednesday", "sunday"] as ("wednesday" | "sunday")[],
-  effectiveFrom: "2026-08-01",
-  effectiveTo: "2026-12-31",
-  plans: { sameAllDays: true, sharedContainerIds: [], containersByDay: {} },
+// Validation reads a scheme as collection groups (D33): a legacy rule scheme
+// with one shared rule is one implicit group covering every service day; a
+// per-day rule scheme is one group per day named by its short day label.
+type DayRule = { day: ServiceDay; fractions: string[]; vehicleType?: string; matchedCount: number }
+const DAY_LABEL: Record<string, string> = { wednesday: "Wed", sunday: "Sun", monday: "Mon", tuesday: "Tue" }
+const ruleInput = (matching: {
+  areaId: string | undefined
+  sameAllDays: boolean
+  dayRules: DayRule[]
+  plannedVehicleType?: string
+}): SchemeValidationInput => {
+  const base = {
+    vehicleId: "vehicle-1",
+    driverId: "driver-1",
+    stopSource: "rule" as const,
+    vehicleType: matching.plannedVehicleType ?? null,
+  }
+  const groups: SchemeGroupValidationInput[] = matching.sameAllDays
+    ? [
+        {
+          ...base,
+          id: "default",
+          name: "Scheme",
+          days: matching.dayRules.map((rule) => rule.day),
+          fractions: matching.dayRules[0]?.fractions ?? [],
+          ruleVehicleType: matching.dayRules[0]?.vehicleType,
+          dayStops: matching.dayRules.map((rule) => ({ day: rule.day, count: rule.matchedCount, claimedByOthers: 0 })),
+        },
+      ]
+    : matching.dayRules.map((rule) => ({
+        ...base,
+        id: `day-${rule.day}`,
+        name: DAY_LABEL[rule.day],
+        days: [rule.day],
+        fractions: rule.fractions,
+        ruleVehicleType: rule.vehicleType,
+        dayStops: [{ day: rule.day, count: rule.matchedCount, claimedByOthers: 0 }],
+      }))
+  return {
+    serviceDays: ["wednesday", "sunday"],
+    effectiveFrom: "2026-08-01",
+    effectiveTo: "2026-12-31",
+    areaId: matching.areaId,
+    groups,
+  }
 }
 
 check(
   "a matching rule validates without the manual container check",
-  validateScheme({
-    ...VALID_BASE,
-    stopMatching: {
+  validateScheme(
+    ruleInput({
       areaId: AREA,
       sameAllDays: true,
       dayRules: [
         { day: "wednesday", fractions: ["Residual"], matchedCount: 3 },
         { day: "sunday", fractions: ["Residual"], matchedCount: 3 },
       ],
-    },
-  }),
+    }),
+  ),
   { status: "Validated", issues: [], warnings: [] },
 )
 check(
   "a rule without a planning area blocks",
-  validateScheme({
-    ...VALID_BASE,
-    stopMatching: {
+  validateScheme(
+    ruleInput({
       areaId: undefined,
       sameAllDays: true,
-      dayRules: [{ day: "wednesday", fractions: ["Residual"], matchedCount: 0 }],
-    },
-  }).issues,
+      dayRules: [
+        { day: "wednesday", fractions: ["Residual"], matchedCount: 0 },
+        { day: "sunday", fractions: ["Residual"], matchedCount: 0 },
+      ],
+    }),
+  ).issues,
   ["Pick a planning area — the stop rule matches containers inside it"],
 )
 check(
   "a day without fractions blocks, naming the days in per-day mode",
-  validateScheme({
-    ...VALID_BASE,
-    stopMatching: {
+  validateScheme(
+    ruleInput({
       areaId: AREA,
       sameAllDays: false,
       dayRules: [
         { day: "wednesday", fractions: [], matchedCount: 0 },
         { day: "sunday", fractions: ["Glass"], matchedCount: 2 },
       ],
-    },
-  }).issues,
+    }),
+  ).issues,
   ["Pick waste fractions for Wed"],
 )
 check(
   "a zero-match rule blocks (shared and per-day phrasing)",
   [
-    validateScheme({
-      ...VALID_BASE,
-      stopMatching: {
+    validateScheme(
+      ruleInput({
         areaId: AREA,
         sameAllDays: true,
         dayRules: [
           { day: "wednesday", fractions: ["Metal"], matchedCount: 0 },
           { day: "sunday", fractions: ["Metal"], matchedCount: 0 },
         ],
-      },
-    }).issues,
-    validateScheme({
-      ...VALID_BASE,
-      stopMatching: {
+      }),
+    ).issues,
+    validateScheme(
+      ruleInput({
         areaId: AREA,
         sameAllDays: false,
         dayRules: [
           { day: "wednesday", fractions: ["Metal"], matchedCount: 0 },
           { day: "sunday", fractions: ["Glass"], matchedCount: 2 },
         ],
-      },
-    }).issues,
+      }),
+    ).issues,
   ],
   [
     ["No containers currently match the stop rule"],
@@ -772,23 +817,17 @@ check(
 )
 check(
   "a rule vehicle type the default vehicle cannot serve warns, never blocks",
-  validateScheme({
-    ...VALID_BASE,
-    plannedVehicleId: "vehicle-1",
-    stopMatching: {
+  validateScheme(
+    ruleInput({
       areaId: AREA,
       sameAllDays: true,
       dayRules: [
-        {
-          day: "wednesday",
-          fractions: ["Organic"],
-          vehicleType: "Organic sealed",
-          matchedCount: 2,
-        },
+        { day: "wednesday", fractions: ["Organic"], vehicleType: "Organic sealed", matchedCount: 2 },
+        { day: "sunday", fractions: ["Organic"], vehicleType: "Organic sealed", matchedCount: 2 },
       ],
       plannedVehicleType: "Rear loader",
-    },
-  }),
+    }),
+  ),
   {
     status: "Validated",
     issues: [],
@@ -800,17 +839,14 @@ check(
 check(
   "an overlapping rule-mode scheme warns with the shared fractions and days",
   validateScheme(
-    {
-      ...VALID_BASE,
-      stopMatching: {
-        areaId: AREA,
-        sameAllDays: true,
-        dayRules: [
-          { day: "wednesday", fractions: ["Residual", "Glass"], matchedCount: 3 },
-          { day: "sunday", fractions: ["Residual", "Glass"], matchedCount: 3 },
-        ],
-      },
-    },
+    ruleInput({
+      areaId: AREA,
+      sameAllDays: true,
+      dayRules: [
+        { day: "wednesday", fractions: ["Residual", "Glass"], matchedCount: 3 },
+        { day: "sunday", fractions: ["Residual", "Glass"], matchedCount: 3 },
+      ],
+    }),
     [],
     [],
     [
@@ -831,16 +867,14 @@ check(
 check(
   "overlap warnings skip disjoint periods, other areas, and unshared days",
   validateScheme(
-    {
-      ...VALID_BASE,
-      stopMatching: {
-        areaId: AREA,
-        sameAllDays: true,
-        dayRules: [
-          { day: "wednesday", fractions: ["Residual"], matchedCount: 3 },
-        ],
-      },
-    },
+    ruleInput({
+      areaId: AREA,
+      sameAllDays: true,
+      dayRules: [
+        { day: "wednesday", fractions: ["Residual"], matchedCount: 3 },
+        { day: "sunday", fractions: ["Residual"], matchedCount: 3 },
+      ],
+    }),
     [],
     [],
     [
@@ -870,7 +904,27 @@ check(
 )
 check(
   "manual validation is untouched by the rule checks",
-  validateScheme(VALID_BASE).issues,
+  validateScheme({
+    serviceDays: ["wednesday", "sunday"],
+    effectiveFrom: "2026-08-01",
+    effectiveTo: "2026-12-31",
+    areaId: AREA,
+    groups: [
+      {
+        id: "default",
+        name: "Scheme",
+        days: ["wednesday", "sunday"],
+        vehicleId: "vehicle-1",
+        driverId: "driver-1",
+        stopSource: "manual",
+        fractions: [],
+        dayStops: [
+          { day: "wednesday", count: 0, claimedByOthers: 0 },
+          { day: "sunday", count: 0, claimedByOthers: 0 },
+        ],
+      },
+    ],
+  }).issues,
   ["Pick at least one container"],
 )
 

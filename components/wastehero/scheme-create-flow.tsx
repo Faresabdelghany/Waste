@@ -1,22 +1,18 @@
 "use client"
 
 // Route Scheme create flow for the Route Schemes module (spec FR-1/FR-2/FR-5/
-// FR-14/FR-15, tickets #5/#6). "New route scheme" opens a chooser between
-// Quick create (the schema-driven dialog, opened via onQuickCreate) and Guided
-// Setup — a seven-step wizard (issue #32): scheme & scope, collection
-// calendar, recurrence, assignment, per-day container plans, route map, and
-// review & create. Guided completion hands the collected values to
-// onGuidedCreate, which owns record creation and the Validated/Draft decision.
+// FR-14/FR-15, tickets #5/#6; collection groups: SPEC area L, D33–D36). "New
+// route scheme" opens a chooser between Quick create (the schema-driven
+// dialog, opened via onQuickCreate) and Guided Setup — a six-step wizard:
+// scheme & scope (with the operational defaults), collection calendar,
+// recurrence, collection groups (who collects what on which days — the
+// former Assignment and Containers steps folded into one hub-and-spoke
+// step), route map, and review & create. Guided completion hands the
+// collected values to onGuidedCreate, which owns record creation and the
+// Validated/Draft decision.
 
-import { useEffect, useMemo, useState } from "react"
-import {
-  CaretLeft,
-  CaretRight,
-  Check,
-  MagnifyingGlass,
-  Plus,
-  X,
-} from "@phosphor-icons/react/dist/ssr"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { CaretLeft, CaretRight, Check, Plus, X } from "@phosphor-icons/react/dist/ssr"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,6 +24,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  CollectionGroupsEditor,
+  RecordSelect,
+  groupContainerCounts,
+  newCollectionGroup,
+} from "@/components/wastehero/collection-groups-editor"
 import { Stepper } from "@/components/project-wizard/Stepper"
 import { StepMode } from "@/components/project-wizard/steps/StepMode"
 import type { ProjectMode } from "@/components/project-wizard/types"
@@ -67,24 +69,21 @@ import {
 } from "@/lib/route-schemes/recurrence"
 import { sortServiceDays } from "@/lib/route-schemes/recurrence"
 import {
-  EMPTY_STOP_MATCH_RULE,
-  STOP_MATCH_VEHICLE_TYPES,
-  effectiveDayRules,
-  resolveStopMatches,
+  collectionGroupContainerIds,
+  flattenGroupPlans,
+  resolveCollectionGroupPlans,
+  schemeAssignmentSources,
   schemeStopRuleSources,
-  stopRuleSummary,
-  vehicleTypeOfRecord,
-  type SchemeMatchPlans,
-  type StopMatchRule,
-} from "@/lib/route-schemes/matching"
+  schemeValidationGroups,
+  unattributedIssues,
+  type CollectionGroupResolution,
+} from "@/lib/route-schemes/groups"
+import { stopRuleSummary, vehicleTypeOfRecord } from "@/lib/route-schemes/matching"
 import {
   allocationConflictSources,
   dayPlanCountSummary,
-  effectiveDayPlans,
-  schemeDefaultsFromValues,
   validateScheme,
   type SchemeDayPlan,
-  type SchemeDayPlans,
   type SchemeFrequencyPromise,
   type SchemeValidationResult,
 } from "@/lib/route-schemes/validation"
@@ -97,64 +96,45 @@ import { cn } from "@/lib/utils"
 // pulling in UI code; re-exported here for the existing import sites.
 export type { GuidedSchemeData }
 
-export function schemeDayPlans(data: GuidedSchemeData): SchemeDayPlans {
-  return {
-    // The per-day toggle is only offered for multi-day schemes, so with fewer
-    // than two service days the picker edits the shared list even while a
-    // stale per-day choice lingers in the draft — plans must read that same
-    // shared list or validation would judge a list the picker never showed.
-    sameAllDays: data.sameAllDays || data.serviceDays.length < 2,
-    sharedContainerIds: data.sharedContainerIds,
-    containersByDay: data.containersByDay,
-  }
-}
-
-/** The rule-mode counterpart of schemeDayPlans (same sameAllDays forcing). */
-export function schemeMatchPlans(data: GuidedSchemeData): SchemeMatchPlans {
-  return {
-    sameAllDays: data.sameAllDays || data.serviceDays.length < 2,
-    sharedRule: data.matchRule,
-    rulesByDay: data.matchRulesByDay,
-  }
-}
-
 const draftProjectIds = (data: GuidedSchemeData): string[] | undefined =>
   data.projectId ? [data.projectId] : undefined
 
 /**
- * The per-day stop lists the draft currently resolves to: the picked lists in
- * manual mode, the rule matches (against the live container records) in rule
- * mode — the same seam generation uses once the scheme is saved.
+ * The draft's collection groups resolved per day against the live container
+ * records — the same seam generation uses once the scheme is saved (manual
+ * picks, rule matches, and the manual-beats-rule / first-rule-group-wins
+ * tie-breaks between groups on a shared day).
  */
+export function resolvedDraftGroups(
+  data: GuidedSchemeData,
+  containers: readonly BusinessRecord[],
+): CollectionGroupResolution {
+  return resolveCollectionGroupPlans({
+    groups: data.groups,
+    serviceDays: data.serviceDays,
+    areaId: data.planningAreaId,
+    projectIds: draftProjectIds(data),
+    containers,
+  })
+}
+
+/** Day-flattened view: every stop any group serves per service day (counts line). */
 export function resolvedDraftPlans(
   data: GuidedSchemeData,
   containers: readonly BusinessRecord[],
 ): SchemeDayPlan[] {
-  if (data.stopSelection === "manual") {
-    return effectiveDayPlans(data.serviceDays, schemeDayPlans(data))
-  }
-  return effectiveDayRules(data.serviceDays, schemeMatchPlans(data)).map(
-    ({ day, rule }) => ({
-      day,
-      containerIds: resolveStopMatches({
-        rule,
-        areaId: data.planningAreaId,
-        projectIds: draftProjectIds(data),
-        containers,
-      }).matched.map((profile) => profile.id),
-    }),
-  )
+  return flattenGroupPlans(resolvedDraftGroups(data, containers), data.serviceDays)
 }
 
 /**
- * FR-5 over the wizard draft plus every existing scheme's defaults and the
- * Vehicle Planning allocations (issue #11); the selected Collection Calendar
- * adds non-blocking warnings (Q6/Q7). Rule-mode drafts (issue #19) validate
- * their stop-matching rules instead of picked lists — the containers and
- * vehicles are needed to resolve the matches and the default vehicle's type.
- * The resolved per-day stops also feed the promised-service-frequency
- * reconciliation (issue #21): every linked container with a standing promise
- * is compared against the draft's recurrence cadence.
+ * FR-5 over the wizard draft plus every existing scheme's planned assignments
+ * and the Vehicle Planning allocations (issue #11); the selected Collection
+ * Calendar adds non-blocking warnings (Q6/Q7). Groups validate their own
+ * days, assignment, and stops (D33–D35) — the containers and vehicles are
+ * needed to resolve the matches and each group's vehicle type. The resolved
+ * stops also feed the promised-service-frequency reconciliation (issue #21):
+ * every linked container with a standing promise is compared against the
+ * draft's recurrence cadence.
  */
 export function validateGuidedScheme(
   data: GuidedSchemeData,
@@ -168,11 +148,8 @@ export function validateGuidedScheme(
   // filter the edit path's schemeLiveValidation applies, so create and edit
   // never disagree about who can conflict.
   const siblings = schemesInPlanning(existingSchemes)
-  const matchPlans = schemeMatchPlans(data)
-  // In rule mode these are the rule matches, day-aligned with
-  // effectiveDayRules (resolvedDraftPlans maps that same list).
-  const dayPlans = resolvedDraftPlans(data, containers)
-  const linkedContainerIds = new Set(dayPlans.flatMap((plan) => plan.containerIds))
+  const resolution = resolvedDraftGroups(data, containers)
+  const linkedContainerIds = new Set(collectionGroupContainerIds(resolution))
   const promises = containers
     .filter((container) => linkedContainerIds.has(container.id))
     .map((container) => schemeFrequencyPromiseOfRecord(container))
@@ -182,34 +159,18 @@ export function validateGuidedScheme(
       serviceDays: data.serviceDays,
       effectiveFrom: data.effectiveFrom,
       effectiveTo: data.effectiveTo,
-      plans: schemeDayPlans(data),
-      plannedVehicleId: data.plannedVehicleId,
-      plannedDriverId: data.plannedDriverId,
+      areaId: data.planningAreaId,
       calendar,
       frequencyReconciliation: { frequency: data.frequency, promises },
-      ...(data.stopSelection === "rule"
-        ? {
-            stopMatching: {
-              areaId: data.planningAreaId,
-              sameAllDays: matchPlans.sameAllDays,
-              dayRules: effectiveDayRules(data.serviceDays, matchPlans).map(
-                ({ day, rule }, index) => ({
-                  day,
-                  fractions: rule.fractions,
-                  vehicleType: rule.vehicleType,
-                  matchedCount: dayPlans[index]?.containerIds.length ?? 0,
-                }),
-              ),
-              plannedVehicleType: vehicleTypeOfRecord(
-                vehicles.find((vehicle) => vehicle.id === data.plannedVehicleId),
-              ),
-            },
-          }
-        : {}),
+      ...schemeValidationGroups(
+        data.groups,
+        resolution,
+        (vehicleId) =>
+          vehicleTypeOfRecord(vehicles.find((vehicle) => vehicle.id === vehicleId)),
+        (containerId) => containers.find((container) => container.id === containerId)?.name,
+      ),
     },
-    siblings
-      .map((record) => schemeDefaultsFromValues(record.name, record.submittedValues))
-      .filter((source): source is NonNullable<typeof source> => source !== null),
+    siblings.flatMap((record) => schemeAssignmentSources(record.name, record.submittedValues)),
     allocationConflictSources(allocations),
     schemeStopRuleSources(siblings),
   )
@@ -309,8 +270,7 @@ const GUIDED_STEPS = [
   "Scheme & scope",
   "Collection Calendar",
   "Recurrence",
-  "Assignment",
-  "Containers",
+  "Collection groups",
   "Route map",
   "Review & create",
 ]
@@ -322,18 +282,16 @@ const GUIDED_STEP = {
   scope: 1,
   calendar: 2,
   recurrence: 3,
-  assignment: 4,
-  containers: 5,
-  map: 6,
-  review: 7,
+  groups: 4,
+  map: 5,
+  review: 6,
 } as const
 
 const GUIDED_STEP_TITLES: Record<number, string> = {
   [GUIDED_STEP.scope]: "Which scope does this scheme plan for?",
   [GUIDED_STEP.calendar]: "Which Collection Calendar governs the service dates?",
   [GUIDED_STEP.recurrence]: "When does this scheme collect?",
-  [GUIDED_STEP.assignment]: "Which defaults run the generated routes?",
-  [GUIDED_STEP.containers]: "Which containers does each service day serve?",
+  [GUIDED_STEP.groups]: "Who collects what on which service days?",
   [GUIDED_STEP.map]: "How do the generated routes look?",
   [GUIDED_STEP.review]: "Review route scheme setup",
 }
@@ -366,19 +324,14 @@ function GuidedSchemeWizardOverlay({
     effectiveFrom: todayIso(),
     effectiveTo: "",
     plannedStartTime: "06:30",
-    // Declarative stop matching is the default (issue #19); picking
-    // containers by hand stays available as the small-scale mode.
-    stopSelection: "rule",
-    sameAllDays: true,
-    sharedContainerIds: [],
-    containersByDay: {},
-    matchRule: EMPTY_STOP_MATCH_RULE,
-    matchRulesByDay: {},
+    // Collection groups (D33) are defined in their own step once the service
+    // days are known; the step seeds one group covering every day.
+    groups: [],
   }))
 
-  const updateData = (updates: Partial<GuidedSchemeData>) => {
+  const updateData = useCallback((updates: Partial<GuidedSchemeData>) => {
     setData((previous) => ({ ...previous, ...updates }))
-  }
+  }, [])
 
   const goToStep = (target: number) => {
     setStep(target)
@@ -423,11 +376,8 @@ function GuidedSchemeWizardOverlay({
             {step === GUIDED_STEP.recurrence && (
               <StepRecurrence data={data} updateData={updateData} />
             )}
-            {step === GUIDED_STEP.assignment && (
-              <StepAssignment data={data} updateData={updateData} />
-            )}
-            {step === GUIDED_STEP.containers && (
-              <StepDayContainers data={data} updateData={updateData} />
+            {step === GUIDED_STEP.groups && (
+              <StepCollectionGroups data={data} updateData={updateData} />
             )}
             {step === GUIDED_STEP.map && <StepRouteMap data={data} />}
             {step === GUIDED_STEP.review && (
@@ -470,46 +420,12 @@ interface GuidedStepProps {
   updateData: (updates: Partial<GuidedSchemeData>) => void
 }
 
-function RecordSelect({
-  label,
-  placeholder,
-  records,
-  value,
-  onChange,
-  hint,
-}: {
-  label: string
-  placeholder: string
-  records: BusinessRecord[]
-  value?: string
-  onChange: (value: string) => void
-  hint?: string
-}) {
-  return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="w-full">
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          {records.map((record) => (
-            <SelectItem key={record.id} value={record.id}>
-              {record.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-    </div>
-  )
-}
-
 // Step 1 — Scheme & scope
 
 function StepSchemeScope({ data, updateData }: GuidedStepProps) {
   const projects = useModuleRecords("configure", "organization")
   const areas = useModuleRecords("plan", "areas")
+  const depots = useModuleRecords("resources", "depots")
 
   return (
     <div className="max-w-md space-y-6">
@@ -537,7 +453,27 @@ function StepSchemeScope({ data, updateData }: GuidedStepProps) {
         records={areas}
         value={data.planningAreaId}
         onChange={(planningAreaId) => updateData({ planningAreaId })}
+        hint="One planning area per scheme — every collection group matches its stops inside it."
       />
+      <div className="space-y-4 border-t border-border/60 pt-4">
+        <p className="text-xs font-medium text-muted-foreground">
+          Operational defaults (optional)
+        </p>
+        <RecordSelect
+          label="Departure depot"
+          placeholder="Select depot"
+          records={depots}
+          value={data.depotId}
+          onChange={(depotId) => updateData({ depotId })}
+        />
+        <RecordSelect
+          label="Unloading station"
+          placeholder="Select unloading station"
+          records={depots}
+          value={data.unloadingStationId}
+          onChange={(unloadingStationId) => updateData({ unloadingStationId })}
+        />
+      </div>
     </div>
   )
 }
@@ -805,622 +741,105 @@ function StepRecurrence({ data, updateData }: GuidedStepProps) {
   )
 }
 
-// Step 4 — Assignment
+// Step 4 — Collection groups (D33): the hub-and-spoke editor over the
+// draft's groups, with the live FR-5 outcome so group-level issues show on
+// the rows as the planner works. Nothing gates Next — a scheme can always be
+// saved as Draft with its issues named (D34).
 
-function StepAssignment({ data, updateData }: GuidedStepProps) {
-  const serviceProviders = useModuleRecords("service-providers", "service-providers")
-  const vehicles = useModuleRecords("fleet", "vehicles")
-  const drivers = useModuleRecords("fleet", "drivers")
-  const depots = useModuleRecords("resources", "depots")
-
-  return (
-    <div className="max-w-md space-y-6">
-      <p className="text-sm text-muted-foreground">
-        Defaults only — every generated route can be reassigned individually.
-      </p>
-      <RecordSelect
-        label="Responsible service provider (optional)"
-        placeholder="Keep in-house"
-        records={serviceProviders}
-        value={data.serviceProviderId}
-        onChange={(serviceProviderId) => updateData({ serviceProviderId })}
-      />
-      <RecordSelect
-        label="Default vehicle"
-        placeholder="Select vehicle"
-        records={vehicles}
-        value={data.plannedVehicleId}
-        onChange={(plannedVehicleId) => updateData({ plannedVehicleId })}
-      />
-      <RecordSelect
-        label="Default driver"
-        placeholder="Select driver"
-        records={drivers}
-        value={data.plannedDriverId}
-        onChange={(plannedDriverId) => updateData({ plannedDriverId })}
-      />
-      <RecordSelect
-        label="Departure depot"
-        placeholder="Select depot"
-        records={depots}
-        value={data.depotId}
-        onChange={(depotId) => updateData({ depotId })}
-      />
-      <RecordSelect
-        label="Unloading station"
-        placeholder="Select unloading station"
-        records={depots}
-        value={data.unloadingStationId}
-        onChange={(unloadingStationId) => updateData({ unloadingStationId })}
-      />
-    </div>
-  )
-}
-
-// Step 5 — Stops: declarative matching rule (issue #19) or manually picked
-// per-day service plans (FR-14). The rule is the source of truth in rule
-// mode — the matched list below it is a live preview, not a stored pick.
-
-function StepDayContainers({ data, updateData }: GuidedStepProps) {
+function StepCollectionGroups({ data, updateData }: GuidedStepProps) {
+  const existingSchemes = useModuleRecords("route-studio", "schemes")
+  const allocations = useModuleRecords("fleet", "vehicle-planning")
   const containers = useModuleRecords("resources", "containers")
-  const projects = useModuleRecords("configure", "organization")
-  const areas = useModuleRecords("plan", "areas")
+  const vehicles = useModuleRecords("fleet", "vehicles")
+  const { calendar } = useSelectedCalendar(data.calendarId)
   const days = sortServiceDays(data.serviceDays)
-  const isMultiDay = days.length > 1
-  const isRule = data.stopSelection === "rule"
-  const isPerDay = isMultiDay && !data.sameAllDays
-  const [activeDay, setActiveDay] = useState<ServiceDay>(days[0] ?? "monday")
+  // Once the planner removes every group on purpose, the step must not
+  // silently put one back (the hub's empty state explains what to do).
+  const [cleared, setCleared] = useState(false)
 
+  // The simple case stays simple: the first visit seeds one group covering
+  // every service day, so a single-assignment scheme is one group's fields.
   useEffect(() => {
-    if (days.length > 0 && !days.includes(activeDay)) setActiveDay(days[0])
-  }, [days, activeDay])
-
-  const pickedIds = isPerDay
-    ? (data.containersByDay[activeDay] ?? [])
-    : data.sharedContainerIds
-  const setPickedIds = (ids: string[]) => {
-    if (isPerDay) {
-      updateData({ containersByDay: { ...data.containersByDay, [activeDay]: ids } })
-    } else {
-      updateData({ sharedContainerIds: ids })
+    if (!cleared && data.groups.length === 0 && days.length > 0) {
+      updateData({
+        groups: [
+          {
+            ...newCollectionGroup([], days),
+            name: data.schemeName.trim() || "Collection",
+          },
+        ],
+      })
     }
-  }
+  }, [cleared, data.groups.length, data.schemeName, days, updateData])
 
-  const activeRule = isPerDay
-    ? (data.matchRulesByDay[activeDay] ?? EMPTY_STOP_MATCH_RULE)
-    : data.matchRule
-  const setActiveRule = (rule: StopMatchRule) => {
-    if (isPerDay) {
-      updateData({ matchRulesByDay: { ...data.matchRulesByDay, [activeDay]: rule } })
-    } else {
-      updateData({ matchRule: rule })
-    }
-  }
-
-  // Switching to per-day seeds each service day with the shared selection so
-  // the planner edits per day instead of restarting from zero.
-  const enablePerDay = () => {
-    if (isRule) {
-      const seededRules = { ...data.matchRulesByDay }
-      for (const day of days) {
-        if (!seededRules[day]) seededRules[day] = { ...data.matchRule }
-      }
-      updateData({ sameAllDays: false, matchRulesByDay: seededRules })
-      return
-    }
-    const seeded = { ...data.containersByDay }
-    for (const day of days) {
-      if (!seeded[day]) seeded[day] = [...data.sharedContainerIds]
-    }
-    updateData({ sameAllDays: false, containersByDay: seeded })
-  }
-
-  if (days.length === 0) {
-    return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        Pick at least one service day in the Recurrence step first — each
-        service day gets its own generated route and container plan.
-      </p>
-    )
-  }
-
-  const schemeProjectName = projects.find(
-    (project) => project.id === data.projectId,
-  )?.name
-  const dayCounts = new Map(
-    resolvedDraftPlans(data, containers).map((plan) => [
-      plan.day,
-      plan.containerIds.length,
-    ]),
+  const validation = validateGuidedScheme(
+    data,
+    existingSchemes,
+    calendar,
+    allocations,
+    containers,
+    vehicles,
   )
+  // Issues the group rows already show name a group; the rest (coverage,
+  // single-group wording, dates) show once below the hub.
+  const schemeLevelIssues = unattributedIssues(data.groups, validation.issues)
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant={isRule ? "secondary" : "outline"}
-          onClick={() => updateData({ stopSelection: "rule" })}
-        >
-          Match by rule
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={!isRule ? "secondary" : "outline"}
-          onClick={() => updateData({ stopSelection: "manual" })}
-        >
-          Pick containers manually
-        </Button>
-        <p className="basis-full text-xs text-muted-foreground">
-          {isRule
-            ? "The scheme stores the selection rule — containers matching it are resolved every time routes are generated, so new eligible containers join automatically."
-            : "The scheme stores the picked list — new containers must be added by editing the scheme."}
-        </p>
-      </div>
-      {isMultiDay && (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant={data.sameAllDays ? "secondary" : "outline"}
-            onClick={() => updateData({ sameAllDays: true })}
-          >
-            {isRule ? "Same rule every day" : "Same containers every day"}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={!data.sameAllDays ? "secondary" : "outline"}
-            onClick={enablePerDay}
-          >
-            Different per day
-          </Button>
-        </div>
-      )}
-      {isPerDay && (
-        <>
-          <div className="flex flex-wrap gap-1.5 border-b border-border pb-2">
-            {days.map((day) => {
-              const count = dayCounts.get(day) ?? 0
-              return (
-                <button
-                  key={day}
-                  type="button"
-                  onClick={() => setActiveDay(day)}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-                    day === activeDay
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted",
-                  )}
-                >
-                  {SERVICE_DAY_SHORT_LABELS[day]}
-                  <span className="font-mono">{count}</span>
-                </button>
-              )
-            })}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {isRule ? "Setting the rule for" : "Picking the route for"}{" "}
-            <span className="font-semibold text-foreground">
-              {SERVICE_DAY_SHORT_LABELS[activeDay]}
-            </span>{" "}
-            — each service day generates its own route with its own stops.
-          </p>
-        </>
-      )}
-      {isRule ? (
-        <SchemeRuleEditor
-          containers={containers}
-          areaName={areas.find((area) => area.id === data.planningAreaId)?.name}
-          areaId={data.planningAreaId}
-          projectIds={data.projectId ? [data.projectId] : undefined}
-          rule={activeRule}
-          onChange={setActiveRule}
-        />
-      ) : (
-        <SchemeContainerPicker
-          containers={containers}
-          defaultProject={schemeProjectName}
-          pickedIds={pickedIds}
-          onPick={setPickedIds}
-        />
-      )}
-    </div>
-  )
-}
-
-/**
- * The declarative rule editor + live match preview (issue #19): waste
- * fraction chips, an optional vehicle-type constraint, and the containers the
- * rule currently resolves to inside the scheme's planning area — matched list,
- * near-miss exclusions with reasons, and a loud zero-match empty state.
- */
-function SchemeRuleEditor({
-  containers,
-  areaId,
-  areaName,
-  projectIds,
-  rule,
-  onChange,
-}: {
-  containers: BusinessRecord[]
-  areaId?: string
-  areaName?: string
-  projectIds?: string[]
-  rule: StopMatchRule
-  onChange: (rule: StopMatchRule) => void
-}) {
-  const fractionOptions = useMemo(() => {
-    const values = new Set<string>(rule.fractions)
-    for (const container of containers) {
-      const fact = container.facts?.["Waste fractions"]
-      if (!fact || fact === "—") continue
-      for (const part of fact.split("·")) {
-        const trimmed = part.trim()
-        if (trimmed) values.add(trimmed)
-      }
-    }
-    return Array.from(values).sort()
-  }, [containers, rule.fractions])
-
-  const toggleFraction = (fraction: string) => {
-    onChange({
-      ...rule,
-      fractions: rule.fractions.includes(fraction)
-        ? rule.fractions.filter((candidate) => candidate !== fraction)
-        : [...rule.fractions, fraction],
-    })
-  }
-
-  const result = useMemo(
-    () => resolveStopMatches({ rule, areaId, projectIds, containers }),
-    [rule, areaId, projectIds, containers],
-  )
-
-  return (
-    <div className="space-y-3 rounded-2xl border border-border/60 p-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-foreground">Stop matching rule</p>
-        <p className="text-sm font-medium text-primary">
-          {result.matched.length} matching
-        </p>
-      </div>
-
-      {areaId ? (
-        <p className="text-xs text-muted-foreground">
-          Matching inside{" "}
-          <span className="font-semibold text-foreground">
-            {areaName ?? "the selected planning area"}
-          </span>{" "}
-          — containers carry their planning area; the scheme&apos;s area bounds
-          the rule.
-        </p>
-      ) : (
-        <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-          No planning area selected — go back to the Scheme &amp; scope step and
-          pick one. The rule matches containers inside the scheme&apos;s area.
-        </p>
-      )}
-
-      <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground">Waste fractions</Label>
-        <div className="flex flex-wrap gap-2">
-          {fractionOptions.map((fraction) => {
-            const isOn = rule.fractions.includes(fraction)
-            return (
-              <button
-                key={fraction}
-                type="button"
-                onClick={() => toggleFraction(fraction)}
-                className={cn(
-                  "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                  isOn
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-background text-muted-foreground hover:border-primary/50",
-                )}
-              >
-                {fraction}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      <div className="max-w-xs space-y-1.5">
-        <Label className="text-xs text-muted-foreground">Vehicle type</Label>
-        <Select
-          value={rule.vehicleType ?? "any"}
-          onValueChange={(value) =>
-            onChange(
-              value === "any"
-                ? { fractions: rule.fractions }
-                : { ...rule, vehicleType: value },
-            )
-          }
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="any">Any vehicle type</SelectItem>
-            {STOP_MATCH_VEHICLE_TYPES.map((type) => (
-              <SelectItem key={type} value={type}>
-                {type}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          Only containers this vehicle type can service are matched.
-        </p>
-      </div>
-
-      <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-        {rule.fractions.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            Pick at least one waste fraction — the rule is the fraction
-            selection.
-          </p>
-        ) : result.matched.length === 0 ? (
-          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-4 text-center">
-            <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
-              No containers currently match this rule
-            </p>
-            <p className="mt-1 text-xs text-amber-700/80 dark:text-amber-400/80">
-              {areaId
-                ? `${result.scopeTotal} container${result.scopeTotal === 1 ? "" : "s"} in the planning area — none matches the fractions${rule.vehicleType ? ` and ${rule.vehicleType.toLowerCase()} compatibility` : ""}. The scheme cannot validate until the rule matches.`
-                : "Pick a planning area first."}
-            </p>
-          </div>
-        ) : (
-          result.matched.map((profile) => {
-            const container = containers.find(
-              (candidate) => candidate.id === profile.id,
-            )
-            return (
-              <div
-                key={profile.id}
-                className="flex w-full items-center gap-3 rounded-xl border border-border/60 px-3 py-2 text-left"
-              >
-                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-primary bg-primary text-primary-foreground">
-                  <Check className="h-3 w-3" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">
-                    {profile.name}
-                    <span className="ml-2 font-normal text-muted-foreground">
-                      {profile.fractions.join(" · ")}
-                    </span>
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {container?.facts?.Address ?? container?.context ?? ""}
-                    {profile.containerType ? ` · ${profile.containerType}` : ""}
-                  </p>
-                </div>
-              </div>
-            )
-          })
-        )}
-      </div>
-
-      {result.excluded.length > 0 && (
-        <div className="space-y-1 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
-          <p className="text-xs font-medium text-muted-foreground">
-            {result.excluded.length} matching-fraction container
-            {result.excluded.length === 1 ? "" : "s"} excluded
-          </p>
-          <ul className="space-y-0.5 text-xs text-muted-foreground">
-            {result.excluded.slice(0, 6).map((exclusion) => (
-              <li key={exclusion.id} className="truncate">
-                <span className="font-medium text-foreground/80">
-                  {exclusion.name}
-                </span>{" "}
-                — {exclusion.reason}
-              </li>
-            ))}
-            {result.excluded.length > 6 && (
-              <li>… and {result.excluded.length - 6} more</li>
-            )}
-          </ul>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function SchemeContainerPicker({
-  containers,
-  defaultProject,
-  pickedIds,
-  onPick,
-}: {
-  containers: BusinessRecord[]
-  defaultProject?: string
-  pickedIds: string[]
-  onPick: (ids: string[]) => void
-}) {
-  const [search, setSearch] = useState("")
-  const [projectFilter, setProjectFilter] = useState(defaultProject ?? "all")
-  const [fractionFilter, setFractionFilter] = useState("all")
-  const [typeFilter, setTypeFilter] = useState("all")
-
-  const factOptions = (fact: string) => {
-    const values = new Set<string>()
-    for (const container of containers) {
-      const value = container.facts?.[fact]
-      if (value && value !== "—") values.add(value)
-    }
-    return Array.from(values).sort()
-  }
-  const projectOptions = useMemo(() => factOptions("Project"), [containers]) // eslint-disable-line react-hooks/exhaustive-deps
-  const fractionOptions = useMemo(() => factOptions("Waste fractions"), [containers]) // eslint-disable-line react-hooks/exhaustive-deps
-  const typeOptions = useMemo(() => factOptions("Container type"), [containers]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const matches = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    return containers.filter((container) => {
-      const facts = container.facts ?? {}
-      if (projectFilter !== "all" && facts.Project !== projectFilter) return false
-      if (fractionFilter !== "all" && facts["Waste fractions"] !== fractionFilter) {
-        return false
-      }
-      if (typeFilter !== "all" && facts["Container type"] !== typeFilter) return false
-      if (!query) return true
-      return (
-        container.name.toLowerCase().includes(query) ||
-        (facts.Address ?? "").toLowerCase().includes(query)
-      )
-    })
-  }, [containers, fractionFilter, projectFilter, search, typeFilter])
-
-  const allMatchesPicked =
-    matches.length > 0 && matches.every((container) => pickedIds.includes(container.id))
-  const toggleAllMatches = () => {
-    onPick(
-      allMatchesPicked
-        ? pickedIds.filter((id) => !matches.some((container) => container.id === id))
-        : Array.from(new Set([...pickedIds, ...matches.map((container) => container.id)])),
-    )
-  }
-
-  const toggleContainer = (containerId: string) => {
-    onPick(
-      pickedIds.includes(containerId)
-        ? pickedIds.filter((id) => id !== containerId)
-        : [...pickedIds, containerId],
-    )
-  }
-
-  const filterSelect = (
-    label: string,
-    value: string,
-    onChange: (value: string) => void,
-    options: string[],
-  ) => (
-    <div className="space-y-1.5">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="w-full">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All</SelectItem>
-          {options.map((option) => (
-            <SelectItem key={option} value={option}>
-              {option}
-            </SelectItem>
+      <p className="text-sm text-muted-foreground">
+        Each collection group runs on some of the scheme&apos;s service days with
+        its own vehicle, default driver, and containers — one generated route
+        per group per day. Every service day needs at least one group; a
+        vehicle, driver, or container is never on two groups the same day.
+      </p>
+      <CollectionGroupsEditor
+        groups={data.groups}
+        onChange={(groups) => {
+          if (groups.length === 0) setCleared(true)
+          updateData({ groups })
+        }}
+        serviceDays={days}
+        planningAreaId={data.planningAreaId}
+        projectId={data.projectId}
+        issues={validation.issues}
+      />
+      {schemeLevelIssues.length > 0 && (
+        <ul className="list-disc space-y-1 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 pl-9 text-xs text-amber-700 dark:text-amber-400">
+          {schemeLevelIssues.map((issue) => (
+            <li key={issue}>{issue}</li>
           ))}
-        </SelectContent>
-      </Select>
-    </div>
-  )
-
-  return (
-    <div className="space-y-3 rounded-2xl border border-border/60 p-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-foreground">Pick containers</p>
-        <p className="text-sm font-medium text-primary">
-          {pickedIds.length} picked
-        </p>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        {filterSelect("Project", projectFilter, setProjectFilter, projectOptions)}
-        {filterSelect("Waste fraction", fractionFilter, setFractionFilter, fractionOptions)}
-        {filterSelect("Container type", typeFilter, setTypeFilter, typeOptions)}
-      </div>
-
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <MagnifyingGlass className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search by container ID or address"
-            className="pl-9"
-          />
-        </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={matches.length === 0}
-          onClick={toggleAllMatches}
-        >
-          {allMatchesPicked ? "Clear filtered" : `Add all filtered (${matches.length})`}
-        </Button>
-      </div>
-
-      <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-        {matches.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            No containers match this filter.
-          </p>
-        ) : (
-          matches.map((container) => {
-            const isPicked = pickedIds.includes(container.id)
-            return (
-              <button
-                key={container.id}
-                type="button"
-                onClick={() => toggleContainer(container.id)}
-                className="flex w-full items-center gap-3 rounded-xl border border-border/60 px-3 py-2 text-left transition-colors hover:bg-muted/50"
-              >
-                <span
-                  className={cn(
-                    "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
-                    isPicked
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border",
-                  )}
-                >
-                  {isPicked && <Check className="h-3 w-3" />}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">
-                    {container.name}
-                    <span className="ml-2 font-normal text-muted-foreground">
-                      {container.facts?.["Waste fractions"] ?? ""}
-                    </span>
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {container.facts?.Address ?? container.context}
-                    {container.facts?.["Container type"]
-                      ? ` · ${container.facts["Container type"]}`
-                      : ""}
-                  </p>
-                </div>
-              </button>
-            )
-          })
-        )}
-      </div>
+        </ul>
+      )}
     </div>
   )
 }
 
-// Step 6 — Route map (FR-15): one colored route line + pins per service day
+// Step 5 — Route map (FR-15): one colored route line + pins per generated
+// route — one per collection group per service day.
 
 function StepRouteMap({ data }: { data: GuidedSchemeData }) {
   const containers = useModuleRecords("resources", "containers")
-  const plans = resolvedDraftPlans(data, containers)
+  const resolution = resolvedDraftGroups(data, containers)
+  const nameOf = new Map(data.groups.map((group) => [group.id, group.name]))
+  const plans = resolution.plans.map((plan) => ({
+    day: plan.day,
+    containerIds: plan.containerIds,
+    ...(data.groups.length > 1 ? { label: nameOf.get(plan.groupId) ?? plan.groupId } : {}),
+  }))
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        {data.stopSelection === "rule"
-          ? "Each service day generates its own route from the containers its rule currently matches — filter a day to isolate its line."
-          : "Each service day generates its own route in picked order — filter a day to isolate its line."}
+        Each collection group generates its own route on every day it runs —
+        rule groups from the containers they currently match, manual groups in
+        picked order. Filter a day to isolate its lines.
       </p>
       <SchemeRouteMap plans={plans} containers={containers} />
     </div>
   )
 }
 
-// Step 7 — Review & create
+// Step 6 — Review & create
 
 function StepSchemeReview({
   data,
@@ -1449,18 +868,8 @@ function StepSchemeReview({
     vehicles,
   )
   const recurrence = draftRecurrence(data)
-  const normalizedPlans = schemeDayPlans(data)
+  const resolution = resolvedDraftGroups(data, containers)
   const plans = resolvedDraftPlans(data, containers)
-  const isRule = data.stopSelection === "rule"
-  const matchPlans = schemeMatchPlans(data)
-  const ruleRows: { label: string; value: string }[] = isRule
-    ? matchPlans.sameAllDays
-      ? [{ label: "Rule", value: stopRuleSummary(data.matchRule) }]
-      : effectiveDayRules(data.serviceDays, matchPlans).map(({ day, rule }) => ({
-          label: `Rule · ${SERVICE_DAY_SHORT_LABELS[day]}`,
-          value: stopRuleSummary(rule),
-        }))
-    : []
 
   const nameOf = (records: BusinessRecord[], id?: string) =>
     records.find((record) => record.id === id)?.name ?? "Not specified"
@@ -1480,7 +889,7 @@ function StepSchemeReview({
           serviceDays: data.serviceDays,
           effectiveFrom: data.effectiveFrom,
           effectiveTo: data.effectiveTo,
-          dayPlans: plans,
+          groupPlans: resolution.plans,
           calendar,
         })
       : null
@@ -1497,6 +906,11 @@ function StepSchemeReview({
         { label: "Name", value: data.schemeName.trim() || "Not specified" },
         { label: "Project", value: nameOf(projects, data.projectId) },
         { label: "Planning area", value: nameOf(areas, data.planningAreaId) },
+        { label: "Departure depot", value: nameOf(depots, data.depotId) },
+        {
+          label: "Unloading station",
+          value: nameOf(depots, data.unloadingStationId),
+        },
       ],
     },
     {
@@ -1536,42 +950,31 @@ function StepSchemeReview({
       ],
     },
     {
-      title: "Assignment",
-      step: GUIDED_STEP.assignment,
+      title: `Collection groups (${data.groups.length})`,
+      step: GUIDED_STEP.groups,
       rows: [
-        {
-          label: "Service provider",
-          value: data.serviceProviderId
-            ? nameOf(serviceProviders, data.serviceProviderId)
-            : "In-house",
-        },
-        { label: "Default vehicle", value: nameOf(vehicles, data.plannedVehicleId) },
-        { label: "Default driver", value: nameOf(drivers, data.plannedDriverId) },
-        { label: "Departure depot", value: nameOf(depots, data.depotId) },
-        {
-          label: "Unloading station",
-          value: nameOf(depots, data.unloadingStationId),
-        },
+        ...data.groups.flatMap((group) => [
+          {
+            label: group.name,
+            value: `${group.days.map((day) => SERVICE_DAY_SHORT_LABELS[day]).join(", ") || "No days"} · ${
+              group.serviceProviderId
+                ? nameOf(serviceProviders, group.serviceProviderId)
+                : "In-house"
+            } · ${nameOf(vehicles, group.vehicleId)} · ${nameOf(drivers, group.driverId)}`,
+          },
+          {
+            label: `${group.name} · containers`,
+            value:
+              group.stopSource === "rule"
+                ? `Matched by rule — ${stopRuleSummary({
+                    fractions: group.fractions,
+                    ...(group.ruleVehicleType ? { vehicleType: group.ruleVehicleType } : {}),
+                  })} · ${groupContainerCounts(group, resolution)}`
+                : `Picked manually · ${groupContainerCounts(group, resolution)}`,
+          },
+        ]),
+        { label: "Stops per day", value: dayPlanCountSummary(plans) },
       ],
-    },
-    {
-      title: "Containers",
-      step: GUIDED_STEP.containers,
-      rows: isRule
-        ? [
-            { label: "Stop selection", value: "Matched by rule" },
-            ...ruleRows,
-            { label: "Currently matching", value: dayPlanCountSummary(plans) },
-          ]
-        : [
-            {
-              label: "Container selection",
-              value: normalizedPlans.sameAllDays
-                ? "Same containers every day"
-                : "Different per day",
-            },
-            { label: "Stops per day", value: dayPlanCountSummary(plans) },
-          ],
     },
   ]
 
@@ -1613,7 +1016,8 @@ function StepSchemeReview({
             <p className="text-xs text-green-700/80 dark:text-green-400/80">
               {creationPreview && creationPreview.routeDates.length > 0 ? (
                 <>
-                  Creating this scheme generates routes for{" "}
+                  Creating this scheme generates {creationPreview.routeCount} route
+                  {creationPreview.routeCount === 1 ? "" : "s"} for{" "}
                   {creationPreview.routeDates
                     .map((date) => formatServiceDate(date))
                     .join(" · ")}

@@ -61,13 +61,59 @@ export function dayPlanCountSummary(plans: readonly SchemeDayPlan[]): string {
     .join(" · ")
 }
 
+/**
+ * One collection group as validation sees it (D33–D35): the group's days,
+ * assignment, stop source, and — pre-resolved by the caller through
+ * lib/route-schemes/groups resolveCollectionGroupPlans, so validation stays
+ * pure data logic — the stops it actually serves per applicable day after the
+ * manual-beats-rule / first-rule-group-wins tie-breaks.
+ */
+export type SchemeGroupValidationInput = {
+  id: string
+  name: string
+  days: readonly ServiceDay[]
+  vehicleId?: string
+  driverId?: string
+  /**
+   * The group's vehicle's canonical type when resolvable
+   * (matching vehicleTypeOfRecord); a rule requiring a different type warns.
+   */
+  vehicleType?: string | null
+  stopSource: "rule" | "manual"
+  fractions: readonly string[]
+  ruleVehicleType?: string
+  /** Per applicable day: stops after tie-breaks, and matches other groups claimed. */
+  dayStops: ReadonlyArray<{ day: ServiceDay; count: number; claimedByOthers: number }>
+}
+
+/** A container hand-picked into two groups on one day — an explicit collision. */
+export type SchemeManualDuplicate = {
+  containerId: string
+  containerName?: string
+  day: ServiceDay
+  groupIds: readonly [string, string]
+}
+
+/** Two rule groups matching the same containers on one day — the first wins. */
+export type SchemeRuleOverlap = {
+  day: ServiceDay
+  winnerGroupId: string
+  loserGroupId: string
+  containerIds: readonly string[]
+}
+
 export type SchemeValidationInput = {
   serviceDays: ServiceDay[]
   effectiveFrom: string
   effectiveTo: string
-  plans: SchemeDayPlans
-  plannedVehicleId?: string
-  plannedDriverId?: string
+  /** The scheme's planning area (plan.areas record id); rule groups match inside it. */
+  areaId?: string
+  /** The scheme's collection groups — implicit (legacy shape) or explicit. */
+  groups: readonly SchemeGroupValidationInput[]
+  /** From resolveCollectionGroupPlans: explicit same-day collisions (blocking). */
+  manualDuplicates?: readonly SchemeManualDuplicate[]
+  /** From resolveCollectionGroupPlans: rule-vs-rule overlaps (warning). */
+  ruleOverlaps?: readonly SchemeRuleOverlap[]
   /** The scheme's Collection Calendar, when it carries structured data. */
   calendar?: CollectionCalendar | null
   /**
@@ -75,16 +121,6 @@ export type SchemeValidationInput = {
    * Vehicle Planning allocations targeting this scheme are then not conflicts.
    */
   schemeId?: string
-  /**
-   * Present when the scheme selects stops declaratively (issue #19): the
-   * per-day rules with their currently matched container counts, pre-resolved
-   * by the caller (lib/route-schemes/matching resolveStopMatches — validation
-   * stays pure data logic). When set, the FR-5(c) picked-container check is
-   * replaced by the rule checks: a planning area must be set, every day's
-   * rule needs at least one fraction, and a rule matching zero containers
-   * blocks — a zero-match configuration must never save as quiet success.
-   */
-  stopMatching?: SchemeStopMatchingInput
   /**
    * Present when the caller can resolve the linked containers' promised
    * service frequencies (issue #21): the scheme's recurrence cadence plus one
@@ -113,24 +149,6 @@ export type SchemeFrequencyReconciliationInput = {
   promises: SchemeFrequencyPromise[]
 }
 
-export type SchemeStopMatchingInput = {
-  /** The scheme's planning area (plan.areas record id); rules match inside it. */
-  areaId?: string
-  sameAllDays: boolean
-  dayRules: Array<{
-    day: ServiceDay
-    fractions: readonly string[]
-    vehicleType?: string
-    /** Containers the day's rule currently matches (resolved by the caller). */
-    matchedCount: number
-  }>
-  /**
-   * The default vehicle's canonical type when resolvable
-   * (matching vehicleTypeOfRecord); a rule requiring a different type warns.
-   */
-  plannedVehicleType?: string | null
-}
-
 /**
  * What the rule-overlap warning needs to know about another rule-mode scheme:
  * same planning area + shared service day + intersecting fractions +
@@ -139,6 +157,8 @@ export type SchemeStopMatchingInput = {
  */
 export type SchemeStopRuleSource = {
   schemeName: string
+  /** Set when the source is one explicit group of a multi-group scheme. */
+  groupName?: string
   areaId: string
   serviceDays: readonly ServiceDay[]
   /** Union of the scheme's day-rule fractions. */
@@ -147,9 +167,15 @@ export type SchemeStopRuleSource = {
   effectiveTo?: string
 }
 
-/** What FR-5(d) needs to know about an already-existing scheme. */
+/**
+ * What FR-5(d) needs to know about an already-existing scheme's planned
+ * assignment: one source per collection group (lib/route-schemes/groups
+ * schemeAssignmentSources) — a legacy single-assignment scheme is one source.
+ */
 export type SchemeDefaultsSource = {
   schemeName: string
+  /** Set when the source is one explicit group of a multi-group scheme. */
+  groupName?: string
   serviceDays: readonly ServiceDay[]
   plannedVehicleId?: string
   plannedDriverId?: string
@@ -326,7 +352,7 @@ const effectivePeriodsDisjoint = (
  * is only dismissed when it is provably impossible.
  */
 function allocationWindowTouchesScheme(
-  input: SchemeValidationInput,
+  input: Pick<SchemeValidationInput, "serviceDays" | "effectiveFrom" | "effectiveTo">,
   allocation: AllocationConflictSource,
 ): boolean {
   const start = isoDatePart(allocation.plannedStart)
@@ -350,22 +376,68 @@ function allocationWindowTouchesScheme(
   return false
 }
 
+const namesOf = (groups: ReadonlyArray<{ name: string }>): string =>
+  groups.map((group) => group.name).join(", ")
+
+const capitalize = (value: string): string => value.charAt(0).toUpperCase() + value.slice(1)
+
 /**
- * The blocking checks of FR-5, in spec order: (a) ≥1 service day,
- * (b) effective from set — effective to is optional (issue #28, D23) but must
- * be ≥ from when present, (c) every service day has ≥1
- * container (per-day mode names the empty days) — replaced for rule-mode
- * schemes (issue #19, input.stopMatching) by: planning area set, every day's
- * rule carries ≥1 fraction, and every day's rule currently matches ≥1
- * container, (d) the default vehicle or driver is not already the default on
- * another scheme sharing a service day within an overlapping effective
- * period, (e) the default vehicle or driver has no Confirmed Vehicle
- * Planning allocation whose planned window touches the scheme (issue #11).
- * All pass → Validated; any fail → Draft with the issues named. Calendar
- * caveats, unconfirmed (Draft/Allocated) allocation overlaps, a rule vehicle
- * type the default vehicle cannot serve, rule overlaps with other rule-mode
- * schemes, and promised-service-frequency reconciliation mismatches
- * (issue #21) come back as non-blocking warnings.
+ * Groups sharing one planned assignment (vehicle + driver). A legacy scheme's
+ * implicit per-day groups all share the scheme's single assignment, so the
+ * resource checks speak of "the default vehicle" exactly as before; explicit
+ * groups with their own assignments are named.
+ */
+type AssignmentCluster = {
+  vehicleId?: string
+  driverId?: string
+  groups: SchemeGroupValidationInput[]
+  days: ServiceDay[]
+}
+
+const assignmentClusters = (
+  groups: readonly SchemeGroupValidationInput[],
+): AssignmentCluster[] => {
+  const clusters = new Map<string, AssignmentCluster>()
+  for (const group of groups) {
+    const key = `${group.vehicleId ?? ""}|${group.driverId ?? ""}`
+    const cluster = clusters.get(key)
+    if (cluster) {
+      cluster.groups.push(group)
+      cluster.days = sortServiceDays([...new Set([...cluster.days, ...group.days])])
+    } else {
+      clusters.set(key, {
+        vehicleId: group.vehicleId,
+        driverId: group.driverId,
+        groups: [group],
+        days: sortServiceDays([...group.days]),
+      })
+    }
+  }
+  return [...clusters.values()]
+}
+
+const ruleKey = (group: SchemeGroupValidationInput): string =>
+  `${[...group.fractions].map((f) => f.toLowerCase()).sort().join(",")}|${group.ruleVehicleType ?? ""}`
+
+/**
+ * The blocking checks of FR-5, in spec order and extended for collection
+ * groups (D33–D35): (a) ≥1 service day, (b) effective from set — effective to
+ * is optional (issue #28, D23) but must be ≥ from when present, (c) every
+ * service day is covered by ≥1 group and no group runs outside the service
+ * days; every group has a vehicle and a default driver; every manual group
+ * has ≥1 container on each of its days and every rule group (planning area
+ * set, ≥1 fraction) currently serves ≥1 container on each of its days after
+ * tie-breaks; no vehicle, driver, or hand-picked container is on two groups
+ * the same day, (d) no group's vehicle or driver is already planned on another
+ * scheme sharing a service day within an overlapping effective period, (e) no
+ * group's vehicle or driver has a Confirmed Vehicle Planning allocation whose
+ * planned window touches the group's days (issue #11). All pass → Validated;
+ * any fail → Draft with the issues named. Calendar caveats, unconfirmed
+ * allocation overlaps, a rule vehicle type the group's vehicle cannot serve,
+ * rule overlaps inside the scheme (first group wins) and with other schemes,
+ * and promised-service-frequency mismatches (issue #21) come back as
+ * non-blocking warnings. A scheme with one planned assignment keeps the
+ * single-assignment wording ("Default vehicle …"); several name the group.
  */
 export function validateScheme(
   input: SchemeValidationInput,
@@ -375,7 +447,10 @@ export function validateScheme(
 ): SchemeValidationResult {
   const issues: string[] = []
   const matchingWarnings: string[] = []
-  const matching = input.stopMatching
+  const groups = input.groups
+  const single = groups.length === 1
+  const nameById = new Map(groups.map((group) => [group.id, group.name]))
+  const labelOf = (id: string) => nameById.get(id) ?? id
 
   if (input.serviceDays.length === 0) issues.push("Pick at least one service day")
 
@@ -387,136 +462,303 @@ export function validateScheme(
     issues.push("Effective to must be on or after effective from")
   }
 
-  if (input.serviceDays.length > 0 && !matching) {
-    const emptyDays = effectiveDayPlans(input.serviceDays, input.plans)
-      .filter((plan) => plan.containerIds.length === 0)
-      .map((plan) => plan.day)
-    if (emptyDays.length > 0) {
+  /* ---- coverage (D33): every service day has ≥1 group, none run elsewhere ---- */
+
+  if (groups.length === 0) {
+    issues.push("Add a collection group")
+  } else if (input.serviceDays.length > 0) {
+    const uncovered = sortServiceDays(input.serviceDays).filter(
+      (day) => !groups.some((group) => group.days.includes(day)),
+    )
+    if (uncovered.length > 0) {
+      issues.push(`No collection group covers ${shortDays(uncovered)}`)
+    }
+    for (const group of groups) {
+      const stray = group.days.filter((day) => !input.serviceDays.includes(day))
+      if (stray.length > 0) {
+        issues.push(
+          `${group.name} runs on ${shortDays(stray)}, which ${stray.length === 1 ? "is not a service day" : "are not service days"}`,
+        )
+      }
+    }
+  }
+
+  /* ---- assignment (D34): vehicle required, default driver required for Validated ---- */
+
+  const withoutVehicle = groups.filter((group) => !group.vehicleId)
+  if (withoutVehicle.length > 0) {
+    issues.push(
+      withoutVehicle.length === groups.length
+        ? "Pick a vehicle"
+        : `Pick a vehicle for ${namesOf(withoutVehicle)}`,
+    )
+  }
+  const withoutDriver = groups.filter((group) => !group.driverId)
+  if (withoutDriver.length > 0) {
+    issues.push(
+      withoutDriver.length === groups.length
+        ? "Pick a driver"
+        : `Pick a driver for ${namesOf(withoutDriver)}`,
+    )
+  }
+
+  /* ---- stops (FR-5c, FR-16–18 at group level) ---- */
+
+  const manualGroups = groups.filter((group) => group.stopSource === "manual")
+  const ruleGroups = groups.filter((group) => group.stopSource === "rule")
+
+  const emptyManual = manualGroups.filter((group) =>
+    group.dayStops.some((stop) => stop.count === 0),
+  )
+  if (emptyManual.length > 0) {
+    issues.push(
+      single ? "Pick at least one container" : `Pick containers for ${namesOf(emptyManual)}`,
+    )
+  }
+
+  if (ruleGroups.length > 0) {
+    if (!input.areaId) {
+      issues.push("Pick a planning area — the stop rule matches containers inside it")
+    }
+    const ruleless = ruleGroups.filter((group) => group.fractions.length === 0)
+    if (ruleless.length > 0) {
       issues.push(
-        input.plans.sameAllDays
-          ? "Pick at least one container"
-          : `Pick containers for ${shortDays(emptyDays)}`,
+        single
+          ? "Pick at least one waste fraction for the stop rule"
+          : `Pick waste fractions for ${namesOf(ruleless)}`,
+      )
+    }
+    // Zero matches only block once the rule is actually evaluable — the
+    // missing-area and missing-fraction issues already name the real gap.
+    if (input.areaId) {
+      const evaluable = ruleGroups.filter((group) => group.fractions.length > 0)
+      const unmatched = evaluable.filter((group) =>
+        group.dayStops.some((stop) => stop.count === 0 && stop.claimedByOthers === 0),
+      )
+      if (unmatched.length > 0) {
+        issues.push(
+          single
+            ? "No containers currently match the stop rule"
+            : `No containers match the stop rule for ${namesOf(unmatched)}`,
+        )
+      }
+      // A rule group whose every match another group already collects is a
+      // rule-vs-rule overlap taken to its end — a warning like any overlap
+      // (D35), never a hard error.
+      const starved = evaluable.filter(
+        (group) =>
+          !unmatched.includes(group) &&
+          group.dayStops.some((stop) => stop.count === 0 && stop.claimedByOthers > 0),
+      )
+      if (starved.length > 0) {
+        matchingWarnings.push(
+          `Nothing left for ${namesOf(starved)} to collect — every container it matches is collected by another group on the same day`,
+        )
+      }
+    }
+  }
+
+  /* ---- same-day collisions inside the scheme (D33) ---- */
+
+  for (let i = 0; i < groups.length; i += 1) {
+    for (let j = i + 1; j < groups.length; j += 1) {
+      const a = groups[i]
+      const b = groups[j]
+      const shared = sortServiceDays(a.days.filter((day) => b.days.includes(day)))
+      if (shared.length === 0) continue
+      if (a.vehicleId && a.vehicleId === b.vehicleId) {
+        issues.push(`Vehicle is planned on both ${a.name} and ${b.name} on ${shortDays(shared)}`)
+      }
+      if (a.driverId && a.driverId === b.driverId) {
+        issues.push(`Driver is planned on both ${a.name} and ${b.name} on ${shortDays(shared)}`)
+      }
+    }
+  }
+
+  const duplicateDays = new Map<string, { label: string; a: string; b: string; days: ServiceDay[] }>()
+  for (const duplicate of input.manualDuplicates ?? []) {
+    const key = `${duplicate.containerId}|${duplicate.groupIds[0]}|${duplicate.groupIds[1]}`
+    const entry = duplicateDays.get(key)
+    if (entry) {
+      entry.days = sortServiceDays([...new Set([...entry.days, duplicate.day])])
+    } else {
+      duplicateDays.set(key, {
+        label: duplicate.containerName ?? duplicate.containerId,
+        a: labelOf(duplicate.groupIds[0]),
+        b: labelOf(duplicate.groupIds[1]),
+        days: [duplicate.day],
+      })
+    }
+  }
+  for (const entry of duplicateDays.values()) {
+    issues.push(
+      `${entry.label} is picked in both ${entry.a} and ${entry.b} on ${shortDays(entry.days)}`,
+    )
+  }
+
+  /* ---- vehicle-type fit (FR-18 warning) ---- */
+
+  const clusters = assignmentClusters(groups)
+  const oneAssignment = clusters.length <= 1
+  const mismatched = ruleGroups.filter(
+    (group) =>
+      group.vehicleType &&
+      group.ruleVehicleType &&
+      group.ruleVehicleType !== group.vehicleType,
+  )
+  if (oneAssignment) {
+    const seen = new Set<string>()
+    for (const group of mismatched) {
+      const key = `${group.vehicleType}|${group.ruleVehicleType}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      matchingWarnings.push(
+        `Default vehicle is a ${group.vehicleType!.toLowerCase()} but the stop rule requires a ${group.ruleVehicleType!.toLowerCase()}`,
+      )
+    }
+  } else {
+    for (const group of mismatched) {
+      matchingWarnings.push(
+        `Vehicle of ${group.name} is a ${group.vehicleType!.toLowerCase()} but its stop rule requires a ${group.ruleVehicleType!.toLowerCase()}`,
       )
     }
   }
 
-  if (matching) {
-    if (!matching.areaId) {
-      issues.push("Pick a planning area — the stop rule matches containers inside it")
+  /* ---- rule overlaps inside the scheme (D35 warning: first group wins) ---- */
+
+  const overlapPairs = new Map<string, { winner: string; loser: string; days: ServiceDay[]; containers: Set<string> }>()
+  for (const overlap of input.ruleOverlaps ?? []) {
+    const key = `${overlap.winnerGroupId}|${overlap.loserGroupId}`
+    const entry = overlapPairs.get(key)
+    if (entry) {
+      entry.days = sortServiceDays([...new Set([...entry.days, overlap.day])])
+      for (const id of overlap.containerIds) entry.containers.add(id)
+    } else {
+      overlapPairs.set(key, {
+        winner: labelOf(overlap.winnerGroupId),
+        loser: labelOf(overlap.loserGroupId),
+        days: [overlap.day],
+        containers: new Set(overlap.containerIds),
+      })
     }
-    const ruleless = matching.dayRules
-      .filter((dayRule) => dayRule.fractions.length === 0)
-      .map((dayRule) => dayRule.day)
-    if (ruleless.length > 0) {
-      issues.push(
-        matching.sameAllDays
-          ? "Pick at least one waste fraction for the stop rule"
-          : `Pick waste fractions for ${shortDays(ruleless)}`,
-      )
-    }
-    // Zero matches only blocks once the rule is actually evaluable — the
-    // missing-area and missing-fraction issues already name the real gap.
-    if (matching.areaId) {
-      const unmatched = matching.dayRules
-        .filter(
-          (dayRule) => dayRule.fractions.length > 0 && dayRule.matchedCount === 0,
-        )
-        .map((dayRule) => dayRule.day)
-      if (unmatched.length > 0) {
-        issues.push(
-          matching.sameAllDays
-            ? "No containers currently match the stop rule"
-            : `No containers match the stop rule for ${shortDays(unmatched)}`,
-        )
+  }
+  for (const entry of overlapPairs.values()) {
+    const count = entry.containers.size
+    matchingWarnings.push(
+      `${entry.loser} and ${entry.winner} both match ${count} container${count === 1 ? "" : "s"} on ${shortDays(entry.days)} — ${entry.winner} collects them (first group wins)`,
+    )
+  }
+
+  /* ---- rule overlaps with other schemes (FR-18 warning) ---- */
+
+  if (input.areaId && ruleGroups.length > 0) {
+    // Groups sharing one rule speak with one voice (a legacy per-day scheme
+    // with the same rule every day is one rule); differing rules are named.
+    const ruleClusters = new Map<string, { groups: SchemeGroupValidationInput[]; days: ServiceDay[]; fractions: string[] }>()
+    for (const group of ruleGroups) {
+      if (group.fractions.length === 0) continue
+      const key = ruleKey(group)
+      const cluster = ruleClusters.get(key)
+      if (cluster) {
+        cluster.groups.push(group)
+        cluster.days = sortServiceDays([...new Set([...cluster.days, ...group.days])])
+      } else {
+        ruleClusters.set(key, {
+          groups: [group],
+          days: sortServiceDays([...group.days]),
+          fractions: [...new Set(group.fractions)],
+        })
       }
     }
-    if (matching.plannedVehicleType) {
-      const mismatched = Array.from(
-        new Set(
-          matching.dayRules
-            .map((dayRule) => dayRule.vehicleType)
-            .filter(
-              (type): type is string =>
-                Boolean(type) && type !== matching.plannedVehicleType,
-            ),
-        ),
-      )
-      for (const type of mismatched) {
-        matchingWarnings.push(
-          `Default vehicle is a ${matching.plannedVehicleType.toLowerCase()} but the stop rule requires a ${type.toLowerCase()}`,
-        )
-      }
-    }
-    if (matching.areaId) {
-      const ownFractions = Array.from(
-        new Set(matching.dayRules.flatMap((dayRule) => dayRule.fractions)),
-      )
+    const oneRule = ruleClusters.size <= 1
+    for (const cluster of ruleClusters.values()) {
       for (const other of otherRuleSchemes) {
-        if (other.areaId !== matching.areaId) continue
+        if (other.areaId !== input.areaId) continue
         if (effectivePeriodsDisjoint(input, other)) continue
-        const sharedDays = input.serviceDays.filter((day) =>
-          other.serviceDays.includes(day),
-        )
+        const sharedDays = cluster.days.filter((day) => other.serviceDays.includes(day))
         if (sharedDays.length === 0) continue
-        const sharedFractions = ownFractions.filter((fraction) =>
+        const sharedFractions = cluster.fractions.filter((fraction) =>
           other.fractions.some(
             (candidate) => candidate.toLowerCase() === fraction.toLowerCase(),
           ),
         )
         if (sharedFractions.length === 0) continue
+        const otherLabel = other.groupName
+          ? `${other.schemeName} · ${other.groupName}`
+          : other.schemeName
         matchingWarnings.push(
-          `Stop rule overlaps "${other.schemeName}" — ${sharedFractions.join(", ")} containers in the same planning area are already matched on ${shortDays(sharedDays)}`,
+          `${oneRule ? "Stop rule" : `Stop rule of ${namesOf(cluster.groups)}`} overlaps "${otherLabel}" — ${sharedFractions.join(", ")} containers in the same planning area are already matched on ${shortDays(sharedDays)}`,
         )
       }
     }
   }
 
-  for (const other of otherSchemes) {
-    if (effectivePeriodsDisjoint(input, other)) continue
-    const sharedDays = input.serviceDays.filter((day) => other.serviceDays.includes(day))
-    if (sharedDays.length === 0) continue
-    const sharing = `(shares ${shortDays(sharedDays)})`
-    if (input.plannedVehicleId && input.plannedVehicleId === other.plannedVehicleId) {
-      issues.push(
-        `Default vehicle is already the default on "${other.schemeName}" ${sharing}`,
-      )
-    }
-    if (input.plannedDriverId && input.plannedDriverId === other.plannedDriverId) {
-      issues.push(
-        `Default driver is already the default on "${other.schemeName}" ${sharing}`,
-      )
+  /* ---- FR-5(d): planned on another scheme ---- */
+
+  for (const cluster of clusters) {
+    const subject = (resource: "vehicle" | "driver") =>
+      oneAssignment
+        ? `Default ${resource} is already the default on`
+        : `${capitalize(resource)} of ${namesOf(cluster.groups)} is already planned on`
+    for (const other of otherSchemes) {
+      if (effectivePeriodsDisjoint(input, other)) continue
+      const sharedDays = cluster.days.filter((day) => other.serviceDays.includes(day))
+      if (sharedDays.length === 0) continue
+      const otherLabel = other.groupName
+        ? `${other.schemeName} · ${other.groupName}`
+        : other.schemeName
+      const sharing = `(shares ${shortDays(sharedDays)})`
+      if (cluster.vehicleId && cluster.vehicleId === other.plannedVehicleId) {
+        issues.push(`${subject("vehicle")} "${otherLabel}" ${sharing}`)
+      }
+      if (cluster.driverId && cluster.driverId === other.plannedDriverId) {
+        issues.push(`${subject("driver")} "${otherLabel}" ${sharing}`)
+      }
     }
   }
 
+  /* ---- FR-5(e): Vehicle Planning allocations ---- */
+
   const allocationWarnings: string[] = []
-  for (const allocation of allocations) {
-    // Released allocations returned their capacity; a scheme-scoped
-    // allocation is this scheme's own planned capacity, not a competitor.
-    if (allocation.status === "Released") continue
-    if (input.schemeId && allocation.schemeId === input.schemeId) continue
-    const resources: string[] = []
-    if (input.plannedVehicleId && input.plannedVehicleId === allocation.vehicleId) {
-      resources.push("vehicle")
+  for (const cluster of clusters) {
+    const window = {
+      serviceDays: cluster.days,
+      effectiveFrom: input.effectiveFrom,
+      effectiveTo: input.effectiveTo,
     }
-    if (input.plannedDriverId && input.plannedDriverId === allocation.driverId) {
-      resources.push("driver")
-    }
-    if (resources.length === 0) continue
-    if (!allocationWindowTouchesScheme(input, allocation)) continue
-    // Form-created allocations share one machine name, so the planned window
-    // is what identifies which allocation the message means.
-    const start = isoDatePart(allocation.plannedStart)
-    const end = isoDatePart(allocation.plannedEnd)
-    const window = start ? (end && end !== start ? `${start} → ${end}` : start) : ""
-    for (const resource of resources) {
-      if (allocation.status === "Confirmed") {
-        issues.push(
-          `Default ${resource} conflicts with confirmed Vehicle Planning allocation "${allocation.allocationName}"${window ? ` (${window})` : ""}`,
-        )
-      } else {
-        allocationWarnings.push(
-          `Default ${resource} is planned on Vehicle Planning allocation "${allocation.allocationName}" (${allocation.status}${window ? ` · ${window}` : ""}) — confirm or release it in Fleet`,
-        )
+    const subject = (resource: "vehicle" | "driver") =>
+      oneAssignment
+        ? `Default ${resource}`
+        : `${capitalize(resource)} of ${namesOf(cluster.groups)}`
+    for (const allocation of allocations) {
+      // Released allocations returned their capacity; a scheme-scoped
+      // allocation is this scheme's own planned capacity, not a competitor.
+      if (allocation.status === "Released") continue
+      if (input.schemeId && allocation.schemeId === input.schemeId) continue
+      const resources: Array<"vehicle" | "driver"> = []
+      if (cluster.vehicleId && cluster.vehicleId === allocation.vehicleId) {
+        resources.push("vehicle")
+      }
+      if (cluster.driverId && cluster.driverId === allocation.driverId) {
+        resources.push("driver")
+      }
+      if (resources.length === 0) continue
+      if (!allocationWindowTouchesScheme(window, allocation)) continue
+      // Form-created allocations share one machine name, so the planned window
+      // is what identifies which allocation the message means.
+      const start = isoDatePart(allocation.plannedStart)
+      const end = isoDatePart(allocation.plannedEnd)
+      const span = start ? (end && end !== start ? `${start} → ${end}` : start) : ""
+      for (const resource of resources) {
+        if (allocation.status === "Confirmed") {
+          issues.push(
+            `${subject(resource)} conflicts with confirmed Vehicle Planning allocation "${allocation.allocationName}"${span ? ` (${span})` : ""}`,
+          )
+        } else {
+          allocationWarnings.push(
+            `${subject(resource)} is planned on Vehicle Planning allocation "${allocation.allocationName}" (${allocation.status}${span ? ` · ${span}` : ""}) — confirm or release it in Fleet`,
+          )
+        }
       }
     }
   }
@@ -540,32 +782,6 @@ type StoredValues = Record<string, string | boolean | undefined>
 export const stringValue = (values: StoredValues, key: string): string | undefined => {
   const value = values[key]
   return typeof value === "string" && value ? value : undefined
-}
-
-/**
- * Reads what FR-5(d) needs from an existing scheme record's submittedValues
- * (the `route-studio.schemes` field ids, shared by quick create and the
- * wizard). Returns null for schemes that cannot conflict: no structured
- * service days (legacy free-text records) or no default assignment at all.
- */
-export function schemeDefaultsFromValues(
-  schemeName: string,
-  values: StoredValues | undefined,
-): SchemeDefaultsSource | null {
-  if (!values) return null
-  const serviceDays = serviceDaysFromValues(values)
-  if (serviceDays.length === 0) return null
-  const plannedVehicleId = stringValue(values, "plannedVehicleId")
-  const plannedDriverId = stringValue(values, "plannedDriverId")
-  if (!plannedVehicleId && !plannedDriverId) return null
-  return {
-    schemeName,
-    serviceDays,
-    plannedVehicleId,
-    plannedDriverId,
-    effectiveFrom: stringValue(values, "effectiveFrom"),
-    effectiveTo: stringValue(values, "effectiveTo"),
-  }
 }
 
 /**

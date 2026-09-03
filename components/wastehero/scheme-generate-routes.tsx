@@ -195,9 +195,9 @@ export function SchemeGenerateRoutesDialog({
             <DialogHeader>
               <DialogTitle>Generate routes</DialogTitle>
               <DialogDescription>
-                {scheme.name} · one dated Planned route per service day, one
-                pickup per container in that day&apos;s plan. Re-running the
-                same window updates instead of duplicating.
+                {scheme.name} · one dated Planned route per collection group
+                per service day, one pickup per container in that group&apos;s
+                plan. Re-running the same window updates instead of duplicating.
               </DialogDescription>
             </DialogHeader>
 
@@ -256,6 +256,11 @@ export function SchemeGenerateRoutesDialog({
                           {SERVICE_DAY_SHORT_LABELS[planned.day]}
                         </span>
                         <span className="font-mono text-xs">{planned.routeName}</span>
+                        {planned.groupName && (
+                          <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                            {planned.groupName}
+                          </span>
+                        )}
                         {planned.action !== "cancel" && planned.action !== "omit" && (
                           <span className="text-xs text-muted-foreground">
                             {planned.containerIds.length} stop

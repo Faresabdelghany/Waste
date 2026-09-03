@@ -69,10 +69,21 @@ import {
   setPlanAhead,
 } from "@/lib/route-schemes/plan-ahead"
 import {
+  GROUP_OWNED_SCHEME_FIELD_IDS,
   QUICK_SCHEME_DRAFT_FIELD_IDS,
   quickSchemeDraftFromValues,
   seedSchemeEditValues,
 } from "@/lib/route-schemes/quick-create"
+import {
+  collectionGroupContainerIds,
+  collectionGroupSummary,
+  collectionGroupsOf,
+  collectionGroupsToValues,
+  hasExplicitCollectionGroups,
+  schemeGroupPlans,
+  sharedServiceProvider,
+  type CollectionGroup,
+} from "@/lib/route-schemes/groups"
 import {
   schemeRowSummary,
   withDerivedSchemeContext,
@@ -89,14 +100,10 @@ import {
 import {
   effectiveDayRules,
   matchPlansFromValues,
-  matchPlansToValues,
   stopRuleSummary,
   stopSelectionMode,
 } from "@/lib/route-schemes/matching"
-import {
-  dayPlanCountSummary,
-  dayPlansToValues,
-} from "@/lib/route-schemes/validation"
+import { dayPlanCountSummary } from "@/lib/route-schemes/validation"
 import type {
   BusinessFormField,
   BusinessFormOption,
@@ -223,12 +230,12 @@ import {
 } from "@/components/wastehero/route-create-flow"
 import {
   SchemeCreateEntry,
+  resolvedDraftGroups,
   resolvedDraftPlans,
-  schemeDayPlans,
-  schemeMatchPlans,
   validateGuidedScheme,
   type GuidedSchemeData,
 } from "@/components/wastehero/scheme-create-flow"
+import { CollectionGroupsEditorDialog } from "@/components/wastehero/collection-groups-editor"
 import { SchemeGenerateRoutesDialog } from "@/components/wastehero/scheme-generate-routes"
 import { SchemeDetailsPage } from "@/components/wastehero/scheme-details-page"
 import { SchemePlanAheadRunner } from "@/components/wastehero/scheme-plan-ahead"
@@ -989,6 +996,81 @@ function serviceProviderScopedFormSchema(
   return schema
 }
 
+type SchemeStoredValues = Record<string, string | boolean | undefined>
+
+/**
+ * Keeps a Route Scheme's stop-selection and assignment facts in step with its
+ * stored values (issue #19; collection groups D33/D36). Explicit groups own
+ * the assignment and the stops, so the record-level Vehicle/Driver facts read
+ * "Per collection group" and a "Collection groups" fact carries one summary
+ * per group; the legacy single-assignment shape keeps the rule / manual facts
+ * and folds the quick form's label-keyed assignment facts onto the canonical
+ * keys generation and the detail page read.
+ */
+function withSchemeGroupFacts(
+  facts: Record<string, string>,
+  values: SchemeStoredValues,
+  /**
+   * The groups as just edited, with their denormalized names — the legacy
+   * single-assignment shape stores ids only, so without these the Vehicle /
+   * Driver facts (which generation stamps on the implicit group's routes)
+   * would go stale on an "Edit collection groups" save.
+   */
+  editedGroups?: readonly CollectionGroup[],
+): Record<string, string> {
+  const nextFacts = { ...facts }
+  const promote = (label: string, key: string) => {
+    if (nextFacts[label]) {
+      nextFacts[key] = nextFacts[label]
+      delete nextFacts[label]
+    }
+  }
+  promote("Planned vehicle", "Vehicle")
+  promote("Planned driver", "Driver")
+  promote("Responsible service provider", "Service provider")
+  const serviceDays = serviceDaysFromValues(values)
+  const groups = editedGroups ?? collectionGroupsOf(values, { serviceDays, facts: nextFacts })
+  if (hasExplicitCollectionGroups(values)) {
+    nextFacts["Container selection"] =
+      groups.length === 0 ? "No collection groups" : "Per collection group"
+    nextFacts["Collection groups"] = groups.map(collectionGroupSummary).join(" · ")
+    nextFacts.Vehicle = "Per collection group"
+    nextFacts.Driver = "Per collection group"
+    const shared = sharedServiceProvider(groups)
+    if (shared.name) {
+      nextFacts["Service provider"] = shared.name
+    } else if (groups.some((group) => group.serviceProviderName)) {
+      nextFacts["Service provider"] = "Per collection group"
+    } else {
+      delete nextFacts["Service provider"]
+    }
+    delete nextFacts["Stop matching"]
+    return nextFacts
+  }
+  delete nextFacts["Collection groups"]
+  const [single] = groups
+  if (single) {
+    nextFacts.Vehicle = single.vehicleName ?? "Unassigned"
+    nextFacts.Driver = single.driverName ?? "Unassigned"
+    if (single.serviceProviderName) nextFacts["Service provider"] = single.serviceProviderName
+    else delete nextFacts["Service provider"]
+  }
+  if (stopSelectionMode(values) === "rule") {
+    const matchPlans = matchPlansFromValues(values)
+    nextFacts["Container selection"] = "Matched by rule"
+    nextFacts["Stop matching"] = matchPlans.sameAllDays
+      ? stopRuleSummary(matchPlans.sharedRule)
+      : effectiveDayRules(serviceDays, matchPlans)
+          .map(({ day, rule }) => `${SERVICE_DAY_SHORT_LABELS[day]}: ${stopRuleSummary(rule)}`)
+          .join(" · ")
+  } else if (nextFacts["Stop matching"]) {
+    delete nextFacts["Stop matching"]
+    nextFacts["Container selection"] =
+      values.sameAllDays !== false ? "Same containers every day" : "Different per day"
+  }
+  return nextFacts
+}
+
 export function BusinessWorkspace({
   workspaceId,
   initialModuleId,
@@ -1099,6 +1181,8 @@ export function BusinessWorkspace({
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [generateSchemeRecord, setGenerateSchemeRecord] =
+    useState<BusinessRecord | null>(null)
+  const [groupsEditorScheme, setGroupsEditorScheme] =
     useState<BusinessRecord | null>(null)
   const [relatedCreateTarget, setRelatedCreateTarget] =
     useState<RelatedCreateTarget | null>(null)
@@ -2576,8 +2660,25 @@ export function BusinessWorkspace({
   const editFormSchema = useMemo<BusinessFormSchema | undefined>(() => {
     if (!editingRecord || !activeModuleFormSchema?.execution) return undefined
     const entity = activeModule.entityLabel
+    // A multi-group scheme's groups own its assignment and stop selection
+    // (D36): the schema dialog edits scheme-level fields only — the groups
+    // are edited on the scheme page — so those fields are hidden here.
+    const hidesGroupFields =
+      activeModuleFormSchema.key === "route-studio.schemes" &&
+      hasExplicitCollectionGroups(editingRecord.submittedValues)
+    const sections = hidesGroupFields
+      ? activeModuleFormSchema.sections
+          .map((section) => ({
+            ...section,
+            fields: section.fields.filter(
+              (field) => !GROUP_OWNED_SCHEME_FIELD_IDS.has(field.id),
+            ),
+          }))
+          .filter((section) => section.fields.length > 0)
+      : activeModuleFormSchema.sections
     return {
       ...activeModuleFormSchema,
+      sections,
       title: `Edit ${entity.toLowerCase()}`,
       description: `Update the linked records and details of ${editingRecord.name}. Changes are recorded with audit history.`,
       submitLabel: "Save changes",
@@ -3325,7 +3426,7 @@ export function BusinessWorkspace({
     // lib/route-schemes/recurrence reads); the facts get the one-line summary
     // the record detail shows.
     const normalizeRouteSchemeRecord = (record: BusinessRecord): BusinessRecord => {
-      const nextFacts = { ...record.facts }
+      let nextFacts = { ...record.facts }
       // Keep the stop-selection facts in sync with the merged values
       // (issue #19): the quick edit form can flip the mode or change the
       // shared rule, and the facts must follow the stopSelection flag —
@@ -3351,24 +3452,7 @@ export function BusinessWorkspace({
           : ""
       if (plannedStartTime) nextFacts["Planned start"] = plannedStartTime
       else delete nextFacts["Planned start"]
-      if (stopSelectionMode(mergedValues) === "rule") {
-        const matchPlans = matchPlansFromValues(mergedValues)
-        nextFacts["Container selection"] = "Matched by rule"
-        nextFacts["Stop matching"] = matchPlans.sameAllDays
-          ? stopRuleSummary(matchPlans.sharedRule)
-          : effectiveDayRules(serviceDaysFromValues(mergedValues), matchPlans)
-              .map(
-                ({ day, rule }) =>
-                  `${SERVICE_DAY_SHORT_LABELS[day]}: ${stopRuleSummary(rule)}`,
-              )
-              .join(" · ")
-      } else if (nextFacts["Stop matching"]) {
-        delete nextFacts["Stop matching"]
-        nextFacts["Container selection"] =
-          mergedValues.sameAllDays !== false
-            ? "Same containers every day"
-            : "Different per day"
-      }
+      nextFacts = withSchemeGroupFacts(nextFacts, mergedValues)
       const recurrence = recurrenceFromValues(values)
       if (!recurrence) return { ...record, facts: nextFacts }
       // The retired free-text cadence field, and — when the frequency moved
@@ -3993,14 +4077,6 @@ export function BusinessWorkspace({
     const project = linkRecord("projectId", "configure", "organization", data.projectId)
     const area = linkRecord("planningAreaId", "plan", "areas", data.planningAreaId)
     const calendar = linkRecord("calendarId", "plan", "calendars", data.calendarId)
-    const serviceProvider = linkRecord(
-      "serviceProviderId",
-      "service-providers",
-      "service-providers",
-      data.serviceProviderId,
-    )
-    const vehicle = linkRecord("plannedVehicleId", "fleet", "vehicles", data.plannedVehicleId)
-    const driver = linkRecord("plannedDriverId", "fleet", "drivers", data.plannedDriverId)
     const depot = linkRecord("depotId", "resources", "depots", data.depotId)
     const unloadingStation = linkRecord(
       "unloadingStationId",
@@ -4009,7 +4085,6 @@ export function BusinessWorkspace({
       data.unloadingStationId,
     )
 
-    const isRuleScheme = data.stopSelection === "rule"
     const containersModule = businessWorkspaces.resources.modules.find(
       (candidate) => candidate.id === "containers",
     )
@@ -4023,20 +4098,54 @@ export function BusinessWorkspace({
       ? getRecords("fleet", vehiclesModule.id, vehiclesModule.records)
       : []
 
-    const normalizedPlans = schemeDayPlans(data)
-    const normalizedMatchPlans = schemeMatchPlans(data)
-    // Rule mode resolves the rule at creation time for the display counts;
-    // manual mode expands the picked lists. Only manual picks become
-    // container relationRefs — a rule-mode scheme stores the rule, never the
-    // resolved result (issue #19), so generation re-resolves each run.
-    const dayPlans = resolvedDraftPlans(data, containerRecords)
-    if (!isRuleScheme) {
-      for (const containerId of new Set(
-        dayPlans.flatMap((plan) => plan.containerIds),
-      )) {
-        linkRecord("containerIds", "resources", "containers", containerId)
+    // Collection groups (D33): each group links its own vehicle, driver, and
+    // service provider, and carries their display names so generation stamps
+    // them without a record lookup. Linking dedupes across groups.
+    const linkedIds = new Set<string>()
+    const linkOnce = (
+      fieldId: string,
+      workspaceId: WorkspaceId,
+      moduleId: string,
+      recordId?: string,
+    ) => {
+      if (!recordId) return undefined
+      const key = `${fieldId}:${recordId}`
+      if (linkedIds.has(key)) {
+        return moduleRecords(workspaceId, moduleId).find(
+          (candidate) => candidate.id === recordId,
+        )
       }
+      linkedIds.add(key)
+      return linkRecord(fieldId, workspaceId, moduleId, recordId)
     }
+    const groups: CollectionGroup[] = data.groups.map((group) => {
+      const vehicle = linkOnce("plannedVehicleId", "fleet", "vehicles", group.vehicleId)
+      const driver = linkOnce("plannedDriverId", "fleet", "drivers", group.driverId)
+      const provider = linkOnce(
+        "serviceProviderId",
+        "service-providers",
+        "service-providers",
+        group.serviceProviderId,
+      )
+      return {
+        ...group,
+        // Vehicle names carry the registration plate; facts show the callsign.
+        ...(vehicle ? { vehicleName: vehicle.name.split(" · ")[0] } : {}),
+        ...(driver ? { driverName: driver.name } : {}),
+        ...(provider ? { serviceProviderName: provider.name } : {}),
+      }
+    })
+    // Only manual picks become container relationRefs — a rule group stores
+    // the rule, never the resolved result (issue #19), so generation
+    // re-resolves each run.
+    for (const containerId of new Set(
+      groups
+        .filter((group) => group.stopSource === "manual")
+        .flatMap((group) => group.containerIds),
+    )) {
+      linkRecord("containerIds", "resources", "containers", containerId)
+    }
+    const dayPlans = resolvedDraftPlans(data, containerRecords)
     if (origin.extraRelations) relationRefs.push(...origin.extraRelations)
 
     // Conflicts (FR-5d) are checked against every scheme, not just the ones a
@@ -4069,76 +4178,53 @@ export function BusinessWorkspace({
       effectiveFrom: data.effectiveFrom,
       effectiveTo: data.effectiveTo,
       plannedStartTime: data.plannedStartTime,
-      serviceProviderId: data.serviceProviderId ?? "",
-      plannedVehicleId: data.plannedVehicleId ?? "",
-      plannedDriverId: data.plannedDriverId ?? "",
       depotId: data.depotId ?? "",
       unloadingStationId: data.unloadingStationId ?? "",
-      stopSelection: data.stopSelection,
-      // The scheme stores the selection rule OR the picked lists, never both
-      // (issue #19) — the stopSelection flag is the single source of truth.
-      ...(isRuleScheme
-        ? {
-            sameAllDays: normalizedMatchPlans.sameAllDays,
-            ...matchPlansToValues(normalizedMatchPlans),
-          }
-        : dayPlansToValues(normalizedPlans)),
+      // One group covering every service day stores as the legacy
+      // single-assignment shape; anything else stores the groups explicitly
+      // (D36) — never both, the group list is the single source of truth.
+      ...collectionGroupsToValues(groups, data.serviceDays),
     }
     const recurrence = recurrenceFromValues(submittedValues)
 
     const projectIds = selectedProjectIds(projectScope, {
       projectId: data.projectId ?? "",
     })
-    // Vehicle names carry the registration plate; facts show the callsign.
-    const vehicleName = vehicle?.name.split(" · ")[0]
     const totalStops = dayPlans.reduce(
       (sum, plan) => sum + plan.containerIds.length,
       0,
     )
-    const facts: Record<string, string> = {
-      Scope: projectScopeLabel(projectIds),
-      "Record kind": "Route Scheme",
-      "Execution policy": "create record",
-      "Submitted by": actorName,
-      Version: "v1",
-      ...(project ? { Project: project.name } : {}),
-      ...(area ? { "Planning area": area.name } : {}),
-      ...(calendar ? { "Collection calendar": calendar.name } : {}),
-      ...(recurrence ? { Recurrence: recurrenceSentence(recurrence) } : {}),
-      ...(data.effectiveFrom
-        ? {
-            Effective: `${data.effectiveFrom} → ${data.effectiveTo || "ongoing"}`,
-          }
-        : {}),
-      // Absent = no estimated start (issue #32) — the detail page shows "—".
-      ...(data.plannedStartTime.trim()
-        ? { "Planned start": data.plannedStartTime.trim() }
-        : {}),
-      ...(serviceProvider ? { "Service provider": serviceProvider.name } : {}),
-      Vehicle: vehicleName ?? "Unassigned",
-      Driver: driver?.name ?? "Unassigned",
-      ...(depot ? { "Departure depot": depot.name } : {}),
-      ...(unloadingStation
-        ? { "Unloading station": unloadingStation.name }
-        : {}),
-      "Container selection": isRuleScheme
-        ? "Matched by rule"
-        : normalizedPlans.sameAllDays
-          ? "Same containers every day"
-          : "Different per day",
-      ...(isRuleScheme
-        ? {
-            "Stop matching": normalizedMatchPlans.sameAllDays
-              ? stopRuleSummary(data.matchRule)
-              : effectiveDayRules(data.serviceDays, normalizedMatchPlans)
-                  .map(
-                    ({ day, rule }) =>
-                      `${SERVICE_DAY_SHORT_LABELS[day]}: ${stopRuleSummary(rule)}`,
-                  )
-                  .join(" · "),
-          }
-        : {}),
-      Containers: dayPlanCountSummary(dayPlans),
+    const sharedProviderId = sharedServiceProvider(groups).id
+    const facts: Record<string, string> = withSchemeGroupFacts(
+      {
+        Scope: projectScopeLabel(projectIds),
+        "Record kind": "Route Scheme",
+        "Execution policy": "create record",
+        "Submitted by": actorName,
+        Version: "v1",
+        ...(project ? { Project: project.name } : {}),
+        ...(area ? { "Planning area": area.name } : {}),
+        ...(calendar ? { "Collection calendar": calendar.name } : {}),
+        ...(recurrence ? { Recurrence: recurrenceSentence(recurrence) } : {}),
+        ...(data.effectiveFrom
+          ? {
+              Effective: `${data.effectiveFrom} → ${data.effectiveTo || "ongoing"}`,
+            }
+          : {}),
+        // Absent = no estimated start (issue #32) — the detail page shows "—".
+        ...(data.plannedStartTime.trim()
+          ? { "Planned start": data.plannedStartTime.trim() }
+          : {}),
+        ...(depot ? { "Departure depot": depot.name } : {}),
+        ...(unloadingStation
+          ? { "Unloading station": unloadingStation.name }
+          : {}),
+        Containers: dayPlanCountSummary(dayPlans),
+      },
+      submittedValues,
+      groups,
+    )
+    Object.assign(facts, {
       ...(origin.extraFacts ?? {}),
       ...(validation.issues.length > 0
         ? { "Validation issues": validation.issues.join(" · ") }
@@ -4146,7 +4232,7 @@ export function BusinessWorkspace({
       ...(validation.warnings.length > 0
         ? { "Validation warnings": validation.warnings.join(" · ") }
         : {}),
-    }
+    })
 
     const newRecord: BusinessRecord = {
       id: `${activeModule.id}-route-scheme-${now}`,
@@ -4158,11 +4244,14 @@ export function BusinessWorkspace({
       owner: actorName,
       value: `${totalStops} planned stops`,
       updated: "Now",
-      description: isRuleScheme
-        ? `Created with ${origin.method} — stops are matched by the scheme's declarative rule at every generation.`
-        : origin.method === "Guided Setup"
-          ? "Created with Guided Setup covering scope, recurrence, assignment defaults, and per-day container plans."
-          : "Created with Quick create — manual container lists are picked in Guided Setup.",
+      description:
+        groups.length > 1
+          ? `Created with ${origin.method} — ${groups.length} collection groups, each generating its own routes on the days it runs.`
+          : groups[0]?.stopSource === "rule"
+            ? `Created with ${origin.method} — stops are matched by the scheme's declarative rule at every generation.`
+            : origin.method === "Guided Setup"
+              ? "Created with Guided Setup covering scope, recurrence, the collection group's assignment, and its picked containers."
+              : "Created with Quick create — manual container lists are picked in Guided Setup.",
       facts,
       related: [
         ...relationRefs.map((relation) => relation.label),
@@ -4173,7 +4262,7 @@ export function BusinessWorkspace({
       allowedTransitions: activeModule.lifecycle.slice(1, 3),
       companyId: FIXTURE_COMPANY_ID,
       projectIds,
-      serviceProviderId: data.serviceProviderId ?? serviceProviderScopeId,
+      serviceProviderId: sharedProviderId ?? serviceProviderScopeId,
       recordKind: "Route Scheme",
       submittedValues,
       relationRefs,
@@ -4254,6 +4343,83 @@ export function BusinessWorkspace({
           validation.issues.length === 1 ? "" : "s"
         }: ${validation.issues.join(" · ")}`,
       })
+    }
+  }
+
+  /**
+   * "Edit collection groups" save (D36): serializes the groups onto the stored
+   * scheme (legacy shape for one group covering every day, explicit
+   * otherwise), refreshes the facts, and runs the same edit-save
+   * reconciliation the schema dialog runs — the lifecycle seam revalidates
+   * and reshapes the future planning window; this handler applies the upserts.
+   */
+  const handleSchemeGroupsSave = (groups: CollectionGroup[]) => {
+    if (!groupsEditorScheme) return
+    const stored =
+      moduleRecords("route-studio", "schemes").find(
+        (candidate) => candidate.id === groupsEditorScheme.id,
+      ) ?? groupsEditorScheme
+    const serviceDays = serviceDaysFromValues(stored.submittedValues ?? {})
+    const mergedValues = {
+      ...stored.submittedValues,
+      ...collectionGroupsToValues(groups, serviceDays),
+    }
+    let updatedRecord: BusinessRecord = {
+      ...stored,
+      updated: "Now",
+      freshness: "Now",
+      submittedValues: mergedValues,
+      facts: withSchemeGroupFacts(stored.facts, mergedValues, groups),
+      serviceProviderId: sharedServiceProvider(groups).id ?? stored.serviceProviderId,
+    }
+    const containerRecords = moduleRecords("resources", "containers")
+    const schemeEdit = planSchemeEditReconciliation(
+      { before: stored, after: updatedRecord, today: todayIso(), actorName },
+      {
+        schemes: moduleRecords("route-studio", "schemes"),
+        existingRoutes: moduleRecords("route-studio", "routes"),
+        existingPickups: moduleRecords("route-studio", "pickups"),
+        containers: containerRecords,
+        vehicles: moduleRecords("fleet", "vehicles"),
+        allocations: moduleRecords("fleet", "vehicle-planning"),
+        calendarRecords: moduleRecords("plan", "calendars"),
+      },
+    )
+    updatedRecord = schemeEdit.scheme
+    const linkedContainers = collectionGroupContainerIds(
+      schemeGroupPlans(updatedRecord, serviceDays, containerRecords).resolution,
+    ).length
+    const editEvent: AuditEvent = {
+      id: `audit-edit-groups-${Date.now()}`,
+      action: "Edit collection groups",
+      actor: actorName,
+      at: "Now",
+      reason: `${groups.length} collection group${groups.length === 1 ? "" : "s"}`,
+      before: stored.status,
+      after: updatedRecord.status,
+      evidence: `${linkedContainers} containers across the groups`,
+    }
+    upsertRecord("route-studio", "schemes", updatedRecord)
+    for (const route of schemeEdit.routes) {
+      upsertRecord("route-studio", "routes", route)
+    }
+    for (const pickup of schemeEdit.pickups) {
+      upsertRecord("route-studio", "pickups", pickup)
+    }
+    setAuditEvents((current) => ({
+      ...current,
+      [updatedRecord.id]: [editEvent, ...(current[updatedRecord.id] ?? [])],
+    }))
+    if (selectedRecord?.id === updatedRecord.id) setSelectedRecord(updatedRecord)
+    setGroupsEditorScheme(null)
+    if (schemeEdit.outcome === "draft") {
+      toast.warning(`${updatedRecord.name} saved as Draft`, {
+        description: schemeEdit.message,
+      })
+    } else if (schemeEdit.outcome === "generation-failed") {
+      toast.warning(`${updatedRecord.name} updated`, { description: schemeEdit.message })
+    } else {
+      toast.success(`${updatedRecord.name} updated`, { description: schemeEdit.message })
     }
   }
 
@@ -4423,6 +4589,9 @@ export function BusinessWorkspace({
             canRunRecordActions
               ? () => setGenerateSchemeRecord(schemeDetailRecord)
               : undefined
+          }
+          onEditGroups={
+            canEditRecords ? () => setGroupsEditorScheme(schemeDetailRecord) : undefined
           }
           readOnly={!canRunRecordActions}
         />
@@ -5321,6 +5490,11 @@ export function BusinessWorkspace({
         scheme={generateSchemeRecord}
         actorName={actorName}
         onClose={() => setGenerateSchemeRecord(null)}
+      />
+      <CollectionGroupsEditorDialog
+        scheme={groupsEditorScheme}
+        onClose={() => setGroupsEditorScheme(null)}
+        onSave={handleSchemeGroupsSave}
       />
       <ActionDecisionDialog
         module={activeModule}

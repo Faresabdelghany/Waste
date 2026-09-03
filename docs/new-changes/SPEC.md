@@ -167,6 +167,8 @@ never recomputed.
 
 - **7 steps:** 1 Scheme & scope · 2 **Collection Calendar** (new dedicated step) ·
   3 Recurrence · 4 Assignment · 5 Containers · 6 Route map · 7 Review & create.
+  **[Superseded by area L (2026-09-03): six steps — Assignment and Containers fold into
+  one Collection groups step; depot and unloading station move to step 1.]**
 - Step 2 contains the calendar select (moved out of step 1) plus read-only context:
   working days, holiday dates, validity period, status. The selected calendar
   participates directly in the recurrence/next-dates preview. This is a wizard
@@ -340,6 +342,53 @@ KPI tiles for calendars. The calendars table currently renders generic module co
 - The superseded statements in RS/PS (see Further Notes) get inline edit-markers pointing
   at this spec, so no document silently disagrees.
 
+### L. Collection groups (D33–D36) — 2026-09-03
+
+- A Route Scheme carries one or more **collection groups**. Each group has: the
+  service days it runs on (a subset of the scheme's, defined once and reused), its
+  waste fractions, a **vehicle** (required), a **default driver** (required for
+  Validated), an optional service provider, and its stop source — a **matching rule**
+  (fractions + optional vehicle type inside the scheme's planning area, resolved at
+  generation) as the normal path, or **hand-picked containers** as the explicit
+  exception. The scheme owns the planning area (one per scheme), the calendar, the
+  recurrence, and the service days; groups inherit them. Service action is
+  *collection* only — replace/deliver stay deferred.
+- **Generation** writes one route per group per applicable day, carrying the group's
+  vehicle, driver, and service provider (`lib/route-schemes/generation.ts`); pickups
+  follow their route. The generate dialog and the route facts name the group.
+- **Invariants** (`lib/route-schemes/groups.ts` `resolveCollectionGroupPlans`,
+  `validateScheme`): every service day has ≥ 1 group; a vehicle, driver, or hand-picked
+  container is never on two groups the same day (blocking); reuse across days is
+  allowed; a container two rule groups match on one day goes to the first group
+  (warning — first group wins, D35); a hand-picked container always beats a rule.
+- **Storage and identity** (D36): explicit groups serialize as JSON under
+  `submittedValues.collectionGroups`; one group covering every service day stores as
+  the legacy single-assignment shape; every scheme without the key resolves to
+  *implicit* groups (`collectionGroupsOf`), so fixtures, Quick Create, and pre-groups
+  schemes keep working unchanged. Route identity is `(schemeId, serviceDate)` for the
+  implicit group and `(schemeId, groupId, serviceDate)` for explicit groups.
+- **Guided Setup** is six steps: Scheme & scope (now also departure depot / unloading
+  station), Collection Calendar, Recurrence, **Collection groups** (hub-and-spoke: a
+  service-day coverage strip, one summary row per group with its live issues, one
+  editor open at a time — `components/wastehero/collection-groups-editor.tsx`), Route
+  map (one line per group per day), Review & create. Quick Create maps onto one group.
+  Issues show per group; Next is never gated — Draft is always allowed (D34).
+- **Scheme page**: a "Collection groups" card replaces the Assignment and Containers
+  cards; "Edit collection groups" opens the same editor and saves through the edit-save
+  reconciliation seam (G). The schema edit dialog hides the group-owned fields
+  (provider, vehicle, driver, stop selection, rule) for multi-group schemes.
+- Harness: `scripts/collection-groups-harness.ts` (model, implicit derivation, values
+  round trip, tie-breaks, coverage, validation wording, per-group generation and
+  identity).
+
+**Changes from current:** Assignment and Containers were scheme-wide (one vehicle and
+driver, one rule or list shared or per day via the same-all-days toggle); the spec's
+open question "per-day assignment or split schemes" is answered by groups. Vehicle and
+driver were optional; both are now required for Validated (validation issues, never a
+form gate — the quick schema keeps them optional). Route identity gains the group id
+for explicit groups. The two fixture schemes gained typed `plannedVehicleId` /
+`plannedDriverId` (and Østerbro its `serviceProviderId`) so they keep validating.
+
 ## Testing Decisions
 
 - **What makes a good test here:** feed records in, assert records/plans out. Harness
@@ -366,6 +415,13 @@ KPI tiles for calendars. The calendars table currently renders generic module co
   tiles, and empty/blocked states are verified by browser E2E passes with screenshots
   (the established issue-18-style flow), not by harnesses. Type-checking via
   `npx tsc --noEmit` remains mandatory (the build ignores type errors).
+- **Collection groups** (area L): `scripts/collection-groups-harness.ts` covers the
+  group model and its implicit derivation from every legacy storage shape, the values
+  round trip, per-day resolution with the tie-breaks, coverage, the group-aware
+  validation wording, per-group generation with stable legacy identity, and the
+  legacy→explicit split; the validation, matching, and lifecycle harnesses were
+  updated to the group-aware seams (the generation harness is unchanged — its legacy
+  single-assignment cases exercise the implicit group).
 
 ## Out of Scope
 
@@ -414,8 +470,10 @@ This spec explicitly supersedes these statements; each gets an edit-marker in pl
 
 ### Binding invariants carried (must not regress)
 
-- Route identity `(schemeId, serviceDate)`; deterministic ids/names; `serviceDate` is
-  never rewritten — deviation moves live in `actualDate` only.
+- Route identity `(schemeId, serviceDate)` for the implicit collection group and
+  `(schemeId, groupId, serviceDate)` for explicit groups (area L, D36); deterministic
+  ids/names; `serviceDate` is never rewritten — deviation moves live in `actualDate`
+  only.
 - Generation-authored cancels carry `cancelledByGeneration` and are the only
   resurrectable cancels.
 - 367-day walk cap; unserved-date cleanup bounded by the walked range. The edit-to-Draft
@@ -431,8 +489,9 @@ This spec explicitly supersedes these statements; each gets an edit-marker in pl
   `plannedStartTime` participates in no date math. Legacy schemes without
   `plannedStartTime` display "—" and their generated routes carry **no** estimated start
   (D16) — the current hard-coded 06:00 fallback in generation is removed.
-- Manual mode persists container ids; rule mode persists only the rule (`stopSelection`
-  is the single source of truth; never both).
+- Per collection group, a manual group persists container ids and a rule group persists
+  only the rule — never both (area L). For the implicit legacy group `stopSelection`
+  remains that single source of truth.
 
 ### Sequencing note
 

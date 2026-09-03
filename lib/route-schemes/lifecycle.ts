@@ -20,18 +20,16 @@ import { isSoftDeleted } from "../data/record-visibility"
 import { schemeFrequencyPromiseOfRecord } from "../data/service-frequencies"
 import { calendarFromRecord } from "./calendar"
 import {
-  effectiveDayRules,
-  effectiveStopPlans,
-  matchPlansFromValues,
+  collectionGroupContainerIds,
+  schemeAssignmentSources,
+  schemeGroupPlans,
   schemeStopRuleSources,
-  stopSelectionMode,
-  vehicleTypeOfRecord,
-} from "./matching"
+  schemeValidationGroups,
+} from "./groups"
+import { vehicleTypeOfRecord } from "./matching"
 import { isIsoDate, recurrenceFromValues, serviceDaysFromValues } from "./recurrence"
 import {
   allocationConflictSources,
-  dayPlansFromValues,
-  schemeDefaultsFromValues,
   stringValue,
   validateScheme,
   type SchemeFrequencyPromise,
@@ -206,19 +204,16 @@ export function schemeLiveValidation(
   const calendar = calendarId
     ? calendarFromRecord(related.calendars?.find((candidate) => candidate.id === calendarId))
     : null
-  const plannedVehicleId = stringValue(values, "plannedVehicleId")
-  const plannedDriverId = stringValue(values, "plannedDriverId")
 
-  // In rule mode these are the current rule matches, day-aligned with
-  // effectiveDayRules below (effectiveStopPlans maps that same list).
-  const dayPlans = effectiveStopPlans(record, serviceDays, containers)
-  const linkedContainerIds = new Set(dayPlans.flatMap((plan) => plan.containerIds))
+  // The record's collection groups (implicit or explicit) resolved per day —
+  // the same seam generation reads, so validation and generation agree.
+  const { groups, resolution } = schemeGroupPlans(record, serviceDays, containers)
+  const linkedContainerIds = new Set(collectionGroupContainerIds(resolution))
   const promises = containers
     .filter((container) => linkedContainerIds.has(container.id))
     .map((container) => schemeFrequencyPromiseOfRecord(container))
     .filter((promise): promise is SchemeFrequencyPromise => promise !== null)
 
-  const matchPlans = matchPlansFromValues(values)
   const otherSchemes = schemesInPlanning(related.schemes).filter(
     (candidate) => candidate.id !== record.id,
   )
@@ -227,37 +222,21 @@ export function schemeLiveValidation(
       serviceDays,
       effectiveFrom: recurrence.effectiveFrom,
       effectiveTo: recurrence.effectiveTo,
-      plans: dayPlansFromValues(values),
-      plannedVehicleId,
-      plannedDriverId,
+      areaId: stringValue(values, "planningAreaId"),
       calendar,
       schemeId: record.id,
       frequencyReconciliation: { frequency: recurrence.frequency, promises },
-      ...(stopSelectionMode(values) === "rule"
-        ? {
-            stopMatching: {
-              areaId: stringValue(values, "planningAreaId"),
-              sameAllDays: matchPlans.sameAllDays,
-              dayRules: effectiveDayRules(serviceDays, matchPlans).map(
-                ({ day, rule }, index) => ({
-                  day,
-                  fractions: rule.fractions,
-                  vehicleType: rule.vehicleType,
-                  matchedCount: dayPlans[index]?.containerIds.length ?? 0,
-                }),
-              ),
-              plannedVehicleType: vehicleTypeOfRecord(
-                related.vehicles?.find((vehicle) => vehicle.id === plannedVehicleId),
-              ),
-            },
-          }
-        : {}),
+      ...schemeValidationGroups(
+        groups,
+        resolution,
+        (vehicleId) =>
+          vehicleTypeOfRecord(related.vehicles?.find((vehicle) => vehicle.id === vehicleId)),
+        (containerId) => containers.find((container) => container.id === containerId)?.name,
+      ),
     },
-    otherSchemes
-      .map((candidate) =>
-        schemeDefaultsFromValues(candidate.name, candidate.submittedValues),
-      )
-      .filter((source): source is NonNullable<typeof source> => source !== null),
+    otherSchemes.flatMap((candidate) =>
+      schemeAssignmentSources(candidate.name, candidate.submittedValues),
+    ),
     allocationConflictSources(related.allocations ?? []),
     schemeStopRuleSources(otherSchemes),
   )

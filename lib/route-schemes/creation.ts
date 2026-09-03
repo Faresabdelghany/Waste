@@ -36,7 +36,7 @@ import {
   type WeekRotation,
 } from "./recurrence"
 import { count } from "./text"
-import { dayPlansToValues, type SchemeDayPlan } from "./validation"
+import { COLLECTION_GROUPS_KEY } from "./groups"
 
 const INITIAL_WINDOW_DAYS = 7
 
@@ -205,15 +205,20 @@ export type SchemeCreationPreviewInput = {
   serviceDays: readonly ServiceDay[]
   effectiveFrom: string
   effectiveTo?: string
-  /** Resolved per-day stop lists (rule matches or manual picks). */
-  dayPlans: readonly SchemeDayPlan[]
+  /**
+   * Resolved per-(group, day) stop lists — rule matches after tie-breaks or
+   * manual picks — one entry per collection group per applicable day.
+   */
+  groupPlans: ReadonlyArray<{ groupId: string; day: ServiceDay; containerIds: readonly string[] }>
   calendar?: CollectionCalendar | null
 }
 
 export type SchemeCreationPreview = {
   window: GenerationWindow
-  /** Operating dates a route would be created for, ascending. */
+  /** Distinct operating dates a route would be created for, ascending. */
   routeDates: string[]
+  /** Routes that would be created — one per collection group per date. */
+  routeCount: number
   /**
    * Stop count across those routes — an estimate: rule matches re-resolve at
    * generation time, so the real count can differ (D27 labels it as such).
@@ -234,10 +239,17 @@ export type SchemeCreationPreview = {
 export function previewSchemeCreation(
   input: SchemeCreationPreviewInput,
 ): SchemeCreationPreview | null {
-  const containersByDay: Partial<Record<ServiceDay, string[]>> = {}
-  for (const plan of input.dayPlans) {
-    containersByDay[plan.day] = [...plan.containerIds]
-  }
+  // The caller already resolved every group's stops per day, so the synthetic
+  // record carries one explicit MANUAL group per (group, day) — the engine
+  // then writes exactly one route per group per date, as creation will.
+  const groups = input.groupPlans.map((plan) => ({
+    id: `${plan.groupId}:${plan.day}`,
+    name: plan.groupId,
+    days: [plan.day],
+    fractions: [],
+    stopSource: "manual" as const,
+    containerIds: [...plan.containerIds],
+  }))
   const scheme: BusinessRecord = {
     id: "scheme-creation-preview",
     name: "Creation preview",
@@ -258,14 +270,7 @@ export function previewSchemeCreation(
       serviceDays: input.serviceDays.join(", "),
       effectiveFrom: input.effectiveFrom,
       effectiveTo: input.effectiveTo ?? "",
-      // The caller already resolved rule matches into per-day lists, so the
-      // synthetic record always reads as manual per-day plans.
-      stopSelection: "manual",
-      ...dayPlansToValues({
-        sameAllDays: false,
-        sharedContainerIds: [],
-        containersByDay,
-      }),
+      [COLLECTION_GROUPS_KEY]: JSON.stringify(groups),
     },
   }
   const window = initialGenerationWindow(input.today, input.effectiveFrom)
@@ -280,7 +285,8 @@ export function previewSchemeCreation(
   const creates = plan.routes.filter((route) => route.action === "create")
   return {
     window,
-    routeDates: creates.map((route) => route.actualDate),
+    routeDates: Array.from(new Set(creates.map((route) => route.actualDate))),
+    routeCount: creates.length,
     estimatedStops: creates.reduce(
       (sum, route) => sum + route.containerIds.length,
       0,

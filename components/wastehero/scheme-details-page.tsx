@@ -54,14 +54,8 @@ import {
   schemeLiveValidation,
   type SchemeRelatedRecords,
 } from "@/lib/route-schemes/lifecycle"
-import {
-  effectiveDayRules,
-  matchPlansFromValues,
-  resolveStopMatches,
-  splitList,
-  stopRuleSummary,
-  stopSelectionMode,
-} from "@/lib/route-schemes/matching"
+import { schemeGroupPlans } from "@/lib/route-schemes/groups"
+import { stopRuleSummary } from "@/lib/route-schemes/matching"
 import { isPlanAheadEnabled, setPlanAhead } from "@/lib/route-schemes/plan-ahead"
 import { schemeAreaName } from "@/lib/route-schemes/scheme-list"
 import {
@@ -193,6 +187,7 @@ export function SchemeDetailsPage({
   onEdit,
   onDelete,
   onGenerateRoutes,
+  onEditGroups,
   readOnly = false,
 }: {
   module: ModuleDefinition
@@ -204,6 +199,8 @@ export function SchemeDetailsPage({
   onDelete?: () => void
   /** Opens the Generate routes dialog; absent hides the action entirely. */
   onGenerateRoutes?: () => void
+  /** Opens the collection groups editor (D36); absent hides the action. */
+  onEditGroups?: () => void
   /** Hides every mutation control, e.g. for view-only roles. */
   readOnly?: boolean
 }) {
@@ -382,6 +379,12 @@ export function SchemeDetailsPage({
                     Edit scheme
                   </DropdownMenuItem>
                 )}
+                {onEditGroups && (
+                  <DropdownMenuItem onSelect={onEditGroups}>
+                    <PencilSimple className="h-4 w-4" />
+                    Edit collection groups
+                  </DropdownMenuItem>
+                )}
                 {!readOnly && (
                   <DropdownMenuItem onSelect={togglePlanAhead}>
                     <CalendarCheck className="h-4 w-4" />
@@ -449,6 +452,7 @@ export function SchemeDetailsPage({
             blockingIssues={blockingIssues}
             draftPendingResave={draftPendingResave}
             onEdit={onEdit}
+            onEditGroups={onEditGroups}
           />
         </TabsContent>
         <TabsContent value="routes" className="mt-0 min-h-0 flex-1 overflow-y-auto">
@@ -489,6 +493,7 @@ function SchemeDetailsTab({
   blockingIssues,
   draftPendingResave,
   onEdit,
+  onEditGroups,
 }: {
   record: BusinessRecord
   values: NonNullable<BusinessRecord["submittedValues"]>
@@ -503,7 +508,9 @@ function SchemeDetailsTab({
   /** Persisted Draft whose live validation is now clean — needs a re-save. */
   draftPendingResave: boolean
   onEdit?: () => void
+  onEditGroups?: () => void
 }) {
+  const serviceProviders = useModuleRecords("service-providers", "service-providers")
   const facts = record.facts ?? {}
   const recurrence = recurrenceFromValues(values)
   const serviceDays = serviceDaysFromValues(values)
@@ -512,32 +519,31 @@ function SchemeDetailsTab({
   // submittedValues and live related records first; the stored display fact
   // only where a legacy record has no structured value at all. Area
   // resolution is the shared list/detail policy (issue #30).
-  const areaId = stringValue(values, "planningAreaId")
   const areaName = schemeAreaName(record, areas)
-  const plannedVehicle =
-    vehicles.find(
-      (vehicle) => vehicle.id === stringValue(values, "plannedVehicleId"),
-    )?.name ?? facts.Vehicle
-  const plannedDriver =
-    drivers.find(
-      (driver) => driver.id === stringValue(values, "plannedDriverId"),
-    )?.name ?? facts.Driver
   const effectiveFrom = stringValue(values, "effectiveFrom")
   // D16: display "—" for legacy schemes without a planned start time —
   // never invent a default. Resolved through the same helper generation
   // uses (issue #32) so the page and the engine cannot disagree.
   const plannedStartTime = schemePlannedStartTime(record) ?? "—"
 
-  const mode = stopSelectionMode(values)
-  const matchPlans = matchPlansFromValues(values)
-  const dayRules =
-    mode === "rule" ? effectiveDayRules(serviceDays, matchPlans) : []
-  const shownRules = matchPlans.sameAllDays ? dayRules.slice(0, 1) : dayRules
-  const pickedContainerIds =
-    mode === "manual" ? splitList(stringValue(values, "containerIds")) : []
-  const pickedContainers = pickedContainerIds.map(
-    (id) => containers.find((candidate) => candidate.id === id)?.name ?? id,
-  )
+  // Collection groups (D33): the record's groups — implicit for the legacy
+  // single-assignment shape, explicit when stored — resolved per day against
+  // the live containers through the same seam generation reads.
+  const { groups, resolution } = schemeGroupPlans(record, serviceDays, containers)
+  const groupVehicleName = (group: (typeof groups)[number]) =>
+    vehicles.find((vehicle) => vehicle.id === group.vehicleId)?.name ??
+    group.vehicleName ??
+    "Not assigned"
+  const groupDriverName = (group: (typeof groups)[number]) =>
+    drivers.find((driver) => driver.id === group.driverId)?.name ??
+    group.driverName ??
+    "Not assigned"
+  const groupProviderName = (group: (typeof groups)[number]) =>
+    serviceProviders.find((provider) => provider.id === group.serviceProviderId)?.name ??
+    group.serviceProviderName ??
+    (facts.Hauler ?? facts["Service provider"] ?? "In-house")
+  const groupPlans = (group: (typeof groups)[number]) =>
+    resolution.plans.filter((plan) => plan.groupId === group.id)
 
   // Edit-save reconciliation aftermath (issue #33, SPEC G): a Draft with
   // generation evidence had its future refreshable routes cancelled by the
@@ -688,80 +694,89 @@ function SchemeDetailsTab({
           <StatRow label="Planned start time" value={plannedStartTime} />
         </DetailCard>
 
-        <DetailCard title="Assignment">
-          <StatRow label="Vehicle" value={plannedVehicle ?? "Not assigned"} />
-          <StatRow label="Driver" value={plannedDriver ?? "Not assigned"} />
-          <StatRow
-            label="Hauler"
-            value={facts.Hauler ?? facts["Service provider"] ?? "—"}
-          />
+        <DetailCard
+          title={`Collection groups (${groups.length})`}
+          className="md:col-span-2 xl:col-span-2"
+        >
+          {onEditGroups && (
+            <div className="flex justify-end">
+              <Button type="button" variant="outline" size="sm" onClick={onEditGroups}>
+                <PencilSimple className="h-4 w-4" />
+                Edit collection groups
+              </Button>
+            </div>
+          )}
+          <div className="divide-y divide-border/60">
+            {groups.map((group) => {
+              const plans = groupPlans(group)
+              const stopCounts =
+                plans.length > 0
+                  ? plans
+                      .map(
+                        (plan) =>
+                          `${SERVICE_DAY_SHORT_LABELS[plan.day]} ${plan.containerIds.length}`,
+                      )
+                      .join(" · ")
+                  : "No service days"
+              const claimed = plans.reduce((sum, plan) => sum + plan.claimedByOthers.length, 0)
+              const pickedNames = group.containerIds.map(
+                (id) => containers.find((candidate) => candidate.id === id)?.name ?? id,
+              )
+              return (
+                <div key={group.id} className="space-y-1 py-3 first:pt-0 last:pb-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-foreground">
+                      {group.implicit && groups.length === 1 ? "Planned assignment" : group.name}
+                    </p>
+                    <span className="text-xs text-muted-foreground">
+                      {group.days.map((day) => SERVICE_DAY_SHORT_LABELS[day]).join(", ") ||
+                        "No days"}
+                    </span>
+                    <Badge variant="outline" className="rounded-full text-[11px]">
+                      {group.stopSource === "rule" ? "Matched by rule" : "Picked containers"}
+                    </Badge>
+                  </div>
+                  <StatRow label="Vehicle" value={groupVehicleName(group)} />
+                  <StatRow label="Driver" value={groupDriverName(group)} />
+                  <StatRow label="Service provider" value={groupProviderName(group)} />
+                  {group.stopSource === "rule" ? (
+                    <StatRow
+                      label="Stop rule"
+                      value={`${stopRuleSummary({
+                        fractions: group.fractions,
+                        ...(group.ruleVehicleType ? { vehicleType: group.ruleVehicleType } : {}),
+                      })} — ${stopCounts} currently matched${
+                        claimed > 0 ? ` · ${claimed} left to other groups on shared days` : ""
+                      }`}
+                    />
+                  ) : (
+                    <StatRow
+                      label="Picked containers"
+                      value={`${pickedNames.length}${
+                        pickedNames.length > 0
+                          ? ` — ${pickedNames.slice(0, 4).join(", ")}${
+                              pickedNames.length > 4 ? ` and ${pickedNames.length - 4} more` : ""
+                            }`
+                          : ""
+                      }`}
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </div>
           {facts["Departure depot"] && (
             <StatRow label="Departure depot" value={facts["Departure depot"]} />
           )}
           {facts["Unloading station"] && (
-            <StatRow
-              label="Unloading station"
-              value={facts["Unloading station"]}
-            />
+            <StatRow label="Unloading station" value={facts["Unloading station"]} />
           )}
           <p className="text-xs text-muted-foreground">
-            Planned Assignment — generated routes start from these defaults;
-            dispatcher overrides stay on the route.
+            One route is generated per group per day it runs on, starting from
+            the group&apos;s planned assignment — dispatcher overrides stay on the
+            route. Rule matches are a preview; Stops exist only on generated
+            routes.
           </p>
-        </DetailCard>
-
-        <DetailCard
-          title="Containers & stop rule"
-          className="md:col-span-2 xl:col-span-1"
-        >
-          <StatRow
-            label="Stop selection"
-            value={mode === "rule" ? "Matched by rule" : "Picked containers"}
-          />
-          {mode === "rule" ? (
-            <>
-              {shownRules.map(({ day, rule }) => {
-                const matched = resolveStopMatches({
-                  rule,
-                  areaId,
-                  projectIds: record.projectIds,
-                  containers,
-                }).matched.length
-                return (
-                  <StatRow
-                    key={day}
-                    label={
-                      matchPlans.sameAllDays
-                        ? "Rule (every service day)"
-                        : `Rule (${SERVICE_DAY_SHORT_LABELS[day]})`
-                    }
-                    value={`${stopRuleSummary(rule)} — ${matched} container${
-                      matched === 1 ? "" : "s"
-                    } currently matched`}
-                  />
-                )
-              })}
-              <p className="text-xs text-muted-foreground">
-                The rule resolves against live containers at every generation.
-                Matches are a preview — Stops exist only on generated routes.
-              </p>
-            </>
-          ) : (
-            <>
-              <StatRow
-                label="Picked containers"
-                value={String(pickedContainers.length)}
-              />
-              {pickedContainers.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {pickedContainers.slice(0, 4).join(", ")}
-                  {pickedContainers.length > 4
-                    ? ` and ${pickedContainers.length - 4} more`
-                    : ""}
-                </p>
-              )}
-            </>
-          )}
         </DetailCard>
       </div>
     </div>

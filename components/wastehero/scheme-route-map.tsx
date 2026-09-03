@@ -23,12 +23,13 @@ import {
   groupIdenticalDayPlans,
   schemeMapPins,
   type SchemeMapDayGroup,
+  type SchemeMapPlan,
 } from "@/lib/route-schemes/map"
 import {
   SERVICE_DAY_SHORT_LABELS,
+  sortServiceDays,
   type ServiceDay,
 } from "@/lib/route-schemes/recurrence"
-import type { SchemeDayPlan } from "@/lib/route-schemes/validation"
 import { cn } from "@/lib/utils"
 
 /** Store-merged records of one module — fixtures plus user-created. */
@@ -61,14 +62,16 @@ function fractionMix(
 }
 
 function groupDaysLabel(group: SchemeMapDayGroup): string {
-  return group.days.map((day) => SERVICE_DAY_SHORT_LABELS[day]).join(", ")
+  const days = group.days.map((day) => SERVICE_DAY_SHORT_LABELS[day]).join(", ")
+  return group.label ? `${group.label} · ${days}` : days
 }
 
 export function SchemeRouteMap({
   plans,
   containers,
 }: {
-  plans: readonly SchemeDayPlan[]
+  /** One entry per generated route (per collection group per day). */
+  plans: readonly SchemeMapPlan[]
   containers: readonly BusinessRecord[]
 }) {
   const [focusDay, setFocusDay] = useState<ServiceDay | "all">("all")
@@ -78,10 +81,11 @@ export function SchemeRouteMap({
   const shownGroups = groupIdenticalDayPlans(shownPlans)
   const pins = schemeMapPins(shownGroups)
   const legendGroups = groupIdenticalDayPlans(plans)
+  const days = sortServiceDays(Array.from(new Set(plans.map((plan) => plan.day))))
 
   return (
     <div className="space-y-3">
-      {plans.length > 1 && (
+      {days.length > 1 && (
         <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
@@ -95,23 +99,23 @@ export function SchemeRouteMap({
           >
             All days
           </button>
-          {plans.map((plan) => (
+          {days.map((day) => (
             <button
-              key={plan.day}
+              key={day}
               type="button"
-              onClick={() => setFocusDay(plan.day)}
+              onClick={() => setFocusDay(day)}
               className={cn(
                 "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-                focusDay === plan.day
+                focusDay === day
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-muted",
               )}
             >
               <span
                 className="size-2 rounded-full"
-                style={{ backgroundColor: SCHEME_DAY_COLORS[plan.day] }}
+                style={{ backgroundColor: SCHEME_DAY_COLORS[day] }}
               />
-              {SERVICE_DAY_SHORT_LABELS[plan.day]}
+              {SERVICE_DAY_SHORT_LABELS[day]}
             </button>
           ))}
         </div>
@@ -137,7 +141,7 @@ export function SchemeRouteMap({
             if (!linePoints) return null
             return (
               <polyline
-                key={group.days.join("-")}
+                key={`${group.label ?? ""}-${group.days.join("-")}`}
                 points={linePoints}
                 fill="none"
                 stroke={group.color}
@@ -171,14 +175,14 @@ export function SchemeRouteMap({
       <div className="divide-y divide-border overflow-hidden rounded-xl border border-border/60">
         {legendGroups.map((group) => (
           <div
-            key={group.days.join("-")}
+            key={`${group.label ?? ""}-${group.days.join("-")}`}
             className="flex items-center gap-3 px-3 py-2 text-xs"
           >
             <span
               className="size-2.5 shrink-0 rounded-full"
               style={{ backgroundColor: group.color }}
             />
-            <span className="min-w-10 shrink-0 font-semibold">
+            <span className="min-w-10 shrink-0 truncate font-semibold">
               {groupDaysLabel(group)}
             </span>
             <span className="shrink-0 font-mono">

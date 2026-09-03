@@ -9,12 +9,8 @@
 // there is no second create path to drift.
 // Harness: scripts/route-scheme-validation-harness.ts.
 
-import {
-  matchPlansFromValues,
-  stopSelectionMode,
-  type StopMatchRule,
-  type StopSelectionMode,
-} from "./matching"
+import { IMPLICIT_GROUP_ID, type CollectionGroup } from "./groups"
+import { matchPlansFromValues, stopSelectionMode } from "./matching"
 import {
   isRecurrenceFrequency,
   parseServiceDays,
@@ -46,16 +42,14 @@ export interface GuidedSchemeData {
   depotId?: string
   unloadingStationId?: string
   /**
-   * Stop selection (issue #19): "rule" stores a declarative matching rule
-   * (fractions + optional vehicle type inside the scheme's planning area);
-   * "manual" keeps the explicitly picked container lists.
+   * The scheme's collection groups (D33): each carries its days, fractions,
+   * vehicle, default driver, optional service provider, and its stop source —
+   * a matching rule (fractions + optional vehicle type inside the scheme's
+   * planning area) or explicitly picked containers. Record creation stores
+   * one group covering every service day in the legacy single-assignment
+   * shape and anything else explicitly (collectionGroupsToValues).
    */
-  stopSelection: StopSelectionMode
-  sameAllDays: boolean
-  sharedContainerIds: string[]
-  containersByDay: Partial<Record<ServiceDay, string[]>>
-  matchRule: StopMatchRule
-  matchRulesByDay: Partial<Record<ServiceDay, StopMatchRule>>
+  groups: CollectionGroup[]
 }
 
 type StoredValues = Record<string, string | boolean | undefined>
@@ -98,10 +92,11 @@ export const QUICK_SCHEME_DRAFT_FIELD_IDS: ReadonlySet<string> = new Set([
 
 /**
  * Maps the Quick Create form's stored values (the `route-studio.schemes`
- * field ids) onto the wizard's draft shape (D19). Single-rule by design
- * (D29): the draft always carries one shared rule across all service days —
- * per-day rules and manual container lists are Guided Setup capabilities, so
- * those draft fields stay empty. A "manual" stop selection is preserved (the
+ * field ids) onto the wizard's draft shape (D19). Single-group by design
+ * (D29): the draft carries ONE collection group covering every service day —
+ * vehicle, driver, provider, and one shared rule or (empty) manual list from
+ * the form — so record creation stores it in the legacy shape; several groups
+ * are a Guided Setup capability. A "manual" stop selection is preserved (the
  * quick form offers no picker, so validation blocks it with the same
  * missing-containers issue the wizard would raise for an empty pick — never
  * silently converted to a rule). Unknown frequency/rotation values fall back
@@ -112,14 +107,36 @@ export const QUICK_SCHEME_DRAFT_FIELD_IDS: ReadonlySet<string> = new Set([
 export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeData {
   const frequency = stringOf(values, "frequency")
   const weekRotation = stringOf(values, "weekRotation")
+  const serviceDays = parseServiceDays(stringOf(values, "serviceDays"))
+  const schemeName = stringOf(values, "schemeName")
+  const rule = matchPlansFromValues(values).sharedRule
+  const stopSource = values.stopSelection === "manual" ? "manual" : "rule"
+  const group: CollectionGroup = {
+    id: IMPLICIT_GROUP_ID,
+    name: schemeName || "Collection",
+    days: serviceDays,
+    fractions: stopSource === "rule" ? [...rule.fractions] : [],
+    ...(optionalId(values, "plannedVehicleId")
+      ? { vehicleId: optionalId(values, "plannedVehicleId") }
+      : {}),
+    ...(optionalId(values, "plannedDriverId")
+      ? { driverId: optionalId(values, "plannedDriverId") }
+      : {}),
+    ...(optionalId(values, "serviceProviderId")
+      ? { serviceProviderId: optionalId(values, "serviceProviderId") }
+      : {}),
+    stopSource,
+    ...(stopSource === "rule" && rule.vehicleType ? { ruleVehicleType: rule.vehicleType } : {}),
+    containerIds: [],
+  }
   return {
-    schemeName: stringOf(values, "schemeName"),
+    schemeName,
     projectId: optionalId(values, "projectId"),
     planningAreaId: optionalId(values, "planningAreaId"),
     calendarId: optionalId(values, "calendarId"),
     frequency: isRecurrenceFrequency(frequency) ? frequency : "weekly",
     weekRotation: weekRotation === "even" ? "even" : "odd",
-    serviceDays: parseServiceDays(stringOf(values, "serviceDays")),
+    serviceDays,
     effectiveFrom: stringOf(values, "effectiveFrom"),
     // Optional (D23): an omitted To means the scheme runs open-ended until
     // explicitly ended or expired through later configuration.
@@ -127,19 +144,27 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
     // No silent time injection (issue #32): a scheme without a planned start
     // time stays without one — its routes then carry no estimated start.
     plannedStartTime: stringOf(values, "plannedStartTime"),
-    serviceProviderId: optionalId(values, "serviceProviderId"),
-    plannedVehicleId: optionalId(values, "plannedVehicleId"),
-    plannedDriverId: optionalId(values, "plannedDriverId"),
     depotId: optionalId(values, "depotId"),
     unloadingStationId: optionalId(values, "unloadingStationId"),
-    stopSelection: values.stopSelection === "manual" ? "manual" : "rule",
-    sameAllDays: true,
-    sharedContainerIds: [],
-    containersByDay: {},
-    matchRule: matchPlansFromValues(values).sharedRule,
-    matchRulesByDay: {},
+    groups: [group],
   }
 }
+
+/**
+ * The quick-schema field ids a multi-group scheme's groups own (D36): the
+ * schema dialog edits scheme-level fields only for such a scheme
+ * (hasExplicitCollectionGroups) — its groups are edited on the scheme page —
+ * so these fields are hidden there instead of showing values the groups
+ * would ignore.
+ */
+export const GROUP_OWNED_SCHEME_FIELD_IDS: ReadonlySet<string> = new Set([
+  "serviceProviderId",
+  "plannedVehicleId",
+  "plannedDriverId",
+  "stopSelection",
+  "matchFractions",
+  "matchVehicleType",
+])
 
 /**
  * Seeds the quick form for editing a stored scheme (issue #35). The stored

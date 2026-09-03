@@ -10,6 +10,8 @@ import {
   seedSchemeEditValues,
   type GuidedSchemeData,
 } from "../lib/route-schemes/quick-create"
+import { schemeAssignmentSources } from "../lib/route-schemes/groups"
+import type { ServiceDay } from "../lib/route-schemes/recurrence"
 import {
   allocationConflictSourceFromValues,
   allocationConflictSources,
@@ -17,12 +19,12 @@ import {
   dayPlansFromValues,
   dayPlansToValues,
   effectiveDayPlans,
-  schemeDefaultsFromValues,
   schemeFrequencyReconciliationWarnings,
   validateScheme,
   type AllocationConflictSource,
   type SchemeDayPlans,
   type SchemeFrequencyPromise,
+  type SchemeGroupValidationInput,
   type SchemeValidationInput,
 } from "../lib/route-schemes/validation"
 
@@ -77,13 +79,51 @@ check(
 
 /* ------------------------------ validation ------------------------------- */
 
+// Validation reads the scheme as collection groups (D33). A legacy
+// single-assignment scheme is one implicit group covering every service day
+// (or one per day for per-day plans, named by its short day label), so the
+// group builders below stand in for the legacy shapes the checks describe.
+const manualGroup = (
+  overrides: Partial<SchemeGroupValidationInput> & { days: ServiceDay[] },
+  countsByDay: Partial<Record<ServiceDay, number>> = {},
+): SchemeGroupValidationInput => ({
+  id: "default",
+  name: "Scheme",
+  vehicleId: "vehicle-1",
+  driverId: "driver-1",
+  stopSource: "manual",
+  fractions: [],
+  dayStops: overrides.days.map((day) => ({
+    day,
+    count: countsByDay[day] ?? 1,
+    claimedByOthers: 0,
+  })),
+  ...overrides,
+})
+const perDayGroups = (
+  days: ServiceDay[],
+  countsByDay: Partial<Record<ServiceDay, number>>,
+  assignment: Pick<SchemeGroupValidationInput, "vehicleId" | "driverId"> = {},
+): SchemeGroupValidationInput[] =>
+  days.map((day) =>
+    manualGroup(
+      { id: `day-${day}`, name: { monday: "Mon", tuesday: "Tue", wednesday: "Wed", thursday: "Thu", friday: "Fri", saturday: "Sat", sunday: "Sun" }[day], days: [day], ...assignment },
+      countsByDay,
+    ),
+  )
+const withAssignment = (
+  input: SchemeValidationInput,
+  assignment: { vehicleId?: string; driverId?: string },
+): SchemeValidationInput => ({
+  ...input,
+  groups: input.groups.map((group) => ({ ...group, ...assignment })),
+})
+
 const validInput: SchemeValidationInput = {
   serviceDays: ["wednesday", "sunday"],
   effectiveFrom: "2026-08-28",
   effectiveTo: "2026-12-31",
-  plans: perDayPlans,
-  plannedVehicleId: "vehicle-1",
-  plannedDriverId: "driver-1",
+  groups: perDayGroups(["wednesday", "sunday"], { wednesday: 2, sunday: 1 }),
 }
 
 check("all checks pass → Validated with no issues", validateScheme(validInput, []), {
@@ -129,7 +169,7 @@ check(
   validateScheme(
     {
       ...validInput,
-      plans: { sameAllDays: true, sharedContainerIds: [], containersByDay: {} },
+      groups: [manualGroup({ days: ["wednesday", "sunday"] }, { wednesday: 0, sunday: 0 })],
     },
     [],
   ),
@@ -141,7 +181,7 @@ check(
   validateScheme(
     {
       ...validInput,
-      plans: { sameAllDays: false, sharedContainerIds: [], containersByDay: { wednesday: ["w1"] } },
+      groups: perDayGroups(["wednesday", "sunday"], { wednesday: 1, sunday: 0 }),
     },
     [],
   ),
@@ -154,7 +194,7 @@ check(
     {
       ...validInput,
       serviceDays: ["sunday", "monday", "wednesday"],
-      plans: { sameAllDays: false, sharedContainerIds: [], containersByDay: { monday: ["m1"] } },
+      groups: perDayGroups(["monday", "wednesday", "sunday"], { monday: 1, wednesday: 0, sunday: 0 }),
     },
     [],
   ),
@@ -184,7 +224,7 @@ check(
 
 check(
   "same default driver on a shared service day → Draft, named issue",
-  validateScheme({ ...validInput, plannedVehicleId: "vehicle-9" }, [
+  validateScheme(withAssignment(validInput, { vehicleId: "vehicle-9" }), [
     { ...otherScheme, plannedVehicleId: "vehicle-8", plannedDriverId: "driver-1" },
   ]),
   {
@@ -211,12 +251,12 @@ check(
 )
 
 check(
-  "unset own defaults never conflict",
+  "unset own defaults never conflict — but vehicle and driver are required (D34)",
   validateScheme(
-    { ...validInput, plannedVehicleId: undefined, plannedDriverId: undefined },
+    withAssignment(validInput, { vehicleId: undefined, driverId: undefined }),
     [{ ...otherScheme, plannedVehicleId: undefined, plannedDriverId: undefined }],
   ),
-  { status: "Validated", issues: [], warnings: [] },
+  { status: "Draft", issues: ["Pick a vehicle", "Pick a driver"], warnings: [] },
 )
 
 check(
@@ -582,33 +622,52 @@ check(
 /* -------------------- record extraction & serialization ------------------ */
 
 check(
-  "schemeDefaultsFromValues reads the quick-create value shape",
-  schemeDefaultsFromValues("RS-X", {
+  "schemeAssignmentSources reads the quick-create value shape as one source",
+  schemeAssignmentSources("RS-X", {
     serviceDays: "wednesday, sunday",
     plannedVehicleId: "vehicle-1",
     plannedDriverId: "",
   }),
-  {
-    schemeName: "RS-X",
-    serviceDays: ["wednesday", "sunday"],
-    plannedVehicleId: "vehicle-1",
-    plannedDriverId: undefined,
-  },
+  [
+    {
+      schemeName: "RS-X",
+      serviceDays: ["wednesday", "sunday"],
+      plannedVehicleId: "vehicle-1",
+      plannedDriverId: undefined,
+    },
+  ],
 )
 
 check(
-  "schemeDefaultsFromValues → null without structured service days",
-  schemeDefaultsFromValues("RS-Legacy", { serviceDays: "Mon–Fri narrative" }),
-  null,
+  "schemeAssignmentSources → none without structured service days",
+  schemeAssignmentSources("RS-Legacy", { serviceDays: "Mon–Fri narrative" }),
+  [],
 )
 
 check(
-  "schemeDefaultsFromValues → null without any default assignment",
-  schemeDefaultsFromValues("RS-Y", { serviceDays: "monday" }),
-  null,
+  "schemeAssignmentSources → none without any default assignment",
+  schemeAssignmentSources("RS-Y", { serviceDays: "monday" }),
+  [],
 )
 
-check("schemeDefaultsFromValues → null for missing values", schemeDefaultsFromValues("RS-Z", undefined), null)
+check("schemeAssignmentSources → none for missing values", schemeAssignmentSources("RS-Z", undefined), [])
+
+check(
+  "schemeAssignmentSources → one named source per explicit group, days clipped to the scheme's",
+  schemeAssignmentSources("RS-G", {
+    serviceDays: "wednesday, sunday",
+    effectiveFrom: "2026-09-01",
+    collectionGroups: JSON.stringify([
+      { id: "g1", name: "Organic run", days: ["wednesday"], stopSource: "rule", fractions: ["Organic"], vehicleId: "vehicle-1", driverId: "driver-1" },
+      { id: "g2", name: "Glass run", days: ["sunday", "friday"], stopSource: "manual", containerIds: ["c"], vehicleId: "vehicle-2" },
+      { id: "g3", name: "Unassigned", days: ["sunday"], stopSource: "manual", containerIds: ["c"] },
+    ]),
+  }),
+  [
+    { schemeName: "RS-G", groupName: "Organic run", serviceDays: ["wednesday"], plannedVehicleId: "vehicle-1", plannedDriverId: "driver-1", effectiveFrom: "2026-09-01", effectiveTo: undefined },
+    { schemeName: "RS-G", groupName: "Glass run", serviceDays: ["sunday"], plannedVehicleId: "vehicle-2", plannedDriverId: undefined, effectiveFrom: "2026-09-01", effectiveTo: undefined },
+  ],
+)
 
 const roundTrip = dayPlansFromValues(dayPlansToValues(perDayPlans))
 check("day plans survive the submittedValues round trip", roundTrip, perDayPlans)
@@ -685,10 +744,16 @@ check(
   },
 )
 
+const wedOnlyInput: SchemeValidationInput = {
+  ...validInput,
+  serviceDays: ["wednesday"],
+  groups: perDayGroups(["wednesday"], { wednesday: 2 }),
+}
+
 check(
   "all service days working → no warnings",
   validateScheme(
-    { ...validInput, serviceDays: ["wednesday"], calendar: centralCalendar },
+    { ...wedOnlyInput, calendar: centralCalendar },
     [],
   ),
   { status: "Validated", issues: [], warnings: [] },
@@ -698,8 +763,7 @@ check(
   "non-Active calendar → warning, still Validated",
   validateScheme(
     {
-      ...validInput,
-      serviceDays: ["wednesday"],
+      ...wedOnlyInput,
       calendar: { ...centralCalendar, status: "Draft" },
     },
     [],
@@ -717,8 +781,7 @@ check(
   "scheme effective period past calendar validity → warning",
   validateScheme(
     {
-      ...validInput,
-      serviceDays: ["wednesday"],
+      ...wedOnlyInput,
       calendar: { ...centralCalendar, validTo: "2026-10-31" },
     },
     [],
@@ -736,8 +799,7 @@ check(
   "open-ended scheme with a bounded calendar → Validated with a validity warning",
   validateScheme(
     {
-      ...validInput,
-      serviceDays: ["wednesday"],
+      ...wedOnlyInput,
       effectiveTo: "",
       calendar: centralCalendar,
     },
@@ -944,7 +1006,7 @@ const quickValues: Record<string, string | boolean | undefined> = {
 
 const quickDraft = quickSchemeDraftFromValues(quickValues)
 
-check("quick values map onto the wizard draft shape", quickDraft, {
+check("quick values map onto the wizard draft shape: one group covering every service day (D29)", quickDraft, {
   schemeName: "Nørrebro glass",
   projectId: "project-cph",
   planningAreaId: "area-norrebro",
@@ -955,20 +1017,25 @@ check("quick values map onto the wizard draft shape", quickDraft, {
   effectiveFrom: "2026-09-01",
   effectiveTo: "",
   plannedStartTime: "07:00",
-  plannedVehicleId: "vehicle-1",
-  plannedDriverId: "driver-1",
   depotId: "depot-1",
   unloadingStationId: "depot-2",
-  stopSelection: "rule",
-  sameAllDays: true,
-  sharedContainerIds: [],
-  containersByDay: {},
-  matchRule: { fractions: ["Glass", "Metal"], vehicleType: "Glass crane" },
-  matchRulesByDay: {},
+  groups: [
+    {
+      id: "default",
+      name: "Nørrebro glass",
+      days: ["wednesday", "sunday"],
+      fractions: ["Glass", "Metal"],
+      vehicleId: "vehicle-1",
+      driverId: "driver-1",
+      stopSource: "rule",
+      ruleVehicleType: "Glass crane",
+      containerIds: [],
+    },
+  ],
 } satisfies GuidedSchemeData)
 
 check(
-  "single-rule by design (D29): per-day and manual stray values are ignored",
+  "single-group by design (D29): per-day and manual stray values are ignored",
   quickSchemeDraftFromValues({
     ...quickValues,
     sameAllDays: false,
@@ -987,11 +1054,12 @@ check(
       stopSelection: "manual",
     })
     return {
-      stopSelection: draft.stopSelection,
-      sharedContainerIds: draft.sharedContainerIds,
+      stopSource: draft.groups[0].stopSource,
+      containerIds: draft.groups[0].containerIds,
+      fractions: draft.groups[0].fractions,
     }
   })(),
-  { stopSelection: "manual", sharedContainerIds: [] },
+  { stopSource: "manual", containerIds: [], fractions: [] },
 )
 
 check(
@@ -1009,8 +1077,8 @@ check(
 )
 
 // The domain rules over a mapped quick draft — the same validateScheme the
-// wizard runs, composed the way the create path composes it (one shared rule
-// across every service day, matches pre-resolved by the caller).
+// wizard runs, composed the way the create path composes it (one group
+// covering every service day, stops pre-resolved by the caller).
 const quickValidation = (
   draft: GuidedSchemeData,
   matchedCount: number,
@@ -1020,27 +1088,22 @@ const quickValidation = (
       serviceDays: draft.serviceDays,
       effectiveFrom: draft.effectiveFrom,
       effectiveTo: draft.effectiveTo,
-      plans: {
-        sameAllDays: draft.sameAllDays,
-        sharedContainerIds: draft.sharedContainerIds,
-        containersByDay: draft.containersByDay,
-      },
-      plannedVehicleId: draft.plannedVehicleId,
-      plannedDriverId: draft.plannedDriverId,
-      ...(draft.stopSelection === "rule"
-        ? {
-            stopMatching: {
-              areaId: draft.planningAreaId,
-              sameAllDays: true,
-              dayRules: draft.serviceDays.map((day) => ({
-                day,
-                fractions: draft.matchRule.fractions,
-                vehicleType: draft.matchRule.vehicleType,
-                matchedCount,
-              })),
-            },
-          }
-        : {}),
+      areaId: draft.planningAreaId,
+      groups: draft.groups.map((group) => ({
+        id: group.id,
+        name: group.name,
+        days: group.days,
+        vehicleId: group.vehicleId,
+        driverId: group.driverId,
+        stopSource: group.stopSource,
+        fractions: group.fractions,
+        ruleVehicleType: group.ruleVehicleType,
+        dayStops: group.days.map((day) => ({
+          day,
+          count: group.stopSource === "rule" ? matchedCount : group.containerIds.length,
+          claimedByOthers: 0,
+        })),
+      })),
     },
     [],
   )

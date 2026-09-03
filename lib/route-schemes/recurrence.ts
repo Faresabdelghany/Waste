@@ -153,8 +153,17 @@ export function nextServiceDates(
   return dates
 }
 
-export function routeIdentityKey(schemeId: string, serviceDate: string): string {
-  return `${schemeId}:${serviceDate}`
+/**
+ * Route identity: (schemeId, serviceDate) for the implicit legacy collection
+ * group; explicit groups (D36) append their id, so one date can carry one
+ * route per group while every already-generated legacy route keeps its key.
+ */
+export function routeIdentityKey(
+  schemeId: string,
+  serviceDate: string,
+  groupKey?: string,
+): string {
+  return groupKey ? `${schemeId}:${serviceDate}:${groupKey}` : `${schemeId}:${serviceDate}`
 }
 
 export function formatServiceDate(iso: string): string {

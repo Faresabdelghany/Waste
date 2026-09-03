@@ -13,9 +13,15 @@
 //     route still Draft/Planned                → refresh date/stops/version;
 //                                                keep an overridden assignment
 //     route Ready/Active/Completed/Cancelled   → leave untouched
-//   routes in the window whose service date the scheme no longer serves:
+//   routes in the window whose service date the scheme no longer serves, or
+//   whose collection group the scheme no longer plans on that date:
 //     still Planned → cancel ("scheme no longer serves this date"); else leave.
-//   Route identity is (schemeId, serviceDate) — deterministic ids, never Date.now().
+//   Collection groups (D33/D36): the scheme's groups resolve per day
+//   (lib/route-schemes/groups) and generation writes ONE route per group per
+//   applicable day, carrying the group's vehicle, default driver, and service
+//   provider. Route identity is (schemeId, serviceDate) for the implicit legacy
+//   group and (schemeId, groupId, serviceDate) for explicit groups —
+//   deterministic ids, never Date.now().
 
 import type { BusinessRecord } from "../data/business-modules"
 import {
@@ -23,8 +29,8 @@ import {
   dayStatusSkipsGeneration,
   type CollectionCalendar,
 } from "./calendar"
+import { schemeGroupPlans, type ResolvedCollectionGroup } from "./groups"
 import { avalancheHash } from "./hash"
-import { effectiveStopPlans, stopSelectionMode } from "./matching"
 import {
   addDays,
   formatServiceDate,
@@ -52,6 +58,14 @@ export type PlannedRoute = {
   actualDate: string
   day: ServiceDay
   containerIds: string[]
+  /** The explicit collection group this route materializes; absent for the implicit legacy group. */
+  groupId?: string
+  groupName?: string
+  /** The group's planned assignment as display names (create/refresh rows). */
+  vehicle?: string
+  driver?: string
+  serviceProvider?: string
+  serviceProviderId?: string
   /** The stored route this action refreshes, skips, or cancels. */
   existing?: BusinessRecord
   note?: string
@@ -86,18 +100,39 @@ export type GenerationApplyResult = {
 
 /* ------------------------------ identity ---------------------------------- */
 
-export function generatedRouteId(schemeId: string, serviceDate: string): string {
-  return `route-gen-${schemeId}-${serviceDate}`
+/**
+ * Deterministic route id: the legacy (scheme, serviceDate) shape for the
+ * implicit group, extended with the group id for explicit groups (D36).
+ */
+export function generatedRouteId(
+  schemeId: string,
+  serviceDate: string,
+  groupKey?: string,
+): string {
+  return groupKey
+    ? `route-gen-${schemeId}-${groupKey}-${serviceDate}`
+    : `route-gen-${schemeId}-${serviceDate}`
 }
 
 /**
- * Deterministic RC number per (scheme, serviceDate) so regeneration never
+ * Deterministic RC number per route identity so regeneration never
  * renumbers. RC-7000–RC-9999 keeps clear of the fixture RC-10xx range;
  * cross-scheme hash collisions are tolerated in this prototype.
  */
-export function generatedRouteName(schemeId: string, serviceDate: string): string {
-  return `RC-${7000 + (avalancheHash(routeIdentityKey(schemeId, serviceDate)) % 3000)}`
+export function generatedRouteName(
+  schemeId: string,
+  serviceDate: string,
+  groupKey?: string,
+): string {
+  return `RC-${7000 + (avalancheHash(routeIdentityKey(schemeId, serviceDate, groupKey)) % 3000)}`
 }
+
+/** The identity half explicit groups add; implicit (legacy) groups add none. */
+const groupKeyOf = (group: ResolvedCollectionGroup): string | undefined =>
+  group.implicit ? undefined : group.id
+
+const identityOf = (groupKey: string | undefined, serviceDate: string): string =>
+  `${groupKey ?? ""}|${serviceDate}`
 
 /** "v6 draft" → "v6"; absent → "v1". */
 export function schemeVersionOf(scheme: BusinessRecord): string {
@@ -193,28 +228,56 @@ export function planSchemeGeneration(input: {
   const recurrence = recurrenceFromValues(scheme.submittedValues ?? {})
   if (!recurrence) return null
 
-  const plans = effectiveStopPlans(scheme, recurrence.serviceDays, input.containers)
-  const stopsByDay = new Map(plans.map((plan) => [plan.day, plan.containerIds]))
+  // The scheme's collection groups resolved per day (D33): implicit for the
+  // legacy single-assignment shape, explicit when stored — one route per
+  // group per applicable day. Tie-breaks between groups (manual beats rule,
+  // first rule group wins) are already applied in the per-group plans.
+  const { groups, resolution } = schemeGroupPlans(
+    scheme,
+    recurrence.serviceDays,
+    input.containers,
+  )
+  const planFor = new Map(
+    resolution.plans.map((plan) => [`${plan.groupId}|${plan.day}`, plan.containerIds]),
+  )
   // A rule that resolves to zero stops must never look like quiet success
-  // (issue #19): the preview row says so. Manual schemes keep today's
+  // (issue #19): the preview row says so. Manual groups keep today's
   // behavior — FR-5c already blocks empty manual plans at save time.
-  const matchWarningForDay = (day: ServiceDay): string | undefined =>
-    stopSelectionMode(scheme.submittedValues) === "rule" &&
-    (stopsByDay.get(day) ?? []).length === 0
-      ? "No containers currently match this day's stop rule"
+  const matchWarningFor = (
+    group: ResolvedCollectionGroup,
+    day: ServiceDay,
+  ): string | undefined =>
+    group.stopSource === "rule" && (planFor.get(`${group.id}|${day}`) ?? []).length === 0
+      ? group.implicit
+        ? "No containers currently match this day's stop rule"
+        : `No containers currently match the stop rule of ${group.name}`
       : undefined
+  // The implicit group already carries the scheme's display facts as its
+  // names (collectionGroupsOf), so a missing name is genuinely unassigned.
+  const groupFieldsOf = (group: ResolvedCollectionGroup) =>
+    groupKeyOf(group) ? { groupId: group.id, groupName: group.name } : {}
+  const assignmentOf = (group: ResolvedCollectionGroup) => ({
+    ...groupFieldsOf(group),
+    vehicle: group.vehicleName ?? "Unassigned",
+    driver: group.driverName ?? "Unassigned",
+    ...(group.serviceProviderName ? { serviceProvider: group.serviceProviderName } : {}),
+    ...(group.serviceProviderId ? { serviceProviderId: group.serviceProviderId } : {}),
+  })
 
-  const existingByIdentity = new Map<string, BusinessRecord>()
+  type ExistingRoute = { route: BusinessRecord; serviceDate: string; groupId?: string }
+  const existingByIdentity = new Map<string, ExistingRoute>()
   for (const route of input.existingRoutes) {
     const schemeId = stringValueOf(route, "schemeId")
     const serviceDate = stringValueOf(route, "serviceDate")
     if (schemeId === scheme.id && serviceDate) {
-      existingByIdentity.set(serviceDate, route)
+      const groupId = stringValueOf(route, "collectionGroupId")
+      existingByIdentity.set(identityOf(groupId, serviceDate), { route, serviceDate, groupId })
     }
   }
 
   const routes: PlannedRoute[] = []
   const servedDates = new Set<string>()
+  const plannedIdentities = new Set<string>()
   const walkedDates = windowDates(window)
   const walkEnd = walkedDates.length > 0
     ? walkedDates[walkedDates.length - 1]
@@ -224,19 +287,40 @@ export function planSchemeGeneration(input: {
     if (!matchesRecurrence(recurrence, date)) continue
     servedDates.add(date)
     const day = serviceDayOf(date)
-    const existing = existingByIdentity.get(date)
 
     // Calendar validity filtering (Q2/Q7): a holiday or non-working date gets
     // no route. The date stays in the preview so the planner sees why, and a
     // still-Planned route generation previously wrote there is cancelled — the
     // same rule as a date the scheme no longer serves.
+    let calendarSkip: string | undefined
     if (calendar) {
       const dayStatus = calendarDayStatus(calendar, date)
       if (dayStatusSkipsGeneration(dayStatus)) {
-        const reason =
+        calendarSkip =
           dayStatus === "holiday"
             ? `Holiday on ${calendar.name}`
             : `Not a working day on ${calendar.name}`
+      }
+    }
+    // Non-blocking calendar caveats (Q6): uncovered dates generate normally
+    // but warn.
+    let calendarWarning: string | undefined
+    if (calendar && calendarDayStatus(calendar, date) === "uncovered") {
+      calendarWarning = `Outside ${calendar.name} validity — calendar rules not applied`
+    }
+
+    for (const group of groups) {
+      if (!group.days.includes(day)) continue
+      const groupKey = groupKeyOf(group)
+      const identity = identityOf(groupKey, date)
+      plannedIdentities.add(identity)
+      const existing = existingByIdentity.get(identity)?.route
+      const containerIds = planFor.get(`${group.id}|${day}`) ?? []
+      const routeId = generatedRouteId(scheme.id, date, groupKey)
+      const routeName = generatedRouteName(scheme.id, date, groupKey)
+      const groupFields = groupFieldsOf(group)
+
+      if (calendarSkip) {
         if (existing && existing.status === "Planned") {
           routes.push({
             action: "cancel",
@@ -246,8 +330,9 @@ export function planSchemeGeneration(input: {
             actualDate: stringValueOf(existing, "actualDate") ?? date,
             day,
             containerIds: [],
+            ...groupFields,
             existing,
-            note: reason,
+            note: calendarSkip,
           })
         } else if (existing) {
           routes.push({
@@ -257,77 +342,74 @@ export function planSchemeGeneration(input: {
             serviceDate: date,
             actualDate: stringValueOf(existing, "actualDate") ?? date,
             day,
-            containerIds: stopsByDay.get(day) ?? [],
+            containerIds,
+            ...groupFields,
             existing,
             note: `${existing.status} — left untouched`,
-            calendarWarning: reason,
+            calendarWarning: calendarSkip,
           })
         } else {
           routes.push({
             action: "omit",
-            routeId: generatedRouteId(scheme.id, date),
-            routeName: generatedRouteName(scheme.id, date),
+            routeId,
+            routeName,
             serviceDate: date,
             actualDate: date,
             day,
             containerIds: [],
-            note: reason,
+            ...groupFields,
+            note: calendarSkip,
           })
         }
         continue
       }
-    }
 
-    // Non-blocking calendar caveats (Q6): uncovered dates generate normally
-    // but warn.
-    let calendarWarning: string | undefined
-    if (calendar && calendarDayStatus(calendar, date) === "uncovered") {
-      calendarWarning = `Outside ${calendar.name} validity — calendar rules not applied`
+      // A Cancelled route that generation itself authored (calendar skip or
+      // unserved-date cleanup) is bookkeeping, not operational reality: once
+      // the scheme serves the date again — the holiday left the calendar, the
+      // service day returned, the group is planned again — the route is
+      // re-created. An operationally cancelled route (no marker) stays untouched.
+      const resurrect =
+        existing?.status === "Cancelled" &&
+        existing.submittedValues?.cancelledByGeneration === true
+      const action: PlannedRouteAction =
+        !existing || resurrect
+          ? "create"
+          : REFRESHABLE_STATUSES.has(existing.status)
+            ? "refresh"
+            : "skip"
+      const matchWarning = action === "skip" ? undefined : matchWarningFor(group, day)
+      routes.push({
+        action,
+        routeId,
+        routeName,
+        serviceDate: date,
+        // A skip row is display-only — show where the stored route actually
+        // operates, not where a fresh write would put it.
+        actualDate:
+          action === "skip"
+            ? (stringValueOf(existing!, "actualDate") ?? date)
+            : date,
+        day,
+        containerIds,
+        ...assignmentOf(group),
+        ...(existing && !resurrect ? { existing } : {}),
+        ...(action === "skip"
+          ? { note: `${existing?.status} — left untouched` }
+          : {}),
+        ...(calendarWarning ? { calendarWarning } : {}),
+        ...(matchWarning ? { matchWarning } : {}),
+      })
     }
-
-    // A Cancelled route that generation itself authored (calendar skip or
-    // unserved-date cleanup) is bookkeeping, not operational reality: once the
-    // scheme serves the date again — the holiday left the calendar, the service
-    // day returned — the route is re-created.
-    // An operationally cancelled route (no marker) stays untouched.
-    const resurrect =
-      existing?.status === "Cancelled" &&
-      existing.submittedValues?.cancelledByGeneration === true
-    const action: PlannedRouteAction =
-      !existing || resurrect
-        ? "create"
-        : REFRESHABLE_STATUSES.has(existing.status)
-          ? "refresh"
-          : "skip"
-    const matchWarning = action === "skip" ? undefined : matchWarningForDay(day)
-    routes.push({
-      action,
-      routeId: generatedRouteId(scheme.id, date),
-      routeName: generatedRouteName(scheme.id, date),
-      serviceDate: date,
-      // A skip row is display-only — show where the stored route actually
-      // operates, not where a fresh write would put it.
-      actualDate:
-        action === "skip"
-          ? (stringValueOf(existing!, "actualDate") ?? date)
-          : date,
-      day,
-      containerIds: stopsByDay.get(day) ?? [],
-      ...(existing && !resurrect ? { existing } : {}),
-      ...(action === "skip"
-        ? { note: `${existing?.status} — left untouched` }
-        : {}),
-      ...(calendarWarning ? { calendarWarning } : {}),
-      ...(matchWarning ? { matchWarning } : {}),
-    })
   }
 
-  // Routes this scheme once generated inside the window but no longer serves:
-  // still Planned → cancel; any further state is operational reality we keep.
-  // Bounded by walkEnd, not window.to — dates past the walk cap were never
-  // examined, so their routes must not be judged "no longer served".
-  for (const [serviceDate, existing] of existingByIdentity) {
-    if (servedDates.has(serviceDate)) continue
+  // Routes this scheme once generated inside the window but no longer plans —
+  // the date is no longer served, or the collection group no longer runs on
+  // it: still Planned → cancel; any further state is operational reality we
+  // keep. Bounded by walkEnd, not window.to — dates past the walk cap were
+  // never examined, so their routes must not be judged "no longer served".
+  for (const [identity, { route: existing, serviceDate, groupId }] of existingByIdentity) {
+    if (plannedIdentities.has(identity)) continue
     if (serviceDate < window.from || serviceDate > walkEnd) continue
     if (existing.status !== "Planned") continue
     routes.push({
@@ -338,8 +420,16 @@ export function planSchemeGeneration(input: {
       actualDate: stringValueOf(existing, "actualDate") ?? serviceDate,
       day: serviceDayOf(serviceDate),
       containerIds: [],
+      ...(groupId ? { groupId, groupName: existing.facts?.["Collection group"] ?? groupId } : {}),
       existing,
-      note: "Scheme no longer serves this date",
+      // A served date with a stale identity: an explicit group that no longer
+      // runs that day, or a legacy single-assignment route on a scheme that
+      // now plans the date per collection group (D36).
+      note: !servedDates.has(serviceDate)
+        ? "Scheme no longer serves this date"
+        : groupId
+          ? "Scheme no longer plans this collection group on this date"
+          : "Scheme now plans this date per collection group",
     })
   }
 
@@ -652,8 +742,12 @@ export function applySchemeGeneration(input: {
       input.generatedAt ??
       (existing ? stringValueOf(existing, "generatedAt") : undefined)
 
-    const schemeVehicle = schemeFacts.Vehicle ?? "Unassigned"
-    const schemeDriver = schemeFacts.Driver ?? "Unassigned"
+    // The group's planned assignment (the scheme's own for the implicit
+    // legacy group) — stamped as appliedVehicle/appliedDriver so a per-group
+    // value never reads as a dispatcher override on the next refresh.
+    const schemeVehicle = planned.vehicle ?? schemeFacts.Vehicle ?? "Unassigned"
+    const schemeDriver = planned.driver ?? schemeFacts.Driver ?? "Unassigned"
+    const serviceProvider = planned.serviceProvider ?? schemeFacts["Service provider"]
     // A dispatcher override is a fact that drifted from what generation last
     // applied; the scheme default must not silently take the route back.
     const keepVehicle =
@@ -690,7 +784,8 @@ export function applySchemeGeneration(input: {
           : {}),
         Vehicle: vehicle,
         Driver: driver,
-        ...(schemeFacts["Service provider"] ? { "Service provider": schemeFacts["Service provider"] } : {}),
+        ...(serviceProvider ? { "Service provider": serviceProvider } : {}),
+        ...(planned.groupName ? { "Collection group": planned.groupName } : {}),
         ...(schemeFacts["Departure depot"]
           ? { Depot: schemeFacts["Departure depot"] }
           : {}),
@@ -718,7 +813,7 @@ export function applySchemeGeneration(input: {
       allowedTransitions: ["Ready", "Cancelled"],
       companyId: scheme.companyId,
       projectIds: scheme.projectIds ? [...scheme.projectIds] : undefined,
-      serviceProviderId: scheme.serviceProviderId,
+      serviceProviderId: planned.serviceProviderId ?? scheme.serviceProviderId,
       recordKind: "Route",
       submittedValues: {
         schemeId: scheme.id,
@@ -727,6 +822,7 @@ export function applySchemeGeneration(input: {
         schemeVersion: plan.schemeVersion,
         appliedVehicle: schemeVehicle,
         appliedDriver: schemeDriver,
+        ...(planned.groupId ? { collectionGroupId: planned.groupId } : {}),
         ...(generatedAtStamp ? { generatedAt: generatedAtStamp } : {}),
       },
     })
@@ -778,7 +874,7 @@ export function applySchemeGeneration(input: {
         deepLink: `/route-studio?module=routes&record=${planned.routeId}`,
         companyId: scheme.companyId,
         projectIds: scheme.projectIds ? [...scheme.projectIds] : undefined,
-        serviceProviderId: scheme.serviceProviderId,
+        serviceProviderId: planned.serviceProviderId ?? scheme.serviceProviderId,
         recordKind: "Pickup",
         submittedValues: {
           routeId: planned.routeId,

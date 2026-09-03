@@ -12,19 +12,8 @@
 // harness-testable (scripts/route-scheme-matching-harness.ts).
 
 import type { BusinessRecord } from "../data/business-modules"
-import {
-  SERVICE_DAYS,
-  serviceDaysFromValues,
-  sortServiceDays,
-  type ServiceDay,
-} from "./recurrence"
-import {
-  dayPlansFromValues,
-  effectiveDayPlans,
-  stringValue,
-  type SchemeDayPlan,
-  type SchemeStopRuleSource,
-} from "./validation"
+import { SERVICE_DAYS, sortServiceDays, type ServiceDay } from "./recurrence"
+import { stringValue } from "./validation"
 
 /* ------------------------------ vocabulary -------------------------------- */
 
@@ -402,77 +391,6 @@ export function resolveStopMatches(input: {
   matched.sort((a, b) => a.name.localeCompare(b.name))
   excluded.sort((a, b) => a.name.localeCompare(b.name))
   return { matched, excluded, scopeTotal }
-}
-
-/* ------------------------- the shared stop-plan seam ----------------------- */
-
-type SchemeRecordLike = Pick<BusinessRecord, "submittedValues" | "projectIds">
-
-/**
- * THE seam every consumer resolves a scheme's per-day stops through —
- * generation (manual Generate routes AND Plan Ahead), the scheme detail's
- * map and matched-stops sections, and validation callers. Manual schemes
- * keep their picked lists (unchanged behavior); rule schemes resolve their
- * rules against the supplied container records at call time, so the result
- * always reflects the containers that exist NOW.
- */
-export function effectiveStopPlans(
-  scheme: SchemeRecordLike,
-  serviceDays: readonly ServiceDay[],
-  containers: readonly ContainerRecordLike[],
-): SchemeDayPlan[] {
-  const values = scheme.submittedValues
-  if (stopSelectionMode(values) === "manual") {
-    return effectiveDayPlans(serviceDays, dayPlansFromValues(values))
-  }
-  const areaId = stringValue(values ?? {}, "planningAreaId")
-  return effectiveDayRules(serviceDays, matchPlansFromValues(values)).map(
-    ({ day, rule }) => ({
-      day,
-      containerIds: resolveStopMatches({
-        rule,
-        areaId,
-        projectIds: scheme.projectIds,
-        containers,
-      }).matched.map((profile) => profile.id),
-    }),
-  )
-}
-
-/**
- * What the rule-overlap warning (validateScheme) needs from the existing
- * rule-mode schemes: area, service days, fraction union, effective period.
- * Manual schemes and schemes without an area or service days cannot overlap
- * by rule and are skipped.
- */
-export function schemeStopRuleSources(
-  records: readonly Pick<BusinessRecord, "name" | "submittedValues">[],
-): SchemeStopRuleSource[] {
-  const sources: SchemeStopRuleSource[] = []
-  for (const record of records) {
-    const values = record.submittedValues
-    if (stopSelectionMode(values) !== "rule" || !values) continue
-    const areaId = stringValue(values, "planningAreaId")
-    if (!areaId) continue
-    const serviceDays = serviceDaysFromValues(values)
-    if (serviceDays.length === 0) continue
-    const plans = matchPlansFromValues(values)
-    const fractions = Array.from(
-      new Set(
-        effectiveDayRules(serviceDays, plans).flatMap(({ rule }) => rule.fractions),
-      ),
-    )
-    if (fractions.length === 0) continue
-    sources.push({
-      schemeName: record.name,
-      areaId,
-      serviceDays,
-      fractions,
-      effectiveFrom: stringValue(values, "effectiveFrom"),
-      effectiveTo: stringValue(values, "effectiveTo"),
-    })
-  }
-  return sources
 }
 
 /* --------------------------- vehicle-type reading -------------------------- */

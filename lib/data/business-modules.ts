@@ -2116,7 +2116,8 @@ const plan: WorkspaceDefinition = {
               "Collection calendar": "Copenhagen Central 2026",
               "Planned start": "06:00",
               Hauler: "WasteHero",
-              Vehicle: "Rear loader 18t",
+              Vehicle: "WH-24",
+              Driver: "Mads Jensen",
               "Container selection": "Matched by rule",
               "Stop matching": "Residual · Rear loader",
             },
@@ -2134,6 +2135,10 @@ const plan: WorkspaceDefinition = {
             effectiveFrom: "2026-06-01",
             effectiveTo: "",
             plannedStartTime: "06:00",
+            // Typed planned assignment (D34): the scheme's single implicit
+            // collection group — WH-24 is the rear loader its rule requires.
+            plannedVehicleId: "vehicle-wh24",
+            plannedDriverId: "driver-mads",
             sameAllDays: true,
             stopSelection: "rule",
             matchFractions: "Residual",
@@ -2158,8 +2163,9 @@ const plan: WorkspaceDefinition = {
               Effective: "4 Aug – 31 Dec 2026",
               "Collection calendar": "Copenhagen Central 2026",
               "Planned start": "06:30",
-              Hauler: "NordRen ApS",
-              Vehicle: "Organic sealed 12t",
+              "Service provider": "NordRen ApS",
+              Vehicle: "NR-08",
+              Driver: "Lars Møller",
             },
             ["2 under-served frequency promises", "Service area CA-Ø-2", "96 pickup orders"],
             "Planning draft",
@@ -2175,6 +2181,11 @@ const plan: WorkspaceDefinition = {
             effectiveFrom: "2026-08-04",
             effectiveTo: "2026-12-31",
             plannedStartTime: "06:30",
+            // Typed planned assignment (D34): NordRen's organic sealed truck
+            // and its driver — the record is service-provider scoped.
+            serviceProviderId: "service-provider-nordren",
+            plannedVehicleId: "vehicle-nr08",
+            plannedDriverId: "driver-lars",
             sameAllDays: true,
             containerIds:
               "asset-seed-91007,asset-seed-91008,asset-seed-91010,asset-seed-91011",

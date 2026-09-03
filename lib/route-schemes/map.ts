@@ -48,37 +48,70 @@ export function dayPolylinePoints(containerIds: readonly string[]): string {
 }
 
 /**
- * Day plans whose stop lists are identical, folded into one drawable group
+ * Stable per-collection-group colors (D33): when a scheme has several groups
+ * the map colors lines by group, not by day — two groups on one day would
+ * otherwise share a color and be indistinguishable.
+ */
+export const SCHEME_GROUP_COLORS = [
+  "#2563eb",
+  "#059669",
+  "#d97706",
+  "#db2777",
+  "#7c3aed",
+  "#0891b2",
+  "#dc2626",
+  "#65a30d",
+] as const
+
+/** A drawable plan: one route's stops on one day, optionally labelled by its group. */
+export type SchemeMapPlan = {
+  day: ServiceDay
+  containerIds: readonly string[]
+  /** The collection group's name — set only for multi-group schemes. */
+  label?: string
+}
+
+/**
+ * Plans whose stop lists are identical, folded into one drawable group
  * (issue #17): positions are deterministic per container, so a sameAllDays
  * scheme's per-day plans would otherwise paint N pixel-identical routes on
  * top of each other and only the last day's color would survive. One group =
- * one polyline, one pin set, one legend row.
+ * one polyline, one pin set, one legend row. Labelled plans (collection
+ * groups) fold only with the same label and take the group's color.
  */
 export type SchemeMapDayGroup = {
   /** Every day serving this exact stop list, in canonical day order. */
   days: ServiceDay[]
   /** The shared stop list in picked order, deduped within the day. */
   containerIds: string[]
-  /** The group's earliest day speaks for it on the map. */
+  /** The collection group label, when the plans carry one. */
+  label?: string
+  /** The group's earliest day (or its collection group) speaks for it on the map. */
   color: string
 }
 
-export function groupIdenticalDayPlans(
-  plans: readonly { day: ServiceDay; containerIds: readonly string[] }[],
-): SchemeMapDayGroup[] {
+export function groupIdenticalDayPlans(plans: readonly SchemeMapPlan[]): SchemeMapDayGroup[] {
   const groups = new Map<string, SchemeMapDayGroup>()
+  const labels = Array.from(
+    new Set(plans.map((plan) => plan.label).filter((label): label is string => Boolean(label))),
+  )
+  const colorFor = (plan: SchemeMapPlan, days: readonly ServiceDay[]): string =>
+    plan.label
+      ? SCHEME_GROUP_COLORS[labels.indexOf(plan.label) % SCHEME_GROUP_COLORS.length]
+      : SCHEME_DAY_COLORS[days[0]]
   for (const plan of plans) {
     const containerIds = [...new Set(plan.containerIds)]
-    const key = containerIds.join("\u0000")
+    const key = `${plan.label ?? ""}\u0001${containerIds.join("\u0000")}`
     const group = groups.get(key)
     if (group) {
       group.days = sortServiceDays([...group.days, plan.day])
-      group.color = SCHEME_DAY_COLORS[group.days[0]]
+      group.color = colorFor(plan, group.days)
     } else {
       groups.set(key, {
         days: [plan.day],
         containerIds,
-        color: SCHEME_DAY_COLORS[plan.day],
+        ...(plan.label ? { label: plan.label } : {}),
+        color: colorFor(plan, [plan.day]),
       })
     }
   }

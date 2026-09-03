@@ -246,6 +246,53 @@ calendar, P0 behavior).
   generated for service dates within the effective period, preserves all history. No
   generated route from a scheme may have a service date later than effectiveTo.
 
+## Collection groups (2026-09-03)
+
+Context: the Codex design conversation of 2026-09-03 agreed to replace the scheme-wide
+assignment plus the same-all-days container toggle with collection groups; the
+deep-research pass (AMCS Master Routing, Salesforce maintenance plans, Jobber, Onfleet,
+Dynamics 365 RSO, the DWP "add another thing" pattern) confirmed the shape and softened
+two invariants. These decisions record the result.
+
+- **D33 (Q33) — Collection groups are the unit of planning inside a Route Scheme.** A
+  scheme carries one or more groups; each has its applicable service days (subset of the
+  scheme's, defined once), waste fractions, a vehicle, a default driver, an optional
+  service provider, and its stop source (rule, or hand-picked containers). The scheme
+  owns one planning area, the calendar, the recurrence, and the service days; groups
+  inherit them. Generation writes one route per group per applicable day. Every service
+  day has at least one group; the same vehicle, driver, or container is never on two
+  groups the same day but may be reused across days. Service action is collection only
+  in this phase. Rationale: the real product's Route Scheme is "which vehicle and driver
+  combination will use the route" — a collection group maps onto it one to one, and the
+  scheme becomes the bundle that carries geography, calendar, and cadence; AMCS's Master
+  Route (single weekday, vehicle type, allowed materials, vehicle, default driver,
+  transport supplier) is the same granularity.
+- **D34 (Q34) — Vehicle required; driver is a default required for Validated, never a
+  Next gate.** The vehicle's type drives stop matching, so a group without one cannot
+  validate; the driver is the planned default refined per route at dispatch. Both are
+  blocking issues (the scheme saves as Draft with them named), not wizard gates —
+  saving as Draft is always allowed. Softened from "both mandatory at entry" because no
+  surveyed product mandates a driver on the template (AMCS "Default driver", Jobber
+  allows unassigned recurring jobs, Onfleet binds drivers at optimization).
+- **D35 (Q35) — Tie-breaks between groups on one day.** A hand-picked container always
+  beats a rule (an exception carves out of the defaults). Two rule groups matching the
+  same containers: the first group in order wins, and validation *warns* naming both
+  groups — not a hard error, following AMCS's plan-group first-match-with-reorder rather
+  than a block. Hard errors are reserved for explicit collisions: the same vehicle or
+  driver on two groups sharing a day, and one container hand-picked into two groups.
+  Nothing is silent — the losing group lists the container as excluded with the reason.
+- **D36 (Q36) — Storage, identity, and editing.** Explicit groups serialize as JSON under
+  `submittedValues.collectionGroups`; a single group covering every service day stores
+  as the legacy single-assignment shape, and every scheme without the key resolves to
+  implicit groups (one for a shared plan, one per day for per-day plans, named by day
+  so validation wording is unchanged). Route identity is `(schemeId, serviceDate)` for
+  implicit groups — nothing already generated moves — and `(schemeId, groupId,
+  serviceDate)` for explicit groups; splitting a scheme into groups therefore
+  re-creates its future routes and cancels the old ones with the resurrection marker
+  (edit-save reconciliation, D31). Groups are edited in the wizard step and on the
+  scheme page ("Edit collection groups"); the schema edit dialog hides the group-owned
+  fields for multi-group schemes instead of showing values the groups would ignore.
+
 ## Closing principle (P2)
 
 **The Route Scheme is the source of truth for future planning, while generated Routes
