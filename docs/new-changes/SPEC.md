@@ -44,6 +44,7 @@ between scheme creation and normal route generation.
 Around that core:
 
 - Guided Setup grows to **7 steps** with a dedicated **Collection Calendar** step.
+  **[Superseded 2026-09-03: five steps, calendar back in step 1 — see area C.]**
 - Quick Create runs **the same validation and post-create semantics** (P1) as the wizard
   and stops requiring `effectiveTo`.
 - The scheme detail becomes a **full page** with **Details · Routes · Stops · Collection
@@ -169,6 +170,11 @@ never recomputed.
   3 Recurrence · 4 Assignment · 5 Containers · 6 Route map · 7 Review & create.
   **[Superseded by area L (2026-09-03): six steps — Assignment and Containers fold into
   one Collection groups step; depot and unloading station move to step 1.]**
+  **[Superseded again (2026-09-03, wizard tidy-up): five steps — the dedicated
+  Collection Calendar step is retired and its select returns to step 1 Scheme & scope,
+  with the calendar's working days, holidays, and validity summarized as the field's
+  hint. Steps: 1 Scheme & scope · 2 Recurrence · 3 Collection groups · 4 Route map ·
+  5 Review & create. Steps 1 and 2 lay their fields out in two columns.]**
 - Step 2 contains the calendar select (moved out of step 1) plus read-only context:
   working days, holiday dates, validity period, status. The selected calendar
   participates directly in the recurrence/next-dates preview. This is a wizard
@@ -367,8 +373,8 @@ KPI tiles for calendars. The calendars table currently renders generic module co
   *implicit* groups (`collectionGroupsOf`), so fixtures, Quick Create, and pre-groups
   schemes keep working unchanged. Route identity is `(schemeId, serviceDate)` for the
   implicit group and `(schemeId, groupId, serviceDate)` for explicit groups.
-- **Guided Setup** is six steps: Scheme & scope (now also departure depot / unloading
-  station), Collection Calendar, Recurrence, **Collection groups** (hub-and-spoke: a
+- **Guided Setup** is five steps: Scheme & scope (now also the Collection Calendar,
+  departure depot / unloading station), Recurrence, **Collection groups** (hub-and-spoke: a
   service-day coverage strip, one summary row per group with its live issues, one
   editor open at a time — `components/wastehero/collection-groups-editor.tsx`), Route
   map (one line per group per day), Review & create. Quick Create maps onto one group.

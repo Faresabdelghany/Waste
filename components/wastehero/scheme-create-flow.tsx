@@ -3,13 +3,13 @@
 // Route Scheme create flow for the Route Schemes module (spec FR-1/FR-2/FR-5/
 // FR-14/FR-15, tickets #5/#6; collection groups: SPEC area L, D33–D36). "New
 // route scheme" opens a chooser between Quick create (the schema-driven
-// dialog, opened via onQuickCreate) and Guided Setup — a six-step wizard:
-// scheme & scope (with the operational defaults), collection calendar,
-// recurrence, collection groups (who collects what on which days — the
-// former Assignment and Containers steps folded into one hub-and-spoke
-// step), route map, and review & create. Guided completion hands the
-// collected values to onGuidedCreate, which owns record creation and the
-// Validated/Draft decision.
+// dialog, opened via onQuickCreate) and Guided Setup — a five-step wizard:
+// scheme & scope (with the collection calendar and the operational
+// defaults), recurrence, collection groups (who collects what on which
+// days — the former Assignment and Containers steps folded into one
+// hub-and-spoke step), route map, and review & create. Guided completion
+// hands the collected values to onGuidedCreate, which owns record creation
+// and the Validated/Draft decision.
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { CaretLeft, CaretRight, Check, Plus, X } from "@phosphor-icons/react/dist/ssr"
@@ -268,7 +268,6 @@ function SchemeModeChooserOverlay({
 
 const GUIDED_STEPS = [
   "Scheme & scope",
-  "Collection Calendar",
   "Recurrence",
   "Collection groups",
   "Route map",
@@ -280,16 +279,14 @@ const GUIDED_STEPS = [
 // these — renumbering the wizard is one edit here, not a hunt for literals.
 const GUIDED_STEP = {
   scope: 1,
-  calendar: 2,
-  recurrence: 3,
-  groups: 4,
-  map: 5,
-  review: 6,
+  recurrence: 2,
+  groups: 3,
+  map: 4,
+  review: 5,
 } as const
 
 const GUIDED_STEP_TITLES: Record<number, string> = {
   [GUIDED_STEP.scope]: "Which scope does this scheme plan for?",
-  [GUIDED_STEP.calendar]: "Which Collection Calendar governs the service dates?",
   [GUIDED_STEP.recurrence]: "When does this scheme collect?",
   [GUIDED_STEP.groups]: "Who collects what on which service days?",
   [GUIDED_STEP.map]: "How do the generated routes look?",
@@ -298,7 +295,7 @@ const GUIDED_STEP_TITLES: Record<number, string> = {
 
 /**
  * The wizard's selected Collection Calendar — one lookup shared by the
- * calendar step, the recurrence preview, and the review, so every step
+ * scope step, the recurrence preview, and the review, so every step
  * describes the same calendar.
  */
 function useSelectedCalendar(calendarId: string | undefined) {
@@ -372,9 +369,6 @@ function GuidedSchemeWizardOverlay({
             {step === GUIDED_STEP.scope && (
               <StepSchemeScope data={data} updateData={updateData} />
             )}
-            {step === GUIDED_STEP.calendar && (
-              <StepCollectionCalendar data={data} updateData={updateData} />
-            )}
             {step === GUIDED_STEP.recurrence && (
               <StepRecurrence data={data} updateData={updateData} />
             )}
@@ -422,138 +416,112 @@ interface GuidedStepProps {
   updateData: (updates: Partial<GuidedSchemeData>) => void
 }
 
-// Step 1 — Scheme & scope
+// Step 1 — Scheme & scope: name, scope, and the Collection Calendar. The
+// calendar's read-only context (working days, holidays, validity) rides
+// along as the select's hint — the selection feeds the recurrence step's
+// next-dates preview and generation's holiday and working-day filtering.
 
 function StepSchemeScope({ data, updateData }: GuidedStepProps) {
   const projects = useModuleRecords("configure", "organization")
   const areas = useModuleRecords("plan", "areas")
   const depots = useModuleRecords("resources", "depots")
+  const selectedCalendar = useSelectedCalendar(data.calendarId)
 
   return (
-    <div className="max-w-xl space-y-6">
+    <div className="max-w-2xl space-y-6">
       <p className="text-sm text-muted-foreground">
         Name the scheme and pin the operating scope its routes are generated for.
       </p>
-      <div className="space-y-2">
-        <Label>Route scheme name</Label>
-        <Input
-          value={data.schemeName}
-          onChange={(event) => updateData({ schemeName: event.target.value })}
-          placeholder="e.g. Central weekly plan"
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label>Route scheme name</Label>
+          <Input
+            value={data.schemeName}
+            onChange={(event) => updateData({ schemeName: event.target.value })}
+            placeholder="e.g. Central weekly plan"
+          />
+        </div>
+        <RecordSelect
+          label="Project"
+          placeholder="Select project"
+          records={projects}
+          value={data.projectId}
+          onChange={(projectId) => updateData({ projectId })}
+        />
+        <RecordSelect
+          label="Operational planning area"
+          placeholder="Select planning area"
+          records={areas}
+          value={data.planningAreaId}
+          onChange={(planningAreaId) => updateData({ planningAreaId })}
+          hint="One planning area per scheme — every collection group matches its stops inside it."
+        />
+        <RecordSelect
+          label="Collection calendar"
+          placeholder="Select collection calendar"
+          records={selectedCalendar.calendars}
+          value={data.calendarId}
+          onChange={(calendarId) => updateData({ calendarId })}
+          hint={calendarHint(selectedCalendar.record, selectedCalendar.calendar)}
         />
       </div>
-      <RecordSelect
-        label="Project"
-        placeholder="Select project"
-        records={projects}
-        value={data.projectId}
-        onChange={(projectId) => updateData({ projectId })}
-      />
-      <RecordSelect
-        label="Operational planning area"
-        placeholder="Select planning area"
-        records={areas}
-        value={data.planningAreaId}
-        onChange={(planningAreaId) => updateData({ planningAreaId })}
-        hint="One planning area per scheme — every collection group matches its stops inside it."
-      />
       <div className="space-y-4 border-t border-border/60 pt-4">
         <p className="text-xs font-medium text-muted-foreground">
           Operational defaults (optional)
         </p>
-        <RecordSelect
-          label="Departure depot"
-          placeholder="Select depot"
-          records={depots}
-          value={data.depotId}
-          onChange={(depotId) => updateData({ depotId })}
-        />
-        <RecordSelect
-          label="Unloading station"
-          placeholder="Select unloading station"
-          records={depots}
-          value={data.unloadingStationId}
-          onChange={(unloadingStationId) => updateData({ unloadingStationId })}
-        />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <RecordSelect
+            label="Departure depot"
+            placeholder="Select depot"
+            records={depots}
+            value={data.depotId}
+            onChange={(depotId) => updateData({ depotId })}
+          />
+          <RecordSelect
+            label="Unloading station"
+            placeholder="Select unloading station"
+            records={depots}
+            value={data.unloadingStationId}
+            onChange={(unloadingStationId) => updateData({ unloadingStationId })}
+          />
+        </div>
       </div>
     </div>
   )
 }
 
-// Step 2 — Collection Calendar (issue #32): the calendar select plus the
-// selected calendar's read-only operational context. The selection feeds the
-// recurrence step's next-dates preview and, later, generation's holiday and
-// working-day filtering — this step only chooses and explains, it never edits
-// the calendar.
-
-function StepCollectionCalendar({ data, updateData }: GuidedStepProps) {
-  const { calendars, record, calendar } = useSelectedCalendar(data.calendarId)
-
-  return (
-    <div className="max-w-xl space-y-6">
-      <p className="text-sm text-muted-foreground">
-        The Collection Calendar decides which planned dates are operationally
-        valid — holidays and non-working days generate no routes.
-      </p>
-      <RecordSelect
-        label="Collection calendar"
-        placeholder="Select collection calendar"
-        records={calendars}
-        value={data.calendarId}
-        onChange={(calendarId) => updateData({ calendarId })}
-      />
-      {record && (
-        <div className="space-y-2 rounded-2xl border border-border/60 p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-foreground">{record.name}</p>
-            <span className="rounded-full border border-border/60 px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-              {record.status}
-            </span>
-          </div>
-          {calendar ? (
-            <dl className="space-y-2 pt-1">
-              {(
-                [
-                  ["Working days", formatWorkingDays(calendar.workingDays)],
-                  [
-                    "Holidays",
-                    calendar.holidayDates.length > 0
-                      ? `${plural(calendar.holidayDates.length, "date")} — ${calendar.holidayDates
-                          .slice(0, 4)
-                          .map((date) => formatServiceDate(date))
-                          .join(" · ")}${calendar.holidayDates.length > 4 ? " · …" : ""}`
-                      : "None recorded",
-                  ],
-                  ["Validity", formatValidity(calendar.validFrom, calendar.validTo)],
-                ] as const
-              ).map(([label, value]) => (
-                <div key={label} className="flex items-start justify-between gap-6">
-                  <dt className="text-sm text-muted-foreground">{label}</dt>
-                  <dd className="text-right text-sm font-medium text-foreground">
-                    {value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              This calendar record carries no structured working days, holidays,
-              or validity period — it constrains nothing during generation.
-            </p>
-          )}
-        </div>
-      )}
-      {!record && (
-        <p className="text-xs text-muted-foreground">
-          Without a calendar the scheme generates on every recurrence date — no
-          holiday or working-day filtering applies.
-        </p>
-      )}
-    </div>
-  )
+/**
+ * What the selected calendar will do to the service dates, in one line —
+ * the context the former dedicated calendar step showed as a card.
+ */
+function calendarHint(
+  record: BusinessRecord | undefined,
+  calendar: CollectionCalendar | null,
+): string {
+  if (!record) {
+    return "Without a calendar the scheme generates on every recurrence date — no holiday or working-day filtering applies."
+  }
+  if (!calendar) {
+    return "This calendar carries no structured working days, holidays, or validity period — it constrains nothing during generation."
+  }
+  return [
+    record.status,
+    `Working days ${formatWorkingDays(calendar.workingDays)}`,
+    holidaySummary(calendar),
+    `Valid ${formatValidity(calendar.validFrom, calendar.validTo)}`,
+  ]
+    .filter(Boolean)
+    .join(" · ")
 }
 
-// Step 3 — Recurrence
+/** "11 holidays" / "No holidays recorded" — one phrase for the hint and the review. */
+function holidaySummary(calendar: CollectionCalendar): string {
+  return calendar.holidayDates.length > 0
+    ? plural(calendar.holidayDates.length, "holiday")
+    : "No holidays recorded"
+}
+
+// Step 2 — Recurrence
 
 function StepRecurrence({ data, updateData }: GuidedStepProps) {
   const recurrence = draftRecurrence(data)
@@ -617,77 +585,76 @@ function StepRecurrence({ data, updateData }: GuidedStepProps) {
             Leave empty to run ongoing until the scheme is ended.
           </p>
         </div>
-      </div>
-      <div className="space-y-2">
-        <Label>Collection frequency</Label>
-        <Select
-          value={data.frequency}
-          onValueChange={(frequency) =>
-            updateData({ frequency: frequency as RecurrenceFrequency })
-          }
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(RECURRENCE_FREQUENCY_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      {data.frequency === "every-2-weeks" && (
         <div className="space-y-2">
-          <Label>Week rotation</Label>
+          <Label>Collection frequency</Label>
           <Select
-            value={data.weekRotation}
-            onValueChange={(weekRotation) =>
-              updateData({ weekRotation: weekRotation as WeekRotation })
+            value={data.frequency}
+            onValueChange={(frequency) =>
+              updateData({ frequency: frequency as RecurrenceFrequency })
             }
           >
             <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="odd">Odd ISO weeks</SelectItem>
-              <SelectItem value="even">Even ISO weeks</SelectItem>
+              {Object.entries(RECURRENCE_FREQUENCY_LABELS).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
-      )}
-      <div className="space-y-2">
-        <Label>Service days</Label>
-        <div className="flex flex-wrap gap-2">
-          {SERVICE_DAYS.map((day) => {
-            const isOn = data.serviceDays.includes(day)
-            return (
-              <button
-                key={day}
-                type="button"
-                onClick={() => toggleDay(day)}
-                className={cn(
-                  "rounded-full border px-4 py-2 text-sm font-medium transition-colors",
-                  isOn
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-background text-muted-foreground hover:border-primary/50",
-                )}
-              >
-                {SERVICE_DAY_SHORT_LABELS[day]}
-              </button>
-            )
-          })}
+        {data.frequency === "every-2-weeks" && (
+          <div className="space-y-2">
+            <Label>Week rotation</Label>
+            <Select
+              value={data.weekRotation}
+              onValueChange={(weekRotation) =>
+                updateData({ weekRotation: weekRotation as WeekRotation })
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="odd">Odd ISO weeks</SelectItem>
+                <SelectItem value="even">Even ISO weeks</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        <div className="space-y-2">
+          <Label>Planned start time</Label>
+          <Input
+            type="time"
+            value={data.plannedStartTime}
+            onChange={(event) => updateData({ plannedStartTime: event.target.value })}
+          />
         </div>
-      </div>
-      <div className="space-y-2">
-        <Label>Planned start time</Label>
-        <Input
-          type="time"
-          value={data.plannedStartTime}
-          onChange={(event) => updateData({ plannedStartTime: event.target.value })}
-          className="w-32"
-        />
+        <div className="space-y-2 sm:col-span-2">
+          <Label>Service days</Label>
+          <div className="flex flex-wrap gap-2">
+            {SERVICE_DAYS.map((day) => {
+              const isOn = data.serviceDays.includes(day)
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => toggleDay(day)}
+                  className={cn(
+                    "rounded-full border px-4 py-2 text-sm font-medium transition-colors",
+                    isOn
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/50",
+                  )}
+                >
+                  {SERVICE_DAY_SHORT_LABELS[day]}
+                </button>
+              )
+            })}
+          </div>
+        </div>
       </div>
       <div className="rounded-lg border border-border/70 bg-muted/30 px-4 py-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -743,7 +710,7 @@ function StepRecurrence({ data, updateData }: GuidedStepProps) {
   )
 }
 
-// Step 4 — Collection groups (D33): the hub-and-spoke editor over the
+// Step 3 — Collection groups (D33): the hub-and-spoke editor over the
 // draft's groups, with the live FR-5 outcome so group-level issues show on
 // the rows as the planner works. Nothing gates Next — a scheme can always be
 // saved as Draft with its issues named (D34).
@@ -816,7 +783,7 @@ function StepCollectionGroups({ data, updateData }: GuidedStepProps) {
   )
 }
 
-// Step 5 — Route map (FR-15): one colored route line + pins per generated
+// Step 4 — Route map (FR-15): one colored route line + pins per generated
 // route — one per collection group per service day.
 
 function StepRouteMap({ data }: { data: GuidedSchemeData }) {
@@ -841,7 +808,7 @@ function StepRouteMap({ data }: { data: GuidedSchemeData }) {
   )
 }
 
-// Step 6 — Review & create
+// Step 5 — Review & create
 
 function StepSchemeReview({
   data,
@@ -908,30 +875,18 @@ function StepSchemeReview({
         { label: "Name", value: data.schemeName.trim() || "Not specified" },
         { label: "Project", value: nameOf(projects, data.projectId) },
         { label: "Planning area", value: nameOf(areas, data.planningAreaId) },
+        { label: "Collection calendar", value: nameOf(calendars, data.calendarId) },
+        ...(calendar
+          ? [
+              { label: "Working days", value: formatWorkingDays(calendar.workingDays) },
+              { label: "Holidays", value: holidaySummary(calendar) },
+            ]
+          : []),
         { label: "Departure depot", value: nameOf(depots, data.depotId) },
         {
           label: "Unloading station",
           value: nameOf(depots, data.unloadingStationId),
         },
-      ],
-    },
-    {
-      title: "Collection Calendar",
-      step: GUIDED_STEP.calendar,
-      rows: [
-        { label: "Calendar", value: nameOf(calendars, data.calendarId) },
-        ...(calendar
-          ? [
-              { label: "Working days", value: formatWorkingDays(calendar.workingDays) },
-              {
-                label: "Holidays",
-                value:
-                  calendar.holidayDates.length > 0
-                    ? plural(calendar.holidayDates.length, "date")
-                    : "None recorded",
-              },
-            ]
-          : []),
       ],
     },
     {

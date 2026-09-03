@@ -48,6 +48,10 @@ silently preserved.
   persisted on the scheme; the select currently lives inside Step 1 "Scheme & scope").
   D6 is a wizard restructuring / UX improvement — promote the field to its own step with
   contextual preview — not a new domain capability or relationship.
+  **Revised (2026-09-03):** the dedicated step is retired. The calendar select moved back
+  into step 1 (Scheme & scope) and its read-only context (working days, holidays,
+  validity) became the field's hint, so the wizard is five steps. The calendar still
+  drives the recurrence preview and generation's skipped dates unchanged.
 - **D7 (Q7) — Keep the fortnight anchor control, conditionally.** For "Every 2 weeks"
   the explicit anchor/odd-even configuration stays (per issue #15 decision), shown only
   when that frequency is selected. **"Planned start time" flows into generated routes'
