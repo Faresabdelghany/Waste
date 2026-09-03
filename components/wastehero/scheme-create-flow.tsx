@@ -340,7 +340,9 @@ function GuidedSchemeWizardOverlay({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-      <div className="flex w-full max-w-[900px] overflow-hidden rounded-[24px] bg-background shadow-2xl">
+      {/* Wider than the mode chooser on purpose: the Collection groups step
+          lays out a three-column group editor plus a container list. */}
+      <div className="flex w-full max-w-[1200px] overflow-hidden rounded-[24px] bg-background shadow-2xl">
         <div className="hidden w-64 border-r border-border bg-background px-6 py-7 md:flex md:flex-col md:gap-7">
           <p className="text-sm font-semibold text-foreground">New route scheme</p>
           <Stepper
@@ -351,7 +353,7 @@ function GuidedSchemeWizardOverlay({
           />
         </div>
 
-        <div className="flex max-h-[85vh] min-h-[540px] flex-1 flex-col">
+        <div className="flex max-h-[90vh] min-h-[600px] flex-1 flex-col">
           <div className="flex items-start justify-between px-8 pb-4 pt-6">
             <h2 className="pr-6 text-lg font-semibold tracking-tight">
               {GUIDED_STEP_TITLES[step]}
@@ -428,7 +430,7 @@ function StepSchemeScope({ data, updateData }: GuidedStepProps) {
   const depots = useModuleRecords("resources", "depots")
 
   return (
-    <div className="max-w-md space-y-6">
+    <div className="max-w-xl space-y-6">
       <p className="text-sm text-muted-foreground">
         Name the scheme and pin the operating scope its routes are generated for.
       </p>
@@ -488,7 +490,7 @@ function StepCollectionCalendar({ data, updateData }: GuidedStepProps) {
   const { calendars, record, calendar } = useSelectedCalendar(data.calendarId)
 
   return (
-    <div className="max-w-md space-y-6">
+    <div className="max-w-xl space-y-6">
       <p className="text-sm text-muted-foreground">
         The Collection Calendar decides which planned dates are operationally
         valid — holidays and non-working days generate no routes.
@@ -589,7 +591,7 @@ function StepRecurrence({ data, updateData }: GuidedStepProps) {
   }
 
   return (
-    <div className="max-w-xl space-y-6">
+    <div className="max-w-2xl space-y-6">
       <p className="text-sm text-muted-foreground">
         Set the effective window and cadence — one route is generated per service
         day per occurrence.

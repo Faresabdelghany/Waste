@@ -219,7 +219,7 @@ export function SchemeRuleEditor({
         </p>
       </div>
 
-      <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+      <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
         {rule.fractions.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             Pick at least one waste fraction — the rule is the fraction
@@ -415,7 +415,7 @@ export function SchemeContainerPicker({
         </Button>
       </div>
 
-      <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+      <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
         {matches.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             No containers match this filter.
@@ -911,7 +911,7 @@ export function CollectionGroupsEditorDialog({
 }) {
   return (
     <Dialog open={Boolean(scheme)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
         {scheme && (
           // Keyed by scheme so the editor state re-seeds per opened record —
           // the dialog itself stays mounted while closed.
