@@ -1,7 +1,6 @@
-// Plan Ahead auto-generation (spec docs/specs/ROUTE_SCHEMES.md FR-11,
-// ticket #8). Pure data logic — no UI or store dependencies — over the same
+// Plan Ahead auto-generation (ticket #8). Pure data logic — no UI or store dependencies — over the same
 // generation engine as the manual flow, so auto-runs obey the identical
-// idempotency rules (scripts/route-scheme-plan-ahead-harness.ts).
+// idempotency rules.
 //
 // Rules:
 //   the toggle is a scheme flag (submittedValues.planAhead + a "Plan ahead"

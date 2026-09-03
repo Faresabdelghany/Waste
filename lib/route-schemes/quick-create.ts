@@ -1,5 +1,4 @@
-// Quick Create alignment (issue #31; docs/new-changes/SPEC.md area D,
-// DECISIONS.md D19/D23/D29, P1). Pure data logic — no UI or store
+// Quick Create alignment (issue #31). Pure data logic — no UI or store
 // dependencies. Quick Create and Guided Setup are two UX paths to the same
 // domain entity, so on submit the quick form's stored values are mapped onto
 // the exact draft shape the wizard hands to record creation
@@ -7,7 +6,6 @@
 // validateScheme outcome, the same canonical record shape, and the same
 // creation orchestration (planSchemeCreation). Parity holds by construction —
 // there is no second create path to drift.
-// Harness: scripts/route-scheme-validation-harness.ts.
 
 import { IMPLICIT_GROUP_ID, type CollectionGroup } from "./groups"
 import { matchPlansFromValues, stopSelectionMode } from "./matching"
@@ -23,7 +21,7 @@ import {
  * The scheme draft both create paths hand to record creation: Guided Setup
  * collects it across the wizard steps, Quick Create maps its form values onto
  * it (quickSchemeDraftFromValues). Lives here — not in the wizard component —
- * so the mapping and the harness can read it without pulling in UI code.
+ * so the mapping can read it without pulling in UI code.
  */
 export interface GuidedSchemeData {
   schemeName: string

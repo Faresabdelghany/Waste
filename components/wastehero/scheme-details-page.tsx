@@ -1,8 +1,7 @@
 "use client"
 
-// Scheme detail as a dedicated full page (issue #29; SPEC.md area E,
-// DECISIONS.md D8/D9/D10/D17/D26/D28): Details · Routes · Stops · Collection
-// Calendar tabs, replacing the generic record side sheet for Route Schemes.
+// Scheme detail as a dedicated full page (issue #29): Details · Routes ·
+// Stops · Collection Calendar tabs, replacing the generic record side sheet for Route Schemes.
 // Every displayed value is read from the canonical scheme record and the live
 // related records at render time — never from stale display copies. Rule
 // matches are a preview of containers; Stops exist only once routes are

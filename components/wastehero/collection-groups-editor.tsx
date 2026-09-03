@@ -1,7 +1,6 @@
 "use client"
 
-// Collection groups editor (docs/new-changes/SPEC.md area L, DECISIONS.md
-// D33–D36): the hub-and-spoke surface that defines a Route Scheme's
+// Collection groups editor: the hub-and-spoke surface that defines a Route Scheme's
 // collection groups — the hub is a service-day coverage strip plus one
 // summary row per group (the "every service day has at least one group"
 // invariant made visible), the spoke edits one group at a time: name, days,

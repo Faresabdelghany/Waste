@@ -1,5 +1,4 @@
-// Scheme deletion orchestration (issue #34; docs/new-changes/SPEC.md area H,
-// DECISIONS.md D32, closing principle P2). Pure data logic — no UI or store
+// Scheme deletion orchestration (issue #34). Pure data logic — no UI or store
 // dependencies — the single planner behind "Delete scheme": deletion is a
 // safe boundary, not an eraser. The scheme is soft-deleted (marked, never
 // removed) with Plan Ahead off, so no auto-run or manual generation touches
@@ -8,7 +7,6 @@
 // shape with their open pickups skipped; and every route that is operational
 // reality (past or today's, Ready/Active/Completed, operationally Cancelled)
 // stays exactly as stored, Stops/Pickups included, as history.
-// Harness: scripts/route-scheme-lifecycle-harness.ts.
 
 import type { BusinessRecord } from "../data/business-modules"
 import { softDeletedRecord, type SoftDeletion } from "../data/record-visibility"
@@ -25,7 +23,7 @@ export type SchemeDeletionInput = SoftDeletion & {
    */
   scheme: BusinessRecord
   today: string
-  /** ISO datetime stamped on the cancelled routes; omitted for harness determinism. */
+  /** ISO datetime stamped on the cancelled routes; omitted for deterministic runs. */
   generatedAt?: string
 }
 

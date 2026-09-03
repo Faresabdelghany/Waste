@@ -30,7 +30,7 @@ export const LEGACY_MODULE_IDS: Readonly<Record<string, string>> = {
 
 /**
  * `${workspaceId}.${moduleId}` keys (record store buckets, role access maps).
- * The rename entries are listed for documentation and as harness fixtures;
+ * The rename entries are listed for documentation;
  * `migrateLegacyModuleKey` also rewrites any other key token-wise (see
  * LEGACY_ID_TOKENS), so a bucket such as `contractors.settlements` resolves
  * without an entry here. The `plan.areas` move is a real lookup: its tokens
@@ -76,7 +76,7 @@ export const LEGACY_ID_TOKENS: ReadonlyArray<readonly [string, string]> = [
 /**
  * Enum-like values: ownership, employment type, audience, scope, persona,
  * filter variant. All of them fall out of the token rewrite; the map exists
- * so the harness can pin each one explicitly.
+ * so each one is pinned explicitly.
  */
 export const LEGACY_ENUM_VALUES: Readonly<Record<string, string>> = {
   contractor: "service-provider",

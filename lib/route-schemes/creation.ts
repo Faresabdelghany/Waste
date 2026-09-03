@@ -1,12 +1,10 @@
-// Scheme creation orchestration (issue #28; docs/new-changes/SPEC.md area A,
-// DECISIONS.md D18/D24/D25/D27). Pure data logic — no UI or store
+// Scheme creation orchestration (issue #28). Pure data logic — no UI or store
 // dependencies — the single planner behind "Create": it composes the existing
 // validation outcome (the record's status), the generation engine, and the
 // Plan Ahead flag helper, never duplicating their logic. UI submit handlers
 // only apply the returned upserts to the record store. Guided Setup calls it
-// today; Quick Create joins through its own alignment issue (SPEC area D) so
-// the two paths cannot drift apart (P1).
-// Harness: scripts/route-scheme-lifecycle-harness.ts.
+// today; Quick Create joins through its own alignment (issue #31) so the two
+// paths cannot drift apart.
 //
 // Create flow (D18): persist scheme → if Validated, immediately generate the
 // initial window with each route's Pickups → Plan Ahead on by default →
@@ -63,7 +61,7 @@ export type SchemeCreationInput = {
   actorName: string
   /**
    * ISO datetime stamped on the generated routes and the scheme's generation
-   * marker; omitted (harness determinism), the marker uses the current time.
+   * marker; omitted, the marker uses the current time.
    */
   generatedAt?: string
 }

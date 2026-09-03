@@ -2092,7 +2092,7 @@ const plan: WorkspaceDefinition = {
       ],
       records: [
         // Fixture schemes carry the same structured recurrence submittedValues
-        // the Guided Setup wizard writes (PLAN_SIMPLIFICATION Q14), so the
+        // the Guided Setup wizard writes, so the
         // default data can generate routes out of the box. scheme-central-a
         // selects stops declaratively (issue #19): a stop-matching rule
         // (fractions + vehicle type inside its planning area) instead of a
@@ -2222,7 +2222,7 @@ const plan: WorkspaceDefinition = {
       ],
       records: [
         // Fixture calendars carry the structured operational data the
-        // generation engine consumes (PLAN_SIMPLIFICATION Q5) — 11 Danish
+        // generation engine consumes — 11 Danish
         // holidays of 2026 (the 10 statutory public holidays plus
         // Grundlovsdag). The list's Holidays / Next holiday columns and KPI
         // tiles derive from these structured values at render time (issue
@@ -2642,8 +2642,7 @@ const customers: WorkspaceDefinition = {
         // its own — its "Service frequency" fact is derived from the assigned
         // container's typed frequency reference, mirroring the real product
         // (the agreement displays what it inherits). "Billing" stays separate:
-        // billing cadence is not pickup frequency. Guarded in
-        // scripts/plan-structure-harness.ts.
+        // billing cadence is not pickup frequency.
         {
           ...record(
             "agreement-2408",
@@ -2829,9 +2828,8 @@ const resources: WorkspaceDefinition = {
         // typed submittedValues.planningAreaId the stop-match resolver reads.
         // They likewise carry the typed frequency promise (issue #20):
         // submittedValues.serviceFrequencyId referencing SERVICE_FREQUENCIES,
-        // with the "Service frequency" fact derived from it (guarded in
-        // scripts/plan-structure-harness.ts). Out-of-service units (storage,
-        // ended, in transit) have neither.
+        // with the "Service frequency" fact derived from it. Out-of-service units
+        // (storage, ended, in transit) have neither.
         {
         ...record(
           "asset-82014",

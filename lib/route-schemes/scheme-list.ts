@@ -1,5 +1,4 @@
-// Derived presentation for the Route Schemes list (issue #30;
-// docs/new-changes/SPEC.md area F, DECISIONS.md D15).
+// Derived presentation for the Route Schemes list (issue #30).
 //
 // Pure data logic, following the calendar-list.ts seam: records plus current
 // related records in, display strings out. The recurrence summary derives

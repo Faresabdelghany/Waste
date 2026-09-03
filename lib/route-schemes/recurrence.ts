@@ -1,4 +1,4 @@
-// Route Scheme recurrence engine (spec docs/specs/ROUTE_SCHEMES.md, FR-3/FR-4).
+// Route Scheme recurrence engine.
 // Pure date math over ISO `yyyy-mm-dd` strings — no UI, store, or fixture
 // dependencies — so the scheme form preview and the route generation engine
 // share one definition of "which dates does this scheme serve".

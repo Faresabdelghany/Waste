@@ -93,8 +93,8 @@ import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
 import { cn } from "@/lib/utils"
 
 // The wizard's draft shape lives in lib/route-schemes/quick-create (issue
-// #31) so Quick Create's value mapping and the harness share it without
-// pulling in UI code; re-exported here for the existing import sites.
+// #31) so Quick Create's value mapping can share it without pulling in UI
+// code; re-exported here for the existing import sites.
 export type { GuidedSchemeData }
 
 const draftProjectIds = (data: GuidedSchemeData): string[] | undefined =>

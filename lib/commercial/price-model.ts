@@ -1,6 +1,6 @@
 import type { BusinessRecord } from "@/lib/data/business-modules"
 
-// Deterministic "today" for status derivation and harness runs.
+// Deterministic "today" for status derivation.
 export const PRICING_REFERENCE_DATE = "2026-08-20"
 
 export type ProductType = "Container collection" | "Recurring service" | "Additional service"
@@ -79,7 +79,7 @@ export const RESOLUTION_RULE =
 
 // Fact keys — the single source of truth for how models serialize into
 // BusinessRecord.facts. Fixtures (Task 2) and write paths (Task 3) use these
-// exact strings; the harness registry checks fail loudly if they drift.
+// exact strings.
 export const ROW_FACTS = {
   amount: "Amount", unit: "Unit", zone: "Zone", customerType: "Customer type",
   containerType: "Container type", wasteFraction: "Waste fraction",

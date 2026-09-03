@@ -1,8 +1,5 @@
-// Manual route generation engine (spec docs/specs/ROUTE_SCHEMES.md FR-6–FR-10
-// and docs/specs/PLAN_SIMPLIFICATION.md). Pure data logic — no UI or store
-// dependencies — so the confirm preview and the record writes share one plan,
-// and the upsert rules are harness-testable
-// (scripts/route-scheme-generation-harness.ts).
+// Manual route generation engine. Pure data logic — no UI or store
+// dependencies — so the confirm preview and the record writes share one plan.
 //
 // Upsert rules (validated in the prototype on branch prototype/route-schemes):
 //   for each service date in the window:
@@ -664,7 +661,7 @@ export function applySchemeGeneration(input: {
   /**
    * ISO datetime stamped as submittedValues.generatedAt on every route this
    * run writes (the scheme detail's "Last generated", FR-13). Optional so
-   * the engine stays deterministic for harnesses; omitted, a refreshed
+   * the engine stays deterministic; omitted, a refreshed
    * route keeps its prior stamp.
    */
   generatedAt?: string
@@ -737,7 +734,7 @@ export function applySchemeGeneration(input: {
     const isRefresh = planned.action === "refresh"
     if (isRefresh) summary.refreshed += 1
     else summary.created += 1
-    // A stamp-less run (harness determinism) keeps a refreshed route's prior stamp.
+    // A stamp-less run keeps a refreshed route's prior stamp.
     const generatedAtStamp =
       input.generatedAt ??
       (existing ? stringValueOf(existing, "generatedAt") : undefined)

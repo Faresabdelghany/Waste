@@ -1,5 +1,4 @@
-// Route Scheme lifecycle (issue #25; docs/new-changes/SPEC.md area B,
-// DECISIONS.md D5/D20/D25/D30). Pure data logic — no UI, store, or fixture
+// Route Scheme lifecycle (issue #25). Pure data logic — no UI, store, or fixture
 // dependencies — the single seam every surface reads scheme status through:
 //
 //   Draft → Validated → Scheduled → Effective → Expired

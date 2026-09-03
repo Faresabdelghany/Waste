@@ -1,5 +1,5 @@
 // Service frequency — the typed home for the customer's collection-cadence
-// promise (issue #20; REAL_PRODUCT_CONVERGENCE.md open question 2).
+// promise (issue #20).
 //
 // In the real product the frequency promise is a reusable, project-scoped
 // Pickup Setting record referenced by product and container — NOT a field on
@@ -194,8 +194,8 @@ export function serviceFrequencyFactValue(id: string | null | undefined) {
 
 /**
  * A promise's nominal collections per week — the interval-vocabulary side of
- * the reconciliation comparison (issue #21; REAL_PRODUCT_CONVERGENCE.md option
- * C step 4 asks for interval comparison, not a hard-coded cadence ladder).
+ * the reconciliation comparison (issue #21 asks for interval comparison, not a
+ * hard-coded cadence ladder).
  * weeks-between divides; days-between promises already state a weekly count.
  * The monthly definition carries no faithful interval fields by design, so it
  * reads the scheme-cadence rate. null = on demand — no standing cadence to

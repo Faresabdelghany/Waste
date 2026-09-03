@@ -1,9 +1,8 @@
-// Collection Calendar model (spec docs/specs/PLAN_SIMPLIFICATION.md §1).
-// Pure data logic — no UI or store dependencies — so generation, validation,
-// and the harnesses share one definition of "is this planned date
+// Collection Calendar model. Pure data logic — no UI or store dependencies —
+// so generation and validation share one definition of "is this planned date
 // operationally valid on this calendar".
 //
-// Semantics (decisions Q2/Q5/Q6/Q7):
+// Semantics:
 //   the calendar decides whether a normal planned date is valid — holidays and
 //   non-working days are skipped, never moved. A date the calendar
 //   does not cover (outside validFrom/validTo, or no structured data at all)

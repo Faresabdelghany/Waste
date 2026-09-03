@@ -1,5 +1,4 @@
-// Declarative stop matching for Route Schemes (issue #19, convergence doc
-// docs/specs/REAL_PRODUCT_CONVERGENCE.md option C step 3): a scheme in "rule"
+// Declarative stop matching for Route Schemes (issue #19): a scheme in "rule"
 // stop-selection mode stores the selection rule — waste fractions + optional
 // vehicle type, scoped to the scheme's planning area and project — instead of
 // a hand-picked container list. Generation, validation, the wizard preview,
@@ -8,8 +7,8 @@
 // the next generation without editing the scheme.
 //
 // Pure data logic — no UI, store, or fixture dependencies (type-only import
-// of BusinessRecord), mirroring validation.ts, so the resolver is
-// harness-testable (scripts/route-scheme-matching-harness.ts).
+// of BusinessRecord), mirroring validation.ts, so the resolver can be
+// exercised without a browser.
 
 import type { BusinessRecord } from "../data/business-modules"
 import { SERVICE_DAYS, sortServiceDays, type ServiceDay } from "./recurrence"
@@ -55,8 +54,7 @@ export const CONTAINER_VEHICLE_COMPATIBILITY: Readonly<
 
 /**
  * Only containers in service can be planned into routes — the prototype
- * analog of the real product's Active-agreement gate (REAL_PRODUCT_CONVERGENCE
- * concept-mapping table). Future, On hold, Defect, In storage, In transit,
+ * analog of the real product's Active-agreement gate. Future, On hold, Defect, In storage, In transit,
  * and Ended containers are excluded with a visible reason.
  */
 export const ELIGIBLE_CONTAINER_STATUSES = new Set(["Available"])

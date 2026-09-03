@@ -1,10 +1,9 @@
-// Edit-save reconciliation orchestration (issue #33; docs/new-changes/SPEC.md
-// area G, DECISIONS.md D31). Pure data logic — no UI or store dependencies —
+// Edit-save reconciliation orchestration (issue #33). Pure data logic — no UI or store dependencies —
 // the single planner behind saving a scheme edit: `Edit → Validate → Save →
 // Reconcile future planning window`. It composes the shared live validation
 // (lifecycle.ts), the generation engine, and the Plan Ahead flag helper,
 // never duplicating their logic; UI submit handlers only apply the returned
-// upserts. Harness: scripts/route-scheme-lifecycle-harness.ts.
+// upserts.
 //
 // Flow (D31): a valid edit re-runs generation over the future planning
 // window, so recurrence/day/calendar/rule/container/start-time/assignment/
@@ -74,7 +73,7 @@ export type SchemeEditReconciliationInput = {
   after: BusinessRecord
   today: string
   actorName: string
-  /** ISO datetime stamped on written routes; omitted for harness determinism. */
+  /** ISO datetime stamped on written routes; omitted for deterministic runs. */
   generatedAt?: string
 }
 

@@ -1,6 +1,6 @@
 /**
- * Areas & Zones — the Settings-managed planning-geography module (D37,
- * docs/new-changes/DECISIONS.md; moved from the Plan workspace 2026-09-03).
+ * Areas & Zones — the Settings-managed planning-geography module (moved
+ * from the Plan workspace 2026-09-03).
  *
  * Planning areas stay business records in the shared record store under
  * `configure.areas` so Route Schemes, containers, and Service Areas keep

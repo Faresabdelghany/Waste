@@ -1,5 +1,4 @@
-// Collection groups inside a Route Scheme (docs/new-changes/SPEC.md area L,
-// DECISIONS.md D33–D36). Pure data logic — no UI, store, or fixture
+// Collection groups inside a Route Scheme. Pure data logic — no UI, store, or fixture
 // dependencies — so the wizard, the scheme detail page, validation, and the
 // generation engine all read one definition of "which groups does this scheme
 // have, on which days, with which vehicle, driver, and stops".
@@ -19,7 +18,6 @@
 // stopSelection + the shared or per-day rule / container lists). Implicit
 // groups keep the legacy route identity (schemeId, serviceDate), so nothing
 // already generated moves; explicit groups extend it with the group id.
-// Harness: scripts/collection-groups-harness.ts
 
 import type { BusinessRecord } from "../data/business-modules"
 import {

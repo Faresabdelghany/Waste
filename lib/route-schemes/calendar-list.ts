@@ -1,5 +1,4 @@
-// Derived presentation for the Collection Calendars list (issue #27;
-// docs/new-changes/SPEC.md area J, decisions D13/D22/D28iii).
+// Derived presentation for the Collection Calendars list (issue #27).
 //
 // Pure data logic, following the lifecycle.ts seam: records plus an explicit
 // `today` in, tiles and row summaries out. Everything here derives from the

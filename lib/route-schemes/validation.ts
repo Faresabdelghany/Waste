@@ -1,5 +1,5 @@
-// Route Scheme guided-setup validation and per-day service plans (spec
-// docs/specs/ROUTE_SCHEMES.md, FR-5/FR-14). Pure data logic — no UI, store,
+// Route Scheme guided-setup validation and per-day service plans. Pure data
+// logic — no UI, store,
 // or fixture dependencies — so the wizard's review step and the record
 // creation path share one definition of "is this scheme Validated or Draft",
 // and the generation engine can read a scheme's per-day plans back from its
@@ -212,7 +212,7 @@ export type SchemeValidationResult = {
 }
 
 /**
- * The calendar caveats of PLAN_SIMPLIFICATION Q6/Q7, save-time side: service
+ * The calendar caveats, save-time side: service
  * days the calendar treats as non-working (those dates are skipped at
  * generation), a calendar that is not Active, and a scheme effective period
  * that extends outside the calendar's validity. All non-blocking.
@@ -272,8 +272,7 @@ const namedContainers = (names: readonly string[]): string => {
 }
 
 /**
- * The reconciliation caveats of issue #21 (REAL_PRODUCT_CONVERGENCE.md option
- * C step 4), compared on the collections-per-week scale so every-N-weeks
+ * The reconciliation caveats of issue #21, compared on the collections-per-week scale so every-N-weeks
  * promises order without a scheme-cadence counterpart. Under-service — the
  * scheme's cadence falls short of a linked container's promise — is the
  * promise-breaking direction and leads; over-service also warns (decided
