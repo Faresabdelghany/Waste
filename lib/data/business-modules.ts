@@ -2210,9 +2210,9 @@ const plan: WorkspaceDefinition = {
       contextLabel: "Project",
       valueLabel: "Next holiday",
       primaryAction: "New calendar",
-      // The rendered KPI tiles derive from real calendar records at render
-      // time (issue #27, D13) — see lib/route-schemes/calendar-list.ts.
-      // Static illustrative metrics are deliberately absent.
+      // No KPI tiles above the calendars list; the table cells derive from
+      // real calendar records at render time (issue #27) — see
+      // lib/route-schemes/calendar-list.ts.
       metrics: [],
       lifecycle: ["Draft", "Active", "Superseded", "Archived"],
       rules: [
@@ -2224,10 +2224,10 @@ const plan: WorkspaceDefinition = {
         // Fixture calendars carry the structured operational data the
         // generation engine consumes — 11 Danish
         // holidays of 2026 (the 10 statutory public holidays plus
-        // Grundlovsdag). The list's Holidays / Next holiday columns and KPI
-        // tiles derive from these structured values at render time (issue
-        // #27, D13/D28iii); the display facts below are legacy copies shown
-        // only in the record detail.
+        // Grundlovsdag). The list's Holidays / Next holiday columns derive
+        // from these structured values at render time (issue #27, D28iii);
+        // the display facts below are legacy copies shown only in the
+        // record detail.
         {
           ...record(
             "calendar-central",

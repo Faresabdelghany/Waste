@@ -1,14 +1,11 @@
 // Derived presentation for the Collection Calendars list (issue #27).
 //
 // Pure data logic, following the lifecycle.ts seam: records plus an explicit
-// `today` in, tiles and row summaries out. Everything here derives from the
-// structured `submittedValues` a calendar record carries (via
-// calendarFromRecord) — never from display facts, stored value strings, or
-// the module's static metrics. Per D22 the tiles use only values derivable
-// from the current project-scoped calendar model; there is no customer or
-// service scoping to report.
+// `today` in, row summaries out. Everything here derives from the structured
+// `submittedValues` a calendar record carries (via calendarFromRecord) — never
+// from display facts, stored value strings, or the module's static metrics.
 
-import type { BusinessRecord, ModuleMetric } from "../data/business-modules"
+import type { BusinessRecord } from "../data/business-modules"
 import { calendarFromRecord } from "./calendar"
 import {
   addDays,
@@ -16,11 +13,6 @@ import {
   SERVICE_DAY_SHORT_LABELS,
   type ServiceDay,
 } from "./recurrence"
-
-/** Window the "Upcoming holidays" tile counts over. */
-export const HOLIDAY_WINDOW_DAYS = 60
-/** Window the "Expiring within 90d" tile counts over. */
-export const EXPIRY_WINDOW_DAYS = 90
 
 const EMPTY = "—"
 
@@ -147,109 +139,7 @@ export function withDerivedCalendarValue(
   return { ...record, value: derived }
 }
 
-/** "1 date", "11 dates" — the count phrasing shared by the list, KPI tiles, and the wizard's calendar context (issue #32). */
+/** "1 date", "11 dates" — the count phrasing shared by the list and the wizard's calendar context (issue #32). */
 export function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`
-}
-
-/**
- * The four KPI tiles above the calendars list, computed from the records the
- * list itself shows (D13). Labels follow the artboard; helper text reports
- * only what the current model derives (D22 — no project/customer splits).
- */
-export function calendarKpis(
-  records: BusinessRecord[],
-  today: string,
-): ModuleMetric[] {
-  const total = records.length
-  const calendars = records.map((record) => ({
-    record,
-    calendar: calendarFromRecord(record),
-  }))
-
-  // Active calendars — stored lifecycle statuses, with the non-active
-  // breakdown as the helper (count desc, then name, deterministic).
-  const activeCount = records.filter((record) => record.status === "Active").length
-  const nonActive = new Map<string, number>()
-  for (const record of records) {
-    if (record.status === "Active") continue
-    nonActive.set(record.status, (nonActive.get(record.status) ?? 0) + 1)
-  }
-  const activeHelper =
-    total === 0
-      ? "No calendars yet"
-      : activeCount === total
-        ? "All calendars active"
-        : [...nonActive.entries()]
-            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-            .map(([status, count]) => `${count} ${status}`)
-            .join(" · ")
-
-  // Upcoming holidays — distinct dates across calendars inside the window.
-  const holidayWindowEnd = addDays(today, HOLIDAY_WINDOW_DAYS)
-  const upcomingDates = new Set<string>()
-  let nextHoliday: string | undefined
-  for (const { calendar } of calendars) {
-    for (const date of calendar?.holidayDates ?? []) {
-      if (date < today) continue
-      if (date <= holidayWindowEnd) upcomingDates.add(date)
-      if (!nextHoliday || date < nextHoliday) nextHoliday = date
-    }
-  }
-  const upcomingHelper =
-    upcomingDates.size > 0
-      ? `Within ${HOLIDAY_WINDOW_DAYS} days`
-      : nextHoliday
-        ? `Next: ${dayMonth(nextHoliday)}`
-        : "None scheduled"
-
-  // Working-day rules — calendars whose structured data names working days.
-  const configured = calendars.filter(
-    ({ calendar }) => (calendar?.workingDays.length ?? 0) > 0,
-  ).length
-  const missing = total - configured
-
-  // Expiring within 90d — validity ends inside the window, earliest named.
-  const expiryWindowEnd = addDays(today, EXPIRY_WINDOW_DAYS)
-  const ends = calendars
-    .map(({ calendar }) => calendar?.validTo ?? "")
-    .filter((end) => end !== "")
-  const upcomingEnds = ends.filter((end) => end >= today).sort()
-  const expiringCount = upcomingEnds.filter((end) => end <= expiryWindowEnd).length
-  const expiryHelper =
-    upcomingEnds.length > 0
-      ? `Earliest: ${dayMonthYear(upcomingEnds[0])}`
-      : ends.length > 0
-        ? "All validity ended"
-        : "No end dates set"
-
-  return [
-    { label: "Active calendars", value: String(activeCount), helper: activeHelper },
-    {
-      label: "Upcoming holidays",
-      value: String(upcomingDates.size),
-      helper: upcomingHelper,
-    },
-    {
-      label: "Working-day rules",
-      value: String(configured),
-      helper:
-        total === 0
-          ? "No calendars yet"
-          : missing === 0
-            ? "All calendars configured"
-            : `${plural(missing, "calendar")} without rules`,
-      ...(total > 0 && missing === 0
-        ? { tone: "positive" as const }
-        : missing > 0
-          ? { tone: "warning" as const }
-          : {}),
-    },
-    {
-      label: `Expiring within ${EXPIRY_WINDOW_DAYS}d`,
-      value: String(expiringCount),
-      helper: expiryHelper,
-      ...(expiringCount > 0 ? { tone: "warning" as const } : {}),
-    },
-  ]
 }

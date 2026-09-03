@@ -35,7 +35,6 @@ import {
   getWorkspaceDefinition,
   type BusinessRecord,
   type ModuleDefinition,
-  type ModuleMetric,
   type WorkspaceDefinition,
   type WorkspaceId,
 } from "@/lib/data/business-modules"
@@ -55,7 +54,6 @@ import {
 } from "@/lib/data/business-view-kinds"
 import { calendarFromRecord } from "@/lib/route-schemes/calendar"
 import {
-  calendarKpis,
   calendarRowSummary,
   withDerivedCalendarValue,
   type CalendarRowSummary,
@@ -766,43 +764,6 @@ function ContainerSensorState({ record }: { record: BusinessRecord }) {
         {hasSensor ? sensor : "No measurements"}
       </p>
     </div>
-  )
-}
-
-// The derived KPI tile row above the Collection Calendars list (issue #27,
-// D13). Values arrive already computed from real records — this component
-// only lays them out; tones follow the status-badge palette.
-const KPI_TONE_CLASSES: Record<NonNullable<ModuleMetric["tone"]>, string> = {
-  positive: "text-teal-700 dark:text-teal-300",
-  warning: "text-amber-700 dark:text-amber-300",
-  danger: "text-rose-700 dark:text-rose-300",
-  neutral: "text-muted-foreground",
-}
-
-function ModuleKpiTiles({ tiles }: { tiles: ModuleMetric[] }) {
-  if (tiles.length === 0) return null
-  return (
-    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {tiles.map((tile) => (
-        <div
-          key={tile.label}
-          className="rounded-xl border border-border/60 bg-card px-4 py-3"
-        >
-          <p className="text-xs text-muted-foreground">{tile.label}</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
-            {tile.value}
-          </p>
-          <p
-            className={cn(
-              "mt-1 text-xs",
-              KPI_TONE_CLASSES[tile.tone ?? "neutral"],
-            )}
-          >
-            {tile.helper}
-          </p>
-        </div>
-      ))}
-    </section>
   )
 }
 
@@ -1711,10 +1672,9 @@ export function BusinessWorkspace({
       ]),
     )
   }, [activeRecords, getRecords, isSchemesView])
-  // Derived Collection Calendars presentation (issue #27, D13/D28iii): the
-  // KPI tiles compute from the same records the list shows — scope-filtered
-  // but not search-filtered — and the table's Working days / Holidays /
-  // Validity cells derive from each record's structured submittedValues.
+  // Derived Collection Calendars presentation (issue #27, D28iii): the table's
+  // Working days / Holidays / Validity cells derive from each record's
+  // structured submittedValues.
   const calendarRowsById = useMemo(() => {
     if (!isCalendarsView) return new Map<string, CalendarRowSummary>()
     const today = todayIso()
@@ -1722,10 +1682,6 @@ export function BusinessWorkspace({
       activeRecords.map((record) => [record.id, calendarRowSummary(record, today)]),
     )
   }, [activeRecords, isCalendarsView])
-  const calendarKpiTiles = useMemo(
-    () => (isCalendarsView ? calendarKpis(visibleScopedRecords, todayIso()) : null),
-    [isCalendarsView, visibleScopedRecords],
-  )
   const schemeExtraActions = useCallback(
     (record: BusinessRecord): RecordExtraAction[] | undefined =>
       isSchemesView &&
@@ -4867,8 +4823,6 @@ export function BusinessWorkspace({
                 </p>
               )}
           </section>
-
-          {calendarKpiTiles && <ModuleKpiTiles tiles={calendarKpiTiles} />}
 
           <section className="overflow-hidden rounded-xl border border-border/60">
             <div className="border-b border-border px-4 py-2">
