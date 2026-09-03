@@ -78,7 +78,6 @@ type RegisterProps = {
   records: BusinessRecord[]
   projectScope: ContainerProjectScope
   fixedScopeLabel?: string
-  onProjectScopeChange: (scope: ContainerProjectScope) => void
   onOpenRecord: (record: BusinessRecord) => void
   onAction: (record: BusinessRecord, action: string) => void
 }
@@ -261,7 +260,6 @@ export function ContainersAssetsRegister({
   records,
   projectScope,
   fixedScopeLabel,
-  onProjectScopeChange,
   onOpenRecord,
   onAction,
 }: RegisterProps) {
@@ -525,24 +523,7 @@ export function ContainersAssetsRegister({
                 ) : null}
               </div>
               <div className="flex items-center gap-2">
-                {!fixedScopeLabel ? (
-                  <Select
-                    value={projectScope}
-                    onValueChange={(value: ContainerProjectScope) => {
-                      setSelectedIds(new Set())
-                      onProjectScopeChange(value)
-                    }}
-                  >
-                    <SelectTrigger className="h-9 w-[190px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="copenhagen">Copenhagen Central</SelectItem>
-                      <SelectItem value="harbor">Harbor Commercial</SelectItem>
-                      <SelectItem value="all">All permitted projects</SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Badge variant="outline">{fixedScopeLabel}</Badge>
-                )}
+                {fixedScopeLabel ? <Badge variant="outline">{fixedScopeLabel}</Badge> : null}
                 <div className="inline-flex rounded-lg border border-border p-0.5">
                   <Button
                     variant={view === "list" ? "secondary" : "ghost"}

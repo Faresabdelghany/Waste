@@ -162,7 +162,7 @@ export function filterKeyForChipLabel(label: string): BusinessFilterKey | undefi
   return BUSINESS_FILTER_KEYS.find((key) => BUSINESS_FILTER_CHIP_LABELS[key] === label)
 }
 
-/** Removes one chip's value; unknown labels (e.g. the Project scope chip) are untouched. */
+/** Removes one chip's value; labels that are not business filter chips are untouched. */
 export function removeBusinessFilterValue(
   filters: BusinessFilters,
   chipLabel: string,

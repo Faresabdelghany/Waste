@@ -302,6 +302,11 @@ type BusinessWorkspaceProps = {
 
 type ProjectScope = "copenhagen" | "harbor" | "all"
 
+// The header no longer offers a project switcher; generic workspaces run in the
+// default project (the sidebar identity "Copenhagen Central") unless a restricted
+// shell pins a scope via fixedProjectScope.
+const DEFAULT_PROJECT_SCOPE: ProjectScope = "copenhagen"
+
 type AuditEvent = {
   id: string
   action: string
@@ -1142,9 +1147,7 @@ export function BusinessWorkspace({
   const [viewOptions, setViewOptions] = useState<BusinessViewOptions>(
     defaultBusinessViewOptions,
   )
-  const [selectedProjectScope, setSelectedProjectScope] =
-    useState<ProjectScope>("copenhagen")
-  const projectScope = fixedProjectScope ?? selectedProjectScope
+  const projectScope = fixedProjectScope ?? DEFAULT_PROJECT_SCOPE
   const [selectedRecord, setSelectedRecord] = useState<BusinessRecord | null>(null)
   const [editingRecord, setEditingRecord] = useState<BusinessRecord | null>(null)
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
@@ -1587,16 +1590,10 @@ export function BusinessWorkspace({
     }
     return matchingRecords
   }, [businessFilters, query, viewOptions.ordering, visibleScopedRecords])
-  const activeFilterChips = useMemo(() => {
-    const chips = businessFilterChips(businessFilters)
-    if (!fixedProjectScope && projectScope !== "copenhagen") {
-      chips.push({
-        key: "Project",
-        value: projectScope === "harbor" ? "Harbor Commercial" : "All permitted projects",
-      })
-    }
-    return chips
-  }, [businessFilters, fixedProjectScope, projectScope])
+  const activeFilterChips = useMemo(
+    () => businessFilterChips(businessFilters),
+    [businessFilters],
+  )
   // Queue vs rich vs standard table is a property of the module, never of the
   // viewing persona (lib/data/business-view-kinds.ts) — the operator's Tickets
   // page and the service provider workspace render the same rich record table.
@@ -1891,7 +1888,6 @@ export function BusinessWorkspace({
 
   const removeFilterChip = (key: string, value: string) => {
     setBusinessFilters((current) => removeBusinessFilterValue(current, key, value))
-    if (key === "Project") setSelectedProjectScope("copenhagen")
   }
 
   const handleModuleChange = (moduleId: string) => {
@@ -4755,24 +4751,6 @@ export function BusinessWorkspace({
               </div>
 
               <div className="flex items-center gap-2">
-                {!fixedProjectScope && (
-                  <Select
-                    value={projectScope}
-                    onValueChange={(value: ProjectScope) => {
-                      setSelectedProjectScope(value)
-                      setBusinessFilters(emptyBusinessFilters)
-                    }}
-                  >
-                    <SelectTrigger className="h-8 w-[190px] text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="copenhagen">Copenhagen Central</SelectItem>
-                      <SelectItem value="harbor">Harbor Commercial</SelectItem>
-                      <SelectItem value="all">All permitted projects</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
                 {showDeepLinks && activeModule.deepLink && (
                   <Button variant="outline" size="sm" asChild>
                     <Link href={activeModule.deepLink}>

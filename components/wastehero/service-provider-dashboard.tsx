@@ -33,7 +33,6 @@ export function ServiceProviderDashboard() {
     <PerformanceControlRoom
       breadcrumbLabel="Dashboard"
       subtitle="NordRen ApS · Service area CA-Ø-2"
-      scopeOptions={[{ value: "ca-o-2", label: "Service area CA-Ø-2" }]}
       rows={SERVICE_PROVIDER_ROUTE_PERFORMANCE_ROWS}
       series={SERVICE_PROVIDER_THROUGHPUT_SERIES}
       summary={SERVICE_PROVIDER_PORTFOLIO_SUMMARY}

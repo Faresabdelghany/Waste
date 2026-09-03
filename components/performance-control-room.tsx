@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import { format, subDays } from "date-fns"
 import {
   ArrowUp,
-  Buildings,
   CalendarBlank,
   CaretLeft,
   CaretRight,
@@ -87,19 +86,11 @@ const PORTFOLIO_SUMMARY: PerformancePortfolioSummary = {
   resolvedTotal: 128,
 }
 
-type ScopeOption = { value: string; label: string }
-
-const DEFAULT_SCOPE_OPTIONS: ScopeOption[] = [
-  { value: "copenhagen", label: "Copenhagen Central" },
-  { value: "all", label: "All operating projects" },
-]
-
 type HideableTableColumn = "proof" | "exceptions" | "trend"
 
 type PerformanceControlRoomProps = {
   breadcrumbLabel?: string
   subtitle?: string
-  scopeOptions?: ScopeOption[]
   rows?: RoutePerformanceRow[]
   series?: ThroughputPoint[]
   summary?: PerformancePortfolioSummary
@@ -246,7 +237,6 @@ function completionPercent(row: RoutePerformanceRow) {
 export function PerformanceControlRoom({
   breadcrumbLabel = "Route performance",
   subtitle = "Operational delivery and service health",
-  scopeOptions = DEFAULT_SCOPE_OPTIONS,
   rows = ROUTE_PERFORMANCE_ROWS,
   series = THROUGHPUT_SERIES,
   summary = PORTFOLIO_SUMMARY,
@@ -256,7 +246,6 @@ export function PerformanceControlRoom({
   onRouteOpen,
 }: PerformanceControlRoomProps) {
   const router = useRouter()
-  const [scope, setScope] = useState(scopeOptions[0]?.value ?? "copenhagen")
   const [rangeId, setRangeId] = useState<RangeId>("30d")
   const [cadence, setCadence] = useState<Cadence>("daily")
   const [selectedRouteId, setSelectedRouteId] = useState("all")
@@ -538,19 +527,6 @@ export function PerformanceControlRoom({
 
         <div className="flex flex-col gap-2.5 px-3 py-3 sm:px-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={scope} onValueChange={setScope}>
-              <SelectTrigger className="h-8 w-[196px] bg-transparent text-xs">
-                <Buildings className="mr-2 h-4 w-4 text-muted-foreground" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {scopeOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <Select value={rangeId} onValueChange={(value) => setRangeId(value as RangeId)}>
               <SelectTrigger className="h-8 w-[150px] bg-transparent text-xs">
                 <CalendarBlank className="mr-2 h-4 w-4 text-muted-foreground" />
