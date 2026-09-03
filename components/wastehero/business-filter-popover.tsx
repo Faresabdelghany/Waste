@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import {
+  Barcode,
   Buildings,
   CalendarBlank,
   Cube,
@@ -9,9 +10,12 @@ import {
   Flag,
   Funnel,
   IdentificationBadge,
+  MapPin,
   MapTrifold,
+  Path,
   Speedometer,
   Spinner,
+  SteeringWheel,
   Tag,
   Truck,
   UsersThree,
@@ -19,6 +23,15 @@ import {
 } from "@phosphor-icons/react/dist/ssr"
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
+import {
+  BUSINESS_FILTER_CHIP_LABELS,
+  emptyBusinessFilters,
+  singleFilterValue,
+  splitFilterValues,
+  type BusinessFilterKey,
+  type BusinessFilters,
+  type FilterValueReaders,
+} from "@/lib/data/business-filters"
 import { serviceFrequencyOfRecord } from "@/lib/data/service-frequencies"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -30,52 +43,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-export type BusinessFilters = {
-  statuses: string[]
-  sources: string[]
-  freshness: string[]
-  containerTypes: string[]
-  wasteFractions: string[]
-  vehicles: string[]
-  serviceFrequencies: string[]
-  routeSchemes: string[]
-  collectionCalendars: string[]
-  propertyTypes: string[]
-  serviceAreas: string[]
-  serviceScopes: string[]
-  reliabilityBands: string[]
-  roles: string[]
-  ticketTypes: string[]
-  priorities: string[]
-  teams: string[]
-}
-
-type FilterCategory = keyof BusinessFilters
-
-const emptyFilters: BusinessFilters = {
-  statuses: [],
-  sources: [],
-  freshness: [],
-  containerTypes: [],
-  wasteFractions: [],
-  vehicles: [],
-  serviceFrequencies: [],
-  routeSchemes: [],
-  collectionCalendars: [],
-  propertyTypes: [],
-  serviceAreas: [],
-  serviceScopes: [],
-  reliabilityBands: [],
-  roles: [],
-  ticketTypes: [],
-  priorities: [],
-  teams: [],
-}
+// The filter shape lives in the pure lib (lib/data/business-filters.ts) so
+// non-workspace surfaces filter through the same model; re-exported for the
+// existing component importers.
+export type { BusinessFilters }
 
 type FilterDefinition = {
-  id: FilterCategory
+  id: BusinessFilterKey
   label: string
-  icon: typeof Spinner
   values: (record: BusinessRecord) => string[]
   /**
    * When set, the category always offers exactly these values (in this
@@ -89,51 +64,76 @@ type FilterDefinition = {
 import { canonicalCalendarName } from "@/lib/route-schemes/calendar"
 export { canonicalCalendarName }
 
-function singleValue(value: string | undefined) {
-  return value && value !== "—" ? [value] : []
+/** One icon per category, whichever surface offers it. */
+const CATEGORY_ICONS: Readonly<Record<BusinessFilterKey, typeof Spinner>> = {
+  statuses: Spinner,
+  sources: Database,
+  freshness: WifiHigh,
+  containerTypes: Cube,
+  wasteFractions: Database,
+  vehicles: Truck,
+  drivers: SteeringWheel,
+  containers: MapPin,
+  containerIds: Barcode,
+  routes: Path,
+  serviceDates: CalendarBlank,
+  serviceFrequencies: Database,
+  routeSchemes: MapTrifold,
+  collectionCalendars: CalendarBlank,
+  propertyTypes: Buildings,
+  serviceAreas: MapTrifold,
+  serviceScopes: Database,
+  reliabilityBands: Speedometer,
+  roles: IdentificationBadge,
+  ticketTypes: Tag,
+  priorities: Flag,
+  teams: UsersThree,
 }
 
-function fractionValues(value: string | undefined) {
-  if (!value || value === "—") return []
-  return value.split(" · ").map((fraction) => fraction.trim()).filter(Boolean)
+/**
+ * Categories for a surface that passes its own reader set: the same function
+ * fills the popover's option list and decides which rows survive, so the two
+ * can never disagree. Reader declaration order is the category order.
+ */
+function categoriesFromReaders(readers: FilterValueReaders): FilterDefinition[] {
+  return (Object.keys(readers) as BusinessFilterKey[]).flatMap((id) => {
+    const values = readers[id]
+    return values ? [{ id, label: BUSINESS_FILTER_CHIP_LABELS[id], values }] : []
+  })
 }
 
 const defaultCategories: FilterDefinition[] = [
-  { id: "statuses", label: "Status", icon: Spinner, values: (record) => [record.status] },
-  { id: "sources", label: "Source", icon: Database, values: (record) => [record.source] },
-  { id: "freshness", label: "Freshness", icon: WifiHigh, values: (record) => [record.freshness] },
+  { id: "statuses", label: "Status", values: (record) => [record.status] },
+  { id: "sources", label: "Source", values: (record) => [record.source] },
+  { id: "freshness", label: "Freshness", values: (record) => [record.freshness] },
 ]
 
 const containerCategories: FilterDefinition[] = [
-  { id: "statuses", label: "Status", icon: Spinner, values: (record) => [record.status] },
+  { id: "statuses", label: "Status", values: (record) => [record.status] },
   {
     id: "containerTypes",
     label: "Container type",
-    icon: Cube,
-    values: (record) => singleValue(record.facts["Container type"]),
+    values: (record) => singleFilterValue(record.facts["Container type"]),
   },
   {
     id: "wasteFractions",
     label: "Waste fraction",
-    icon: Database,
-    values: (record) => fractionValues(record.facts["Waste fractions"]),
+    values: (record) => splitFilterValues(record.facts["Waste fractions"]),
   },
   {
     id: "vehicles",
     label: "Vehicle",
-    icon: Truck,
-    values: (record) => singleValue(record.facts.Vehicle),
+    values: (record) => singleFilterValue(record.facts.Vehicle),
   },
   {
     id: "serviceFrequencies",
     label: "Service frequency",
-    icon: Database,
     // Typed reference first (issue #20); the fact chain is the legacy
     // fallback — pre-rename records keep the retired "Pickup setting" key
     // (issue #13), and pre-#20 fused strings fold onto catalog names so the
     // facet stays one option per cadence.
     values: (record) =>
-      singleValue(
+      singleFilterValue(
         serviceFrequencyOfRecord(record)?.name ??
           record.facts["Service frequency"] ??
           record.facts["Pickup setting"],
@@ -142,42 +142,36 @@ const containerCategories: FilterDefinition[] = [
   {
     id: "routeSchemes",
     label: "Route scheme",
-    icon: MapTrifold,
-    values: (record) => singleValue(record.facts["Route scheme"]),
+    values: (record) => singleFilterValue(record.facts["Route scheme"]),
   },
   {
     id: "collectionCalendars",
     label: "Collection calendar",
-    icon: CalendarBlank,
-    values: (record) => singleValue(canonicalCalendarName(record.facts["Collection calendar"])),
+    values: (record) => singleFilterValue(canonicalCalendarName(record.facts["Collection calendar"])),
   },
   {
     id: "propertyTypes",
     label: "Property type",
-    icon: Buildings,
-    values: (record) => singleValue(record.facts["Property type"]),
+    values: (record) => singleFilterValue(record.facts["Property type"]),
   },
 ]
 
 const serviceProviderCategories: FilterDefinition[] = [
-  { id: "statuses", label: "Status", icon: Spinner, values: (record) => [record.status] },
+  { id: "statuses", label: "Status", values: (record) => [record.status] },
   {
     id: "serviceAreas",
     label: "Service area",
-    icon: MapTrifold,
-    values: (record) => singleValue(record.facts["Service area"]),
+    values: (record) => singleFilterValue(record.facts["Service area"]),
   },
   {
     id: "serviceScopes",
     label: "Service scope",
-    icon: Database,
-    values: (record) => fractionValues(record.facts["Service scope"]),
+    values: (record) => splitFilterValues(record.facts["Service scope"]),
   },
   {
     id: "reliabilityBands",
     label: "Reliability",
-    icon: Speedometer,
-    values: (record) => singleValue(record.facts["Reliability band"]),
+    values: (record) => singleFilterValue(record.facts["Reliability band"]),
   },
 ]
 
@@ -191,16 +185,14 @@ const serviceProviderUserCategories: FilterDefinition[] = [
   {
     id: "statuses",
     label: "Status",
-    icon: Spinner,
     values: (record) => [record.status],
     options: ["Invited", "Active", "Deactive"],
   },
   {
     id: "roles",
     label: "Role",
-    icon: IdentificationBadge,
     values: (record) =>
-      singleValue(record.facts.Role ?? record.facts["Service provider role"]),
+      singleFilterValue(record.facts.Role ?? record.facts["Service provider role"]),
     options: ["Service provider manager", "Foreman", "Driver", "Read-only viewer"],
   },
 ]
@@ -211,26 +203,23 @@ const serviceProviderUserCategories: FilterDefinition[] = [
 // store the field labels Ticket type/Priority/Assigned team, so both keys are
 // read. Subject and description stay free-text searchable instead.
 const ticketCategories: FilterDefinition[] = [
-  { id: "statuses", label: "Status", icon: Spinner, values: (record) => [record.status] },
+  { id: "statuses", label: "Status", values: (record) => [record.status] },
   {
     id: "ticketTypes",
     label: "Type",
-    icon: Tag,
     values: (record) =>
-      singleValue(record.facts.Type ?? record.facts["Ticket type"]),
+      singleFilterValue(record.facts.Type ?? record.facts["Ticket type"]),
   },
   {
     id: "priorities",
     label: "Priority",
-    icon: Flag,
-    values: (record) => singleValue(record.facts.Priority),
+    values: (record) => singleFilterValue(record.facts.Priority),
   },
   {
     id: "teams",
     label: "Assigned team",
-    icon: UsersThree,
     values: (record) =>
-      singleValue(record.facts.Team ?? record.facts["Assigned team"]),
+      singleFilterValue(record.facts.Team ?? record.facts["Assigned team"]),
   },
 ]
 
@@ -238,6 +227,21 @@ function uniqueSorted(values: string[]) {
   return Array.from(new Set(values.filter(Boolean))).sort((left, right) =>
     left.localeCompare(right),
   )
+}
+
+export type BusinessFilterVariant =
+  | "default"
+  | "containers"
+  | "service-providers"
+  | "service-provider-users"
+  | "tickets"
+
+const CATEGORIES_BY_VARIANT: Readonly<Record<BusinessFilterVariant, FilterDefinition[]>> = {
+  default: defaultCategories,
+  containers: containerCategories,
+  "service-providers": serviceProviderCategories,
+  "service-provider-users": serviceProviderUserCategories,
+  tickets: ticketCategories,
 }
 
 function toggleValue(values: string[], value: string) {
@@ -251,38 +255,39 @@ export function BusinessFilterPopover({
   value,
   onChange,
   variant = "default",
+  readers,
 }: {
   records: BusinessRecord[]
   value: BusinessFilters
   onChange: (filters: BusinessFilters) => void
-  variant?: "default" | "containers" | "service-providers" | "service-provider-users" | "tickets"
+  variant?: BusinessFilterVariant
+  /**
+   * A surface's own reader set (e.g. the scheme detail tabs) — offered in
+   * declaration order instead of the variant's categories, so the popover's
+   * options and the surface's row matching read one function per category.
+   */
+  readers?: FilterValueReaders
 }) {
   const [open, setOpen] = useState(false)
   const [activeCategory, setActiveCategory] =
-    useState<FilterCategory>("statuses")
+    useState<BusinessFilterKey>("statuses")
   const [categorySearch, setCategorySearch] = useState("")
   const [optionSearch, setOptionSearch] = useState("")
   const [draft, setDraft] = useState<BusinessFilters>(value)
 
-  const categories =
-    variant === "containers"
-      ? containerCategories
-      : variant === "service-providers"
-        ? serviceProviderCategories
-        : variant === "service-provider-users"
-          ? serviceProviderUserCategories
-          : variant === "tickets"
-            ? ticketCategories
-            : defaultCategories
+  const categories = useMemo(
+    () => (readers ? categoriesFromReaders(readers) : CATEGORIES_BY_VARIANT[variant]),
+    [readers, variant],
+  )
   const resolvedActiveCategory = categories.some(
     (category) => category.id === activeCategory,
   )
     ? activeCategory
     : categories[0].id
 
-  const options = useMemo<Record<FilterCategory, string[]>>(() => {
-    const next = {} as Record<FilterCategory, string[]>
-    for (const key of Object.keys(emptyFilters) as FilterCategory[]) {
+  const options = useMemo<Record<BusinessFilterKey, string[]>>(() => {
+    const next = {} as Record<BusinessFilterKey, string[]>
+    for (const key of Object.keys(emptyBusinessFilters) as BusinessFilterKey[]) {
       next[key] = []
     }
     for (const category of categories) {
@@ -294,8 +299,8 @@ export function BusinessFilterPopover({
   }, [categories, records])
 
   const counts = useMemo(() => {
-    const next = {} as Record<FilterCategory, Record<string, number>>
-    for (const key of Object.keys(emptyFilters) as FilterCategory[]) {
+    const next = {} as Record<BusinessFilterKey, Record<string, number>>
+    for (const key of Object.keys(emptyBusinessFilters) as BusinessFilterKey[]) {
       next[key] = {}
     }
     for (const category of categories) {
@@ -321,8 +326,8 @@ export function BusinessFilterPopover({
   )
 
   const clear = () => {
-    setDraft(emptyFilters)
-    onChange(emptyFilters)
+    setDraft(emptyBusinessFilters)
+    onChange(emptyBusinessFilters)
   }
 
   return (
@@ -367,7 +372,7 @@ export function BusinessFilterPopover({
             />
             <div className="space-y-1">
               {visibleCategories.map((category) => {
-                const Icon = category.icon
+                const Icon = CATEGORY_ICONS[category.id]
                 const selectionCount = draft[category.id].length
                 return (
                   <button

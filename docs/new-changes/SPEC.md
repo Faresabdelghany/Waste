@@ -75,8 +75,8 @@ Around that core:
 15. As an operations planner, I want a Draft scheme's detail page to lead with a callout listing the current blocking issues and a "Resolve via Edit" action, and its Routes/Stops tabs to explain that generation is blocked, so that the path to fixing it is obvious (D26).
 16. As an operations planner, I want the scheme detail as a full page with Details, Routes, Stops, and Collection Calendar tabs, so that I can inspect everything the scheme produces in one place (D8).
 17. As an operations planner, I want the Details tab organized as five cards — Scheme & scope, Collection calendar, Recurrence, Assignment, Containers & stop rule — reading live canonical data, so that the detail never shows stale display copies (D28i).
-18. As an operations planner, I want the Routes tab to list the scheme's generated routes as Service date · Route ID · Status · Stops · Vehicle · Driver, with the *actual* date, so that I see what will really run (D17).
-19. As an operations planner, I want the Stops tab to show the generated Stops of the scheme's dated routes, filterable by route and date, so that I can verify what each service day serves (D9, D28ii).
+18. As an operations planner, I want the Routes tab to list the scheme's generated routes as Service date · Route ID · Status · Stops · Waste fraction · Vehicle · Driver, with the *actual* date, using the same search, Filter popover (Waste fraction · Vehicle · Driver) and table styling as every other record table, so that I see what will really run (D17, amended 2026-09-03).
+19. As an operations planner, I want the Stops tab to show the generated Stops of the scheme's dated routes as Service date / Route · # · Container · Container ID · Container type · Status · Waste fraction · Driver, filterable through the shared Filter popover on Container · Container ID · Container type · Status · Waste fraction · Driver · Route · Service date, so that I can verify what each service day serves (D9, D28ii amended 2026-09-03).
 20. As an operations planner, I want the Stops tab to be empty before generation — rule matches are a preview, never presented as Stops — so that I never mistake a rule's current matches for planned work (D9).
 21. As an operations planner, I want the Collection Calendar tab to show the shared calendar read-only with an "Open in Plan" link, so that scheme editing never forks or redefines a shared calendar (D10).
 22. As an operations planner, I want the schemes list to show name + description, project · service days, status, recurrence, and collection calendar, with the recurrence summary derived at render time, so that the list is scannable and never shows stale stored display text (D15).
@@ -214,12 +214,16 @@ Draft, requires `effectiveTo`, and never generates or enables Plan Ahead.
     data at render time (D28i). For Draft schemes, a prominent validation callout lists
     current blocking issues from live validation with "Resolve via Edit" (D26).
   - **Routes** — the scheme's generated routes: `Service date | Route ID | Status |
-    Stops | Vehicle | Driver`; service date is the actual generated route date (D17;
-    Collection Deviation moves removed 2026-09-03). Scheme-constant columns (Project, Area)
-    are omitted.
+    Stops | Waste fraction | Vehicle | Driver`; service date is the actual generated
+    route date (D17; Collection Deviation moves removed 2026-09-03). Scheme-constant
+    columns (Project, Area) are omitted. Same toolbar as the workspace tables — search,
+    shared Filter popover (Waste fraction · Vehicle · Driver), removable chips
+    (amended 2026-09-03).
   - **Stops** — generated Stops of the generated dated routes, columns `Service date /
-    Route | # | Stop | Service | Status`, filterable by route/date (D9, D28ii). Rule
-    matches are never presented here pre-generation.
+    Route | # | Container | Container ID | Container type | Status | Waste fraction |
+    Driver`, filtered through the shared Filter popover on Container · Container ID ·
+    Container type · Status · Waste fraction · Driver · Route · Service date (D9, D28ii,
+    amended 2026-09-03). Rule matches are never presented here pre-generation.
   - **Collection Calendar** — read-only view of the selected shared calendar with an
     "Open in Plan" link; the scheme never owns or redefines it (D10).
 - Draft schemes: Routes/Stops tabs show explanatory empty states ("generation is blocked

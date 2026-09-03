@@ -62,7 +62,9 @@ silently preserved.
 - **D9 (Q9) — Scheme Stops tab shows generated Stops** belonging to the dated Routes
   generated from the scheme, filterable by route/date. Resolved rule matches are never
   persisted or presented as Stops before generation (glossary: the Stop Matching Rule
-  stores the rule, never the result).
+  stores the rule, never the result). *Amended 2026-09-03*: the route/date filters are
+  the Route and Service date categories of the shared Filter popover (see D28ii), not
+  standalone selects.
 - **D10 (Q10) — Collection Calendar tab is read-only** with an "Open in Plan" link. The
   scheme selects and uses the shared calendar; it never owns or redefines it.
 - **D11 (Q11) — Route lifecycle unchanged.** `Draft, Planned, Ready, Active, Completed,
@@ -98,6 +100,14 @@ silently preserved.
   `Service date | Route ID | Status | Stops | Vehicle | Driver`. Service date is the
   **actual generated route date**, including any move caused by an approved Collection
   Deviation.
+  *Amended 2026-09-03 (table/filter parity)*: the tab renders the workspace record
+  toolbar (search · shared Filter popover · removable chips) and table styling, with
+  filters **Waste fraction · Vehicle · Driver** and a `Waste fraction` column between
+  Stops and Vehicle; rows open the route's details page like workspace rows. A route's
+  fractions are derived live from the Stops still in its plan (render-time projection,
+  never persisted; Stops a regeneration removed are excluded). The Collection Deviation
+  clause above is superseded — deviations were removed 2026-09-03; holidays are skipped,
+  never moved.
 
 ## Generation & creation-path decisions
 
@@ -188,7 +198,14 @@ calendar, P0 behavior).
   (Scheme & scope, Collection calendar, Recurrence, Assignment, Containers & stop rule),
   all values from canonical scheme/related data, never duplicated display-only values;
   (ii) Stops tab columns `Service date / Route | # | Stop | Service | Status` — generated
-  stops of generated dated routes per D9; (iii) Collection Calendars table adopts
+  stops of generated dated routes per D9 — *amended 2026-09-03 (table/filter parity)*
+  to `Service date / Route | # | Container | Container ID | Container type | Status |
+  Waste fraction | Driver`, filtered through the shared Filter popover on Container ·
+  Container ID · Container type · Status · Waste fraction · Driver · Route · Service
+  date (Route and Service date carry D9's route/date filters; the two standalone
+  selects are retired). Container is the street line of the Stop's address, falling
+  back to its Container ID; Service date is the route's operating date projected onto
+  the Stop at render time; rows open the Stop's route details page; (iii) Collection Calendars table adopts
   artboard 6 columns, "Customer · project" renders only context that exists today (D22),
   Holidays / Next holiday derived from `holidayDates` and the current date;
   (iv) the Routes list star/favorite column is dropped (new capability, out of scope).

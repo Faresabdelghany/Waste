@@ -184,9 +184,16 @@ import { ProgressCircle } from "@/components/progress-circle"
 import { TaskRowBase } from "@/components/tasks/TaskRowBase"
 import {
   BusinessFilterPopover,
-  type BusinessFilters,
   canonicalCalendarName,
 } from "@/components/wastehero/business-filter-popover"
+import {
+  businessFilterChips,
+  emptyBusinessFilters,
+  matchesBusinessQuery,
+  removeBusinessFilterValue,
+  type BusinessFilters,
+} from "@/lib/data/business-filters"
+import { RecordSearchInput } from "@/components/wastehero/record-search-input"
 import {
   canonicalServiceFrequencyName,
   resolveServiceFrequencyValue,
@@ -282,46 +289,6 @@ type BusinessWorkspaceProps = {
 }
 
 type ProjectScope = "copenhagen" | "harbor" | "all"
-
-const emptyBusinessFilters: BusinessFilters = {
-  statuses: [],
-  sources: [],
-  freshness: [],
-  containerTypes: [],
-  wasteFractions: [],
-  vehicles: [],
-  serviceFrequencies: [],
-  routeSchemes: [],
-  collectionCalendars: [],
-  propertyTypes: [],
-  serviceAreas: [],
-  serviceScopes: [],
-  reliabilityBands: [],
-  roles: [],
-  ticketTypes: [],
-  priorities: [],
-  teams: [],
-}
-
-const filterFieldByChipLabel: Record<string, keyof BusinessFilters> = {
-  Status: "statuses",
-  Source: "sources",
-  Freshness: "freshness",
-  "Container type": "containerTypes",
-  "Waste fraction": "wasteFractions",
-  Vehicle: "vehicles",
-  "Service frequency": "serviceFrequencies",
-  "Route scheme": "routeSchemes",
-  "Collection calendar": "collectionCalendars",
-  "Property type": "propertyTypes",
-  "Service area": "serviceAreas",
-  "Service scope": "serviceScopes",
-  Reliability: "reliabilityBands",
-  Role: "roles",
-  Type: "ticketTypes",
-  Priority: "priorities",
-  "Assigned team": "teams",
-}
 
 type AuditEvent = {
   id: string
@@ -1440,7 +1407,6 @@ export function BusinessWorkspace({
   )
 
   const filteredRecords = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase()
     const matchingRecords = visibleScopedRecords.filter((record) => {
       const matchesStatus =
         businessFilters.statuses.length === 0 ||
@@ -1535,20 +1501,7 @@ export function BusinessWorkspace({
         businessFilters.teams.includes(
           (record.facts.Team ?? record.facts["Assigned team"] ?? "").trim(),
         )
-      const matchesQuery =
-        !normalizedQuery ||
-        [
-          record.name,
-          record.context,
-          record.status,
-          record.value,
-          record.description,
-          ...Object.values(record.facts),
-          ...record.related,
-        ]
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedQuery)
+      const matchesQuery = matchesBusinessQuery(record, query)
 
       return (
         matchesStatus &&
@@ -1584,58 +1537,7 @@ export function BusinessWorkspace({
     return matchingRecords
   }, [businessFilters, query, viewOptions.ordering, visibleScopedRecords])
   const activeFilterChips = useMemo(() => {
-    const chips: Array<{ key: string; value: string }> = []
-    businessFilters.statuses.forEach((value) =>
-      chips.push({ key: "Status", value }),
-    )
-    businessFilters.sources.forEach((value) =>
-      chips.push({ key: "Source", value }),
-    )
-    businessFilters.freshness.forEach((value) =>
-      chips.push({ key: "Freshness", value }),
-    )
-    businessFilters.containerTypes.forEach((value) =>
-      chips.push({ key: "Container type", value }),
-    )
-    businessFilters.wasteFractions.forEach((value) =>
-      chips.push({ key: "Waste fraction", value }),
-    )
-    businessFilters.vehicles.forEach((value) =>
-      chips.push({ key: "Vehicle", value }),
-    )
-    businessFilters.serviceFrequencies.forEach((value) =>
-      chips.push({ key: "Service frequency", value }),
-    )
-    businessFilters.routeSchemes.forEach((value) =>
-      chips.push({ key: "Route scheme", value }),
-    )
-    businessFilters.collectionCalendars.forEach((value) =>
-      chips.push({ key: "Collection calendar", value }),
-    )
-    businessFilters.propertyTypes.forEach((value) =>
-      chips.push({ key: "Property type", value }),
-    )
-    businessFilters.serviceAreas.forEach((value) =>
-      chips.push({ key: "Service area", value }),
-    )
-    businessFilters.serviceScopes.forEach((value) =>
-      chips.push({ key: "Service scope", value }),
-    )
-    businessFilters.reliabilityBands.forEach((value) =>
-      chips.push({ key: "Reliability", value }),
-    )
-    businessFilters.roles.forEach((value) =>
-      chips.push({ key: "Role", value }),
-    )
-    businessFilters.ticketTypes.forEach((value) =>
-      chips.push({ key: "Type", value }),
-    )
-    businessFilters.priorities.forEach((value) =>
-      chips.push({ key: "Priority", value }),
-    )
-    businessFilters.teams.forEach((value) =>
-      chips.push({ key: "Assigned team", value }),
-    )
+    const chips = businessFilterChips(businessFilters)
     if (!fixedProjectScope && projectScope !== "copenhagen") {
       chips.push({
         key: "Project",
@@ -1942,15 +1844,7 @@ export function BusinessWorkspace({
   }, [activeModuleId])
 
   const removeFilterChip = (key: string, value: string) => {
-    const filterField = filterFieldByChipLabel[key]
-    if (filterField) {
-      setBusinessFilters((current) => ({
-        ...current,
-        [filterField]: current[filterField].filter(
-          (candidate) => candidate !== value,
-        ),
-      }))
-    }
+    setBusinessFilters((current) => removeBusinessFilterValue(current, key, value))
     if (key === "Project") setSelectedProjectScope("copenhagen")
   }
 
@@ -4711,15 +4605,11 @@ export function BusinessWorkspace({
           {showFilters && (
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-1 flex-wrap items-center gap-2 min-w-[260px]">
-                <div className="relative min-w-[220px] max-w-sm flex-1">
-                  <MagnifyingGlass className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder={`Search ${activeModule.entityLabel.toLowerCase()}s`}
-                    className="h-8 pl-9 text-sm"
-                  />
-                </div>
+                <RecordSearchInput
+                  value={query}
+                  onChange={setQuery}
+                  placeholder={`Search ${activeModule.entityLabel.toLowerCase()}s`}
+                />
                 <BusinessFilterPopover
                   records={visibleScopedRecords}
                   value={businessFilters}

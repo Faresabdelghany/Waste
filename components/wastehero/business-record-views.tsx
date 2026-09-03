@@ -113,7 +113,7 @@ function RecordStatusBadge({ status }: { status: string }) {
   )
 }
 
-function NoMatchingRecords() {
+export function NoMatchingRecords() {
   return (
     <div className="flex h-52 flex-col items-center justify-center gap-2 text-center">
       <MagnifyingGlass className="h-6 w-6 text-muted-foreground" />

@@ -501,7 +501,15 @@ export function staleGenerationPickup(
     description: reason,
     facts: { ...pickup.facts, Deviation: reason },
     allowedTransitions: [],
+    // Structured marker so readers can tell "left the plan at regeneration"
+    // from a Stop skipped in execution without parsing display strings.
+    submittedValues: { ...pickup.submittedValues, removedFromPlan: "true" },
   }
+}
+
+/** True for a Stop a regeneration removed from its route's plan (kept as a Skipped record, never deleted). */
+export function pickupRemovedFromPlan(pickup: BusinessRecord): boolean {
+  return stringValueOf(pickup, "removedFromPlan") === "true"
 }
 
 /**

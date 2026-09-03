@@ -9,6 +9,7 @@
 // generated (D9).
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
 import {
@@ -23,6 +24,14 @@ import {
   Warning,
 } from "@phosphor-icons/react/dist/ssr"
 
+import {
+  applyBusinessFilters,
+  businessFilterChips,
+  emptyBusinessFilters,
+  removeBusinessFilterValue,
+  type BusinessFilters,
+  type FilterValueReaders,
+} from "@/lib/data/business-filters"
 import type {
   BusinessRecord,
   ModuleDefinition,
@@ -56,6 +65,15 @@ import {
 import { isPlanAheadEnabled, setPlanAhead } from "@/lib/route-schemes/plan-ahead"
 import { schemeAreaName } from "@/lib/route-schemes/scheme-list"
 import {
+  SCHEME_ROUTE_FILTER_READERS,
+  SCHEME_STOP_FILTER_READERS,
+  routeWasteFractionsLabel,
+  schemeStopContainerLabel,
+  schemeStopContainerType,
+  withRouteWasteFractions,
+  withStopServiceDate,
+} from "@/lib/route-schemes/scheme-tabs"
+import {
   SERVICE_DAY_SHORT_LABELS,
   formatServiceDate,
   recurrenceFromValues,
@@ -75,13 +93,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
   Table,
   TableBody,
   TableCell,
@@ -94,11 +105,17 @@ import {
   useTablePagination,
 } from "@/components/ui/table-pagination"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ChipOverflow } from "@/components/chip-overflow"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { StatRow } from "@/components/projects/StatRow"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { BusinessFilterPopover } from "@/components/wastehero/business-filter-popover"
 import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
-import { statusClasses } from "@/components/wastehero/business-record-views"
+import {
+  NoMatchingRecords,
+  statusClasses,
+} from "@/components/wastehero/business-record-views"
+import { RecordSearchInput } from "@/components/wastehero/record-search-input"
 import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
 
 const GENERATED_AT_FORMAT = new Intl.DateTimeFormat("en-GB", {
@@ -257,10 +274,13 @@ export function SchemeDetailsPage({
 
   // Generated Stops (D9): the pickups written with the scheme's dated routes.
   // Empty before generation — rule matches are never presented as Stops.
+  const schemePickups = useMemo(
+    () => allPickups.filter((pickup) => stringValueOf(pickup, "schemeId") === record.id),
+    [allPickups, record.id],
+  )
   const schemeStops = useMemo(
     () =>
-      allPickups
-        .filter((pickup) => stringValueOf(pickup, "schemeId") === record.id)
+      schemePickups
         .map((pickup) => {
           const route = routesById.get(stringValueOf(pickup, "routeId") ?? "")
           return {
@@ -277,7 +297,7 @@ export function SchemeDetailsPage({
             a.date.localeCompare(b.date) ||
             Number(a.pickup.facts.Stop ?? 0) - Number(b.pickup.facts.Stop ?? 0),
         ),
-    [allPickups, record.id, routesById],
+    [routesById, schemePickups],
   )
 
   const calendarId = stringValue(values, "calendarId")
@@ -434,6 +454,7 @@ export function SchemeDetailsPage({
         <TabsContent value="routes" className="mt-0 min-h-0 flex-1 overflow-y-auto">
           <SchemeRoutesTab
             routes={schemeRoutes}
+            pickups={schemePickups}
             generationBlocked={!canGenerate}
           />
         </TabsContent>
@@ -747,53 +768,168 @@ function SchemeDetailsTab({
   )
 }
 
+/* ------------------------------- Tab toolbar ------------------------------ */
+
+/**
+ * The workspace record toolbar — search, the shared Filter popover, removable
+ * chips — so the Routes and Stops tabs filter exactly like every other table.
+ * `readers` is the tab's reader set: the popover's options and the tab's row
+ * matching read one function per category.
+ */
+function SchemeTabToolbar({
+  query,
+  onQueryChange,
+  placeholder,
+  records,
+  filters,
+  onFiltersChange,
+  readers,
+}: {
+  query: string
+  onQueryChange: (query: string) => void
+  placeholder: string
+  records: BusinessRecord[]
+  filters: BusinessFilters
+  onFiltersChange: (filters: BusinessFilters) => void
+  readers: FilterValueReaders
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-1 flex-wrap items-center gap-2 min-w-[260px]">
+        <RecordSearchInput
+          value={query}
+          onChange={onQueryChange}
+          placeholder={placeholder}
+        />
+        <BusinessFilterPopover
+          records={records}
+          value={filters}
+          onChange={onFiltersChange}
+          readers={readers}
+        />
+      </div>
+      <ChipOverflow
+        chips={businessFilterChips(filters)}
+        onRemove={(key, value) =>
+          onFiltersChange(removeBusinessFilterValue(filters, key, value))
+        }
+        maxVisible={4}
+      />
+    </div>
+  )
+}
+
+/** "12 records" / "3 of 12 records" — the workspace record-count line. */
+function recordCountLabel(shown: number, total: number) {
+  return shown === total ? `${total} records` : `${shown} of ${total} records`
+}
+
+function routeDetailsHref(routeId: string) {
+  return `/route-studio?module=routes&record=${routeId}`
+}
+
+/** The workspace's clickable-row contract: button role, keyboard activation, hover. */
+function recordRowProps(label: string, onOpen: () => void) {
+  return {
+    role: "button" as const,
+    tabIndex: 0,
+    "aria-label": `Open ${label}`,
+    className:
+      "cursor-pointer hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset",
+    onClick: onOpen,
+    onKeyDown: (event: React.KeyboardEvent) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault()
+        onOpen()
+      }
+    },
+  }
+}
+
 /* -------------------------------- Routes tab ------------------------------ */
 
 function SchemeRoutesTab({
   routes,
+  pickups,
   generationBlocked,
 }: {
   routes: readonly BusinessRecord[]
+  /** The scheme's generated Stops — a route's waste fractions derive from them. */
+  pickups: readonly BusinessRecord[]
   /** Generation cannot run right now — blocking issues or unsaved Draft. */
   generationBlocked: boolean
 }) {
+  const router = useRouter()
+  const [query, setQuery] = useState("")
+  const [filters, setFilters] = useState<BusinessFilters>(emptyBusinessFilters)
+
+  // Render-time projection only (never persisted): each route carries the
+  // fractions its planned Stops serve so the table cell, the popover's
+  // options and the row matching read one value.
+  const rows = useMemo(
+    () => routes.map((route) => withRouteWasteFractions(route, pickups)),
+    [pickups, routes],
+  )
+  const filtered = useMemo(
+    () => applyBusinessFilters(rows, filters, SCHEME_ROUTE_FILTER_READERS, query),
+    [filters, query, rows],
+  )
   const { page, setPage, pageCount, pageRows, totalCount } =
-    useTablePagination(routes)
+    useTablePagination(filtered)
   const generatedStamp = lastGeneratedAt(routes)
 
   return (
-    <div className="p-4">
-      <div className="overflow-hidden rounded-xl border border-border">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5 text-xs text-muted-foreground">
-          <span>
-            {routes.length} generated route{routes.length === 1 ? "" : "s"}
-          </span>
+    <div className="space-y-4 p-4">
+      <SchemeTabToolbar
+        query={query}
+        onQueryChange={(next) => {
+          setQuery(next)
+          setPage(1)
+        }}
+        placeholder="Search routes"
+        records={rows}
+        filters={filters}
+        onFiltersChange={(next) => {
+          setFilters(next)
+          setPage(1)
+        }}
+        readers={SCHEME_ROUTE_FILTER_READERS}
+      />
+
+      <section className="overflow-hidden rounded-xl border border-border/60">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
+          <p className="text-xs text-muted-foreground">
+            {recordCountLabel(filtered.length, rows.length)}
+          </p>
           {generatedStamp && (
-            <span>
+            <p className="text-xs text-muted-foreground">
               Last generated {GENERATED_AT_FORMAT.format(new Date(generatedStamp))}
-            </span>
+            </p>
           )}
         </div>
         <div className="overflow-x-auto">
-          <Table className="min-w-[820px]">
-            <TableHeader className="bg-muted/30">
-              <TableRow className="hover:bg-transparent">
-                {["Service date", "Route ID", "Status", "Stops", "Vehicle", "Driver"].map(
-                  (head) => (
-                    <TableHead
-                      key={head}
-                      className="text-xs font-medium text-muted-foreground"
-                    >
-                      {head}
-                    </TableHead>
-                  ),
-                )}
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableHead>Service date</TableHead>
+                <TableHead>Route ID</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Stops</TableHead>
+                <TableHead>Waste fraction</TableHead>
+                <TableHead>Vehicle</TableHead>
+                <TableHead>Driver</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {routes.length === 0 ? (
+              {filtered.length === 0 && rows.length > 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-52 text-center">
+                  <TableCell colSpan={7}>
+                    <NoMatchingRecords />
+                  </TableCell>
+                </TableRow>
+              ) : rows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-52 text-center">
                     <ArrowsClockwise className="mx-auto h-6 w-6 text-muted-foreground" />
                     {generationBlocked ? (
                       <>
@@ -824,26 +960,28 @@ function SchemeRoutesTab({
                   // The shared deviation seam (issue #26) — never raw facts reads.
                   const deviationNote = routeDeviationNote(route)
                   return (
-                    <TableRow key={route.id} className="hover:bg-muted/60">
-                      <TableCell className="min-w-[180px] py-3">
-                        <p className="text-sm font-medium">
-                          {operatingDate ? formatServiceDate(operatingDate) : "—"}
-                        </p>
-                        {deviationNote && (
-                          <p className="mt-0.5 max-w-56 truncate text-xs text-amber-700 dark:text-amber-400">
-                            {deviationNote}
+                    <TableRow
+                      key={route.id}
+                      {...recordRowProps(route.name, () =>
+                        router.push(routeDetailsHref(route.id)),
+                      )}
+                    >
+                      <TableCell className="min-w-[180px]">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-foreground">
+                            {operatingDate ? formatServiceDate(operatingDate) : "—"}
                           </p>
-                        )}
+                          {deviationNote && (
+                            <p className="max-w-[340px] truncate text-xs text-amber-700 dark:text-amber-400">
+                              {deviationNote}
+                            </p>
+                          )}
+                        </div>
                       </TableCell>
-                      <TableCell className="py-3">
-                        <Link
-                          href={`/route-studio?module=routes&record=${route.id}`}
-                          className="font-mono text-xs underline-offset-4 hover:underline"
-                        >
-                          {route.name}
-                        </Link>
+                      <TableCell className="whitespace-nowrap text-sm text-foreground">
+                        {route.name}
                       </TableCell>
-                      <TableCell className="py-3">
+                      <TableCell>
                         <Badge
                           variant="outline"
                           className={cn(
@@ -854,13 +992,16 @@ function SchemeRoutesTab({
                           {route.status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="py-3 text-sm">
+                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                         {route.facts.Stops ?? "0"}
                       </TableCell>
-                      <TableCell className="py-3 text-sm">
+                      <TableCell className="min-w-[140px] text-sm text-muted-foreground">
+                        {routeWasteFractionsLabel(route) ?? "—"}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                         {route.facts.Vehicle ?? "Unassigned"}
                       </TableCell>
-                      <TableCell className="py-3 text-sm">
+                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                         {route.facts.Driver ?? "Unassigned"}
                       </TableCell>
                     </TableRow>
@@ -876,7 +1017,7 @@ function SchemeRoutesTab({
           totalCount={totalCount}
           onPageChange={setPage}
         />
-      </div>
+      </section>
     </div>
   )
 }
@@ -898,92 +1039,82 @@ function SchemeStopsTab({
   /** Generation cannot run right now — blocking issues or unsaved Draft. */
   generationBlocked: boolean
 }) {
-  const [routeFilter, setRouteFilter] = useState("all")
-  const [dateFilter, setDateFilter] = useState("all")
+  const router = useRouter()
+  const [query, setQuery] = useState("")
+  const [filters, setFilters] = useState<BusinessFilters>(emptyBusinessFilters)
 
-  const routeOptions = useMemo(
-    () =>
-      [...new Set(stops.map((stop) => stop.pickup.facts.Route).filter(Boolean))] as string[],
+  // Render-time projection only (never persisted): each Stop carries its
+  // route's operating date so the Service date filter reads it like any fact.
+  const pickups = useMemo(
+    () => stops.map((stop) => withStopServiceDate(stop.pickup, stop.date)),
     [stops],
   )
-  const dateOptions = useMemo(
-    () => [...new Set(stops.map((stop) => stop.date).filter(Boolean))],
-    [stops],
-  )
-  const filtered = stops.filter(
-    (stop) =>
-      (routeFilter === "all" || stop.pickup.facts.Route === routeFilter) &&
-      (dateFilter === "all" || stop.date === dateFilter),
-  )
+  const filtered = useMemo(() => {
+    const kept = new Set(
+      applyBusinessFilters(pickups, filters, SCHEME_STOP_FILTER_READERS, query).map(
+        (pickup) => pickup.id,
+      ),
+    )
+    return stops.filter((stop) => kept.has(stop.pickup.id))
+  }, [filters, pickups, query, stops])
   const { page, setPage, pageCount, pageRows, totalCount } =
     useTablePagination(filtered)
 
+  // A Stop opens the dated route it belongs to — the Route details page owns
+  // stop-level work.
+  const stopRouteId = (stop: SchemeStopRow) =>
+    stop.route?.id ?? stringValueOf(stop.pickup, "routeId")
+
   return (
-    <div className="p-4">
-      <div className="overflow-hidden rounded-xl border border-border">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
-          <span className="text-xs text-muted-foreground">
-            {filtered.length} stop{filtered.length === 1 ? "" : "s"}
-          </span>
-          {stops.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <Select value={routeFilter} onValueChange={(value) => {
-                setRouteFilter(value)
-                setPage(1)
-              }}>
-                <SelectTrigger className="h-8 w-40 text-xs">
-                  <SelectValue placeholder="Route" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All routes</SelectItem>
-                  {routeOptions.map((route) => (
-                    <SelectItem key={route} value={route}>
-                      {route}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={dateFilter} onValueChange={(value) => {
-                setDateFilter(value)
-                setPage(1)
-              }}>
-                <SelectTrigger className="h-8 w-44 text-xs">
-                  <SelectValue placeholder="Service date" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All dates</SelectItem>
-                  {dateOptions.map((date) => (
-                    <SelectItem key={date} value={date}>
-                      {formatServiceDate(date)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+    <div className="space-y-4 p-4">
+      <SchemeTabToolbar
+        query={query}
+        onQueryChange={(next) => {
+          setQuery(next)
+          setPage(1)
+        }}
+        placeholder="Search stops"
+        records={pickups}
+        filters={filters}
+        onFiltersChange={(next) => {
+          setFilters(next)
+          setPage(1)
+        }}
+        readers={SCHEME_STOP_FILTER_READERS}
+      />
+
+      <section className="overflow-hidden rounded-xl border border-border/60">
+        <div className="border-b border-border px-4 py-2">
+          <p className="text-xs text-muted-foreground">
+            {recordCountLabel(filtered.length, stops.length)}
+          </p>
         </div>
         <div className="overflow-x-auto">
-          <Table className="min-w-[820px]">
-            <TableHeader className="bg-muted/30">
-              <TableRow className="hover:bg-transparent">
-                {["Service date / Route", "#", "Stop", "Service", "Status"].map(
-                  (head) => (
-                    <TableHead
-                      key={head}
-                      className="text-xs font-medium text-muted-foreground"
-                    >
-                      {head}
-                    </TableHead>
-                  ),
-                )}
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableHead>Service date / Route</TableHead>
+                <TableHead>#</TableHead>
+                <TableHead>Container</TableHead>
+                <TableHead>Container ID</TableHead>
+                <TableHead>Container type</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Waste fraction</TableHead>
+                <TableHead>Driver</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
+              {filtered.length === 0 && stops.length > 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-52 text-center">
+                  <TableCell colSpan={8}>
+                    <NoMatchingRecords />
+                  </TableCell>
+                </TableRow>
+              ) : stops.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-52 text-center">
                     <MapPin className="mx-auto h-6 w-6 text-muted-foreground" />
-                    {generationBlocked && stops.length === 0 ? (
+                    {generationBlocked ? (
                       <>
                         <p className="mt-2 text-sm font-medium">
                           Route generation is blocked by scheme validation
@@ -993,7 +1124,7 @@ function SchemeStopsTab({
                           blocking issues via Edit on the Details tab first.
                         </p>
                       </>
-                    ) : stops.length === 0 ? (
+                    ) : (
                       <>
                         <p className="mt-2 text-sm font-medium">No Stops yet</p>
                         <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
@@ -1001,58 +1132,64 @@ function SchemeStopsTab({
                           matches on the Details tab are a preview, never Stops.
                         </p>
                       </>
-                    ) : (
-                      <p className="mt-2 text-sm font-medium">
-                        No stops match the current filters
-                      </p>
                     )}
                   </TableCell>
                 </TableRow>
               ) : (
-                pageRows.map(({ pickup, date }) => (
-                  <TableRow key={pickup.id} className="hover:bg-muted/60">
-                    <TableCell className="min-w-[200px] py-3">
-                      <p className="text-sm font-medium">
-                        {date ? formatServiceDate(date) : "—"}
-                      </p>
-                      <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                        {pickup.facts.Route ?? "—"}
-                      </p>
-                    </TableCell>
-                    <TableCell className="py-3 text-sm tabular-nums">
-                      {pickup.facts.Stop ?? "—"}
-                    </TableCell>
-                    <TableCell className="min-w-[220px] py-3">
-                      <p className="text-sm font-medium">
-                        {pickup.facts.Address?.split(",")[0] ?? pickup.name}
-                      </p>
-                      {pickup.facts["Container ID"] && (
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {pickup.facts["Container ID"]}
-                        </p>
-                      )}
-                    </TableCell>
-                    <TableCell className="py-3 text-sm">
-                      {[
-                        pickup.facts["Waste fraction"] ?? "Collection",
-                        pickup.facts["Container Type"],
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </TableCell>
-                    <TableCell className="py-3">
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                          statusClasses(pickup.status),
-                        )}
-                      >
-                        {pickup.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))
+                pageRows.map((stop) => {
+                  const { pickup, date } = stop
+                  const routeId = stopRouteId(stop)
+                  return (
+                    <TableRow
+                      key={pickup.id}
+                      {...(routeId
+                        ? recordRowProps(pickup.facts.Route ?? "route", () =>
+                            router.push(routeDetailsHref(routeId)),
+                          )
+                        : {})}
+                    >
+                      <TableCell className="min-w-[200px]">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-foreground">
+                            {date ? formatServiceDate(date) : "—"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {pickup.facts.Route ?? "—"}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm tabular-nums text-muted-foreground">
+                        {pickup.facts.Stop ?? "—"}
+                      </TableCell>
+                      <TableCell className="min-w-[180px] text-sm text-foreground">
+                        {schemeStopContainerLabel(pickup) ?? "—"}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                        {pickup.facts["Container ID"] ?? "—"}
+                      </TableCell>
+                      <TableCell className="min-w-[160px] text-sm text-muted-foreground">
+                        {schemeStopContainerType(pickup) ?? "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                            statusClasses(pickup.status),
+                          )}
+                        >
+                          {pickup.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="min-w-[130px] text-sm text-muted-foreground">
+                        {pickup.facts["Waste fraction"] ?? "—"}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                        {pickup.facts.Driver ?? "—"}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
               )}
             </TableBody>
           </Table>
@@ -1063,7 +1200,7 @@ function SchemeStopsTab({
           totalCount={totalCount}
           onPageChange={setPage}
         />
-      </div>
+      </section>
     </div>
   )
 }
