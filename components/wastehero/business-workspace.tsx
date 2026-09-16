@@ -271,6 +271,7 @@ import {
 } from "@/components/settings/commercial-registries-store"
 import { ServiceProviderDetailsPage } from "@/components/wastehero/service-provider-details-page"
 import { ContainerDetailsSheet } from "@/components/wastehero/containers-assets-register"
+import { MapPlanningView } from "@/components/wastehero/map-planning/map-planning-view"
 import { RouteDetailsPage } from "@/components/wastehero/route-details-page"
 import { TicketDetailsDialog } from "@/components/tickets/TicketDetailsDialog"
 import { useOrganizationStore } from "@/components/settings/organization-store"
@@ -1179,6 +1180,9 @@ export function BusinessWorkspace({
     activeModuleGrants === null || activeModuleGrants.includes(action)
   const isContainersAssetsView =
     workspace.id === "resources" && activeModule.id === "containers"
+  // Map Planning (2026-09-16) renders its own page below the header: no
+  // search, filter, or table rows — the map owns its toolbar.
+  const isMapPlanningView = workspace.id === "plan" && activeModule.id === "map-planning"
   const primaryModuleIds =
     primaryModuleIdsByWorkspace[workspace.id] ??
     workspace.modules.slice(0, 4).map((module) => module.id)
@@ -1469,6 +1473,27 @@ export function BusinessWorkspace({
       ),
     [scopedRecords],
   )
+  // Map Planning reads other modules' records in the workspace's project
+  // scope: the containers and properties it draws, and the routes and
+  // pickups its collection window consults.
+  const mapPlanningRecords = useMemo(() => {
+    if (!isMapPlanningView) return null
+    const inScope = (record: BusinessRecord) => {
+      if (projectScope === "all") return true
+      const recordScope = recordProject(record)
+      return recordScope === "all" || recordScope === projectScope
+    }
+    return {
+      containers: moduleRecords("resources", "containers").filter(inScope),
+      properties: moduleRecords("customers", "properties").filter(inScope),
+      routes: moduleRecords("route-studio", "routes"),
+      pickups: moduleRecords("route-studio", "pickups"),
+    }
+  }, [isMapPlanningView, moduleRecords, projectScope])
+  const containersModuleDefinition = getModuleDefinition({
+    workspaceId: "resources",
+    moduleId: "containers",
+  })
 
   const filteredRecords = useMemo(() => {
     const matchingRecords = visibleScopedRecords.filter((record) => {
@@ -4712,6 +4737,7 @@ export function BusinessWorkspace({
           )}
         </div>
 
+        {!isMapPlanningView && (
         <div className="flex flex-col gap-3 px-4 py-3">
           {workspace.modules.length > 1 && (
             <div
@@ -4764,7 +4790,7 @@ export function BusinessWorkspace({
             </div>
           )}
 
-          {showFilters && (
+          {showFilters && !isMapPlanningView && (
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-1 flex-wrap items-center gap-2 min-w-[260px]">
                 <RecordSearchInput
@@ -4839,7 +4865,7 @@ export function BusinessWorkspace({
               </div>
             </div>
           )}
-          {showFilters && (
+          {showFilters && !isMapPlanningView && (
             <ChipOverflow
               chips={activeFilterChips}
               onRemove={removeFilterChip}
@@ -4847,8 +4873,20 @@ export function BusinessWorkspace({
             />
           )}
         </div>
+        )}
       </header>
 
+      {isMapPlanningView && mapPlanningRecords && containersModuleDefinition ? (
+        <MapPlanningView
+          containers={mapPlanningRecords.containers}
+          properties={mapPlanningRecords.properties}
+          routes={mapPlanningRecords.routes}
+          pickups={mapPlanningRecords.pickups}
+          containersModule={containersModuleDefinition}
+          canCreateScheme={hasGrant("create")}
+          onCreateScheme={handleGuidedSchemeCreate}
+        />
+      ) : (
       <div className="flex-1 min-h-0 overflow-y-auto p-4">
         <div className="mx-auto max-w-[1500px] space-y-4">
           <section className="flex flex-col gap-1">
@@ -5422,6 +5460,7 @@ export function BusinessWorkspace({
 
         </div>
       </div>
+      )}
 
       {isTicketDetails && selectedRecord ? (
         <TicketDetailsDialog record={selectedRecord} onClose={closeRecord} />
