@@ -807,10 +807,9 @@ function selectedProjectIds(
 ): string[] {
   const selectedProjectId =
     typeof values.projectId === "string" ? values.projectId : ""
-  if (
-    selectedProjectId === FIXTURE_PROJECT_IDS.copenhagen ||
-    selectedProjectId === FIXTURE_PROJECT_IDS.harbor
-  ) {
+  // A chosen project scopes the record — any project record, not only the
+  // two the workspace scope switch knows (Cairo Operations, round 3).
+  if (selectedProjectId.startsWith("project-")) {
     return [selectedProjectId]
   }
   if (projectScope === "all") {
@@ -826,6 +825,7 @@ function selectedProjectIds(
 function projectScopeLabel(projectIds: readonly string[]) {
   if (projectIds.length > 1) return "All permitted projects"
   if (projectIds[0] === FIXTURE_PROJECT_IDS.harbor) return "Harbor Commercial"
+  if (projectIds[0] === FIXTURE_PROJECT_IDS.cairo) return "Cairo Operations"
   return "Copenhagen Central"
 }
 
@@ -1676,8 +1676,8 @@ export function BusinessWorkspace({
     )
   }, [activeRecords, getRecords, isSchemesView])
   // Derived Collection Calendars presentation (issue #27, D28iii): the table's
-  // Working days / Holidays / Validity cells derive from each record's
-  // structured submittedValues.
+  // Holidays / Validity cells derive from each record's structured
+  // submittedValues (working days left the calendar for the project, round 3).
   const calendarRowsById = useMemo(() => {
     if (!isCalendarsView) return new Map<string, CalendarRowSummary>()
     const today = todayIso()
@@ -1817,8 +1817,9 @@ export function BusinessWorkspace({
         activeFactColumns.length +
         1
       : 3 +
-        // Working days / Holidays / Validity on the calendars table (#27).
-        (isCalendarsView ? 3 : 0) +
+        // Holidays / Validity on the calendars table (#27; working days
+        // left the calendar for the project, round 3).
+        (isCalendarsView ? 2 : 0) +
         Number(viewOptions.showContext) +
         Number(viewOptions.showUpdated)
   const isFleetPlanningView =
@@ -3607,6 +3608,7 @@ export function BusinessWorkspace({
             vehicles: moduleRecords("fleet", "vehicles"),
             allocations: moduleRecords("fleet", "vehicle-planning"),
             calendarRecords: moduleRecords("plan", "calendars"),
+            projectRecords: moduleRecords("configure", "organization"),
           },
         )
         updatedRecord = schemeEdit.scheme
@@ -4228,6 +4230,7 @@ export function BusinessWorkspace({
         calendarRecords: calendarsModule
           ? getRecords("plan", calendarsModule.id, calendarsModule.records)
           : [],
+        projectRecords: moduleRecords("configure", "organization"),
       },
     )
     const creationEvent: AuditEvent = {
@@ -4326,6 +4329,7 @@ export function BusinessWorkspace({
         vehicles: moduleRecords("fleet", "vehicles"),
         allocations: moduleRecords("fleet", "vehicle-planning"),
         calendarRecords: moduleRecords("plan", "calendars"),
+        projectRecords: moduleRecords("configure", "organization"),
       },
     )
     updatedRecord = schemeEdit.scheme
@@ -5000,7 +5004,6 @@ export function BusinessWorkspace({
                             <TableHead>Status</TableHead>
                             {isCalendarsView && (
                               <>
-                                <TableHead>Working days</TableHead>
                                 <TableHead>Holidays</TableHead>
                                 <TableHead>Validity</TableHead>
                               </>
@@ -5302,9 +5305,6 @@ export function BusinessWorkspace({
                                 </TableCell>
                                 {isCalendarsView && (
                                   <>
-                                    <TableCell className="min-w-[110px] whitespace-nowrap text-sm text-muted-foreground">
-                                      {calendarRowsById.get(record.id)?.workingDays ?? "—"}
-                                    </TableCell>
                                     <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                                       {calendarRowsById.get(record.id)?.holidays ?? "—"}
                                     </TableCell>

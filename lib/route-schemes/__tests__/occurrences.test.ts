@@ -14,12 +14,20 @@ import {
   shiftedNote,
   shiftToWorkingDay,
 } from "../occurrences"
-import { REGRESSION_HOLIDAY_DATES, weekdays } from "./holiday-fixture"
+import {
+  DANISH_WEEKEND,
+  EGYPT_WEEKEND,
+  REGRESSION_HOLIDAY_DATES,
+  calendarOf,
+  weekdays,
+} from "./holiday-fixture"
 
 const holidays = holidayListFromDates(REGRESSION_HOLIDAY_DATES)
+const calendar = calendarOf(holidays, DANISH_WEEKEND)
+const noHolidays = calendarOf(NO_HOLIDAYS, DANISH_WEEKEND)
 
 describe("occurrencePreview — regression values (Mon–Fri weekly from 13 Sep 2026, open-ended)", () => {
-  const preview = occurrencePreview({ recurrence: weekdays, holidayPolicy: "shift-next", holidays })
+  const preview = occurrencePreview({ recurrence: weekdays, holidayPolicy: "shift-next", calendar })
 
   test("shift-next → 261 collections in 12 months, none skipped", () => {
     assert.equal(preview.ongoing, true)
@@ -66,7 +74,7 @@ describe("occurrencePreview — regression values (Mon–Fri weekly from 13 Sep 
   })
 
   test("skip → 9 skipped, 252 collections", () => {
-    const skipped = occurrencePreview({ recurrence: weekdays, holidayPolicy: "skip", holidays })
+    const skipped = occurrencePreview({ recurrence: weekdays, holidayPolicy: "skip", calendar })
     assert.equal(skipped.rows.filter((row) => row.status === "skipped").length, 9)
     assert.equal(skipped.count, 252)
     const eve = skipped.rows.find((row) => row.plannedDate === "2026-12-24")
@@ -88,7 +96,7 @@ describe("occurrencePreview — regression values (Mon–Fri weekly from 13 Sep 
 
 describe("holiday policies", () => {
   test("collect keeps the row on the holiday and counts it", () => {
-    const preview = occurrencePreview({ recurrence: weekdays, holidayPolicy: "collect", holidays })
+    const preview = occurrencePreview({ recurrence: weekdays, holidayPolicy: "collect", calendar })
     const row = preview.rows.find((row) => row.plannedDate === "2026-12-24")
     assert.ok(row)
     assert.equal(row.status, "holiday")
@@ -97,7 +105,7 @@ describe("holiday policies", () => {
   })
 
   test("shift-prev moves Fri 25 Dec back to Wed 23 Dec, past the Thu 24 holiday", () => {
-    const preview = occurrencePreview({ recurrence: weekdays, holidayPolicy: "shift-prev", holidays })
+    const preview = occurrencePreview({ recurrence: weekdays, holidayPolicy: "shift-prev", calendar })
     const row = preview.rows.find((row) => row.plannedDate === "2026-12-25")
     assert.ok(row)
     assert.equal(row.status, "shifted")
@@ -108,7 +116,7 @@ describe("holiday policies", () => {
     const preview = occurrencePreview({
       recurrence: { ...weekdays, serviceDays: ["saturday"], effectiveTo: "2026-10-31" },
       holidayPolicy: "shift-next",
-      holidays,
+      calendar,
     })
     assert.equal(preview.count, 7)
     assert.ok(preview.rows.every((row) => row.status === "planned"))
@@ -117,7 +125,7 @@ describe("holiday policies", () => {
       recurrence: { ...weekdays, serviceDays: ["saturday"] },
       window: { from: "2026-12-20", to: "2026-12-31" },
       holidayPolicy: "shift-next",
-      holidays,
+      calendar,
     })
     assert.deepEqual(
       christmas.map((row) => [row.plannedDate, row.date, row.status]),
@@ -129,7 +137,7 @@ describe("holiday policies", () => {
     const preview = occurrencePreview({
       recurrence: { ...weekdays, effectiveTo: "2026-09-30" },
       holidayPolicy: "shift-next",
-      holidays: NO_HOLIDAYS,
+      calendar: noHolidays,
     })
     assert.equal(preview.ongoing, false)
     assert.equal(preview.horizon, "2026-09-30")
@@ -144,7 +152,7 @@ describe("holiday policies", () => {
       recurrence: weekdays,
       window: { from: "2026-10-05", to: "2026-10-09" },
       holidayPolicy: "skip",
-      holidays: list,
+      calendar: calendarOf(list, DANISH_WEEKEND),
     })
     assert.deepEqual(
       rows.map((row) => [row.date, row.status, row.note]),
@@ -164,7 +172,7 @@ describe("occurrencePreview — window edge cases", () => {
     const preview = occurrencePreview({
       recurrence: { ...weekdays, effectiveTo: "2026-09-01" },
       holidayPolicy: "shift-next",
-      holidays,
+      calendar,
     })
     assert.equal(preview.rows.length, 0)
     assert.equal(preview.count, 0)
@@ -175,7 +183,7 @@ describe("occurrencePreview — window edge cases", () => {
     const preview = occurrencePreview({
       recurrence: { ...weekdays, serviceDays: [] },
       holidayPolicy: "shift-next",
-      holidays,
+      calendar,
     })
     assert.equal(preview.rows.length, 0)
   })
@@ -190,7 +198,7 @@ describe("occurrencePreview — window edge cases", () => {
         effectiveTo: "2026-10-31",
       },
       holidayPolicy: "skip",
-      holidays,
+      calendar,
     })
     assert.deepEqual(
       preview.rows.map((row) => [row.date, row.week]),
@@ -212,7 +220,7 @@ describe("occurrencePreview — window edge cases", () => {
         effectiveTo: "2026-12-31",
       },
       holidayPolicy: "skip",
-      holidays,
+      calendar,
     })
     assert.deepEqual(
       preview.rows.map((row) => row.date),
@@ -234,12 +242,21 @@ describe("date helpers", () => {
     assert.equal(formatClockTime(""), "")
   })
 
-  test("working days exclude weekends and the holiday list", () => {
-    assert.equal(isWorkingDay(holidays, "2026-12-23"), true)
-    assert.equal(isWorkingDay(holidays, "2026-12-24"), false)
-    assert.equal(isWorkingDay(holidays, "2026-12-27"), false)
-    assert.equal(shiftToWorkingDay(holidays, "2026-12-25", 1), "2026-12-28")
-    assert.equal(shiftToWorkingDay(NO_HOLIDAYS, "2026-09-18", 1), "2026-09-21")
-    assert.equal(shiftToWorkingDay(NO_HOLIDAYS, "2026-09-21", -1), "2026-09-18")
+  test("working days exclude the project's weekend and its holiday list", () => {
+    assert.equal(isWorkingDay(calendar, "2026-12-23"), true)
+    assert.equal(isWorkingDay(calendar, "2026-12-24"), false)
+    assert.equal(isWorkingDay(calendar, "2026-12-27"), false)
+    assert.equal(shiftToWorkingDay(calendar, "2026-12-25", 1), "2026-12-28")
+    assert.equal(shiftToWorkingDay(noHolidays, "2026-09-18", 1), "2026-09-21")
+    assert.equal(shiftToWorkingDay(noHolidays, "2026-09-21", -1), "2026-09-18")
+  })
+
+  test("the weekend is the project's, not Saturday/Sunday: Sunday works and Friday rests in Egypt", () => {
+    const egypt = calendarOf(NO_HOLIDAYS, EGYPT_WEEKEND)
+    assert.equal(isWorkingDay(egypt, "2026-09-13"), true)
+    assert.equal(isWorkingDay(egypt, "2026-09-18"), false)
+    assert.equal(isWorkingDay(egypt, "2026-09-19"), false)
+    assert.equal(shiftToWorkingDay(egypt, "2026-09-17", 1), "2026-09-20")
+    assert.equal(shiftToWorkingDay(egypt, "2026-09-20", -1), "2026-09-17")
   })
 })

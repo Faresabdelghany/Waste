@@ -18,6 +18,7 @@ export const FIXTURE_COMPANY_ID = "company-wastehero-dk"
 export const FIXTURE_PROJECT_IDS = {
   copenhagen: "project-copenhagen",
   harbor: "project-harbor",
+  cairo: "project-cairo",
 } as const
 
 export const FIXTURE_SERVICE_PROVIDER_IDS = {
@@ -210,6 +211,16 @@ const harborFixtureRecordIds = [
   "marketplace-order-2908",
 ] as const
 
+// Cairo Operations (round 3, 2026-09-16): the Friday–Saturday-weekend project
+// the working-week model is proven against — its per-year holiday calendars
+// and one planning area.
+const cairoFixtureRecordIds = [
+  "project-cairo",
+  "calendar-cairo-2026",
+  "calendar-cairo-2027",
+  "area-cairo-nasr",
+] as const
+
 const companyWideFixtureRecordIds = [
   "product-res-240",
   "product-card-660",
@@ -321,6 +332,7 @@ function buildFixtureRecordScopeRegistry(): Readonly<
 
   register(copenhagenFixtureRecordIds, [FIXTURE_PROJECT_IDS.copenhagen])
   register(harborFixtureRecordIds, [FIXTURE_PROJECT_IDS.harbor])
+  register(cairoFixtureRecordIds, [FIXTURE_PROJECT_IDS.cairo])
   register(seededCopenhagenContainerRecordIds, [FIXTURE_PROJECT_IDS.copenhagen])
   register(seededHarborContainerRecordIds, [FIXTURE_PROJECT_IDS.harbor])
   register(seededCopenhagenPropertyRecordIds, [FIXTURE_PROJECT_IDS.copenhagen])
@@ -2203,7 +2215,7 @@ const plan: WorkspaceDefinition = {
       id: "calendars",
       label: "Collection Calendars",
       title: "Collection Calendars",
-      description: "Working days, holidays, and validity periods that decide which planned service dates are valid.",
+      description: "Holidays and validity periods, maintained per project and year, that decide which planned service dates are valid.",
       entityLabel: "Calendar",
       // Calendars are project-scoped (D22) — there is no customer or service
       // scoping in the model, so the list never claims one.
@@ -2216,8 +2228,8 @@ const plan: WorkspaceDefinition = {
       metrics: [],
       lifecycle: ["Draft", "Active", "Superseded", "Archived"],
       rules: [
-        "Working days, holidays, and the validity period decide whether a planned date is valid.",
-        "Holiday and non-working dates are skipped at generation; service is never moved to another date.",
+        "The project's holiday list and the validity period decide whether a planned date is valid; the working week is a project attribute.",
+        "Each scheme's holiday policy decides whether a collection on a holiday shifts to a working day, skips, or goes ahead.",
         "Time zone is display information; generation is day-granular.",
       ],
       records: [
@@ -2237,8 +2249,8 @@ const plan: WorkspaceDefinition = {
             "Operations Admin",
             "25–26 Dec",
             "1 week ago",
-            "Project collection calendar with Danish holidays and local working-day rules.",
-            { WeekStart: "Monday", Holidays: "11", WorkingDays: "Mon–Fri", Timezone: "Europe/Copenhagen", Validity: "1 Jan – 31 Dec 2026" },
+            "Project collection calendar with the Danish holidays of 2026.",
+            { WeekStart: "Monday", Holidays: "11", Timezone: "Europe/Copenhagen", Validity: "1 Jan – 31 Dec 2026" },
             ["38 route schemes", "1,602 properties", "11 holidays"],
             "Project configuration",
             "1 week",
@@ -2247,7 +2259,6 @@ const plan: WorkspaceDefinition = {
           submittedValues: {
             calendarName: "Copenhagen Central 2026",
             weekStart: "monday",
-            workingDays: "monday, tuesday, wednesday, thursday, friday",
             holidayDates:
               "2026-01-01, 2026-04-02, 2026-04-03, 2026-04-05, 2026-04-06, 2026-05-14, 2026-05-24, 2026-05-25, 2026-06-05, 2026-12-25, 2026-12-26",
             validFrom: "2026-01-01",
@@ -2268,7 +2279,7 @@ const plan: WorkspaceDefinition = {
             "1 Jan",
             "2 days ago",
             "Project collection calendar with the Danish holidays of 2027.",
-            { WeekStart: "Monday", Holidays: "11", WorkingDays: "Mon–Fri", Timezone: "Europe/Copenhagen", Validity: "1 Jan – 31 Dec 2027" },
+            { WeekStart: "Monday", Holidays: "11", Timezone: "Europe/Copenhagen", Validity: "1 Jan – 31 Dec 2027" },
             ["38 route schemes", "1,602 properties", "11 holidays"],
             "Project configuration",
             "2 days",
@@ -2277,7 +2288,6 @@ const plan: WorkspaceDefinition = {
           submittedValues: {
             calendarName: "Copenhagen Central 2027",
             weekStart: "monday",
-            workingDays: "monday, tuesday, wednesday, thursday, friday",
             holidayDates:
               "2027-01-01, 2027-03-25, 2027-03-26, 2027-03-28, 2027-03-29, 2027-05-06, 2027-05-16, 2027-05-17, 2027-06-05, 2027-12-25, 2027-12-26",
             validFrom: "2027-01-01",
@@ -2297,7 +2307,7 @@ const plan: WorkspaceDefinition = {
             "Not published",
             "Yesterday",
             "Draft project calendar for Harbor Offices service, awaiting agreement activation.",
-            { WeekStart: "Monday", Holidays: "None scheduled", WorkingDays: "Tue/Fri", Timezone: "Europe/Copenhagen", Validity: "1 Sep 2026 – 31 Aug 2027" },
+            { WeekStart: "Monday", Holidays: "None scheduled", Timezone: "Europe/Copenhagen", Validity: "1 Sep 2026 – 31 Aug 2027" },
             ["Draft agreement AGR-2512", "6 properties", "1 route scheme draft"],
             "Draft agreement",
             "Yesterday",
@@ -2306,11 +2316,64 @@ const plan: WorkspaceDefinition = {
           submittedValues: {
             calendarName: "Harbor Offices service calendar",
             weekStart: "monday",
-            workingDays: "tuesday, friday",
             holidayDates: "",
             validFrom: "2026-09-01",
             validTo: "2027-08-31",
             timezone: "Europe/Copenhagen",
+          },
+        },
+        // Cairo Operations keeps its own per-year lists (round 3): Egyptian
+        // public holidays. Eid dates follow the lunar calendar and are
+        // maintained by hand each year.
+        {
+          ...record(
+            "calendar-cairo-2026",
+            "Cairo Operations 2026",
+            "Cairo Operations · Africa/Cairo",
+            "Active",
+            "Operations Admin",
+            "6 Oct",
+            "3 days ago",
+            "Project collection calendar with the Egyptian public holidays of late 2026.",
+            { WeekStart: "Sunday", Holidays: "1", Timezone: "Africa/Cairo", Validity: "1 Sep – 31 Dec 2026" },
+            ["1 route scheme", "1 holiday"],
+            "Project configuration",
+            "3 days",
+            ["Create next year", "Archive"],
+          ),
+          submittedValues: {
+            calendarName: "Cairo Operations 2026",
+            weekStart: "sunday",
+            holidayDates: "2026-10-06",
+            validFrom: "2026-09-01",
+            validTo: "2026-12-31",
+            timezone: "Africa/Cairo",
+          },
+        },
+        {
+          ...record(
+            "calendar-cairo-2027",
+            "Cairo Operations 2027",
+            "Cairo Operations · Africa/Cairo",
+            "Active",
+            "Operations Admin",
+            "7 Jan",
+            "3 days ago",
+            "Project collection calendar with the Egyptian public holidays of 2027.",
+            { WeekStart: "Sunday", Holidays: "8", Timezone: "Africa/Cairo", Validity: "1 Jan – 31 Dec 2027" },
+            ["1 route scheme", "8 holidays"],
+            "Project configuration",
+            "3 days",
+            ["Create next year", "Archive"],
+          ),
+          submittedValues: {
+            calendarName: "Cairo Operations 2027",
+            weekStart: "sunday",
+            holidayDates:
+              "2027-01-07, 2027-01-25, 2027-03-08, 2027-03-09, 2027-04-25, 2027-05-01, 2027-06-30, 2027-07-23",
+            validFrom: "2027-01-01",
+            validTo: "2027-12-31",
+            timezone: "Africa/Cairo",
           },
         },
       ],
@@ -5636,21 +5699,26 @@ const configure: WorkspaceDefinition = {
           "Today",
           ["Suspended", "Archive"],
         ),
-        record(
-          "project-copenhagen",
-          "Copenhagen Central",
-          "Project · municipality",
-          "Active",
-          "Project Admin",
-          "Core + Live + Invoicing",
-          "Today",
-          "Municipal operating scope with local calendar, areas, fleet, routes, customers, and finance configuration.",
-          { Language: "Danish", Currency: "DKK", Timezone: "Europe/Copenhagen", WeekStart: "Monday" },
-          ["62 users", "12 operating areas", "2,481 properties", "38 route schemes"],
-          "Project settings",
-          "Today",
-          ["Suspended", "Archive"],
-        ),
+        // The working week is a project attribute (round 3): `weekend` holds
+        // the weekdays the project rests on, read by resolveProjectCalendar.
+        {
+          ...record(
+            "project-copenhagen",
+            "Copenhagen Central",
+            "Project · municipality",
+            "Active",
+            "Project Admin",
+            "Core + Live + Invoicing",
+            "Today",
+            "Municipal operating scope with local calendar, areas, fleet, routes, customers, and finance configuration.",
+            { Language: "Danish", Currency: "DKK", Timezone: "Europe/Copenhagen", WeekStart: "Monday", Weekend: "Sat–Sun" },
+            ["62 users", "12 operating areas", "2,481 properties", "38 route schemes"],
+            "Project settings",
+            "Today",
+            ["Suspended", "Archive"],
+          ),
+          submittedValues: { weekend: "saturday, sunday" },
+        },
         record(
           "project-harbor",
           "Harbor Commercial",
@@ -5666,6 +5734,25 @@ const configure: WorkspaceDefinition = {
           "Yesterday",
           ["Active", "Archive"],
         ),
+        // Egypt rests Friday–Saturday: a Thursday holiday shifts to Sunday.
+        {
+          ...record(
+            "project-cairo",
+            "Cairo Operations",
+            "Project · municipality",
+            "Active",
+            "Project Admin",
+            "Core + Live",
+            "3 days ago",
+            "Municipal operating scope in Cairo with a Sunday–Thursday working week.",
+            { Language: "Arabic", Currency: "EGP", Timezone: "Africa/Cairo", WeekStart: "Sunday", Weekend: "Fri–Sat" },
+            ["8 users", "1 operating area", "1 route scheme"],
+            "Project settings",
+            "3 days",
+            ["Suspended", "Archive"],
+          ),
+          submittedValues: { weekend: "friday, saturday" },
+        },
       ],
     },
     {
@@ -5880,6 +5967,21 @@ const configure: WorkspaceDefinition = {
           ["Harbor warehouse", "1 notification zone"],
           "Project geography",
           "1 week",
+          ["Create version", "Archive"],
+        ),
+        record(
+          "area-cairo-nasr",
+          "Nasr City Operations",
+          "Planning area · Cairo Operations",
+          "Active",
+          "Operations Admin",
+          "11.3 km²",
+          "3 days ago",
+          "Planning geography for the Cairo Operations Nasr City collections.",
+          { Code: "OP-CAI-01", Boundary: "Valid", Properties: "0", Routes: "Sun–Thu" },
+          ["1 route scheme"],
+          "Project geography",
+          "3 days",
           ["Create version", "Archive"],
         ),
       ],

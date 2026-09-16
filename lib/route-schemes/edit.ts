@@ -25,7 +25,7 @@ import {
   type GenerationSummary,
   type GenerationWindow,
 } from "./generation"
-import { schemeHolidayList } from "./holidays"
+import { schemeGenerationCalendar } from "./project-calendar"
 import { recordSchemeGeneration, schemeLiveValidation } from "./lifecycle"
 import { addDays } from "./recurrence"
 import { count } from "./text"
@@ -88,8 +88,10 @@ export type SchemeEditReconciliationRelated = {
   vehicles?: readonly BusinessRecord[]
   /** Vehicle Planning allocation records (issue #11 cross-check). */
   allocations?: readonly BusinessRecord[]
-  /** Collection Calendar records; the scheme's holiday list resolves here. */
+  /** Collection Calendar records; the scheme's project holiday list resolves here. */
   calendarRecords?: readonly BusinessRecord[]
+  /** Project records (configure.organization); the scheme's project weekend resolves here. */
+  projectRecords?: readonly BusinessRecord[]
 }
 
 export type SchemeEditReconciliationOutcome =
@@ -248,7 +250,10 @@ export function planSchemeEditReconciliation(
       window,
       existingRoutes: related.existingRoutes,
       containers: related.containers,
-      holidays: schemeHolidayList(validated, related.calendarRecords),
+      calendar: schemeGenerationCalendar(validated, {
+        projects: related.projectRecords,
+        calendars: related.calendarRecords,
+      }),
     })
     if (!plan) return failed()
     const result = applySchemeGeneration({

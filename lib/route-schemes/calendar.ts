@@ -1,13 +1,14 @@
 // Collection Calendar model. Pure data logic — no UI or store dependencies.
-// A calendar record carries working days, holiday dates, and a validity
-// period; since the 2026-09-16 holiday model only its holiday DATES feed the
-// scheme engine (lib/route-schemes/holidays.ts builds the holiday list from
-// them). Working days and validity are display data for the Collection
-// Calendars list. Timezone is display-only (Q9): all date math is day-granular
-// ISO.
+// A calendar record carries holiday dates and a validity period; since the
+// 2026-09-16 holiday model only its holiday DATES feed the scheme engine
+// (lib/route-schemes/holidays.ts builds the holiday list from them). The
+// working week is a PROJECT attribute (project-calendar.ts, round 3) — the
+// calendar-level working days were retired so the weekend is defined once.
+// Validity is display data for the Collection Calendars list. Timezone is
+// display-only (Q9): all date math is day-granular ISO.
 
 import type { BusinessRecord } from "../data/business-modules"
-import { isIsoDate, parseServiceDays, type ServiceDay } from "./recurrence"
+import { isIsoDate } from "./recurrence"
 import { stringValue } from "./validation"
 
 export type CollectionCalendar = {
@@ -15,8 +16,6 @@ export type CollectionCalendar = {
   name: string
   /** Record lifecycle status (Draft, Active, Superseded, Archived). */
   status: string
-  /** Weekdays service may operate on; empty = unknown, no constraint. */
-  workingDays: ServiceDay[]
   /** ISO dates that are non-working holidays. */
   holidayDates: string[]
   /** ISO; empty = open-ended. */
@@ -63,9 +62,6 @@ export function calendarFromRecord(
 ): CollectionCalendar | null {
   if (!record) return null
   const values = record.submittedValues ?? {}
-  const workingDays = parseServiceDays(
-    typeof values.workingDays === "string" ? values.workingDays : "",
-  )
   const holidayDates = parseHolidayDates(
     typeof values.holidayDates === "string" ? values.holidayDates : undefined,
   )
@@ -73,19 +69,13 @@ export function calendarFromRecord(
   const validToRaw = stringValue(values, "validTo") ?? ""
   const validFrom = isIsoDate(validFromRaw) ? validFromRaw : ""
   const validTo = isIsoDate(validToRaw) ? validToRaw : ""
-  if (
-    workingDays.length === 0 &&
-    holidayDates.length === 0 &&
-    !validFrom &&
-    !validTo
-  ) {
+  if (holidayDates.length === 0 && !validFrom && !validTo) {
     return null
   }
   return {
     id: record.id,
     name: record.name,
     status: record.status,
-    workingDays,
     holidayDates,
     validFrom,
     validTo,

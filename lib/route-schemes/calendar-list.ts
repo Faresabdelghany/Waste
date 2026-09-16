@@ -62,7 +62,7 @@ export function formatHolidaySpan(span: string[]): string {
   return `${dayMonth(first)} – ${dayMonth(last)}`
 }
 
-/** "Mon–Fri" for a contiguous Monday-first run, "Tue/Fri" otherwise. */
+/** "Mon–Fri" for a contiguous Monday-first run, "Tue/Fri" otherwise — any weekday set (service days, a weekend). */
 export function formatWorkingDays(days: ServiceDay[]): string {
   if (days.length === 0) return EMPTY
   const ordered = [...days].sort(
@@ -93,14 +93,12 @@ export function formatValidity(validFrom: string, validTo: string): string {
 }
 
 export type CalendarRowSummary = {
-  workingDays: string
   holidays: string
   validity: string
   nextHoliday: string
 }
 
 const EMPTY_ROW: CalendarRowSummary = {
-  workingDays: EMPTY,
   holidays: EMPTY,
   validity: EMPTY,
   nextHoliday: EMPTY,
@@ -114,7 +112,6 @@ export function calendarRowSummary(
   const calendar = calendarFromRecord(record)
   if (!calendar) return EMPTY_ROW
   return {
-    workingDays: formatWorkingDays(calendar.workingDays),
     holidays: String(calendar.holidayDates.length),
     validity: formatValidity(calendar.validFrom, calendar.validTo),
     nextHoliday: formatHolidaySpan(nextHolidaySpan(calendar.holidayDates, today)),

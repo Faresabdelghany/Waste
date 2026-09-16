@@ -31,7 +31,7 @@ import {
   planSchemeGeneration,
   type PlannedRouteAction,
 } from "@/lib/route-schemes/generation"
-import { schemeHolidayList } from "@/lib/route-schemes/holidays"
+import { schemeGenerationCalendar } from "@/lib/route-schemes/project-calendar"
 import {
   recordSchemeGeneration,
   schemeGenerationRecorded,
@@ -81,6 +81,7 @@ export function SchemeGenerateRoutesDialog({
   const existingPickups = useModuleRecords("route-studio", "pickups")
   const schemeRecords = useModuleRecords("route-studio", "schemes")
   const calendarRecords = useModuleRecords("plan", "calendars")
+  const projectRecords = useModuleRecords("configure", "organization")
   const containers = useModuleRecords("resources", "containers")
   const { upsertRecord } = useBusinessRecordStore()
 
@@ -95,7 +96,10 @@ export function SchemeGenerateRoutesDialog({
       // Rule-mode schemes (issue #19) resolve their stop-matching rules
       // against the live container records at plan time.
       containers,
-      holidays: schemeHolidayList(scheme, calendarRecords),
+      calendar: schemeGenerationCalendar(scheme, {
+        projects: projectRecords,
+        calendars: calendarRecords,
+      }),
     })
     if (!plan) return null
     return {
@@ -114,6 +118,7 @@ export function SchemeGenerateRoutesDialog({
     existingRoutes,
     existingPickups,
     calendarRecords,
+    projectRecords,
     containers,
     actorName,
   ])

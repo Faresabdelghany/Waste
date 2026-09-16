@@ -8,10 +8,10 @@ import {
   holidaySourceLabel,
   projectHolidayList,
   projectHolidaySource,
-  schemeHolidayList,
   schemeHolidayListName,
   schemeProjectId,
 } from "../holidays"
+import { schemeGenerationCalendar } from "../project-calendar"
 
 function stub(
   id: string,
@@ -54,7 +54,6 @@ const calendars: BusinessRecord[] = [
   stub("cal-2026", "Copenhagen Central 2026", {
     projectIds: ["project-copenhagen"],
     submittedValues: {
-      workingDays: "monday, tuesday",
       holidayDates: "2026-12-25, 2026-12-26",
       validFrom: "2026-01-01",
       validTo: "2026-12-31",
@@ -64,10 +63,10 @@ const calendars: BusinessRecord[] = [
   stub("cal-user", "User list", {
     submittedValues: { projectId: "project-copenhagen", holidayDates: "2026-06-05" },
   }),
-  // Harbor's calendar carries working days only — no holiday list.
+  // Harbor's calendar carries no holiday dates — no holiday list.
   stub("cal-harbor", "Harbor Offices service calendar", {
     projectIds: ["project-harbor"],
-    submittedValues: { workingDays: "tuesday, friday", holidayDates: "" },
+    submittedValues: { holidayDates: "", validFrom: "2026-09-01" },
   }),
 ]
 
@@ -120,10 +119,12 @@ describe("scheme holiday list", () => {
     assert.equal(schemeProjectId(typed), "project-copenhagen")
     assert.equal(schemeProjectId(scoped), "project-copenhagen")
     assert.equal(schemeProjectId(none), undefined)
-    assert.equal(schemeHolidayList(typed, calendars).size, 5)
-    assert.equal(schemeHolidayList(scoped, calendars).size, 5)
-    assert.equal(schemeHolidayList(none, calendars).size, 0)
     const projects = [copenhagen, harbor]
+    const holidaysOf = (scheme: BusinessRecord) =>
+      schemeGenerationCalendar(scheme, { projects, calendars }).holidays.size
+    assert.equal(holidaysOf(typed), 5)
+    assert.equal(holidaysOf(scoped), 5)
+    assert.equal(holidaysOf(none), 0)
     assert.equal(schemeHolidayListName(typed, calendars, projects), "Danish public holidays")
     assert.equal(schemeHolidayListName(stub("s4", "Harbor", { projectIds: ["project-harbor"] }), calendars, projects), "—")
   })

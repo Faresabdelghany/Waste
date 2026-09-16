@@ -5,12 +5,22 @@ import type { BusinessRecord } from "../../data/business-modules"
 import { planSchemeGeneration } from "../generation"
 import { holidayListFromDates } from "../holidays"
 import { occurrencePreview, type HolidayPolicy } from "../occurrences"
-import { REGRESSION_HOLIDAY_DATES, weekdays } from "./holiday-fixture"
+import type { SchemeRecurrence } from "../recurrence"
+import {
+  DANISH_WEEKEND,
+  EGYPT_HOLIDAY_DATES,
+  EGYPT_WEEKEND,
+  REGRESSION_HOLIDAY_DATES,
+  calendarOf,
+  sunToThu,
+  weekdays,
+} from "./holiday-fixture"
 
 const holidays = holidayListFromDates(REGRESSION_HOLIDAY_DATES)
+const calendar = calendarOf(holidays, DANISH_WEEKEND)
 
-/** A stored Mon–Fri weekly scheme in the legacy single-group manual shape. */
-function scheme(holidayPolicy: HolidayPolicy): BusinessRecord {
+/** A stored weekly scheme in the legacy single-group manual shape. */
+function scheme(holidayPolicy: HolidayPolicy, recurrence: SchemeRecurrence = weekdays): BusinessRecord {
   return {
     id: "scheme-parity",
     name: "Parity",
@@ -27,9 +37,9 @@ function scheme(holidayPolicy: HolidayPolicy): BusinessRecord {
     allowedTransitions: [],
     submittedValues: {
       schemeName: "Parity",
-      frequency: weekdays.frequency,
-      serviceDays: weekdays.serviceDays.join(", "),
-      effectiveFrom: weekdays.effectiveFrom,
+      frequency: recurrence.frequency,
+      serviceDays: recurrence.serviceDays.join(", "),
+      effectiveFrom: recurrence.effectiveFrom,
       effectiveTo: "",
       holidayPolicy,
       stopSelection: "manual",
@@ -41,30 +51,61 @@ function scheme(holidayPolicy: HolidayPolicy): BusinessRecord {
 
 const window = { from: "2026-09-13", to: "2027-09-13" }
 
+// Preview / generation parity runs per project × policy: the calendar (holiday
+// list + weekend) is one input both sides receive, so a Danish Mon–Fri scheme
+// and an Egyptian Sun–Thu scheme must each agree with their own preview.
+const PROJECTS = [
+  { name: "Copenhagen (Sat–Sun weekend)", recurrence: weekdays, calendar },
+  {
+    name: "Cairo (Fri–Sat weekend)",
+    recurrence: sunToThu,
+    calendar: calendarOf(holidayListFromDates(EGYPT_HOLIDAY_DATES), EGYPT_WEEKEND),
+  },
+] as const
+
 describe("generation applies the holiday policy through the shared occurrence generator", () => {
-  for (const policy of ["shift-next", "shift-prev", "skip", "collect"] as const) {
-    test(`${policy}: generated (serviceDate, actualDate) pairs equal the preview rows`, () => {
-      const plan = planSchemeGeneration({
-        scheme: scheme(policy),
-        window,
-        existingRoutes: [],
-        containers: [],
-        holidays,
+  for (const project of PROJECTS) {
+    for (const policy of ["shift-next", "shift-prev", "skip", "collect"] as const) {
+      test(`${project.name} · ${policy}: generated (serviceDate, actualDate) pairs equal the preview rows`, () => {
+        const plan = planSchemeGeneration({
+          scheme: scheme(policy, project.recurrence),
+          window,
+          existingRoutes: [],
+          containers: [],
+          calendar: project.calendar,
+        })
+        assert.ok(plan)
+        const preview = occurrencePreview({
+          recurrence: project.recurrence,
+          holidayPolicy: policy,
+          calendar: project.calendar,
+        })
+        const generated = plan.routes
+          .filter((route) => route.action === "create")
+          .map((route) => [route.serviceDate, route.actualDate])
+          .sort()
+        const previewed = preview.rows
+          .filter((row) => row.status !== "skipped")
+          .map((row) => [row.plannedDate, row.date])
+          .sort()
+        assert.deepEqual(generated, previewed)
+        assert.equal(generated.length, preview.count)
       })
-      assert.ok(plan)
-      const preview = occurrencePreview({ recurrence: weekdays, holidayPolicy: policy, holidays })
-      const generated = plan.routes
-        .filter((route) => route.action === "create")
-        .map((route) => [route.serviceDate, route.actualDate])
-        .sort()
-      const previewed = preview.rows
-        .filter((row) => row.status !== "skipped")
-        .map((row) => [row.plannedDate, row.date])
-        .sort()
-      assert.deepEqual(generated, previewed)
-      assert.equal(generated.length, preview.count)
-    })
+    }
   }
+
+  test("Cairo · shift-next: Thu 7 Jan 2027 operates on Sun 10 Jan 2027", () => {
+    const plan = planSchemeGeneration({
+      scheme: scheme("shift-next", sunToThu),
+      window,
+      existingRoutes: [],
+      containers: [],
+      calendar: PROJECTS[1].calendar,
+    })
+    assert.ok(plan)
+    const route = plan.routes.find((candidate) => candidate.serviceDate === "2027-01-07")
+    assert.equal(route?.actualDate, "2027-01-10")
+  })
 
   test("shift-next: 261 routes, 24 and 25 Dec operate on Mon 28 Dec, Easter 2027 on Tue 30 Mar", () => {
     const plan = planSchemeGeneration({
@@ -72,7 +113,7 @@ describe("generation applies the holiday policy through the shared occurrence ge
       window,
       existingRoutes: [],
       containers: [],
-      holidays,
+      calendar,
     })
     assert.ok(plan)
     const creates = plan.routes.filter((route) => route.action === "create")
@@ -94,7 +135,7 @@ describe("generation applies the holiday policy through the shared occurrence ge
       window,
       existingRoutes: [],
       containers: [],
-      holidays,
+      calendar,
     })
     assert.ok(plan)
     const omitted = plan.routes.filter((route) => route.action === "omit")
@@ -109,7 +150,7 @@ describe("generation applies the holiday policy through the shared occurrence ge
       window: { from: "2026-12-21", to: "2026-12-31" },
       existingRoutes: [],
       containers: [],
-      holidays,
+      calendar,
     })
     assert.ok(plan)
     const eve = plan.routes.find((route) => route.serviceDate === "2026-12-24")
@@ -126,7 +167,7 @@ describe("generation applies the holiday policy through the shared occurrence ge
       window: { from: "2026-12-21", to: "2026-12-31" },
       existingRoutes: [],
       containers: [],
-      holidays,
+      calendar,
     })
     assert.ok(plan)
     assert.equal(plan.routes.filter((route) => route.action === "omit").length, 3)

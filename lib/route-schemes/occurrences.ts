@@ -7,13 +7,16 @@
 //
 // Holiday policies:
 //   shift-next / shift-prev  move the collection to the nearest working day in
-//                            that direction — a working day is a Monday–Friday
-//                            that is not a holiday, and the search keeps going
-//                            past further holidays and weekends;
+//                            that direction — a working day is one that is
+//                            neither on the project's weekend nor on its
+//                            holiday list, and the search keeps going past
+//                            further holidays and weekend days;
 //   skip                     drop the collection;
 //   collect                  keep it on the holiday.
-// Weekends only matter as shift targets: a scheme whose service days include
-// Saturday collects on Saturdays.
+// The weekend comes from the project (project-calendar.ts) — Egypt rests
+// Friday–Saturday, so a Thursday holiday shifts to Sunday there. Nothing here
+// knows which weekdays a weekend holds. Weekend days only matter as shift
+// targets: a scheme whose service days include Saturday collects on Saturdays.
 
 import {
   addDays,
@@ -23,6 +26,7 @@ import {
   serviceDayOf,
   SERVICE_DAY_SHORT_LABELS,
   type SchemeRecurrence,
+  type ServiceDay,
 } from "./recurrence"
 
 export const HOLIDAY_POLICIES = ["shift-next", "shift-prev", "skip", "collect"] as const
@@ -42,6 +46,17 @@ export const isHolidayPolicy = (value: unknown): value is HolidayPolicy =>
 export type HolidayList = ReadonlyMap<string, string>
 
 export const NO_HOLIDAYS: HolidayList = new Map()
+
+/**
+ * The calendar a scheme's dates are judged against — its project's holiday
+ * list and weekend as ONE input, so the preview and generation cannot
+ * disagree on what a working day is.
+ */
+export type SchemeCalendar = {
+  holidays: HolidayList
+  /** The weekdays the project rests on; never assumed. */
+  weekend: readonly ServiceDay[]
+}
 
 export type OccurrenceStatus = "planned" | "shifted" | "skipped" | "holiday"
 
@@ -65,7 +80,7 @@ export type GenerateOccurrencesInput = {
   recurrence: SchemeRecurrence
   window: OccurrenceWindow
   holidayPolicy: HolidayPolicy
-  holidays: HolidayList
+  calendar: SchemeCalendar
 }
 
 export type OccurrencePreview = {
@@ -108,24 +123,23 @@ export function formatClockTime(time: string | undefined): string {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`
 }
 
-const isWeekend = (iso: string) => {
-  const day = serviceDayOf(iso)
-  return day === "saturday" || day === "sunday"
-}
-
-/** A Monday–Friday that is not on the holiday list. */
-export function isWorkingDay(holidays: HolidayList, iso: string): boolean {
-  return !isWeekend(iso) && !holidays.has(iso)
+/** A day that is neither on the project's weekend nor on its holiday list. */
+export function isWorkingDay(calendar: SchemeCalendar, iso: string): boolean {
+  return !calendar.weekend.includes(serviceDayOf(iso)) && !calendar.holidays.has(iso)
 }
 
 /** The nearest working day from the date in the given direction (exclusive). */
-export function shiftToWorkingDay(holidays: HolidayList, iso: string, direction: 1 | -1): string {
+export function shiftToWorkingDay(
+  calendar: SchemeCalendar,
+  iso: string,
+  direction: 1 | -1,
+): string {
   let cursor = iso
-  // Holidays and weekends cannot block more than a couple of weeks in a row;
-  // the bound only guards against a degenerate list.
+  // Holidays and weekend days cannot block more than a couple of weeks in a
+  // row; the bound only guards against a degenerate list or a 7-day weekend.
   for (let step = 0; step < 60; step += 1) {
     cursor = addDays(cursor, direction)
-    if (isWorkingDay(holidays, cursor)) return cursor
+    if (isWorkingDay(calendar, cursor)) return cursor
   }
   return cursor
 }
@@ -141,14 +155,14 @@ const byDate = (a: Occurrence, b: Occurrence) =>
  * window bounds the recurrence dates; a shift may land just outside it.
  */
 export function generateOccurrences(input: GenerateOccurrencesInput): Occurrence[] {
-  const { recurrence, window, holidayPolicy, holidays } = input
+  const { recurrence, window, holidayPolicy, calendar } = input
   const rows: Occurrence[] = []
   if (!isIsoDate(window.from) || !isIsoDate(window.to) || window.to < window.from) return rows
   if (recurrence.serviceDays.length === 0) return rows
 
   for (let cursor = window.from; cursor <= window.to; cursor = addDays(cursor, 1)) {
     if (!matchesRecurrence(recurrence, cursor)) continue
-    const note = holidays.get(cursor)
+    const note = calendar.holidays.get(cursor)
     if (note === undefined) {
       rows.push({ n: null, date: cursor, plannedDate: cursor, week: isoWeek(cursor), status: "planned" })
       continue
@@ -158,7 +172,7 @@ export function generateOccurrences(input: GenerateOccurrencesInput): Occurrence
     } else if (holidayPolicy === "skip") {
       rows.push({ n: null, date: cursor, plannedDate: cursor, week: isoWeek(cursor), status: "skipped", note })
     } else {
-      const shifted = shiftToWorkingDay(holidays, cursor, holidayPolicy === "shift-next" ? 1 : -1)
+      const shifted = shiftToWorkingDay(calendar, cursor, holidayPolicy === "shift-next" ? 1 : -1)
       rows.push({ n: null, date: shifted, plannedDate: cursor, week: isoWeek(shifted), status: "shifted", note })
     }
   }
@@ -177,7 +191,7 @@ export function generateOccurrences(input: GenerateOccurrencesInput): Occurrence
 export type OccurrencePreviewInput = {
   recurrence: SchemeRecurrence
   holidayPolicy: HolidayPolicy
-  holidays: HolidayList
+  calendar: SchemeCalendar
 }
 
 const EMPTY = (ongoing: boolean, horizon: string | null): OccurrencePreview => ({
@@ -192,14 +206,14 @@ const EMPTY = (ongoing: boolean, horizon: string | null): OccurrencePreview => (
  * effective window, or over 12 months from effective-from when open-ended.
  */
 export function occurrencePreview(input: OccurrencePreviewInput): OccurrencePreview {
-  const { recurrence, holidayPolicy, holidays } = input
+  const { recurrence, holidayPolicy, calendar } = input
   const from = recurrence.effectiveFrom
   const ongoing = !recurrence.effectiveTo
   if (!isIsoDate(from) || recurrence.serviceDays.length === 0) return EMPTY(ongoing, null)
   const to = ongoing ? addMonths(from, PREVIEW_HORIZON_MONTHS) : recurrence.effectiveTo
   if (!isIsoDate(to) || to < from) return EMPTY(ongoing, isIsoDate(to) ? to : null)
 
-  const rows = generateOccurrences({ recurrence, window: { from, to }, holidayPolicy, holidays })
+  const rows = generateOccurrences({ recurrence, window: { from, to }, holidayPolicy, calendar })
   return {
     rows,
     ongoing,

@@ -302,8 +302,8 @@ export function parseServiceDays(value: string): ServiceDay[] {
  * The shared guard for reading a record's structured `serviceDays` out of its
  * submitted form values: the values object may be missing entirely, and the
  * field may hold a non-string in merged or hand-edited stores. Returns []
- * when nothing parses. Calendar working days (`values.workingDays`) keep
- * their own read — different field.
+ * when nothing parses. The project's weekend (`values.weekend`) keeps its
+ * own read in project-calendar.ts — different field.
  */
 export function serviceDaysFromValues(
   values: Record<string, unknown> | null | undefined,

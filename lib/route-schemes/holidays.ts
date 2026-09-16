@@ -126,14 +126,6 @@ export function schemeProjectId(
   return stringValue(scheme.submittedValues ?? {}, "projectId") ?? scheme.projectIds?.[0]
 }
 
-/** The holiday list a stored scheme generates against — its project's. */
-export function schemeHolidayList(
-  scheme: Pick<BusinessRecord, "submittedValues" | "projectIds">,
-  calendarRecords: readonly BusinessRecord[] | undefined,
-): HolidayList {
-  return projectHolidayList(schemeProjectId(scheme), calendarRecords)
-}
-
 /** The scheme's holiday list name for list cells: the project's, or "—" when it has none. */
 export function schemeHolidayListName(
   scheme: Pick<BusinessRecord, "submittedValues" | "projectIds">,

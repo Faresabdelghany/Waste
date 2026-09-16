@@ -23,6 +23,7 @@ export function SchemePlanAheadRunner({ actorName }: { actorName: string }) {
   const existingRoutes = useModuleRecords("route-studio", "routes")
   const existingPickups = useModuleRecords("route-studio", "pickups")
   const calendarRecords = useModuleRecords("plan", "calendars")
+  const projectRecords = useModuleRecords("configure", "organization")
   const containers = useModuleRecords("resources", "containers")
   const { upsertRecord } = useBusinessRecordStore()
 
@@ -45,6 +46,7 @@ export function SchemePlanAheadRunner({ actorName }: { actorName: string }) {
       existingRoutes,
       existingPickups,
       calendarRecords,
+      projectRecords,
       containers,
       actorName: `Plan Ahead (${actorName})`,
       generatedAt: new Date().toISOString(),
@@ -74,6 +76,7 @@ export function SchemePlanAheadRunner({ actorName }: { actorName: string }) {
   }, [
     actorName,
     calendarRecords,
+    projectRecords,
     containers,
     existingPickups,
     existingRoutes,

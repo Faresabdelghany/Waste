@@ -7,6 +7,11 @@
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { projectHolidaySource, type HolidaySource } from "@/lib/route-schemes/holidays"
 import {
+  resolveProjectCalendar,
+  schemeCalendarOf,
+  type ProjectCalendar,
+} from "@/lib/route-schemes/project-calendar"
+import {
   draftGroups,
   draftRecurrence,
   resolvedDraftGroups,
@@ -36,7 +41,6 @@ import {
   type ContainerMatchProfile,
 } from "@/lib/route-schemes/matching"
 import {
-  NO_HOLIDAYS,
   formatClockTime,
   occurrencePreview,
   type OccurrencePreview,
@@ -84,6 +88,8 @@ export type WizardIssue = {
 export type WizardModel = {
   /** The project's holiday list; null while no project is picked or it has none. */
   holidaySource: HolidaySource | null
+  /** The project's calendar — holiday list and weekend — the next dates are judged against. */
+  calendar: ProjectCalendar
   recurrence: SchemeRecurrence | null
   occurrences: OccurrencePreview
   resolution: CollectionGroupResolution
@@ -119,11 +125,19 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
     records.projects.find((record) => record.id === data.projectId),
     records.calendars,
   )
-  const holidays = holidaySource?.list ?? NO_HOLIDAYS
+  // The project's weekend travels with its holiday list — one calendar input.
+  const calendar = resolveProjectCalendar(data.projectId, {
+    projects: records.projects,
+    calendars: records.calendars,
+  })
   const recurrence = draftRecurrence(data)
   const serviceDays = sortServiceDays(data.serviceDays)
   const occurrences = recurrence
-    ? occurrencePreview({ recurrence, holidayPolicy: data.holidayPolicy, holidays })
+    ? occurrencePreview({
+        recurrence,
+        holidayPolicy: data.holidayPolicy,
+        calendar: schemeCalendarOf(calendar),
+      })
     : { rows: [], ongoing: !data.effectiveTo, horizon: null, count: 0 }
 
   const vehicles = new Map(records.vehicleProfiles.map((profile) => [profile.id, profile]))
@@ -263,6 +277,7 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
 
   return {
     holidaySource,
+    calendar,
     recurrence,
     occurrences,
     resolution,

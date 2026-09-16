@@ -28,11 +28,12 @@ import type { BusinessRecord } from "../data/business-modules"
 import { schemeGroupPlans, type ResolvedCollectionGroup } from "./groups"
 import { avalancheHash } from "./hash"
 import { schemeHolidayPolicy } from "./holidays"
+import { DEFAULT_WEEKEND } from "./project-calendar"
 import {
   NO_HOLIDAYS,
   generateOccurrences,
   shiftedNote,
-  type HolidayList,
+  type SchemeCalendar,
   type Occurrence,
 } from "./occurrences"
 import {
@@ -211,9 +212,10 @@ function holidayNoteOf(occurrence: Occurrence): string | undefined {
  * The generation plan for one scheme over one window — every row the confirm
  * preview shows and applySchemeGeneration writes. Returns null for schemes
  * without structured recurrence (legacy free-text records cannot generate).
- * The holiday list and the scheme's stored holiday policy go through
- * generateOccurrences — the same call the guided setup's next-dates preview
- * makes — so what the wizard showed is what generation writes.
+ * The project's calendar (holiday list + weekend) and the scheme's stored
+ * holiday policy go through generateOccurrences — the same call the guided
+ * setup's next-dates preview makes — so what the wizard showed is what
+ * generation writes.
  * Stop lists come from effectiveStopPlans (issue #19): manual schemes keep
  * their picked lists; rule schemes resolve their stop-matching rules against
  * the supplied container records at plan time, so regeneration picks up
@@ -225,8 +227,11 @@ export function planSchemeGeneration(input: {
   existingRoutes: readonly BusinessRecord[]
   /** Container records the stop rules resolve against (and pickups enrich from). */
   containers: readonly BusinessRecord[]
-  /** The holiday list the scheme's dates are judged against; absent = every date is a working day. */
-  holidays?: HolidayList | null
+  /**
+   * The project's calendar (holiday list + weekend) the scheme's dates are
+   * judged against; absent = no holidays and the default weekend.
+   */
+  calendar?: SchemeCalendar | null
 }): SchemeGenerationPlan | null {
   const { scheme, window } = input
   const recurrence = recurrenceFromValues(scheme.submittedValues ?? {})
@@ -287,7 +292,7 @@ export function planSchemeGeneration(input: {
     recurrence,
     window: { from: window.from, to: walkEnd },
     holidayPolicy: schemeHolidayPolicy(scheme.submittedValues),
-    holidays: input.holidays ?? NO_HOLIDAYS,
+    calendar: input.calendar ?? { holidays: NO_HOLIDAYS, weekend: DEFAULT_WEEKEND },
   })
 
   for (const occurrence of occurrences) {

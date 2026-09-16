@@ -1219,7 +1219,7 @@ export const operationsBusinessFormSchemas = [
     recordKind: "Collection Calendar",
     title: "Create collection calendar",
     description:
-      "Define the working days, holidays, and validity period that decide which planned service dates are valid.",
+      "Define the holidays and validity period that decide which planned service dates are valid.",
     submitLabel: "Create calendar",
     nameField: "calendarName",
     contextFieldIds: ["projectId", "validFrom", "validTo"],
@@ -1228,7 +1228,7 @@ export const operationsBusinessFormSchemas = [
         id: "identity-validity",
         title: "Identity and validity",
         description:
-          "Validation: name, Project, validity start, and working days are required. Dates outside the validity period generate without calendar rules and are flagged in the generation preview.",
+          "Validation: name, Project, and validity start are required. Dates outside the validity period generate without calendar rules and are flagged in the generation preview.",
         fields: [
           {
             id: "calendarName",
@@ -1277,26 +1277,11 @@ export const operationsBusinessFormSchemas = [
         ],
       },
       {
-        id: "service-days",
-        title: "Working days and holidays",
+        id: "holidays",
+        title: "Holidays",
         description:
-          "Holiday and non-working dates are skipped at generation; service is never moved to another date.",
+          "Each scheme's holiday policy decides whether a collection on a listed date shifts, skips, or goes ahead; the working week is set on the Project.",
         fields: [
-          {
-            id: "workingDays",
-            label: "Working days",
-            type: "multiselect",
-            required: true,
-            options: [
-              { value: "monday", label: "Monday" },
-              { value: "tuesday", label: "Tuesday" },
-              { value: "wednesday", label: "Wednesday" },
-              { value: "thursday", label: "Thursday" },
-              { value: "friday", label: "Friday" },
-              { value: "saturday", label: "Saturday" },
-              { value: "sunday", label: "Sunday" },
-            ],
-          },
           {
             id: "holidayDates",
             label: "Holiday dates",

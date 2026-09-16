@@ -13,7 +13,7 @@
 
 import type { BusinessRecord } from "../data/business-modules"
 import { isSoftDeleted } from "../data/record-visibility"
-import { schemeHolidayList } from "./holidays"
+import { schemeGenerationCalendar } from "./project-calendar"
 import {
   applySchemeGeneration,
   planSchemeGeneration,
@@ -115,8 +115,10 @@ export function runPlanAhead(input: {
   today: string
   existingRoutes: readonly BusinessRecord[]
   existingPickups: readonly BusinessRecord[]
-  /** Collection Calendar records; each scheme's holiday list resolves here. */
+  /** Collection Calendar records; each scheme's project holiday list resolves here. */
   calendarRecords?: readonly BusinessRecord[]
+  /** Project records (configure.organization); each scheme's project weekend resolves here. */
+  projectRecords?: readonly BusinessRecord[]
   containers: readonly BusinessRecord[]
   actorName: string
   /** ISO datetime stamped on every written route (FR-13's "Last generated"). */
@@ -124,6 +126,7 @@ export function runPlanAhead(input: {
 }): PlanAheadRunResult {
   const window = planAheadWindow(input.today)
   const calendarRecords = input.calendarRecords ?? []
+  const projectRecords = input.projectRecords ?? []
   const routes: BusinessRecord[] = []
   const pickups: BusinessRecord[] = []
   const schemes: BusinessRecord[] = []
@@ -146,7 +149,10 @@ export function runPlanAhead(input: {
       // Rule-mode schemes (issue #19) resolve their stop-matching rules
       // against these records — the same set manual generation uses.
       containers: input.containers,
-      holidays: schemeHolidayList(scheme, calendarRecords),
+      calendar: schemeGenerationCalendar(scheme, {
+        projects: projectRecords,
+        calendars: calendarRecords,
+      }),
     })
     if (!plan) continue
     const result = applySchemeGeneration({

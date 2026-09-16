@@ -34,8 +34,8 @@ import {
 } from "./recurrence"
 import { count } from "./text"
 import { COLLECTION_GROUPS_KEY } from "./groups"
-import { schemeHolidayList } from "./holidays"
-import type { HolidayList, HolidayPolicy } from "./occurrences"
+import { schemeGenerationCalendar } from "./project-calendar"
+import type { HolidayPolicy, SchemeCalendar } from "./occurrences"
 
 const INITIAL_WINDOW_DAYS = 7
 
@@ -115,8 +115,10 @@ export type SchemeCreationRelated = {
   existingPickups: readonly BusinessRecord[]
   /** Container records — rule resolution and pickup enrichment. */
   containers: readonly BusinessRecord[]
-  /** Collection Calendar records; the scheme's holiday list resolves here. */
+  /** Collection Calendar records; the scheme's project holiday list resolves here. */
   calendarRecords?: readonly BusinessRecord[]
+  /** Project records (configure.organization); the scheme's project weekend resolves here. */
+  projectRecords?: readonly BusinessRecord[]
 }
 
 export type SchemeCreationOutcome =
@@ -216,7 +218,10 @@ export function planSchemeCreation(
       window,
       existingRoutes: related.existingRoutes,
       containers: related.containers,
-      holidays: schemeHolidayList(scheme, related.calendarRecords),
+      calendar: schemeGenerationCalendar(scheme, {
+        projects: related.projectRecords,
+        calendars: related.calendarRecords,
+      }),
     })
     // A Validated record the engine cannot read (no structured recurrence) is
     // a technical failure, not scheduling — the scheme stays Validated (D25).
@@ -265,7 +270,8 @@ export type SchemeCreationPreviewInput = {
    */
   groupPlans: ReadonlyArray<{ groupId: string; day: ServiceDay; containerIds: readonly string[] }>
   holidayPolicy?: HolidayPolicy
-  holidays?: HolidayList | null
+  /** The project's calendar (holiday list + weekend); absent = no holidays, default weekend. */
+  calendar?: SchemeCalendar | null
 }
 
 export type SchemeCreationPreview = {
@@ -335,7 +341,7 @@ export function previewSchemeCreation(
     window,
     existingRoutes: [],
     containers: [],
-    holidays: input.holidays ?? null,
+    calendar: input.calendar ?? null,
   })
   if (!plan) return null
   const creates = plan.routes.filter((route) => route.action === "create")
