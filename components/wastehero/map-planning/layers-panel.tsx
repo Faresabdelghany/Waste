@@ -17,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { PlanningAreaLayer } from "@/lib/map-planning/areas"
 import { BASE_MAPS, type BaseMap, type BaseMapId } from "@/lib/map-planning/base-maps"
 import { UNCOVERED_COLOR } from "@/lib/map-planning/coverage-gaps"
+import { COMPARE_COLORS, type SchemeStopSet } from "@/lib/map-planning/scheme-compare"
 import { ROUTE_BUCKET_COLORS, type AreaRoute, type RouteBucket } from "@/lib/map-planning/routes"
 import type { ServiceAreaLayer } from "@/lib/map-planning/service-areas"
 import { cn } from "@/lib/utils"
@@ -44,6 +45,11 @@ export type LayersPanelProps = {
   /** The Coverage gaps layer: whether it is on, and the registry-wide counts behind it. */
   coverage: CoverageLayer
   onToggleCoverage: (enabled: boolean) => void
+  /** Every comparable Route Scheme with its resolved stops. */
+  schemes: readonly SchemeStopSet[]
+  /** The schemes being compared, A first — at most two. */
+  compareIds: readonly string[]
+  onToggleCompare: (schemeId: string, enabled: boolean) => void
   className?: string
 }
 
@@ -85,6 +91,9 @@ export function LayersPanel({
   windowLabel,
   coverage,
   onToggleCoverage,
+  schemes,
+  compareIds,
+  onToggleCompare,
   className,
 }: LayersPanelProps) {
   const drawable = areas.filter((area) => area.bounds !== null)
@@ -189,6 +198,54 @@ export function LayersPanel({
               </span>
             </label>
           </div>
+        </div>
+        <div className="border-b border-border px-3 py-3" data-testid="schemes-layer">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-medium text-muted-foreground">Route Schemes</p>
+            <span className="text-[11px] text-muted-foreground">
+              {compareIds.length === 2 ? "Comparing" : "Tick two to compare"}
+            </span>
+          </div>
+          {schemes.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No Route Scheme has a readable recurrence yet.</p>
+          ) : (
+            <ul className="max-h-40 space-y-0.5 overflow-y-auto">
+              {schemes.map((scheme) => {
+                const checkboxId = `scheme-compare-${scheme.id}`
+                const position = compareIds.indexOf(scheme.id)
+                const side = position === 0 ? "a" : position === 1 ? "b" : null
+                const full = compareIds.length >= 2 && !side
+                return (
+                  <li key={scheme.id} className="flex items-center gap-2 rounded-md px-1 py-1 hover:bg-accent/60">
+                    <Checkbox
+                      id={checkboxId}
+                      checked={side !== null}
+                      disabled={full}
+                      onCheckedChange={(checked) => onToggleCompare(scheme.id, checked === true)}
+                    />
+                    <label
+                      htmlFor={checkboxId}
+                      className={cn("min-w-0 flex-1 cursor-pointer", full && "text-muted-foreground")}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <span
+                          className="flex size-3.5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold uppercase text-white"
+                          style={{ backgroundColor: side ? COMPARE_COLORS[side] : "var(--muted)" }}
+                          aria-hidden
+                        >
+                          {side ?? ""}
+                        </span>
+                        <span className="truncate">{scheme.name}</span>
+                      </span>
+                      <span className="block truncate pl-5 text-[11px] text-muted-foreground tabular-nums">
+                        {scheme.status} · {scheme.containerIds.size} {scheme.containerIds.size === 1 ? "stop" : "stops"}
+                      </span>
+                    </label>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </div>
         <div className="border-b border-border px-3 py-3" data-testid="service-areas-layer">
           <p className="mb-2 text-xs font-medium text-muted-foreground">Service areas</p>

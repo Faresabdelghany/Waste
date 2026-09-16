@@ -16,7 +16,7 @@ import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useTheme } from "next-themes"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ArrowSquareOut, Play, Polygon, Selection, Trash } from "@phosphor-icons/react/dist/ssr"
+import { ArrowSquareOut, Play, Polygon, Selection, Trash, X } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import { useAssetManagementStore } from "@/components/settings/asset-management-store"
@@ -44,7 +44,8 @@ import {
 import type { MapCluster } from "@/lib/map-planning/clusters"
 import { fractionColor } from "@/lib/map-planning/colors"
 import { serviceAreasForSelection } from "@/lib/map-planning/coverage"
-import { coverageGaps, coverageInSelection } from "@/lib/map-planning/coverage-gaps"
+import { UNCOVERED_COLOR, coverageGaps, coverageInSelection } from "@/lib/map-planning/coverage-gaps"
+import { COMPARE_COLORS, compareSchemes, schemeStopSets } from "@/lib/map-planning/scheme-compare"
 import { MAP_FILTER_READERS } from "@/lib/map-planning/filters"
 import { formatDateRange, formatDistance, formatDuration, formatShortDate } from "@/lib/map-planning/format"
 import { boundsFromPolygon, pointInPolygon, type LngLat } from "@/lib/map-planning/geo"
@@ -158,6 +159,8 @@ export function MapPlanningView({
   const [playback, setPlayback] = useState<Playback | null>(null)
   // The Coverage gaps layer: containers needing service that no scheme lists.
   const [coverageOnMap, setCoverageOnMap] = useState(false)
+  // Two schemes compared on the map, A first.
+  const [compareIds, setCompareIds] = useState<readonly string[]>([])
   // A wizard seed narrower than the whole selection ("Create scheme for uncovered").
   const [wizardSeedOverride, setWizardSeedOverride] = useState<Partial<GuidedSchemeData> | null>(null)
   const [highlight, setHighlight] = useState<Highlight | null>(null)
@@ -358,6 +361,26 @@ export function MapPlanningView({
     [gaps.uncovered, selectedContainerIds],
   )
 
+  // Scheme comparison: every comparable scheme's stops, and the two picked ones side by side.
+  const stopSets = useMemo(() => schemeStopSets(schemes, containers, today), [containers, schemes, today])
+  const comparison = useMemo(() => {
+    if (compareIds.length !== 2) return null
+    const a = stopSets.find((set) => set.id === compareIds[0])
+    const b = stopSets.find((set) => set.id === compareIds[1])
+    return a && b ? compareSchemes(a, b, containers, gaps.needing) : null
+  }, [compareIds, containers, gaps.needing, stopSets])
+  useEffect(() => {
+    // A compared scheme that left planning (deleted, recurrence broken) drops out of the pair.
+    if (compareIds.some((id) => !stopSets.some((set) => set.id === id))) {
+      setCompareIds((current) => current.filter((id) => stopSets.some((set) => set.id === id)))
+    }
+  }, [compareIds, stopSets])
+  const toggleCompare = (schemeId: string, enabled: boolean) =>
+    setCompareIds((current) => {
+      const without = current.filter((id) => id !== schemeId)
+      return enabled ? [...without, schemeId].slice(-2) : without
+    })
+
   /* -------------------------------- actions -------------------------------- */
 
   const resetAll = () => {
@@ -537,7 +560,8 @@ export function MapPlanningView({
                 }
               : null
           }
-          uncoveredIds={coverageOnMap ? gaps.uncovered : null}
+          uncoveredIds={comparison ? comparison.orphaned : coverageOnMap ? gaps.uncovered : null}
+          compare={comparison ? { membership: comparison.membership, hull: comparison.hull } : null}
           highlightedIds={highlightedIds}
           highlightedRouteId={highlightedRouteId}
           onHoverPoint={hoverContainers}
@@ -608,6 +632,40 @@ export function MapPlanningView({
           />
         )}
 
+        {comparison && (
+          <section
+            aria-label={`Comparing ${comparison.a.name} with ${comparison.b.name}`}
+            data-testid="compare-strip"
+            className="absolute left-1/2 top-3 z-30 flex max-w-[min(760px,calc(100%-24px))] -translate-x-1/2 items-center gap-2 rounded-lg border border-border bg-background/95 px-3 py-1.5 text-xs shadow-sm backdrop-blur"
+          >
+            <span className="flex min-w-0 items-center gap-1.5">
+              <CompareDot color={COMPARE_COLORS.a} letter="A" />
+              <span className="truncate font-medium">{comparison.a.name}</span>
+            </span>
+            <span className="text-muted-foreground">vs</span>
+            <span className="flex min-w-0 items-center gap-1.5">
+              <CompareDot color={COMPARE_COLORS.b} letter="B" />
+              <span className="truncate font-medium">{comparison.b.name}</span>
+            </span>
+            <span className="mx-1 h-4 w-px shrink-0 bg-border" aria-hidden />
+            <span className="flex shrink-0 items-center gap-2.5 tabular-nums" data-testid="compare-counts">
+              <CompareCount color={COMPARE_COLORS.a} label="A only" value={comparison.aOnly.size} />
+              <CompareCount color={COMPARE_COLORS.b} label="B only" value={comparison.bOnly.size} />
+              <CompareCount color={COMPARE_COLORS.both} label="Both" value={comparison.both.size} />
+              <CompareCount color={UNCOVERED_COLOR} label="Orphaned" value={comparison.orphaned.size} ring />
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 shrink-0 text-muted-foreground"
+              aria-label="Stop comparing"
+              onClick={() => setCompareIds([])}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </section>
+        )}
+
         {playback && playbackRoute && (
           <PlaybackBar
             route={playbackRoute}
@@ -664,6 +722,9 @@ export function MapPlanningView({
               schemes: gaps.schemesConsidered,
             }}
             onToggleCoverage={setCoverageOnMap}
+            schemes={stopSets}
+            compareIds={compareIds}
+            onToggleCompare={toggleCompare}
           />
         </div>
 
@@ -828,6 +889,32 @@ export function MapPlanningView({
         />
       )}
     </div>
+  )
+}
+
+function CompareDot({ color, letter }: { color: string; letter: string }) {
+  return (
+    <span
+      className="flex size-4 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold text-white"
+      style={{ backgroundColor: color }}
+      aria-hidden
+    >
+      {letter}
+    </span>
+  )
+}
+
+function CompareCount({ color, label, value, ring }: { color: string; label: string; value: number; ring?: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span
+        className={cn("size-2.5 rounded-full", ring && "border-2 bg-background")}
+        style={ring ? { borderColor: color } : { backgroundColor: color }}
+        aria-hidden
+      />
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-semibold">{value}</span>
+    </span>
   )
 }
 

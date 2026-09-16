@@ -38,6 +38,7 @@ import { baseMapById, type BaseMapId } from "@/lib/map-planning/base-maps"
 import { clusterPoints, type MapCluster } from "@/lib/map-planning/clusters"
 import { NO_FRACTION_COLOR, SELECTION_COLOR } from "@/lib/map-planning/colors"
 import { UNCOVERED_COLOR } from "@/lib/map-planning/coverage-gaps"
+import { COMPARE_COLORS, clusterMembership, type CompareMembership } from "@/lib/map-planning/scheme-compare"
 import { polygonCentroid, worldPoint, type LngLat, type LngLatBounds } from "@/lib/map-planning/geo"
 import type { MapPoint } from "@/lib/map-planning/points"
 import { COPENHAGEN_CENTER } from "@/lib/map-planning/positions"
@@ -111,6 +112,8 @@ export type PlanningMapProps = {
   playback: RoutePlayback | null
   /** Containers no Route Scheme lists — ringed red, counted on clusters; null when the layer is off. */
   uncoveredIds: ReadonlySet<string> | null
+  /** Two schemes compared: markers take their side's colour, the rest fade; the hull of both is outlined. */
+  compare: SchemeCompareLayer | null
   /** Container ids the panel is pointing at — their markers stand out. */
   highlightedIds: ReadonlySet<string>
   /** The route the panel is pointing at — its line stands out, the others fade. */
@@ -129,6 +132,11 @@ export type PlanningMapProps = {
 }
 
 type ScreenPoint = { x: number; y: number }
+
+export type SchemeCompareLayer = {
+  membership: ReadonlyMap<string, CompareMembership>
+  hull: readonly LngLat[]
+}
 
 export type RoutePlayback = {
   routeId: string
@@ -159,6 +167,25 @@ function markerRing(selected: boolean, highlighted: boolean, uncovered = false):
   return rings.length ? rings.join(", ") : undefined
 }
 
+const COMPARE_LABELS: Readonly<Record<CompareMembership, string>> = {
+  a: "In scheme A",
+  b: "In scheme B",
+  both: "In both schemes",
+}
+
+/** How many of a cluster's containers sit on each side, sides present only, A then B then both. */
+function compareSides(
+  containerIds: readonly string[],
+  membership: ReadonlyMap<string, CompareMembership>,
+): Array<[CompareMembership, number]> {
+  const counts: Record<CompareMembership, number> = { a: 0, b: 0, both: 0 }
+  for (const id of containerIds) {
+    const side = membership.get(id)
+    if (side) counts[side] += 1
+  }
+  return (["a", "b", "both"] as const).filter((side) => counts[side] > 0).map((side) => [side, counts[side]])
+}
+
 const countUncovered = (points: readonly MapPoint[], uncoveredIds: ReadonlySet<string> | null) =>
   uncoveredIds ? points.filter((point) => point.containerIds.some((id) => uncoveredIds.has(id))).length : 0
 
@@ -178,6 +205,7 @@ export function PlanningMap({
   onRouteClick,
   playback,
   uncoveredIds,
+  compare,
   highlightedIds,
   highlightedRouteId,
   onHoverPoint,
@@ -347,6 +375,7 @@ export function PlanningMap({
           routes={routeLines}
           roadGeometries={roadGeometries}
           playback={playback}
+          compareHull={compare?.hull ?? null}
           shape={shape}
           editing={editingShape && drawTool === "none"}
           project={project}
@@ -371,8 +400,19 @@ export function PlanningMap({
                 const selected = selectedIds.has(point.id)
                 const highlighted = highlightedIds.has(point.id)
                 const uncovered = countUncovered(cluster.points, uncoveredIds) > 0
-                const color = point.fractions[0] ? colorFor(point.fractions[0]) : NO_FRACTION_COLOR
-                const label = [point.label, point.fractions.join(", "), point.sublabel, uncovered ? "In no route scheme" : ""]
+                const side = compare ? clusterMembership(point.containerIds, compare.membership) : null
+                const color = side
+                  ? COMPARE_COLORS[side]
+                  : point.fractions[0]
+                    ? colorFor(point.fractions[0])
+                    : NO_FRACTION_COLOR
+                const label = [
+                  point.label,
+                  point.fractions.join(", "),
+                  point.sublabel,
+                  uncovered ? "In no route scheme" : "",
+                  side ? COMPARE_LABELS[side] : "",
+                ]
                   .filter(Boolean)
                   .join(" · ")
                 return (
@@ -386,12 +426,14 @@ export function PlanningMap({
                         data-selected={selected ? "true" : undefined}
                         data-highlighted={highlighted ? "true" : undefined}
                         data-uncovered={uncovered ? "true" : undefined}
+                        data-compare={side ?? undefined}
                         onClick={() => onPointClick(point)}
                         onMouseEnter={() => onHoverPoint(point.containerIds)}
                         onMouseLeave={() => onHoverPoint(null)}
                         className={cn(
                           "pointer-events-auto absolute size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background shadow transition-transform hover:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                           highlighted && "z-10 scale-150",
+                          compare && !side && !uncovered && "opacity-40",
                         )}
                         style={{
                           left: anchor.x,
@@ -406,12 +448,17 @@ export function PlanningMap({
                       {point.fractions.length > 0 && <p>{point.fractions.join(" · ")}</p>}
                       <p className="text-muted-foreground">{point.sublabel}</p>
                       {uncovered && <p style={{ color: UNCOVERED_COLOR }}>In no route scheme</p>}
+                      {side && <p style={{ color: COMPARE_COLORS[side] }}>{COMPARE_LABELS[side]}</p>}
                     </TooltipContent>
                   </Tooltip>
                 )
               }
-              const trail = cluster.fractions.slice(0, MAX_TRAIL_DOTS)
-              const overflow = cluster.fractions.length - trail.length
+              const clusterIds = cluster.points.flatMap((point) => point.containerIds)
+              const clusterSide = compare ? clusterMembership(clusterIds, compare.membership) : null
+              const sides = compare ? compareSides(clusterIds, compare.membership) : []
+              // In compare mode the fraction trail gives way to the sides present.
+              const trail = compare ? [] : cluster.fractions.slice(0, MAX_TRAIL_DOTS)
+              const overflow = compare ? 0 : cluster.fractions.length - trail.length
               const highlightedCount = cluster.points.filter((point) => highlightedIds.has(point.id)).length
               return (
                 <Tooltip key={cluster.id}>
@@ -423,18 +470,23 @@ export function PlanningMap({
                       data-count={cluster.count}
                       data-selected={selectedCount > 0 ? "true" : undefined}
                       data-highlighted={highlightedCount > 0 ? "true" : undefined}
+                      data-compare={clusterSide ?? undefined}
                       onClick={() => handleClusterClick(cluster, anchor)}
                       onMouseEnter={() => onHoverPoint(cluster.points.flatMap((point) => point.containerIds))}
                       onMouseLeave={() => onHoverPoint(null)}
                       className={cn(
                         "pointer-events-auto absolute flex -translate-y-1/2 items-center focus-visible:outline-none",
                         highlightedCount > 0 && "z-10",
+                        compare && !clusterSide && uncoveredCount === 0 && "opacity-40",
                       )}
                       style={{ left: anchor.x - 16, top: anchor.y }}
                     >
                       <span
                         className="relative flex size-8 items-center justify-center rounded-full border border-border bg-background text-xs font-semibold text-foreground shadow-sm"
-                        style={{ boxShadow: markerRing(selectedCount > 0, highlightedCount > 0) }}
+                        style={{
+                          boxShadow: markerRing(selectedCount > 0, highlightedCount > 0),
+                          ...(clusterSide ? { borderColor: COMPARE_COLORS[clusterSide], borderWidth: 2 } : {}),
+                        }}
                       >
                         {cluster.count}
                         {uncoveredCount > 0 && (
@@ -447,6 +499,20 @@ export function PlanningMap({
                           </span>
                         )}
                       </span>
+                      {sides.length > 0 && (
+                        <span className="-ml-1 flex items-center">
+                          {sides.map(([side, count], index) => (
+                            <span
+                              key={side}
+                              className="flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-background px-1 text-[9px] font-semibold leading-none text-white"
+                              style={{ backgroundColor: COMPARE_COLORS[side], marginLeft: index === 0 ? 0 : -3 }}
+                              data-compare-count={side}
+                            >
+                              {count}
+                            </span>
+                          ))}
+                        </span>
+                      )}
                       {trail.length > 0 && (
                         <span className="-ml-1 flex items-center">
                           {trail.map((fraction, index) => (
@@ -544,6 +610,7 @@ function ShapesOverlay({
   routes,
   roadGeometries,
   playback,
+  compareHull,
   shape,
   editing,
   project,
@@ -558,6 +625,7 @@ function ShapesOverlay({
   routes: readonly AreaRoute[]
   roadGeometries: ReadonlyMap<string, RoadGeometryState>
   playback: RoutePlayback | null
+  compareHull: readonly LngLat[] | null
   shape: SelectionShape | null
   editing: boolean
   project: (lngLat: LngLat) => ScreenPoint | null
@@ -699,6 +767,23 @@ function ShapesOverlay({
           </g>
         )
       })}
+
+      {compareHull && compareHull.length >= 3 && (() => {
+        const outline = compareHull.map(project).filter((point): point is ScreenPoint => point !== null)
+        return outline.length >= 3 ? (
+          <polygon
+            data-compare-hull=""
+            points={toPoints(outline)}
+            fill={COMPARE_COLORS.both}
+            fillOpacity={0.04}
+            stroke={COMPARE_COLORS.both}
+            strokeOpacity={0.6}
+            strokeWidth={1.5}
+            strokeDasharray="4 4"
+            strokeLinejoin="round"
+          />
+        ) : null
+      })()}
 
       {/* The highlighted route is drawn last so it sits on top of the others. */}
       {[...routes]

@@ -528,6 +528,37 @@ test("the Coverage gaps layer rings containers no Route Scheme lists and the pan
   await expect(page.getByRole("dialog", { name: "New route scheme" })).toBeVisible()
 })
 
+test("ticking two Route Schemes compares their stops on the map with A only, B only, both, and orphaned counts", async ({ page }) => {
+  await page.getByRole("button", { name: /^Layers/ }).click()
+  const layers = page.getByRole("dialog", { name: "Layers" })
+  const schemesLayer = layers.getByTestId("schemes-layer")
+  await expect(schemesLayer).toContainText("Tick two to compare")
+  await expect(schemesLayer).toContainText("RS-Central · Week A")
+  await expect(schemesLayer).toContainText("RS-Østerbro · Organic B")
+  await expect(page.getByTestId("compare-strip")).toHaveCount(0)
+  await schemesLayer.getByRole("checkbox", { name: /RS-Central · Week A/ }).click()
+  await expect(page.getByTestId("compare-strip")).toHaveCount(0)
+  await schemesLayer.getByRole("checkbox", { name: /RS-Østerbro · Organic B/ }).click()
+  await expect(schemesLayer).toContainText("Comparing")
+  await page.keyboard.press("Escape")
+
+  const strip = page.getByTestId("compare-strip")
+  await expect(strip).toBeVisible()
+  await expect(strip).toContainText("RS-Central · Week A")
+  await expect(strip).toContainText("RS-Østerbro · Organic B")
+  await expect(strip.getByTestId("compare-counts")).toContainText(/A only\s*\d+/)
+  await expect(strip.getByTestId("compare-counts")).toContainText(/B only\s*\d+/)
+  await expect(strip.getByTestId("compare-counts")).toContainText(/Both\s*\d+/)
+  await expect(strip.getByTestId("compare-counts")).toContainText(/Orphaned\s*\d+/)
+  // Markers take a side.
+  await expect(page.locator("[data-marker][data-compare]").first()).toBeVisible()
+  await expect(page.locator("[data-compare-hull]")).toHaveCount(1)
+
+  await strip.getByRole("button", { name: "Stop comparing" }).click()
+  await expect(strip).toHaveCount(0)
+  await expect(page.locator("[data-marker][data-compare]")).toHaveCount(0)
+})
+
 test("hovering a route row highlights its line and hovering the line highlights the row", async ({ page }) => {
   // Three stops on Vesterbro and Frederiksberg streets, inside the rectangle.
   await seedDrawableRoute(page, ["asset-seed-91005", "asset-seed-91007", "asset-seed-91010"])
