@@ -65,13 +65,12 @@ test("the map opens on Any date with the search, filters, and window in the tool
   await expect(page.getByRole("status")).toContainText("Base map unavailable")
 })
 
-test("clusters carry their count and fractions; lone containers are dots; the legend is a popover", async ({ page }) => {
+test("clusters carry their count and fractions; lone containers are dots; there is no legend button", async ({ page }) => {
   const cluster = page.locator('[data-marker="cluster"]').first()
   await expect(cluster).toHaveAttribute("aria-label", /^\d+ containers · /)
   await expect(cluster).toHaveAttribute("data-count", /^\d+$/)
   await expect(page.locator('[data-marker="point"]').first()).toHaveAttribute("aria-label", /BIN-/)
-  await page.getByRole("button", { name: "Legend" }).click()
-  await expect(page.getByRole("dialog", { name: "Legend" })).toContainText("Waste fractions")
+  await expect(page.getByRole("button", { name: "Legend" })).toHaveCount(0)
 })
 
 test("a rectangle selection opens the Selected area panel with its statistics; the close button clears it", async ({ page }) => {

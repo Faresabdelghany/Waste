@@ -64,7 +64,6 @@ import { todayIso } from "@/lib/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
 
 import { LayersPanel } from "./layers-panel"
-import { LegendPanel, type LegendEntry } from "./legend-panel"
 import { MapSearch } from "./map-search"
 import { MapToolbar } from "./map-toolbar"
 import type { DrawTool, PlanningMapApi } from "./planning-map"
@@ -201,16 +200,6 @@ export function MapPlanningView({
     () => routesInSelection(selectedContainers, routes, pickups, inServiceContainers),
     [inServiceContainers, pickups, routes, selectedContainers],
   )
-  const legendEntries = useMemo<LegendEntry[]>(() => {
-    const counts = new Map<string, number>()
-    for (const point of points) {
-      for (const fraction of point.fractions) counts.set(fraction, (counts.get(fraction) ?? 0) + 1)
-    }
-    return Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([fraction, count]) => ({ fraction, color: colorFor(fraction), count }))
-  }, [points, colorFor])
-
   const activeChips = businessFilterChips(filters).length
   const canReset = activeChips > 0 || window !== DEFAULT_COLLECTION_WINDOW
   const hasSelection = shape !== null || selectedContainerIds.size > 0
@@ -389,7 +378,6 @@ export function MapPlanningView({
         )}
 
         <div className="absolute bottom-8 right-3 z-30 flex items-center gap-2">
-          <LegendPanel entries={legendEntries} />
           <LayersPanel
             baseMap={baseMap}
             onBaseMapChange={chooseBaseMap}
