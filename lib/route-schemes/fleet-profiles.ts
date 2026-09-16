@@ -3,11 +3,15 @@
 // callsign, type, capacity, licence class, and the licences a driver holds.
 // Pure data logic (type-only import of BusinessRecord).
 //
-// Gap adapter: vehicle records carry no licence class, so it is derived from
-// capacity (anything over 3.5 t needs C; a trailer needs CE). Driver
-// licences are free text in facts.Licence ("C/CE + crane · valid 2028"); a
-// driver whose licences cannot be read is treated as eligible for every
-// vehicle rather than hidden.
+// Two stopgaps, each behind a named helper so the model can replace them:
+//   requiredLicenceClass — vehicle records carry no licence class, so it is
+//     derived from capacity (over 3.5 t needs C; a trailer needs CE);
+//   parseDriverLicences — driver licences are free text in facts.Licence
+//     ("C/CE + crane · valid 2028"); the typed licenceClass form field is a
+//     master-data relation, not a class.
+// Safety rule: a driver whose licence cannot be read is NOT eligible for any
+// vehicle. The driver is still listed, disabled, with the reason beside the
+// name — the one case that cannot be verified must never pass.
 
 import type { BusinessRecord } from "../data/business-modules"
 import { vehicleTypeOfRecord } from "./matching"
@@ -43,6 +47,21 @@ export function parseTonnes(text: string | undefined): number | null {
 
 const LIGHT_VEHICLE_MAX_T = 3.5
 
+/**
+ * The licence class a vehicle needs, derived from what its record says:
+ * a trailer needs CE, anything over 3.5 t needs C, the rest B. Unknown
+ * capacity is treated as heavy (C) — the safe side.
+ * TODO: read a real `licenceClass` field on the vehicle record once the
+ * fleet form carries one; this derivation is the stopgap.
+ */
+export function requiredLicenceClass(vehicle: {
+  isTrailer: boolean
+  capacityT: number | null
+}): LicenceClass {
+  if (vehicle.isTrailer) return "CE"
+  return vehicle.capacityT !== null && vehicle.capacityT <= LIGHT_VEHICLE_MAX_T ? "B" : "C"
+}
+
 export function vehicleProfile(record: RecordLike): VehicleProfile {
   const facts = record.facts ?? {}
   const contextType = record.context.split(" · ")[0]?.trim() ?? ""
@@ -55,17 +74,12 @@ export function vehicleProfile(record: RecordLike): VehicleProfile {
   const type =
     vehicleTypeOfRecord(record) ??
     (contextType ? contextType.replace(/\s*\d+(?:[.,]\d+)?\s*t\b.*$/i, "").trim() || null : null)
-  const licenceClass: LicenceClass = isTrailer
-    ? "CE"
-    : capacityT !== null && capacityT <= LIGHT_VEHICLE_MAX_T
-      ? "B"
-      : "C"
   return {
     id: record.id,
     callsign: record.name.split(" · ")[0]?.trim() || record.name,
     type,
     capacityT,
-    licenceClass,
+    licenceClass: requiredLicenceClass({ isTrailer, capacityT }),
     isTrailer,
   }
 }
@@ -85,14 +99,18 @@ export function collectionVehicles<T extends RecordLike>(records: readonly T[]):
 export type DriverProfile = {
   id: string
   name: string
-  /** Licence classes read from the record; empty = unknown. */
+  /** Licence classes read from the record; empty = unknown, which is NOT eligible. */
   licences: LicenceClass[]
 }
 
 const LICENCE_CLASSES: readonly LicenceClass[] = ["B", "C", "CE"]
 
-/** "C/CE + crane · valid 2028" → ["C", "CE"]; unknown text → []. */
-export function parseLicences(text: string | undefined): LicenceClass[] {
+/**
+ * "C/CE + crane · valid 2028" → ["C", "CE"]; unreadable text → [] (unknown).
+ * Stopgap parse of the free-text Licence fact — a structured licenceClass
+ * field on the driver record is the model (ticketed).
+ */
+export function parseDriverLicences(text: string | undefined): LicenceClass[] {
   if (!text) return []
   const head = text.split(" · ")[0] ?? text
   const found = new Set<LicenceClass>()
@@ -105,11 +123,12 @@ export function parseLicences(text: string | undefined): LicenceClass[] {
 
 export function driverProfile(record: RecordLike): DriverProfile {
   const facts = record.facts ?? {}
-  const licences = parseLicences(facts.Licence)
+  const licences = parseDriverLicences(facts.Licence)
   return {
     id: record.id,
     name: record.name,
-    licences: licences.length > 0 ? licences : parseLicences(stringOf(record, "licenceClass")),
+    licences:
+      licences.length > 0 ? licences : parseDriverLicences(stringOf(record, "licenceClass")),
   }
 }
 
@@ -120,18 +139,53 @@ const IMPLIED_BY: Record<LicenceClass, readonly LicenceClass[]> = {
   CE: ["CE"],
 }
 
-/** Whether the driver may drive a vehicle of the class; unknown licences are eligible. */
+/** Whether the driver may drive a vehicle of the class; an unknown licence never may. */
 export function driverHoldsLicence(driver: DriverProfile, licenceClass: LicenceClass): boolean {
-  if (driver.licences.length === 0) return true
+  if (driver.licences.length === 0) return false
   return driver.licences.some((held) => IMPLIED_BY[licenceClass].includes(held))
+}
+
+export const NO_LICENCE_ON_RECORD = "No licence on record"
+
+export type DriverEligibility = {
+  driver: DriverProfile
+  eligible: boolean
+  /** Short reason shown beside a disabled driver. */
+  reason?: string
+}
+
+/** Why a driver may or may not take a vehicle of the class. */
+export function driverEligibility(
+  driver: DriverProfile,
+  licenceClass: LicenceClass,
+): DriverEligibility {
+  if (driver.licences.length === 0) return { driver, eligible: false, reason: NO_LICENCE_ON_RECORD }
+  if (!driverHoldsLicence(driver, licenceClass)) {
+    return { driver, eligible: false, reason: `Needs ${licenceClass} licence` }
+  }
+  return { driver, eligible: true }
+}
+
+/**
+ * Every driver for the driver select, each with its eligibility for the
+ * vehicle — ineligible drivers stay listed, disabled, with the reason.
+ * Without a vehicle nothing can be judged, so everyone is listed enabled.
+ */
+export function driverOptions(
+  drivers: readonly DriverProfile[],
+  vehicle: VehicleProfile | null | undefined,
+): DriverEligibility[] {
+  if (!vehicle) return drivers.map((driver) => ({ driver, eligible: true }))
+  return drivers.map((driver) => driverEligibility(driver, vehicle.licenceClass))
 }
 
 export function eligibleDrivers(
   drivers: readonly DriverProfile[],
   vehicle: VehicleProfile | null | undefined,
 ): DriverProfile[] {
-  if (!vehicle) return [...drivers]
-  return drivers.filter((driver) => driverHoldsLicence(driver, vehicle.licenceClass))
+  return driverOptions(drivers, vehicle)
+    .filter((option) => option.eligible)
+    .map((option) => option.driver)
 }
 
 /** "Mads Jensen · C, CE" — the driver select's option text; name alone when licences are unknown. */

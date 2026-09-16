@@ -39,7 +39,7 @@ import { routeEstimateAdapter } from "@/lib/route-schemes/estimates"
 import {
   driverHoldsLicence,
   driverOptionLabel,
-  eligibleDrivers,
+  driverOptions,
   vehicleOptionLabel,
 } from "@/lib/route-schemes/fleet-profiles"
 import type { CollectionGroup } from "@/lib/route-schemes/groups"
@@ -122,7 +122,9 @@ export function GroupEditor({
   const schemeDays = model.serviceDays
 
   const vehicle = model.vehicleById(group.vehicleId)
-  const drivers = eligibleDrivers(records.driverProfiles, vehicle)
+  // Every driver is listed; one without a readable licence, or without the
+  // vehicle's class, is disabled with the reason beside the name.
+  const drivers = driverOptions(records.driverProfiles, vehicle)
   const driver = model.driverById(group.driverId)
   const driverOk = !driver || !vehicle || driverHoldsLicence(driver, vehicle.licenceClass)
   // Inherited from step 1 — the scheme's waste fraction is the one source of truth.
@@ -245,9 +247,12 @@ export function GroupEditor({
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  {drivers.map((profile) => (
-                    <SelectItem key={profile.id} value={profile.id}>
+                  {drivers.map(({ driver: profile, eligible, reason }) => (
+                    <SelectItem key={profile.id} value={profile.id} disabled={!eligible}>
                       {driverOptionLabel(profile)}
+                      {reason ? (
+                        <span className="text-muted-foreground"> · {reason}</span>
+                      ) : null}
                     </SelectItem>
                   ))}
                 </SelectContent>

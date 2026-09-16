@@ -2,13 +2,17 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import {
+  NO_LICENCE_ON_RECORD,
   collectionVehicles,
+  driverEligibility,
   driverHoldsLicence,
   driverOptionLabel,
+  driverOptions,
   driverProfile,
   eligibleDrivers,
-  parseLicences,
+  parseDriverLicences,
   parseTonnes,
+  requiredLicenceClass,
   vehicleOptionLabel,
   vehicleProfile,
 } from "../fleet-profiles"
@@ -101,23 +105,51 @@ describe("drivers", () => {
     assert.deepEqual(lars.licences, ["C"])
     assert.deepEqual(emil.licences, ["B"])
     assert.deepEqual(unknown.licences, [])
-    assert.deepEqual(parseLicences("B, C"), ["B", "C"])
+    assert.deepEqual(parseDriverLicences("B, C"), ["B", "C"])
+    assert.deepEqual(parseDriverLicences("Not on record"), [])
   })
 
   test("eligibility follows the vehicle's licence class, with implied classes", () => {
     const truck = vehicleProfile(wh24)
     assert.deepEqual(
       eligibleDrivers([mads, freja, lars, emil, unknown], truck).map((driver) => driver.id),
-      ["driver-mads", "driver-freja", "driver-lars", "driver-new"],
+      ["driver-mads", "driver-freja", "driver-lars"],
     )
     assert.equal(driverHoldsLicence(mads, "B"), true)
     assert.equal(driverHoldsLicence(emil, "C"), false)
     assert.equal(driverHoldsLicence(lars, "CE"), false)
-    assert.equal(driverHoldsLicence(unknown, "CE"), true)
   })
 
-  test("without a vehicle every driver is listed", () => {
-    assert.equal(eligibleDrivers([mads, emil], null).length, 2)
+  test("an unknown or unreadable licence is never eligible — listed, disabled, with the reason", () => {
+    const truck = vehicleProfile(wh24)
+    assert.equal(driverHoldsLicence(unknown, "B"), false)
+    assert.equal(driverHoldsLicence(unknown, "CE"), false)
+    assert.deepEqual(driverEligibility(unknown, "C"), {
+      driver: unknown,
+      eligible: false,
+      reason: NO_LICENCE_ON_RECORD,
+    })
+    assert.deepEqual(driverEligibility(emil, "C"), { driver: emil, eligible: false, reason: "Needs C licence" })
+    assert.deepEqual(
+      driverOptions([mads, emil, unknown], truck).map((option) => [option.driver.id, option.eligible, option.reason]),
+      [
+        ["driver-mads", true, undefined],
+        ["driver-emil", false, "Needs C licence"],
+        ["driver-new", false, NO_LICENCE_ON_RECORD],
+      ],
+    )
+  })
+
+  test("without a vehicle every driver is listed and nothing is judged", () => {
+    assert.equal(eligibleDrivers([mads, emil, unknown], null).length, 3)
+    assert.ok(driverOptions([unknown], null).every((option) => option.eligible))
+  })
+
+  test("requiredLicenceClass: trailer → CE, over 3.5 t → C, light → B, unknown capacity → C", () => {
+    assert.equal(requiredLicenceClass({ isTrailer: true, capacityT: 1 }), "CE")
+    assert.equal(requiredLicenceClass({ isTrailer: false, capacityT: 18 }), "C")
+    assert.equal(requiredLicenceClass({ isTrailer: false, capacityT: 3.5 }), "B")
+    assert.equal(requiredLicenceClass({ isTrailer: false, capacityT: null }), "C")
   })
 
   test("option labels", () => {
