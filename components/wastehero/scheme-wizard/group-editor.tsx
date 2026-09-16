@@ -4,7 +4,8 @@
 // days, vehicle, a default driver filtered to the vehicle's licence class,
 // the waste fraction inherited from step 1 (read-only, with a Change link
 // back), container types, and a live summary of what the rule matches.
-// "Review containers" opens the matched list read-only.
+// "Review containers" opens the matched list read-only — there is no
+// container editor, so no manual +/− adjustments are shown either.
 
 import { useMemo, useState } from "react"
 
@@ -141,10 +142,8 @@ export function GroupEditor({
     })
   }, [fraction, containerTypes, data.planningAreaId, data.projectId, records.containers])
 
-  const count = matches ? matches.matched.length + group.containerIds.length : 0
+  const count = matches ? matches.matched.length : 0
   const loadT = matches ? routeEstimateAdapter.loadTonnes(matches.matched, records.weightKg) : 0
-  const added = group.containerIds.length
-  const excluded = 0
 
   const valid = Boolean(
     group.name.trim() &&
@@ -324,12 +323,6 @@ export function GroupEditor({
                   {matches
                     ? `${loadT} t${vehicle?.capacityT != null ? ` / ${vehicle.capacityT} t` : ""}`
                     : "—"}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Manual adjustments</div>
-                <div className="font-medium tabular-nums">
-                  +{added} / −{excluded}
                 </div>
               </div>
             </div>

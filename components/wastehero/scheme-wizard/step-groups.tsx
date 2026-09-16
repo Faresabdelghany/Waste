@@ -136,7 +136,6 @@ export function StepGroups({
                 const clash = issues.some(
                   (issue) => issue.kind === "vehicle" && issue.groupIds.includes(group.id),
                 )
-                const added = group.containerIds.length
                 return (
                   <TableRow key={group.id}>
                     <TableCell className="pl-4 font-medium">
@@ -190,7 +189,6 @@ export function StepGroups({
                         ]
                           .filter(Boolean)
                           .join(" · ")}
-                        {added > 0 ? ` · +${added} / −0` : ""}
                       </div>
                     </TableCell>
                     <TableCell>
