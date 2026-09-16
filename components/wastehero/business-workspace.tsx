@@ -62,6 +62,10 @@ import {
   planSchemeCreation,
 } from "@/lib/route-schemes/creation"
 import { draftGroups } from "@/lib/route-schemes/draft"
+import {
+  driverFormOptions,
+  driverIneligibilityReason,
+} from "@/lib/route-schemes/fleet-profiles"
 import { NO_HOLIDAY_LIST_LABEL, resolveProjectCalendar } from "@/lib/route-schemes/project-calendar"
 import { HOLIDAY_POLICY_LABELS } from "@/lib/route-schemes/occurrences"
 import { planSchemeDeletion } from "@/lib/route-schemes/deletion"
@@ -2267,7 +2271,7 @@ export function BusinessWorkspace({
         resolved.module.records,
       )
 
-      return relationRecords
+      const permittedRecords = relationRecords
         .filter((record) => {
           if (
             formSchema?.recordKind === "Service area assignment" &&
@@ -2392,12 +2396,28 @@ export function BusinessWorkspace({
           }
           return true
         })
-        .map((record) => ({
-          value: record.id,
-          label: record.name,
-        }))
+      // The route scheme quick form's driver select goes through the same
+      // licence rule as the wizard's group editor (driverOptions): every
+      // driver listed, an ineligible one disabled with the reason, an
+      // unknown licence never eligible.
+      if (formSchema?.key === "route-studio.schemes" && field.id === "plannedDriverId") {
+        const vehicles = resolveFormModule("fleet", "vehicles")
+        const plannedVehicleId =
+          typeof values.plannedVehicleId === "string" ? values.plannedVehicleId : ""
+        const vehicle =
+          vehicles && plannedVehicleId
+            ? getRecords(vehicles.workspaceId, vehicles.module.id, vehicles.module.records).find(
+                (record) => record.id === plannedVehicleId,
+              )
+            : undefined
+        return driverFormOptions(permittedRecords, vehicle)
+      }
+      return permittedRecords.map((record) => ({
+        value: record.id,
+        label: record.name,
+      }))
     },
-    [serviceProviderScopeId, formSchema?.recordKind, getRecords, projectScope],
+    [serviceProviderScopeId, formSchema?.key, formSchema?.recordKind, getRecords, projectScope],
   )
 
   const formInitialValues = useMemo<BusinessFormValues>(
@@ -2688,6 +2708,30 @@ export function BusinessWorkspace({
         })
         if (duplicate) {
           errors[field.id] = `${field.label} already exists in this module.`
+        }
+      }
+
+      if (formSchema.key === "route-studio.schemes") {
+        const plannedVehicleId =
+          typeof values.plannedVehicleId === "string" ? values.plannedVehicleId : ""
+        const plannedDriverId =
+          typeof values.plannedDriverId === "string" ? values.plannedDriverId : ""
+        if (plannedVehicleId && plannedDriverId) {
+          const vehicles = resolveFormModule("fleet", "vehicles")
+          const drivers = resolveFormModule("fleet", "drivers")
+          const reason = driverIneligibilityReason(
+            drivers
+              ? getRecords(drivers.workspaceId, drivers.module.id, drivers.module.records).find(
+                  (record) => record.id === plannedDriverId,
+                )
+              : undefined,
+            vehicles
+              ? getRecords(vehicles.workspaceId, vehicles.module.id, vehicles.module.records).find(
+                  (record) => record.id === plannedVehicleId,
+                )
+              : undefined,
+          )
+          if (reason) errors.plannedDriverId = reason
         }
       }
 

@@ -13,6 +13,7 @@
 // vehicle. The driver is still listed, disabled, with the reason beside the
 // name — the one case that cannot be verified must never pass.
 
+import type { BusinessFormOption } from "../data/business-form-types"
 import type { BusinessRecord } from "../data/business-modules"
 import { vehicleTypeOfRecord } from "./matching"
 
@@ -191,4 +192,31 @@ export function eligibleDrivers(
 /** "Mads Jensen · C, CE" — the driver select's option text; name alone when licences are unknown. */
 export function driverOptionLabel(driver: DriverProfile): string {
   return driver.licences.length > 0 ? `${driver.name} · ${driver.licences.join(", ")}` : driver.name
+}
+
+/**
+ * The quick form's driver select, through the same rule as the wizard's:
+ * every driver listed, an ineligible one disabled with the reason in its
+ * label. Without a vehicle nothing is judged.
+ */
+export function driverFormOptions(
+  drivers: readonly RecordLike[],
+  vehicle: RecordLike | undefined,
+): BusinessFormOption[] {
+  return driverOptions(drivers.map(driverProfile), vehicle ? vehicleProfile(vehicle) : null).map(
+    ({ driver, eligible, reason }) => ({
+      value: driver.id,
+      label: reason ? `${driverOptionLabel(driver)} · ${reason}` : driverOptionLabel(driver),
+      ...(eligible ? {} : { disabled: true }),
+    }),
+  )
+}
+
+/** Why the driver may not take the vehicle, for the quick form's submit check; undefined when they may (or nothing is judged). */
+export function driverIneligibilityReason(
+  driver: RecordLike | undefined,
+  vehicle: RecordLike | undefined,
+): string | undefined {
+  if (!driver || !vehicle) return undefined
+  return driverEligibility(driverProfile(driver), vehicleProfile(vehicle).licenceClass).reason
 }

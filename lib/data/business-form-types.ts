@@ -18,6 +18,8 @@ export type BusinessFormFieldType =
 export type BusinessFormOption = {
   value: string
   label: string
+  /** Listed but not selectable — the label carries the reason. */
+  disabled?: boolean
 }
 
 export type BusinessRelationTarget = {
