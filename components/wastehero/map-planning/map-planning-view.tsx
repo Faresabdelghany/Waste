@@ -46,10 +46,11 @@ import { fractionColor } from "@/lib/map-planning/colors"
 import { serviceAreasForSelection } from "@/lib/map-planning/coverage"
 import { MAP_FILTER_READERS } from "@/lib/map-planning/filters"
 import { formatDateRange, formatShortDate } from "@/lib/map-planning/format"
-import { pointInPolygon, type LngLat } from "@/lib/map-planning/geo"
+import { boundsFromPolygon, pointInPolygon, type LngLat } from "@/lib/map-planning/geo"
 import { containerPoints, type MapPoint } from "@/lib/map-planning/points"
 import { containerLocation } from "@/lib/map-planning/positions"
 import { routesInSelection, routesInWindow, type AreaRoute } from "@/lib/map-planning/routes"
+import type { SavedSelection } from "@/lib/map-planning/saved-selections"
 import {
   COLLECTION_WINDOW_LABELS,
   DEFAULT_COLLECTION_WINDOW,
@@ -73,6 +74,7 @@ import { cn } from "@/lib/utils"
 import { LayersPanel } from "./layers-panel"
 import { MapSearch } from "./map-search"
 import { MapToolbar } from "./map-toolbar"
+import { SavedSelectionsMenu } from "./saved-selections-menu"
 import type { DrawTool, PlanningMapApi } from "./planning-map"
 import { SelectedAreaPanel } from "./selected-area-panel"
 import { StatusBadge } from "./status-badge"
@@ -173,13 +175,16 @@ export function MapPlanningView({
     [containers],
   )
   const stopIndex = useMemo(() => routeStopIndex(routes, pickups), [routes, pickups])
-  const filteredContainers = useMemo(
-    () =>
-      applyBusinessFilters(inServiceContainers, filters, MAP_FILTER_READERS).filter((record) =>
-        inCollectionWindow(nextCollectionDate(record, stopIndex, today), window, today),
+  // The containers a filter set and window leave on the map — the live view
+  // reads the current pair; loading a saved selection reads the saved one.
+  const containersFor = useCallback(
+    (activeFilters: BusinessFilters, activeWindow: CollectionWindow) =>
+      applyBusinessFilters(inServiceContainers, activeFilters, MAP_FILTER_READERS).filter((record) =>
+        inCollectionWindow(nextCollectionDate(record, stopIndex, today), activeWindow, today),
       ),
-    [filters, inServiceContainers, stopIndex, today, window],
+    [inServiceContainers, stopIndex, today],
   )
+  const filteredContainers = useMemo(() => containersFor(filters, window), [containersFor, filters, window])
   const points = useMemo(() => containerPoints(filteredContainers), [filteredContainers])
   // Area outlines wrap every in-service container, whatever the filters hide.
   const areaLayers = useMemo(
@@ -252,6 +257,23 @@ export function MapPlanningView({
     setEditingShape(false)
     setRoutesOnMap(false)
     setHighlight(null)
+  }
+
+  // Restores the saved filters and window, then selects inside the saved
+  // shape against the containers that pair leaves on the map.
+  const loadSavedSelection = (saved: SavedSelection) => {
+    setFilters(saved.filters)
+    setWindow(saved.window)
+    setShape(saved.shape)
+    setEditingShape(false)
+    setRoutesOnMap(false)
+    setHighlight(null)
+    setDrawTool("none")
+    const visible = containerPoints(containersFor(saved.filters, saved.window))
+    setSelectedContainerIds(
+      new Set(visible.filter((point) => pointInPolygon(point.lngLat, saved.shape.polygon)).map((point) => point.id)),
+    )
+    mapApi.current?.fitBounds(boundsFromPolygon(saved.shape.polygon))
   }
 
   const hoverContainers = (ids: readonly string[] | null) =>
@@ -401,6 +423,8 @@ export function MapPlanningView({
           <ToolButton label="Clear selection" disabled={!hasSelection} onClick={clearSelection}>
             <Trash className="h-4 w-4" />
           </ToolButton>
+          <span className="mx-0.5 h-5 w-px bg-border" aria-hidden />
+          <SavedSelectionsMenu shape={shape} filters={filters} window={window} onLoad={loadSavedSelection} />
         </div>
 
         {hasSelection && (
