@@ -278,13 +278,14 @@ export function GroupEditor({
                   Change
                 </Button>
               </div>
-              <p
-                className="flex h-10 items-center text-sm"
-                aria-labelledby="group-fraction-label"
-                data-testid="group-fraction"
-              >
-                {fraction || "—"}
-              </p>
+              <div className="flex h-10 items-center gap-2 text-sm">
+                <span aria-labelledby="group-fraction-label" data-testid="group-fraction">
+                  {fraction || "—"}
+                </span>
+                <Badge variant="secondary" className="font-normal text-muted-foreground">
+                  Inherited
+                </Badge>
+              </div>
             </div>
             <div className="space-y-2">
               <Label className="text-sm" id="group-types-label">

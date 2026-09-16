@@ -1647,10 +1647,9 @@ export function BusinessWorkspace({
   // Per-scheme derived row presentation, one pass over one related-records
   // load: the live Attention warnings (issue #25, D5/D20 — recomputed from
   // canonical stored configuration, never read from persisted "Validation
-  // warnings" facts) plus the Recurrence / Collection calendar cells (issue
-  // #30, D15 — derived from structured submittedValues and the live calendar
-  // records, so editing a scheme changes them with no stored display string
-  // involved).
+  // warnings" facts) plus the Recurrence / Waste fraction cells (issue #30,
+  // D15 — derived from structured submittedValues, so editing a scheme
+  // changes them with no stored display string involved).
   const schemeRowsById = useMemo(() => {
     if (!isSchemesView) {
       return new Map<string, SchemeRowSummary & { attention: string[] }>()
@@ -1661,8 +1660,6 @@ export function BusinessWorkspace({
       )
       return module ? getRecords(workspaceId, module.id, module.records) : []
     }
-    const calendars = relatedModuleRecords("plan", "calendars")
-    const projects = relatedModuleRecords("configure", "organization")
     const related = {
       schemes: activeRecords,
       allocations: relatedModuleRecords("fleet", "vehicle-planning"),
@@ -1673,7 +1670,7 @@ export function BusinessWorkspace({
       activeRecords.map((record) => [
         record.id,
         {
-          ...schemeRowSummary(record, calendars, projects),
+          ...schemeRowSummary(record),
           attention: schemeAttention(record, related),
         },
       ]),
@@ -1806,7 +1803,7 @@ export function BusinessWorkspace({
       Number(viewOptions.showProject)
     : isRichRecordView
       ? 3 +
-        // Recurrence + Collection calendar replace the value column (#30).
+        // Recurrence + Waste fraction replace the value column (#30).
         (isSchemesView ? 1 : 0) +
         Number(showRouteStarColumn) +
         (isRoutesView
@@ -5055,12 +5052,12 @@ export function BusinessWorkspace({
                               </>
                             )}
                             {/* Schemes swap the generic value column (Demand)
-                                for the derived Recurrence / Collection
-                                calendar pair (issue #30, D15). */}
+                                for the derived Recurrence / Waste fraction
+                                pair (issue #30, D15; round 3). */}
                             {isSchemesView ? (
                               <>
                                 <TableHead>Recurrence</TableHead>
-                                <TableHead>Holiday list</TableHead>
+                                <TableHead>Waste fraction</TableHead>
                               </>
                             ) : (
                               !isServiceProviderUsersView && (
@@ -5364,8 +5361,8 @@ export function BusinessWorkspace({
                                     <TableCell className="min-w-[170px] whitespace-nowrap text-sm text-muted-foreground">
                                       {schemeRowsById.get(record.id)?.recurrence ?? "—"}
                                     </TableCell>
-                                    <TableCell className="min-w-[180px] whitespace-nowrap text-sm text-muted-foreground">
-                                      {schemeRowsById.get(record.id)?.holidays ?? "—"}
+                                    <TableCell className="min-w-[140px] whitespace-nowrap text-sm text-muted-foreground">
+                                      {schemeRowsById.get(record.id)?.wasteFraction ?? "—"}
                                     </TableCell>
                                   </>
                                 ) : (

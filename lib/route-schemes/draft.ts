@@ -77,6 +77,11 @@ export function resolvedDraftPlans(
  * needed to resolve the matches and each group's vehicle type. The resolved
  * stops also feed the promised-service-frequency reconciliation (issue #21).
  */
+/** The distinct fractions the draft's groups name, in first-seen order. */
+function draftFractions(data: GuidedSchemeData): string[] {
+  return [...new Set(draftGroups(data).flatMap((group) => group.fractions))]
+}
+
 export function validateGuidedScheme(
   data: GuidedSchemeData,
   existingSchemes: readonly BusinessRecord[],
@@ -93,7 +98,7 @@ export function validateGuidedScheme(
     .filter((container) => linkedContainerIds.has(container.id))
     .map((container) => schemeFrequencyPromiseOfRecord(container))
     .filter((promise): promise is SchemeFrequencyPromise => promise !== null)
-  return validateScheme(
+  const result = validateScheme(
     {
       serviceDays: data.serviceDays,
       effectiveFrom: data.effectiveFrom,
@@ -112,6 +117,21 @@ export function validateGuidedScheme(
     allocationConflictSources(allocations),
     schemeStopRuleSources(siblings),
   )
+  // A route scheme plans one waste fraction (round 3): Guided Setup enforces
+  // it through inheritance; the quick form's multi-fraction rule is the one
+  // way a mixed scheme could still be created, so both paths block here.
+  const fractions = draftFractions(data)
+  if (fractions.length > 1) {
+    return {
+      ...result,
+      status: "Draft",
+      issues: [
+        `A route scheme plans one waste fraction — this one names ${fractions.join(", ")}`,
+        ...result.issues,
+      ],
+    }
+  }
+  return result
 }
 
 /** The draft's recurrence, or null while it has no service days or start date. */

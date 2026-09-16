@@ -6,18 +6,16 @@
 // a stored display string — so editing a scheme's recurrence changes the
 // list immediately. Row context and calendar resolve live related records
 // first; a stored display fact is consulted only when the record has no
-// structured id at all (the D28i legacy tolerance) — a structured id that no
-// longer resolves means the target was deleted, and its frozen display copy
-// must not impersonate it. Per D15 the context always names the actual
+// structured value at all (the D28i legacy tolerance) — a structured id that
+// no longer resolves means the target was deleted, and its frozen display
+// copy must not impersonate it. Per D15 the context always names the actual
 // stored planning area (or project scope) — the design artifact's truncated
 // "Copenhagen Central · By Operations" was a copy bug, not a layout to
 // reproduce.
 
 import type { BusinessRecord } from "../data/business-modules"
-import { canonicalCalendarName } from "./calendar"
 import { formatWorkingDays } from "./calendar-list"
-import { schemeProjectId } from "./holidays"
-import { resolveProjectCalendar } from "./project-calendar"
+import { matchPlansFromValues } from "./matching"
 import {
   recurrenceCadenceLabel,
   recurrenceFromValues,
@@ -95,37 +93,33 @@ export function schemeRecurrenceSummary(record: BusinessRecord): string {
 }
 
 /**
- * The Holiday list column: the name of the scheme's project's holiday list
- * (holiday model 2026-09-16 — holidays follow the project, never the scheme).
- * "—" when the project has no list. A legacy record without a project falls
- * back to its stored display fact (D28i), folded through
- * canonicalCalendarName so pre-rename copies agree with the filter facet.
+ * The Waste fraction column (round 3 — the project already implies the
+ * holiday list; the fraction is what a planner scans for): the typed
+ * scheme-level fraction, else the display fact, else the fractions the
+ * stored stop rule names (a quick-created record), else "—". Only the
+ * scheme's own declared configuration — a manual legacy scheme that declares
+ * no fraction shows "—" rather than the incidental mix of its picked
+ * containers.
  */
-export function schemeHolidayListLabel(
-  record: BusinessRecord,
-  calendars: readonly BusinessRecord[],
-  projects: readonly BusinessRecord[],
-): string {
-  const projectId = schemeProjectId(record)
-  if (projectId) {
-    return resolveProjectCalendar(projectId, { projects, calendars }).list?.name ?? EMPTY
-  }
-  return canonicalCalendarName(factOf(record, "Collection calendar")) ?? EMPTY
+export function schemeWasteFractionLabel(record: BusinessRecord): string {
+  const values = record.submittedValues ?? {}
+  const typed = stringValue(values, "wasteFraction")
+  if (typed) return typed
+  const fact = factOf(record, "Waste fraction")
+  if (fact) return fact
+  const rule = matchPlansFromValues(values).sharedRule.fractions
+  return rule.length > 0 ? rule.join(", ") : EMPTY
 }
 
 export type SchemeRowSummary = {
   recurrence: string
-  holidays: string
+  wasteFraction: string
 }
 
 /** The derived table cells for one scheme row (D15). */
-export function schemeRowSummary(
-  record: BusinessRecord,
-  calendars: readonly BusinessRecord[],
-  projects: readonly BusinessRecord[],
-): SchemeRowSummary {
+export function schemeRowSummary(record: BusinessRecord): SchemeRowSummary {
   return {
     recurrence: schemeRecurrenceSummary(record),
-    holidays: schemeHolidayListLabel(record, calendars, projects),
+    wasteFraction: schemeWasteFractionLabel(record),
   }
 }

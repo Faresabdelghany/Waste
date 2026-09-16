@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { draftGroups } from "../draft"
+import { draftGroups, validateGuidedScheme } from "../draft"
 import type { CollectionGroup } from "../groups"
 import { quickSchemeDraftFromValues, type GuidedSchemeData } from "../quick-create"
 
@@ -18,7 +18,7 @@ const group = (id: string, fractions: string[]): CollectionGroup => ({
 const draft = (wasteFraction: string, groups: CollectionGroup[]): GuidedSchemeData => ({
   schemeName: "Scope",
   wasteFraction,
-  serviceType: "Collection",
+  serviceType: "Container collection",
   frequency: "weekly",
   weekRotation: "odd",
   serviceDays: ["monday"],
@@ -66,5 +66,31 @@ describe("scheme-level waste fraction", () => {
     assert.equal(several.wasteFraction, "")
     assert.deepEqual(several.groups[0].fractions, ["Paper", "Cardboard"])
     assert.equal(several.serviceType, "")
+  })
+})
+
+describe("a route scheme plans one waste fraction", () => {
+  const issuesOf = (data: GuidedSchemeData) => validateGuidedScheme(data, [], [], [], []).issues
+
+  test("groups of different fractions block creation with one named issue", () => {
+    const issues = issuesOf(draft("", [group("a", ["Paper", "Cardboard"])]))
+    assert.ok(
+      issues.includes("A route scheme plans one waste fraction — this one names Paper, Cardboard"),
+      issues.join("\n"),
+    )
+    const twoGroups = issuesOf(draft("", [group("a", ["Paper"]), group("b", ["Glass"])]))
+    assert.ok(twoGroups.some((issue) => issue.startsWith("A route scheme plans one waste fraction")))
+  })
+
+  test("a single fraction — scoped on the scheme or shared by every group — raises nothing of the kind", () => {
+    for (const data of [
+      draft("Residual", [group("a", []), group("b", ["Paper"])]),
+      draft("", [group("a", ["Paper"]), group("b", ["Paper"])]),
+    ]) {
+      assert.equal(
+        issuesOf(data).some((issue) => issue.startsWith("A route scheme plans one waste fraction")),
+        false,
+      )
+    }
   })
 })

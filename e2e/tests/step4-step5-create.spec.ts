@@ -44,7 +44,10 @@ test("step 5 has no running-scheme edit policy and creates the scheme onto the l
   await createButton(page).click()
   await expect(root).toBeHidden()
   await expect(toasts(page)).toContainText(`Route scheme created as Validated — ${name}`)
+  // The list scans by fraction: the Holiday list column gave way to Waste fraction.
+  await expect(page.getByRole("columnheader", { name: "Waste fraction" })).toBeVisible()
+  await expect(page.getByRole("columnheader", { name: "Holiday list" })).toHaveCount(0)
   const row = schemeRow(page, name)
   await expect(row).toBeVisible()
-  await expect(row).toContainText("Danish public holidays")
+  await expect(row).toContainText("Residual")
 })

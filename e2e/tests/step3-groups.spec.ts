@@ -36,6 +36,7 @@ test("the group editor shows the inherited fraction read-only with a Change link
   await expect(wizard(page).getByText(`Organic · ${BASELINE_SERVICE_TYPE}`)).toBeVisible()
   const editor = await openGroupEditor(page)
   await expect(editor.getByTestId("group-fraction")).toHaveText("Organic")
+  await expect(editor.getByText("Inherited", { exact: true })).toBeVisible()
   await expect(editor.getByRole("combobox", { name: "Waste fraction" })).toHaveCount(0)
   await expect(editor.getByText("Manual adjustments")).toHaveCount(0)
   await editor.getByRole("button", { name: "Change" }).click()
