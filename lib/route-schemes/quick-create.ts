@@ -17,6 +17,7 @@ import { IMPLICIT_GROUP_ID, type CollectionGroup } from "./groups"
 import { matchPlansFromValues, stopSelectionMode } from "./matching"
 import { isHolidayPolicy, type HolidayPolicy } from "./occurrences"
 import {
+  SERVICE_DAYS,
   isRecurrenceFrequency,
   parseServiceDays,
   type RecurrenceFrequency,
@@ -126,7 +127,9 @@ export const QUICK_SCHEME_DRAFT_FIELD_IDS: ReadonlySet<string> = new Set([
 export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeData {
   const frequency = stringOf(values, "frequency")
   const weekRotation = stringOf(values, "weekRotation")
-  const serviceDays = parseServiceDays(stringOf(values, "serviceDays"))
+  // A daily scheme serves the full week whatever days the form picked.
+  const serviceDays =
+    frequency === "daily" ? [...SERVICE_DAYS] : parseServiceDays(stringOf(values, "serviceDays"))
   const schemeName = stringOf(values, "schemeName")
   const rule = matchPlansFromValues(values).sharedRule
   const stopSource = values.stopSelection === "manual" ? "manual" : "rule"
@@ -221,10 +224,11 @@ export function seedSchemeEditValues(
     seeded.serviceDays = parseServiceDays(seeded.serviceDays).join(", ")
   }
   if (seeded.frequency === "biweekly") seeded.frequency = "every-2-weeks"
-  // The retired "four-week" shape has a home again since every-4-weeks
-  // joined the engine (2026-09-16); calendar-rule still has none.
-  if (seeded.frequency === "four-week") seeded.frequency = "every-4-weeks"
-  if (seeded.frequency === "calendar-rule") seeded.frequency = ""
+  // Neither retired shape is offered by the form (every-4-weeks exists in the
+  // engine for stored records only), so both blank for a re-pick.
+  if (seeded.frequency === "four-week" || seeded.frequency === "calendar-rule") {
+    seeded.frequency = ""
+  }
   if (typeof seeded.plannedStartTime !== "string") seeded.plannedStartTime = ""
   return seeded
 }

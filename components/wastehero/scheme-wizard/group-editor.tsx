@@ -173,7 +173,7 @@ export function GroupEditor({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-2xl">
+      <DialogContent className="max-w-2xl gap-0 overflow-hidden rounded-2xl bg-background p-0 sm:max-w-2xl">
         <DialogHeader className="px-6 pb-4 pt-6 text-left">
           <DialogTitle className="text-lg">
             {isEdit ? "Edit collection group" : "Add collection group"}
@@ -357,7 +357,7 @@ function ReviewContainersDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-2xl">
+      <DialogContent className="max-w-2xl gap-0 overflow-hidden rounded-2xl bg-background p-0 sm:max-w-2xl">
         <DialogHeader className="px-6 pb-4 pt-6 text-left">
           <DialogTitle className="text-lg">Review containers</DialogTitle>
           <DialogDescription className="sr-only">

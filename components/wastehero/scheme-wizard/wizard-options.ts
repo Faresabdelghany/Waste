@@ -5,7 +5,16 @@
 import { SCHEME_CREATE_AS_LABELS, SCHEME_EDIT_POLICY_LABELS } from "@/lib/route-schemes/creation"
 import { HOLIDAY_POLICIES, HOLIDAY_POLICY_LABELS } from "@/lib/route-schemes/occurrences"
 import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
-import { todayIso } from "@/lib/route-schemes/recurrence"
+import {
+  OFFERED_RECURRENCE_FREQUENCIES,
+  RECURRENCE_FREQUENCY_LABELS,
+  SERVICE_DAYS,
+  isIsoDate,
+  isRecurrenceFrequency,
+  isoWeekRotation,
+  todayIso,
+  type RecurrenceFrequency,
+} from "@/lib/route-schemes/recurrence"
 
 import type { SelectOption } from "./wizard-fields"
 
@@ -27,37 +36,40 @@ export const WIZARD_STEP_TITLES: Record<WizardStepId, string> = {
   5: "Ready to create this scheme?",
 }
 
-export type WizardFrequencyValue = "weekly" | "biweekly-even" | "biweekly-odd" | "every-4-weeks"
-
-export const WIZARD_FREQUENCIES: readonly { value: WizardFrequencyValue; label: string }[] = [
-  { value: "weekly", label: "Every week" },
-  { value: "biweekly-even", label: "Every 2 weeks (even ISO weeks)" },
-  { value: "biweekly-odd", label: "Every 2 weeks (odd ISO weeks)" },
-  { value: "every-4-weeks", label: "Every 4 weeks" },
-]
+/** Daily · Every week · Every 2 weeks · Every 3 weeks · Once a month. */
+export const WIZARD_FREQUENCIES: readonly SelectOption[] = OFFERED_RECURRENCE_FREQUENCIES.map(
+  (value) => ({ value, label: RECURRENCE_FREQUENCY_LABELS[value] }),
+)
 
 /** The select value for the draft's cadence; empty for a cadence the wizard does not offer. */
-export function wizardFrequencyValue(
-  data: Pick<GuidedSchemeData, "frequency" | "weekRotation">,
-): WizardFrequencyValue | "" {
-  if (data.frequency === "weekly") return "weekly"
-  if (data.frequency === "every-4-weeks") return "every-4-weeks"
-  if (data.frequency === "every-2-weeks") {
-    return data.weekRotation === "even" ? "biweekly-even" : "biweekly-odd"
-  }
-  return ""
+export function wizardFrequencyValue(data: Pick<GuidedSchemeData, "frequency">): string {
+  return OFFERED_RECURRENCE_FREQUENCIES.includes(data.frequency) ? data.frequency : ""
 }
 
-export function applyWizardFrequency(value: string): Pick<GuidedSchemeData, "frequency" | "weekRotation"> {
-  switch (value) {
-    case "biweekly-even":
-      return { frequency: "every-2-weeks", weekRotation: "even" }
-    case "biweekly-odd":
-      return { frequency: "every-2-weeks", weekRotation: "odd" }
-    case "every-4-weeks":
-      return { frequency: "every-4-weeks", weekRotation: "odd" }
-    default:
-      return { frequency: "weekly", weekRotation: "odd" }
+/**
+ * The fortnight cadence anchors on the effective-from week: the week
+ * rotation is that week's ISO parity, so "Every 2 weeks" reads as "from the
+ * start week, every other week" while the engine keeps its parity model.
+ */
+export function fortnightRotation(effectiveFrom: string) {
+  return isoWeekRotation(isIsoDate(effectiveFrom) ? effectiveFrom : todayIso())
+}
+
+/**
+ * The draft patch for a picked cadence. Daily serves the whole week, so it
+ * selects every service day; every 2 weeks derives its rotation from the
+ * effective-from week.
+ */
+export function applyWizardFrequency(
+  value: string,
+  draft: Pick<GuidedSchemeData, "effectiveFrom" | "serviceDays" | "weekRotation">,
+): Pick<GuidedSchemeData, "frequency" | "weekRotation" | "serviceDays"> {
+  const frequency: RecurrenceFrequency = isRecurrenceFrequency(value) ? value : "weekly"
+  return {
+    frequency,
+    weekRotation:
+      frequency === "every-2-weeks" ? fortnightRotation(draft.effectiveFrom) : draft.weekRotation,
+    serviceDays: frequency === "daily" ? [...SERVICE_DAYS] : draft.serviceDays,
   }
 }
 

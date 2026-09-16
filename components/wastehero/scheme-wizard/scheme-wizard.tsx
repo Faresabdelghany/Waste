@@ -96,7 +96,7 @@ export function SchemeWizard({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-5/6 w-full max-w-6xl gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-6xl">
+      <DialogContent className="flex h-5/6 w-full max-w-6xl gap-0 overflow-hidden rounded-2xl bg-background p-0 sm:max-w-6xl">
         <aside className="hidden w-64 shrink-0 flex-col border-r border-border p-6 md:flex">
           <DialogTitle className="mb-6 text-base font-semibold">New route scheme</DialogTitle>
           <DialogDescription className="sr-only">Guided setup for a new route scheme</DialogDescription>

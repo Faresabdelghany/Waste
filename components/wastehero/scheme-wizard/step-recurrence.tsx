@@ -40,6 +40,7 @@ import {
   HOLIDAY_POLICY_OPTIONS,
   WIZARD_FREQUENCIES,
   applyWizardFrequency,
+  fortnightRotation,
   wizardFrequencyValue,
 } from "./wizard-options"
 import { Field, PILL_TOGGLE_ITEM_CLASS, SimpleSelect } from "./wizard-fields"
@@ -79,6 +80,16 @@ export function StepRecurrence({
   const { occurrences } = model
   const rows = occurrences.rows.slice(0, showAll ? PREVIEW_ROWS_EXPANDED : PREVIEW_ROWS)
   const startTime = formatClockTime(data.plannedStartTime)
+  const daily = data.frequency === "daily"
+
+  const setEffectiveFrom = (effectiveFrom: string) =>
+    update({
+      effectiveFrom,
+      // The fortnight anchor follows the start date.
+      ...(data.frequency === "every-2-weeks"
+        ? { weekRotation: fortnightRotation(effectiveFrom) }
+        : {}),
+    })
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -89,7 +100,7 @@ export function StepRecurrence({
             type="date"
             className="h-10 rounded-xl"
             value={data.effectiveFrom}
-            onChange={(event) => update({ effectiveFrom: event.target.value })}
+            onChange={(event) => setEffectiveFrom(event.target.value)}
           />
         </Field>
         <Field id="scheme-to" label="Effective to (optional)">
@@ -106,7 +117,7 @@ export function StepRecurrence({
           <SimpleSelect
             id="scheme-frequency"
             value={wizardFrequencyValue(data)}
-            onChange={(value) => update(applyWizardFrequency(value))}
+            onChange={(value) => update(applyWizardFrequency(value, data))}
             options={WIZARD_FREQUENCIES}
             placeholder="Select frequency"
           />
@@ -136,6 +147,7 @@ export function StepRecurrence({
             }
             aria-labelledby="scheme-days-label"
             className="gap-2"
+            disabled={daily}
           >
             {SERVICE_DAYS.map((day) => (
               <ToggleGroupItem

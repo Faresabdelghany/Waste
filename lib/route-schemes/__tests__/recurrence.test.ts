@@ -66,6 +66,47 @@ describe("every-4-weeks", () => {
   })
 })
 
+describe("daily and every-3-weeks", () => {
+  test("daily matches every date in the window regardless of service days", () => {
+    const recurrence = {
+      frequency: "daily" as const,
+      serviceDays: ["monday" as const],
+      effectiveFrom: "2026-09-14",
+      effectiveTo: "2026-09-20",
+    }
+    for (const iso of ["2026-09-14", "2026-09-16", "2026-09-19", "2026-09-20"]) {
+      assert.equal(matchesRecurrence(recurrence, iso), true, iso)
+    }
+    assert.equal(matchesRecurrence(recurrence, "2026-09-21"), false)
+    assert.equal(RECURRENCE_WEEKLY_RATES.daily, 7)
+    assert.equal(recurrenceCadenceLabel({ frequency: "daily" }), "Daily")
+  })
+
+  test("recurrenceFromValues widens a daily scheme to the full week", () => {
+    const recurrence = recurrenceFromValues({
+      frequency: "daily",
+      serviceDays: "monday, tuesday",
+      effectiveFrom: "2026-09-14",
+      effectiveTo: "",
+    })
+    assert.equal(recurrence?.serviceDays.length, 7)
+  })
+
+  test("every 3 weeks anchors on the effective-from week", () => {
+    const recurrence = {
+      frequency: "every-3-weeks" as const,
+      serviceDays: ["tuesday" as const],
+      effectiveFrom: "2026-09-16",
+      effectiveTo: "",
+    }
+    assert.equal(matchesRecurrence(recurrence, "2026-09-22"), false)
+    assert.equal(matchesRecurrence(recurrence, "2026-10-06"), true)
+    assert.equal(matchesRecurrence(recurrence, "2026-10-13"), false)
+    assert.equal(matchesRecurrence(recurrence, "2026-10-27"), true)
+    assert.equal(RECURRENCE_WEEKLY_RATES["every-3-weeks"], 1 / 3)
+  })
+})
+
 describe("isoWeek", () => {
   test("known weeks", () => {
     assert.equal(isoWeek("2026-09-14"), 38)

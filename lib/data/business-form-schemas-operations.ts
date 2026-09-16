@@ -1045,9 +1045,10 @@ export const operationsBusinessFormSchemas = [
             type: "select",
             required: true,
             options: [
+              { value: "daily", label: "Daily" },
               { value: "weekly", label: "Every week" },
               { value: "every-2-weeks", label: "Every 2 weeks" },
-              { value: "every-4-weeks", label: "Every 4 weeks" },
+              { value: "every-3-weeks", label: "Every 3 weeks" },
               { value: "monthly", label: "Once a month" },
             ],
           },

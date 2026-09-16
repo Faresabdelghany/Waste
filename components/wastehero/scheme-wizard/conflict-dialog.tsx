@@ -26,7 +26,7 @@ export function ConflictDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md rounded-2xl">
+      <DialogContent className="max-w-md rounded-2xl bg-background">
         <DialogHeader className="text-left">
           <DialogTitle>
             {issues.length} issue{issues.length === 1 ? "" : "s"} block route generation

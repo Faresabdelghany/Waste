@@ -46,19 +46,40 @@ export const SERVICE_DAY_LABELS: Record<ServiceDay, string> = {
 }
 
 /**
- * every-4-weeks (guided setup redesign, 2026-09-16) anchors on the ISO week
- * of the scheme's effective-from date: the anchor week and every fourth week
- * after it serve. Unlike the fortnight rotations it is a true 28-day cadence,
- * so it does not follow the 53-week ISO-year boundary behaviour below.
+ * daily (2026-09-16): every date in the effective window — the scheme serves
+ * all seven weekdays, so its stored service days are always the full week.
+ * every-3-weeks / every-4-weeks anchor on the ISO week of the scheme's
+ * effective-from date: the anchor week and every third / fourth week after
+ * it serve. Unlike the fortnight rotations they are true 21- / 28-day
+ * cadences, so they do not follow the 53-week ISO-year boundary behaviour
+ * below. every-4-weeks is kept for stored records; the forms offer the
+ * other five.
  */
-export type RecurrenceFrequency = "weekly" | "every-2-weeks" | "every-4-weeks" | "monthly"
+export type RecurrenceFrequency =
+  | "daily"
+  | "weekly"
+  | "every-2-weeks"
+  | "every-3-weeks"
+  | "every-4-weeks"
+  | "monthly"
 
 export const RECURRENCE_FREQUENCY_LABELS: Record<RecurrenceFrequency, string> = {
+  daily: "Daily",
   weekly: "Every week",
   "every-2-weeks": "Every 2 weeks",
+  "every-3-weeks": "Every 3 weeks",
   "every-4-weeks": "Every 4 weeks",
   monthly: "Once a month",
 }
+
+/** The cadences the create forms offer, in display order. */
+export const OFFERED_RECURRENCE_FREQUENCIES: readonly RecurrenceFrequency[] = [
+  "daily",
+  "weekly",
+  "every-2-weeks",
+  "every-3-weeks",
+  "monthly",
+]
 
 /**
  * Nominal collections per week each cadence delivers on one service day —
@@ -71,8 +92,11 @@ export const RECURRENCE_FREQUENCY_LABELS: Record<RecurrenceFrequency, string> = 
  * scheme-cadence counterpart.
  */
 export const RECURRENCE_WEEKLY_RATES: Record<RecurrenceFrequency, number> = {
+  // A daily scheme collects every container it serves seven times a week.
+  daily: 7,
   weekly: 1,
   "every-2-weeks": 1 / 2,
+  "every-3-weeks": 1 / 3,
   "every-4-weeks": 1 / 4,
   monthly: 12 / 52,
 }
@@ -147,9 +171,16 @@ export function weeksFromEffectiveFrom(recurrence: Pick<SchemeRecurrence, "effec
   return Math.round((week - anchor) / (7 * 864e5))
 }
 
+const ANCHORED_WEEK_INTERVALS: Partial<Record<RecurrenceFrequency, number>> = {
+  "every-3-weeks": 3,
+  "every-4-weeks": 4,
+}
+
 export function matchesRecurrence(recurrence: SchemeRecurrence, iso: string): boolean {
   if (recurrence.effectiveFrom && iso < recurrence.effectiveFrom) return false
   if (recurrence.effectiveTo && iso > recurrence.effectiveTo) return false
+  // Daily serves every weekday, whatever the stored service days say.
+  if (recurrence.frequency === "daily") return true
   if (!recurrence.serviceDays.includes(serviceDayOf(iso))) return false
   if (
     recurrence.frequency === "every-2-weeks" &&
@@ -159,10 +190,11 @@ export function matchesRecurrence(recurrence: SchemeRecurrence, iso: string): bo
   }
   // Without an effective-from there is no anchor week; the cadence then
   // degrades to weekly rather than matching nothing (the form requires From).
+  const interval = ANCHORED_WEEK_INTERVALS[recurrence.frequency]
   if (
-    recurrence.frequency === "every-4-weeks" &&
+    interval &&
     recurrence.effectiveFrom &&
-    weeksFromEffectiveFrom(recurrence, iso) % 4 !== 0
+    weeksFromEffectiveFrom(recurrence, iso) % interval !== 0
   ) {
     return false
   }
@@ -249,6 +281,7 @@ export function recurrenceCadenceLabel(
 }
 
 export function recurrenceSentence(recurrence: SchemeRecurrence): string {
+  if (recurrence.frequency === "daily") return "Daily"
   if (recurrence.serviceDays.length === 0) return "No service days selected"
   const days = sortServiceDays(recurrence.serviceDays)
     .map((day) => SERVICE_DAY_SHORT_LABELS[day])
@@ -308,7 +341,8 @@ export function recurrenceFromValues(
 ): SchemeRecurrence | null {
   const frequency = values.frequency
   if (!isRecurrenceFrequency(frequency)) return null
-  const serviceDays = serviceDaysFromValues(values)
+  // Daily always serves the full week; a partial stored list cannot narrow it.
+  const serviceDays = frequency === "daily" ? [...SERVICE_DAYS] : serviceDaysFromValues(values)
   if (serviceDays.length === 0) return null
   const effectiveFrom = typeof values.effectiveFrom === "string" ? values.effectiveFrom : ""
   // Malformed dates (possible in hand-edited or corrupted submittedValues)
