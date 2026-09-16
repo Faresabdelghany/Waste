@@ -172,19 +172,21 @@ export function StepRecurrence({
             options={HOLIDAY_POLICY_OPTIONS}
             placeholder="Select"
           />
-          <div
-            className={cn(
-              "flex items-center gap-2 text-xs",
-              model.holidaySource ? "text-muted-foreground" : "text-amber-700 dark:text-amber-400",
-            )}
-            data-testid="holiday-source"
-          >
-            <span className="truncate">{holidaySourceLabel(model.holidaySource)}</span>
-            <Button variant="link" size="sm" className="h-auto shrink-0 p-0 text-xs" asChild>
-              <Link href={HOLIDAY_SETTINGS_HREF}>View in Settings</Link>
-            </Button>
-          </div>
         </Field>
+      </div>
+      {/* The holiday source, one line under the policy select's row: which
+          list the project brings, or the amber no-list state. */}
+      <div
+        className={cn(
+          "-mt-4 flex flex-wrap items-center justify-end gap-x-3 text-xs",
+          model.holidaySource ? "text-muted-foreground" : "text-amber-700 dark:text-amber-400",
+        )}
+        data-testid="holiday-source"
+      >
+        <span>{holidaySourceLabel(model.holidaySource)}</span>
+        <Button variant="link" size="sm" className="h-auto shrink-0 p-0 text-xs" asChild>
+          <Link href={HOLIDAY_SETTINGS_HREF}>View in Settings</Link>
+        </Button>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-border bg-muted/40">
