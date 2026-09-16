@@ -161,9 +161,9 @@ export async function fillRecurrence(page: Page, input: RecurrenceInput): Promis
   if (input.holidayPolicy) await pickOption(page, root, "On a public holiday", input.holidayPolicy)
 }
 
-/** The muted / amber holiday-source line beside the holiday policy select. */
-export function holidaySourceLine(page: Page): Locator {
-  return wizard(page).getByTestId("holiday-source")
+/** The read-only "Holiday list · working week" field beside the holiday policy select. */
+export function projectCalendarField(page: Page): Locator {
+  return wizard(page).getByTestId("project-calendar")
 }
 
 /** The next-dates table rows (the preview). */

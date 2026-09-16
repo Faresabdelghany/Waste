@@ -1,11 +1,12 @@
 "use client"
 
 // Step 2 — When does this scheme collect? Effective window, cadence, start
-// time, service days, the holiday policy with its project-scoped holiday
-// source, and the live next-dates table.
+// time, service days, the holiday policy beside the project's read-only
+// calendar (holiday list · working week), and the live next-dates table.
 
 import { useState } from "react"
 import Link from "next/link"
+import { CalendarDays } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -136,35 +137,36 @@ export function StepRecurrence({
         </Field>
       </div>
 
-      <div className="flex flex-wrap items-end gap-6">
-        <div className="shrink-0 space-y-2">
-          <Label className="text-sm" id="scheme-days-label">
-            Service days
-          </Label>
-          <ToggleGroup
-            type="multiple"
-            variant="outline"
-            value={data.serviceDays}
-            onValueChange={(values) =>
-              update({ serviceDays: sortServiceDays(values as ServiceDay[]) })
-            }
-            aria-labelledby="scheme-days-label"
-            className="gap-2"
-            disabled={daily}
-          >
-            {SERVICE_DAYS.map((day) => (
-              <ToggleGroupItem
-                key={day}
-                value={day}
-                aria-label={SERVICE_DAY_LABELS[day]}
-                className={cn(PILL_TOGGLE_ITEM_CLASS, "h-10")}
-              >
-                {SERVICE_DAY_SHORT_LABELS[day]}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        </div>
-        <Field id="scheme-holiday" label="On a public holiday" className="min-w-64 flex-1">
+      <div className="space-y-2">
+        <Label className="text-sm" id="scheme-days-label">
+          Service days
+        </Label>
+        <ToggleGroup
+          type="multiple"
+          variant="outline"
+          value={data.serviceDays}
+          onValueChange={(values) =>
+            update({ serviceDays: sortServiceDays(values as ServiceDay[]) })
+          }
+          aria-labelledby="scheme-days-label"
+          className="gap-2"
+          disabled={daily}
+        >
+          {SERVICE_DAYS.map((day) => (
+            <ToggleGroupItem
+              key={day}
+              value={day}
+              aria-label={SERVICE_DAY_LABELS[day]}
+              className={cn(PILL_TOGGLE_ITEM_CLASS, "h-10")}
+            >
+              {SERVICE_DAY_SHORT_LABELS[day]}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <Field id="scheme-holiday" label="On a public holiday">
           <SimpleSelect
             id="scheme-holiday"
             value={data.holidayPolicy}
@@ -173,20 +175,39 @@ export function StepRecurrence({
             placeholder="Select"
           />
         </Field>
-      </div>
-      {/* The holiday source, one line under the policy select's row: which
-          list the project brings, or the amber no-list state. */}
-      <div
-        className={cn(
-          "-mt-4 flex flex-wrap items-center justify-end gap-x-3 text-xs",
-          model.calendar.list ? "text-muted-foreground" : "text-amber-700 dark:text-amber-400",
-        )}
-        data-testid="holiday-source"
-      >
-        <span>{projectCalendarLabel(model.calendar)}</span>
-        <Button variant="link" size="sm" className="h-auto shrink-0 p-0 text-xs" asChild>
-          <Link href={HOLIDAY_SETTINGS_HREF}>View in Settings</Link>
-        </Button>
+        {/* The project's calendar, read-only — there is no control to bind,
+            so the label is plain text in label styling (a span, so it sits on
+            the same baseline as the labels beside it). Which list the project
+            brings and which days it rests on; amber while it has no list. */}
+        <div className="space-y-2">
+          <Label className="text-sm" asChild>
+            <span>Holiday list · working week</span>
+          </Label>
+          <div
+            data-testid="project-calendar"
+            className={cn(
+              "flex h-10 items-center gap-2 rounded-xl border border-input bg-muted/50 px-3 text-sm",
+              !model.calendar.list &&
+                "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300",
+            )}
+          >
+            <CalendarDays
+              className={cn(
+                "size-4 shrink-0",
+                model.calendar.list ? "text-muted-foreground" : "text-current",
+              )}
+            />
+            <span className="min-w-0 flex-1 truncate">{projectCalendarLabel(model.calendar)}</span>
+            <Button
+              variant="link"
+              size="sm"
+              className="h-auto shrink-0 p-0 text-xs text-current"
+              asChild
+            >
+              <Link href={HOLIDAY_SETTINGS_HREF}>Settings</Link>
+            </Button>
+          </div>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-border bg-muted/40">

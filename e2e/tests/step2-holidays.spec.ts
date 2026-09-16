@@ -2,7 +2,7 @@ import { expect, test } from "../fixtures"
 import {
   fillRecurrence,
   fillScope,
-  holidaySourceLine,
+  projectCalendarField,
   nextDatesRows,
   nextStep,
   optionTexts,
@@ -13,39 +13,50 @@ import {
 
 const HOLIDAY_SETTINGS_HREF = "/settings?pane=operations-setup"
 
+const AREA_BY_PROJECT: Record<string, string> = {
+  "Copenhagen Central": "Indre By Operations",
+  "Harbor Commercial": "Nordhavn Harbor Area",
+  "Cairo Operations": "Nasr City Operations",
+}
+
 async function toStep2(page: Parameters<typeof startGuided>[0], project: string) {
   await startGuided(page)
   await fillScope(page, {
     name: `Holidays · ${project}`,
     project,
-    area: project === "Copenhagen Central" ? "Indre By Operations" : "Nordhavn Harbor Area",
+    area: AREA_BY_PROJECT[project],
     fraction: "Residual",
   })
   await nextStep(page)
   await expect(stepHeading(page)).toHaveText("When does this scheme collect?")
 }
 
-test("the holiday source follows the project and links to Settings", async ({ page }) => {
+test("the holiday list and working week are one read-only field beside the policy, linking to Settings", async ({
+  page,
+}) => {
   await toStep2(page, "Copenhagen Central")
-  const line = holidaySourceLine(page)
-  await expect(line).toContainText("Danish public holidays · Sat–Sun weekend")
-  await expect(line).not.toHaveClass(/text-amber/)
-  await expect(line.getByRole("link", { name: "View in Settings" })).toHaveAttribute(
+  const root = wizard(page)
+  await expect(root.getByText("Holiday list · working week", { exact: true })).toBeVisible()
+  const field = projectCalendarField(page)
+  await expect(field).toContainText("Danish public holidays · Sat–Sun weekend")
+  await expect(field).not.toHaveClass(/amber/)
+  await expect(field.getByRole("link", { name: "Settings", exact: true })).toHaveAttribute(
     "href",
     HOLIDAY_SETTINGS_HREF,
   )
-  // No holiday picker anywhere in the wizard.
-  await expect(wizard(page).getByText("Collection calendar")).toHaveCount(0)
+  // No "from project" wording, no holiday picker anywhere in the wizard.
+  await expect(root.getByText(/from project/)).toHaveCount(0)
+  await expect(root.getByText("Collection calendar")).toHaveCount(0)
 })
 
-test("a project without a holiday list says so in amber and treats every date as working", async ({
+test("a project without a holiday list shows the amber field and treats every weekday as working", async ({
   page,
 }) => {
   await toStep2(page, "Harbor Commercial")
-  const line = holidaySourceLine(page)
-  await expect(line).toContainText("None on this project · Sat–Sun weekend")
-  await expect(line).toHaveClass(/text-amber/)
-  await expect(line.getByRole("link", { name: "View in Settings" })).toBeVisible()
+  const field = projectCalendarField(page)
+  await expect(field).toContainText("None on this project · Sat–Sun weekend")
+  await expect(field).toHaveClass(/amber/)
+  await expect(field.getByRole("link", { name: "Settings", exact: true })).toBeVisible()
   await fillRecurrence(page, {
     effectiveFrom: "2026-12-21",
     effectiveTo: "2026-12-31",
@@ -94,4 +105,23 @@ test("the next-dates preview applies the project's holidays per policy", async (
     "25 Dec 2026",
   )
   await expect(wizard(page).getByText("9 collections")).toBeVisible()
+})
+
+test("Cairo: a Thursday holiday shifts to Sunday under the project's Fri–Sat weekend", async ({
+  page,
+}) => {
+  await toStep2(page, "Cairo Operations")
+  await expect(projectCalendarField(page)).toContainText("Egyptian public holidays · Fri–Sat weekend")
+  await fillRecurrence(page, {
+    effectiveFrom: "2027-01-03",
+    effectiveTo: "2027-01-14",
+    days: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"],
+    holidayPolicy: "Shift to the next working day",
+  })
+  // Thu 7 Jan 2027 (Coptic Christmas) → Fri 8 and Sat 9 are the weekend → Sun 10 Jan.
+  const shifted = nextDatesRows(page).filter({ hasText: "Shifted from Thu 7 Jan · Coptic Christmas" })
+  await expect(shifted).toHaveCount(1)
+  await expect(shifted).toContainText("10 Jan 2027")
+  await expect(shifted).toContainText("Sunday")
+  await expect(wizard(page).getByText("10 collections")).toBeVisible()
 })
