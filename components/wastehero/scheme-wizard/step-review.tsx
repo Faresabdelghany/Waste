@@ -1,7 +1,7 @@
 "use client"
 
 // Step 5 — Ready to create this scheme? Four sections with Change links
-// back to their steps, then the two create options.
+// back to their steps, then the create option.
 
 import type { ReactNode } from "react"
 
@@ -13,7 +13,7 @@ import { recurrenceCadenceLabel, serviceDaysRangeLabel } from "@/lib/route-schem
 
 import type { WizardRecords } from "./use-wizard-records"
 import type { WizardModel } from "./wizard-model"
-import { CREATE_AS_OPTIONS, EDIT_POLICY_OPTIONS, type WizardStepId } from "./wizard-options"
+import { CREATE_AS_OPTIONS, type WizardStepId } from "./wizard-options"
 import { Field, SimpleSelect } from "./wizard-fields"
 
 function ReviewRow({ label, value }: { label: string; value: ReactNode }) {
@@ -126,15 +126,6 @@ export function StepReview({
             value={data.createAs}
             onChange={(value) => update({ createAs: value as GuidedSchemeData["createAs"] })}
             options={CREATE_AS_OPTIONS}
-            placeholder="Select"
-          />
-        </Field>
-        <Field id="scheme-edit-policy" label="Changes to a running scheme">
-          <SimpleSelect
-            id="scheme-edit-policy"
-            value={data.editPolicy}
-            onChange={(value) => update({ editPolicy: value as GuidedSchemeData["editPolicy"] })}
-            options={EDIT_POLICY_OPTIONS}
             placeholder="Select"
           />
         </Field>

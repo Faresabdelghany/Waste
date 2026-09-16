@@ -59,11 +59,14 @@ export const isSchemeCreateAs = (value: unknown): value is SchemeCreateAs =>
 
 /**
  * "Changes to a running scheme": how a later edit of a scheme with
- * generated routes should apply. Persisted on the record; the edit
- * reconciliation planner does not consume it yet (it asks each time).
+ * generated routes should apply. Nothing consumes it yet — the edit
+ * reconciliation planner always reshapes the future window — so the wizard
+ * no longer offers a choice and creation stamps the server-side default,
+ * "ask each time". Wiring the policy into reconciliation is ticketed.
  */
 export const SCHEME_EDIT_POLICIES = ["ask", "future", "single"] as const
 export type SchemeEditPolicy = (typeof SCHEME_EDIT_POLICIES)[number]
+export const DEFAULT_SCHEME_EDIT_POLICY: SchemeEditPolicy = "ask"
 export const SCHEME_EDIT_POLICY_LABELS: Record<SchemeEditPolicy, string> = {
   ask: "Ask each time",
   future: "Apply to future collections",

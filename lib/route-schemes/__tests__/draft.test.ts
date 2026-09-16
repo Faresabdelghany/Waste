@@ -27,7 +27,6 @@ const draft = (wasteFraction: string, groups: CollectionGroup[]): GuidedSchemeDa
   plannedStartTime: "06:30",
   holidayPolicy: "shift-next",
   createAs: "validated",
-  editPolicy: "ask",
   groups,
 })
 

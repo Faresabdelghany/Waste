@@ -58,7 +58,7 @@ import {
   type CalendarRowSummary,
 } from "@/lib/route-schemes/calendar-list"
 import {
-  SCHEME_EDIT_POLICY_LABELS,
+  DEFAULT_SCHEME_EDIT_POLICY,
   planSchemeCreation,
 } from "@/lib/route-schemes/creation"
 import { draftGroups } from "@/lib/route-schemes/draft"
@@ -4106,7 +4106,9 @@ export function BusinessWorkspace({
       // policy through the same occurrence generator the wizard previewed with.
       holidayPolicy: data.holidayPolicy,
       createAs: data.createAs,
-      editPolicy: data.editPolicy,
+      // Not chosen in the wizard: the edit planner does not consume a policy
+      // yet, so every scheme carries the server-side default.
+      editPolicy: DEFAULT_SCHEME_EDIT_POLICY,
       // One group covering every service day stores as the legacy
       // single-assignment shape; anything else stores the groups explicitly
       // (D36) — never both, the group list is the single source of truth.
@@ -4144,7 +4146,6 @@ export function BusinessWorkspace({
             }
           : {}),
         "Holiday policy": HOLIDAY_POLICY_LABELS[data.holidayPolicy],
-        "Changes to a running scheme": SCHEME_EDIT_POLICY_LABELS[data.editPolicy],
         // Absent = no estimated start (issue #32) — the detail page shows "—".
         ...(data.plannedStartTime.trim()
           ? { "Planned start": data.plannedStartTime.trim() }

@@ -2,7 +2,7 @@
 // opens with. The frequency options are the product's four cadences mapped
 // onto the engine's (frequency, weekRotation) pair.
 
-import { SCHEME_CREATE_AS_LABELS, SCHEME_EDIT_POLICY_LABELS } from "@/lib/route-schemes/creation"
+import { SCHEME_CREATE_AS_LABELS } from "@/lib/route-schemes/creation"
 import { HOLIDAY_POLICIES, HOLIDAY_POLICY_LABELS } from "@/lib/route-schemes/occurrences"
 import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
 import { SCHEME_SERVICE_TYPES } from "@/lib/route-schemes/scope"
@@ -88,10 +88,6 @@ export const CREATE_AS_OPTIONS: readonly SelectOption[] = Object.entries(SCHEME_
   ([value, label]) => ({ value, label }),
 )
 
-export const EDIT_POLICY_OPTIONS: readonly SelectOption[] = Object.entries(
-  SCHEME_EDIT_POLICY_LABELS,
-).map(([value, label]) => ({ value, label }))
-
 /** A blank draft: today as effective-from, weekly, 06:30, holidays skipped. */
 export function initialSchemeDraft(): GuidedSchemeData {
   return {
@@ -106,7 +102,6 @@ export function initialSchemeDraft(): GuidedSchemeData {
     plannedStartTime: "06:30",
     holidayPolicy: "skip",
     createAs: "validated",
-    editPolicy: "ask",
     groups: [],
   }
 }

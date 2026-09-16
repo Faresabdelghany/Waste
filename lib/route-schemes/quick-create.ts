@@ -7,12 +7,7 @@
 // creation orchestration (planSchemeCreation). Parity holds by construction —
 // there is no second create path to drift.
 
-import {
-  isSchemeCreateAs,
-  isSchemeEditPolicy,
-  type SchemeCreateAs,
-  type SchemeEditPolicy,
-} from "./creation"
+import { isSchemeCreateAs, type SchemeCreateAs } from "./creation"
 import { IMPLICIT_GROUP_ID, type CollectionGroup } from "./groups"
 import { matchPlansFromValues, stopSelectionMode } from "./matching"
 import { isHolidayPolicy, type HolidayPolicy } from "./occurrences"
@@ -57,8 +52,6 @@ export interface GuidedSchemeData {
   holidayPolicy: HolidayPolicy
   /** Review step: create Validated (no generation) or Effective (generate + Plan Ahead). */
   createAs: SchemeCreateAs
-  /** Review step: how later edits of a running scheme apply. Persisted, not yet consumed. */
-  editPolicy: SchemeEditPolicy
   serviceProviderId?: string
   plannedVehicleId?: string
   plannedDriverId?: string
@@ -105,7 +98,6 @@ export const QUICK_SCHEME_DRAFT_FIELD_IDS: ReadonlySet<string> = new Set([
   "plannedStartTime",
   "holidayPolicy",
   "createAs",
-  "editPolicy",
   "serviceProviderId",
   "plannedVehicleId",
   "plannedDriverId",
@@ -163,7 +155,6 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
   }
   const holidayPolicy = values.holidayPolicy
   const createAs = values.createAs
-  const editPolicy = values.editPolicy
   return {
     schemeName,
     projectId: optionalId(values, "projectId"),
@@ -187,7 +178,6 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
     // initial window generated on create (the pre-2026-09-16 default).
     holidayPolicy: isHolidayPolicy(holidayPolicy) ? holidayPolicy : "skip",
     createAs: isSchemeCreateAs(createAs) ? createAs : "effective",
-    editPolicy: isSchemeEditPolicy(editPolicy) ? editPolicy : "ask",
     depotId: optionalId(values, "depotId"),
     unloadingStationId: optionalId(values, "unloadingStationId"),
     groups: [group],
