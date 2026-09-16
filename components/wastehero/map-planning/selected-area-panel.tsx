@@ -18,7 +18,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import type { ServiceAreaCoverage } from "@/lib/map-planning/coverage"
@@ -28,6 +27,8 @@ import type { AreaRoutes, RouteBucket } from "@/lib/map-planning/routes"
 import type { SelectionShape } from "@/lib/map-planning/selection"
 import type { SelectionStatistics } from "@/lib/map-planning/statistics"
 import { cn } from "@/lib/utils"
+
+import { StatusBadge } from "./status-badge"
 
 export type SelectedAreaPanelProps = {
   shape: SelectionShape | null
@@ -348,25 +349,4 @@ function CountRow({ label, value, tone }: { label: string; value: number; tone?:
 
 function EmptyLine({ children }: { children: React.ReactNode }) {
   return <p className="text-xs text-muted-foreground">{children}</p>
-}
-
-const POSITIVE_STATUSES = new Set(["active", "scheduled", "effective", "valid"])
-const WARNING_STATUSES = new Set(["expiring", "overlap", "validated", "upcoming", "draft"])
-
-function StatusBadge({ status }: { status: string }) {
-  const key = status.trim().toLowerCase()
-  return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "h-5 shrink-0 px-1.5 text-[10px] font-medium",
-        POSITIVE_STATUSES.has(key) &&
-          "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300",
-        WARNING_STATUSES.has(key) &&
-          "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300",
-      )}
-    >
-      {status}
-    </Badge>
-  )
 }

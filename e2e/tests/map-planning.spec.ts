@@ -34,6 +34,80 @@ async function selectRectangle(page: Page): Promise<void> {
   await expect(overlay).toHaveCount(0)
 }
 
+/** The app's own local-date "today" (lib/route-schemes/recurrence.ts todayIso). */
+const localToday = () => {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
+}
+
+const SEEDED_ROUTE_ID = "route-e2e-9001"
+
+/**
+ * Fixture route days name pickups outside the registry, so nothing is
+ * drawable until a Route Scheme generates routes. Seed one dated route with
+ * three located stops the way generation writes them (typed routeId and
+ * containerId on the pickups) and reload — the store merges browser records
+ * with the fixtures.
+ */
+async function seedDrawableRoute(page: Page): Promise<void> {
+  const blank = { context: "", owner: "", updated: "", description: "", related: [], source: "", freshness: "" }
+  const stops = ["asset-82014", "asset-66420", "asset-44831"]
+  const seeded = {
+    "route-studio.routes": [
+      {
+        ...blank,
+        id: SEEDED_ROUTE_ID,
+        name: "RC-9001",
+        status: "Planned",
+        value: `${stops.length} stops`,
+        facts: { Vehicle: "WH-24", Driver: "Mads Jensen", "Time window": "06:00–14:00" },
+        submittedValues: { serviceDate: localToday() },
+      },
+    ],
+    "route-studio.pickups": stops.map((containerId, index) => ({
+      ...blank,
+      id: `pickup-e2e-${index + 1}`,
+      name: `Pickup ${index + 1}`,
+      status: "Planned",
+      value: "",
+      facts: { Stop: String(index + 1) },
+      submittedValues: { routeId: SEEDED_ROUTE_ID, containerId },
+    })),
+  }
+  await page.addInitScript((payload) => {
+    window.localStorage.setItem("wastehero-business-records-v1", JSON.stringify(payload))
+  }, seeded)
+  await page.reload()
+  await expect(page.locator(MARKERS)).toBeVisible()
+  await expect(page.locator('[data-marker="cluster"]').first()).toBeVisible()
+}
+
+/**
+ * Clicks a drawn route where its hit stroke is the topmost element: a marker
+ * stands on every stop and clusters may sit on the segment, so walk the first
+ * segment until the point under the pointer is the route itself.
+ */
+async function clickRouteLine(page: Page, routeId: string): Promise<void> {
+  const point = await page.evaluate((id) => {
+    const circles = Array.from(document.querySelectorAll(`[data-route-line="${id}"] circle`)).slice(0, 2)
+    if (circles.length < 2) return null
+    const [a, b] = circles.map((node) => {
+      const box = node.getBoundingClientRect()
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    })
+    for (let step = 1; step < 40; step += 1) {
+      const t = step / 40
+      const x = a.x + (b.x - a.x) * t
+      const y = a.y + (b.y - a.y) * t
+      const hit = document.elementFromPoint(x, y)
+      if (hit?.getAttribute("data-route-hit") === id) return { x, y }
+    }
+    return null
+  }, routeId)
+  if (!point) throw new Error(`no clear point on route ${routeId}`)
+  await page.mouse.click(point.x, point.y)
+}
+
 const mapZoom = (page: Page) =>
   page.evaluate(
     (selector) =>
@@ -204,4 +278,52 @@ test("a legacy Plan calendars link lands on the Settings pane", async ({ page })
   await expect(dialog).toBeHidden()
   await expect(page.getByRole("heading", { name: "Collection calendars" }).first()).toBeVisible()
   await expect(page.getByRole("cell", { name: "Copenhagen Central 2026" }).first()).toBeVisible()
+})
+
+test("the Routes layer is disabled while no route has stop positions", async ({ page }) => {
+  await page.getByRole("button", { name: /^Layers/ }).click()
+  const layers = page.getByRole("dialog", { name: "Layers" })
+  const routesLayer = layers.getByTestId("routes-layer")
+  await expect(routesLayer).toContainText("Routes")
+  await expect(routesLayer).toContainText("Any date")
+  await expect(routesLayer.getByRole("checkbox", { name: /Routes in the collection window/ })).toBeDisabled()
+  await expect(routesLayer).toContainText("No route has stop positions yet")
+  await expect(page.locator("[data-route-line]")).toHaveCount(0)
+})
+
+test("the Routes layer draws a dated route coloured by status and a click on its line opens the route card", async ({ page }) => {
+  await seedDrawableRoute(page)
+  await page.getByRole("button", { name: /^Layers/ }).click()
+  const layers = page.getByRole("dialog", { name: "Layers" })
+  const toggle = layers.getByTestId("routes-layer").getByRole("checkbox", { name: /Routes in the collection window/ })
+  await expect(toggle).toBeEnabled()
+  await expect(layers.getByTestId("routes-layer")).toContainText("1 awaiting")
+  await toggle.click()
+  const line = page.locator(`[data-route-line="${SEEDED_ROUTE_ID}"]`)
+  await expect(line).toBeVisible()
+  await expect(line).toHaveAttribute("data-route-status", "awaiting")
+  await expect(line.locator("polyline").first()).toHaveAttribute("stroke", "#f59e0b")
+  await page.keyboard.press("Escape")
+  await expect(layers).toHaveCount(0)
+
+  // The window still holds the route: it runs today.
+  await page.getByLabel("Collection window").click()
+  await page.getByRole("option", { name: "Today" }).click()
+  await expect(line).toBeVisible()
+
+  await clickRouteLine(page, SEEDED_ROUTE_ID)
+  const card = page.getByTestId("route-card")
+  await expect(card).toBeVisible()
+  await expect(card).toContainText("RC-9001")
+  await expect(card).toContainText("Planned")
+  await expect(card).toContainText("WH-24")
+  await expect(card).toContainText("Mads Jensen")
+  await expect(card).toContainText("06:00–14:00")
+  await expect(card).toContainText("3")
+  await expect(card.getByRole("link", { name: "Open route" })).toHaveAttribute(
+    "href",
+    `/route-studio?module=routes&record=${SEEDED_ROUTE_ID}`,
+  )
+  await page.keyboard.press("Escape")
+  await expect(card).toHaveCount(0)
 })

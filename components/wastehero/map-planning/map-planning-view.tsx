@@ -6,15 +6,17 @@
 // selected with a rectangle or polygon that stays on the map and can be
 // edited, summed up in the Selected area panel, and handed to the Guided
 // Setup wizard as a Route Scheme draft. The Layers control picks the base
-// map and switches planning-area outlines on. Every number on screen
-// derives from live records at render time; the page stores nothing but
-// the base map choice in the browser. Rendered by BusinessWorkspace for
-// plan.map-planning.
+// map, switches planning-area outlines on, and draws every dated route in
+// the collection window, coloured by status and clickable for its card.
+// Every number on screen derives from live records at render time; the page
+// stores nothing but the base map choice in the browser. Rendered by
+// BusinessWorkspace for plan.map-planning.
 
 import dynamic from "next/dynamic"
+import Link from "next/link"
 import { useTheme } from "next-themes"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Polygon, Selection, Trash } from "@phosphor-icons/react/dist/ssr"
+import { ArrowSquareOut, Polygon, Selection, Trash } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import { useAssetManagementStore } from "@/components/settings/asset-management-store"
@@ -43,12 +45,13 @@ import type { MapCluster } from "@/lib/map-planning/clusters"
 import { fractionColor } from "@/lib/map-planning/colors"
 import { serviceAreasForSelection } from "@/lib/map-planning/coverage"
 import { MAP_FILTER_READERS } from "@/lib/map-planning/filters"
-import { formatDateRange } from "@/lib/map-planning/format"
+import { formatDateRange, formatShortDate } from "@/lib/map-planning/format"
 import { pointInPolygon, type LngLat } from "@/lib/map-planning/geo"
 import { containerPoints, type MapPoint } from "@/lib/map-planning/points"
 import { containerLocation } from "@/lib/map-planning/positions"
-import { routesInSelection } from "@/lib/map-planning/routes"
+import { routesInSelection, routesInWindow, type AreaRoute } from "@/lib/map-planning/routes"
 import {
+  COLLECTION_WINDOW_LABELS,
   DEFAULT_COLLECTION_WINDOW,
   collectionWindowRange,
   inCollectionWindow,
@@ -68,6 +71,7 @@ import { MapSearch } from "./map-search"
 import { MapToolbar } from "./map-toolbar"
 import type { DrawTool, PlanningMapApi } from "./planning-map"
 import { SelectedAreaPanel } from "./selected-area-panel"
+import { StatusBadge } from "./status-badge"
 
 const PlanningMap = dynamic(
   () => import("./planning-map").then((module) => module.PlanningMap),
@@ -91,6 +95,7 @@ export type MapPlanningViewProps = {
 }
 
 type ClusterList = { cluster: MapCluster; anchor: { x: number; y: number } }
+type RouteCard = { route: AreaRoute; anchor: { x: number; y: number } }
 
 /** The quantities line when no collection window bounds them. */
 const PER_COLLECTION_LABEL = "Per collection"
@@ -119,6 +124,9 @@ export function MapPlanningView({
   const [shape, setShape] = useState<SelectionShape | null>(null)
   const [editingShape, setEditingShape] = useState(false)
   const [routesOnMap, setRoutesOnMap] = useState(false)
+  // The Routes layer: every drawable route in the collection window.
+  const [windowRoutesOnMap, setWindowRoutesOnMap] = useState(false)
+  const [routeCard, setRouteCard] = useState<RouteCard | null>(null)
   const [detail, setDetail] = useState<BusinessRecord | null>(null)
   const [clusterList, setClusterList] = useState<ClusterList | null>(null)
   const [wizardOpen, setWizardOpen] = useState(false)
@@ -196,10 +204,21 @@ export function MapPlanningView({
     () => serviceAreasForSelection(selectedContainers, serviceAreas),
     [selectedContainers, serviceAreas],
   )
+  const windowRoutes = useMemo(
+    () => routesInWindow(routes, pickups, inServiceContainers, quantityRange),
+    [inServiceContainers, pickups, quantityRange, routes],
+  )
   const areaRoutes = useMemo(
     () => routesInSelection(selectedContainers, routes, pickups, inServiceContainers),
     [inServiceContainers, pickups, routes, selectedContainers],
-  )
+  )  // Both sources may name the same route; the layer's copy stands for it.
+  const routeLines = useMemo(() => {
+    const lines = new Map<string, AreaRoute>()
+    if (routesOnMap) for (const route of areaRoutes.routes) lines.set(route.id, route)
+    if (windowRoutesOnMap) for (const route of windowRoutes) lines.set(route.id, route)
+    return Array.from(lines.values())
+  }, [areaRoutes.routes, routesOnMap, windowRoutes, windowRoutesOnMap])
+
   const activeChips = businessFilterChips(filters).length
   const canReset = activeChips > 0 || window !== DEFAULT_COLLECTION_WINDOW
   const hasSelection = shape !== null || selectedContainerIds.size > 0
@@ -325,7 +344,8 @@ export function MapPlanningView({
           editingShape={editingShape}
           onShapeChange={changeShape}
           areaLayers={visibleAreaLayers}
-          routeLines={routesOnMap ? areaRoutes.routes : []}
+          routeLines={routeLines}
+          onRouteClick={(route, anchor) => setRouteCard({ route, anchor })}
           onDrawComplete={completeDraw}
           onDrawCancel={() => setDrawTool("none")}
           onPointClick={openPoint}
@@ -387,8 +407,61 @@ export function MapPlanningView({
             onShowAllAreas={showAllAreas}
             onHideAllAreas={hideAllAreas}
             onZoomToArea={zoomToArea}
+            routes={windowRoutes}
+            routesOnMap={windowRoutesOnMap}
+            onToggleRoutes={setWindowRoutesOnMap}
+            windowLabel={COLLECTION_WINDOW_LABELS[window]}
           />
         </div>
+
+        {routeCard && (
+          <Popover open onOpenChange={(open) => !open && setRouteCard(null)}>
+            <PopoverAnchor asChild>
+              <span
+                className="pointer-events-none absolute size-px"
+                style={{ left: routeCard.anchor.x, top: routeCard.anchor.y }}
+              />
+            </PopoverAnchor>
+            <PopoverContent align="start" className="w-72 p-3 text-sm" data-testid="route-card">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2">
+                    <span
+                      className="size-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: routeCard.route.color }}
+                      aria-hidden
+                    />
+                    <span className="truncate font-semibold">{routeCard.route.name}</span>
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {routeCard.route.date ? formatShortDate(routeCard.route.date) : "Undated"}
+                    {routeCard.route.timeWindow ? ` · ${routeCard.route.timeWindow}` : ""}
+                  </p>
+                </div>
+                <StatusBadge status={routeCard.route.status} />
+              </div>
+              <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                <dt className="text-muted-foreground">Vehicle</dt>
+                <dd className="truncate">{routeCard.route.vehicle ?? "Unassigned"}</dd>
+                <dt className="text-muted-foreground">Driver</dt>
+                <dd className="truncate">{routeCard.route.driver ?? "Unassigned"}</dd>
+                <dt className="text-muted-foreground">Stops</dt>
+                <dd className="tabular-nums">
+                  {routeCard.route.stopCount}
+                  {routeCard.route.stops.length < routeCard.route.stopCount
+                    ? ` · ${routeCard.route.stops.length} on the map`
+                    : ""}
+                </dd>
+              </dl>
+              <Button asChild variant="outline" size="sm" className="mt-3 h-8 w-full gap-1.5 text-xs">
+                <Link href={routeCard.route.href}>
+                  Open route
+                  <ArrowSquareOut className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </PopoverContent>
+          </Popover>
+        )}
 
         {clusterList && (
           <Popover open onOpenChange={(open) => !open && setClusterList(null)}>

@@ -84,8 +84,10 @@ export type PlanningMapProps = {
   onShapeChange: (polygon: LngLat[]) => void
   /** Planning-area outlines that are switched on. */
   areaLayers: readonly PlanningAreaLayer[]
-  /** Routes to draw as stop-to-stop lines ("See on map"). */
+  /** Routes to draw as stop-to-stop lines ("See on map", the Routes layer). */
   routeLines: readonly AreaRoute[]
+  /** A click on a route line — open its card at that point. */
+  onRouteClick: (route: AreaRoute, anchor: { x: number; y: number }) => void
   onDrawComplete: (polygon: LngLat[]) => void
   onDrawCancel: () => void
   onPointClick: (point: MapPoint) => void
@@ -117,6 +119,7 @@ export function PlanningMap({
   onShapeChange,
   areaLayers,
   routeLines,
+  onRouteClick,
   onDrawComplete,
   onDrawCancel,
   onPointClick,
@@ -277,6 +280,7 @@ export function PlanningMap({
           project={project}
           unproject={unproject}
           onShapeChange={onShapeChange}
+          onRouteClick={onRouteClick}
         />
       )}
 
@@ -425,6 +429,7 @@ function ShapesOverlay({
   project,
   unproject,
   onShapeChange,
+  onRouteClick,
 }: {
   areas: readonly PlanningAreaLayer[]
   routes: readonly AreaRoute[]
@@ -433,6 +438,7 @@ function ShapesOverlay({
   project: (lngLat: LngLat) => ScreenPoint | null
   unproject: (screen: ScreenPoint) => LngLat
   onShapeChange: (polygon: LngLat[]) => void
+  onRouteClick: (route: AreaRoute, anchor: ScreenPoint) => void
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [drag, setDrag] = useState<{ index: number; screen: ScreenPoint[] } | null>(null)
@@ -442,7 +448,7 @@ function ShapesOverlay({
     : []
   const screen = drag ? drag.screen : projected
 
-  const local = (event: ReactPointerEvent): ScreenPoint => {
+  const local = (event: { clientX: number; clientY: number }): ScreenPoint => {
     const rect = svgRef.current?.getBoundingClientRect()
     return { x: event.clientX - (rect?.left ?? 0), y: event.clientY - (rect?.top ?? 0) }
   }
@@ -480,7 +486,6 @@ function ShapesOverlay({
   return (
     <svg
       ref={svgRef}
-      aria-hidden
       data-testid="planning-map-shapes"
       className="pointer-events-none absolute inset-0 z-10 h-full w-full overflow-visible"
     >
@@ -519,8 +524,9 @@ function ShapesOverlay({
       {routes.map((route) => {
         const stops = route.stops.map(project).filter((point): point is ScreenPoint => point !== null)
         if (stops.length === 0) return null
+        const open = (event: { clientX: number; clientY: number }) => onRouteClick(route, local(event))
         return (
-          <g key={route.id} data-route-line={route.id}>
+          <g key={route.id} data-route-line={route.id} data-route-status={route.bucket}>
             {stops.length >= 2 && (
               <polyline
                 points={toPoints(stops)}
@@ -535,6 +541,28 @@ function ShapesOverlay({
             {stops.map((stop, index) => (
               <circle key={index} cx={stop.x} cy={stop.y} r={4} fill="white" stroke={route.color} strokeWidth={2} />
             ))}
+            {/* A wide, invisible stroke makes the line easy to hit; it is the interactive element. */}
+            <polyline
+              points={toPoints(stops.length >= 2 ? stops : [stops[0], stops[0]])}
+              fill="none"
+              stroke="transparent"
+              strokeWidth={14}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              role="button"
+              tabIndex={0}
+              aria-label={`Route ${route.name}, ${route.status}`}
+              data-route-hit={route.id}
+              className="cursor-pointer focus-visible:outline-none"
+              style={{ pointerEvents: "stroke" }}
+              onClick={open}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return
+                event.preventDefault()
+                const box = event.currentTarget.getBoundingClientRect()
+                open({ clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 })
+              }}
+            />
             <text
               x={stops[0].x + 8}
               y={stops[0].y - 8}
@@ -613,7 +641,7 @@ function DrawOverlay({
     return () => window.removeEventListener("keydown", onKey)
   }, [onCancel, onComplete, tool, unproject, vertices])
 
-  const local = (event: ReactPointerEvent): ScreenPoint => {
+  const local = (event: { clientX: number; clientY: number }): ScreenPoint => {
     const rect = svgRef.current?.getBoundingClientRect()
     return { x: event.clientX - (rect?.left ?? 0), y: event.clientY - (rect?.top ?? 0) }
   }

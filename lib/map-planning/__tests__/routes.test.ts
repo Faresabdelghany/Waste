@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { BusinessRecord } from "../../data/business-modules"
-import { routesInSelection } from "../routes"
+import { ROUTE_BUCKET_COLORS, routesInSelection, routesInWindow } from "../routes"
 
 function record(id: string, facts: Record<string, string> = {}, extra: Partial<BusinessRecord> = {}): BusinessRecord {
   return {
@@ -37,7 +37,11 @@ const routes = [
   record("route-gen-1", { Area: "Elsewhere" }, { name: "RC-7001", status: "Planned", submittedValues: { serviceDate: "2026-09-18" } }),
   record("route-gen-2", {}, { name: "RC-7002", status: "Active", submittedValues: { serviceDate: "2026-09-16", actualDate: "2026-09-17" } }),
   // Fixture-shaped: pickups name it by display facts.
-  record("route-day-1044", { Area: "Nørrebro" }, { name: "RC-1044", status: "Completed" }),
+  record(
+    "route-day-1044",
+    { Area: "Nørrebro", Vehicle: "WH-24", Driver: "Mads Jensen", "Time window": "06:10–14:18" },
+    { name: "RC-1044", status: "Completed", value: "42 stops" },
+  ),
   // Fixture-shaped with no pickups at all: linked by the Area fact prefix.
   record("route-day-1048", { Area: "Østerbro" }, { name: "RC-1048", status: "Active" }),
   // Cancelled — never counted.
@@ -84,5 +88,51 @@ describe("routesInSelection", () => {
     const summary = routesInSelection([containers[3]], routes, pickups, containers)
     assert.deepEqual(summary.routes.map((route) => [route.name, route.date]), [["RC-7002", "2026-09-17"]])
     assert.deepEqual(routesInSelection([], routes, pickups, containers).total, 0)
+  })
+})
+
+describe("route colours", () => {
+  test("a route is coloured by its status bucket, not its position in the list", () => {
+    const summary = routesInSelection(containers.slice(0, 3), routes, pickups, containers)
+    const byId = new Map(summary.routes.map((route) => [route.id, route]))
+    assert.equal(byId.get("route-gen-1")!.color, ROUTE_BUCKET_COLORS.awaiting)
+    assert.equal(byId.get("route-day-1048")!.color, ROUTE_BUCKET_COLORS["in-progress"])
+    assert.equal(byId.get("route-day-1044")!.color, ROUTE_BUCKET_COLORS.completed)
+  })
+})
+
+describe("route details", () => {
+  test("a route carries vehicle, driver, time window, its stop count, and a Route Studio link", () => {
+    const summary = routesInSelection(containers.slice(0, 3), routes, pickups, containers)
+    const fixture = summary.routes.find((route) => route.id === "route-day-1044")!
+    assert.equal(fixture.vehicle, "WH-24")
+    assert.equal(fixture.driver, "Mads Jensen")
+    assert.equal(fixture.timeWindow, "06:10–14:18")
+    assert.equal(fixture.stopCount, 42, "the record's own stop count wins over the partial fixture pickups")
+    assert.equal(fixture.href, "/route-studio?module=routes&record=route-day-1044")
+    const generated = summary.routes.find((route) => route.id === "route-gen-1")!
+    assert.equal(generated.vehicle, null)
+    assert.equal(generated.stopCount, 3, "a generated route counts its pickups")
+  })
+})
+
+describe("routesInWindow", () => {
+  test("without a window every drawable route is returned, selected or not", () => {
+    const rows = routesInWindow(routes, pickups, containers, null)
+    assert.deepEqual(
+      rows.map((route) => route.name),
+      ["RC-7001", "RC-7002", "RC-1044"],
+      "awaiting, then in progress, then completed; RC-1048 has no stops, RC-7003 is cancelled, RC-7004 stops at an unknown container",
+    )
+    assert.ok(rows.every((route) => route.stops.length > 0))
+  })
+
+  test("with a window only routes dated inside it remain; the actual date wins; dateless routes drop out", () => {
+    const seventeenth = routesInWindow(routes, pickups, containers, { from: "2026-09-17", to: "2026-09-17" })
+    assert.deepEqual(seventeenth.map((route) => route.name), ["RC-7002"])
+    const later = routesInWindow(routes, pickups, containers, { from: "2026-09-18", to: "2026-09-30" })
+    assert.deepEqual(later.map((route) => route.name), ["RC-7001"])
+    const sixteenth = routesInWindow(routes, pickups, containers, { from: "2026-09-16", to: "2026-09-16" })
+    assert.deepEqual(sixteenth, [], "RC-7002 moved to the 17th; RC-1044 has no date")
   })
 })

@@ -1,10 +1,11 @@
 "use client"
 
 // The Layers control (2026-09-16): the bottom-right "Layers n/N" button
-// and its panel — the base map picker (CSS-drawn swatches, no network) and
-// the planning-area outlines, each with a checkbox and a zoom-to button.
-// Areas come from lib/map-planning/areas.ts; the map draws the ones that
-// are on.
+// and its panel — the base map picker (CSS-drawn swatches, no network), the
+// planning-area outlines, each with a checkbox and a zoom-to button, and the
+// Routes layer: every drawable route in the collection window, counted by
+// status. Areas come from lib/map-planning/areas.ts and routes from
+// lib/map-planning/routes.ts; the map draws the ones that are on.
 
 import { Check, Crosshair, Stack } from "@phosphor-icons/react/dist/ssr"
 
@@ -14,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { PlanningAreaLayer } from "@/lib/map-planning/areas"
 import { BASE_MAPS, type BaseMap, type BaseMapId } from "@/lib/map-planning/base-maps"
+import { ROUTE_BUCKET_COLORS, type AreaRoute, type RouteBucket } from "@/lib/map-planning/routes"
 import { cn } from "@/lib/utils"
 
 export type LayersPanelProps = {
@@ -25,8 +27,21 @@ export type LayersPanelProps = {
   onShowAllAreas: () => void
   onHideAllAreas: () => void
   onZoomToArea: (area: PlanningAreaLayer) => void
+  /** Every drawable route in the collection window. */
+  routes: readonly AreaRoute[]
+  routesOnMap: boolean
+  onToggleRoutes: (enabled: boolean) => void
+  /** "Any date", "Next 7 days", … — names the window the routes are read from. */
+  windowLabel: string
   className?: string
 }
+
+const ROUTE_BUCKET_LABELS: Readonly<Record<RouteBucket, string>> = {
+  awaiting: "awaiting",
+  "in-progress": "in progress",
+  completed: "completed",
+}
+const ROUTE_BUCKETS: readonly RouteBucket[] = ["awaiting", "in-progress", "completed"]
 
 export function LayersPanel({
   baseMap,
@@ -37,10 +52,17 @@ export function LayersPanel({
   onShowAllAreas,
   onHideAllAreas,
   onZoomToArea,
+  routes,
+  routesOnMap,
+  onToggleRoutes,
+  windowLabel,
   className,
 }: LayersPanelProps) {
   const drawable = areas.filter((area) => area.bounds !== null)
   const enabled = drawable.filter((area) => enabledAreaIds.has(area.id)).length
+  const routeCounts = ROUTE_BUCKETS.map(
+    (bucket) => [bucket, routes.filter((route) => route.bucket === bucket).length] as const,
+  ).filter(([, count]) => count > 0)
 
   return (
     <Popover>
@@ -70,6 +92,45 @@ export function LayersPanel({
                 onSelect={() => onBaseMapChange(option.id)}
               />
             ))}
+          </div>
+        </div>
+        <div className="border-b border-border px-3 py-3" data-testid="routes-layer">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-medium text-muted-foreground">Routes</p>
+            <span className="text-[11px] text-muted-foreground">{windowLabel}</span>
+          </div>
+          <div className="flex items-start gap-2 rounded-md px-1 py-1 hover:bg-accent/60">
+            <Checkbox
+              id="routes-layer-toggle"
+              className="mt-0.5"
+              checked={routesOnMap && routes.length > 0}
+              disabled={routes.length === 0}
+              onCheckedChange={(checked) => onToggleRoutes(checked === true)}
+            />
+            <label
+              htmlFor="routes-layer-toggle"
+              className={cn("min-w-0 flex-1 cursor-pointer", routes.length === 0 && "text-muted-foreground")}
+            >
+              <span className="block">Routes in the collection window</span>
+              {routes.length === 0 ? (
+                <span className="block text-[11px] text-muted-foreground">
+                  No route has stop positions yet. Generate routes from a Route Scheme to draw them.
+                </span>
+              ) : (
+                <span className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-muted-foreground">
+                  {routeCounts.map(([bucket, count]) => (
+                    <span key={bucket} className="inline-flex items-center gap-1 tabular-nums">
+                      <span
+                        className="size-2 rounded-full"
+                        style={{ backgroundColor: ROUTE_BUCKET_COLORS[bucket] }}
+                        aria-hidden
+                      />
+                      {count} {ROUTE_BUCKET_LABELS[bucket]}
+                    </span>
+                  ))}
+                </span>
+              )}
+            </label>
           </div>
         </div>
         <div className="px-3 py-3">
