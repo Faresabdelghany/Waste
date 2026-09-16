@@ -40,14 +40,24 @@ export function SchemeWizard({
   open,
   onOpenChange,
   onCreate,
+  initialData,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreate: (data: GuidedSchemeData) => void
+  /**
+   * Values a caller already knows — Map Planning seeds the fraction, planning
+   * area, and project a selection agrees on. Layered over the blank draft
+   * once, when the wizard mounts.
+   */
+  initialData?: Partial<GuidedSchemeData>
 }) {
   const [step, setStepRaw] = useState<WizardStepId>(1)
   const [maxStep, setMaxStep] = useState<WizardStepId>(1)
-  const [data, setData] = useState<GuidedSchemeData>(initialSchemeDraft)
+  const [data, setData] = useState<GuidedSchemeData>(() => ({
+    ...initialSchemeDraft(),
+    ...initialData,
+  }))
   const [conflictOpen, setConflictOpen] = useState(false)
 
   const records = useWizardRecords()
