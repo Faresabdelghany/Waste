@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils"
 import { ConflictDialog } from "./conflict-dialog"
 import { StepGroups } from "./step-groups"
 import { StepRecurrence } from "./step-recurrence"
+import { StepRouteMap, type EditedRoutes } from "./step-route-map"
 import { StepScope } from "./step-scope"
 import { useWizardRecords } from "./use-wizard-records"
 import { buildWizardModel } from "./wizard-model"
@@ -47,6 +48,9 @@ export function SchemeWizard({
   const [maxStep, setMaxStep] = useState<WizardStepId>(1)
   const [data, setData] = useState<GuidedSchemeData>(initialSchemeDraft)
   const [conflictOpen, setConflictOpen] = useState(false)
+  // Route locks keyed `${groupId}|${day}`. Nothing in the create flow edits
+  // a route yet, so this only ever clears; the Route map step owns the switch.
+  const [editedRoutes, setEditedRoutes] = useState<EditedRoutes>({})
 
   const records = useWizardRecords()
   const model = useMemo(() => buildWizardModel(data, records), [data, records])
@@ -151,6 +155,15 @@ export function SchemeWizard({
             {step === 2 && <StepRecurrence data={data} update={update} model={model} />}
             {step === 3 && (
               <StepGroups data={data} update={update} model={model} records={records} />
+            )}
+            {step === 4 && (
+              <StepRouteMap
+                data={data}
+                model={model}
+                records={records}
+                editedRoutes={editedRoutes}
+                setEditedRoutes={setEditedRoutes}
+              />
             )}
           </div>
           <footer className="flex items-center justify-between gap-3 border-t border-border px-8 py-5">
