@@ -2,10 +2,14 @@
 // dependencies — so the confirm preview and the record writes share one plan.
 //
 // Upsert rules (validated in the prototype on branch prototype/route-schemes):
-//   for each service date in the window:
-//     a holiday or non-working date on the scheme's Collection Calendar is
-//       skipped: no route is written, the preview shows why, and a
+//   for each occurrence generateOccurrences (occurrences.ts) yields in the
+//   window — the SAME function the guided setup previews with, so the holiday
+//   policy (shift-next / shift-prev / skip / collect) produces the same dates
+//   in both places:
+//     a skipped holiday writes no route, the preview shows why, and a
 //       still-Planned previously generated route on that date is cancelled;
+//     a shifted collection keeps its recurrence date as serviceDate (identity)
+//       and operates on actualDate;
 //     no route for (scheme, serviceDate)       → create Planned with scheme defaults
 //     route still Draft/Planned                → refresh date/stops/version;
 //                                                keep an overridden assignment
@@ -21,18 +25,19 @@
 //   deterministic ids, never Date.now().
 
 import type { BusinessRecord } from "../data/business-modules"
-import {
-  calendarDayStatus,
-  dayStatusSkipsGeneration,
-  type CollectionCalendar,
-} from "./calendar"
 import { schemeGroupPlans, type ResolvedCollectionGroup } from "./groups"
 import { avalancheHash } from "./hash"
+import { schemeHolidayPolicy } from "./holidays"
+import {
+  NO_HOLIDAYS,
+  generateOccurrences,
+  shiftedNote,
+  type HolidayList,
+  type Occurrence,
+} from "./occurrences"
 import {
   addDays,
   formatServiceDate,
-  isIsoDate,
-  matchesRecurrence,
   recurrenceFromValues,
   routeIdentityKey,
   serviceDayOf,
@@ -42,7 +47,7 @@ import { stringValue } from "./validation"
 
 export type GenerationWindow = { from: string; to: string }
 
-/** "omit" rows are calendar skips: preview-visible, but never written. */
+/** "omit" rows are holiday skips: preview-visible, but never written. */
 export type PlannedRouteAction = "create" | "refresh" | "skip" | "cancel" | "omit"
 
 export type PlannedRoute = {
@@ -51,7 +56,7 @@ export type PlannedRoute = {
   routeName: string
   /** The scheme's service date — the identity half that never remaps. */
   serviceDate: string
-  /** The date the route operates on — the service date for generated rows; a skip row keeps the stored route's own. */
+  /** The date the route operates on — the service date, or the working day the holiday policy shifted it to; a skip row keeps the stored route's own. */
   actualDate: string
   day: ServiceDay
   containerIds: string[]
@@ -66,8 +71,8 @@ export type PlannedRoute = {
   /** The stored route this action refreshes, skips, or cancels. */
   existing?: BusinessRecord
   note?: string
-  /** Non-blocking calendar caveat (uncovered date, replacement on a holiday). */
-  calendarWarning?: string
+  /** Non-blocking holiday caveat: shifted off a holiday, or collecting on one. */
+  holidayNote?: string
   /** Rule-mode caveat: the day's stop rule currently matches no containers. */
   matchWarning?: string
 }
@@ -84,8 +89,8 @@ export type GenerationSummary = {
   refreshed: number
   cancelled: number
   skipped: number
-  /** Dates the Collection Calendar invalidated (holiday / non-working). */
-  calendarSkipped: number
+  /** Planned dates the scheme's holiday policy skipped. */
+  holidaySkipped: number
   pickups: number
 }
 
@@ -184,30 +189,31 @@ export function routeDeviationNote(route: BusinessRecord): string | null {
 export const WALK_CAP_DAYS = 366
 
 /**
- * A day-by-day walk is fine: windows are weeks, not years. The walk caps at
- * 367 dates; everything downstream (generation AND cleanup) must bound itself
- * to the walked range, never the raw window, or an over-long window would
- * cancel still-served routes past the truncation point.
+ * The last date the walk judges: the window end, capped at from + 366 days.
+ * Everything downstream (generation AND cleanup) must bound itself to this,
+ * never the raw window end, or an over-long window would cancel still-served
+ * routes past the truncation point. An inverted window walks nothing.
  */
-function windowDates(window: GenerationWindow): string[] {
-  const dates: string[] = []
-  for (
-    let cursor = window.from;
-    cursor <= window.to && dates.length <= WALK_CAP_DAYS;
-    cursor = addDays(cursor, 1)
-  ) {
-    dates.push(cursor)
-  }
-  return dates
+function walkEndOf(window: GenerationWindow): string {
+  if (window.to < window.from) return window.from
+  const cap = addDays(window.from, WALK_CAP_DAYS)
+  return window.to < cap ? window.to : cap
+}
+
+/** The preview / deviation wording for an occurrence the holiday policy touched. */
+function holidayNoteOf(occurrence: Occurrence): string | undefined {
+  if (occurrence.status === "shifted") return `Shifted ${shiftedNote(occurrence)}`
+  if (occurrence.status === "holiday") return `Collects on a holiday · ${occurrence.note ?? "Holiday"}`
+  return undefined
 }
 
 /**
  * The generation plan for one scheme over one window — every row the confirm
  * preview shows and applySchemeGeneration writes. Returns null for schemes
  * without structured recurrence (legacy free-text records cannot generate).
- * The optional calendar is the scheme's Collection Calendar: it invalidates
- * holiday and non-working candidate dates (Q2/Q7); uncovered dates only warn
- * (Q6).
+ * The holiday list and the scheme's stored holiday policy go through
+ * generateOccurrences — the same call the guided setup's next-dates preview
+ * makes — so what the wizard showed is what generation writes.
  * Stop lists come from effectiveStopPlans (issue #19): manual schemes keep
  * their picked lists; rule schemes resolve their stop-matching rules against
  * the supplied container records at plan time, so regeneration picks up
@@ -219,9 +225,10 @@ export function planSchemeGeneration(input: {
   existingRoutes: readonly BusinessRecord[]
   /** Container records the stop rules resolve against (and pickups enrich from). */
   containers: readonly BusinessRecord[]
-  calendar?: CollectionCalendar | null
+  /** The holiday list the scheme's dates are judged against; absent = every date is a working day. */
+  holidays?: HolidayList | null
 }): SchemeGenerationPlan | null {
-  const { scheme, window, calendar } = input
+  const { scheme, window } = input
   const recurrence = recurrenceFromValues(scheme.submittedValues ?? {})
   if (!recurrence) return null
 
@@ -275,36 +282,27 @@ export function planSchemeGeneration(input: {
   const routes: PlannedRoute[] = []
   const servedDates = new Set<string>()
   const plannedIdentities = new Set<string>()
-  const walkedDates = windowDates(window)
-  const walkEnd = walkedDates.length > 0
-    ? walkedDates[walkedDates.length - 1]
-    : window.from
+  const walkEnd = walkEndOf(window)
+  const occurrences = generateOccurrences({
+    recurrence,
+    window: { from: window.from, to: walkEnd },
+    holidayPolicy: schemeHolidayPolicy(scheme.submittedValues),
+    holidays: input.holidays ?? NO_HOLIDAYS,
+  })
 
-  for (const date of walkedDates) {
-    if (!matchesRecurrence(recurrence, date)) continue
+  for (const occurrence of occurrences) {
+    // The recurrence date is the route's identity; a shift moves only the
+    // operating date. Groups run on the recurrence weekday.
+    const date = occurrence.plannedDate
     servedDates.add(date)
     const day = serviceDayOf(date)
 
-    // Calendar validity filtering (Q2/Q7): a holiday or non-working date gets
-    // no route. The date stays in the preview so the planner sees why, and a
-    // still-Planned route generation previously wrote there is cancelled — the
-    // same rule as a date the scheme no longer serves.
-    let calendarSkip: string | undefined
-    if (calendar) {
-      const dayStatus = calendarDayStatus(calendar, date)
-      if (dayStatusSkipsGeneration(dayStatus)) {
-        calendarSkip =
-          dayStatus === "holiday"
-            ? `Holiday on ${calendar.name}`
-            : `Not a working day on ${calendar.name}`
-      }
-    }
-    // Non-blocking calendar caveats (Q6): uncovered dates generate normally
-    // but warn.
-    let calendarWarning: string | undefined
-    if (calendar && calendarDayStatus(calendar, date) === "uncovered") {
-      calendarWarning = `Outside ${calendar.name} validity — calendar rules not applied`
-    }
+    // A skipped holiday gets no route. The date stays in the preview so the
+    // planner sees why, and a still-Planned route generation previously wrote
+    // there is cancelled — the same rule as a date the scheme no longer serves.
+    const holidaySkip =
+      occurrence.status === "skipped" ? `Skipped · ${occurrence.note ?? "Holiday"}` : undefined
+    const holidayNote = holidayNoteOf(occurrence)
 
     for (const group of groups) {
       if (!group.days.includes(day)) continue
@@ -317,7 +315,7 @@ export function planSchemeGeneration(input: {
       const routeName = generatedRouteName(scheme.id, date, groupKey)
       const groupFields = groupFieldsOf(group)
 
-      if (calendarSkip) {
+      if (holidaySkip) {
         if (existing && existing.status === "Planned") {
           routes.push({
             action: "cancel",
@@ -329,7 +327,7 @@ export function planSchemeGeneration(input: {
             containerIds: [],
             ...groupFields,
             existing,
-            note: calendarSkip,
+            note: holidaySkip,
           })
         } else if (existing) {
           routes.push({
@@ -343,7 +341,7 @@ export function planSchemeGeneration(input: {
             ...groupFields,
             existing,
             note: `${existing.status} — left untouched`,
-            calendarWarning: calendarSkip,
+            holidayNote: holidaySkip,
           })
         } else {
           routes.push({
@@ -355,15 +353,15 @@ export function planSchemeGeneration(input: {
             day,
             containerIds: [],
             ...groupFields,
-            note: calendarSkip,
+            note: holidaySkip,
           })
         }
         continue
       }
 
-      // A Cancelled route that generation itself authored (calendar skip or
+      // A Cancelled route that generation itself authored (holiday skip or
       // unserved-date cleanup) is bookkeeping, not operational reality: once
-      // the scheme serves the date again — the holiday left the calendar, the
+      // the scheme serves the date again — the holiday left the list, the
       // service day returned, the group is planned again — the route is
       // re-created. An operationally cancelled route (no marker) stays untouched.
       const resurrect =
@@ -386,7 +384,7 @@ export function planSchemeGeneration(input: {
         actualDate:
           action === "skip"
             ? (stringValueOf(existing!, "actualDate") ?? date)
-            : date,
+            : occurrence.date,
         day,
         containerIds,
         ...assignmentOf(group),
@@ -394,7 +392,7 @@ export function planSchemeGeneration(input: {
         ...(action === "skip"
           ? { note: `${existing?.status} — left untouched` }
           : {}),
-        ...(calendarWarning ? { calendarWarning } : {}),
+        ...(holidayNote ? { holidayNote } : {}),
         ...(matchWarning ? { matchWarning } : {}),
       })
     }
@@ -683,7 +681,7 @@ export function applySchemeGeneration(input: {
     refreshed: 0,
     cancelled: 0,
     skipped: 0,
-    calendarSkipped: 0,
+    holidaySkipped: 0,
     pickups: 0,
   }
 
@@ -707,9 +705,9 @@ export function applySchemeGeneration(input: {
       continue
     }
 
-    // Calendar skips are preview information, never writes (Q2).
+    // Holiday skips are preview information, never writes.
     if (planned.action === "omit") {
-      summary.calendarSkipped += 1
+      summary.holidaySkipped += 1
       continue
     }
 
@@ -798,7 +796,9 @@ export function applySchemeGeneration(input: {
         "Route scheme": scheme.name,
         "Scheme version": plan.schemeVersion,
         Stops: String(stops),
-        Deviation: "None",
+        // A shift or a holiday collection is the route's deviation from its
+        // recurrence date (routeDeviationNote reads this fact).
+        Deviation: planned.holidayNote ?? "None",
         "Generated by": input.actorName,
       },
       related: [

@@ -6,7 +6,6 @@
 
 import type { BusinessRecord } from "../data/business-modules"
 import { schemeFrequencyPromiseOfRecord } from "../data/service-frequencies"
-import type { CollectionCalendar } from "./calendar"
 import {
   collectionGroupContainerIds,
   flattenGroupPlans,
@@ -60,8 +59,7 @@ export function resolvedDraftPlans(
 
 /**
  * FR-5 over the wizard draft plus every existing scheme's planned assignments
- * and the Vehicle Planning allocations (issue #11); the selected Collection
- * Calendar adds non-blocking warnings (Q6/Q7). Groups validate their own
+ * and the Vehicle Planning allocations (issue #11). Groups validate their own
  * days, assignment, and stops (D33–D35) — the containers and vehicles are
  * needed to resolve the matches and each group's vehicle type. The resolved
  * stops also feed the promised-service-frequency reconciliation (issue #21).
@@ -69,7 +67,6 @@ export function resolvedDraftPlans(
 export function validateGuidedScheme(
   data: GuidedSchemeData,
   existingSchemes: readonly BusinessRecord[],
-  calendar: CollectionCalendar | null | undefined,
   allocations: readonly BusinessRecord[],
   containers: readonly BusinessRecord[],
   vehicles: readonly BusinessRecord[],
@@ -89,7 +86,6 @@ export function validateGuidedScheme(
       effectiveFrom: data.effectiveFrom,
       effectiveTo: data.effectiveTo,
       areaId: data.planningAreaId,
-      calendar,
       frequencyReconciliation: { frequency: data.frequency, promises },
       ...schemeValidationGroups(
         data.groups,

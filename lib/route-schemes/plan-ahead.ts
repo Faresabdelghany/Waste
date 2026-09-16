@@ -13,11 +13,10 @@
 
 import type { BusinessRecord } from "../data/business-modules"
 import { isSoftDeleted } from "../data/record-visibility"
-import { calendarFromRecord } from "./calendar"
+import { schemeHolidayList } from "./holidays"
 import {
   applySchemeGeneration,
   planSchemeGeneration,
-  stringValueOf,
   type GenerationWindow,
 } from "./generation"
 import {
@@ -87,8 +86,8 @@ export type PlanAheadSummary = {
   refreshed: number
   cancelled: number
   skipped: number
-  /** Dates the schemes' Collection Calendars invalidated (holiday / non-working). */
-  calendarSkipped: number
+  /** Planned dates the schemes' holiday policies skipped. */
+  holidaySkipped: number
   pickups: number
 }
 
@@ -116,7 +115,7 @@ export function runPlanAhead(input: {
   today: string
   existingRoutes: readonly BusinessRecord[]
   existingPickups: readonly BusinessRecord[]
-  /** Collection Calendar records; each scheme's calendarId resolves here. */
+  /** Collection Calendar records; each scheme's holiday list resolves here. */
   calendarRecords?: readonly BusinessRecord[]
   containers: readonly BusinessRecord[]
   actorName: string
@@ -134,18 +133,12 @@ export function runPlanAhead(input: {
     refreshed: 0,
     cancelled: 0,
     skipped: 0,
-    calendarSkipped: 0,
+    holidaySkipped: 0,
     pickups: 0,
   }
 
   for (const scheme of input.schemes) {
     if (!schemeAutoGenerates(scheme, input.today)) continue
-    const calendarId = stringValueOf(scheme, "calendarId")
-    const calendar = calendarId
-      ? calendarFromRecord(
-          calendarRecords.find((record) => record.id === calendarId),
-        )
-      : null
     const plan = planSchemeGeneration({
       scheme,
       window,
@@ -153,7 +146,7 @@ export function runPlanAhead(input: {
       // Rule-mode schemes (issue #19) resolve their stop-matching rules
       // against these records — the same set manual generation uses.
       containers: input.containers,
-      calendar,
+      holidays: schemeHolidayList(scheme, calendarRecords),
     })
     if (!plan) continue
     const result = applySchemeGeneration({
@@ -178,7 +171,7 @@ export function runPlanAhead(input: {
     summary.refreshed += result.summary.refreshed
     summary.cancelled += result.summary.cancelled
     summary.skipped += result.summary.skipped
-    summary.calendarSkipped += result.summary.calendarSkipped
+    summary.holidaySkipped += result.summary.holidaySkipped
     summary.pickups += result.summary.pickups
     if (result.routes.length === 0 && result.pickups.length === 0) continue
     summary.schemes += 1

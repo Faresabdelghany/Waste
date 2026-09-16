@@ -224,13 +224,12 @@ export function SchemeDetailsPage({
   const validation = useMemo(() => {
     const related: SchemeRelatedRecords = {
       schemes,
-      calendars: calendarRecords,
       allocations,
       containers,
       vehicles,
     }
     return schemeLiveValidation(record, related)
-  }, [allocations, calendarRecords, containers, record, schemes, vehicles])
+  }, [allocations, containers, record, schemes, vehicles])
   // Blocking issues gate on LIVE validation (D26), not only the persisted
   // Draft status: a validated scheme whose environment drifted into blocking
   // issues must show them and lose Generate routes too. A Draft with no

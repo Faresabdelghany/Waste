@@ -16,7 +16,6 @@
 // marker; a later valid save re-materializes them idempotently.
 
 import type { BusinessRecord } from "../data/business-modules"
-import { calendarFromRecord } from "./calendar"
 import {
   applySchemeGeneration,
   cancelSchemeFutureRoutes,
@@ -26,6 +25,7 @@ import {
   type GenerationSummary,
   type GenerationWindow,
 } from "./generation"
+import { schemeHolidayList } from "./holidays"
 import { recordSchemeGeneration, schemeLiveValidation } from "./lifecycle"
 import { addDays } from "./recurrence"
 import { count } from "./text"
@@ -88,7 +88,7 @@ export type SchemeEditReconciliationRelated = {
   vehicles?: readonly BusinessRecord[]
   /** Vehicle Planning allocation records (issue #11 cross-check). */
   allocations?: readonly BusinessRecord[]
-  /** Collection Calendar records; the scheme's calendarId resolves here. */
+  /** Collection Calendar records; the scheme's holiday list resolves here. */
   calendarRecords?: readonly BusinessRecord[]
 }
 
@@ -167,7 +167,6 @@ export function planSchemeEditReconciliation(
   const { after, today } = input
   const validation = schemeLiveValidation(after, {
     schemes: related.schemes,
-    calendars: related.calendarRecords,
     allocations: related.allocations,
     containers: related.containers,
     vehicles: related.vehicles,
@@ -244,18 +243,12 @@ export function planSchemeEditReconciliation(
   })
 
   try {
-    const calendarId = stringValueOf(validated, "calendarId")
-    const calendar = calendarId
-      ? calendarFromRecord(
-          related.calendarRecords?.find((record) => record.id === calendarId),
-        )
-      : null
     const plan = planSchemeGeneration({
       scheme: validated,
       window,
       existingRoutes: related.existingRoutes,
       containers: related.containers,
-      calendar,
+      holidays: schemeHolidayList(validated, related.calendarRecords),
     })
     if (!plan) return failed()
     const result = applySchemeGeneration({

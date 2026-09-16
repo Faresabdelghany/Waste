@@ -17,7 +17,6 @@
 import type { BusinessRecord } from "../data/business-modules"
 import { isSoftDeleted } from "../data/record-visibility"
 import { schemeFrequencyPromiseOfRecord } from "../data/service-frequencies"
-import { calendarFromRecord } from "./calendar"
 import {
   collectionGroupContainerIds,
   schemeAssignmentSources,
@@ -170,8 +169,6 @@ export function schemesInPlanning(
 export type SchemeRelatedRecords = {
   /** Every scheme record (this one included; it is excluded internally). */
   schemes: readonly BusinessRecord[]
-  /** Collection Calendar records; the scheme's calendarId resolves here. */
-  calendars?: readonly BusinessRecord[]
   /** Vehicle Planning allocation records (issue #11 cross-check). */
   allocations?: readonly BusinessRecord[]
   /** Container records — stop-rule matches and frequency promises. */
@@ -184,7 +181,7 @@ export type SchemeRelatedRecords = {
  * Re-runs validateScheme against a stored record's canonical configuration
  * plus the current related records — the record-side counterpart of the
  * wizard's validateGuidedScheme, sharing every check (FR-5 blocking issues,
- * calendar/allocation/rule-overlap/frequency-reconciliation warnings).
+ * allocation/rule-overlap/frequency-reconciliation warnings).
  * Null for legacy records without structured recurrence: there is nothing
  * to evaluate live.
  */
@@ -199,10 +196,6 @@ export function schemeLiveValidation(
 
   const serviceDays = serviceDaysFromValues(values)
   const containers = related.containers ?? []
-  const calendarId = stringValue(values, "calendarId")
-  const calendar = calendarId
-    ? calendarFromRecord(related.calendars?.find((candidate) => candidate.id === calendarId))
-    : null
 
   // The record's collection groups (implicit or explicit) resolved per day —
   // the same seam generation reads, so validation and generation agree.
@@ -222,7 +215,6 @@ export function schemeLiveValidation(
       effectiveFrom: recurrence.effectiveFrom,
       effectiveTo: recurrence.effectiveTo,
       areaId: stringValue(values, "planningAreaId"),
-      calendar,
       schemeId: record.id,
       frequencyReconciliation: { frequency: recurrence.frequency, promises },
       ...schemeValidationGroups(

@@ -52,7 +52,6 @@ import {
   moduleOffersRowActions,
   resolveModuleViewKind,
 } from "@/lib/data/business-view-kinds"
-import { calendarFromRecord } from "@/lib/route-schemes/calendar"
 import {
   calendarRowSummary,
   withDerivedCalendarValue,
@@ -1656,9 +1655,9 @@ export function BusinessWorkspace({
       )
       return module ? getRecords(workspaceId, module.id, module.records) : []
     }
+    const calendars = relatedModuleRecords("plan", "calendars")
     const related = {
       schemes: activeRecords,
-      calendars: relatedModuleRecords("plan", "calendars"),
       allocations: relatedModuleRecords("fleet", "vehicle-planning"),
       containers: relatedModuleRecords("resources", "containers"),
       vehicles: relatedModuleRecords("fleet", "vehicles"),
@@ -1667,7 +1666,7 @@ export function BusinessWorkspace({
       activeRecords.map((record) => [
         record.id,
         {
-          ...schemeRowSummary(record, related.calendars),
+          ...schemeRowSummary(record, calendars),
           attention: schemeAttention(record, related),
         },
       ]),
@@ -4078,7 +4077,6 @@ export function BusinessWorkspace({
     const validation = validateGuidedScheme(
       data,
       getRecords(workspace.id, activeModule.id, activeModule.records),
-      calendarFromRecord(calendar),
       allocationModule
         ? getRecords("fleet", allocationModule.id, allocationModule.records)
         : [],
@@ -4100,8 +4098,8 @@ export function BusinessWorkspace({
       plannedStartTime: data.plannedStartTime,
       depotId: data.depotId ?? "",
       unloadingStationId: data.unloadingStationId ?? "",
-      // Guided setup options (2026-09-16). Generation honours "skip" only
-      // today; the policy and the edit policy are persisted for the engine.
+      // Guided setup options (2026-09-16). Generation applies the holiday
+      // policy through the same occurrence generator the wizard previewed with.
       holidayPolicy: data.holidayPolicy,
       createAs: data.createAs,
       editPolicy: data.editPolicy,

@@ -937,7 +937,6 @@ function CollectionGroupsEditorDialogBody({
   onSave: (groups: CollectionGroup[]) => void
 }) {
   const schemes = useModuleRecords("route-studio", "schemes")
-  const calendars = useModuleRecords("plan", "calendars")
   const allocations = useModuleRecords("fleet", "vehicle-planning")
   const containers = useModuleRecords("resources", "containers")
   const vehicles = useModuleRecords("fleet", "vehicles")
@@ -961,9 +960,9 @@ function CollectionGroupsEditorDialogBody({
             ...collectionGroupsToValues(groups, serviceDays),
           },
         },
-        { schemes, calendars, allocations, containers, vehicles },
+        { schemes, allocations, containers, vehicles },
       ),
-    [allocations, calendars, containers, groups, scheme, schemes, serviceDays, vehicles],
+    [allocations, containers, groups, scheme, schemes, serviceDays, vehicles],
   )
 
   const planningAreaId =

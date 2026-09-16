@@ -26,13 +26,12 @@ import { Label } from "@/components/ui/label"
 import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
 import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
 import type { BusinessRecord } from "@/lib/data/business-modules"
-import { calendarFromRecord } from "@/lib/route-schemes/calendar"
 import {
   applySchemeGeneration,
   planSchemeGeneration,
-  stringValueOf,
   type PlannedRouteAction,
 } from "@/lib/route-schemes/generation"
+import { schemeHolidayList } from "@/lib/route-schemes/holidays"
 import {
   recordSchemeGeneration,
   schemeGenerationRecorded,
@@ -89,12 +88,6 @@ export function SchemeGenerateRoutesDialog({
   // so the preview and the confirm write the exact same records.
   const generation = useMemo(() => {
     if (!scheme || !fromDate || !toDate || toDate < fromDate) return null
-    const calendarId = stringValueOf(scheme, "calendarId")
-    const calendar = calendarId
-      ? calendarFromRecord(
-          calendarRecords.find((record) => record.id === calendarId),
-        )
-      : null
     const plan = planSchemeGeneration({
       scheme,
       window: { from: fromDate, to: toDate },
@@ -102,7 +95,7 @@ export function SchemeGenerateRoutesDialog({
       // Rule-mode schemes (issue #19) resolve their stop-matching rules
       // against the live container records at plan time.
       containers,
-      calendar,
+      holidays: schemeHolidayList(scheme, calendarRecords),
     })
     if (!plan) return null
     return {
@@ -177,8 +170,8 @@ export function SchemeGenerateRoutesDialog({
           `${summary.refreshed} refreshed`,
           ...(summary.cancelled > 0 ? [`${summary.cancelled} cancelled`] : []),
           ...(summary.skipped > 0 ? [`${summary.skipped} left untouched`] : []),
-          ...(summary.calendarSkipped > 0
-            ? [`${summary.calendarSkipped} calendar-skipped`]
+          ...(summary.holidaySkipped > 0
+            ? [`${summary.holidaySkipped} holiday-skipped`]
             : []),
           `${summary.pickups} pickups`,
         ].join(" · "),
@@ -292,9 +285,9 @@ export function SchemeGenerateRoutesDialog({
                             {deviationNote}
                           </span>
                         )}
-                        {planned.calendarWarning && (
+                        {planned.holidayNote && (
                           <span className="basis-full pl-[92px] text-xs text-amber-700 dark:text-amber-400">
-                            {planned.calendarWarning}
+                            {planned.holidayNote}
                           </span>
                         )}
                         {planned.matchWarning && (
@@ -314,8 +307,8 @@ export function SchemeGenerateRoutesDialog({
               <p className="text-xs text-muted-foreground">
                 Scheme version {generation.plan.schemeVersion} is pinned on every
                 generated route. Ready, Active, Completed, and Cancelled routes
-                are never touched. Holiday and non-working dates on the
-                scheme&apos;s Collection Calendar are skipped.
+                are never touched. Holidays follow the scheme&apos;s holiday
+                policy — the same dates the guided setup previewed.
               </p>
             )}
 

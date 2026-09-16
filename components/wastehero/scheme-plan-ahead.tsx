@@ -64,8 +64,8 @@ export function SchemePlanAheadRunner({ actorName }: { actorName: string }) {
           `${summary.created} created`,
           ...(summary.refreshed > 0 ? [`${summary.refreshed} refreshed`] : []),
           ...(summary.cancelled > 0 ? [`${summary.cancelled} cancelled`] : []),
-          ...(summary.calendarSkipped > 0
-            ? [`${summary.calendarSkipped} calendar-skipped`]
+          ...(summary.holidaySkipped > 0
+            ? [`${summary.holidaySkipped} holiday-skipped`]
             : []),
           `${summary.schemes} scheme${summary.schemes === 1 ? "" : "s"}`,
         ].join(" · "),

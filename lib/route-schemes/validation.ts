@@ -5,7 +5,6 @@
 // and the generation engine can read a scheme's per-day plans back from its
 // submittedValues.
 
-import type { CollectionCalendar } from "./calendar"
 import {
   RECURRENCE_FREQUENCY_LABELS,
   RECURRENCE_WEEKLY_RATES,
@@ -114,8 +113,6 @@ export type SchemeValidationInput = {
   manualDuplicates?: readonly SchemeManualDuplicate[]
   /** From resolveCollectionGroupPlans: rule-vs-rule overlaps (warning). */
   ruleOverlaps?: readonly SchemeRuleOverlap[]
-  /** The scheme's Collection Calendar, when it carries structured data. */
-  calendar?: CollectionCalendar | null
   /**
    * The scheme's own record id, when revalidating an existing scheme —
    * Vehicle Planning allocations targeting this scheme are then not conflicts.
@@ -129,7 +126,7 @@ export type SchemeValidationInput = {
    * validation stays pure data logic). Containers whose promise the scheme's
    * cadence under- or over-serves come back as non-blocking warnings — the
    * deferred "week-parity vs pickup settings" reconciliation class, which
-   * like calendar warnings never demotes status.
+   * like the other warnings never demotes status.
    */
   frequencyReconciliation?: SchemeFrequencyReconciliationInput
 }
@@ -205,59 +202,10 @@ export type SchemeValidationResult = {
   status: "Validated" | "Draft"
   issues: string[]
   /**
-   * Non-blocking caveats: calendar (Q6/Q7) and unconfirmed Vehicle Planning
-   * allocations. Shown, but never demote status.
+   * Non-blocking caveats: unconfirmed Vehicle Planning allocations, rule
+   * overlaps, frequency reconciliation. Shown, but never demote status.
    */
   warnings: string[]
-}
-
-/**
- * The calendar caveats, save-time side: service
- * days the calendar treats as non-working (those dates are skipped at
- * generation), a calendar that is not Active, and a scheme effective period
- * that extends outside the calendar's validity. All non-blocking.
- */
-export function schemeCalendarWarnings(input: {
-  serviceDays: readonly ServiceDay[]
-  effectiveFrom: string
-  effectiveTo: string
-  calendar?: CollectionCalendar | null
-}): string[] {
-  const { calendar } = input
-  if (!calendar) return []
-  const warnings: string[] = []
-
-  if (calendar.workingDays.length > 0) {
-    const nonWorking = input.serviceDays.filter(
-      (day) => !calendar.workingDays.includes(day),
-    )
-    if (nonWorking.length > 0) {
-      warnings.push(
-        `${shortDays(nonWorking)} ${nonWorking.length === 1 ? "is not a working day" : "are not working days"} on ${calendar.name} — those dates are skipped at generation`,
-      )
-    }
-  }
-
-  if (calendar.status !== "Active") {
-    warnings.push(
-      `Calendar ${calendar.name} is ${calendar.status} — its working days and holidays may not be final`,
-    )
-  }
-
-  const fromOutside =
-    input.effectiveFrom && calendar.validFrom && input.effectiveFrom < calendar.validFrom
-  const toOutside =
-    calendar.validTo &&
-    (input.effectiveTo
-      ? input.effectiveTo > calendar.validTo
-      : true)
-  if (fromOutside || toOutside) {
-    warnings.push(
-      `Scheme effective period extends outside ${calendar.name} validity — uncovered dates generate without calendar rules`,
-    )
-  }
-
-  return warnings
 }
 
 // Rates are quotients of small integers from one shared constant table, so
@@ -766,7 +714,6 @@ export function validateScheme(
     status: issues.length === 0 ? "Validated" : "Draft",
     issues,
     warnings: [
-      ...schemeCalendarWarnings(input),
       ...allocationWarnings,
       ...matchingWarnings,
       ...(input.frequencyReconciliation

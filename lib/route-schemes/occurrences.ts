@@ -1,17 +1,20 @@
-// Next-dates preview for the guided setup (2026-09-16 redesign). Pure date
-// math — no UI, store, or fixture dependencies. Walks the effective window
-// (or 12 months from effective-from when open-ended) through the shared
-// recurrence predicate, then applies the scheme's holiday policy against the
-// selected Collection Calendar.
+// Occurrence generation for route schemes — the ONE implementation of "on
+// which dates does this scheme collect, and what happens when a date is a
+// holiday". The guided setup's next-dates preview (step 2) and route
+// generation (generation.ts) both call generateOccurrences, so a preview row
+// and a generated route for the same scheme and window agree by construction.
+// Pure date math — no UI, store, or fixture dependencies.
 //
-// Gap adapter: generation (lib/route-schemes/generation.ts) skips calendar
-// holidays and non-working days and never moves a collection, so only the
-// "skip" policy is honoured end to end. The other three policies are
-// previewed here and persisted on the record (submittedValues.holidayPolicy)
-// for the engine to pick up later.
+// Holiday policies:
+//   shift-next / shift-prev  move the collection to the nearest working day in
+//                            that direction — a working day is a Monday–Friday
+//                            that is not a holiday, and the search keeps going
+//                            past further holidays and weekends;
+//   skip                     drop the collection;
+//   collect                  keep it on the holiday.
+// Weekends only matter as shift targets: a scheme whose service days include
+// Saturday collects on Saturdays.
 
-import { calendarDayStatus, type CollectionCalendar } from "./calendar"
-import { holidayLabel } from "./holiday-names"
 import {
   addDays,
   isIsoDate,
@@ -35,6 +38,11 @@ export const HOLIDAY_POLICY_LABELS: Record<HolidayPolicy, string> = {
 export const isHolidayPolicy = (value: unknown): value is HolidayPolicy =>
   typeof value === "string" && (HOLIDAY_POLICIES as readonly string[]).includes(value)
 
+/** ISO date → holiday name. The list generation and the preview judge dates against. */
+export type HolidayList = ReadonlyMap<string, string>
+
+export const NO_HOLIDAYS: HolidayList = new Map()
+
 export type OccurrenceStatus = "planned" | "shifted" | "skipped" | "holiday"
 
 export type Occurrence = {
@@ -44,10 +52,20 @@ export type Occurrence = {
   date: string
   /** The recurrence date the row stems from; differs from `date` when shifted. */
   plannedDate: string
+  /** ISO week of `date`. */
   week: number
   status: OccurrenceStatus
-  /** Holiday (or non-working day) label for shifted, skipped, and holiday rows. */
+  /** Holiday name for shifted, skipped, and holiday rows. */
   note?: string
+}
+
+export type OccurrenceWindow = { from: string; to: string }
+
+export type GenerateOccurrencesInput = {
+  recurrence: SchemeRecurrence
+  window: OccurrenceWindow
+  holidayPolicy: HolidayPolicy
+  holidays: HolidayList
 }
 
 export type OccurrencePreview = {
@@ -95,38 +113,71 @@ const isWeekend = (iso: string) => {
   return day === "saturday" || day === "sunday"
 }
 
-/**
- * Whether a collection can land on the date when shifting away from a
- * holiday: never a calendar holiday or non-working day; and when the
- * calendar declares no working days at all, never a weekend either.
- */
-export function isShiftTarget(calendar: CollectionCalendar | null | undefined, iso: string): boolean {
-  const status = calendarDayStatus(calendar, iso)
-  if (status === "holiday" || status === "non-working") return false
-  if (calendar && calendar.workingDays.length > 0 && status === "working") return true
-  return !isWeekend(iso)
+/** A Monday–Friday that is not on the holiday list. */
+export function isWorkingDay(holidays: HolidayList, iso: string): boolean {
+  return !isWeekend(iso) && !holidays.has(iso)
 }
 
-/** The nearest shift target from the date in the given direction (exclusive). */
-export function shiftToWorkingDay(
-  calendar: CollectionCalendar | null | undefined,
-  iso: string,
-  direction: 1 | -1,
-): string {
+/** The nearest working day from the date in the given direction (exclusive). */
+export function shiftToWorkingDay(holidays: HolidayList, iso: string, direction: 1 | -1): string {
   let cursor = iso
-  // A calendar cannot block more than a few weeks in a row; the bound only
-  // guards against a degenerate calendar with no working days.
+  // Holidays and weekends cannot block more than a couple of weeks in a row;
+  // the bound only guards against a degenerate list.
   for (let step = 0; step < 60; step += 1) {
     cursor = addDays(cursor, direction)
-    if (isShiftTarget(calendar, cursor)) return cursor
+    if (isWorkingDay(holidays, cursor)) return cursor
   }
   return cursor
+}
+
+const byDate = (a: Occurrence, b: Occurrence) =>
+  a.date.localeCompare(b.date) || a.plannedDate.localeCompare(b.plannedDate)
+
+/**
+ * Every collection the scheme makes inside the window, in date order and
+ * numbered: one row per recurrence date, with the holiday policy applied to
+ * the dates on the holiday list. A shifted row keeps its recurrence date as
+ * `plannedDate` — that is the route's identity — and moves `date`. The
+ * window bounds the recurrence dates; a shift may land just outside it.
+ */
+export function generateOccurrences(input: GenerateOccurrencesInput): Occurrence[] {
+  const { recurrence, window, holidayPolicy, holidays } = input
+  const rows: Occurrence[] = []
+  if (!isIsoDate(window.from) || !isIsoDate(window.to) || window.to < window.from) return rows
+  if (recurrence.serviceDays.length === 0) return rows
+
+  for (let cursor = window.from; cursor <= window.to; cursor = addDays(cursor, 1)) {
+    if (!matchesRecurrence(recurrence, cursor)) continue
+    const note = holidays.get(cursor)
+    if (note === undefined) {
+      rows.push({ n: null, date: cursor, plannedDate: cursor, week: isoWeek(cursor), status: "planned" })
+      continue
+    }
+    if (holidayPolicy === "collect") {
+      rows.push({ n: null, date: cursor, plannedDate: cursor, week: isoWeek(cursor), status: "holiday", note })
+    } else if (holidayPolicy === "skip") {
+      rows.push({ n: null, date: cursor, plannedDate: cursor, week: isoWeek(cursor), status: "skipped", note })
+    } else {
+      const shifted = shiftToWorkingDay(holidays, cursor, holidayPolicy === "shift-next" ? 1 : -1)
+      rows.push({ n: null, date: shifted, plannedDate: cursor, week: isoWeek(shifted), status: "shifted", note })
+    }
+  }
+
+  rows.sort(byDate)
+  let n = 0
+  for (const row of rows) {
+    if (row.status !== "skipped") {
+      n += 1
+      row.n = n
+    }
+  }
+  return rows
 }
 
 export type OccurrencePreviewInput = {
   recurrence: SchemeRecurrence
   holidayPolicy: HolidayPolicy
-  calendar: CollectionCalendar | null | undefined
+  holidays: HolidayList
 }
 
 const EMPTY = (ongoing: boolean, horizon: string | null): OccurrencePreview => ({
@@ -137,68 +188,27 @@ const EMPTY = (ongoing: boolean, horizon: string | null): OccurrencePreview => (
 })
 
 /**
- * Every collection the scheme would make in its effective window (12 months
- * when open-ended), in date order and numbered. Holidays follow the policy;
- * a calendar non-working day is always skipped, as generation skips it.
+ * The guided setup's next-dates table: generateOccurrences over the scheme's
+ * effective window, or over 12 months from effective-from when open-ended.
  */
 export function occurrencePreview(input: OccurrencePreviewInput): OccurrencePreview {
-  const { recurrence, holidayPolicy, calendar } = input
+  const { recurrence, holidayPolicy, holidays } = input
   const from = recurrence.effectiveFrom
   const ongoing = !recurrence.effectiveTo
   if (!isIsoDate(from) || recurrence.serviceDays.length === 0) return EMPTY(ongoing, null)
   const to = ongoing ? addMonths(from, PREVIEW_HORIZON_MONTHS) : recurrence.effectiveTo
   if (!isIsoDate(to) || to < from) return EMPTY(ongoing, isIsoDate(to) ? to : null)
 
-  const rows: Occurrence[] = []
-  for (let cursor = from; cursor <= to; cursor = addDays(cursor, 1)) {
-    if (!matchesRecurrence(recurrence, cursor)) continue
-    const week = isoWeek(cursor)
-    const dayStatus = calendarDayStatus(calendar, cursor)
-    if (dayStatus === "working" || dayStatus === "uncovered") {
-      rows.push({ n: null, date: cursor, plannedDate: cursor, week, status: "planned" })
-      continue
-    }
-    if (dayStatus === "non-working") {
-      rows.push({
-        n: null,
-        date: cursor,
-        plannedDate: cursor,
-        week,
-        status: "skipped",
-        note: "Non-working day",
-      })
-      continue
-    }
-    const note = holidayLabel(cursor)
-    if (holidayPolicy === "collect") {
-      rows.push({ n: null, date: cursor, plannedDate: cursor, week, status: "holiday", note })
-    } else if (holidayPolicy === "skip") {
-      rows.push({ n: null, date: cursor, plannedDate: cursor, week, status: "skipped", note })
-    } else {
-      const shifted = shiftToWorkingDay(calendar, cursor, holidayPolicy === "shift-next" ? 1 : -1)
-      rows.push({
-        n: null,
-        date: shifted,
-        plannedDate: cursor,
-        week: isoWeek(shifted),
-        status: "shifted",
-        note,
-      })
-    }
+  const rows = generateOccurrences({ recurrence, window: { from, to }, holidayPolicy, holidays })
+  return {
+    rows,
+    ongoing,
+    horizon: to,
+    count: rows.filter((row) => row.status !== "skipped").length,
   }
-
-  rows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
-  let n = 0
-  for (const row of rows) {
-    if (row.status !== "skipped") {
-      n += 1
-      row.n = n
-    }
-  }
-  return { rows, ongoing, horizon: to, count: n }
 }
 
-/** "Shifted from Thu 24 Dec · Christmas Eve" — the badge text for a shifted row. */
+/** "from Thu 24 Dec · Christmas Eve" — the badge text for a shifted row. */
 export function shiftedNote(row: Occurrence): string {
   return `from ${formatOccurrenceShortDate(row.plannedDate)}${row.note ? ` · ${row.note}` : ""}`
 }

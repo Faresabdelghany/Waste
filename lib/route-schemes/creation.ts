@@ -15,7 +15,6 @@
 // Generation stays decoupled from Vehicle Planning.
 
 import type { BusinessRecord } from "../data/business-modules"
-import { calendarFromRecord, type CollectionCalendar } from "./calendar"
 import {
   applySchemeGeneration,
   planSchemeGeneration,
@@ -35,6 +34,8 @@ import {
 } from "./recurrence"
 import { count } from "./text"
 import { COLLECTION_GROUPS_KEY } from "./groups"
+import { schemeHolidayList } from "./holidays"
+import type { HolidayList, HolidayPolicy } from "./occurrences"
 
 const INITIAL_WINDOW_DAYS = 7
 
@@ -111,7 +112,7 @@ export type SchemeCreationRelated = {
   existingPickups: readonly BusinessRecord[]
   /** Container records — rule resolution and pickup enrichment. */
   containers: readonly BusinessRecord[]
-  /** Collection Calendar records; the scheme's calendarId resolves here. */
+  /** Collection Calendar records; the scheme's holiday list resolves here. */
   calendarRecords?: readonly BusinessRecord[]
 }
 
@@ -207,18 +208,12 @@ export function planSchemeCreation(
   })
 
   try {
-    const calendarId = stringValueOf(scheme, "calendarId")
-    const calendar = calendarId
-      ? calendarFromRecord(
-          related.calendarRecords?.find((record) => record.id === calendarId),
-        )
-      : null
     const plan = planSchemeGeneration({
       scheme,
       window,
       existingRoutes: related.existingRoutes,
       containers: related.containers,
-      calendar,
+      holidays: schemeHolidayList(scheme, related.calendarRecords),
     })
     // A Validated record the engine cannot read (no structured recurrence) is
     // a technical failure, not scheduling — the scheme stays Validated (D25).
@@ -266,7 +261,8 @@ export type SchemeCreationPreviewInput = {
    * manual picks — one entry per collection group per applicable day.
    */
   groupPlans: ReadonlyArray<{ groupId: string; day: ServiceDay; containerIds: readonly string[] }>
-  calendar?: CollectionCalendar | null
+  holidayPolicy?: HolidayPolicy
+  holidays?: HolidayList | null
 }
 
 export type SchemeCreationPreview = {
@@ -280,8 +276,8 @@ export type SchemeCreationPreview = {
    * generation time, so the real count can differ (D27 labels it as such).
    */
   estimatedStops: number
-  /** Window dates the Collection Calendar invalidates (holiday / non-working). */
-  calendarSkipped: number
+  /** Window dates the holiday policy skips. */
+  holidaySkipped: number
 }
 
 /**
@@ -326,6 +322,7 @@ export function previewSchemeCreation(
       serviceDays: input.serviceDays.join(", "),
       effectiveFrom: input.effectiveFrom,
       effectiveTo: input.effectiveTo ?? "",
+      holidayPolicy: input.holidayPolicy ?? "skip",
       [COLLECTION_GROUPS_KEY]: JSON.stringify(groups),
     },
   }
@@ -335,7 +332,7 @@ export function previewSchemeCreation(
     window,
     existingRoutes: [],
     containers: [],
-    calendar: input.calendar ?? null,
+    holidays: input.holidays ?? null,
   })
   if (!plan) return null
   const creates = plan.routes.filter((route) => route.action === "create")
@@ -347,6 +344,6 @@ export function previewSchemeCreation(
       (sum, route) => sum + route.containerIds.length,
       0,
     ),
-    calendarSkipped: plan.routes.filter((route) => route.action === "omit").length,
+    holidaySkipped: plan.routes.filter((route) => route.action === "omit").length,
   }
 }

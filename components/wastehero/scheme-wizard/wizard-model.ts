@@ -6,6 +6,7 @@
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { calendarFromRecord, type CollectionCalendar } from "@/lib/route-schemes/calendar"
+import { holidayListFromDates } from "@/lib/route-schemes/holidays"
 import { draftRecurrence, resolvedDraftGroups, validateGuidedScheme } from "@/lib/route-schemes/draft"
 import {
   estimateLoadTonnes,
@@ -32,6 +33,7 @@ import {
   type ContainerMatchProfile,
 } from "@/lib/route-schemes/matching"
 import {
+  NO_HOLIDAYS,
   formatClockTime,
   occurrencePreview,
   type OccurrencePreview,
@@ -111,8 +113,9 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
   const calendar = calendarFromRecord(calendarRecord)
   const recurrence = draftRecurrence(data)
   const serviceDays = sortServiceDays(data.serviceDays)
+  const holidays = calendar ? holidayListFromDates(calendar.holidayDates) : NO_HOLIDAYS
   const occurrences = recurrence
-    ? occurrencePreview({ recurrence, holidayPolicy: data.holidayPolicy, calendar })
+    ? occurrencePreview({ recurrence, holidayPolicy: data.holidayPolicy, holidays })
     : { rows: [], ongoing: !data.effectiveTo, horizon: null, count: 0 }
 
   const vehicles = new Map(records.vehicleProfiles.map((profile) => [profile.id, profile]))
@@ -193,7 +196,6 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
   const validation = validateGuidedScheme(
     data,
     records.schemes,
-    calendar,
     records.allocations,
     records.containers,
     records.vehicles,

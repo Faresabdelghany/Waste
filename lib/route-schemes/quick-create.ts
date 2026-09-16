@@ -43,9 +43,9 @@ export interface GuidedSchemeData {
   effectiveTo: string
   plannedStartTime: string
   /**
-   * What a collection on a calendar holiday does (guided setup 2026-09-16).
-   * Generation honours "skip" only today; the value is persisted for the
-   * engine to pick up (see lib/route-schemes/occurrences.ts).
+   * What a collection on a holiday does (guided setup 2026-09-16). Applied by
+   * generateOccurrences (lib/route-schemes/occurrences.ts) — the preview and
+   * generation share it.
    */
   holidayPolicy: HolidayPolicy
   /** Review step: create Validated (no generation) or Effective (generate + Plan Ahead). */
