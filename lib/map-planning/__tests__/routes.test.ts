@@ -136,3 +136,68 @@ describe("routesInWindow", () => {
     assert.deepEqual(sixteenth, [], "RC-7002 moved to the 17th; RC-1044 has no date")
   })
 })
+
+describe("route stops", () => {
+  test("each located stop carries its order, kind, label, planned and actual time, and status", () => {
+    const depot = record(
+      "p0",
+      { Type: "Depot", Address: "Sundkrogsgade 21, 2100 København Ø", Stop: "1", Scheduled: "06:10", "Completed at": "06:10" },
+      { name: "Stop 1 · Nordhavn Depot", status: "Completed", submittedValues: { routeId: "route-gen-2" } },
+    )
+    const collected = record(
+      "p4b",
+      { Stop: "2", Scheduled: "06:32", "Completed at": "06:41" },
+      { name: "Stop 2 · Amagerbrogade 5", status: "Completed", submittedValues: { routeId: "route-gen-2", containerId: "d" } },
+    )
+    const planned = record(
+      "p4c",
+      { Stop: "3" },
+      { name: "Stop 3 · Ryesgade 12", status: "Planned", value: "06:50 · Scheduled", submittedValues: { routeId: "route-gen-2", containerId: "a" } },
+    )
+    const [route] = routesInWindow([routes[1]], [depot, collected, planned], containers, null)
+    assert.deepEqual(
+      route.stops.map((stop) => [stop.index, stop.kind, stop.containerId, stop.label, stop.planned, stop.actual, stop.status]),
+      [
+        [1, "depot", null, "Nordhavn Depot", "06:10", "06:10", "Completed"],
+        [2, "container", "d", "Amagerbrogade 5", "06:32", "06:41", "Completed"],
+        [3, "container", "a", "Ryesgade 12", "06:50", null, "Planned"],
+      ],
+    )
+    assert.deepEqual(route.containerIds, ["d", "a"], "depot stops are not containers")
+    assert.equal(route.stopCount, 3)
+    assert.ok(route.stops.every((stop) => Number.isFinite(stop.lngLat.lng) && Number.isFinite(stop.lngLat.lat)))
+  })
+
+  test("a pickup at an unknown container with no address has no place on the map and is skipped", () => {
+    const lost = record("p9", { Stop: "1" }, { status: "Planned", submittedValues: { routeId: "route-gen-1", containerId: "zzz" } })
+    const kept = record("p10", { Stop: "2" }, { status: "Planned", submittedValues: { routeId: "route-gen-1", containerId: "a" } })
+    const [route] = routesInWindow([routes[0]], [lost, kept], containers, null)
+    assert.deepEqual(route.stops.map((stop) => stop.containerId), ["a"])
+    assert.equal(route.stopCount, 2, "the record still counts both pickups")
+  })
+})
+
+describe("address-only stops", () => {
+  test("a pickup at no container is placed by its address only when the street is in the gazetteer", () => {
+    const known = record(
+      "p11",
+      { Type: "Depot", Address: "Ryesgade 60, 2200 København N", Stop: "1" },
+      { name: "Stop 1 · Ryesgade Depot", status: "Planned", submittedValues: { routeId: "route-gen-1" } },
+    )
+    const unknown = record(
+      "p12",
+      { Address: "Nowhere Lane 3, 9999 Elsewhere", Stop: "2" },
+      { name: "Stop 2 · Nowhere Lane 3", status: "Planned", submittedValues: { routeId: "route-gen-1" } },
+    )
+    const served = record("p13", { Stop: "3" }, { status: "Planned", submittedValues: { routeId: "route-gen-1", containerId: "a" } })
+    const [route] = routesInWindow([routes[0]], [known, unknown, served], containers, null)
+    assert.deepEqual(
+      route.stops.map((stop) => [stop.index, stop.kind, stop.label]),
+      [
+        [1, "depot", "Ryesgade Depot"],
+        [3, "container", "Ryesgade 12"],
+      ],
+      "the unknown street has no honest place on the map, so it is left out rather than scattered",
+    )
+  })
+})

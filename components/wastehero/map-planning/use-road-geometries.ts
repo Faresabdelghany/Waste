@@ -79,7 +79,9 @@ export function useRoadGeometries(routes: readonly AreaRoute[]): ReadonlyMap<str
   const wanted = useMemo(() => {
     const byKey = new Map<string, readonly LngLat[]>()
     for (const route of routes) {
-      if (route.stops.length >= 2) byKey.set(roadGeometryKey(route.stops), route.stops)
+      if (route.stops.length < 2) continue
+      const stops = route.stops.map((stop) => stop.lngLat)
+      byKey.set(roadGeometryKey(stops), stops)
     }
     return byKey
   }, [routes])
@@ -121,8 +123,9 @@ export function useRoadGeometries(routes: readonly AreaRoute[]): ReadonlyMap<str
     void version
     return new Map(
       routes.map((route): [string, RoadGeometryState] => {
-        if (route.stops.length < 2) return [route.id, { status: "ready", geometry: noRoad(route.stops) }]
-        const key = roadGeometryKey(route.stops)
+        const stops = route.stops.map((stop) => stop.lngLat)
+        if (stops.length < 2) return [route.id, { status: "ready", geometry: noRoad(stops) }]
+        const key = roadGeometryKey(stops)
         const known = memory.get(key)
         if (known) return [route.id, { status: "ready", geometry: known }]
         if (refused.has(key)) return [route.id, { status: "failed" }]

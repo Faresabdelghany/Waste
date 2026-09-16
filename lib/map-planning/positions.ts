@@ -101,9 +101,18 @@ function hashedLocation(seed: string): LngLat {
  * at that property shares the result.
  */
 export function addressLocation(address: string, seed: string): LngLat {
+  return knownAddressLocation(address, seed) ?? hashedLocation(seed || address)
+}
+
+/**
+ * The kerb position of an address on a gazetteer street, or null when the
+ * street is unknown — for callers that would rather leave a stop off the map
+ * than scatter it at a hashed spot (route stops named only by address).
+ */
+export function knownAddressLocation(address: string, seed = address): LngLat | null {
   const parsed = parseAddress(address)
   const anchor = parsed ? STREET_ANCHORS[parsed.street] : undefined
-  if (!parsed || !anchor) return hashedLocation(seed || address)
+  if (!parsed || !anchor) return null
   const number = parsed.number ?? 1 + (avalancheHash(seed || address) % 40)
   const along = bearingOffset(anchor.start, number * METRES_PER_HOUSE_NUMBER, anchor.bearing)
   const side = number % 2 === 0 ? 1 : -1

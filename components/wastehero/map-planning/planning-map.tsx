@@ -20,6 +20,7 @@ import {
   type StyleSpecification,
 } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
+import { Truck } from "@phosphor-icons/react/dist/ssr"
 import {
   useCallback,
   useEffect,
@@ -105,6 +106,8 @@ export type PlanningMapProps = {
   roadGeometries: ReadonlyMap<string, RoadGeometryState>
   /** A click on a route line — open its card at that point. */
   onRouteClick: (route: AreaRoute, anchor: { x: number; y: number }) => void
+  /** A route being replayed: the vehicle's position and the path driven so far. */
+  playback: RoutePlayback | null
   /** Container ids the panel is pointing at — their markers stand out. */
   highlightedIds: ReadonlySet<string>
   /** The route the panel is pointing at — its line stands out, the others fade. */
@@ -123,6 +126,13 @@ export type PlanningMapProps = {
 }
 
 type ScreenPoint = { x: number; y: number }
+
+export type RoutePlayback = {
+  routeId: string
+  color: string
+  position: LngLat
+  travelled: readonly LngLat[]
+}
 
 function clusterLabel(cluster: MapCluster, selected: number): string {
   const head = `${cluster.count} container${cluster.count === 1 ? "" : "s"}`
@@ -155,6 +165,7 @@ export function PlanningMap({
   routeLines,
   roadGeometries,
   onRouteClick,
+  playback,
   highlightedIds,
   highlightedRouteId,
   onHoverPoint,
@@ -323,6 +334,7 @@ export function PlanningMap({
           serviceAreas={serviceAreaLayers}
           routes={routeLines}
           roadGeometries={roadGeometries}
+          playback={playback}
           shape={shape}
           editing={editingShape && drawTool === "none"}
           project={project}
@@ -446,6 +458,25 @@ export function PlanningMap({
                 </Tooltip>
               )
             })}
+            {playback && (() => {
+              const anchor = project(playback.position)
+              if (!anchor) return null
+              return (
+                <div
+                  data-testid="playback-vehicle"
+                  aria-hidden
+                  className="absolute z-20 -translate-x-1/2 -translate-y-1/2"
+                  style={{ left: anchor.x, top: anchor.y }}
+                >
+                  <span
+                    className="flex size-8 items-center justify-center rounded-full border-2 border-background text-white shadow-md"
+                    style={{ backgroundColor: playback.color }}
+                  >
+                    <Truck className="h-4 w-4" weight="fill" />
+                  </span>
+                </div>
+              )
+            })()}
           </div>
         </TooltipProvider>
       )}
@@ -487,6 +518,7 @@ function ShapesOverlay({
   serviceAreas,
   routes,
   roadGeometries,
+  playback,
   shape,
   editing,
   project,
@@ -500,6 +532,7 @@ function ShapesOverlay({
   serviceAreas: readonly ServiceAreaLayer[]
   routes: readonly AreaRoute[]
   roadGeometries: ReadonlyMap<string, RoadGeometryState>
+  playback: RoutePlayback | null
   shape: SelectionShape | null
   editing: boolean
   project: (lngLat: LngLat) => ScreenPoint | null
@@ -648,7 +681,7 @@ function ShapesOverlay({
         .map((route) => {
           const state = roadGeometries.get(route.id)
           const road = state?.status === "ready" && state.geometry.legs.length > 0 ? state.geometry : null
-          const anchors = (road ? road.snappedStops : route.stops)
+          const anchors = (road ? road.snappedStops : route.stops.map((stop) => stop.lngLat))
             .map(project)
             .filter((point): point is ScreenPoint => point !== null)
           if (anchors.length === 0) return null
@@ -657,6 +690,11 @@ function ShapesOverlay({
           const faded = highlightedRouteId !== null && !highlighted
           const width = highlighted ? 5 : 3.5
           const roadData = road && roadTransform ? roadPaths.get(route.id) : undefined
+          // A replayed route shows the road ahead faint and the road driven in full colour.
+          const replaying = playback?.routeId === route.id
+          const travelledScreen = replaying && !roadData
+            ? playback.travelled.map(project).filter((point): point is ScreenPoint => point !== null)
+            : []
           const straight = toPoints(anchors.length >= 2 ? anchors : [anchors[0], anchors[0]])
           const chevrons =
             highlighted && road && showChevrons
@@ -720,10 +758,23 @@ function ShapesOverlay({
                     fill="none"
                     stroke={route.color}
                     strokeWidth={width}
+                    strokeOpacity={replaying ? 0.3 : 1}
                     strokeLinejoin="round"
                     strokeLinecap="round"
                     vectorEffect="non-scaling-stroke"
                   />
+                  {replaying && (
+                    <path
+                      d={localPathData(playback.travelled, ROAD_REF_ZOOM, COPENHAGEN_CENTER)}
+                      data-route-travelled={route.id}
+                      fill="none"
+                      stroke={route.color}
+                      strokeWidth={width + 0.5}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  )}
                 </g>
               ) : (
                 anchors.length >= 2 && (
@@ -736,9 +787,20 @@ function ShapesOverlay({
                     strokeDasharray="6 6"
                     strokeLinejoin="round"
                     strokeLinecap="round"
-                    strokeOpacity={0.85}
+                    strokeOpacity={replaying ? 0.3 : 0.85}
                   />
                 )
+              )}
+              {replaying && travelledScreen.length >= 2 && (
+                <polyline
+                  points={toPoints(travelledScreen)}
+                  data-route-travelled={route.id}
+                  fill="none"
+                  stroke={route.color}
+                  strokeWidth={3}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
               )}
               {chevrons.map((chevron, index) => (
                 <path

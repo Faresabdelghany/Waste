@@ -5,18 +5,40 @@
 // routeId/containerId first, the Route and Container ID display facts
 // second); a fixture route day without pickups falls back to its Area fact
 // naming a selected container's planning area. Lines are coloured by status
-// bucket, and each route carries what its map card shows. Cancelled routes
-// are never counted. Pure data logic.
+// bucket, and each route carries what its map card shows and, per located
+// stop, what playback narrates: order, kind, label, planned and actual time.
+// A pickup at no container but with an address (a depot start) is placed by
+// that address when its street is in the gazetteer. Cancelled routes are
+// never counted. Pure data logic.
 
 import type { BusinessRecord } from "../data/business-modules"
 import { isSoftDeleted } from "../data/record-visibility"
 import { isIsoDate } from "../route-schemes/recurrence"
 import type { LngLat } from "./geo"
-import { containerLocation } from "./positions"
+import { containerLocation, knownAddressLocation } from "./positions"
 import { parseDisplayDate } from "./schedule"
 import type { QuantityRange } from "./statistics"
 
 export type RouteBucket = "awaiting" | "in-progress" | "completed"
+
+export type RouteStopKind = "container" | "depot" | "address"
+
+export type RouteStop = {
+  /** Stop order as the pickup says, 1-based. */
+  index: number
+  kind: RouteStopKind
+  /** The container served, when the pickup resolves to one. */
+  containerId: string | null
+  /** "Adelgade 12", "Nordhavn Depot" — the pickup name's tail, else the address street line. */
+  label: string
+  lngLat: LngLat
+  /** The pickup's status: Planned, Next, Completed, Skipped, … */
+  status: string
+  /** Planned clock ("06:32") from the Scheduled fact, when known. */
+  planned: string | null
+  /** Actual clock from the Completed-at fact, when the stop is done. */
+  actual: string | null
+}
 
 export type AreaRoute = {
   id: string
@@ -28,7 +50,7 @@ export type AreaRoute = {
   /** The status bucket's colour — every line of a bucket looks the same. */
   color: string
   /** Located stops in stop order — empty when the route's pickups are unknown. */
-  stops: LngLat[]
+  stops: RouteStop[]
   containerIds: string[]
   vehicle: string | null
   driver: string | null
@@ -112,10 +134,14 @@ function pickupRouteKeys(pickup: BusinessRecord): string[] {
   )
 }
 
+type LinkedStop = { pickup: BusinessRecord; container: BusinessRecord | null }
+
 type LinkedRoute = {
   route: BusinessRecord
   bucket: RouteBucket
   pickups: BusinessRecord[]
+  /** Every pickup with the container it resolves to, if any, in stop order. */
+  stops: LinkedStop[]
   /** The containers the pickups resolve to, in stop order. */
   stopContainers: BusinessRecord[]
 }
@@ -152,22 +178,59 @@ function linkRoutes(
     const routePickups = Array.from(
       new Map(routeKeys.flatMap((key) => pickupsByRoute.get(key) ?? []).map((pickup) => [pickup.id, pickup])).values(),
     ).sort((a, b) => stopNumber(a) - stopNumber(b) || a.id.localeCompare(b.id))
-    const stopContainers = routePickups
-      .map((pickup) => pickupContainerKeys(pickup).map((key) => containersByKey.get(key)).find(Boolean))
+    const stops = routePickups.map((pickup) => ({
+      pickup,
+      container: pickupContainerKeys(pickup).map((key) => containersByKey.get(key)).find(Boolean) ?? null,
+    }))
+    const stopContainers = stops
+      .map((stop) => stop.container)
       .filter((container): container is BusinessRecord => Boolean(container))
-    linked.push({ route, bucket, pickups: routePickups, stopContainers })
+    linked.push({ route, bucket, pickups: routePickups, stops, stopContainers })
   }
   return linked
 }
 
-function toAreaRoute({ route, bucket, pickups, stopContainers }: LinkedRoute): AreaRoute {
+const CLOCK = /(\d{1,2}:\d{2})/
+
+/** The first "hh:mm" in a display value, zero-padded, or null. */
+function clockOf(value: string | undefined): string | null {
+  const match = CLOCK.exec(value ?? "")
+  return match ? match[1].padStart(5, "0") : null
+}
+
+const streetLine = (address: string | undefined) => clean(address)?.split(",")[0]?.trim()
+
+/** The located stop a pickup stands for, or null when nothing places it on the map. */
+function routeStop({ pickup, container }: LinkedStop, position: number): RouteStop | null {
+  const address = clean(pickup.facts.Address)
+  // No container: the address places the stop, but only on a gazetteer street — never a hashed spot.
+  const lngLat = container ? containerLocation(container) : address ? knownAddressLocation(address) : null
+  if (!lngLat) return null
+  const order = stopNumber(pickup)
+  const nameTail = pickup.name.split("·")[1]?.trim()
+  return {
+    index: order === Number.MAX_SAFE_INTEGER ? position + 1 : order,
+    kind: container ? "container" : lower(clean(pickup.facts.Type) ?? "") === "depot" ? "depot" : "address",
+    containerId: container?.id ?? null,
+    label: nameTail || streetLine(address) || streetLine(container?.facts.Address) || container?.name || pickup.name,
+    lngLat,
+    status: pickup.status,
+    planned: clockOf(pickup.facts.Scheduled) ?? (/scheduled/i.test(pickup.value) ? clockOf(pickup.value) : null),
+    actual: clockOf(pickup.facts["Completed at"]) ?? (lower(pickup.status) === "completed" ? clockOf(pickup.value) : null),
+  }
+}
+
+function toAreaRoute({ route, bucket, pickups, stops: linkedStops }: LinkedRoute): AreaRoute {
   const containerIds: string[] = []
-  const stops: LngLat[] = []
-  for (const container of stopContainers) {
-    if (containerIds.includes(container.id)) continue
-    containerIds.push(container.id)
-    const spot = containerLocation(container)
-    if (spot) stops.push(spot)
+  const stops: RouteStop[] = []
+  for (const [position, linked] of linkedStops.entries()) {
+    // A container served twice is one stop on the map; depots and addresses may repeat (start and end).
+    if (linked.container) {
+      if (containerIds.includes(linked.container.id)) continue
+      containerIds.push(linked.container.id)
+    }
+    const stop = routeStop(linked, position)
+    if (stop) stops.push(stop)
   }
   return {
     id: route.id,

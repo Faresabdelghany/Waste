@@ -10,7 +10,7 @@
 // sections so each block folds away; every number comes from
 // lib/map-planning/statistics.ts, coverage.ts, and routes.ts at render time.
 
-import { CaretDown, Handshake, MapTrifold, PencilSimple, Plus, X } from "@phosphor-icons/react/dist/ssr"
+import { CaretDown, Handshake, MapTrifold, PencilSimple, Plus, X, Play } from "@phosphor-icons/react/dist/ssr"
 
 import {
   Accordion,
@@ -25,7 +25,7 @@ import type { ServiceAreaCoverage } from "@/lib/map-planning/coverage"
 import { formatArea, formatShortDate, formatVolume, formatWeight } from "@/lib/map-planning/format"
 import { polygonAreaSquareMetres } from "@/lib/map-planning/geo"
 import type { MapPoint } from "@/lib/map-planning/points"
-import type { AreaRoutes, RouteBucket } from "@/lib/map-planning/routes"
+import type { AreaRoute, AreaRoutes, RouteBucket } from "@/lib/map-planning/routes"
 import { containerIdsWithFraction, type SelectionShape } from "@/lib/map-planning/selection"
 import type { SelectionStatistics } from "@/lib/map-planning/statistics"
 import { cn } from "@/lib/utils"
@@ -40,6 +40,8 @@ export type SelectedAreaPanelProps = {
   /** Whether the routes are drawn on the map right now. */
   routesOnMap: boolean
   onToggleRoutesOnMap: () => void
+  /** Replay a route stop by stop on the map. */
+  onPlayRoute: (route: AreaRoute) => void
   /** The selected containers by address — the Containers list. */
   containers: readonly MapPoint[]
   /** What the map is pointing at, so the matching rows stand out. */
@@ -80,6 +82,7 @@ export function SelectedAreaPanel({
   routes,
   routesOnMap,
   onToggleRoutesOnMap,
+  onPlayRoute,
   containers,
   highlightedContainerIds,
   highlightedRouteId,
@@ -293,6 +296,16 @@ export function SelectedAreaPanel({
                             ? plural(route.stops.length, "stop")
                             : "No stop data"}
                       </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0"
+                        aria-label={`Play route ${route.name}`}
+                        disabled={route.stops.length === 0}
+                        onClick={() => onPlayRoute(route)}
+                      >
+                        <Play className="h-3.5 w-3.5" />
+                      </Button>
                     </li>
                   ))}
                   {routes.routes.length > MAX_LISTED_ROUTES && (

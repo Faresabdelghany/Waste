@@ -16,7 +16,7 @@ import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useTheme } from "next-themes"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ArrowSquareOut, Polygon, Selection, Trash } from "@phosphor-icons/react/dist/ssr"
+import { ArrowSquareOut, Play, Polygon, Selection, Trash } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import { useAssetManagementStore } from "@/components/settings/asset-management-store"
@@ -49,6 +49,7 @@ import { formatDateRange, formatDistance, formatDuration, formatShortDate } from
 import { boundsFromPolygon, pointInPolygon, type LngLat } from "@/lib/map-planning/geo"
 import { containerPoints, type MapPoint } from "@/lib/map-planning/points"
 import { containerLocation } from "@/lib/map-planning/positions"
+import { advancePlayback, playbackFrame } from "@/lib/map-planning/playback"
 import { routesInSelection, routesInWindow, type AreaRoute } from "@/lib/map-planning/routes"
 import type { SavedSelection } from "@/lib/map-planning/saved-selections"
 import {
@@ -78,6 +79,7 @@ import { todayIso } from "@/lib/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
 
 import { LayersPanel } from "./layers-panel"
+import { PlaybackBar, type PlaybackSpeed } from "./playback-bar"
 import { useRoadGeometries } from "./use-road-geometries"
 import { MapSearch } from "./map-search"
 import { MapToolbar } from "./map-toolbar"
@@ -112,6 +114,8 @@ export type MapPlanningViewProps = {
 
 type ClusterList = { cluster: MapCluster; anchor: { x: number; y: number } }
 type RouteCard = { route: AreaRoute; anchor: { x: number; y: number } }
+/** A route being replayed: progress is a fractional stop index, 0 at the first stop. */
+type Playback = { routeId: string; progress: number; playing: boolean; speed: PlaybackSpeed }
 /** What the pointer rests on — the map and the panel each highlight their side of it. */
 type Highlight = { kind: "containers"; ids: readonly string[] } | { kind: "route"; id: string }
 
@@ -147,6 +151,7 @@ export function MapPlanningView({
   // The Routes layer: every drawable route in the collection window.
   const [windowRoutesOnMap, setWindowRoutesOnMap] = useState(false)
   const [routeCard, setRouteCard] = useState<RouteCard | null>(null)
+  const [playback, setPlayback] = useState<Playback | null>(null)
   const [highlight, setHighlight] = useState<Highlight | null>(null)
   const [detail, setDetail] = useState<BusinessRecord | null>(null)
   const [clusterList, setClusterList] = useState<ClusterList | null>(null)
@@ -264,14 +269,71 @@ export function MapPlanningView({
     () => routesInSelection(selectedContainers, routes, pickups, inServiceContainers),
     [inServiceContainers, pickups, routes, selectedContainers],
   )  // Both sources may name the same route; the layer's copy stands for it.
+  // The replayed route, wherever it was picked from; it stays drawn while it plays.
+  const playbackRoute = useMemo(() => {
+    if (!playback) return null
+    return (
+      windowRoutes.find((route) => route.id === playback.routeId) ??
+      areaRoutes.routes.find((route) => route.id === playback.routeId) ??
+      null
+    )
+  }, [areaRoutes.routes, playback, windowRoutes])
   const routeLines = useMemo(() => {
     const lines = new Map<string, AreaRoute>()
     if (routesOnMap) for (const route of areaRoutes.routes) lines.set(route.id, route)
     if (windowRoutesOnMap) for (const route of windowRoutes) lines.set(route.id, route)
+    if (playbackRoute) lines.set(playbackRoute.id, playbackRoute)
     return Array.from(lines.values())
-  }, [areaRoutes.routes, routesOnMap, windowRoutes, windowRoutesOnMap])
+  }, [areaRoutes.routes, playbackRoute, routesOnMap, windowRoutes, windowRoutesOnMap])
   const roadGeometries = useRoadGeometries(routeLines)
   const routeCardRoad = routeCard ? roadGeometries.get(routeCard.route.id) : undefined
+
+  // Where the replayed vehicle stands: along the road when it is known, straight otherwise.
+  const playbackFrameValue = useMemo(() => {
+    if (!playback || !playbackRoute) return null
+    const state = roadGeometries.get(playbackRoute.id)
+    const geometry = state?.status === "ready" ? state.geometry : null
+    const stops =
+      geometry && geometry.snappedStops.length === playbackRoute.stops.length
+        ? geometry.snappedStops
+        : playbackRoute.stops.map((stop) => stop.lngLat)
+    return playbackFrame(stops, geometry, playback.progress)
+  }, [playback, playbackRoute, roadGeometries])
+
+  // The route left the map's records (window changed, record deleted): stop replaying it.
+  useEffect(() => {
+    if (playback && !playbackRoute) setPlayback(null)
+  }, [playback, playbackRoute])
+
+  // The animation: advance by wall-clock time while playing, stop at the last stop.
+  const stopCount = playbackRoute?.stops.length ?? 0
+  useEffect(() => {
+    if (!playback?.playing || stopCount === 0) return
+    let last = performance.now()
+    let frame = requestAnimationFrame(function tick(now) {
+      const delta = now - last
+      last = now
+      setPlayback((current) => {
+        if (!current || !current.playing) return current
+        const next = advancePlayback(current.progress, delta, current.speed, stopCount)
+        return { ...current, progress: next.progress, playing: !next.done }
+      })
+      frame = requestAnimationFrame(tick)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [playback?.playing, stopCount])
+
+  const startPlayback = (route: AreaRoute) => {
+    if (route.stops.length === 0) {
+      toast.info("This route has no stop positions to replay", {
+        description: "Generate routes from a Route Scheme to see their stops on the map.",
+      })
+      return
+    }
+    setRouteCard(null)
+    setPlayback({ routeId: route.id, progress: 0, playing: route.stops.length > 1, speed: 1 })
+    mapApi.current?.fitBounds(boundsFromPolygon(route.stops.map((stop) => stop.lngLat)))
+  }
 
   const activeChips = businessFilterChips(filters).length
   const canReset = activeChips > 0 || window !== DEFAULT_COLLECTION_WINDOW
@@ -442,6 +504,16 @@ export function MapPlanningView({
           routeLines={routeLines}
           roadGeometries={roadGeometries}
           onRouteClick={(route, anchor) => setRouteCard({ route, anchor })}
+          playback={
+            playback && playbackRoute && playbackFrameValue
+              ? {
+                  routeId: playbackRoute.id,
+                  color: playbackRoute.color,
+                  position: playbackFrameValue.position,
+                  travelled: playbackFrameValue.travelled,
+                }
+              : null
+          }
           highlightedIds={highlightedIds}
           highlightedRouteId={highlightedRouteId}
           onHoverPoint={hoverContainers}
@@ -488,6 +560,7 @@ export function MapPlanningView({
             routes={areaRoutes}
             routesOnMap={routesOnMap}
             onToggleRoutesOnMap={toggleRoutesOnMap}
+            onPlayRoute={startPlayback}
             containers={containerRows}
             highlightedContainerIds={highlightedIds}
             highlightedRouteId={highlightedRouteId}
@@ -504,6 +577,36 @@ export function MapPlanningView({
             onCreateServiceArea={startServiceArea}
             onClose={clearSelection}
             className="absolute bottom-8 left-3 top-14 z-30 w-[min(420px,calc(100%-24px))]"
+          />
+        )}
+
+        {playback && playbackRoute && (
+          <PlaybackBar
+            route={playbackRoute}
+            progress={playback.progress}
+            playing={playback.playing}
+            speed={playback.speed}
+            onTogglePlay={() =>
+              setPlayback((current) =>
+                current
+                  ? {
+                      ...current,
+                      // Play again from the start once the journey has ended.
+                      progress: !current.playing && current.progress >= stopCount - 1 ? 0 : current.progress,
+                      playing: !current.playing,
+                    }
+                  : current,
+              )
+            }
+            onSpeedChange={(speed) => setPlayback((current) => (current ? { ...current, speed } : current))}
+            onScrub={(progress) => setPlayback((current) => (current ? { ...current, progress, playing: false } : current))}
+            onClose={() => setPlayback(null)}
+            className="absolute bottom-8 z-30 -translate-x-1/2"
+            style={{
+              // Centred over the map, or over the part of it the Selected area panel leaves free.
+              left: hasSelection ? "calc(432px + (100% - 432px) / 2)" : "50%",
+              width: hasSelection ? "min(560px, calc(100% - 456px))" : "min(560px, calc(100% - 24px))",
+            }}
           />
         )}
 
@@ -576,12 +679,24 @@ export function MapPlanningView({
                   </>
                 )}
               </dl>
-              <Button asChild variant="outline" size="sm" className="mt-3 h-8 w-full gap-1.5 text-xs">
-                <Link href={routeCard.route.href}>
-                  Open route
-                  <ArrowSquareOut className="h-3.5 w-3.5" />
-                </Link>
-              </Button>
+              <div className="mt-3 flex gap-2">
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-8 flex-1 gap-1.5 text-xs"
+                  disabled={routeCard.route.stops.length === 0}
+                  onClick={() => startPlayback(routeCard.route)}
+                >
+                  <Play className="h-3.5 w-3.5" weight="fill" />
+                  Play route
+                </Button>
+                <Button asChild variant="outline" size="sm" className="h-8 flex-1 gap-1.5 text-xs">
+                  <Link href={routeCard.route.href}>
+                    Open route
+                    <ArrowSquareOut className="h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+              </div>
             </PopoverContent>
           </Popover>
         )}

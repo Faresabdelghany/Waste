@@ -93,6 +93,7 @@ async function seedDrawableRoute(
   page: Page,
   stops: readonly string[] = ["asset-82014", "asset-66420", "asset-44831"],
   roads: "roads" | "refuse" = "roads",
+  options: { status?: string; pickupStatus?: string; pickupFacts?: (index: number) => Record<string, string> } = {},
 ): Promise<void> {
   await stubRoads(page, roads)
   const blank = { context: "", owner: "", updated: "", description: "", related: [], source: "", freshness: "" }
@@ -102,7 +103,7 @@ async function seedDrawableRoute(
         ...blank,
         id: SEEDED_ROUTE_ID,
         name: "RC-9001",
-        status: "Planned",
+        status: options.status ?? "Planned",
         value: `${stops.length} stops`,
         facts: { Vehicle: "WH-24", Driver: "Mads Jensen", "Time window": "06:00–14:00" },
         submittedValues: { serviceDate: localToday() },
@@ -112,9 +113,9 @@ async function seedDrawableRoute(
       ...blank,
       id: `pickup-e2e-${index + 1}`,
       name: `Pickup ${index + 1}`,
-      status: "Planned",
+      status: options.pickupStatus ?? "Planned",
       value: "",
-      facts: { Stop: String(index + 1) },
+      facts: { Stop: String(index + 1), ...(options.pickupFacts?.(index) ?? {}) },
       submittedValues: { routeId: SEEDED_ROUTE_ID, containerId },
     })),
   }
@@ -152,9 +153,16 @@ async function pointOnRouteLine(page: Page, routeId: string): Promise<{ x: numbe
   return point
 }
 
+/**
+ * Opens a route's card by clicking its line. The click is dispatched on the
+ * route's own hit stroke, at a point on the line, so another route crossing
+ * it (fixture route days draw alongside the seeded one) cannot take the click.
+ */
 async function clickRouteLine(page: Page, routeId: string): Promise<void> {
   const point = await pointOnRouteLine(page, routeId)
-  await page.mouse.click(point.x, point.y)
+  await page
+    .locator(`[data-route-hit="${routeId}"]`)
+    .dispatchEvent("click", { clientX: point.x, clientY: point.y, bubbles: true })
 }
 
 const mapZoom = (page: Page) =>
@@ -329,14 +337,17 @@ test("a legacy Plan calendars link lands on the Settings pane", async ({ page })
   await expect(page.getByRole("cell", { name: "Copenhagen Central 2026" }).first()).toBeVisible()
 })
 
-test("the Routes layer is disabled while no route has stop positions", async ({ page }) => {
+test("the Routes layer counts the fixture route days by status and draws nothing until switched on", async ({ page }) => {
+  // Fixture pickups name their stops by address; the ones on gazetteer streets make their route days drawable.
   await page.getByRole("button", { name: /^Layers/ }).click()
   const layers = page.getByRole("dialog", { name: "Layers" })
   const routesLayer = layers.getByTestId("routes-layer")
   await expect(routesLayer).toContainText("Routes")
   await expect(routesLayer).toContainText("Any date")
-  await expect(routesLayer.getByRole("checkbox", { name: /Routes in the collection window/ })).toBeDisabled()
-  await expect(routesLayer).toContainText("No route has stop positions yet")
+  await expect(routesLayer.getByRole("checkbox", { name: /Routes in the collection window/ })).toBeEnabled()
+  await expect(routesLayer).toContainText("2 in progress")
+  await expect(routesLayer).toContainText("1 completed")
+  await expect(routesLayer).not.toContainText("awaiting")
   await expect(page.locator("[data-route-line]")).toHaveCount(0)
 })
 
@@ -436,6 +447,61 @@ test("a route whose road cannot be fetched is drawn straight and dashed", async 
   const card = page.getByTestId("route-card")
   await expect(card).toContainText("RC-9001")
   await expect(card.getByTestId("route-card-drive")).toHaveCount(0)
+})
+
+test("Play route replays a completed route stop by stop with planned and actual times", async ({ page }) => {
+  const clock = (minutes: number) => `${String(6 + Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`
+  await seedDrawableRoute(page, undefined, "roads", {
+    status: "Completed",
+    pickupStatus: "Completed",
+    // Planned every ten minutes from 06:10; each stop completed five minutes late.
+    pickupFacts: (index) => ({ Scheduled: clock(10 + index * 10), "Completed at": clock(15 + index * 10) }),
+  })
+  await page.getByRole("button", { name: /^Layers/ }).click()
+  await page.getByRole("dialog", { name: "Layers" }).getByTestId("routes-layer").getByRole("checkbox").click()
+  await page.keyboard.press("Escape")
+  await expect(page.locator(`[data-route-line="${SEEDED_ROUTE_ID}"]`)).toHaveAttribute("data-route-geometry", "road")
+
+  await clickRouteLine(page, SEEDED_ROUTE_ID)
+  await page.getByTestId("route-card").getByRole("button", { name: "Play route" }).click()
+  const bar = page.getByTestId("playback-bar")
+  await expect(bar).toBeVisible()
+  await expect(page.getByTestId("route-card")).toHaveCount(0)
+  await expect(bar).toContainText("RC-9001")
+  await expect(page.getByTestId("playback-vehicle")).toBeVisible()
+  await expect(page.locator(`[data-route-travelled="${SEEDED_ROUTE_ID}"]`)).toHaveCount(1)
+
+  // Freeze the replay, then walk it with the scrubber.
+  await bar.getByRole("button", { name: "Pause", exact: true }).click()
+  const slider = bar.getByRole("slider", { name: "Route progress" })
+  await slider.focus()
+  await page.keyboard.press("Home")
+  await expect(bar.getByTestId("playback-position")).toHaveText("Stop 1 of 3")
+  await expect(bar.getByTestId("playback-times")).toHaveText("planned 06:10 · actual 06:15 · +5 min")
+  await page.keyboard.press("End")
+  await expect(bar.getByTestId("playback-position")).toHaveText("Stop 3 of 3")
+  await expect(bar.getByTestId("playback-caption")).toContainText("3.")
+  await expect(bar.getByTestId("playback-times")).toHaveText("planned 06:30 · actual 06:35 · +5 min")
+  // At the last stop, Play starts over.
+  await bar.getByRole("button", { name: "Play", exact: true }).click()
+  await expect(bar.getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+
+  await bar.getByRole("button", { name: "Close playback" }).click()
+  await expect(bar).toHaveCount(0)
+  await expect(page.getByTestId("playback-vehicle")).toHaveCount(0)
+})
+
+test("a route row in the Selected area panel can be played without the Routes layer", async ({ page }) => {
+  await seedDrawableRoute(page, ["asset-seed-91005", "asset-seed-91007", "asset-seed-91010"])
+  await selectRectangle(page)
+  const panel = page.getByRole("region", { name: "Selected area" })
+  await panel.locator(`[data-route-row="${SEEDED_ROUTE_ID}"]`).getByRole("button", { name: "Play route RC-9001" }).click()
+  const bar = page.getByTestId("playback-bar")
+  await expect(bar).toBeVisible()
+  // Playing draws the route even though nothing switched the Routes layer on.
+  await expect(page.locator(`[data-route-line="${SEEDED_ROUTE_ID}"]`)).toBeVisible()
+  await expect(page.getByTestId("playback-vehicle")).toBeVisible()
+  await expect(bar.getByTestId("playback-times")).toHaveText("No times recorded")
 })
 
 test("hovering a route row highlights its line and hovering the line highlights the row", async ({ page }) => {
