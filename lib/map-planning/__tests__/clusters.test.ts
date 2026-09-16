@@ -144,7 +144,7 @@ describe("fractionColor", () => {
   test("unknown fractions get a stable fallback, distinct from each other", () => {
     const plastic = fractionColor("Plastic", configured)
     assert.equal(fractionColor("Plastic", configured), plastic)
-    assert.ok(FALLBACK_FRACTION_PALETTE.includes(plastic))
+    assert.ok((FALLBACK_FRACTION_PALETTE as readonly string[]).includes(plastic))
     assert.notEqual(fractionColor("Metal", configured), plastic)
   })
 })

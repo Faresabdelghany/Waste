@@ -24,6 +24,7 @@ export type BusinessFilters = {
   serviceFrequencies: string[]
   routeSchemes: string[]
   collectionCalendars: string[]
+  planningAreas: string[]
   propertyTypes: string[]
   serviceAreas: string[]
   serviceScopes: string[]
@@ -56,6 +57,7 @@ export const BUSINESS_FILTER_CHIP_LABELS: Readonly<Record<BusinessFilterKey, str
   serviceFrequencies: "Service frequency",
   routeSchemes: "Route scheme",
   collectionCalendars: "Holiday list",
+  planningAreas: "Planning area",
   propertyTypes: "Property type",
   serviceAreas: "Service area",
   serviceScopes: "Service scope",

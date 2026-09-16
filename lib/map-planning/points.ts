@@ -10,6 +10,14 @@ import { containerLocation, containerPropertyKey } from "./positions"
 
 export type MapPointKind = "container" | "property"
 
+/** The header toggle: which kind of point the map draws. */
+export type MapMode = "containers" | "properties"
+
+export const MAP_MODE_KIND: Readonly<Record<MapMode, MapPointKind>> = {
+  containers: "container",
+  properties: "property",
+}
+
 export type MapPoint = {
   id: string
   kind: MapPointKind
