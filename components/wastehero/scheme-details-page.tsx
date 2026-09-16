@@ -35,6 +35,7 @@ import type {
   BusinessRecord,
   ModuleDefinition,
 } from "@/lib/data/business-modules"
+import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import {
   lastGeneratedAt,
@@ -203,7 +204,10 @@ export function SchemeDetailsPage({
   const schemes = useModuleRecords("route-studio", "schemes")
   const allRoutes = useModuleRecords("route-studio", "routes")
   const allPickups = useModuleRecords("route-studio", "pickups")
-  const calendarRecords = useModuleRecords("plan", "calendars")
+  const calendarRecords = useModuleRecords(
+    COLLECTION_CALENDARS_MODULE.workspaceId,
+    COLLECTION_CALENDARS_MODULE.moduleId,
+  )
   const projects = useModuleRecords("configure", "organization")
   const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId)
   const allocations = useModuleRecords("fleet", "vehicle-planning")

@@ -53,7 +53,7 @@ export function parseHolidayDates(value: string | undefined): string[] {
 
 /**
  * Reads a calendar's structured operational data from its record (the
- * `plan.calendars` form field ids, kept on records as `submittedValues`).
+ * `configure.calendars` form field ids, kept on records as `submittedValues`).
  * Returns null for a missing record or one without any structured fields —
  * such a calendar constrains nothing (legacy display-only records).
  */

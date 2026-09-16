@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
   Bell,
+  CalendarBlank,
   CaretLeft,
   CheckCircle,
   CreditCard,
@@ -46,7 +47,9 @@ import { CompanyProjectsManagement } from "@/components/settings/company-project
 import { AssetManagementSettings } from "@/components/settings/asset-management-settings"
 import { CommercialDefaultsExtras, CommercialSectionPane } from "@/components/settings/commercial-settings"
 import { PlanningAreasSettings } from "@/components/settings/planning-areas-settings"
+import { CollectionCalendarsSettings } from "@/components/settings/collection-calendars-settings"
 import { PLANNING_AREAS_SETTINGS_PANE_ID } from "@/lib/data/planning-areas"
+import { COLLECTION_CALENDARS_SETTINGS_PANE_ID } from "@/lib/data/collection-calendars"
 import { migrateLegacyId } from "@/lib/data/legacy-ids"
 
 type SettingControl =
@@ -123,6 +126,8 @@ const settingsSections: Array<{
       { id: "asset-management", label: "Asset management", icon: Gear },
       // Areas & Zones moved here from the Plan workspace (2026-09-03, D37).
       { id: PLANNING_AREAS_SETTINGS_PANE_ID, label: "Areas & Zones", icon: MapTrifold },
+      // Collection Calendars moved here from the Plan workspace (2026-09-16).
+      { id: COLLECTION_CALENDARS_SETTINGS_PANE_ID, label: "Collection calendars", icon: CalendarBlank },
       { id: "operations-setup", label: "Operations setup", icon: SlidersHorizontal },
       { id: "ticket-comms", label: "Tickets & communication", icon: Bell },
     ],
@@ -1302,6 +1307,12 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
       "Planning areas and notification zones — the operational geography Route Schemes, containers, and Service Areas reference.",
     groups: [],
   },
+  [COLLECTION_CALENDARS_SETTINGS_PANE_ID]: {
+    title: "Collection calendars",
+    description:
+      "The per-year holiday calendars of each project — the dated records behind the project's holiday list that route generation reads.",
+    groups: [],
+  },
   access: {
     title: "Users and roles",
     description:
@@ -1404,6 +1415,7 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === "access" ||
     paneId === "company" ||
     paneId === PLANNING_AREAS_SETTINGS_PANE_ID ||
+    paneId === COLLECTION_CALENDARS_SETTINGS_PANE_ID ||
     paneId.startsWith("commercial-")
   )
 }
@@ -1767,6 +1779,8 @@ function SettingsPane({
         <AssetManagementSettings />
       ) : paneId === PLANNING_AREAS_SETTINGS_PANE_ID ? (
         <PlanningAreasSettings />
+      ) : paneId === COLLECTION_CALENDARS_SETTINGS_PANE_ID ? (
+        <CollectionCalendarsSettings />
       ) : paneId.startsWith("commercial-") ? (
         <CommercialSectionPane paneId={paneId} />
       ) : (

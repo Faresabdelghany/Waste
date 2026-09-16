@@ -2078,9 +2078,32 @@ const operate: WorkspaceDefinition = {
 
 const plan: WorkspaceDefinition = {
   id: "plan",
-  label: "Plan",
-  description: "Shape recurring service through collection calendars. Route Schemes own recurrence and live in Route Studio; planning geography (Areas & Zones) is managed in Settings.",
+  label: "Map Planning",
+  description: "Plan service on the map: the container and property registry as clustered markers, filtered by fraction, type, area, and collection window, selected spatially and handed to Route Scheme creation. Route Schemes own recurrence and live in Route Studio; planning geography and collection calendars are managed in Settings.",
   modules: [
+    // Map Planning (2026-09-16) replaced the Plan workspace's list modules:
+    // a read-and-select surface over the container and property registry
+    // with no records of its own — the module registers for navigation,
+    // permissions, and links; components/wastehero/map-planning renders it.
+    {
+      id: "map-planning",
+      label: "Map Planning",
+      title: "Map Planning",
+      description:
+        "Containers and properties on the map, clustered by location and coloured by waste fraction. Filter the registry, pick a collection window, draw a rectangle or polygon, and create a route scheme from the selection.",
+      entityLabel: "Container",
+      contextLabel: "Location",
+      valueLabel: "Selection",
+      primaryAction: "Create route scheme",
+      metrics: [],
+      records: [],
+      lifecycle: [],
+      rules: [
+        "Marker positions follow the container's property address; containers at one address share one spot.",
+        "A selection never changes a record — it seeds a Route Scheme in Route Studio.",
+        "The collection window reads generated routes first and the container's next collection second.",
+      ],
+    },
     {
       id: "schemes",
       label: "Route Schemes",
@@ -3599,10 +3622,16 @@ const fleet: WorkspaceDefinition = {
   ],
 }
 
+// Plan's list modules moved out: Vehicle planning to Fleet, Route Schemes to
+// Route Studio, and Collection Calendars to Settings (configure.calendars,
+// 2026-09-16) — Plan is Map Planning alone.
 const planWithoutFleet: WorkspaceDefinition = {
   ...plan,
   modules: plan.modules.filter(
-    (module) => module.id !== "vehicle-planning" && module.id !== "schemes",
+    (module) =>
+      module.id !== "vehicle-planning" &&
+      module.id !== "schemes" &&
+      module.id !== "calendars",
   ),
 }
 
@@ -6428,6 +6457,12 @@ const configure: WorkspaceDefinition = {
         ),
       ],
     },
+    // Collection Calendars moved here from Plan on 2026-09-16 (Plan became
+    // Map Planning). The `configure` workspace is the registry twin of
+    // Settings — business-links resolves its modules to /settings?pane=… —
+    // and the records stay business records (bucket "configure.calendars") so
+    // generation, the wizard, and Plan Ahead keep reading them.
+    requireWorkspaceModule(plan, "calendars"),
   ],
 }
 

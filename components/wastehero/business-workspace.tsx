@@ -38,6 +38,7 @@ import {
   type WorkspaceDefinition,
   type WorkspaceId,
 } from "@/lib/data/business-modules"
+import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import {
   deriveFormRecord,
@@ -731,7 +732,7 @@ const serviceProviderOperatedRelationModuleIds = new Set([
 
 const primaryModuleIdsByWorkspace: Partial<Record<WorkspaceId, readonly string[]>> = {
   operate: ["tickets", "exceptions"],
-  plan: ["calendars"],
+  plan: ["map-planning"],
   "route-studio": ["live", "schemes", "routes", "pickups", "weights"],
   customers: ["properties", "groups", "shared", "agreements"],
   resources: ["containers", "inventory", "warehouses", "depots"],
@@ -3648,7 +3649,7 @@ export function BusinessWorkspace({
             containers: moduleRecords("resources", "containers"),
             vehicles: moduleRecords("fleet", "vehicles"),
             allocations: moduleRecords("fleet", "vehicle-planning"),
-            calendarRecords: moduleRecords("plan", "calendars"),
+            calendarRecords: moduleRecords(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId),
             projectRecords: moduleRecords("configure", "organization"),
           },
         )
@@ -4182,7 +4183,7 @@ export function BusinessWorkspace({
         "Holiday list":
           resolveProjectCalendar(data.projectId, {
             projects: moduleRecords("configure", "organization"),
-            calendars: moduleRecords("plan", "calendars"),
+            calendars: moduleRecords(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId),
           }).list?.name ?? NO_HOLIDAY_LIST_LABEL,
         ...(recurrence ? { Recurrence: recurrenceSentence(recurrence) } : {}),
         ...(data.effectiveFrom
@@ -4257,9 +4258,7 @@ export function BusinessWorkspace({
     const pickupsModule = businessWorkspaces["route-studio"].modules.find(
       (candidate) => candidate.id === "pickups",
     )
-    const calendarsModule = businessWorkspaces.plan.modules.find(
-      (candidate) => candidate.id === "calendars",
-    )
+    const calendarsModule = getModuleDefinition(COLLECTION_CALENDARS_MODULE)
     const creation = planSchemeCreation(
       { scheme: newRecord, today: todayIso(), actorName, createAs: data.createAs },
       {
@@ -4271,7 +4270,11 @@ export function BusinessWorkspace({
           : [],
         containers: containerRecords,
         calendarRecords: calendarsModule
-          ? getRecords("plan", calendarsModule.id, calendarsModule.records)
+          ? getRecords(
+              COLLECTION_CALENDARS_MODULE.workspaceId,
+              calendarsModule.id,
+              calendarsModule.records,
+            )
           : [],
         projectRecords: moduleRecords("configure", "organization"),
       },
@@ -4371,7 +4374,7 @@ export function BusinessWorkspace({
         containers: containerRecords,
         vehicles: moduleRecords("fleet", "vehicles"),
         allocations: moduleRecords("fleet", "vehicle-planning"),
-        calendarRecords: moduleRecords("plan", "calendars"),
+        calendarRecords: moduleRecords(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId),
         projectRecords: moduleRecords("configure", "organization"),
       },
     )

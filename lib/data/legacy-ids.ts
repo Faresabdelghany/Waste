@@ -39,6 +39,9 @@ export const LEGACY_MODULE_IDS: Readonly<Record<string, string>> = {
 export const LEGACY_MODULE_KEYS: Readonly<Record<string, string>> = {
   // Areas & Zones moved from Plan to Settings (2026-09-03, D37).
   "plan.areas": "configure.areas",
+  // Collection Calendars moved from Plan to Settings (2026-09-16) when Plan
+  // became Map Planning.
+  "plan.calendars": "configure.calendars",
   "contractors.contractors": "service-providers.service-providers",
   "contractors.contract-areas": "service-providers.service-areas",
   "contractors.activities": "service-providers.activities",
@@ -231,16 +234,23 @@ export function migrateLegacyModuleKey(key: string): string {
 }
 
 /**
- * `/plan?module=areas[&record=…]` opened the Areas & Zones module before it
- * moved to Settings; the same records now open through the Settings pane.
- * Every other Plan href (calendars, the bare workspace) is left alone.
+ * Plan modules that moved to Settings, by module id → Settings pane id.
+ * `/plan?module=<id>[&record=…]` opened them before the move; the same
+ * records now open through their Settings pane. Every other Plan href (the
+ * bare workspace, Map Planning) is left alone.
  */
-function migratePlanAreasHref(href: string): string {
+const PLAN_MODULE_SETTINGS_PANES: Readonly<Record<string, string>> = {
+  areas: "areas",
+  calendars: "collection-calendars",
+}
+
+function migratePlanModuleHref(href: string): string {
   const match = /^\/plan\?([^#]*)(#.*)?$/.exec(href)
   if (!match) return href
   const params = new URLSearchParams(match[1])
-  if (params.get("module") !== "areas") return href
-  const next = new URLSearchParams({ pane: "areas" })
+  const paneId = PLAN_MODULE_SETTINGS_PANES[params.get("module") ?? ""]
+  if (!paneId) return href
+  const next = new URLSearchParams({ pane: paneId })
   const recordId = params.get("record")
   if (recordId) next.set("record", recordId)
   return `/settings?${next.toString()}${match[2] ?? ""}`
@@ -249,12 +259,13 @@ function migratePlanAreasHref(href: string): string {
 /**
  * Rewrites app-relative hrefs: the retired `/contractors` and
  * `/contractor-workspace(/…)` paths plus `?module=` / `?record=` params, and
- * the Plan deep links into the moved Areas & Zones module. Absolute URLs and
+ * the Plan deep links into the moved Areas & Zones and Collection Calendars
+ * modules. Absolute URLs and
  * non-app paths are returned untouched.
  */
 export function migrateLegacyHref(href: string): string {
   if (!href.startsWith("/")) return href
-  return migratePlanAreasHref(
+  return migratePlanModuleHref(
     href
       .replace(/^\/contractors(?=[/?#]|$)/, "/service-providers")
       .replace(/^\/contractor-workspace(?=[/?#]|$)/, "/service-provider-workspace")
@@ -419,7 +430,7 @@ export function migrateLegacyRecordBuckets<R extends { id: string }>(
  * actually changed.
  */
 export function hasLegacyIds(serialized: string): boolean {
-  return /contractor|contract[- ]?area|plan\.areas|"workspaceId":\s*"plan",\s*"moduleId":\s*"areas"/i.test(
+  return /contractor|contract[- ]?area|plan\.(?:areas|calendars)|"workspaceId":\s*"plan",\s*"moduleId":\s*"(?:areas|calendars)"/i.test(
     serialized,
   )
 }

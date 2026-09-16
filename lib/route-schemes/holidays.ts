@@ -1,8 +1,9 @@
 // The holiday DATES a project's calendar records carry (2026-09-16 holiday
 // model): ONE list per project, maintained per year as Collection Calendar
-// records scoped to the project (plan.calendars), union of their holiday
-// dates. Which list a project has — and whether it has one at all — is the
-// project's explicit `holidayList` attribute, resolved in project-calendar.ts
+// records scoped to the project (configure.calendars, managed in Settings),
+// union of their holiday dates. Which list a project has — and whether it has
+// one at all — is the project's explicit `holidayList` attribute, resolved in
+// project-calendar.ts
 // together with the weekend; this module only reads the dated records and
 // names their dates. Pure data logic (type-only import of BusinessRecord).
 

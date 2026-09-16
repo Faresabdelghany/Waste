@@ -10,6 +10,7 @@ import { useMemo } from "react"
 import { useAssetManagementStore } from "@/components/settings/asset-management-store"
 import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
 import type { BusinessRecord } from "@/lib/data/business-modules"
+import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import { fallbackContainerWeight, type ContainerWeightResolver } from "@/lib/route-schemes/estimates"
 import {
@@ -50,7 +51,10 @@ const locationType = (record: BusinessRecord): "depot" | "unloading" | "unknown"
 export function useWizardRecords(): WizardRecords {
   const projects = useModuleRecords("configure", "organization")
   const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId)
-  const calendars = useModuleRecords("plan", "calendars")
+  const calendars = useModuleRecords(
+    COLLECTION_CALENDARS_MODULE.workspaceId,
+    COLLECTION_CALENDARS_MODULE.moduleId,
+  )
   const locations = useModuleRecords("resources", "depots")
   const fleet = useModuleRecords("fleet", "vehicles")
   const drivers = useModuleRecords("fleet", "drivers")

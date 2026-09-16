@@ -29,12 +29,12 @@ import { ProgressCircle } from "@/components/progress-circle"
 import {
   MagnifyingGlass,
   Tray,
-  CalendarBlank,
   Users,
   ChartBar,
   CreditCard,
   Gear,
   Layout,
+  MapPinArea,
   MapTrifold,
   Truck,
   Buildings,
@@ -51,7 +51,7 @@ import { footerItems, navItems, type NavItemId, type SidebarFooterItemId } from 
 
 const navItemIcons: Record<NavItemId, React.ComponentType<{ className?: string }>> = {
   operate: Tray,
-  plan: CalendarBlank,
+  plan: MapPinArea,
   "route-studio": MapTrifold,
   fleet: Truck,
   customers: Users,

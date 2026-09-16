@@ -34,7 +34,7 @@ export type SidebarFooterItem = {
 export const navItems: NavItem[] = [
   { id: "improve", label: "Dashboard", href: "/performance" },
   { id: "operate", label: "Tickets", href: "/tickets", badge: 6 },
-  { id: "plan", label: "Plan", href: "/plan", badge: 3 },
+  { id: "plan", label: "Map Planning", href: "/plan" },
   { id: "route-studio", label: "Route Studio", href: "/route-studio" },
   { id: "fleet", label: "Fleet", href: "/fleet" },
   { id: "customers", label: "Customers", href: "/customers" },

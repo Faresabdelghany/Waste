@@ -1214,7 +1214,19 @@ export const operationsBusinessFormSchemas = [
     ],
   },
   {
-    key: "plan.calendars",
+    key: "plan.map-planning",
+    mode: "disabled",
+    recordKind: "Map selection",
+    title: "Map Planning",
+    description:
+      "Select containers or properties on the map and plan service from the selection.",
+    submitLabel: "Create route scheme",
+    disabledReason:
+      "Map Planning keeps no records of its own — draw a selection on the map and create a route scheme from it.",
+    sections: [],
+  },
+  {
+    key: "configure.calendars",
     mode: "create",
     recordKind: "Collection Calendar",
     title: "Create collection calendar",

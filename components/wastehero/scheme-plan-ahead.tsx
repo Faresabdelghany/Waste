@@ -14,6 +14,7 @@ import {
   useBusinessRecordsHydrated,
 } from "@/components/wastehero/business-record-store"
 import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
+import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { runPlanAhead } from "@/lib/route-schemes/plan-ahead"
 import { todayIso } from "@/lib/route-schemes/recurrence"
 
@@ -22,7 +23,10 @@ export function SchemePlanAheadRunner({ actorName }: { actorName: string }) {
   const schemes = useModuleRecords("route-studio", "schemes")
   const existingRoutes = useModuleRecords("route-studio", "routes")
   const existingPickups = useModuleRecords("route-studio", "pickups")
-  const calendarRecords = useModuleRecords("plan", "calendars")
+  const calendarRecords = useModuleRecords(
+    COLLECTION_CALENDARS_MODULE.workspaceId,
+    COLLECTION_CALENDARS_MODULE.moduleId,
+  )
   const projectRecords = useModuleRecords("configure", "organization")
   const containers = useModuleRecords("resources", "containers")
   const { upsertRecord } = useBusinessRecordStore()

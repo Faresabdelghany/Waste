@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label"
 import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
 import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
 import type { BusinessRecord } from "@/lib/data/business-modules"
+import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import {
   applySchemeGeneration,
   planSchemeGeneration,
@@ -80,7 +81,10 @@ export function SchemeGenerateRoutesDialog({
   const existingRoutes = useModuleRecords("route-studio", "routes")
   const existingPickups = useModuleRecords("route-studio", "pickups")
   const schemeRecords = useModuleRecords("route-studio", "schemes")
-  const calendarRecords = useModuleRecords("plan", "calendars")
+  const calendarRecords = useModuleRecords(
+    COLLECTION_CALENDARS_MODULE.workspaceId,
+    COLLECTION_CALENDARS_MODULE.moduleId,
+  )
   const projectRecords = useModuleRecords("configure", "organization")
   const containers = useModuleRecords("resources", "containers")
   const { upsertRecord } = useBusinessRecordStore()

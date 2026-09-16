@@ -212,12 +212,12 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
   {
     workspaceId: "plan",
     canonicalPurpose:
-      "Maintain collection calendars. Route Schemes own recurrence and service days and live in Route Studio; planning geography is managed in Settings → Areas & Zones.",
-    blueprintModules: ["M09", "M23"],
+      "Plan service on the map: see the container and property registry as clustered markers, filter it by fraction, type, area, and collection window, select spatially, and hand the selection to Route Scheme creation. Route Schemes own recurrence and live in Route Studio; planning geography and collection calendars are managed in Settings.",
+    blueprintModules: ["M09", "M06", "M03"],
     personas: ["Route planner", "Operations administrator"],
-    moduleIds: ["calendars"],
+    moduleIds: ["map-planning"],
     boundaryNote:
-      "Areas & Zones moved to Settings 2026-09-03 (configure.areas, D37) — Plan consumes planning geography without owning it; Service providers owns Service Areas and their awards. Pickup Settings, Collection Weeks, and Collection Calendar Days are retired — Route Schemes own recurrence. Collection Deviations were removed 2026-09-03 — holiday and non-working dates are skipped at generation, never moved.",
+      "Map Planning reads containers (M06), properties (M03), planning areas, and generated routes; it owns no records of its own — a selection becomes a Route Scheme in Route Studio. Areas & Zones moved to Settings 2026-09-03 (configure.areas, D37). Collection Calendars moved to Settings 2026-09-16 (configure.calendars) when Plan became Map Planning. Pickup Settings, Collection Weeks, and Collection Calendar Days are retired — Route Schemes own recurrence. Collection Deviations were removed 2026-09-03 — holiday and non-working dates are skipped at generation, never moved.",
   },
   {
     workspaceId: "route-studio",
@@ -464,17 +464,17 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
       "A Route Scheme is effective-dated recurring master data; editing it never changes historic Routes.",
   },
   {
-    key: "plan.calendars",
+    key: "plan.map-planning",
     workspaceId: "plan",
-    moduleId: "calendars",
+    moduleId: "map-planning",
     primaryBlueprintModule: "M09",
-    supportingBlueprintModules: ["M17", "M21"],
-    canonicalOwner: "Plan · Collection Calendars",
-    personas: ["Route planner", "Operations administrator", "Customer-service agent"],
-    upstream: ["M02", "M03", "M04", "M05"],
-    downstream: ["M09", "M10", "M11", "M17", "M21", "M23"],
+    supportingBlueprintModules: ["M06", "M03", "M10"],
+    canonicalOwner: "Plan · Map Planning",
+    personas: ["Route planner", "Operations administrator"],
+    upstream: ["M02", "M03", "M06", "M09", "M11"],
+    downstream: ["M09", "M10"],
     boundaryNote:
-      "Settings owns working-calendar defaults; Plan owns effective calendar records — working days, holidays, and validity. Holiday and non-working dates are skipped at generation, never moved.",
+      "A read-and-select surface over the container and property registry: it never stores records. A map selection becomes a Route Scheme through the Guided Setup wizard, so scheme rules stay in Route Studio.",
   },
   {
     key: "fleet.vehicles",
@@ -958,6 +958,24 @@ export const settingsModuleDomains: readonly SettingsModuleDomain[] = [
     downstream: ["M09", "M10", "M11", "M12", "M15", "M17", "M18"],
     boundaryNote:
       "Settings owns operational planning and notification geography as master data; Plan and Route Studio consume it. Service providers owns Service Areas awarded to service providers.",
+  },
+  // Collection Calendars moved here from Plan on 2026-09-16 when Plan became
+  // Map Planning: the per-year holiday records are project master data that
+  // generation reads, so they live beside the project's weekend and holiday
+  // list in Settings.
+  {
+    key: "configure.calendars",
+    workspaceId: "configure",
+    moduleId: "calendars",
+    settingsPaneId: "collection-calendars",
+    primaryBlueprintModule: "M09",
+    supportingBlueprintModules: ["M02", "M17", "M21"],
+    canonicalOwner: "Settings · Collection calendars",
+    personas: ["Route planner", "Operations administrator", "Customer-service agent"],
+    upstream: ["M02", "M03", "M04", "M05"],
+    downstream: ["M09", "M10", "M11", "M17", "M21", "M23"],
+    boundaryNote:
+      "Settings owns the project's weekend and holiday list and the dated calendar records behind it — holidays and validity per year. Holiday and non-working dates are skipped at generation, never moved.",
   },
 ]
 
