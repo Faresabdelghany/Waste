@@ -38,3 +38,8 @@ next-env.d.ts
 .superpowers/
 # Finder metadata
 .DS_Store
+
+# Playwright
+/test-results/
+/playwright-report/
+/.playwright-cli/
