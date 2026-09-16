@@ -24,7 +24,7 @@ import { Separator } from "@/components/ui/separator"
 import type { ServiceAreaCoverage } from "@/lib/map-planning/coverage"
 import { formatArea, formatShortDate, formatVolume, formatWeight } from "@/lib/map-planning/format"
 import { polygonAreaSquareMetres } from "@/lib/map-planning/geo"
-import type { AreaRoutes } from "@/lib/map-planning/routes"
+import type { AreaRoutes, RouteBucket } from "@/lib/map-planning/routes"
 import type { SelectionShape } from "@/lib/map-planning/selection"
 import type { SelectionStatistics } from "@/lib/map-planning/statistics"
 import { cn } from "@/lib/utils"
@@ -231,11 +231,11 @@ export function SelectedAreaPanel({
                   {routesOnMap ? "Hide from map" : "See on map"}
                 </Button>
               </div>
-              <dl className="grid grid-cols-2 gap-3" data-testid="area-routes">
-                <StatTile label="Total routes" value={routes.total} />
-                <StatTile label="Awaiting" value={routes.awaiting} />
-                <StatTile label="In progress" value={routes.inProgress} />
-                <StatTile label="Completed" value={routes.completed} />
+              <dl className="divide-y divide-border/70" data-testid="area-routes">
+                <CountRow label="Total routes" value={routes.total} />
+                <CountRow label="Awaiting" value={routes.awaiting} tone="awaiting" />
+                <CountRow label="In progress" value={routes.inProgress} tone="in-progress" />
+                <CountRow label="Completed" value={routes.completed} tone="completed" />
               </dl>
               {routes.routes.length > 0 && (
                 <ul className="mt-3 divide-y divide-border/70">
@@ -322,6 +322,26 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex items-baseline justify-between gap-4 py-2 first:pt-0 last:pb-0">
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="font-semibold tabular-nums">{value}</dd>
+    </div>
+  )
+}
+
+const COUNT_TONES: Readonly<Record<RouteBucket, { dot: string; value: string }>> = {
+  awaiting: { dot: "bg-amber-500", value: "text-amber-600 dark:text-amber-400" },
+  "in-progress": { dot: "bg-blue-500", value: "text-blue-600 dark:text-blue-400" },
+  completed: { dot: "bg-emerald-500", value: "text-emerald-600 dark:text-emerald-400" },
+}
+
+/** A label/value row with the status colour on the dot and the number. */
+function CountRow({ label, value, tone }: { label: string; value: number; tone?: RouteBucket }) {
+  const colours = tone ? COUNT_TONES[tone] : null
+  return (
+    <div className="flex items-center justify-between gap-4 py-2 first:pt-0 last:pb-0">
+      <dt className="flex items-center gap-2 text-muted-foreground">
+        <span className={cn("size-2.5 rounded-full", colours ? colours.dot : "bg-foreground")} aria-hidden />
+        {label}
+      </dt>
+      <dd className={cn("text-base font-semibold tabular-nums", colours?.value)}>{value}</dd>
     </div>
   )
 }

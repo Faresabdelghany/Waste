@@ -65,6 +65,15 @@ describe("addressLocation", () => {
     assert.ok(metres(odd, even) < 60)
   })
 
+  test("a number-less street keeps its last letter and a house letter still parses", () => {
+    // "Harbor Offices, Dock 4" must hit the gazetteer's harbor offices anchor, not the hash.
+    const offices = addressLocation("Harbor Offices, Dock 4", "Harbor Offices")
+    assert.ok(Math.abs(offices.lng - 12.5975) < 0.01 && Math.abs(offices.lat - 55.7085) < 0.005, JSON.stringify(offices))
+    const lettered = addressLocation("Ryesgade 45A, 2200 København N", "Ryesgade 45A")
+    const plain = addressLocation("Ryesgade 45, 2200 København N", "Ryesgade 45")
+    assert.deepEqual(lettered, plain)
+  })
+
   test("an unknown address is hashed inside the Copenhagen bounds, deterministically", () => {
     const a = addressLocation("Somewhere 1, 9999 Nowhere", "Somewhere 1")
     const b = addressLocation("Somewhere 1, 9999 Nowhere", "Somewhere 1")

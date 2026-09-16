@@ -65,7 +65,10 @@ const STREET_ANCHORS: Readonly<Record<string, StreetAnchor>> = {
 const METRES_PER_HOUSE_NUMBER = 9
 const KERB_OFFSET_METRES = 14
 
-const ADDRESS_SHAPE = /^\s*([^\d,]+?)\s*(\d+)?\s*[a-zA-Z]?\s*(?:,|$)/
+// A house-number letter ("12A") is only allowed right after the number —
+// otherwise it would eat the last letter of a number-less street name
+// ("Harbor Offices, Dock 4") and miss the gazetteer.
+const ADDRESS_SHAPE = /^\s*([^\d,]+?)\s*(?:(\d+)\s*[a-zA-Z]?)?\s*(?:,|$)/
 
 /** "Ryesgade 45, 2200 København N" → { street: "ryesgade", number: 45 }. */
 function parseAddress(address: string): { street: string; number: number | null } | null {

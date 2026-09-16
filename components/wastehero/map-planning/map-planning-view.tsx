@@ -79,7 +79,7 @@ const PlanningMap = dynamic(
 )
 
 export type MapPlanningViewProps = {
-  /** Project-scoped containers; the planning areas, service areas, routes, and pickups they may reference. */
+  /** Every container in the registry; the planning areas, service areas, routes, and pickups they may reference. */
   containers: readonly BusinessRecord[]
   planningAreas: readonly BusinessRecord[]
   serviceAreas: readonly BusinessRecord[]
@@ -384,7 +384,7 @@ export function MapPlanningView({
             canCreateScheme={canCreateScheme}
             onCreateScheme={startWizard}
             onClose={clearSelection}
-            className="absolute left-3 top-14 z-30 max-h-[calc(100%-5.5rem)] w-[min(380px,calc(100%-24px))]"
+            className="absolute bottom-8 left-3 top-14 z-30 w-[min(420px,calc(100%-24px))]"
           />
         )}
 

@@ -16,16 +16,20 @@ async function openMapPlanning(page: Page): Promise<void> {
   await expect(page.locator('[data-marker="cluster"]').first()).toBeVisible()
 }
 
-/** Drags a rectangle over the middle of the map with the rectangle tool. */
+/**
+ * Drags a rectangle over the south-west of the initial view with the
+ * rectangle tool — Copenhagen Central streets only; the Harbor Commercial
+ * containers stand in Nordhavn, to the north-east.
+ */
 async function selectRectangle(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Select with a rectangle" }).click()
   const overlay = page.locator(DRAW)
   await expect(overlay).toBeVisible()
   const box = await overlay.boundingBox()
   if (!box) throw new Error("draw overlay has no box")
-  await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.15)
+  await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.4)
   await page.mouse.down()
-  await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.85, { steps: 6 })
+  await page.mouse.move(box.x + box.width * 0.65, box.y + box.height * 0.9, { steps: 6 })
   await page.mouse.up()
   await expect(overlay).toHaveCount(0)
 }
@@ -129,7 +133,7 @@ test("Create route scheme opens the Guided Setup wizard seeded from the selectio
   await page.getByRole("region", { name: "Selected area" }).getByRole("button", { name: "Create route scheme" }).click()
   const dialog = page.getByRole("dialog", { name: "New route scheme" })
   await expect(dialog).toBeVisible()
-  // Every fixture container in the default scope belongs to Copenhagen Central.
+  // The central rectangle holds Copenhagen Central containers only.
   await expect(dialog.getByLabel("Project", { exact: true })).toContainText("Copenhagen Central")
   await page.keyboard.press("Escape")
   await expect(dialog).toBeHidden()
@@ -164,8 +168,10 @@ test("the Layers control switches the base map and draws planning-area outlines"
   const zoomBefore = await mapZoom(page)
   await layers.getByRole("button", { name: "Zoom to Indre By Operations" }).click()
   await expect.poll(() => mapZoom(page)).not.toBe(zoomBefore)
-  // Areas without located containers cannot be switched on or zoomed to.
-  await expect(layers.getByRole("checkbox", { name: /Nordhavn Harbor Area/ })).toBeDisabled()
+  // Every registry container counts, whichever project it bills to; an area
+  // with no containers in the system cannot be switched on or zoomed to.
+  await expect(layers.getByRole("checkbox", { name: /Nordhavn Harbor Area/ })).toBeEnabled()
+  await expect(layers.getByRole("checkbox", { name: /Nasr City Operations/ })).toBeDisabled()
 })
 
 test("the search flies to an address and the map zooms out to the whole world", async ({ page }) => {
