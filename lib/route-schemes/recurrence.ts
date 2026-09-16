@@ -35,11 +35,28 @@ export const SERVICE_DAY_SHORT_LABELS: Record<ServiceDay, string> = {
   sunday: "Sun",
 }
 
-export type RecurrenceFrequency = "weekly" | "every-2-weeks" | "monthly"
+export const SERVICE_DAY_LABELS: Record<ServiceDay, string> = {
+  monday: "Monday",
+  tuesday: "Tuesday",
+  wednesday: "Wednesday",
+  thursday: "Thursday",
+  friday: "Friday",
+  saturday: "Saturday",
+  sunday: "Sunday",
+}
+
+/**
+ * every-4-weeks (guided setup redesign, 2026-09-16) anchors on the ISO week
+ * of the scheme's effective-from date: the anchor week and every fourth week
+ * after it serve. Unlike the fortnight rotations it is a true 28-day cadence,
+ * so it does not follow the 53-week ISO-year boundary behaviour below.
+ */
+export type RecurrenceFrequency = "weekly" | "every-2-weeks" | "every-4-weeks" | "monthly"
 
 export const RECURRENCE_FREQUENCY_LABELS: Record<RecurrenceFrequency, string> = {
   weekly: "Every week",
   "every-2-weeks": "Every 2 weeks",
+  "every-4-weeks": "Every 4 weeks",
   monthly: "Once a month",
 }
 
@@ -56,6 +73,7 @@ export const RECURRENCE_FREQUENCY_LABELS: Record<RecurrenceFrequency, string> = 
 export const RECURRENCE_WEEKLY_RATES: Record<RecurrenceFrequency, number> = {
   weekly: 1,
   "every-2-weeks": 1 / 2,
+  "every-4-weeks": 1 / 4,
   monthly: 12 / 52,
 }
 
@@ -117,6 +135,18 @@ export function isoWeekRotation(iso: string): WeekRotation {
   return isoWeek(iso) % 2 === 1 ? "odd" : "even"
 }
 
+/** The Monday of the ISO week the date falls in. */
+export function mondayOf(iso: string): string {
+  return addDays(iso, -((parseIso(iso).getUTCDay() + 6) % 7))
+}
+
+/** Whole ISO weeks from the effective-from week to the date's week (negative before it). */
+export function weeksFromEffectiveFrom(recurrence: Pick<SchemeRecurrence, "effectiveFrom">, iso: string): number {
+  const anchor = parseIso(mondayOf(recurrence.effectiveFrom)).getTime()
+  const week = parseIso(mondayOf(iso)).getTime()
+  return Math.round((week - anchor) / (7 * 864e5))
+}
+
 export function matchesRecurrence(recurrence: SchemeRecurrence, iso: string): boolean {
   if (recurrence.effectiveFrom && iso < recurrence.effectiveFrom) return false
   if (recurrence.effectiveTo && iso > recurrence.effectiveTo) return false
@@ -124,6 +154,15 @@ export function matchesRecurrence(recurrence: SchemeRecurrence, iso: string): bo
   if (
     recurrence.frequency === "every-2-weeks" &&
     isoWeekRotation(iso) !== recurrence.weekRotation
+  ) {
+    return false
+  }
+  // Without an effective-from there is no anchor week; the cadence then
+  // degrades to weekly rather than matching nothing (the form requires From).
+  if (
+    recurrence.frequency === "every-4-weeks" &&
+    recurrence.effectiveFrom &&
+    weeksFromEffectiveFrom(recurrence, iso) % 4 !== 0
   ) {
     return false
   }
@@ -177,6 +216,22 @@ export function formatServiceDate(iso: string): string {
 
 export function sortServiceDays(days: readonly ServiceDay[]): ServiceDay[] {
   return [...days].sort((a, b) => SERVICE_DAYS.indexOf(a) - SERVICE_DAYS.indexOf(b))
+}
+
+/**
+ * "Mon–Fri" for three or more consecutive days, otherwise "Mon, Wed" — the
+ * compact day label the guided setup's rail, review, and list rows share.
+ */
+export function serviceDaysRangeLabel(days: readonly ServiceDay[]): string {
+  const indexes = SERVICE_DAYS.map((day, index) => (days.includes(day) ? index : -1)).filter(
+    (index) => index >= 0,
+  )
+  if (indexes.length === 0) return ""
+  const consecutive = indexes.every((value, i) => i === 0 || value === indexes[i - 1] + 1)
+  if (consecutive && indexes.length >= 3) {
+    return `${SERVICE_DAY_SHORT_LABELS[SERVICE_DAYS[indexes[0]]]}–${SERVICE_DAY_SHORT_LABELS[SERVICE_DAYS[indexes[indexes.length - 1]]]}`
+  }
+  return indexes.map((index) => SERVICE_DAY_SHORT_LABELS[SERVICE_DAYS[index]]).join(", ")
 }
 
 /**

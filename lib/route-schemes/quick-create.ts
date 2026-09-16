@@ -7,8 +7,15 @@
 // creation orchestration (planSchemeCreation). Parity holds by construction —
 // there is no second create path to drift.
 
+import {
+  isSchemeCreateAs,
+  isSchemeEditPolicy,
+  type SchemeCreateAs,
+  type SchemeEditPolicy,
+} from "./creation"
 import { IMPLICIT_GROUP_ID, type CollectionGroup } from "./groups"
 import { matchPlansFromValues, stopSelectionMode } from "./matching"
+import { isHolidayPolicy, type HolidayPolicy } from "./occurrences"
 import {
   isRecurrenceFrequency,
   parseServiceDays,
@@ -34,6 +41,16 @@ export interface GuidedSchemeData {
   effectiveFrom: string
   effectiveTo: string
   plannedStartTime: string
+  /**
+   * What a collection on a calendar holiday does (guided setup 2026-09-16).
+   * Generation honours "skip" only today; the value is persisted for the
+   * engine to pick up (see lib/route-schemes/occurrences.ts).
+   */
+  holidayPolicy: HolidayPolicy
+  /** Review step: create Validated (no generation) or Effective (generate + Plan Ahead). */
+  createAs: SchemeCreateAs
+  /** Review step: how later edits of a running scheme apply. Persisted, not yet consumed. */
+  editPolicy: SchemeEditPolicy
   serviceProviderId?: string
   plannedVehicleId?: string
   plannedDriverId?: string
@@ -78,6 +95,9 @@ export const QUICK_SCHEME_DRAFT_FIELD_IDS: ReadonlySet<string> = new Set([
   "effectiveFrom",
   "effectiveTo",
   "plannedStartTime",
+  "holidayPolicy",
+  "createAs",
+  "editPolicy",
   "serviceProviderId",
   "plannedVehicleId",
   "plannedDriverId",
@@ -86,6 +106,7 @@ export const QUICK_SCHEME_DRAFT_FIELD_IDS: ReadonlySet<string> = new Set([
   "stopSelection",
   "matchFractions",
   "matchVehicleType",
+  "matchContainerTypes",
 ])
 
 /**
@@ -125,8 +146,14 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
       : {}),
     stopSource,
     ...(stopSource === "rule" && rule.vehicleType ? { ruleVehicleType: rule.vehicleType } : {}),
+    ...(stopSource === "rule" && rule.containerTypes && rule.containerTypes.length > 0
+      ? { containerTypes: [...rule.containerTypes] }
+      : {}),
     containerIds: [],
   }
+  const holidayPolicy = values.holidayPolicy
+  const createAs = values.createAs
+  const editPolicy = values.editPolicy
   return {
     schemeName,
     projectId: optionalId(values, "projectId"),
@@ -142,6 +169,11 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
     // No silent time injection (issue #32): a scheme without a planned start
     // time stays without one — its routes then carry no estimated start.
     plannedStartTime: stringOf(values, "plannedStartTime"),
+    // Quick Create keeps the engine's behaviour: holidays skipped, the
+    // initial window generated on create (the pre-2026-09-16 default).
+    holidayPolicy: isHolidayPolicy(holidayPolicy) ? holidayPolicy : "skip",
+    createAs: isSchemeCreateAs(createAs) ? createAs : "effective",
+    editPolicy: isSchemeEditPolicy(editPolicy) ? editPolicy : "ask",
     depotId: optionalId(values, "depotId"),
     unloadingStationId: optionalId(values, "unloadingStationId"),
     groups: [group],
@@ -189,9 +221,10 @@ export function seedSchemeEditValues(
     seeded.serviceDays = parseServiceDays(seeded.serviceDays).join(", ")
   }
   if (seeded.frequency === "biweekly") seeded.frequency = "every-2-weeks"
-  if (seeded.frequency === "four-week" || seeded.frequency === "calendar-rule") {
-    seeded.frequency = ""
-  }
+  // The retired "four-week" shape has a home again since every-4-weeks
+  // joined the engine (2026-09-16); calendar-rule still has none.
+  if (seeded.frequency === "four-week") seeded.frequency = "every-4-weeks"
+  if (seeded.frequency === "calendar-rule") seeded.frequency = ""
   if (typeof seeded.plannedStartTime !== "string") seeded.plannedStartTime = ""
   return seeded
 }

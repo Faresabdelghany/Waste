@@ -38,6 +38,39 @@ import { COLLECTION_GROUPS_KEY } from "./groups"
 
 const INITIAL_WINDOW_DAYS = 7
 
+/* ------------------- guided setup create options (2026-09-16) ------------------- */
+
+/**
+ * "Create as" (review step): Validated persists the scheme without running
+ * the initial generation, so its routes stay unpublished until Generate
+ * routes or Plan Ahead is used; Effective runs the existing create
+ * orchestration (initial window + Plan Ahead) and publishes from the first
+ * collection.
+ */
+export const SCHEME_CREATE_AS_OPTIONS = ["validated", "effective"] as const
+export type SchemeCreateAs = (typeof SCHEME_CREATE_AS_OPTIONS)[number]
+export const SCHEME_CREATE_AS_LABELS: Record<SchemeCreateAs, string> = {
+  validated: "Validated — routes stay unpublished",
+  effective: "Effective — routes publish from the first collection",
+}
+export const isSchemeCreateAs = (value: unknown): value is SchemeCreateAs =>
+  typeof value === "string" && (SCHEME_CREATE_AS_OPTIONS as readonly string[]).includes(value)
+
+/**
+ * "Changes to a running scheme": how a later edit of a scheme with
+ * generated routes should apply. Persisted on the record; the edit
+ * reconciliation planner does not consume it yet (it asks each time).
+ */
+export const SCHEME_EDIT_POLICIES = ["ask", "future", "single"] as const
+export type SchemeEditPolicy = (typeof SCHEME_EDIT_POLICIES)[number]
+export const SCHEME_EDIT_POLICY_LABELS: Record<SchemeEditPolicy, string> = {
+  ask: "Ask each time",
+  future: "Apply to future collections",
+  single: "This collection only",
+}
+export const isSchemeEditPolicy = (value: unknown): value is SchemeEditPolicy =>
+  typeof value === "string" && (SCHEME_EDIT_POLICIES as readonly string[]).includes(value)
+
 /**
  * The initial generation window (D24): `start = max(today, effectiveFrom)`,
  * `end = start + 7 days`. Never lengthened to populate the UI — Plan Ahead

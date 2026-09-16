@@ -6,7 +6,8 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "next start",
+    "test": "node --import tsx --test \"lib/**/__tests__/*.test.ts\""
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

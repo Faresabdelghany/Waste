@@ -1047,6 +1047,7 @@ export const operationsBusinessFormSchemas = [
             options: [
               { value: "weekly", label: "Every week" },
               { value: "every-2-weeks", label: "Every 2 weeks" },
+              { value: "every-4-weeks", label: "Every 4 weeks" },
               { value: "monthly", label: "Once a month" },
             ],
           },
@@ -1157,6 +1158,22 @@ export const operationsBusinessFormSchemas = [
               { value: "Metal", label: "Metal" },
               { value: "Mixed", label: "Mixed" },
               { value: "Wastewater", label: "Wastewater" },
+            ],
+          },
+          {
+            id: "matchContainerTypes",
+            label: "Container types to match",
+            type: "multiselect",
+            description: "Leave empty to match every container type.",
+            visibleWhen: { fieldId: "stopSelection", equals: "rule" },
+            options: [
+              { value: "Two-wheel bin · 140 L", label: "Two-wheel bin · 140 L" },
+              { value: "Two-wheel bin · 240 L", label: "Two-wheel bin · 240 L" },
+              { value: "Four-wheel bin · 660 L", label: "Four-wheel bin · 660 L" },
+              { value: "Four-wheel bin · 1,100 L", label: "Four-wheel bin · 1,100 L" },
+              { value: "Igloo · 2,500 L", label: "Igloo · 2,500 L" },
+              { value: "Underground · 5,000 L", label: "Underground · 5,000 L" },
+              { value: "Wastewater tank · 3,000 L", label: "Wastewater tank · 3,000 L" },
             ],
           },
           {

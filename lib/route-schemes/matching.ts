@@ -84,6 +84,30 @@ export type StopMatchRule = {
   fractions: string[]
   /** Restrict to containers this vehicle type can service; absent = any. */
   vehicleType?: string
+  /**
+   * Restrict to these container types (display vocabulary, e.g. "Two-wheel
+   * bin · 240 L"); absent or empty = any type. Added for the guided setup's
+   * fraction + container-type groups (2026-09-16).
+   */
+  containerTypes?: string[]
+}
+
+/** Container types with a compatibility profile — the vocabulary rules pick from. */
+export const CONTAINER_TYPE_VOCABULARY: readonly string[] = Object.keys(
+  CONTAINER_VEHICLE_COMPATIBILITY,
+)
+
+const BIN_TYPE_PREFIXES = ["Two-wheel bin", "Four-wheel bin"]
+
+/**
+ * "Two-wheel bin · 240 L" → "240 L"; "Underground · 5,000 L" → "Underground".
+ * Bins are told apart by size, everything else by kind — the chip label the
+ * guided setup and the group summaries use.
+ */
+export function containerTypeShortLabel(containerType: string): string {
+  const [kind, size] = containerType.split(" · ").map((part) => part.trim())
+  if (!size) return kind
+  return BIN_TYPE_PREFIXES.includes(kind) ? size : kind
 }
 
 export type StopSelectionMode = "manual" | "rule"
@@ -127,11 +151,13 @@ export const splitList = (value: string | undefined): string[] =>
 export function matchPlansToValues(plans: SchemeMatchPlans): {
   matchFractions: string
   matchVehicleType: string
+  matchContainerTypes: string
   matchRulesByDay: string
 } {
   return {
     matchFractions: plans.sharedRule.fractions.join(", "),
     matchVehicleType: plans.sharedRule.vehicleType ?? "",
+    matchContainerTypes: (plans.sharedRule.containerTypes ?? []).join(", "),
     matchRulesByDay: JSON.stringify(plans.rulesByDay),
   }
 }
@@ -143,28 +169,35 @@ const parseRule = (candidate: unknown): StopMatchRule | null => {
   if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
     return null
   }
-  const raw = candidate as { fractions?: unknown; vehicleType?: unknown }
-  const fractions = Array.isArray(raw.fractions)
-    ? raw.fractions.filter(
-        (item): item is string => typeof item === "string" && Boolean(item.trim()),
-      )
-    : []
+  const raw = candidate as { fractions?: unknown; vehicleType?: unknown; containerTypes?: unknown }
+  const stringItems = (value: unknown): string[] =>
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
+      : []
+  const fractions = stringItems(raw.fractions)
+  const containerTypes = stringItems(raw.containerTypes)
   const vehicleType =
     typeof raw.vehicleType === "string" && raw.vehicleType.trim()
       ? raw.vehicleType.trim()
       : undefined
-  return { fractions, ...(vehicleType ? { vehicleType } : {}) }
+  return {
+    fractions,
+    ...(vehicleType ? { vehicleType } : {}),
+    ...(containerTypes.length > 0 ? { containerTypes } : {}),
+  }
 }
 
 export function matchPlansFromValues(
   values: Record<string, string | boolean | undefined> | undefined,
 ): SchemeMatchPlans {
   if (!values) return EMPTY_MATCH_PLANS
+  const containerTypes = splitList(stringValue(values, "matchContainerTypes"))
   const sharedRule: StopMatchRule = {
     fractions: splitList(stringValue(values, "matchFractions")),
     ...(stringValue(values, "matchVehicleType")
       ? { vehicleType: stringValue(values, "matchVehicleType") }
       : {}),
+    ...(containerTypes.length > 0 ? { containerTypes } : {}),
   }
   const rulesByDay: Partial<Record<ServiceDay, StopMatchRule>> = {}
   const rawByDay = stringValue(values, "matchRulesByDay")
@@ -202,10 +235,15 @@ export function effectiveDayRules(
   }))
 }
 
-/** "Residual, Glass · Rear loader" — the facts/review one-liner for a rule. */
+/** "Residual, Glass · 240 L, 660 L · Rear loader" — the facts/review one-liner for a rule. */
 export function stopRuleSummary(rule: StopMatchRule): string {
   const fractions = rule.fractions.length > 0 ? rule.fractions.join(", ") : "No fractions"
-  return rule.vehicleType ? `${fractions} · ${rule.vehicleType}` : fractions
+  const parts = [fractions]
+  if (rule.containerTypes && rule.containerTypes.length > 0) {
+    parts.push(rule.containerTypes.map(containerTypeShortLabel).join(", "))
+  }
+  if (rule.vehicleType) parts.push(rule.vehicleType)
+  return parts.join(" · ")
 }
 
 /* --------------------------- container profiles --------------------------- */
@@ -347,6 +385,17 @@ export function resolveStopMatches(input: {
     scopeTotal += 1
 
     if (!fractionsIntersect(input.rule.fractions, profile.fractions)) continue
+    // A container type outside the rule is a deliberate exclusion (the rule
+    // IS the type selection), not a near-miss the planner must be shown.
+    if (
+      input.rule.containerTypes &&
+      input.rule.containerTypes.length > 0 &&
+      !input.rule.containerTypes.some(
+        (type) => type.toLowerCase() === (profile.containerType ?? "").toLowerCase(),
+      )
+    ) {
+      continue
+    }
 
     if (!ELIGIBLE_CONTAINER_STATUSES.has(profile.status)) {
       excluded.push({

@@ -322,6 +322,9 @@ function GuidedSchemeWizardOverlay({
     effectiveFrom: todayIso(),
     effectiveTo: "",
     plannedStartTime: "06:30",
+    holidayPolicy: "skip",
+    createAs: "effective",
+    editPolicy: "ask",
     // Collection groups (D33) are defined in their own step once the service
     // days are known; the step seeds one group covering every day.
     groups: [],

@@ -73,6 +73,8 @@ export type CollectionGroup = {
   stopSource: CollectionGroupStopSource
   /** Rule groups only: the vehicle type the matched containers must be serviceable by. */
   ruleVehicleType?: string
+  /** Rule groups only: restrict matches to these container types (display vocabulary). */
+  containerTypes?: string[]
   /** Manual groups only: the picked container ids in stop order. */
   containerIds: string[]
 }
@@ -144,6 +146,7 @@ export function parseCollectionGroups(raw: string | undefined): CollectionGroup[
         serviceProviderName: optionalString(entry.serviceProviderName),
         stopSource: entry.stopSource === "rule" ? "rule" : "manual",
         ruleVehicleType: optionalString(entry.ruleVehicleType),
+        containerTypes: stringList(entry.containerTypes).length > 0 ? stringList(entry.containerTypes) : undefined,
         containerIds: stringList(entry.containerIds),
       }),
     )
@@ -221,6 +224,7 @@ export function collectionGroupsOf(
           ...assignment,
           stopSource: "rule" as const,
           ruleVehicleType: plans.sharedRule.vehicleType,
+          containerTypes: plans.sharedRule.containerTypes,
           containerIds: [],
           implicit: true,
         }),
@@ -236,6 +240,7 @@ export function collectionGroupsOf(
         ...assignment,
         stopSource: "rule" as const,
         ruleVehicleType: rule.vehicleType,
+        containerTypes: rule.containerTypes,
         containerIds: [],
         implicit: true,
       })
@@ -308,6 +313,7 @@ export function collectionGroupsToValues(
     serviceProviderId: "",
     matchFractions: "",
     matchVehicleType: "",
+    matchContainerTypes: "",
     matchRulesByDay: "",
     containerIds: "",
     containersByDay: "",
@@ -321,6 +327,9 @@ export function collectionGroupsToValues(
             sharedRule: {
               fractions: [...only.fractions],
               ...(only.ruleVehicleType ? { vehicleType: only.ruleVehicleType } : {}),
+              ...(only.containerTypes && only.containerTypes.length > 0
+                ? { containerTypes: [...only.containerTypes] }
+                : {}),
             },
             rulesByDay: {},
           })
@@ -435,6 +444,9 @@ export function resolveCollectionGroupPlans(input: {
         rule: {
           fractions: [...group.fractions],
           ...(group.ruleVehicleType ? { vehicleType: group.ruleVehicleType } : {}),
+          ...(group.containerTypes && group.containerTypes.length > 0
+            ? { containerTypes: [...group.containerTypes] }
+            : {}),
         },
         areaId: input.areaId,
         projectIds: input.projectIds,
