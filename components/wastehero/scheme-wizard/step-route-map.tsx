@@ -2,16 +2,14 @@
 
 // Step 4 — How do the generated routes look? Day tabs, per-day tiles, one
 // card per route with its verdict, and the map. Regenerate re-stamps the
-// estimate; with "Keep manually edited routes" off it also clears the
-// edited-route locks.
+// estimate. There is no in-wizard route editing yet, so there is no
+// "keep edited routes" switch and no Edited lock — nothing to protect.
 
-import { useState, type Dispatch, type SetStateAction } from "react"
-import { Factory, Lock, RefreshCw, Warehouse } from "lucide-react"
+import { useState } from "react"
+import { Factory, RefreshCw, Warehouse } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   ROUTE_ESTIMATE_STATUS_LABELS,
@@ -29,10 +27,6 @@ import type { WizardRecords } from "./use-wizard-records"
 import type { WizardModel } from "./wizard-model"
 import { PILL_TABS_LIST_CLASS, PILL_TABS_TRIGGER_CLASS } from "./wizard-fields"
 
-export type EditedRoutes = Record<string, boolean>
-
-export const editedRouteKey = (groupId: string, day: ServiceDay) => `${groupId}|${day}`
-
 const STATUS_BADGE_CLASS: Record<RouteEstimateStatus, string> = {
   within: "border-transparent bg-emerald-50 text-emerald-700",
   tight: "border-transparent bg-amber-50 text-amber-800",
@@ -44,20 +38,15 @@ export function StepRouteMap({
   data,
   model,
   records,
-  editedRoutes,
-  setEditedRoutes,
 }: {
   data: GuidedSchemeData
   model: WizardModel
   records: WizardRecords
-  editedRoutes: EditedRoutes
-  setEditedRoutes: Dispatch<SetStateAction<EditedRoutes>>
 }) {
   const days = model.serviceDays
   const [dayState, setDay] = useState<ServiceDay | null>(null)
   const day = dayState && days.includes(dayState) ? dayState : days[0]
   const [selected, setSelected] = useState<string | null>(null)
-  const [keepEdited, setKeepEdited] = useState(true)
   const [regeneratedAt, setRegeneratedAt] = useState<Date | null>(null)
 
   const routes = day ? model.routesOn(day) : []
@@ -68,10 +57,7 @@ export function StepRouteMap({
   const depotName = model.nameOf(records.depots, data.depotId) ?? "—"
   const stationName = model.nameOf(records.stations, data.unloadingStationId) ?? "—"
 
-  const regenerate = () => {
-    if (!keepEdited) setEditedRoutes({})
-    setRegeneratedAt(new Date())
-  }
+  const regenerate = () => setRegeneratedAt(new Date())
 
   if (!day) return null
 
@@ -87,17 +73,9 @@ export function StepRouteMap({
             ))}
           </TabsList>
         </Tabs>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Switch id="keep-edited-routes" checked={keepEdited} onCheckedChange={setKeepEdited} />
-            <Label htmlFor="keep-edited-routes" className="text-sm">
-              Keep manually edited routes
-            </Label>
-          </div>
-          <Button variant="outline" className="rounded-xl" onClick={regenerate}>
-            <RefreshCw /> Regenerate
-          </Button>
-        </div>
+        <Button variant="outline" className="rounded-xl" onClick={regenerate}>
+          <RefreshCw /> Regenerate
+        </Button>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-5">
@@ -118,7 +96,6 @@ export function StepRouteMap({
             {routes.map((route) => {
               const { group, color, vehicle, driver } = route.summary
               const active = selected === group.id
-              const edited = Boolean(editedRoutes[editedRouteKey(group.id, day)])
               return (
                 <li key={group.id}>
                   <button
@@ -133,11 +110,6 @@ export function StepRouteMap({
                     <div className="flex items-center gap-2">
                       <span className="size-2.5 rounded-full" style={{ background: color }} />
                       <span className="flex-1 truncate text-sm font-medium">{group.name}</span>
-                      {edited && (
-                        <Badge variant="outline" className="gap-1 text-muted-foreground">
-                          <Lock className="size-3" /> Edited
-                        </Badge>
-                      )}
                       <Badge className={STATUS_BADGE_CLASS[route.estimate.status]}>
                         {ROUTE_ESTIMATE_STATUS_LABELS[route.estimate.status]}
                       </Badge>
