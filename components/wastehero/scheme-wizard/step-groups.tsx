@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { routeEstimateAdapter } from "@/lib/route-schemes/estimates"
 import type { CollectionGroup } from "@/lib/route-schemes/groups"
 import { containerTypeShortLabel } from "@/lib/route-schemes/matching"
 import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
@@ -118,7 +119,12 @@ export function StepGroups({
                 <TableHead>Vehicle</TableHead>
                 <TableHead>Default driver</TableHead>
                 <TableHead>Containers</TableHead>
-                <TableHead>Est. load per route</TableHead>
+                <TableHead>
+                  Est. load per route
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    {routeEstimateAdapter.label}
+                  </span>
+                </TableHead>
                 <TableHead className="pr-3 text-right">
                   <span className="sr-only">Actions</span>
                 </TableHead>

@@ -13,8 +13,7 @@ import {
   validateGuidedScheme,
 } from "@/lib/route-schemes/draft"
 import {
-  estimateLoadTonnes,
-  estimateRoute,
+  routeEstimateAdapter,
   type ContainerWeightResolver,
   type RouteEstimate,
 } from "@/lib/route-schemes/estimates"
@@ -166,7 +165,7 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
       null,
     )
     const stopProfiles = fullest ? profilesOf(fullest.containerIds) : matched
-    const loadT = estimateLoadTonnes(stopProfiles, records.weightKg)
+    const loadT = routeEstimateAdapter.loadTonnes(stopProfiles, records.weightKg)
     const stops = fullest ? fullest.containerIds.length : matched.length
     return {
       group,
@@ -176,7 +175,7 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
       matched,
       stops,
       loadT,
-      estimate: estimateRoute({ stops, loadT, capacityT: vehicle?.capacityT }),
+      estimate: routeEstimateAdapter.route({ stops, loadT, capacityT: vehicle?.capacityT }),
     }
   })
   const summaryById = new Map(groups.map((summary) => [summary.group.id, summary]))
@@ -187,14 +186,14 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
       .flatMap((plan) => {
         const summary = summaryById.get(plan.groupId)
         if (!summary) return []
-        const loadT = estimateLoadTonnes(profilesOf(plan.containerIds), records.weightKg)
+        const loadT = routeEstimateAdapter.loadTonnes(profilesOf(plan.containerIds), records.weightKg)
         return [
           {
             day,
             summary,
             plan,
             loadT,
-            estimate: estimateRoute({
+            estimate: routeEstimateAdapter.route({
               stops: plan.containerIds.length,
               loadT,
               capacityT: summary.vehicle?.capacityT,

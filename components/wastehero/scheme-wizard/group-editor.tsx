@@ -35,7 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { estimateLoadTonnes } from "@/lib/route-schemes/estimates"
+import { routeEstimateAdapter } from "@/lib/route-schemes/estimates"
 import {
   driverHoldsLicence,
   driverOptionLabel,
@@ -140,7 +140,7 @@ export function GroupEditor({
   }, [fraction, containerTypes, data.planningAreaId, data.projectId, records.containers])
 
   const count = matches ? matches.matched.length + group.containerIds.length : 0
-  const loadT = matches ? estimateLoadTonnes(matches.matched, records.weightKg) : 0
+  const loadT = matches ? routeEstimateAdapter.loadTonnes(matches.matched, records.weightKg) : 0
   const added = group.containerIds.length
   const excluded = 0
 

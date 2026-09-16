@@ -5,6 +5,7 @@ import {
   estimateLoadTonnes,
   estimateRoute,
   fallbackContainerWeightKg,
+  routeEstimateAdapter,
   formatMinutes,
 } from "../estimates"
 
@@ -59,5 +60,22 @@ describe("formatMinutes", () => {
     assert.equal(formatMinutes(45), "45 min")
     assert.equal(formatMinutes(60), "1 h 00 min")
     assert.equal(formatMinutes(461), "7 h 41 min")
+  })
+})
+
+describe("routeEstimateAdapter", () => {
+  test("labels its numbers as estimates and delegates to the heuristics", () => {
+    assert.equal(routeEstimateAdapter.label, "Estimate")
+    assert.deepEqual(
+      routeEstimateAdapter.route({ stops: 381, loadT: 3.8, capacityT: 10 }),
+      estimateRoute({ stops: 381, loadT: 3.8, capacityT: 10 }),
+    )
+    assert.equal(routeEstimateAdapter.loadTonnes([], fallbackContainerWeightKg), 0)
+  })
+
+  test("verdicts are information only — the estimate carries no blocking flag", () => {
+    const over = routeEstimateAdapter.route({ stops: 600, loadT: 12, capacityT: 10 })
+    assert.equal(over.status, "over-capacity")
+    assert.equal("blocking" in over, false)
   })
 })

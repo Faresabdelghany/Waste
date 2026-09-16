@@ -16,6 +16,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   ROUTE_ESTIMATE_STATUS_LABELS,
   formatMinutes,
+  routeEstimateAdapter,
   type RouteEstimateStatus,
 } from "@/lib/route-schemes/estimates"
 import { formatClockTime } from "@/lib/route-schemes/occurrences"
@@ -181,9 +182,10 @@ export function StepRouteMap({
               </span>
             </span>
             <span>
+              {routeEstimateAdapter.label}
               {regeneratedAt
-                ? `Regenerated ${formatClockTime(`${regeneratedAt.getHours()}:${regeneratedAt.getMinutes()}`)}`
-                : "Estimate"}
+                ? ` · Regenerated ${formatClockTime(`${regeneratedAt.getHours()}:${regeneratedAt.getMinutes()}`)}`
+                : ""}
             </span>
           </div>
         </div>

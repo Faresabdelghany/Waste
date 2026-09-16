@@ -1,13 +1,17 @@
-// Route estimate adapter for the guided setup (2026-09-16 redesign): stops,
+// Route estimates for the guided setup (2026-09-16 redesign): stops,
 // distance, duration, load, and the capacity / shift verdicts the group
 // table and the route map show. Pure data logic — no UI or store
 // dependencies.
 //
-// Gap adapter: generation produces stop lists only — no distance, duration,
-// or weight — so every number here is a heuristic (the prototype's
-// coefficients). Container weights come from the asset-management catalogue
-// where it covers the type (the caller passes that resolver) and from the
-// fallback table below otherwise.
+// Every number is an ESTIMATE. Generation produces stop lists only — no
+// distance, duration, or weight — so distance, duration, and the 8 h check
+// are heuristics (the prototype's coefficients), and container weights come
+// from the asset-management catalogue where it has the type (4 of the 7
+// display types today; the caller passes that resolver) and from the
+// fallback table below otherwise. The UI reads all of it through
+// routeEstimateAdapter — the single place a real optimiser response plugs in
+// (see the adapter's doc) — and labels the numbers with the adapter's
+// qualifier. The verdicts never gate Next or Create.
 
 import type { ContainerMatchProfile } from "./matching"
 
@@ -110,6 +114,29 @@ export function estimateRoute(input: {
         ? "tight"
         : "within"
   return { stops, loadT: input.loadT, km, mins, capacityT, pct, overCapacity, overShift, status }
+}
+
+/**
+ * The ONE seam between the wizard and the route numbers it shows. The wizard
+ * model, group editor, route map, and review call these three members and
+ * nothing else in this module, so swapping in a real optimiser means one
+ * change here: return its distance / duration / load from `route` and
+ * `loadTonnes`, and set `label` to what the numbers then are.
+ */
+export type RouteEstimateAdapter = {
+  /** The qualifier the UI shows beside every number this adapter produces. */
+  label: string
+  loadTonnes: (
+    containers: readonly Pick<ContainerMatchProfile, "containerType" | "fractions">[],
+    weightKg: ContainerWeightResolver,
+  ) => number
+  route: (input: { stops: number; loadT: number; capacityT: number | null | undefined }) => RouteEstimate
+}
+
+export const routeEstimateAdapter: RouteEstimateAdapter = {
+  label: "Estimate",
+  loadTonnes: estimateLoadTonnes,
+  route: estimateRoute,
 }
 
 /** "7 h 41 min" / "45 min". */
