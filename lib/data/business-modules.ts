@@ -5699,8 +5699,10 @@ const configure: WorkspaceDefinition = {
           "Today",
           ["Suspended", "Archive"],
         ),
-        // The working week is a project attribute (round 3): `weekend` holds
-        // the weekdays the project rests on, read by resolveProjectCalendar.
+        // The working week and the holiday list are project attributes
+        // (round 3): `weekend` holds the weekdays the project rests on,
+        // `holidayList` names its list (absent = none); both are read by
+        // resolveProjectCalendar. Harbor Commercial sets neither.
         {
           ...record(
             "project-copenhagen",
@@ -5711,13 +5713,13 @@ const configure: WorkspaceDefinition = {
             "Core + Live + Invoicing",
             "Today",
             "Municipal operating scope with local calendar, areas, fleet, routes, customers, and finance configuration.",
-            { Language: "Danish", Currency: "DKK", Timezone: "Europe/Copenhagen", WeekStart: "Monday", Weekend: "Sat–Sun" },
+            { Language: "Danish", Currency: "DKK", Timezone: "Europe/Copenhagen", WeekStart: "Monday", Weekend: "Sat–Sun", "Holiday list": "Danish public holidays" },
             ["62 users", "12 operating areas", "2,481 properties", "38 route schemes"],
             "Project settings",
             "Today",
             ["Suspended", "Archive"],
           ),
-          submittedValues: { weekend: "saturday, sunday" },
+          submittedValues: { weekend: "saturday, sunday", holidayList: "Danish public holidays" },
         },
         record(
           "project-harbor",
@@ -5745,13 +5747,13 @@ const configure: WorkspaceDefinition = {
             "Core + Live",
             "3 days ago",
             "Municipal operating scope in Cairo with a Sunday–Thursday working week.",
-            { Language: "Arabic", Currency: "EGP", Timezone: "Africa/Cairo", WeekStart: "Sunday", Weekend: "Fri–Sat" },
+            { Language: "Arabic", Currency: "EGP", Timezone: "Africa/Cairo", WeekStart: "Sunday", Weekend: "Fri–Sat", "Holiday list": "Egyptian public holidays" },
             ["8 users", "1 operating area", "1 route scheme"],
             "Project settings",
             "3 days",
             ["Suspended", "Archive"],
           ),
-          submittedValues: { weekend: "friday, saturday" },
+          submittedValues: { weekend: "friday, saturday", holidayList: "Egyptian public holidays" },
         },
       ],
     },

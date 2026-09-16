@@ -28,7 +28,7 @@ async function toStep2(page: Parameters<typeof startGuided>[0], project: string)
 test("the holiday source follows the project and links to Settings", async ({ page }) => {
   await toStep2(page, "Copenhagen Central")
   const line = holidaySourceLine(page)
-  await expect(line).toContainText("Danish public holidays · from project Copenhagen Central")
+  await expect(line).toContainText("Danish public holidays · Sat–Sun weekend")
   await expect(line).not.toHaveClass(/text-amber/)
   await expect(line.getByRole("link", { name: "View in Settings" })).toHaveAttribute(
     "href",
@@ -43,7 +43,7 @@ test("a project without a holiday list says so in amber and treats every date as
 }) => {
   await toStep2(page, "Harbor Commercial")
   const line = holidaySourceLine(page)
-  await expect(line).toContainText("No holiday list on this project")
+  await expect(line).toContainText("None on this project · Sat–Sun weekend")
   await expect(line).toHaveClass(/text-amber/)
   await expect(line.getByRole("link", { name: "View in Settings" })).toBeVisible()
   await fillRecurrence(page, {

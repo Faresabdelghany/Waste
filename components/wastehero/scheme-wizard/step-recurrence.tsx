@@ -20,7 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { HOLIDAY_SETTINGS_HREF, holidaySourceLabel } from "@/lib/route-schemes/holidays"
+import { HOLIDAY_SETTINGS_HREF, projectCalendarLabel } from "@/lib/route-schemes/project-calendar"
 import {
   formatClockTime,
   formatOccurrenceDate,
@@ -179,11 +179,11 @@ export function StepRecurrence({
       <div
         className={cn(
           "-mt-4 flex flex-wrap items-center justify-end gap-x-3 text-xs",
-          model.holidaySource ? "text-muted-foreground" : "text-amber-700 dark:text-amber-400",
+          model.calendar.list ? "text-muted-foreground" : "text-amber-700 dark:text-amber-400",
         )}
         data-testid="holiday-source"
       >
-        <span>{holidaySourceLabel(model.holidaySource)}</span>
+        <span>{projectCalendarLabel(model.calendar)}</span>
         <Button variant="link" size="sm" className="h-auto shrink-0 p-0 text-xs" asChild>
           <Link href={HOLIDAY_SETTINGS_HREF}>View in Settings</Link>
         </Button>

@@ -51,15 +51,14 @@ import {
   type SchemeRelatedRecords,
 } from "@/lib/route-schemes/lifecycle"
 import { schemeGroupPlans } from "@/lib/route-schemes/groups"
+import { schemeHolidayPolicy, schemeProjectId } from "@/lib/route-schemes/holidays"
 import {
   HOLIDAY_SETTINGS_HREF,
   NO_HOLIDAY_LIST_LABEL,
-  holidaySourceLabel,
-  projectHolidaySource,
-  schemeHolidayPolicy,
-  schemeProjectId,
-  type HolidaySource,
-} from "@/lib/route-schemes/holidays"
+  resolveProjectCalendar,
+  weekendLabel,
+  type ProjectCalendar,
+} from "@/lib/route-schemes/project-calendar"
 import { HOLIDAY_POLICY_LABELS, type HolidayPolicy } from "@/lib/route-schemes/occurrences"
 import { stopRuleSummary } from "@/lib/route-schemes/matching"
 import { isPlanAheadEnabled, setPlanAhead } from "@/lib/route-schemes/plan-ahead"
@@ -293,12 +292,13 @@ export function SchemeDetailsPage({
     [routesById, schemePickups],
   )
 
-  // Holidays follow the scheme's project (holiday model 2026-09-16): the
-  // project's per-year lists, read from the calendar records scoped to it.
-  const holidaySource = projectHolidaySource(
-    projects.find((candidate) => candidate.id === schemeProjectId(record)),
-    calendarRecords,
-  )
+  // The calendar follows the scheme's project (holiday model 2026-09-16,
+  // round 3): its explicit holiday list, read from the per-year calendar
+  // records scoped to it, and its weekend.
+  const projectCalendar = resolveProjectCalendar(schemeProjectId(record), {
+    projects,
+    calendars: calendarRecords,
+  })
   const holidayPolicy = schemeHolidayPolicy(values)
 
   const togglePlanAhead = () => {
@@ -444,7 +444,7 @@ export function SchemeDetailsPage({
             containers={containers}
             vehicles={vehicles}
             drivers={drivers}
-            holidaySource={holidaySource}
+            projectCalendar={projectCalendar}
             holidayPolicy={holidayPolicy}
             planAheadOn={planAheadOn}
             blockingIssues={blockingIssues}
@@ -464,7 +464,7 @@ export function SchemeDetailsPage({
           <SchemeStopsTab stops={schemeStops} generationBlocked={!canGenerate} />
         </TabsContent>
         <TabsContent value="holidays" className="mt-0 min-h-0 flex-1 overflow-y-auto">
-          <SchemeHolidaysTab source={holidaySource} policy={holidayPolicy} today={today} />
+          <SchemeHolidaysTab calendar={projectCalendar} policy={holidayPolicy} today={today} />
         </TabsContent>
       </Tabs>
     </div>
@@ -480,7 +480,7 @@ function SchemeDetailsTab({
   containers,
   vehicles,
   drivers,
-  holidaySource,
+  projectCalendar,
   holidayPolicy,
   planAheadOn,
   blockingIssues,
@@ -494,7 +494,7 @@ function SchemeDetailsTab({
   containers: readonly BusinessRecord[]
   vehicles: readonly BusinessRecord[]
   drivers: readonly BusinessRecord[]
-  holidaySource: HolidaySource | null
+  projectCalendar: ProjectCalendar
   holidayPolicy: HolidayPolicy
   planAheadOn: boolean
   blockingIssues: readonly string[]
@@ -634,15 +634,11 @@ function SchemeDetailsTab({
         <DetailCard title="Holidays">
           <StatRow
             label="Holiday list"
-            value={holidaySource ? holidaySource.name : NO_HOLIDAY_LIST_LABEL}
+            value={projectCalendar.list?.name ?? NO_HOLIDAY_LIST_LABEL}
           />
+          <StatRow label="Weekend" value={weekendLabel(projectCalendar.weekend)} />
           <StatRow label="Policy" value={HOLIDAY_POLICY_LABELS[holidayPolicy]} />
-          <StatRow label="Dates" value={String(holidaySource?.list.size ?? 0)} />
-          <p className="text-xs text-muted-foreground">
-            {holidaySource
-              ? `From project ${holidaySource.projectName} — see the Holidays tab.`
-              : "Every date counts as a working day."}
-          </p>
+          <StatRow label="Dates" value={String(projectCalendar.list?.dates.size ?? 0)} />
         </DetailCard>
 
         <DetailCard title="Recurrence">
@@ -1204,11 +1200,11 @@ function SchemeStopsTab({
 /* ------------------------------ Holidays tab ------------------------------ */
 
 function SchemeHolidaysTab({
-  source,
+  calendar,
   policy,
   today,
 }: {
-  source: HolidaySource | null
+  calendar: ProjectCalendar
   policy: HolidayPolicy
   today: string
 }) {
@@ -1220,6 +1216,7 @@ function SchemeHolidaysTab({
       </Link>
     </Button>
   )
+  const source = calendar.list
   if (!source) {
     return (
       <div className="flex h-full min-h-64 items-center justify-center p-8">
@@ -1228,14 +1225,16 @@ function SchemeHolidaysTab({
           <p className="mt-2 text-sm font-medium text-amber-700 dark:text-amber-400">
             {NO_HOLIDAY_LIST_LABEL}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">Every date counts as a working day.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {weekendLabel(calendar.weekend)} weekend
+          </p>
           <div className="mt-3">{settingsLink}</div>
         </div>
       </div>
     )
   }
 
-  const dates = [...source.list.entries()]
+  const dates = [...source.dates.entries()]
   const upcoming = dates.filter(([date]) => date >= today)
   const past = dates.filter(([date]) => date < today)
 
@@ -1245,13 +1244,15 @@ function SchemeHolidaysTab({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="text-sm font-semibold">{source.name}</h3>
-            <p className="mt-1 text-xs text-muted-foreground">{holidaySourceLabel(source)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {weekendLabel(calendar.weekend)} weekend
+            </p>
           </div>
           {settingsLink}
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <StatRow label="Lists" value={source.records.map((record) => record.name).join(", ")} />
-          <StatRow label="Dates" value={String(source.list.size)} />
+          <StatRow label="Dates" value={String(source.dates.size)} />
           <StatRow label="Policy" value={HOLIDAY_POLICY_LABELS[policy]} />
         </div>
       </section>

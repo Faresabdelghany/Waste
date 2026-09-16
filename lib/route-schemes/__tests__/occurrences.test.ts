@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { danishHolidayName } from "../holiday-names"
 import { holidayListFromDates } from "../holidays"
 import {
   NO_HOLIDAYS,
@@ -22,7 +23,7 @@ import {
   weekdays,
 } from "./holiday-fixture"
 
-const holidays = holidayListFromDates(REGRESSION_HOLIDAY_DATES)
+const holidays = holidayListFromDates(REGRESSION_HOLIDAY_DATES, danishHolidayName)
 const calendar = calendarOf(holidays, DANISH_WEEKEND)
 const noHolidays = calendarOf(NO_HOLIDAYS, DANISH_WEEKEND)
 
@@ -146,7 +147,7 @@ describe("holiday policies", () => {
   })
 
   test("an unnamed date on the list reads Holiday", () => {
-    const list = holidayListFromDates(["2026-10-07"])
+    const list = holidayListFromDates(["2026-10-07"], danishHolidayName)
     assert.equal(list.get("2026-10-07"), "Holiday")
     const rows = generateOccurrences({
       recurrence: weekdays,

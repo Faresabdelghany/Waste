@@ -62,7 +62,7 @@ import {
   planSchemeCreation,
 } from "@/lib/route-schemes/creation"
 import { draftGroups } from "@/lib/route-schemes/draft"
-import { NO_HOLIDAY_LIST_LABEL, projectHolidaySource } from "@/lib/route-schemes/holidays"
+import { NO_HOLIDAY_LIST_LABEL, resolveProjectCalendar } from "@/lib/route-schemes/project-calendar"
 import { HOLIDAY_POLICY_LABELS } from "@/lib/route-schemes/occurrences"
 import { planSchemeDeletion } from "@/lib/route-schemes/deletion"
 import {
@@ -4137,10 +4137,12 @@ export function BusinessWorkspace({
         ...(area ? { "Planning area": area.name } : {}),
         ...(data.wasteFraction ? { "Waste fraction": data.wasteFraction } : {}),
         ...(data.serviceType ? { "Service type": data.serviceType } : {}),
-        // Holidays follow the project (holiday model 2026-09-16).
+        // Holidays follow the project (holiday model 2026-09-16): its explicit list.
         "Holiday list":
-          projectHolidaySource(project, moduleRecords("plan", "calendars"))?.name ??
-          NO_HOLIDAY_LIST_LABEL,
+          resolveProjectCalendar(data.projectId, {
+            projects: moduleRecords("configure", "organization"),
+            calendars: moduleRecords("plan", "calendars"),
+          }).list?.name ?? NO_HOLIDAY_LIST_LABEL,
         ...(recurrence ? { Recurrence: recurrenceSentence(recurrence) } : {}),
         ...(data.effectiveFrom
           ? {

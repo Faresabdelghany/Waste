@@ -16,7 +16,8 @@
 import type { BusinessRecord } from "../data/business-modules"
 import { canonicalCalendarName } from "./calendar"
 import { formatWorkingDays } from "./calendar-list"
-import { schemeHolidayListName, schemeProjectId } from "./holidays"
+import { schemeProjectId } from "./holidays"
+import { resolveProjectCalendar } from "./project-calendar"
 import {
   recurrenceCadenceLabel,
   recurrenceFromValues,
@@ -105,7 +106,10 @@ export function schemeHolidayListLabel(
   calendars: readonly BusinessRecord[],
   projects: readonly BusinessRecord[],
 ): string {
-  if (schemeProjectId(record)) return schemeHolidayListName(record, calendars, projects)
+  const projectId = schemeProjectId(record)
+  if (projectId) {
+    return resolveProjectCalendar(projectId, { projects, calendars }).list?.name ?? EMPTY
+  }
   return canonicalCalendarName(factOf(record, "Collection calendar")) ?? EMPTY
 }
 

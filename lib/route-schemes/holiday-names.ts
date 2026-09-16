@@ -1,8 +1,12 @@
-// Danish public-holiday names by date. Collection Calendar records store
-// holiday DATES only (submittedValues.holidayDates), so the guided setup's
-// next-dates preview needs a name lookup to read "Shifted from Thu 24 Dec ·
-// Christmas Eve". Gap adapter: replace with calendar-carried names once the
-// calendar model has them. Pure date math over ISO `yyyy-mm-dd` strings.
+// Public-holiday names by date, per holiday list. Collection Calendar records
+// store holiday DATES only (submittedValues.holidayDates), so the guided
+// setup's next-dates preview needs a name lookup to read "Shifted from Thu 24
+// Dec · Christmas Eve". The lookup follows the project's holiday list name
+// (holidayNamesFor): Danish names for "Danish public holidays", Egyptian
+// fixed-date names for "Egyptian public holidays", nothing for a list this
+// module does not know — such dates read "Holiday". Gap adapter: replace with
+// calendar-carried names once the calendar model has them. Pure date math
+// over ISO `yyyy-mm-dd` strings.
 
 import { addDays } from "./recurrence"
 
@@ -68,7 +72,37 @@ export function danishHolidayName(iso: string): string | undefined {
   return holidaysOfYear(year).get(iso)
 }
 
-/** The label a calendar holiday shows: its Danish name, else the generic word. */
-export function holidayLabel(iso: string): string {
-  return danishHolidayName(iso) ?? "Holiday"
+/** Egyptian fixed-date public holidays; Eid and Sham El-Nessim move each year and are not named here. */
+const EGYPTIAN_FIXED_HOLIDAYS: Readonly<Record<string, string>> = {
+  "01-07": "Coptic Christmas",
+  "01-25": "Revolution Day",
+  "04-25": "Sinai Liberation Day",
+  "05-01": "Labour Day",
+  "06-30": "30 June Revolution",
+  "07-23": "Revolution Day",
+  "10-06": "Armed Forces Day",
+}
+
+/** The Egyptian fixed-date holiday name for the date, or undefined. */
+export function egyptianHolidayName(iso: string): string | undefined {
+  return EGYPTIAN_FIXED_HOLIDAYS[iso.slice(5)]
+}
+
+export type HolidayNameLookup = (iso: string) => string | undefined
+
+const HOLIDAY_NAME_LOOKUPS: Readonly<Record<string, HolidayNameLookup>> = {
+  "Danish public holidays": danishHolidayName,
+  "Egyptian public holidays": egyptianHolidayName,
+}
+
+const noNames: HolidayNameLookup = () => undefined
+
+/** The name lookup for a project's holiday list; an unknown list names nothing. */
+export function holidayNamesFor(listName: string | undefined): HolidayNameLookup {
+  return (listName && HOLIDAY_NAME_LOOKUPS[listName]) || noNames
+}
+
+/** The label a calendar holiday shows: its name on the list, else the generic word. */
+export function holidayLabel(iso: string, names: HolidayNameLookup): string {
+  return names(iso) ?? "Holiday"
 }

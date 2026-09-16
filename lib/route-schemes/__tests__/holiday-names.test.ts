@@ -40,7 +40,7 @@ describe("Danish holiday names", () => {
 
   test("ordinary days have no name and fall back to the generic label", () => {
     assert.equal(danishHolidayName("2026-09-16"), undefined)
-    assert.equal(holidayLabel("2026-09-16"), "Holiday")
-    assert.equal(holidayLabel("2026-12-25"), "Christmas Day")
+    assert.equal(holidayLabel("2026-09-16", danishHolidayName), "Holiday")
+    assert.equal(holidayLabel("2026-12-25", danishHolidayName), "Christmas Day")
   })
 })

@@ -3,6 +3,7 @@ import { describe, test } from "node:test"
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { planSchemeGeneration } from "../generation"
+import { danishHolidayName, egyptianHolidayName } from "../holiday-names"
 import { holidayListFromDates } from "../holidays"
 import { occurrencePreview, type HolidayPolicy } from "../occurrences"
 import type { SchemeRecurrence } from "../recurrence"
@@ -16,7 +17,7 @@ import {
   weekdays,
 } from "./holiday-fixture"
 
-const holidays = holidayListFromDates(REGRESSION_HOLIDAY_DATES)
+const holidays = holidayListFromDates(REGRESSION_HOLIDAY_DATES, danishHolidayName)
 const calendar = calendarOf(holidays, DANISH_WEEKEND)
 
 /** A stored weekly scheme in the legacy single-group manual shape. */
@@ -59,7 +60,7 @@ const PROJECTS = [
   {
     name: "Cairo (Fri–Sat weekend)",
     recurrence: sunToThu,
-    calendar: calendarOf(holidayListFromDates(EGYPT_HOLIDAY_DATES), EGYPT_WEEKEND),
+    calendar: calendarOf(holidayListFromDates(EGYPT_HOLIDAY_DATES, egyptianHolidayName), EGYPT_WEEKEND),
   },
 ] as const
 

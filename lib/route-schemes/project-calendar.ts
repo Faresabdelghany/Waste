@@ -1,18 +1,36 @@
 // The project's calendar (round 3, 2026-09-16): its weekend and its holiday
 // list, resolved by ONE function — resolveProjectCalendar — for the guided
 // setup, generation (creation, edit, Plan Ahead, manual runs), the scheme
-// detail, and the list. The weekend is a project attribute (Egypt rests
-// Friday–Saturday, Denmark Saturday–Sunday); it is never derived from the
-// weekday number. Pure data logic (type-only import of BusinessRecord).
+// detail, and the list. Both are explicit project attributes:
+//   weekend      the weekdays the project rests on (Egypt Friday–Saturday,
+//                Denmark Saturday–Sunday), never derived from the weekday
+//                number; DEFAULT_WEEKEND only when nothing is set;
+//   holidayList  the name of the project's holiday list, or absent = no list.
+//                The list's dates are the project's per-year Collection
+//                Calendar records (holidays.ts). Ticket #36's Settings screen
+//                edits both; the wizard only reads them.
+// Pure data logic (type-only import of BusinessRecord).
 
 import type { BusinessRecord } from "../data/business-modules"
 import { formatWorkingDays } from "./calendar-list"
-import { projectHolidaySource, schemeProjectId } from "./holidays"
+import { holidayNamesFor } from "./holiday-names"
+import {
+  holidayListFromDates,
+  projectHolidayCalendars,
+  projectHolidayDates,
+  schemeProjectId,
+} from "./holidays"
 import { NO_HOLIDAYS, type HolidayList, type SchemeCalendar } from "./occurrences"
 import { parseServiceDays, type ServiceDay } from "./recurrence"
 
 /** The weekend a project takes when it has none set. */
 export const DEFAULT_WEEKEND: readonly ServiceDay[] = ["saturday", "sunday"]
+
+/** Where the project calendar is managed: Settings › Operations setup. */
+export const HOLIDAY_SETTINGS_HREF = "/settings?pane=operations-setup"
+
+/** The list name shown when the project has no holiday list. */
+export const NO_HOLIDAY_LIST_LABEL = "None on this project"
 
 export type ProjectHolidayList = {
   /** "Danish public holidays". */
@@ -44,6 +62,11 @@ export function projectWeekend(project: BusinessRecord | undefined): ServiceDay[
   return days.length > 0 ? days : [...DEFAULT_WEEKEND]
 }
 
+/** The name of the project's holiday list, or null when it has none. */
+export function projectHolidayListName(project: BusinessRecord | undefined): string | null {
+  return stringOf(project, "holidayList") || null
+}
+
 /** The calendar the wizard, generation, detail, and list all read for a project. */
 export function resolveProjectCalendar(
   projectId: string | undefined,
@@ -52,9 +75,18 @@ export function resolveProjectCalendar(
   const project = projectId
     ? records.projects.find((record) => record.id === projectId)
     : undefined
-  const source = projectHolidaySource(project, records.calendars)
+  const name = projectHolidayListName(project)
   return {
-    list: source ? { name: source.name, dates: source.list, records: source.records } : null,
+    list: name
+      ? {
+          name,
+          dates: holidayListFromDates(
+            projectHolidayDates(projectId, records.calendars),
+            holidayNamesFor(name),
+          ),
+          records: projectHolidayCalendars(projectId, records.calendars),
+        }
+      : null,
     weekend: projectWeekend(project),
   }
 }
@@ -80,4 +112,9 @@ export function schemeGenerationCalendar(
 /** "Sat–Sun" / "Fri–Sat". */
 export function weekendLabel(weekend: readonly ServiceDay[]): string {
   return formatWorkingDays([...weekend])
+}
+
+/** "Danish public holidays · Sat–Sun weekend" — the step 2 field and the review row; the no-list name when there is none. */
+export function projectCalendarLabel(calendar: ProjectCalendar): string {
+  return `${calendar.list?.name ?? NO_HOLIDAY_LIST_LABEL} · ${weekendLabel(calendar.weekend)} weekend`
 }

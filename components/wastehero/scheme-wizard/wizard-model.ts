@@ -5,7 +5,6 @@
 // Steps render this; nothing here touches React or the store.
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
-import { projectHolidaySource, type HolidaySource } from "@/lib/route-schemes/holidays"
 import {
   resolveProjectCalendar,
   schemeCalendarOf,
@@ -86,9 +85,7 @@ export type WizardIssue = {
 }
 
 export type WizardModel = {
-  /** The project's holiday list; null while no project is picked or it has none. */
-  holidaySource: HolidaySource | null
-  /** The project's calendar — holiday list and weekend — the next dates are judged against. */
+  /** The project's calendar — holiday list (null when it has none) and weekend — the next dates are judged against. */
   calendar: ProjectCalendar
   recurrence: SchemeRecurrence | null
   occurrences: OccurrencePreview
@@ -118,14 +115,10 @@ export function groupColor(index: number): string {
 export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords): WizardModel {
   const nameOf = (list: readonly BusinessRecord[], id: string | undefined) =>
     id ? list.find((record) => record.id === id)?.name : undefined
-  // Holidays follow the project (holiday model 2026-09-16): its per-year
-  // lists, read from the calendar records scoped to it. No list = every date
-  // is a working day.
-  const holidaySource = projectHolidaySource(
-    records.projects.find((record) => record.id === data.projectId),
-    records.calendars,
-  )
-  // The project's weekend travels with its holiday list — one calendar input.
+  // The calendar follows the project (holiday model 2026-09-16, round 3):
+  // its explicit holiday list, read from the per-year calendar records scoped
+  // to it, and its weekend — one input. No list = every date is a working
+  // day outside the weekend.
   const calendar = resolveProjectCalendar(data.projectId, {
     projects: records.projects,
     calendars: records.calendars,
@@ -276,7 +269,6 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
   }
 
   return {
-    holidaySource,
     calendar,
     recurrence,
     occurrences,
