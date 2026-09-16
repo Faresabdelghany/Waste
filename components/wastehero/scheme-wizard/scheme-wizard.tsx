@@ -19,6 +19,7 @@ import {
 import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
 import { cn } from "@/lib/utils"
 
+import { StepRecurrence } from "./step-recurrence"
 import { StepScope } from "./step-scope"
 import { useWizardRecords } from "./use-wizard-records"
 import { buildWizardModel } from "./wizard-model"
@@ -140,6 +141,7 @@ export function SchemeWizard({
           </header>
           <div className="flex-1 overflow-y-auto px-8 pb-6">
             {step === 1 && <StepScope data={data} update={update} records={records} />}
+            {step === 2 && <StepRecurrence data={data} update={update} model={model} />}
           </div>
           <footer className="flex items-center justify-between gap-3 border-t border-border px-8 py-5">
             {step === 1 ? (
