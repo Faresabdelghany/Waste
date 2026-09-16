@@ -1,8 +1,10 @@
-// What a map selection means (2026-09-16): its summary for the selection
-// bar, and the Guided Setup draft it seeds — only what every selected
-// container agrees on, so the wizard never inherits a guess. Pure data logic.
+// What a map selection means (2026-09-16): its fraction summary, and the
+// Guided Setup draft it seeds — only what every selected container agrees
+// on, so the wizard never inherits a guess. The Selected area panel's
+// numbers live in statistics.ts. Pure data logic.
 
 import type { GuidedSchemeData } from "../route-schemes/quick-create"
+import type { LngLat } from "./geo"
 import type { MapPoint } from "./points"
 import { rankFractions } from "./points"
 
@@ -13,7 +15,7 @@ export type SelectionSummary = {
   byFraction: Array<[string, number]>
 }
 
-/** The selected points — container points, or the container members of property points. */
+/** The selected points. */
 export function selectedPoints(
   points: readonly MapPoint[],
   selectedIds: ReadonlySet<string>,
@@ -86,4 +88,10 @@ export function schemeDraftFromSelection(
   if (project) draft.projectId = project
 
   return draft
+}
+
+/** The shape a selection was drawn with — kept so the panel can name it and the map can edit it. */
+export type SelectionShape = {
+  kind: "rectangle" | "polygon"
+  polygon: LngLat[]
 }

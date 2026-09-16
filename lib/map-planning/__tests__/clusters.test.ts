@@ -5,7 +5,7 @@ import type { BusinessRecord } from "../../data/business-modules"
 import { clusterPoints } from "../clusters"
 import { FALLBACK_FRACTION_PALETTE, fractionColor } from "../colors"
 import { offsetMetres } from "../geo"
-import { containerPoints, propertyPoints, type MapPoint } from "../points"
+import { containerPoints, type MapPoint } from "../points"
 
 function container(
   id: string,
@@ -35,7 +35,6 @@ const jagtvej = { Address: "Jagtvej 10, 2200 København N", Property: "Jagtvej 1
 function point(id: string, lng: number, lat: number, fractions: string[]): MapPoint {
   return {
     id,
-    kind: "container",
     lngLat: { lng, lat },
     fractions,
     label: id,
@@ -58,30 +57,6 @@ describe("containerPoints", () => {
     assert.deepEqual(points[1].fractions, ["Residual", "Mixed"])
     assert.equal(points[0].propertyKey, "Ryesgade 45")
     assert.deepEqual(points[0].lngLat, points[1].lngLat)
-  })
-})
-
-describe("propertyPoints", () => {
-  test("one point per property, carrying its containers and distinct fractions", () => {
-    const points = propertyPoints(
-      [
-        container("a", { ...ryesgade, "Waste fractions": "Organic" }),
-        container("b", { ...ryesgade, "Waste fractions": "Organic" }),
-        container("c", { ...ryesgade, "Waste fractions": "Paper" }),
-        container("d", { ...jagtvej, "Waste fractions": "Glass" }),
-      ],
-      [container("property-1", { ServiceAddress: "Ryesgade 45, 2200 København N" }, { name: "Ryesgade 45" })],
-    )
-    assert.equal(points.length, 2)
-    const ryes = points.find((p) => p.propertyKey === "Ryesgade 45")
-    assert.ok(ryes)
-    assert.equal(ryes.kind, "property")
-    assert.equal(ryes.record.id, "property-1", "the property record is attached when it exists")
-    assert.deepEqual(ryes.containerIds, ["a", "b", "c"])
-    assert.deepEqual(ryes.fractions, ["Organic", "Paper"])
-    const jagt = points.find((p) => p.propertyKey === "Jagtvej 10")
-    assert.ok(jagt)
-    assert.equal(jagt.record.id, "d", "without a property record the first container stands in")
   })
 })
 

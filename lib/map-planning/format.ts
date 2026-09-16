@@ -55,3 +55,11 @@ export function formatDateRange(range: { from: string; to: string }): string {
   if (range.from === range.to) return formatLongDate(range.from)
   return `${formatLongDate(range.from)} – ${formatLongDate(range.to)}`
 }
+
+const SHORT_MONTHS = LONG_MONTHS.map((month) => month.slice(0, 3))
+
+/** "2026-09-18" → "18 Sep 2026", the registry's own date shape. */
+export function formatShortDate(iso: string): string {
+  const [year, month, day] = iso.split("-").map((part) => Number.parseInt(part, 10))
+  return `${day} ${SHORT_MONTHS[(month ?? 1) - 1] ?? SHORT_MONTHS[0]} ${year}`
+}

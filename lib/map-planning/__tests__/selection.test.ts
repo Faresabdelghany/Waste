@@ -4,9 +4,7 @@ import { describe, test } from "node:test"
 import type { BusinessRecord } from "../../data/business-modules"
 import { MAP_FILTER_READERS } from "../filters"
 import type { MapPoint } from "../points"
-import { parseSavedViews, serializeSavedViews, type SavedMapView } from "../saved-views"
 import { schemeDraftFromSelection, selectionSummary } from "../selection"
-import { emptyBusinessFilters } from "../../data/business-filters"
 
 function record(id: string, extra: Partial<BusinessRecord> = {}): BusinessRecord {
   return {
@@ -29,7 +27,6 @@ function record(id: string, extra: Partial<BusinessRecord> = {}): BusinessRecord
 function point(id: string, propertyKey: string, fraction: string, values: Record<string, string> = {}): MapPoint {
   return {
     id,
-    kind: "container",
     lngLat: { lng: 12.5, lat: 55.6 },
     fractions: [fraction],
     label: id,
@@ -105,30 +102,5 @@ describe("MAP_FILTER_READERS", () => {
     assert.deepEqual(MAP_FILTER_READERS.planningAreas?.(container), ["Indre By Operations"])
     assert.deepEqual(MAP_FILTER_READERS.propertyTypes?.(container), ["Residential"])
     assert.deepEqual(MAP_FILTER_READERS.planningAreas?.(record("x", { facts: { "Planning area": "—" } })), [])
-  })
-})
-
-describe("saved views", () => {
-  const view: SavedMapView = {
-    id: "view-1",
-    name: "Residual · Indre By",
-    mode: "containers",
-    window: "next-7",
-    filters: { ...emptyBusinessFilters, wasteFractions: ["Residual"] },
-    createdAt: "2026-09-16T10:00:00.000Z",
-  }
-
-  test("round-trips through storage", () => {
-    assert.deepEqual(parseSavedViews(serializeSavedViews([view])), [view])
-  })
-
-  test("tolerates garbage and drops malformed entries", () => {
-    assert.deepEqual(parseSavedViews(null), [])
-    assert.deepEqual(parseSavedViews("not json"), [])
-    assert.deepEqual(parseSavedViews('{"views": "nope"}'), [])
-    const mixed = JSON.stringify({ views: [view, { id: "broken" }, { ...view, id: "v2", window: "weird" }] })
-    const parsed = parseSavedViews(mixed)
-    assert.deepEqual(parsed.map((entry) => entry.id), ["view-1", "v2"])
-    assert.equal(parsed[1].window, "any", "an unknown window falls back to any date")
   })
 })

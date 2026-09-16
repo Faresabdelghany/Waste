@@ -1,17 +1,19 @@
 "use client"
 
-// Map Planning (2026-09-16): the Plan workspace's page. The container and
-// property registry as clustered markers over a real base map, filtered by
-// the shared filter popover and a collection window, selected with a
-// rectangle or polygon, and handed to the Guided Setup wizard as a Route
-// Scheme draft. Every number on screen derives from live records at render
-// time; the page stores nothing but the saved views in the browser. Rendered
-// by BusinessWorkspace for plan.map-planning.
+// Map Planning (2026-09-16): the Plan workspace's page. The container
+// registry as clustered markers over a real base map, searched by address
+// or id, filtered by the shared filter popover and a collection window,
+// selected with a rectangle or polygon that stays on the map and can be
+// edited, summed up in the Selected area panel, and handed to the Guided
+// Setup wizard as a Route Scheme draft. The Layers control picks the base
+// map and switches planning-area outlines on. Every number on screen
+// derives from live records at render time; the page stores nothing but
+// the base map choice in the browser. Rendered by BusinessWorkspace for
+// plan.map-planning.
 
 import dynamic from "next/dynamic"
-import { useRouter } from "next/navigation"
 import { useTheme } from "next-themes"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Polygon, Selection, Trash } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
@@ -19,7 +21,6 @@ import { useAssetManagementStore } from "@/components/settings/asset-management-
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { ContainerDetailsSheet } from "@/components/wastehero/containers-assets-register"
 import { SchemeWizard } from "@/components/wastehero/scheme-wizard/scheme-wizard"
@@ -31,40 +32,43 @@ import {
 } from "@/lib/data/business-filters"
 import type { BusinessRecord, ModuleDefinition } from "@/lib/data/business-modules"
 import { isSoftDeleted } from "@/lib/data/record-visibility"
+import { planningAreaLayers, type PlanningAreaLayer } from "@/lib/map-planning/areas"
+import {
+  BASE_MAP_STORAGE_KEY,
+  defaultBaseMapForTheme,
+  isBaseMapId,
+  type BaseMapId,
+} from "@/lib/map-planning/base-maps"
 import type { MapCluster } from "@/lib/map-planning/clusters"
 import { fractionColor } from "@/lib/map-planning/colors"
+import { serviceAreasForSelection } from "@/lib/map-planning/coverage"
 import { MAP_FILTER_READERS } from "@/lib/map-planning/filters"
+import { formatDateRange } from "@/lib/map-planning/format"
 import { pointInPolygon, type LngLat } from "@/lib/map-planning/geo"
-import {
-  containerPoints,
-  propertyPoints,
-  type MapMode,
-  type MapPoint,
-} from "@/lib/map-planning/points"
+import { containerPoints, type MapPoint } from "@/lib/map-planning/points"
 import { containerLocation } from "@/lib/map-planning/positions"
+import { routesInSelection } from "@/lib/map-planning/routes"
 import {
-  MAP_PLANNING_STORAGE_KEY,
-  parseSavedViews,
-  serializeSavedViews,
-  type SavedMapView,
-} from "@/lib/map-planning/saved-views"
-import {
-  COLLECTION_WINDOW_LABELS,
   DEFAULT_COLLECTION_WINDOW,
+  collectionWindowRange,
   inCollectionWindow,
   nextCollectionDate,
   routeStopIndex,
   type CollectionWindow,
 } from "@/lib/map-planning/schedule"
-import { schemeDraftFromSelection, selectionSummary } from "@/lib/map-planning/selection"
+import type { SearchHit } from "@/lib/map-planning/search"
+import { schemeDraftFromSelection, type SelectionShape } from "@/lib/map-planning/selection"
+import { selectionStatistics } from "@/lib/map-planning/statistics"
 import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
 import { todayIso } from "@/lib/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
 
+import { LayersPanel } from "./layers-panel"
 import { LegendPanel, type LegendEntry } from "./legend-panel"
+import { MapSearch } from "./map-search"
 import { MapToolbar } from "./map-toolbar"
-import type { DrawTool } from "./planning-map"
-import { SelectionBar } from "./selection-bar"
+import type { DrawTool, PlanningMapApi } from "./planning-map"
+import { SelectedAreaPanel } from "./selected-area-panel"
 
 const PlanningMap = dynamic(
   () => import("./planning-map").then((module) => module.PlanningMap),
@@ -75,9 +79,10 @@ const PlanningMap = dynamic(
 )
 
 export type MapPlanningViewProps = {
-  /** Project-scoped containers and properties, and every route and pickup. */
+  /** Project-scoped containers; the planning areas, service areas, routes, and pickups they may reference. */
   containers: readonly BusinessRecord[]
-  properties: readonly BusinessRecord[]
+  planningAreas: readonly BusinessRecord[]
+  serviceAreas: readonly BusinessRecord[]
   routes: readonly BusinessRecord[]
   pickups: readonly BusinessRecord[]
   /** The Containers module — the details sheet reads its copy and lifecycle. */
@@ -88,51 +93,58 @@ export type MapPlanningViewProps = {
 
 type ClusterList = { cluster: MapCluster; anchor: { x: number; y: number } }
 
+/** The quantities line when no collection window bounds them. */
+const PER_COLLECTION_LABEL = "Per collection"
+
 export function MapPlanningView({
   containers,
-  properties,
+  planningAreas,
+  serviceAreas,
   routes,
   pickups,
   containersModule,
   canCreateScheme,
   onCreateScheme,
 }: MapPlanningViewProps) {
-  const router = useRouter()
   const { resolvedTheme } = useTheme()
-  const { wasteFractions } = useAssetManagementStore()
+  const { containerTypes, wasteFractions } = useAssetManagementStore()
   const today = todayIso()
+  const mapApi = useRef<PlanningMapApi | null>(null)
 
-  const [mode, setMode] = useState<MapMode>("containers")
   const [filters, setFilters] = useState<BusinessFilters>(emptyBusinessFilters)
   const [window, setWindow] = useState<CollectionWindow>(DEFAULT_COLLECTION_WINDOW)
-  const [savedViews, setSavedViews] = useState<SavedMapView[]>([])
-  const [savedViewsLoaded, setSavedViewsLoaded] = useState(false)
   const [drawTool, setDrawTool] = useState<DrawTool>("none")
   const [selectedContainerIds, setSelectedContainerIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   )
+  const [shape, setShape] = useState<SelectionShape | null>(null)
+  const [editingShape, setEditingShape] = useState(false)
+  const [routesOnMap, setRoutesOnMap] = useState(false)
   const [detail, setDetail] = useState<BusinessRecord | null>(null)
   const [clusterList, setClusterList] = useState<ClusterList | null>(null)
   const [wizardOpen, setWizardOpen] = useState(false)
+  // null = follow the app theme until the user picks a base map.
+  const [baseMapChoice, setBaseMapChoice] = useState<BaseMapId | null>(null)
+  const [enabledAreaIds, setEnabledAreaIds] = useState<ReadonlySet<string>>(() => new Set())
 
-  // Saved views live in the browser only; load after mount so SSR and the
-  // first client render agree, then persist every change.
+  // The base map choice lives in the browser only; read it after mount so
+  // SSR and the first client render agree.
   useEffect(() => {
     try {
-      setSavedViews(parseSavedViews(globalThis.localStorage?.getItem(MAP_PLANNING_STORAGE_KEY) ?? null))
+      const stored = globalThis.localStorage?.getItem(BASE_MAP_STORAGE_KEY)
+      if (isBaseMapId(stored)) setBaseMapChoice(stored)
     } catch {
-      setSavedViews([])
+      // Storage may be unavailable; the theme default stands.
     }
-    setSavedViewsLoaded(true)
   }, [])
-  useEffect(() => {
-    if (!savedViewsLoaded) return
+  const chooseBaseMap = (id: BaseMapId) => {
+    setBaseMapChoice(id)
     try {
-      globalThis.localStorage?.setItem(MAP_PLANNING_STORAGE_KEY, serializeSavedViews(savedViews))
+      globalThis.localStorage?.setItem(BASE_MAP_STORAGE_KEY, id)
     } catch {
-      // Storage may be unavailable; the menu simply forgets on reload.
+      // Storage may be unavailable; the choice lasts the session.
     }
-  }, [savedViews, savedViewsLoaded])
+  }
 
   const colorFor = useCallback(
     (fraction: string) => fractionColor(fraction, wasteFractions),
@@ -154,38 +166,54 @@ export function MapPlanningView({
       ),
     [filters, inServiceContainers, stopIndex, today, window],
   )
-  // Container points always exist — selection, summary, and the wizard draft
-  // count containers whatever the markers show.
-  const allContainerPoints = useMemo(() => containerPoints(filteredContainers), [filteredContainers])
-  const points = useMemo<MapPoint[]>(
-    () => (mode === "containers" ? allContainerPoints : propertyPoints(filteredContainers, properties)),
-    [allContainerPoints, filteredContainers, mode, properties],
+  const points = useMemo(() => containerPoints(filteredContainers), [filteredContainers])
+  // Area outlines wrap every in-service container, whatever the filters hide.
+  const areaLayers = useMemo(
+    () => planningAreaLayers(planningAreas, inServiceContainers),
+    [inServiceContainers, planningAreas],
   )
-  const selectedPointIds = useMemo(
+  const visibleAreaLayers = useMemo(
+    () => areaLayers.filter((area) => area.bounds !== null && enabledAreaIds.has(area.id)),
+    [areaLayers, enabledAreaIds],
+  )
+  const selectedContainers = useMemo(
+    () => filteredContainers.filter((record) => selectedContainerIds.has(record.id)),
+    [filteredContainers, selectedContainerIds],
+  )
+  const quantityRange = useMemo(() => collectionWindowRange(window, today), [today, window])
+  const stats = useMemo(
     () =>
-      new Set(
-        points
-          .filter((point) => point.containerIds.some((id) => selectedContainerIds.has(id)))
-          .map((point) => point.id),
-      ),
-    [points, selectedContainerIds],
+      selectionStatistics(selectedContainers, {
+        containerTypes,
+        wasteFractions,
+        stopIndex,
+        pickups,
+        range: quantityRange,
+        today,
+      }),
+    [containerTypes, pickups, quantityRange, selectedContainers, stopIndex, today, wasteFractions],
   )
-  const summary = useMemo(
-    () => selectionSummary(allContainerPoints, selectedContainerIds),
-    [allContainerPoints, selectedContainerIds],
+  const serviceAreaRows = useMemo(
+    () => serviceAreasForSelection(selectedContainers, serviceAreas),
+    [selectedContainers, serviceAreas],
+  )
+  const areaRoutes = useMemo(
+    () => routesInSelection(selectedContainers, routes, pickups, inServiceContainers),
+    [inServiceContainers, pickups, routes, selectedContainers],
   )
   const legendEntries = useMemo<LegendEntry[]>(() => {
     const counts = new Map<string, number>()
-    for (const point of allContainerPoints) {
+    for (const point of points) {
       for (const fraction of point.fractions) counts.set(fraction, (counts.get(fraction) ?? 0) + 1)
     }
     return Array.from(counts.entries())
       .sort((a, b) => b[1] - a[1])
       .map(([fraction, count]) => ({ fraction, color: colorFor(fraction), count }))
-  }, [allContainerPoints, colorFor])
+  }, [points, colorFor])
 
   const activeChips = businessFilterChips(filters).length
   const canReset = activeChips > 0 || window !== DEFAULT_COLLECTION_WINDOW
+  const hasSelection = shape !== null || selectedContainerIds.size > 0
 
   /* -------------------------------- actions -------------------------------- */
 
@@ -194,122 +222,95 @@ export function MapPlanningView({
     setWindow(DEFAULT_COLLECTION_WINDOW)
   }
 
-  const applyView = (view: SavedMapView) => {
-    setMode(view.mode)
-    setWindow(view.window)
-    setFilters(view.filters)
-    toast.success("Saved view applied", { description: view.name })
+  const clearSelection = () => {
+    setSelectedContainerIds(new Set())
+    setShape(null)
+    setEditingShape(false)
+    setRoutesOnMap(false)
   }
 
-  const saveView = (name: string) => {
-    const view: SavedMapView = {
-      id: `view-${Date.now()}`,
-      name,
-      mode,
-      window,
-      filters,
-      createdAt: new Date().toISOString(),
-    }
-    setSavedViews((current) => [view, ...current])
-    toast.success("View saved", { description: name })
+  /** The containers a shape holds — the selection a drawn or edited shape replaces. */
+  const selectByPolygon = (polygon: LngLat[]) =>
+    setSelectedContainerIds(
+      new Set(points.filter((point) => pointInPolygon(point.lngLat, polygon)).map((point) => point.id)),
+    )
+
+  const completeDraw = (polygon: LngLat[]) => {
+    if (drawTool === "none") return
+    setShape({ kind: drawTool, polygon })
+    selectByPolygon(polygon)
+    setDrawTool("none")
+    setEditingShape(false)
   }
 
-  const deleteView = (id: string) => {
-    setSavedViews((current) => current.filter((view) => view.id !== id))
+  const changeShape = (polygon: LngLat[]) => {
+    setShape((current) => (current ? { ...current, polygon } : current))
+    selectByPolygon(polygon)
   }
 
+  // A manual pick has no shape to name or edit.
   const addToSelection = (containerIds: readonly string[]) => {
     setSelectedContainerIds((current) => {
       const next = new Set(current)
       for (const id of containerIds) next.add(id)
       return next
     })
+    setShape(null)
+    setEditingShape(false)
   }
 
-  const clearSelection = () => setSelectedContainerIds(new Set())
+  const openPoint = (point: MapPoint) => setDetail(point.record)
 
-  const completeDraw = (polygon: LngLat[]) => {
-    const hits = allContainerPoints.filter((point) => pointInPolygon(point.lngLat, polygon))
-    addToSelection(hits.map((point) => point.id))
-    setDrawTool("none")
-    if (hits.length === 0) {
-      toast.info("No containers inside that shape", {
-        description: "Draw around the markers you want, or widen the filters.",
+  // Only routes with located stops can be drawn; fixture route days carry
+  // none until a Route Scheme generates them.
+  const toggleRoutesOnMap = () => {
+    if (routesOnMap) {
+      setRoutesOnMap(false)
+      return
+    }
+    if (!areaRoutes.routes.some((route) => route.stops.length > 0)) {
+      toast.info("These routes carry no stop positions yet", {
+        description: "Generate routes from a Route Scheme to see their stops on the map.",
       })
-    }
-  }
-
-  const openPoint = (point: MapPoint) => {
-    if (point.kind === "container") {
-      setDetail(point.record)
       return
     }
-    // A property point opens its property record when the CRM has one;
-    // otherwise it lists the containers standing at that address.
-    if (point.record.id !== point.containerIds[0]) {
-      router.push(`/customers?module=properties&record=${encodeURIComponent(point.record.id)}`)
-      return
-    }
-    const members = allContainerPoints.filter((candidate) => point.containerIds.includes(candidate.id))
-    setClusterList({
-      cluster: {
-        id: point.id,
-        lngLat: point.lngLat,
-        count: members.length,
-        points: members,
-        fractions: point.fractions,
-        singleLocation: true,
-      },
-      anchor: { x: 0, y: 0 },
-    })
+    setRoutesOnMap(true)
   }
 
   const startWizard = () => setWizardOpen(true)
   const wizardSeed = useMemo(
-    () => schemeDraftFromSelection(allContainerPoints, selectedContainerIds),
-    [allContainerPoints, selectedContainerIds],
+    () => schemeDraftFromSelection(points, selectedContainerIds),
+    [points, selectedContainerIds],
   )
 
-  const exportSelection = () => {
-    toast.success("Export queued", {
-      description: `${summary.containers} container${summary.containers === 1 ? "" : "s"} · current selection · audit recorded`,
+  const toggleArea = (id: string, enabled: boolean) =>
+    setEnabledAreaIds((current) => {
+      const next = new Set(current)
+      if (enabled) next.add(id)
+      else next.delete(id)
+      return next
     })
+  const showAllAreas = () =>
+    setEnabledAreaIds(new Set(areaLayers.filter((area) => area.bounds).map((area) => area.id)))
+  const hideAllAreas = () => setEnabledAreaIds(new Set())
+  const zoomToArea = (area: PlanningAreaLayer) => {
+    if (area.bounds) mapApi.current?.fitBounds(area.bounds)
   }
 
-  const theme = resolvedTheme === "dark" ? "dark" : "light"
-  const hiddenByFilters = inServiceContainers.length - filteredContainers.length
+  const goToHit = (hit: SearchHit) => {
+    if (hit.kind === "area") {
+      if (hit.bounds) mapApi.current?.fitBounds(hit.bounds)
+      else toast.info("That planning area has no located containers yet")
+      return
+    }
+    if (hit.lngLat) mapApi.current?.flyTo(hit.lngLat)
+  }
+
+  const baseMap = baseMapChoice ?? defaultBaseMapForTheme(resolvedTheme === "dark" ? "dark" : "light")
+  const quantitiesLabel = quantityRange ? formatDateRange(quantityRange) : PER_COLLECTION_LABEL
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="map-planning">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-4">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">Map Planning</h1>
-          <p className="text-xs text-muted-foreground" data-testid="map-planning-counter">
-            {filteredContainers.length} of {inServiceContainers.length} containers on the map
-            {mode === "properties" ? ` · ${points.length} propert${points.length === 1 ? "y" : "ies"}` : ""}
-            {window !== "any" ? ` · ${COLLECTION_WINDOW_LABELS[window]}` : ""}
-            {hiddenByFilters > 0 ? ` · ${hiddenByFilters} hidden by filters` : ""}
-          </p>
-        </div>
-        <ToggleGroup
-          type="single"
-          value={mode}
-          onValueChange={(value) => {
-            if (value === "containers" || value === "properties") setMode(value)
-          }}
-          aria-label="Marker mode"
-          variant="outline"
-          size="sm"
-        >
-          <ToggleGroupItem value="containers" className="px-3 text-xs">
-            Containers
-          </ToggleGroupItem>
-          <ToggleGroupItem value="properties" className="px-3 text-xs">
-            Properties
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </div>
-
       <div className="px-4 py-3">
         <MapToolbar
           records={inServiceContainers}
@@ -317,26 +318,30 @@ export function MapPlanningView({
           onFiltersChange={setFilters}
           window={window}
           onWindowChange={setWindow}
-          savedViews={savedViews}
-          onApplyView={applyView}
-          onSaveView={saveView}
-          onDeleteView={deleteView}
           canReset={canReset}
           onResetAll={resetAll}
-        />
+        >
+          <MapSearch points={points} areas={areaLayers} onPick={goToHit} />
+        </MapToolbar>
       </div>
 
       <div className="relative min-h-[420px] flex-1 border-t border-border">
         <PlanningMap
           points={points}
-          selectedIds={selectedPointIds}
+          selectedIds={selectedContainerIds}
           drawTool={drawTool}
           colorFor={colorFor}
-          theme={theme}
+          baseMap={baseMap}
+          shape={shape}
+          editingShape={editingShape}
+          onShapeChange={changeShape}
+          areaLayers={visibleAreaLayers}
+          routeLines={routesOnMap ? areaRoutes.routes : []}
           onDrawComplete={completeDraw}
           onDrawCancel={() => setDrawTool("none")}
           onPointClick={openPoint}
           onClusterList={(cluster, anchor) => setClusterList({ cluster, anchor })}
+          apiRef={mapApi}
         />
 
         {/* Draw tools */}
@@ -359,28 +364,43 @@ export function MapPlanningView({
           >
             <Polygon className="h-4 w-4" />
           </ToolButton>
-          <ToolButton
-            label="Clear selection"
-            disabled={selectedContainerIds.size === 0}
-            onClick={clearSelection}
-          >
+          <ToolButton label="Clear selection" disabled={!hasSelection} onClick={clearSelection}>
             <Trash className="h-4 w-4" />
           </ToolButton>
         </div>
 
-        <LegendPanel entries={legendEntries} mode={mode} className="absolute bottom-8 right-3 z-30" />
-
-        {summary.containers > 0 && (
-          <SelectionBar
-            summary={summary}
+        {hasSelection && (
+          <SelectedAreaPanel
+            shape={shape}
+            stats={stats}
+            serviceAreas={serviceAreaRows}
+            routes={areaRoutes}
+            routesOnMap={routesOnMap}
+            onToggleRoutesOnMap={toggleRoutesOnMap}
+            quantitiesLabel={quantitiesLabel}
             colorFor={colorFor}
+            editing={editingShape}
+            onToggleEdit={() => setEditingShape((current) => !current)}
             canCreateScheme={canCreateScheme}
             onCreateScheme={startWizard}
-            onExport={exportSelection}
-            onClear={clearSelection}
-            className="absolute bottom-8 left-1/2 z-30 w-[min(720px,calc(100%-24px))] -translate-x-1/2"
+            onClose={clearSelection}
+            className="absolute left-3 top-14 z-30 max-h-[calc(100%-5.5rem)] w-[min(380px,calc(100%-24px))]"
           />
         )}
+
+        <div className="absolute bottom-8 right-3 z-30 flex items-center gap-2">
+          <LegendPanel entries={legendEntries} />
+          <LayersPanel
+            baseMap={baseMap}
+            onBaseMapChange={chooseBaseMap}
+            areas={areaLayers}
+            enabledAreaIds={enabledAreaIds}
+            onToggleArea={toggleArea}
+            onShowAllAreas={showAllAreas}
+            onHideAllAreas={hideAllAreas}
+            onZoomToArea={zoomToArea}
+          />
+        </div>
 
         {clusterList && (
           <Popover open onOpenChange={(open) => !open && setClusterList(null)}>

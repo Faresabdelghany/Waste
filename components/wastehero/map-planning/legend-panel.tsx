@@ -1,12 +1,13 @@
 "use client"
 
 // The map legend (2026-09-16): the fraction colours the markers use and the
-// marker grammar, so the dotted badges never need decoding by heart.
+// marker grammar, behind a button beside the Layers control so the map
+// stays clear until someone asks.
 
-import { useState } from "react"
-import { CaretDown, Stack } from "@phosphor-icons/react/dist/ssr"
+import { ListBullets } from "@phosphor-icons/react/dist/ssr"
 
 import { Button } from "@/components/ui/button"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { SELECTION_COLOR } from "@/lib/map-planning/colors"
 import { cn } from "@/lib/utils"
 
@@ -14,58 +15,24 @@ export type LegendEntry = { fraction: string; color: string; count: number }
 
 export function LegendPanel({
   entries,
-  mode,
   className,
 }: {
   entries: readonly LegendEntry[]
-  mode: "containers" | "properties"
   className?: string
 }) {
-  const [open, setOpen] = useState(true)
-
-  if (!open) {
-    return (
-      <Button
-        variant="outline"
-        size="sm"
-        className={cn("h-8 gap-1.5 bg-background/95 text-xs shadow-sm", className)}
-        onClick={() => setOpen(true)}
-        aria-expanded={false}
-        aria-controls="map-planning-legend"
-      >
-        <Stack className="h-4 w-4" />
-        Legend
-      </Button>
-    )
-  }
-
   return (
-    <section
-      id="map-planning-legend"
-      aria-label="Legend"
-      className={cn(
-        "w-60 rounded-lg border border-border bg-background/95 text-xs shadow-sm backdrop-blur",
-        className,
-      )}
-    >
-      <header className="flex items-center justify-between border-b border-border px-3 py-2">
-        <span className="flex items-center gap-1.5 font-medium">
-          <Stack className="h-4 w-4" />
-          Legend
-        </span>
+    <Popover>
+      <PopoverTrigger asChild>
         <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
-          onClick={() => setOpen(false)}
-          aria-label="Collapse legend"
-          aria-expanded
-          aria-controls="map-planning-legend"
+          variant="outline"
+          size="sm"
+          className={cn("h-8 gap-1.5 bg-background/95 text-xs shadow-sm", className)}
         >
-          <CaretDown className="h-3.5 w-3.5" />
+          <ListBullets className="h-4 w-4" />
+          Legend
         </Button>
-      </header>
-      <div className="space-y-3 px-3 py-2">
+      </PopoverTrigger>
+      <PopoverContent side="top" align="end" className="w-60 space-y-3 p-3 text-xs" aria-label="Legend">
         <div>
           <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             Waste fractions
@@ -96,7 +63,7 @@ export function LegendPanel({
               <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border bg-background text-[10px] font-semibold text-foreground">
                 12
               </span>
-              <span>{mode === "containers" ? "Containers" : "Properties"} nearby — click to zoom</span>
+              <span>Containers nearby — click to zoom</span>
             </li>
             <li className="flex items-center gap-2">
               <span className="flex shrink-0 items-center">
@@ -114,7 +81,7 @@ export function LegendPanel({
             </li>
           </ul>
         </div>
-      </div>
-    </section>
+      </PopoverContent>
+    </Popover>
   )
 }

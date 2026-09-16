@@ -1,14 +1,24 @@
 "use client"
 
-// The planning map's base map and markers (2026-09-16). MapLibre GL over
-// OpenFreeMap vector tiles (no API key); the markers are plain HTML placed
-// with map.project on every move, so a badge can carry whatever the design
-// needs (count, fraction dot trail, selection ring) and Playwright can read
-// it. The draw overlay sits above the canvas while a tool is active and
-// hands the finished shape back as lng/lat — selection resolution stays in
-// the pure lib. Loaded client-only by map-planning-view.tsx (next/dynamic).
+// The planning map's base map, markers, and overlays (2026-09-16). MapLibre
+// GL over keyless tiles (OpenFreeMap vector styles, Esri imagery for
+// satellite); the markers are plain HTML placed with map.project on every
+// move, so a badge can carry whatever the design needs (count, fraction dot
+// trail, selection ring) and Playwright can read it. Two SVG overlays sit
+// above the canvas: the shapes overlay draws the planning-area outlines
+// that are switched on and the selection shape (with draggable handles
+// while it is being edited), and the draw overlay takes over while a tool
+// is active and hands the finished shape back as lng/lat — selection
+// resolution stays in the pure lib. Loaded client-only by
+// map-planning-view.tsx (next/dynamic).
 
-import { Map as MapLibreMap, NavigationControl, getVersion, setWorkerUrl } from "maplibre-gl"
+import {
+  Map as MapLibreMap,
+  NavigationControl,
+  getVersion,
+  setWorkerUrl,
+  type StyleSpecification,
+} from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 import {
   useCallback,
@@ -17,25 +27,22 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type RefObject,
 } from "react"
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import type { PlanningAreaLayer } from "@/lib/map-planning/areas"
+import { baseMapById, type BaseMapId } from "@/lib/map-planning/base-maps"
 import { clusterPoints, type MapCluster } from "@/lib/map-planning/clusters"
 import { NO_FRACTION_COLOR, SELECTION_COLOR } from "@/lib/map-planning/colors"
-import type { LngLat } from "@/lib/map-planning/geo"
+import { polygonCentroid, type LngLat, type LngLatBounds } from "@/lib/map-planning/geo"
 import type { MapPoint } from "@/lib/map-planning/points"
 import { COPENHAGEN_CENTER } from "@/lib/map-planning/positions"
+import type { AreaRoute } from "@/lib/map-planning/routes"
+import type { SelectionShape } from "@/lib/map-planning/selection"
 import { cn } from "@/lib/utils"
 
 export type DrawTool = "none" | "rectangle" | "polygon"
-
-export type MapTheme = "light" | "dark"
-
-/** OpenFreeMap styles — free vector tiles, no key. */
-const STYLE_URLS: Readonly<Record<MapTheme, string>> = {
-  light: "https://tiles.openfreemap.org/styles/liberty",
-  dark: "https://tiles.openfreemap.org/styles/dark",
-}
 
 // MapLibre 6 derives its module-worker URL from its own module URL, which
 // Turbopack's chunking breaks (the worker never starts, no tile loads). The
@@ -45,48 +52,76 @@ const STYLE_URLS: Readonly<Record<MapTheme, string>> = {
 setWorkerUrl(`/maplibre/${getVersion()}/maplibre-gl-worker.mjs`)
 
 const INITIAL_ZOOM = 12
-const MIN_ZOOM = 9
+/** No floor — the whole world is one zoom-out away. */
+const MIN_ZOOM = 0
 const MAX_ZOOM = 19
 /** Past this zoom a cluster click lists its members instead of zooming further. */
 const LIST_ZOOM = 16.5
 const MAX_TRAIL_DOTS = 6
 const CLOSE_POLYGON_PX = 10
 const MIN_RECTANGLE_PX = 6
+const FIT_PADDING_PX = 48
+const FIT_MAX_ZOOM = 16
+const FLY_ZOOM = 17
+
+/** What the page can ask the map to do. */
+export type PlanningMapApi = {
+  fitBounds: (bounds: LngLatBounds) => void
+  flyTo: (lngLat: LngLat, zoom?: number) => void
+}
 
 export type PlanningMapProps = {
   points: readonly MapPoint[]
-  /** Point ids (container ids, or property point ids) that are selected. */
+  /** Container ids that are selected. */
   selectedIds: ReadonlySet<string>
   drawTool: DrawTool
   colorFor: (fraction: string) => string
-  theme: MapTheme
+  baseMap: BaseMapId
+  /** The selection shape to keep on the map, if any. */
+  shape: SelectionShape | null
+  /** Whether the shape's handles can be dragged. */
+  editingShape: boolean
+  onShapeChange: (polygon: LngLat[]) => void
+  /** Planning-area outlines that are switched on. */
+  areaLayers: readonly PlanningAreaLayer[]
+  /** Routes to draw as stop-to-stop lines ("See on map"). */
+  routeLines: readonly AreaRoute[]
   onDrawComplete: (polygon: LngLat[]) => void
   onDrawCancel: () => void
   onPointClick: (point: MapPoint) => void
   /** A cluster that cannot or should not split further — list its members. */
   onClusterList: (cluster: MapCluster, anchor: { x: number; y: number }) => void
+  apiRef?: RefObject<PlanningMapApi | null>
   className?: string
 }
 
 type ScreenPoint = { x: number; y: number }
 
-function clusterLabel(cluster: MapCluster, kindLabel: string, selected: number): string {
-  const head = `${cluster.count} ${kindLabel}${cluster.count === 1 ? "" : "s"}`
+function clusterLabel(cluster: MapCluster, selected: number): string {
+  const head = `${cluster.count} container${cluster.count === 1 ? "" : "s"}`
   const fractions = cluster.fractions.length ? ` · ${cluster.fractions.join(", ")}` : ""
   const picked = selected > 0 ? ` · ${selected} selected` : ""
   return `${head}${fractions}${picked}`
 }
+
+const styleOf = (baseMap: BaseMapId) => baseMapById(baseMap).style as string | StyleSpecification
 
 export function PlanningMap({
   points,
   selectedIds,
   drawTool,
   colorFor,
-  theme,
+  baseMap,
+  shape,
+  editingShape,
+  onShapeChange,
+  areaLayers,
+  routeLines,
   onDrawComplete,
   onDrawCancel,
   onPointClick,
   onClusterList,
+  apiRef,
   className,
 }: PlanningMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -98,12 +133,17 @@ export function PlanningMap({
   const [, setFrame] = useState(0)
   const [baseMapFailed, setBaseMapFailed] = useState(false)
 
+  // MapLibre only runs animation frames once a style has loaded; without a
+  // base map (offline, blocked tiles) the camera jumps instead of easing so
+  // navigation still works.
+  const animationMs = (ms: number) => (loadedRef.current ? ms : 0)
+
   useEffect(() => {
     const container = containerRef.current
     if (!container || mapRef.current) return
     const map = new MapLibreMap({
       container,
-      style: STYLE_URLS[theme],
+      style: styleOf(baseMap),
       center: [COPENHAGEN_CENTER.lng, COPENHAGEN_CENTER.lat],
       zoom: INITIAL_ZOOM,
       minZoom: MIN_ZOOM,
@@ -113,13 +153,15 @@ export function PlanningMap({
       doubleClickZoom: false,
     })
     map.addControl(new NavigationControl({ showCompass: false }), "top-right")
-    // State flags for tests and debugging: the container says when the style
+    // State flags for tests and debugging: the container says when a style
     // has loaded and when the map is idle (every visible tile drawn).
-    map.on("load", () => {
+    const onStyleLoaded = () => {
       loadedRef.current = true
       setBaseMapFailed(false)
       container.dataset.mapLoaded = "true"
-    })
+    }
+    map.on("load", onStyleLoaded)
+    map.on("style.load", onStyleLoaded)
     map.on("idle", () => {
       container.dataset.mapIdle = "true"
     })
@@ -140,22 +182,44 @@ export function PlanningMap({
     map.on("move", onMove)
     map.on("resize", onMove)
     mapRef.current = map
+    if (apiRef) {
+      apiRef.current = {
+        fitBounds: (bounds) =>
+          map.fitBounds(
+            [
+              [bounds.west, bounds.south],
+              [bounds.east, bounds.north],
+            ],
+            { padding: FIT_PADDING_PX, duration: animationMs(600), maxZoom: FIT_MAX_ZOOM },
+          ),
+        flyTo: (lngLat, targetZoom = FLY_ZOOM) =>
+          map.flyTo({ center: [lngLat.lng, lngLat.lat], zoom: targetZoom, duration: animationMs(800) }),
+      }
+    }
     setReady(true)
     return () => {
       map.remove()
       mapRef.current = null
       loadedRef.current = false
+      if (apiRef) apiRef.current = null
     }
-    // The map is created once; theme changes restyle it below.
+    // The map is created once; base map changes restyle it below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const firstStyleRef = useRef(true)
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
+    // The constructor already loaded the first style.
+    if (firstStyleRef.current) {
+      firstStyleRef.current = false
+      return
+    }
     loadedRef.current = false
-    map.setStyle(STYLE_URLS[theme])
-  }, [theme])
+    setBaseMapFailed(false)
+    map.setStyle(styleOf(baseMap))
+  }, [baseMap])
 
   // Cluster at half-zoom steps so a slow pan does not re-cluster every frame.
   const clusterZoom = Math.round(zoom * 2) / 2
@@ -185,13 +249,9 @@ export function PlanningMap({
     map.easeTo({
       center: [cluster.lngLat.lng, cluster.lngLat.lat],
       zoom: Math.min(MAX_ZOOM, zoom + 2),
-      duration: 400,
+      duration: animationMs(400),
     })
   }
-
-  const kindLabel = points[0]?.kind === "property" ? "propert" : "container"
-  const pluralKind = (count: number) =>
-    kindLabel === "propert" ? (count === 1 ? "property" : "properties") : count === 1 ? "container" : "containers"
 
   return (
     <div className={cn("relative h-full w-full overflow-hidden bg-muted", className)}>
@@ -206,6 +266,18 @@ export function PlanningMap({
         >
           Base map unavailable — markers still reflect the registry.
         </div>
+      )}
+
+      {ready && (
+        <ShapesOverlay
+          areas={areaLayers}
+          routes={routeLines}
+          shape={shape}
+          editing={editingShape && drawTool === "none"}
+          project={project}
+          unproject={unproject}
+          onShapeChange={onShapeChange}
+        />
       )}
 
       {ready && (
@@ -232,10 +304,7 @@ export function PlanningMap({
                         data-marker="point"
                         data-selected={selected ? "true" : undefined}
                         onClick={() => onPointClick(point)}
-                        className={cn(
-                          "pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 border-2 border-background shadow transition-transform hover:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          point.kind === "property" ? "size-4 rounded-md" : "size-3.5 rounded-full",
-                        )}
+                        className="pointer-events-auto absolute size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background shadow transition-transform hover:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         style={{
                           left: anchor.x,
                           top: anchor.y,
@@ -259,10 +328,7 @@ export function PlanningMap({
                   <TooltipTrigger asChild>
                     <button
                       type="button"
-                      aria-label={clusterLabel(cluster, kindLabel === "propert" ? "propert" : "container", selectedCount).replace(
-                        /propert(s?)/,
-                        (_, s: string) => (s ? "properties" : "property"),
-                      )}
+                      aria-label={clusterLabel(cluster, selectedCount)}
                       data-marker="cluster"
                       data-count={cluster.count}
                       data-selected={selectedCount > 0 ? "true" : undefined}
@@ -302,7 +368,7 @@ export function PlanningMap({
                   </TooltipTrigger>
                   <TooltipContent side="top" className="max-w-xs text-xs">
                     <p className="font-medium">
-                      {cluster.count} {pluralKind(cluster.count)}
+                      {cluster.count} container{cluster.count === 1 ? "" : "s"}
                       {selectedCount > 0 ? ` · ${selectedCount} selected` : ""}
                     </p>
                     {cluster.fractions.length > 0 && (
@@ -328,6 +394,193 @@ export function PlanningMap({
         />
       )}
     </div>
+  )
+}
+
+/* ----------------------------- shapes overlay ----------------------------- */
+
+const toPoints = (screen: readonly ScreenPoint[]) => screen.map((point) => `${point.x},${point.y}`).join(" ")
+
+/**
+ * Moves corner `index` of an axis-aligned rectangle (corners in draw order:
+ * start, (end.x, start.y), end, (start.x, end.y)) to `next`, keeping the
+ * opposite corner where it is.
+ */
+function moveRectangleCorner(corners: readonly ScreenPoint[], index: number, next: ScreenPoint): ScreenPoint[] {
+  const opposite = corners[(index + 2) % 4]
+  const moved = [...corners]
+  moved[index] = next
+  const shareY = { x: opposite.x, y: next.y }
+  const shareX = { x: next.x, y: opposite.y }
+  moved[(index + 1) % 4] = index % 2 === 0 ? shareY : shareX
+  moved[(index + 3) % 4] = index % 2 === 0 ? shareX : shareY
+  return moved
+}
+
+function ShapesOverlay({
+  areas,
+  routes,
+  shape,
+  editing,
+  project,
+  unproject,
+  onShapeChange,
+}: {
+  areas: readonly PlanningAreaLayer[]
+  routes: readonly AreaRoute[]
+  shape: SelectionShape | null
+  editing: boolean
+  project: (lngLat: LngLat) => ScreenPoint | null
+  unproject: (screen: ScreenPoint) => LngLat
+  onShapeChange: (polygon: LngLat[]) => void
+}) {
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [drag, setDrag] = useState<{ index: number; screen: ScreenPoint[] } | null>(null)
+
+  const projected = shape
+    ? shape.polygon.map(project).filter((point): point is ScreenPoint => point !== null)
+    : []
+  const screen = drag ? drag.screen : projected
+
+  const local = (event: ReactPointerEvent): ScreenPoint => {
+    const rect = svgRef.current?.getBoundingClientRect()
+    return { x: event.clientX - (rect?.left ?? 0), y: event.clientY - (rect?.top ?? 0) }
+  }
+
+  const startDrag = (event: ReactPointerEvent<SVGCircleElement>, index: number) => {
+    if (!editing || event.button !== 0) return
+    event.stopPropagation()
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      // Synthetic pointers have no capture; the handle still follows the moves it gets.
+    }
+    setDrag({ index, screen: projected })
+  }
+
+  const moveDrag = (event: ReactPointerEvent<SVGCircleElement>) => {
+    if (!drag || !shape) return
+    const next = local(event)
+    setDrag((current) => {
+      if (!current) return current
+      const moved =
+        shape.kind === "rectangle" && current.screen.length === 4
+          ? moveRectangleCorner(current.screen, current.index, next)
+          : current.screen.map((point, index) => (index === current.index ? next : point))
+      return { ...current, screen: moved }
+    })
+  }
+
+  const endDrag = () => {
+    if (!drag) return
+    onShapeChange(drag.screen.map(unproject))
+    setDrag(null)
+  }
+
+  return (
+    <svg
+      ref={svgRef}
+      aria-hidden
+      data-testid="planning-map-shapes"
+      className="pointer-events-none absolute inset-0 z-10 h-full w-full overflow-visible"
+    >
+      {areas.map((area) => {
+        const outline = area.polygon.map(project).filter((point): point is ScreenPoint => point !== null)
+        if (outline.length < 3) return null
+        const label = project(polygonCentroid(area.polygon))
+        return (
+          <g key={area.id} data-area-outline={area.id}>
+            <polygon
+              points={toPoints(outline)}
+              fill={area.color}
+              fillOpacity={0.08}
+              stroke={area.color}
+              strokeWidth={2}
+              strokeLinejoin="round"
+            />
+            {label && (
+              <text
+                x={label.x}
+                y={label.y}
+                textAnchor="middle"
+                className="text-[11px] font-semibold"
+                fill={area.color}
+                stroke="white"
+                strokeWidth={3}
+                paintOrder="stroke"
+              >
+                {area.name}
+              </text>
+            )}
+          </g>
+        )
+      })}
+
+      {routes.map((route) => {
+        const stops = route.stops.map(project).filter((point): point is ScreenPoint => point !== null)
+        if (stops.length === 0) return null
+        return (
+          <g key={route.id} data-route-line={route.id}>
+            {stops.length >= 2 && (
+              <polyline
+                points={toPoints(stops)}
+                fill="none"
+                stroke={route.color}
+                strokeWidth={3}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                strokeOpacity={0.85}
+              />
+            )}
+            {stops.map((stop, index) => (
+              <circle key={index} cx={stop.x} cy={stop.y} r={4} fill="white" stroke={route.color} strokeWidth={2} />
+            ))}
+            <text
+              x={stops[0].x + 8}
+              y={stops[0].y - 8}
+              className="text-[11px] font-semibold"
+              fill={route.color}
+              stroke="white"
+              strokeWidth={3}
+              paintOrder="stroke"
+            >
+              {route.name}
+            </text>
+          </g>
+        )
+      })}
+
+      {shape && screen.length >= 3 && (
+        <g data-selection-shape={shape.kind} data-editing={editing ? "true" : undefined}>
+          <polygon
+            points={toPoints(screen)}
+            fill={SELECTION_COLOR}
+            fillOpacity={editing ? 0.14 : 0.08}
+            stroke={SELECTION_COLOR}
+            strokeWidth={2}
+            strokeDasharray="6 4"
+            strokeLinejoin="round"
+          />
+          {screen.map((vertex, index) => (
+            <circle
+              key={index}
+              cx={vertex.x}
+              cy={vertex.y}
+              r={editing ? 7 : 5}
+              fill="white"
+              stroke={SELECTION_COLOR}
+              strokeWidth={2}
+              data-shape-handle={index}
+              className={cn(editing && "pointer-events-auto cursor-move")}
+              onPointerDown={(event) => startDrag(event, index)}
+              onPointerMove={moveDrag}
+              onPointerUp={endDrag}
+              onPointerCancel={() => setDrag(null)}
+            />
+          ))}
+        </g>
+      )}
+    </svg>
   )
 }
 
@@ -451,7 +704,7 @@ function DrawOverlay({
       {tool === "polygon" && path.length > 0 && (
         <>
           <polygon
-            points={path.map((point) => `${point.x},${point.y}`).join(" ")}
+            points={toPoints(path)}
             fill={SELECTION_COLOR}
             fillOpacity={0.1}
             stroke={SELECTION_COLOR}

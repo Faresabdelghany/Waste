@@ -33,3 +33,10 @@ describe("dates", () => {
     assert.equal(formatDateRange({ from: "2026-09-16", to: "2026-09-16" }), "September 16, 2026")
   })
 })
+
+describe("formatShortDate", () => {
+  test("reads like the registry facts", async () => {
+    const { formatShortDate } = await import("../format")
+    assert.equal(formatShortDate("2026-09-18"), "18 Sep 2026")
+  })
+})

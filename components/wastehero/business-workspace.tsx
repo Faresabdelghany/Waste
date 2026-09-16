@@ -1473,9 +1473,11 @@ export function BusinessWorkspace({
       ),
     [scopedRecords],
   )
-  // Map Planning reads other modules' records in the workspace's project
-  // scope: the containers and properties it draws, and the routes and
-  // pickups its collection window consults.
+  // Map Planning reads other modules' records: the containers it draws in
+  // the workspace's project scope, the planning areas its Layers control
+  // outlines, the service areas its Selected area panel reports coverage
+  // from, and the routes and pickups its collection window, quantities, and
+  // "Existing routes in this area" consult.
   const mapPlanningRecords = useMemo(() => {
     if (!isMapPlanningView) return null
     const inScope = (record: BusinessRecord) => {
@@ -1485,7 +1487,8 @@ export function BusinessWorkspace({
     }
     return {
       containers: moduleRecords("resources", "containers").filter(inScope),
-      properties: moduleRecords("customers", "properties").filter(inScope),
+      planningAreas: moduleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId),
+      serviceAreas: moduleRecords("service-providers", "service-areas"),
       routes: moduleRecords("route-studio", "routes"),
       pickups: moduleRecords("route-studio", "pickups"),
     }
@@ -4879,7 +4882,8 @@ export function BusinessWorkspace({
       {isMapPlanningView && mapPlanningRecords && containersModuleDefinition ? (
         <MapPlanningView
           containers={mapPlanningRecords.containers}
-          properties={mapPlanningRecords.properties}
+          planningAreas={mapPlanningRecords.planningAreas}
+          serviceAreas={mapPlanningRecords.serviceAreas}
           routes={mapPlanningRecords.routes}
           pickups={mapPlanningRecords.pickups}
           containersModule={containersModuleDefinition}
