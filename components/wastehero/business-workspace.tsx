@@ -58,7 +58,11 @@ import {
   withDerivedCalendarValue,
   type CalendarRowSummary,
 } from "@/lib/route-schemes/calendar-list"
-import { planSchemeCreation } from "@/lib/route-schemes/creation"
+import {
+  SCHEME_EDIT_POLICY_LABELS,
+  planSchemeCreation,
+} from "@/lib/route-schemes/creation"
+import { HOLIDAY_POLICY_LABELS } from "@/lib/route-schemes/occurrences"
 import { planSchemeDeletion } from "@/lib/route-schemes/deletion"
 import {
   planSchemeEditReconciliation,
@@ -4096,6 +4100,11 @@ export function BusinessWorkspace({
       plannedStartTime: data.plannedStartTime,
       depotId: data.depotId ?? "",
       unloadingStationId: data.unloadingStationId ?? "",
+      // Guided setup options (2026-09-16). Generation honours "skip" only
+      // today; the policy and the edit policy are persisted for the engine.
+      holidayPolicy: data.holidayPolicy,
+      createAs: data.createAs,
+      editPolicy: data.editPolicy,
       // One group covering every service day stores as the legacy
       // single-assignment shape; anything else stores the groups explicitly
       // (D36) — never both, the group list is the single source of truth.
@@ -4127,6 +4136,8 @@ export function BusinessWorkspace({
               Effective: `${data.effectiveFrom} → ${data.effectiveTo || "ongoing"}`,
             }
           : {}),
+        "Holiday policy": HOLIDAY_POLICY_LABELS[data.holidayPolicy],
+        "Changes to a running scheme": SCHEME_EDIT_POLICY_LABELS[data.editPolicy],
         // Absent = no estimated start (issue #32) — the detail page shows "—".
         ...(data.plannedStartTime.trim()
           ? { "Planned start": data.plannedStartTime.trim() }
@@ -4197,7 +4208,7 @@ export function BusinessWorkspace({
       (candidate) => candidate.id === "calendars",
     )
     const creation = planSchemeCreation(
-      { scheme: newRecord, today: todayIso(), actorName },
+      { scheme: newRecord, today: todayIso(), actorName, createAs: data.createAs },
       {
         existingRoutes: routesModule
           ? getRecords("route-studio", routesModule.id, routesModule.records)
@@ -4235,18 +4246,26 @@ export function BusinessWorkspace({
       ...current,
       [newRecord.id]: [creationEvent],
     }))
-    setSelectedRecord(creation.scheme)
-    router.push(
-      getWorkspaceNavigationHref(
-        navigationBasePath,
-        workspace.id,
-        activeModule.id,
-        newRecord.id,
-      ),
-      { scroll: false },
-    )
+    // Guided Setup closes onto the list, where the new scheme appears with
+    // its status (2026-09-16 redesign); Quick create keeps opening the record.
+    if (origin.method !== "Guided Setup") {
+      setSelectedRecord(creation.scheme)
+      router.push(
+        getWorkspaceNavigationHref(
+          navigationBasePath,
+          workspace.id,
+          activeModule.id,
+          newRecord.id,
+        ),
+        { scroll: false },
+      )
+    }
     if (creation.outcome === "scheduled") {
       toast.success(`Route scheme created — ${newRecord.name}`, {
+        description: creation.message,
+      })
+    } else if (creation.outcome === "validated") {
+      toast.success(`Route scheme created as Validated — ${newRecord.name}`, {
         description: creation.message,
       })
     } else if (creation.outcome === "generation-failed") {

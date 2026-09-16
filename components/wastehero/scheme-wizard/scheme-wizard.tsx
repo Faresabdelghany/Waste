@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils"
 import { ConflictDialog } from "./conflict-dialog"
 import { StepGroups } from "./step-groups"
 import { StepRecurrence } from "./step-recurrence"
+import { StepReview } from "./step-review"
 import { StepRouteMap, type EditedRoutes } from "./step-route-map"
 import { StepScope } from "./step-scope"
 import { useWizardRecords } from "./use-wizard-records"
@@ -164,6 +165,9 @@ export function SchemeWizard({
                 editedRoutes={editedRoutes}
                 setEditedRoutes={setEditedRoutes}
               />
+            )}
+            {step === 5 && (
+              <StepReview data={data} update={update} model={model} records={records} go={setStep} />
             )}
           </div>
           <footer className="flex items-center justify-between gap-3 border-t border-border px-8 py-5">

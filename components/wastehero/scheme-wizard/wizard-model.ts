@@ -31,7 +31,11 @@ import {
   resolveStopMatches,
   type ContainerMatchProfile,
 } from "@/lib/route-schemes/matching"
-import { occurrencePreview, type OccurrencePreview } from "@/lib/route-schemes/occurrences"
+import {
+  formatClockTime,
+  occurrencePreview,
+  type OccurrencePreview,
+} from "@/lib/route-schemes/occurrences"
 import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
 import {
   recurrenceCadenceLabel,
@@ -42,7 +46,6 @@ import {
 } from "@/lib/route-schemes/recurrence"
 import type { SchemeValidationResult } from "@/lib/route-schemes/validation"
 
-import { formatClockTime } from "@/lib/route-schemes/occurrences"
 import type { WizardRecords } from "./use-wizard-records"
 
 export type WizardGroupSummary = {

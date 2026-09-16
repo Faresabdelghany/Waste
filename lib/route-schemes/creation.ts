@@ -97,6 +97,13 @@ export type SchemeCreationInput = {
    * marker; omitted, the marker uses the current time.
    */
   generatedAt?: string
+  /**
+   * The review step's "Create as" (2026-09-16): "validated" persists the
+   * Validated scheme without the initial generation and without Plan Ahead;
+   * "effective" (the default, and Quick Create's behaviour) runs the full
+   * create orchestration below.
+   */
+  createAs?: SchemeCreateAs
 }
 
 export type SchemeCreationRelated = {
@@ -111,6 +118,8 @@ export type SchemeCreationRelated = {
 export type SchemeCreationOutcome =
   /** Blocking issues — persisted as Draft, nothing generated (D18). */
   | "draft"
+  /** Created as Validated on purpose — nothing generated, Plan Ahead off. */
+  | "validated"
   /** Initial window generated (zero routes included) — Scheduled (D25). */
   | "scheduled"
   /** Validation passed but the generation run failed technically (D25). */
@@ -138,6 +147,10 @@ export type SchemeCreationPlan = {
 export const SCHEME_DRAFT_CREATION_NOTICE =
   "Saved as Draft — routes will not be generated until the blocking issues are resolved"
 
+/** The "Create as Validated" consequence line (2026-09-16). */
+export const SCHEME_VALIDATED_CREATION_NOTICE =
+  "Created as Validated — routes stay unpublished until Generate routes or Plan Ahead runs."
+
 /**
  * The creation-orchestration planner (SPEC area A): decides everything that
  * happens after "Create" from the persisted-to-be record and the current
@@ -162,6 +175,18 @@ export function planSchemeCreation(
       summary: null,
       outcome: "draft",
       message: `${SCHEME_DRAFT_CREATION_NOTICE}.`,
+    }
+  }
+
+  if (input.createAs === "validated") {
+    return {
+      scheme,
+      routes: [],
+      pickups: [],
+      window: null,
+      summary: null,
+      outcome: "validated",
+      message: SCHEME_VALIDATED_CREATION_NOTICE,
     }
   }
 
