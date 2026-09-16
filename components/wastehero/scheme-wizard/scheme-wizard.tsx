@@ -19,6 +19,8 @@ import {
 import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
 import { cn } from "@/lib/utils"
 
+import { ConflictDialog } from "./conflict-dialog"
+import { StepGroups } from "./step-groups"
 import { StepRecurrence } from "./step-recurrence"
 import { StepScope } from "./step-scope"
 import { useWizardRecords } from "./use-wizard-records"
@@ -44,6 +46,7 @@ export function SchemeWizard({
   const [step, setStepRaw] = useState<WizardStepId>(1)
   const [maxStep, setMaxStep] = useState<WizardStepId>(1)
   const [data, setData] = useState<GuidedSchemeData>(initialSchemeDraft)
+  const [conflictOpen, setConflictOpen] = useState(false)
 
   const records = useWizardRecords()
   const model = useMemo(() => buildWizardModel(data, records), [data, records])
@@ -72,6 +75,10 @@ export function SchemeWizard({
 
   const next = () => {
     if (step === 5) return
+    if (step === 3 && model.issues.length > 0) {
+      setConflictOpen(true)
+      return
+    }
     setStep((step + 1) as WizardStepId)
   }
   const back = () => {
@@ -142,6 +149,9 @@ export function SchemeWizard({
           <div className="flex-1 overflow-y-auto px-8 pb-6">
             {step === 1 && <StepScope data={data} update={update} records={records} />}
             {step === 2 && <StepRecurrence data={data} update={update} model={model} />}
+            {step === 3 && (
+              <StepGroups data={data} update={update} model={model} records={records} />
+            )}
           </div>
           <footer className="flex items-center justify-between gap-3 border-t border-border px-8 py-5">
             {step === 1 ? (
@@ -164,6 +174,8 @@ export function SchemeWizard({
             )}
           </footer>
         </section>
+
+        <ConflictDialog open={conflictOpen} onOpenChange={setConflictOpen} issues={model.issues} />
       </DialogContent>
     </Dialog>
   )
