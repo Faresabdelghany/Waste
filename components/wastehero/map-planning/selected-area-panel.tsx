@@ -20,11 +20,13 @@ import {
 } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { NO_FRACTION_COLOR } from "@/lib/map-planning/colors"
 import type { ServiceAreaCoverage } from "@/lib/map-planning/coverage"
 import { formatArea, formatShortDate, formatVolume, formatWeight } from "@/lib/map-planning/format"
 import { polygonAreaSquareMetres } from "@/lib/map-planning/geo"
+import type { MapPoint } from "@/lib/map-planning/points"
 import type { AreaRoutes, RouteBucket } from "@/lib/map-planning/routes"
-import type { SelectionShape } from "@/lib/map-planning/selection"
+import { containerIdsWithFraction, type SelectionShape } from "@/lib/map-planning/selection"
 import type { SelectionStatistics } from "@/lib/map-planning/statistics"
 import { cn } from "@/lib/utils"
 
@@ -38,6 +40,15 @@ export type SelectedAreaPanelProps = {
   /** Whether the routes are drawn on the map right now. */
   routesOnMap: boolean
   onToggleRoutesOnMap: () => void
+  /** The selected containers by address — the Containers list. */
+  containers: readonly MapPoint[]
+  /** What the map is pointing at, so the matching rows stand out. */
+  highlightedContainerIds: ReadonlySet<string>
+  highlightedRouteId: string | null
+  /** The pointer rests on a row naming these containers, or left one (null). */
+  onHoverContainers: (containerIds: readonly string[] | null) => void
+  onHoverRoute: (routeId: string | null) => void
+  onOpenContainer: (point: MapPoint) => void
   /** "September 16, 2026 – September 22, 2026", or "Per collection" without a window. */
   quantitiesLabel: string
   colorFor: (fraction: string) => string
@@ -54,7 +65,7 @@ const SHAPE_LABELS: Readonly<Record<SelectionShape["kind"], string>> = {
   polygon: "Polygon",
 }
 
-const SECTIONS = ["overview", "quantities", "fractions", "service-areas", "routes"]
+const SECTIONS = ["overview", "quantities", "fractions", "service-areas", "routes", "containers"]
 /** Routes listed under the counts before the list folds into "+N more". */
 const MAX_LISTED_ROUTES = 4
 
@@ -67,6 +78,12 @@ export function SelectedAreaPanel({
   routes,
   routesOnMap,
   onToggleRoutesOnMap,
+  containers,
+  highlightedContainerIds,
+  highlightedRouteId,
+  onHoverContainers,
+  onHoverRoute,
+  onOpenContainer,
   quantitiesLabel,
   colorFor,
   editing,
@@ -154,9 +171,15 @@ export function SelectedAreaPanel({
               {stats.byFraction.length === 0 ? (
                 <EmptyLine>No containers inside the shape yet.</EmptyLine>
               ) : (
-                <ul className="space-y-2.5">
+                <ul className="-mx-2 space-y-1">
                   {stats.byFraction.map(([fraction, count]) => (
-                    <li key={fraction} className="flex items-center gap-3">
+                    <li
+                      key={fraction}
+                      className="flex items-center gap-3 rounded-md px-2 py-0.5 hover:bg-accent/60"
+                      data-fraction-row={fraction}
+                      onMouseEnter={() => onHoverContainers(containerIdsWithFraction(containers, fraction))}
+                      onMouseLeave={() => onHoverContainers(null)}
+                    >
                       <span
                         className="size-2.5 shrink-0 rounded-full"
                         style={{ backgroundColor: colorFor(fraction) }}
@@ -239,9 +262,19 @@ export function SelectedAreaPanel({
                 <CountRow label="Completed" value={routes.completed} tone="completed" />
               </dl>
               {routes.routes.length > 0 && (
-                <ul className="mt-3 divide-y divide-border/70">
+                <ul className="-mx-2 mt-3 divide-y divide-border/70">
                   {routes.routes.slice(0, MAX_LISTED_ROUTES).map((route) => (
-                    <li key={route.id} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
+                    <li
+                      key={route.id}
+                      className={cn(
+                        "flex items-center gap-3 rounded-md px-2 py-2 hover:bg-accent/60",
+                        highlightedRouteId === route.id && "bg-accent",
+                      )}
+                      data-route-row={route.id}
+                      data-highlighted={highlightedRouteId === route.id ? "true" : undefined}
+                      onMouseEnter={() => onHoverRoute(route.id)}
+                      onMouseLeave={() => onHoverRoute(null)}
+                    >
                       <span
                         className="h-2.5 w-2.5 shrink-0 rounded-sm"
                         style={{ backgroundColor: route.color }}
@@ -259,10 +292,60 @@ export function SelectedAreaPanel({
                     </li>
                   ))}
                   {routes.routes.length > MAX_LISTED_ROUTES && (
-                    <li className="pt-2 text-xs text-muted-foreground">
+                    <li className="px-2 pt-2 text-xs text-muted-foreground">
                       +{routes.routes.length - MAX_LISTED_ROUTES} more
                     </li>
                   )}
+                </ul>
+              )}
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="containers">
+            <SectionTrigger aside={containers.length ? String(containers.length) : undefined}>
+              Containers
+            </SectionTrigger>
+            <AccordionContent className="px-5 pb-5">
+              {containers.length === 0 ? (
+                <EmptyLine>No containers inside the shape yet.</EmptyLine>
+              ) : (
+                <ul className="-mx-2 max-h-72 overflow-y-auto" data-testid="selected-containers">
+                  {containers.map((point) => {
+                    const highlighted = point.containerIds.some((id) => highlightedContainerIds.has(id))
+                    return (
+                      <li key={point.id}>
+                        <button
+                          type="button"
+                          data-container-row={point.id}
+                          data-highlighted={highlighted ? "true" : undefined}
+                          className={cn(
+                            "flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            highlighted && "bg-accent",
+                          )}
+                          onMouseEnter={() => onHoverContainers(point.containerIds)}
+                          onMouseLeave={() => onHoverContainers(null)}
+                          onFocus={() => onHoverContainers(point.containerIds)}
+                          onBlur={() => onHoverContainers(null)}
+                          onClick={() => onOpenContainer(point)}
+                        >
+                          <span
+                            className="size-2.5 shrink-0 rounded-full"
+                            style={{
+                              backgroundColor: point.fractions[0] ? colorFor(point.fractions[0]) : NO_FRACTION_COLOR,
+                            }}
+                            aria-hidden
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">{point.label}</span>
+                            <span className="block truncate text-xs text-muted-foreground">{point.sublabel}</span>
+                          </span>
+                          <span className="max-w-[40%] shrink-0 truncate text-xs text-muted-foreground">
+                            {point.fractions.join(" · ")}
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
             </AccordionContent>

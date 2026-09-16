@@ -1,6 +1,7 @@
-// What a map selection means (2026-09-16): its fraction summary, and the
-// Guided Setup draft it seeds — only what every selected container agrees
-// on, so the wizard never inherits a guess. The Selected area panel's
+// What a map selection means (2026-09-16): its fraction summary, the rows
+// its Containers list shows, the containers a fraction row stands for, and
+// the Guided Setup draft it seeds — only what every selected container
+// agrees on, so the wizard never inherits a guess. The Selected area panel's
 // numbers live in statistics.ts. Pure data logic.
 
 import type { GuidedSchemeData } from "../route-schemes/quick-create"
@@ -21,6 +22,21 @@ export function selectedPoints(
   selectedIds: ReadonlySet<string>,
 ): MapPoint[] {
   return points.filter((point) => selectedIds.has(point.id))
+}
+
+/** The Containers list: selected points by address, then by container id. */
+export function selectedContainerRows(
+  points: readonly MapPoint[],
+  selectedIds: ReadonlySet<string>,
+): MapPoint[] {
+  return selectedPoints(points, selectedIds).sort(
+    (a, b) => a.sublabel.localeCompare(b.sublabel) || a.label.localeCompare(b.label),
+  )
+}
+
+/** Every container at the given points that carries the fraction — what a fraction row highlights. */
+export function containerIdsWithFraction(points: readonly MapPoint[], fraction: string): string[] {
+  return points.filter((point) => point.fractions.includes(fraction)).flatMap((point) => point.containerIds)
 }
 
 export function selectionSummary(

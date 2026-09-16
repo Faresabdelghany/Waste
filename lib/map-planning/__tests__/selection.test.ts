@@ -4,7 +4,7 @@ import { describe, test } from "node:test"
 import type { BusinessRecord } from "../../data/business-modules"
 import { MAP_FILTER_READERS } from "../filters"
 import type { MapPoint } from "../points"
-import { schemeDraftFromSelection, selectionSummary } from "../selection"
+import { containerIdsWithFraction, schemeDraftFromSelection, selectedContainerRows, selectionSummary } from "../selection"
 
 function record(id: string, extra: Partial<BusinessRecord> = {}): BusinessRecord {
   return {
@@ -102,5 +102,30 @@ describe("MAP_FILTER_READERS", () => {
     assert.deepEqual(MAP_FILTER_READERS.planningAreas?.(container), ["Indre By Operations"])
     assert.deepEqual(MAP_FILTER_READERS.propertyTypes?.(container), ["Residential"])
     assert.deepEqual(MAP_FILTER_READERS.planningAreas?.(record("x", { facts: { "Planning area": "—" } })), [])
+  })
+})
+
+describe("selectedContainerRows", () => {
+  test("lists the selected points by address, then by container id", () => {
+    const points = [
+      { ...point("c", "Jagtvej 10", "Residual"), sublabel: "Jagtvej 10, 2200 København N" },
+      { ...point("b", "Ryesgade 45", "Residual"), sublabel: "Ryesgade 45, 2200 København N" },
+      { ...point("a", "Ryesgade 45", "Organic"), sublabel: "Ryesgade 45, 2200 København N" },
+      { ...point("z", "Elsewhere 1", "Paper"), sublabel: "Elsewhere 1" },
+    ]
+    const rows = selectedContainerRows(points, new Set(["a", "b", "c"]))
+    assert.deepEqual(rows.map((row) => row.id), ["c", "a", "b"], "Jagtvej before Ryesgade; a before b at the same address")
+  })
+})
+
+describe("containerIdsWithFraction", () => {
+  test("names every container at the given points that carries the fraction", () => {
+    const points = [
+      point("a", "Ryesgade 45", "Organic"),
+      { ...point("b", "Ryesgade 45", "Residual"), fractions: ["Residual", "Organic"] },
+      point("c", "Jagtvej 10", "Residual"),
+    ]
+    assert.deepEqual(containerIdsWithFraction(points, "Organic"), ["a", "b"])
+    assert.deepEqual(containerIdsWithFraction(points, "Glass"), [])
   })
 })

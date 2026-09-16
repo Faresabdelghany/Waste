@@ -49,9 +49,11 @@ const SEEDED_ROUTE_ID = "route-e2e-9001"
  * containerId on the pickups) and reload — the store merges browser records
  * with the fixtures.
  */
-async function seedDrawableRoute(page: Page): Promise<void> {
+async function seedDrawableRoute(
+  page: Page,
+  stops: readonly string[] = ["asset-82014", "asset-66420", "asset-44831"],
+): Promise<void> {
   const blank = { context: "", owner: "", updated: "", description: "", related: [], source: "", freshness: "" }
-  const stops = ["asset-82014", "asset-66420", "asset-44831"]
   const seeded = {
     "route-studio.routes": [
       {
@@ -83,11 +85,11 @@ async function seedDrawableRoute(page: Page): Promise<void> {
 }
 
 /**
- * Clicks a drawn route where its hit stroke is the topmost element: a marker
- * stands on every stop and clusters may sit on the segment, so walk the first
- * segment until the point under the pointer is the route itself.
+ * A point on a drawn route where its hit stroke is the topmost element: a
+ * marker stands on every stop and clusters may sit on the segment, so walk
+ * the first segment until the point under the pointer is the route itself.
  */
-async function clickRouteLine(page: Page, routeId: string): Promise<void> {
+async function pointOnRouteLine(page: Page, routeId: string): Promise<{ x: number; y: number }> {
   const point = await page.evaluate((id) => {
     const circles = Array.from(document.querySelectorAll(`[data-route-line="${id}"] circle`)).slice(0, 2)
     if (circles.length < 2) return null
@@ -105,6 +107,11 @@ async function clickRouteLine(page: Page, routeId: string): Promise<void> {
     return null
   }, routeId)
   if (!point) throw new Error(`no clear point on route ${routeId}`)
+  return point
+}
+
+async function clickRouteLine(page: Page, routeId: string): Promise<void> {
+  const point = await pointOnRouteLine(page, routeId)
   await page.mouse.click(point.x, point.y)
 }
 
@@ -326,4 +333,67 @@ test("the Routes layer draws a dated route coloured by status and a click on its
   )
   await page.keyboard.press("Escape")
   await expect(card).toHaveCount(0)
+})
+
+test("the Containers list mirrors the selection and hover highlights run both ways between rows and markers", async ({ page }) => {
+  await selectRectangle(page)
+  const panel = page.getByRole("region", { name: "Selected area" })
+  const rows = panel.getByTestId("selected-containers").locator("[data-container-row]")
+  const containerCount = Number(await panel.locator("dd").first().locator("xpath=../..").locator("dd").nth(2).innerText())
+  await expect(rows).toHaveCount(containerCount)
+  await expect(page.locator("[data-marker][data-highlighted]")).toHaveCount(0)
+
+  // Row → marker.
+  const firstRow = rows.first()
+  await firstRow.hover()
+  await expect(page.locator('[data-marker][data-highlighted="true"]').first()).toBeVisible()
+  await panel.getByRole("heading", { name: "Selected area" }).hover()
+  await expect(page.locator("[data-marker][data-highlighted]")).toHaveCount(0)
+
+  // Fraction row → markers.
+  await panel.locator("[data-fraction-row]").first().hover()
+  await expect(page.locator('[data-marker][data-highlighted="true"]').first()).toBeVisible()
+
+  // Marker → row: a selected marker clear of the panel, which covers the map's left edge.
+  const marker = await page.evaluate(() => {
+    const panelRight = document.querySelector('[data-testid="selected-area"]')!.getBoundingClientRect().right
+    for (const node of document.querySelectorAll('[data-marker][data-selected="true"]')) {
+      const box = node.getBoundingClientRect()
+      if (box.left > panelRight + 8) return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    }
+    return null
+  })
+  if (!marker) throw new Error("no selected marker clear of the panel")
+  await page.mouse.move(marker.x, marker.y)
+  await expect(rows.locator('xpath=self::*[@data-highlighted="true"]').first()).toBeVisible()
+  await page.locator(CANVAS).hover({ position: { x: 5, y: 5 } })
+  await expect(rows.locator('xpath=self::*[@data-highlighted="true"]')).toHaveCount(0)
+
+  // A row opens the container's details.
+  const label = await firstRow.locator("span.font-medium").innerText()
+  await firstRow.click()
+  await expect(page.getByRole("dialog")).toContainText(label)
+})
+
+test("hovering a route row highlights its line and hovering the line highlights the row", async ({ page }) => {
+  // Three stops on Vesterbro and Frederiksberg streets, inside the rectangle.
+  await seedDrawableRoute(page, ["asset-seed-91005", "asset-seed-91007", "asset-seed-91010"])
+  await selectRectangle(page)
+  const panel = page.getByRole("region", { name: "Selected area" })
+  const row = panel.locator(`[data-route-row="${SEEDED_ROUTE_ID}"]`)
+  await expect(row).toBeVisible()
+  await expect(row).toContainText("RC-9001")
+  await panel.getByRole("button", { name: "See on map" }).click()
+  const line = page.locator(`[data-route-line="${SEEDED_ROUTE_ID}"]`)
+  await expect(line).toBeVisible()
+  await expect(line).not.toHaveAttribute("data-highlighted", "true")
+
+  await row.hover()
+  await expect(line).toHaveAttribute("data-highlighted", "true")
+  await panel.getByRole("heading", { name: "Selected area" }).hover()
+  await expect(line).not.toHaveAttribute("data-highlighted", "true")
+
+  const point = await pointOnRouteLine(page, SEEDED_ROUTE_ID)
+  await page.mouse.move(point.x, point.y)
+  await expect(row).toHaveAttribute("data-highlighted", "true")
 })

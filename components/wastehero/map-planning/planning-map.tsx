@@ -88,6 +88,14 @@ export type PlanningMapProps = {
   routeLines: readonly AreaRoute[]
   /** A click on a route line — open its card at that point. */
   onRouteClick: (route: AreaRoute, anchor: { x: number; y: number }) => void
+  /** Container ids the panel is pointing at — their markers stand out. */
+  highlightedIds: ReadonlySet<string>
+  /** The route the panel is pointing at — its line stands out, the others fade. */
+  highlightedRouteId: string | null
+  /** The pointer rests on a marker (its containers) or left one (null). */
+  onHoverPoint: (containerIds: readonly string[] | null) => void
+  /** The pointer rests on a route line or left one (null). */
+  onHoverRoute: (routeId: string | null) => void
   onDrawComplete: (polygon: LngLat[]) => void
   onDrawCancel: () => void
   onPointClick: (point: MapPoint) => void
@@ -108,6 +116,14 @@ function clusterLabel(cluster: MapCluster, selected: number): string {
 
 const styleOf = (baseMap: BaseMapId) => baseMapById(baseMap).style as string | StyleSpecification
 
+/** The selection ring (amber) and, outside it, the highlight ring (foreground) a marker wears. */
+function markerRing(selected: boolean, highlighted: boolean): string | undefined {
+  const rings: string[] = []
+  if (selected) rings.push(`0 0 0 3px ${SELECTION_COLOR}`)
+  if (highlighted) rings.push(`0 0 0 ${selected ? 6 : 3}px var(--foreground)`)
+  return rings.length ? rings.join(", ") : undefined
+}
+
 export function PlanningMap({
   points,
   selectedIds,
@@ -120,6 +136,10 @@ export function PlanningMap({
   areaLayers,
   routeLines,
   onRouteClick,
+  highlightedIds,
+  highlightedRouteId,
+  onHoverPoint,
+  onHoverRoute,
   onDrawComplete,
   onDrawCancel,
   onPointClick,
@@ -281,6 +301,8 @@ export function PlanningMap({
           unproject={unproject}
           onShapeChange={onShapeChange}
           onRouteClick={onRouteClick}
+          highlightedRouteId={highlightedRouteId}
+          onHoverRoute={onHoverRoute}
         />
       )}
 
@@ -294,6 +316,7 @@ export function PlanningMap({
               if (cluster.count === 1) {
                 const point = cluster.points[0]
                 const selected = selectedIds.has(point.id)
+                const highlighted = highlightedIds.has(point.id)
                 const color = point.fractions[0] ? colorFor(point.fractions[0]) : NO_FRACTION_COLOR
                 const label = [point.label, point.fractions.join(", "), point.sublabel]
                   .filter(Boolean)
@@ -307,13 +330,19 @@ export function PlanningMap({
                         aria-pressed={selected}
                         data-marker="point"
                         data-selected={selected ? "true" : undefined}
+                        data-highlighted={highlighted ? "true" : undefined}
                         onClick={() => onPointClick(point)}
-                        className="pointer-events-auto absolute size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background shadow transition-transform hover:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onMouseEnter={() => onHoverPoint(point.containerIds)}
+                        onMouseLeave={() => onHoverPoint(null)}
+                        className={cn(
+                          "pointer-events-auto absolute size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background shadow transition-transform hover:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          highlighted && "z-10 scale-150",
+                        )}
                         style={{
                           left: anchor.x,
                           top: anchor.y,
                           backgroundColor: color,
-                          boxShadow: selected ? `0 0 0 3px ${SELECTION_COLOR}` : undefined,
+                          boxShadow: markerRing(selected, highlighted),
                         }}
                       />
                     </TooltipTrigger>
@@ -327,6 +356,7 @@ export function PlanningMap({
               }
               const trail = cluster.fractions.slice(0, MAX_TRAIL_DOTS)
               const overflow = cluster.fractions.length - trail.length
+              const highlightedCount = cluster.points.filter((point) => highlightedIds.has(point.id)).length
               return (
                 <Tooltip key={cluster.id}>
                   <TooltipTrigger asChild>
@@ -336,16 +366,19 @@ export function PlanningMap({
                       data-marker="cluster"
                       data-count={cluster.count}
                       data-selected={selectedCount > 0 ? "true" : undefined}
+                      data-highlighted={highlightedCount > 0 ? "true" : undefined}
                       onClick={() => handleClusterClick(cluster, anchor)}
-                      className="pointer-events-auto absolute flex -translate-y-1/2 items-center focus-visible:outline-none"
+                      onMouseEnter={() => onHoverPoint(cluster.points.flatMap((point) => point.containerIds))}
+                      onMouseLeave={() => onHoverPoint(null)}
+                      className={cn(
+                        "pointer-events-auto absolute flex -translate-y-1/2 items-center focus-visible:outline-none",
+                        highlightedCount > 0 && "z-10",
+                      )}
                       style={{ left: anchor.x - 16, top: anchor.y }}
                     >
                       <span
                         className="flex size-8 items-center justify-center rounded-full border border-border bg-background text-xs font-semibold text-foreground shadow-sm"
-                        style={{
-                          boxShadow:
-                            selectedCount > 0 ? `0 0 0 3px ${SELECTION_COLOR}` : undefined,
-                        }}
+                        style={{ boxShadow: markerRing(selectedCount > 0, highlightedCount > 0) }}
                       >
                         {cluster.count}
                       </span>
@@ -430,6 +463,8 @@ function ShapesOverlay({
   unproject,
   onShapeChange,
   onRouteClick,
+  highlightedRouteId,
+  onHoverRoute,
 }: {
   areas: readonly PlanningAreaLayer[]
   routes: readonly AreaRoute[]
@@ -439,6 +474,8 @@ function ShapesOverlay({
   unproject: (screen: ScreenPoint) => LngLat
   onShapeChange: (polygon: LngLat[]) => void
   onRouteClick: (route: AreaRoute, anchor: ScreenPoint) => void
+  highlightedRouteId: string | null
+  onHoverRoute: (routeId: string | null) => void
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [drag, setDrag] = useState<{ index: number; screen: ScreenPoint[] } | null>(null)
@@ -521,25 +558,36 @@ function ShapesOverlay({
         )
       })}
 
-      {routes.map((route) => {
+      {/* The highlighted route is drawn last so it sits on top of the others. */}
+      {[...routes]
+        .sort((a, b) => Number(a.id === highlightedRouteId) - Number(b.id === highlightedRouteId))
+        .map((route) => {
         const stops = route.stops.map(project).filter((point): point is ScreenPoint => point !== null)
         if (stops.length === 0) return null
         const open = (event: { clientX: number; clientY: number }) => onRouteClick(route, local(event))
+        const highlighted = highlightedRouteId === route.id
+        const faded = highlightedRouteId !== null && !highlighted
         return (
-          <g key={route.id} data-route-line={route.id} data-route-status={route.bucket}>
+          <g
+            key={route.id}
+            data-route-line={route.id}
+            data-route-status={route.bucket}
+            data-highlighted={highlighted ? "true" : undefined}
+            opacity={faded ? 0.3 : 1}
+          >
             {stops.length >= 2 && (
               <polyline
                 points={toPoints(stops)}
                 fill="none"
                 stroke={route.color}
-                strokeWidth={3}
+                strokeWidth={highlighted ? 5 : 3}
                 strokeLinejoin="round"
                 strokeLinecap="round"
-                strokeOpacity={0.85}
+                strokeOpacity={highlighted ? 1 : 0.85}
               />
             )}
             {stops.map((stop, index) => (
-              <circle key={index} cx={stop.x} cy={stop.y} r={4} fill="white" stroke={route.color} strokeWidth={2} />
+              <circle key={index} cx={stop.x} cy={stop.y} r={highlighted ? 5 : 4} fill="white" stroke={route.color} strokeWidth={2} />
             ))}
             {/* A wide, invisible stroke makes the line easy to hit; it is the interactive element. */}
             <polyline
@@ -556,6 +604,10 @@ function ShapesOverlay({
               className="cursor-pointer focus-visible:outline-none"
               style={{ pointerEvents: "stroke" }}
               onClick={open}
+              onMouseEnter={() => onHoverRoute(route.id)}
+              onMouseLeave={() => onHoverRoute(null)}
+              onFocus={() => onHoverRoute(route.id)}
+              onBlur={() => onHoverRoute(null)}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" && event.key !== " ") return
                 event.preventDefault()

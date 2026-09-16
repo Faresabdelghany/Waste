@@ -60,7 +60,11 @@ import {
   type CollectionWindow,
 } from "@/lib/map-planning/schedule"
 import type { SearchHit } from "@/lib/map-planning/search"
-import { schemeDraftFromSelection, type SelectionShape } from "@/lib/map-planning/selection"
+import {
+  schemeDraftFromSelection,
+  selectedContainerRows,
+  type SelectionShape,
+} from "@/lib/map-planning/selection"
 import { selectionStatistics } from "@/lib/map-planning/statistics"
 import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
 import { todayIso } from "@/lib/route-schemes/recurrence"
@@ -96,6 +100,8 @@ export type MapPlanningViewProps = {
 
 type ClusterList = { cluster: MapCluster; anchor: { x: number; y: number } }
 type RouteCard = { route: AreaRoute; anchor: { x: number; y: number } }
+/** What the pointer rests on — the map and the panel each highlight their side of it. */
+type Highlight = { kind: "containers"; ids: readonly string[] } | { kind: "route"; id: string }
 
 /** The quantities line when no collection window bounds them. */
 const PER_COLLECTION_LABEL = "Per collection"
@@ -127,6 +133,7 @@ export function MapPlanningView({
   // The Routes layer: every drawable route in the collection window.
   const [windowRoutesOnMap, setWindowRoutesOnMap] = useState(false)
   const [routeCard, setRouteCard] = useState<RouteCard | null>(null)
+  const [highlight, setHighlight] = useState<Highlight | null>(null)
   const [detail, setDetail] = useState<BusinessRecord | null>(null)
   const [clusterList, setClusterList] = useState<ClusterList | null>(null)
   const [wizardOpen, setWizardOpen] = useState(false)
@@ -187,6 +194,15 @@ export function MapPlanningView({
     () => filteredContainers.filter((record) => selectedContainerIds.has(record.id)),
     [filteredContainers, selectedContainerIds],
   )
+  const containerRows = useMemo(
+    () => selectedContainerRows(points, selectedContainerIds),
+    [points, selectedContainerIds],
+  )
+  const highlightedIds = useMemo(
+    () => new Set(highlight?.kind === "containers" ? highlight.ids : []),
+    [highlight],
+  )
+  const highlightedRouteId = highlight?.kind === "route" ? highlight.id : null
   const quantityRange = useMemo(() => collectionWindowRange(window, today), [today, window])
   const stats = useMemo(
     () =>
@@ -235,7 +251,12 @@ export function MapPlanningView({
     setShape(null)
     setEditingShape(false)
     setRoutesOnMap(false)
+    setHighlight(null)
   }
+
+  const hoverContainers = (ids: readonly string[] | null) =>
+    setHighlight(ids && ids.length > 0 ? { kind: "containers", ids } : null)
+  const hoverRoute = (id: string | null) => setHighlight(id ? { kind: "route", id } : null)
 
   /** The containers a shape holds — the selection a drawn or edited shape replaces. */
   const selectByPolygon = (polygon: LngLat[]) =>
@@ -346,6 +367,10 @@ export function MapPlanningView({
           areaLayers={visibleAreaLayers}
           routeLines={routeLines}
           onRouteClick={(route, anchor) => setRouteCard({ route, anchor })}
+          highlightedIds={highlightedIds}
+          highlightedRouteId={highlightedRouteId}
+          onHoverPoint={hoverContainers}
+          onHoverRoute={hoverRoute}
           onDrawComplete={completeDraw}
           onDrawCancel={() => setDrawTool("none")}
           onPointClick={openPoint}
@@ -386,6 +411,12 @@ export function MapPlanningView({
             routes={areaRoutes}
             routesOnMap={routesOnMap}
             onToggleRoutesOnMap={toggleRoutesOnMap}
+            containers={containerRows}
+            highlightedContainerIds={highlightedIds}
+            highlightedRouteId={highlightedRouteId}
+            onHoverContainers={hoverContainers}
+            onHoverRoute={hoverRoute}
+            onOpenContainer={openPoint}
             quantitiesLabel={quantitiesLabel}
             colorFor={colorFor}
             editing={editingShape}
@@ -493,7 +524,12 @@ export function MapPlanningView({
                   <li key={point.id}>
                     <button
                       type="button"
-                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent"
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent",
+                        point.containerIds.some((id) => highlightedIds.has(id)) && "bg-accent",
+                      )}
+                      onMouseEnter={() => hoverContainers(point.containerIds)}
+                      onMouseLeave={() => hoverContainers(null)}
                       onClick={() => {
                         setClusterList(null)
                         openPoint(point)
