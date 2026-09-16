@@ -96,3 +96,81 @@ export function offsetMetres(point: LngLat, eastMetres: number, northMetres: num
     lat: point.lat + northMetres / metresPerDegreeLat,
   }
 }
+
+/** Metres per degree of latitude; longitude scales by cos(lat). */
+const METRES_PER_DEGREE_LAT = 111_320
+
+/** Local flat-earth metres of a coordinate relative to a reference latitude. */
+function localMetres(point: LngLat, refLat: number): { x: number; y: number } {
+  const metresPerDegreeLng = METRES_PER_DEGREE_LAT * Math.cos((refLat * Math.PI) / 180)
+  return { x: point.lng * metresPerDegreeLng, y: point.lat * METRES_PER_DEGREE_LAT }
+}
+
+/** Shoelace area in square metres (equirectangular at the polygon's mean latitude). */
+export function polygonAreaSquareMetres(polygon: readonly LngLat[]): number {
+  if (polygon.length < 3) return 0
+  const refLat = polygon.reduce((sum, point) => sum + point.lat, 0) / polygon.length
+  let twice = 0
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = localMetres(polygon[j], refLat)
+    const b = localMetres(polygon[i], refLat)
+    twice += a.x * b.y - b.x * a.y
+  }
+  return Math.abs(twice) / 2
+}
+
+/** The vertex mean — the label anchor for hull-shaped polygons. */
+export function polygonCentroid(polygon: readonly LngLat[]): LngLat {
+  if (polygon.length === 0) return { lng: 0, lat: 0 }
+  return {
+    lng: polygon.reduce((sum, point) => sum + point.lng, 0) / polygon.length,
+    lat: polygon.reduce((sum, point) => sum + point.lat, 0) / polygon.length,
+  }
+}
+
+const cross = (o: LngLat, a: LngLat, b: LngLat) =>
+  (a.lng - o.lng) * (b.lat - o.lat) - (a.lat - o.lat) * (b.lng - o.lng)
+
+/**
+ * Andrew's monotone chain: the counter-clockwise convex hull of a point set,
+ * duplicates removed. Fewer than three distinct points come back as they are
+ * (the caller pads those into a box).
+ */
+export function convexHull(points: readonly LngLat[]): LngLat[] {
+  const distinct = Array.from(
+    new Map(points.map((point) => [`${point.lng},${point.lat}`, point] as const)).values(),
+  ).sort((a, b) => a.lng - b.lng || a.lat - b.lat)
+  if (distinct.length < 3) return distinct
+  const lower: LngLat[] = []
+  for (const point of distinct) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) {
+      lower.pop()
+    }
+    lower.push(point)
+  }
+  const upper: LngLat[] = []
+  for (const point of [...distinct].reverse()) {
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) {
+      upper.pop()
+    }
+    upper.push(point)
+  }
+  lower.pop()
+  upper.pop()
+  return [...lower, ...upper]
+}
+
+/** Pushes every vertex `metres` further from the centroid — a cheap buffer for convex shapes. */
+export function expandPolygon(polygon: readonly LngLat[], metres: number): LngLat[] {
+  if (polygon.length === 0) return []
+  const centre = polygonCentroid(polygon)
+  return polygon.map((point) => {
+    const c = localMetres(centre, centre.lat)
+    const p = localMetres(point, centre.lat)
+    const dx = p.x - c.x
+    const dy = p.y - c.y
+    const length = Math.hypot(dx, dy)
+    if (length === 0) return point
+    return offsetMetres(point, (dx / length) * metres, (dy / length) * metres)
+  })
+}
