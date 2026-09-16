@@ -61,6 +61,7 @@ import {
   SCHEME_EDIT_POLICY_LABELS,
   planSchemeCreation,
 } from "@/lib/route-schemes/creation"
+import { draftGroups } from "@/lib/route-schemes/draft"
 import { NO_HOLIDAY_LIST_LABEL, projectHolidaySource } from "@/lib/route-schemes/holidays"
 import { HOLIDAY_POLICY_LABELS } from "@/lib/route-schemes/occurrences"
 import { planSchemeDeletion } from "@/lib/route-schemes/deletion"
@@ -4038,7 +4039,8 @@ export function BusinessWorkspace({
       linkedIds.add(key)
       return linkRecord(fieldId, workspaceId, moduleId, recordId)
     }
-    const groups: CollectionGroup[] = data.groups.map((group) => {
+    // Groups inherit the scheme's waste fraction (step 1) — one source of truth.
+    const groups: CollectionGroup[] = draftGroups(data).map((group) => {
       const vehicle = linkOnce("plannedVehicleId", "fleet", "vehicles", group.vehicleId)
       const driver = linkOnce("plannedDriverId", "fleet", "drivers", group.driverId)
       const provider = linkOnce(
@@ -4090,6 +4092,8 @@ export function BusinessWorkspace({
       schemeName: data.schemeName.trim(),
       projectId: data.projectId ?? "",
       planningAreaId: data.planningAreaId ?? "",
+      wasteFraction: data.wasteFraction,
+      serviceType: data.serviceType,
       frequency: data.frequency,
       weekRotation: data.frequency === "every-2-weeks" ? data.weekRotation : "",
       serviceDays: data.serviceDays.join(", "),
@@ -4127,6 +4131,8 @@ export function BusinessWorkspace({
         Version: "v1",
         ...(project ? { Project: project.name } : {}),
         ...(area ? { "Planning area": area.name } : {}),
+        ...(data.wasteFraction ? { "Waste fraction": data.wasteFraction } : {}),
+        ...(data.serviceType ? { "Service type": data.serviceType } : {}),
         // Holidays follow the project (holiday model 2026-09-16).
         "Holiday list":
           projectHolidaySource(project, moduleRecords("plan", "calendars"))?.name ??

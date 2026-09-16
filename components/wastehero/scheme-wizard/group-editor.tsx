@@ -2,8 +2,9 @@
 
 // The collection group editor (nested Dialog): name, the scheme's service
 // days, vehicle, a default driver filtered to the vehicle's licence class,
-// waste fraction, container types, and a live summary of what the rule
-// matches. "Review containers" opens the matched list read-only.
+// the waste fraction inherited from step 1 (read-only, with a Change link
+// back), container types, and a live summary of what the rule matches.
+// "Review containers" opens the matched list read-only.
 
 import { useMemo, useState } from "react"
 
@@ -76,14 +77,12 @@ export function newWizardGroup(): CollectionGroup {
   }
 }
 
-/** The fractions and container types the container records actually carry. */
+/** The container types the container records actually carry. */
 function useContainerVocabulary(records: WizardRecords) {
   return useMemo(() => {
-    const fractions = new Set<string>()
     const types = new Set<string>()
     for (const record of records.containers) {
       const profile = containerMatchProfile(record)
-      for (const fraction of profile.fractions) fractions.add(fraction)
       if (profile.containerType) types.add(profile.containerType)
     }
     const order = (type: string) => {
@@ -91,7 +90,6 @@ function useContainerVocabulary(records: WizardRecords) {
       return index === -1 ? CONTAINER_TYPE_VOCABULARY.length : index
     }
     return {
-      fractions: [...fractions].sort((a, b) => a.localeCompare(b)),
       containerTypes: [...types].sort((a, b) => order(a) - order(b) || a.localeCompare(b)),
     }
   }, [records.containers])
@@ -104,6 +102,7 @@ export function GroupEditor({
   records,
   onClose,
   onSave,
+  onChangeScope,
 }: {
   editor: GroupEditorState
   data: GuidedSchemeData
@@ -111,6 +110,8 @@ export function GroupEditor({
   records: WizardRecords
   onClose: () => void
   onSave: (group: CollectionGroup) => void
+  /** "Change" beside the inherited fraction: closes the editor and returns to step 1. */
+  onChangeScope: () => void
 }) {
   const isEdit = editor.mode === "edit"
   const [group, setGroup] = useState<CollectionGroup>(() =>
@@ -124,7 +125,8 @@ export function GroupEditor({
   const drivers = eligibleDrivers(records.driverProfiles, vehicle)
   const driver = model.driverById(group.driverId)
   const driverOk = !driver || !vehicle || driverHoldsLicence(driver, vehicle.licenceClass)
-  const fraction = group.fractions[0] ?? ""
+  // Inherited from step 1 — the scheme's waste fraction is the one source of truth.
+  const fraction = data.wasteFraction
   const containerTypes = group.containerTypes ?? []
 
   const matches: StopMatchResult | null = useMemo(() => {
@@ -251,15 +253,28 @@ export function GroupEditor({
                 </SelectContent>
               </Select>
             </Field>
-            <Field id="group-fraction" label="Waste fraction">
-              <SimpleSelect
-                id="group-fraction"
-                value={fraction}
-                onChange={(value) => set("fractions", [value])}
-                options={vocabulary.fractions.map((value) => ({ value, label: value }))}
-                placeholder="Select fraction"
-              />
-            </Field>
+            <div className="space-y-2">
+              <div className="flex h-5 items-center justify-between">
+                <Label className="text-sm" id="group-fraction-label">
+                  Waste fraction
+                </Label>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-xs"
+                  onClick={onChangeScope}
+                >
+                  Change
+                </Button>
+              </div>
+              <p
+                className="flex h-10 items-center text-sm"
+                aria-labelledby="group-fraction-label"
+                data-testid="group-fraction"
+              >
+                {fraction || "—"}
+              </p>
+            </div>
             <div className="space-y-2">
               <Label className="text-sm" id="group-types-label">
                 Container types
@@ -327,7 +342,11 @@ export function GroupEditor({
           <Button variant="outline" className="rounded-xl" onClick={onClose}>
             Cancel
           </Button>
-          <Button className="rounded-xl" disabled={!valid} onClick={() => onSave(group)}>
+          <Button
+            className="rounded-xl"
+            disabled={!valid}
+            onClick={() => onSave({ ...group, fractions: fraction ? [fraction] : group.fractions })}
+          >
             {isEdit ? "Save group" : "Add group"}
           </Button>
         </DialogFooter>

@@ -80,6 +80,8 @@ export function StepReview({
             label="Planning area"
             value={model.nameOf(records.areas, data.planningAreaId) ?? DASH}
           />
+          <ReviewRow label="Waste fraction" value={data.wasteFraction || DASH} />
+          <ReviewRow label="Service type" value={data.serviceType || DASH} />
           <ReviewRow
             label="Depot · station"
             value={`${model.nameOf(records.depots, data.depotId) ?? DASH} · ${

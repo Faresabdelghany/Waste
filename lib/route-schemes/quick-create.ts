@@ -35,6 +35,14 @@ export interface GuidedSchemeData {
   schemeName: string
   projectId?: string
   planningAreaId?: string
+  /**
+   * The waste fraction this scheme plans for (display vocabulary, e.g.
+   * "Residual") — scoped once here; every collection group inherits it
+   * (draft.ts draftGroups). Empty only for a quick-created multi-fraction rule.
+   */
+  wasteFraction: string
+  /** The service type this scheme plans for (scope.ts vocabulary); optional. */
+  serviceType: string
   frequency: RecurrenceFrequency
   weekRotation: WeekRotation
   serviceDays: ServiceDay[]
@@ -57,10 +65,11 @@ export interface GuidedSchemeData {
   depotId?: string
   unloadingStationId?: string
   /**
-   * The scheme's collection groups (D33): each carries its days, fractions,
-   * vehicle, default driver, optional service provider, and its stop source —
-   * a matching rule (fractions + optional vehicle type inside the scheme's
-   * planning area) or explicitly picked containers. Record creation stores
+   * The scheme's collection groups (D33): each carries its days, the fraction
+   * it inherits from the scheme, vehicle, default driver, optional service
+   * provider, and its stop source — a matching rule (fraction + container
+   * types inside the scheme's planning area) or explicitly picked containers.
+   * Record creation stores
    * one group covering every service day in the legacy single-assignment
    * shape and anything else explicitly (collectionGroupsToValues).
    */
@@ -159,6 +168,11 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
     schemeName,
     projectId: optionalId(values, "projectId"),
     planningAreaId: optionalId(values, "planningAreaId"),
+    // The quick form's rule may name several fractions; the scheme-level
+    // fraction is set only when it names exactly one, so the group keeps the
+    // rule it was given either way.
+    wasteFraction: stopSource === "rule" && rule.fractions.length === 1 ? rule.fractions[0] : "",
+    serviceType: "",
     frequency: isRecurrenceFrequency(frequency) ? frequency : "weekly",
     weekRotation: weekRotation === "even" ? "even" : "odd",
     serviceDays,

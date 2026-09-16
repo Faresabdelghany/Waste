@@ -5,6 +5,7 @@
 import { SCHEME_CREATE_AS_LABELS, SCHEME_EDIT_POLICY_LABELS } from "@/lib/route-schemes/creation"
 import { HOLIDAY_POLICIES, HOLIDAY_POLICY_LABELS } from "@/lib/route-schemes/occurrences"
 import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
+import { SCHEME_SERVICE_TYPES } from "@/lib/route-schemes/scope"
 import {
   OFFERED_RECURRENCE_FREQUENCIES,
   RECURRENCE_FREQUENCY_LABELS,
@@ -78,6 +79,11 @@ export const HOLIDAY_POLICY_OPTIONS: readonly SelectOption[] = HOLIDAY_POLICIES.
   label: HOLIDAY_POLICY_LABELS[value],
 }))
 
+export const SERVICE_TYPE_OPTIONS: readonly SelectOption[] = SCHEME_SERVICE_TYPES.map((value) => ({
+  value,
+  label: value,
+}))
+
 export const CREATE_AS_OPTIONS: readonly SelectOption[] = Object.entries(SCHEME_CREATE_AS_LABELS).map(
   ([value, label]) => ({ value, label }),
 )
@@ -90,6 +96,8 @@ export const EDIT_POLICY_OPTIONS: readonly SelectOption[] = Object.entries(
 export function initialSchemeDraft(): GuidedSchemeData {
   return {
     schemeName: "",
+    wasteFraction: "",
+    serviceType: "",
     frequency: "weekly",
     weekRotation: "odd",
     serviceDays: [],

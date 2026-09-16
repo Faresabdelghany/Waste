@@ -155,7 +155,7 @@ export function SchemeWizard({
             {step === 1 && <StepScope data={data} update={update} records={records} />}
             {step === 2 && <StepRecurrence data={data} update={update} model={model} />}
             {step === 3 && (
-              <StepGroups data={data} update={update} model={model} records={records} />
+              <StepGroups data={data} update={update} model={model} records={records} go={setStep} />
             )}
             {step === 4 && (
               <StepRouteMap

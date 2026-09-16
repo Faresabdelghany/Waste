@@ -30,17 +30,20 @@ import { GroupEditor, type GroupEditorState } from "./group-editor"
 import { LoadMeter } from "./load-meter"
 import type { WizardRecords } from "./use-wizard-records"
 import type { WizardModel } from "./wizard-model"
+import type { WizardStepId } from "./wizard-options"
 
 export function StepGroups({
   data,
   update,
   model,
   records,
+  go,
 }: {
   data: GuidedSchemeData
   update: (patch: Partial<GuidedSchemeData>) => void
   model: WizardModel
   records: WizardRecords
+  go: (step: WizardStepId) => void
 }) {
   const [editor, setEditor] = useState<GroupEditorState | null>(null)
   const { serviceDays, issues, groups } = model
@@ -223,6 +226,10 @@ export function StepGroups({
           records={records}
           onClose={() => setEditor(null)}
           onSave={save}
+          onChangeScope={() => {
+            setEditor(null)
+            go(1)
+          }}
         />
       )}
     </div>

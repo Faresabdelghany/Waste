@@ -9,6 +9,7 @@ import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
 
 import type { WizardRecords } from "./use-wizard-records"
 import { Field, SimpleSelect } from "./wizard-fields"
+import { SERVICE_TYPE_OPTIONS } from "./wizard-options"
 
 const toOptions = (records: readonly BusinessRecord[]) =>
   records.map((record) => ({ value: record.id, label: record.name }))
@@ -50,6 +51,24 @@ export function StepScope({
             onChange={(planningAreaId) => update({ planningAreaId })}
             options={toOptions(records.areas)}
             placeholder="Select planning area"
+          />
+        </Field>
+        <Field id="scheme-fraction" label="Waste fraction">
+          <SimpleSelect
+            id="scheme-fraction"
+            value={data.wasteFraction}
+            onChange={(wasteFraction) => update({ wasteFraction })}
+            options={records.wasteFractions.map((value) => ({ value, label: value }))}
+            placeholder="Select waste fraction"
+          />
+        </Field>
+        <Field id="scheme-service-type" label="Service type">
+          <SimpleSelect
+            id="scheme-service-type"
+            value={data.serviceType}
+            onChange={(serviceType) => update({ serviceType })}
+            options={SERVICE_TYPE_OPTIONS}
+            placeholder="Select service type"
           />
         </Field>
       </div>

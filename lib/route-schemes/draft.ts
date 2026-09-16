@@ -13,6 +13,7 @@ import {
   schemeAssignmentSources,
   schemeStopRuleSources,
   schemeValidationGroups,
+  type CollectionGroup,
   type CollectionGroupResolution,
 } from "./groups"
 import { schemesInPlanning } from "./lifecycle"
@@ -31,6 +32,18 @@ const draftProjectIds = (data: GuidedSchemeData): string[] | undefined =>
   data.projectId ? [data.projectId] : undefined
 
 /**
+ * The draft's collection groups with the scheme's waste fraction applied:
+ * the fraction is scoped once on the scheme (step 1) and every group
+ * inherits it — the single source of truth for what the rules match. A
+ * draft without a scheme-level fraction (a quick-created multi-fraction
+ * rule) keeps each group's own list.
+ */
+export function draftGroups(data: GuidedSchemeData): CollectionGroup[] {
+  if (!data.wasteFraction) return data.groups
+  return data.groups.map((group) => ({ ...group, fractions: [data.wasteFraction] }))
+}
+
+/**
  * The draft's collection groups resolved per day against the live container
  * records — the same seam generation uses once the scheme is saved (manual
  * picks, rule matches, and the manual-beats-rule / first-rule-group-wins
@@ -41,7 +54,7 @@ export function resolvedDraftGroups(
   containers: readonly BusinessRecord[],
 ): CollectionGroupResolution {
   return resolveCollectionGroupPlans({
-    groups: data.groups,
+    groups: draftGroups(data),
     serviceDays: data.serviceDays,
     areaId: data.planningAreaId,
     projectIds: draftProjectIds(data),
@@ -88,7 +101,7 @@ export function validateGuidedScheme(
       areaId: data.planningAreaId,
       frequencyReconciliation: { frequency: data.frequency, promises },
       ...schemeValidationGroups(
-        data.groups,
+        draftGroups(data),
         resolution,
         (vehicleId) =>
           vehicleTypeOfRecord(vehicles.find((vehicle) => vehicle.id === vehicleId)),

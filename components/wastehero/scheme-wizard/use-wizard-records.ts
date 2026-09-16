@@ -1,9 +1,9 @@
 "use client"
 
 // The records the guided setup reads, in one hook: fixture data merged with
-// user-created records from the record store, plus the fleet profiles and
-// the container-weight resolver (asset-management catalogue first, fallback
-// table second) the estimates need.
+// user-created records from the record store, the Settings waste fractions,
+// plus the fleet profiles and the container-weight resolver
+// (asset-management catalogue first, fallback table second) the estimates need.
 
 import { useMemo } from "react"
 
@@ -32,6 +32,8 @@ export type WizardRecords = {
   containers: BusinessRecord[]
   schemes: BusinessRecord[]
   allocations: BusinessRecord[]
+  /** Active waste fraction names from Settings master data — the step 1 options. */
+  wasteFractions: string[]
   vehicleProfiles: VehicleProfile[]
   driverProfiles: DriverProfile[]
   weightKg: ContainerWeightResolver
@@ -55,7 +57,7 @@ export function useWizardRecords(): WizardRecords {
   const containers = useModuleRecords("resources", "containers")
   const schemes = useModuleRecords("route-studio", "schemes")
   const allocations = useModuleRecords("fleet", "vehicle-planning")
-  const { containerTypes } = useAssetManagementStore()
+  const { containerTypes, wasteFractions } = useAssetManagementStore()
 
   const weightKg = useMemo<ContainerWeightResolver>(() => {
     const byName = new Map(containerTypes.map((type) => [type.name.toLowerCase(), type]))
@@ -85,6 +87,9 @@ export function useWizardRecords(): WizardRecords {
     containers,
     schemes,
     allocations,
+    wasteFractions: wasteFractions
+      .filter((fraction) => fraction.status === "Active")
+      .map((fraction) => fraction.name),
     vehicleProfiles: vehicles.map(vehicleProfile),
     driverProfiles: drivers.map(driverProfile),
     weightKg,

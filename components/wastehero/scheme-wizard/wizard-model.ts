@@ -6,7 +6,12 @@
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { projectHolidaySource, type HolidaySource } from "@/lib/route-schemes/holidays"
-import { draftRecurrence, resolvedDraftGroups, validateGuidedScheme } from "@/lib/route-schemes/draft"
+import {
+  draftGroups,
+  draftRecurrence,
+  resolvedDraftGroups,
+  validateGuidedScheme,
+} from "@/lib/route-schemes/draft"
 import {
   estimateLoadTonnes,
   estimateRoute,
@@ -137,7 +142,8 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
   const resolution = resolvedDraftGroups(data, records.containers)
   const projectIds = data.projectId ? [data.projectId] : undefined
 
-  const groups: WizardGroupSummary[] = data.groups.map((group, index) => {
+  // Groups inherit the scheme's waste fraction (step 1) — one source of truth.
+  const groups: WizardGroupSummary[] = draftGroups(data).map((group, index) => {
     const vehicle = vehicleById(group.vehicleId)
     const matched =
       group.stopSource === "rule"
@@ -231,12 +237,14 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
     0,
   )
 
-  const step1Ok = Boolean(data.schemeName.trim() && data.projectId && data.planningAreaId)
+  const step1Ok = Boolean(
+    data.schemeName.trim() && data.projectId && data.planningAreaId && data.wasteFraction,
+  )
   const step2Ok = serviceDays.length > 0 && occurrences.rows.length > 0
   const step3Ok = issues.length === 0
 
   const summaries: WizardModel["summaries"] = {
-    1: nameOf(records.areas, data.planningAreaId) ?? "",
+    1: [nameOf(records.areas, data.planningAreaId), data.wasteFraction].filter(Boolean).join(" · "),
     2:
       recurrence && serviceDays.length > 0
         ? [
