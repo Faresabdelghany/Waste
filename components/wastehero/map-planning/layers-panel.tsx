@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { PlanningAreaLayer } from "@/lib/map-planning/areas"
 import { BASE_MAPS, type BaseMap, type BaseMapId } from "@/lib/map-planning/base-maps"
+import { UNCOVERED_COLOR } from "@/lib/map-planning/coverage-gaps"
 import { ROUTE_BUCKET_COLORS, type AreaRoute, type RouteBucket } from "@/lib/map-planning/routes"
 import type { ServiceAreaLayer } from "@/lib/map-planning/service-areas"
 import { cn } from "@/lib/utils"
@@ -40,7 +41,22 @@ export type LayersPanelProps = {
   onToggleRoutes: (enabled: boolean) => void
   /** "Any date", "Next 7 days", … — names the window the routes are read from. */
   windowLabel: string
+  /** The Coverage gaps layer: whether it is on, and the registry-wide counts behind it. */
+  coverage: CoverageLayer
+  onToggleCoverage: (enabled: boolean) => void
   className?: string
+}
+
+export type CoverageLayer = {
+  on: boolean
+  /** Containers that need service. */
+  needing: number
+  /** …of which no counting Route Scheme lists. */
+  uncovered: number
+  /** Scheme stops on containers that cannot be served. */
+  unservable: number
+  /** Route Schemes whose stops counted. */
+  schemes: number
 }
 
 const ROUTE_BUCKET_LABELS: Readonly<Record<RouteBucket, string>> = {
@@ -67,6 +83,8 @@ export function LayersPanel({
   routesOnMap,
   onToggleRoutes,
   windowLabel,
+  coverage,
+  onToggleCoverage,
   className,
 }: LayersPanelProps) {
   const drawable = areas.filter((area) => area.bounds !== null)
@@ -141,6 +159,34 @@ export function LayersPanel({
                   ))}
                 </span>
               )}
+            </label>
+          </div>
+        </div>
+        <div className="border-b border-border px-3 py-3" data-testid="coverage-layer">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">Coverage</p>
+          <div className="flex items-start gap-2 rounded-md px-1 py-1 hover:bg-accent/60">
+            <Checkbox
+              id="coverage-layer-toggle"
+              className="mt-0.5"
+              checked={coverage.on}
+              onCheckedChange={(checked) => onToggleCoverage(checked === true)}
+            />
+            <label htmlFor="coverage-layer-toggle" className="min-w-0 flex-1 cursor-pointer">
+              <span className="flex items-center gap-1.5">
+                <span
+                  className="size-2.5 shrink-0 rounded-full border-2 bg-background"
+                  style={{ borderColor: UNCOVERED_COLOR }}
+                  aria-hidden
+                />
+                Coverage gaps
+              </span>
+              <span className="mt-0.5 block text-[11px] text-muted-foreground tabular-nums">
+                {coverage.uncovered} of {coverage.needing} containers needing service are in no Route Scheme
+                {coverage.unservable > 0
+                  ? ` · ${coverage.unservable} scheme ${coverage.unservable === 1 ? "stop" : "stops"} cannot be served`
+                  : ""}
+                {` · ${coverage.schemes} ${coverage.schemes === 1 ? "scheme" : "schemes"} counted`}
+              </span>
             </label>
           </div>
         </div>

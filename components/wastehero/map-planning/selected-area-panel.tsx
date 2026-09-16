@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { NO_FRACTION_COLOR } from "@/lib/map-planning/colors"
 import type { ServiceAreaCoverage } from "@/lib/map-planning/coverage"
+import { UNCOVERED_COLOR, type CoverageCounts } from "@/lib/map-planning/coverage-gaps"
 import { formatArea, formatShortDate, formatVolume, formatWeight } from "@/lib/map-planning/format"
 import { polygonAreaSquareMetres } from "@/lib/map-planning/geo"
 import type { MapPoint } from "@/lib/map-planning/points"
@@ -42,6 +43,12 @@ export type SelectedAreaPanelProps = {
   onToggleRoutesOnMap: () => void
   /** Replay a route stop by stop on the map. */
   onPlayRoute: (route: AreaRoute) => void
+  /** Route Scheme coverage of the selected containers. */
+  coverage: CoverageCounts
+  coverageOnMap: boolean
+  onToggleCoverageOnMap: () => void
+  /** Opens the wizard seeded from the selected containers no scheme lists. */
+  onCreateSchemeForUncovered: () => void
   /** The selected containers by address — the Containers list. */
   containers: readonly MapPoint[]
   /** What the map is pointing at, so the matching rows stand out. */
@@ -69,7 +76,7 @@ const SHAPE_LABELS: Readonly<Record<SelectionShape["kind"], string>> = {
   polygon: "Polygon",
 }
 
-const SECTIONS = ["overview", "quantities", "fractions", "service-areas", "routes", "containers"]
+const SECTIONS = ["overview", "coverage", "quantities", "fractions", "service-areas", "routes", "containers"]
 /** Routes listed under the counts before the list folds into "+N more". */
 const MAX_LISTED_ROUTES = 4
 
@@ -83,6 +90,10 @@ export function SelectedAreaPanel({
   routesOnMap,
   onToggleRoutesOnMap,
   onPlayRoute,
+  coverage,
+  coverageOnMap,
+  onToggleCoverageOnMap,
+  onCreateSchemeForUncovered,
   containers,
   highlightedContainerIds,
   highlightedRouteId,
@@ -155,6 +166,46 @@ export function SelectedAreaPanel({
                 <StatTile label="Collection points" value={stats.collectionPoints} />
                 <StatTile label="Containers" value={stats.containers} />
               </dl>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="coverage">
+            <SectionTrigger
+              aside={coverage.uncovered > 0 ? `${coverage.uncovered} uncovered` : undefined}
+            >
+              Coverage
+            </SectionTrigger>
+            <AccordionContent className="px-5 pb-5" data-testid="selection-coverage">
+              <dl className="divide-y divide-border/70">
+                <CountRow label="Need service" value={coverage.needing} />
+                <CountRow label="Covered by a route scheme" value={coverage.covered} tone="completed" />
+                <CountRow label="In no route scheme" value={coverage.uncovered} color={UNCOVERED_COLOR} />
+                <CountRow label="Scheme stops that cannot be served" value={coverage.unservable} />
+              </dl>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Needing service: Available with an agreement that is not ended, paused, or future. Covered: listed
+                by a Validated, Scheduled, or Effective Route Scheme.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  variant={coverageOnMap ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs"
+                  aria-pressed={coverageOnMap}
+                  onClick={onToggleCoverageOnMap}
+                >
+                  <MapTrifold className="h-3.5 w-3.5" />
+                  {coverageOnMap ? "Hide gaps on map" : "Show gaps on map"}
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={!canCreateScheme || coverage.uncovered === 0}
+                  onClick={onCreateSchemeForUncovered}
+                >
+                  Create scheme for uncovered
+                </Button>
+              </div>
             </AccordionContent>
           </AccordionItem>
 
@@ -447,15 +498,35 @@ const COUNT_TONES: Readonly<Record<RouteBucket, { dot: string; value: string }>>
 }
 
 /** A label/value row with the status colour on the dot and the number. */
-function CountRow({ label, value, tone }: { label: string; value: number; tone?: RouteBucket }) {
+function CountRow({
+  label,
+  value,
+  tone,
+  color,
+}: {
+  label: string
+  value: number
+  tone?: RouteBucket
+  /** An explicit dot and value colour, for counts outside the route status tones. */
+  color?: string
+}) {
   const colours = tone ? COUNT_TONES[tone] : null
   return (
     <div className="flex items-center justify-between gap-4 py-2 first:pt-0 last:pb-0">
       <dt className="flex items-center gap-2 text-muted-foreground">
-        <span className={cn("size-2.5 rounded-full", colours ? colours.dot : "bg-foreground")} aria-hidden />
+        <span
+          className={cn("size-2.5 rounded-full", colours ? colours.dot : !color && "bg-foreground")}
+          style={color ? { backgroundColor: color } : undefined}
+          aria-hidden
+        />
         {label}
       </dt>
-      <dd className={cn("text-base font-semibold tabular-nums", colours?.value)}>{value}</dd>
+      <dd
+        className={cn("text-base font-semibold tabular-nums", colours?.value)}
+        style={color && value > 0 ? { color } : undefined}
+      >
+        {value}
+      </dd>
     </div>
   )
 }

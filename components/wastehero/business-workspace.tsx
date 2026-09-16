@@ -1497,6 +1497,7 @@ export function BusinessWorkspace({
       serviceAreas: moduleRecords("service-providers", "service-areas"),
       routes: moduleRecords("route-studio", "routes"),
       pickups: moduleRecords("route-studio", "pickups"),
+      schemes: moduleRecords("route-studio", "schemes"),
     }
   }, [isMapPlanningView, moduleRecords])
   const containersModuleDefinition = getModuleDefinition({
@@ -4892,6 +4893,7 @@ export function BusinessWorkspace({
           serviceAreas={mapPlanningRecords.serviceAreas}
           routes={mapPlanningRecords.routes}
           pickups={mapPlanningRecords.pickups}
+          schemes={mapPlanningRecords.schemes}
           containersModule={containersModuleDefinition}
           canCreateScheme={hasGrant("create")}
           canCreateServiceArea={hasGrantOn(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId, "create")}

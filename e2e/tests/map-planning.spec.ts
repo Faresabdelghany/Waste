@@ -504,6 +504,30 @@ test("a route row in the Selected area panel can be played without the Routes la
   await expect(bar.getByTestId("playback-times")).toHaveText("No times recorded")
 })
 
+test("the Coverage gaps layer rings containers no Route Scheme lists and the panel counts them", async ({ page }) => {
+  await page.getByRole("button", { name: /^Layers/ }).click()
+  const layers = page.getByRole("dialog", { name: "Layers" })
+  const coverage = layers.getByTestId("coverage-layer")
+  await expect(coverage).toContainText("Coverage gaps")
+  await expect(coverage).toContainText(/\d+ of \d+ containers needing service are in no Route Scheme/)
+  await expect(coverage).toContainText("2 schemes counted")
+  await expect(page.locator("[data-uncovered-count]")).toHaveCount(0)
+  await coverage.getByRole("checkbox", { name: /Coverage gaps/ }).click()
+  await page.keyboard.press("Escape")
+  await expect(layers).toHaveCount(0)
+  // Clusters carry the count of their containers no scheme lists.
+  await expect(page.locator("[data-uncovered-count]").first()).toBeVisible()
+
+  await selectRectangle(page)
+  const panel = page.getByRole("region", { name: "Selected area" })
+  const section = panel.getByTestId("selection-coverage")
+  await expect(section).toContainText("Need service")
+  await expect(section).toContainText("In no route scheme")
+  await expect(section.getByRole("button", { name: "Hide gaps on map" })).toBeVisible()
+  await section.getByRole("button", { name: "Create scheme for uncovered" }).click()
+  await expect(page.getByRole("dialog", { name: "New route scheme" })).toBeVisible()
+})
+
 test("hovering a route row highlights its line and hovering the line highlights the row", async ({ page }) => {
   // Three stops on Vesterbro and Frederiksberg streets, inside the rectangle.
   await seedDrawableRoute(page, ["asset-seed-91005", "asset-seed-91007", "asset-seed-91010"])

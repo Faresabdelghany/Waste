@@ -44,6 +44,7 @@ import {
 import type { MapCluster } from "@/lib/map-planning/clusters"
 import { fractionColor } from "@/lib/map-planning/colors"
 import { serviceAreasForSelection } from "@/lib/map-planning/coverage"
+import { coverageGaps, coverageInSelection } from "@/lib/map-planning/coverage-gaps"
 import { MAP_FILTER_READERS } from "@/lib/map-planning/filters"
 import { formatDateRange, formatDistance, formatDuration, formatShortDate } from "@/lib/map-planning/format"
 import { boundsFromPolygon, pointInPolygon, type LngLat } from "@/lib/map-planning/geo"
@@ -103,6 +104,8 @@ export type MapPlanningViewProps = {
   serviceAreas: readonly BusinessRecord[]
   routes: readonly BusinessRecord[]
   pickups: readonly BusinessRecord[]
+  /** Every Route Scheme — coverage gaps and scheme comparison resolve their stops. */
+  schemes: readonly BusinessRecord[]
   /** The Containers module — the details sheet reads its copy and lifecycle. */
   containersModule: ModuleDefinition
   canCreateScheme: boolean
@@ -128,6 +131,7 @@ export function MapPlanningView({
   serviceAreas,
   routes,
   pickups,
+  schemes,
   containersModule,
   canCreateScheme,
   onCreateScheme,
@@ -152,6 +156,10 @@ export function MapPlanningView({
   const [windowRoutesOnMap, setWindowRoutesOnMap] = useState(false)
   const [routeCard, setRouteCard] = useState<RouteCard | null>(null)
   const [playback, setPlayback] = useState<Playback | null>(null)
+  // The Coverage gaps layer: containers needing service that no scheme lists.
+  const [coverageOnMap, setCoverageOnMap] = useState(false)
+  // A wizard seed narrower than the whole selection ("Create scheme for uncovered").
+  const [wizardSeedOverride, setWizardSeedOverride] = useState<Partial<GuidedSchemeData> | null>(null)
   const [highlight, setHighlight] = useState<Highlight | null>(null)
   const [detail, setDetail] = useState<BusinessRecord | null>(null)
   const [clusterList, setClusterList] = useState<ClusterList | null>(null)
@@ -339,6 +347,17 @@ export function MapPlanningView({
   const canReset = activeChips > 0 || window !== DEFAULT_COLLECTION_WINDOW
   const hasSelection = shape !== null || selectedContainerIds.size > 0
 
+  // Coverage resolves every counting scheme's stops against the registry as it is now.
+  const gaps = useMemo(() => coverageGaps(containers, schemes, today), [containers, schemes, today])
+  const selectionCoverage = useMemo(
+    () => coverageInSelection(gaps, selectedContainerIds),
+    [gaps, selectedContainerIds],
+  )
+  const uncoveredSelectedIds = useMemo(
+    () => new Set([...selectedContainerIds].filter((id) => gaps.uncovered.has(id))),
+    [gaps.uncovered, selectedContainerIds],
+  )
+
   /* -------------------------------- actions -------------------------------- */
 
   const resetAll = () => {
@@ -424,6 +443,10 @@ export function MapPlanningView({
   }
 
   const startWizard = () => setWizardOpen(true)
+  const startWizardForUncovered = () => {
+    setWizardSeedOverride(schemeDraftFromSelection(points, uncoveredSelectedIds))
+    setWizardOpen(true)
+  }
   const wizardSeed = useMemo(
     () => schemeDraftFromSelection(points, selectedContainerIds),
     [points, selectedContainerIds],
@@ -514,6 +537,7 @@ export function MapPlanningView({
                 }
               : null
           }
+          uncoveredIds={coverageOnMap ? gaps.uncovered : null}
           highlightedIds={highlightedIds}
           highlightedRouteId={highlightedRouteId}
           onHoverPoint={hoverContainers}
@@ -561,6 +585,10 @@ export function MapPlanningView({
             routesOnMap={routesOnMap}
             onToggleRoutesOnMap={toggleRoutesOnMap}
             onPlayRoute={startPlayback}
+            coverage={selectionCoverage}
+            coverageOnMap={coverageOnMap}
+            onToggleCoverageOnMap={() => setCoverageOnMap((current) => !current)}
+            onCreateSchemeForUncovered={startWizardForUncovered}
             containers={containerRows}
             highlightedContainerIds={highlightedIds}
             highlightedRouteId={highlightedRouteId}
@@ -628,6 +656,14 @@ export function MapPlanningView({
             routesOnMap={windowRoutesOnMap}
             onToggleRoutes={setWindowRoutesOnMap}
             windowLabel={COLLECTION_WINDOW_LABELS[window]}
+            coverage={{
+              on: coverageOnMap,
+              needing: gaps.needing.size,
+              uncovered: gaps.uncovered.size,
+              unservable: gaps.unservable.size,
+              schemes: gaps.schemesConsidered,
+            }}
+            onToggleCoverage={setCoverageOnMap}
           />
         </div>
 
@@ -776,12 +812,16 @@ export function MapPlanningView({
       {wizardOpen && (
         <SchemeWizard
           open
-          initialData={wizardSeed}
+          initialData={wizardSeedOverride ?? wizardSeed}
           onOpenChange={(open) => {
-            if (!open) setWizardOpen(false)
+            if (!open) {
+              setWizardOpen(false)
+              setWizardSeedOverride(null)
+            }
           }}
           onCreate={(data) => {
             setWizardOpen(false)
+            setWizardSeedOverride(null)
             onCreateScheme(data)
             clearSelection()
           }}

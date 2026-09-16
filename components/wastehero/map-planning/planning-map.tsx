@@ -37,6 +37,7 @@ import type { PlanningAreaLayer } from "@/lib/map-planning/areas"
 import { baseMapById, type BaseMapId } from "@/lib/map-planning/base-maps"
 import { clusterPoints, type MapCluster } from "@/lib/map-planning/clusters"
 import { NO_FRACTION_COLOR, SELECTION_COLOR } from "@/lib/map-planning/colors"
+import { UNCOVERED_COLOR } from "@/lib/map-planning/coverage-gaps"
 import { polygonCentroid, worldPoint, type LngLat, type LngLatBounds } from "@/lib/map-planning/geo"
 import type { MapPoint } from "@/lib/map-planning/points"
 import { COPENHAGEN_CENTER } from "@/lib/map-planning/positions"
@@ -108,6 +109,8 @@ export type PlanningMapProps = {
   onRouteClick: (route: AreaRoute, anchor: { x: number; y: number }) => void
   /** A route being replayed: the vehicle's position and the path driven so far. */
   playback: RoutePlayback | null
+  /** Containers no Route Scheme lists — ringed red, counted on clusters; null when the layer is off. */
+  uncoveredIds: ReadonlySet<string> | null
   /** Container ids the panel is pointing at — their markers stand out. */
   highlightedIds: ReadonlySet<string>
   /** The route the panel is pointing at — its line stands out, the others fade. */
@@ -143,13 +146,21 @@ function clusterLabel(cluster: MapCluster, selected: number): string {
 
 const styleOf = (baseMap: BaseMapId) => baseMapById(baseMap).style as string | StyleSpecification
 
-/** The selection ring (amber) and, outside it, the highlight ring (foreground) a marker wears. */
-function markerRing(selected: boolean, highlighted: boolean): string | undefined {
+/**
+ * The selection ring (amber), outside it the highlight ring (foreground), and
+ * outermost the coverage-gap ring (red) a marker wears.
+ */
+function markerRing(selected: boolean, highlighted: boolean, uncovered = false): string | undefined {
   const rings: string[] = []
-  if (selected) rings.push(`0 0 0 3px ${SELECTION_COLOR}`)
-  if (highlighted) rings.push(`0 0 0 ${selected ? 6 : 3}px var(--foreground)`)
+  let radius = 0
+  if (selected) rings.push(`0 0 0 ${(radius += 3)}px ${SELECTION_COLOR}`)
+  if (highlighted) rings.push(`0 0 0 ${(radius += 3)}px var(--foreground)`)
+  if (uncovered) rings.push(`0 0 0 ${(radius += 2.5)}px ${UNCOVERED_COLOR}`)
   return rings.length ? rings.join(", ") : undefined
 }
+
+const countUncovered = (points: readonly MapPoint[], uncoveredIds: ReadonlySet<string> | null) =>
+  uncoveredIds ? points.filter((point) => point.containerIds.some((id) => uncoveredIds.has(id))).length : 0
 
 export function PlanningMap({
   points,
@@ -166,6 +177,7 @@ export function PlanningMap({
   roadGeometries,
   onRouteClick,
   playback,
+  uncoveredIds,
   highlightedIds,
   highlightedRouteId,
   onHoverPoint,
@@ -353,12 +365,14 @@ export function PlanningMap({
               const anchor = project(cluster.lngLat)
               if (!anchor) return null
               const selectedCount = cluster.points.filter((point) => selectedIds.has(point.id)).length
+              const uncoveredCount = countUncovered(cluster.points, uncoveredIds)
               if (cluster.count === 1) {
                 const point = cluster.points[0]
                 const selected = selectedIds.has(point.id)
                 const highlighted = highlightedIds.has(point.id)
+                const uncovered = countUncovered(cluster.points, uncoveredIds) > 0
                 const color = point.fractions[0] ? colorFor(point.fractions[0]) : NO_FRACTION_COLOR
-                const label = [point.label, point.fractions.join(", "), point.sublabel]
+                const label = [point.label, point.fractions.join(", "), point.sublabel, uncovered ? "In no route scheme" : ""]
                   .filter(Boolean)
                   .join(" · ")
                 return (
@@ -371,6 +385,7 @@ export function PlanningMap({
                         data-marker="point"
                         data-selected={selected ? "true" : undefined}
                         data-highlighted={highlighted ? "true" : undefined}
+                        data-uncovered={uncovered ? "true" : undefined}
                         onClick={() => onPointClick(point)}
                         onMouseEnter={() => onHoverPoint(point.containerIds)}
                         onMouseLeave={() => onHoverPoint(null)}
@@ -382,7 +397,7 @@ export function PlanningMap({
                           left: anchor.x,
                           top: anchor.y,
                           backgroundColor: color,
-                          boxShadow: markerRing(selected, highlighted),
+                          boxShadow: markerRing(selected, highlighted, uncovered),
                         }}
                       />
                     </TooltipTrigger>
@@ -390,6 +405,7 @@ export function PlanningMap({
                       <p className="font-medium">{point.label}</p>
                       {point.fractions.length > 0 && <p>{point.fractions.join(" · ")}</p>}
                       <p className="text-muted-foreground">{point.sublabel}</p>
+                      {uncovered && <p style={{ color: UNCOVERED_COLOR }}>In no route scheme</p>}
                     </TooltipContent>
                   </Tooltip>
                 )
@@ -417,10 +433,19 @@ export function PlanningMap({
                       style={{ left: anchor.x - 16, top: anchor.y }}
                     >
                       <span
-                        className="flex size-8 items-center justify-center rounded-full border border-border bg-background text-xs font-semibold text-foreground shadow-sm"
+                        className="relative flex size-8 items-center justify-center rounded-full border border-border bg-background text-xs font-semibold text-foreground shadow-sm"
                         style={{ boxShadow: markerRing(selectedCount > 0, highlightedCount > 0) }}
                       >
                         {cluster.count}
+                        {uncoveredCount > 0 && (
+                          <span
+                            className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none text-white"
+                            style={{ backgroundColor: UNCOVERED_COLOR }}
+                            data-uncovered-count={uncoveredCount}
+                          >
+                            {uncoveredCount}
+                          </span>
+                        )}
                       </span>
                       {trail.length > 0 && (
                         <span className="-ml-1 flex items-center">
