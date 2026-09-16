@@ -1,0 +1,119 @@
+// Guided-setup draft readers shared by the wizard and the create handler.
+// Pure data logic — no UI or store dependencies — so the wizard steps, the
+// record creation path in business-workspace, and the review previews all
+// resolve the same draft the same way. Moved here from the wizard component
+// (2026-09-16) so the wizard can import them without an import cycle.
+
+import type { BusinessRecord } from "../data/business-modules"
+import { schemeFrequencyPromiseOfRecord } from "../data/service-frequencies"
+import type { CollectionCalendar } from "./calendar"
+import {
+  collectionGroupContainerIds,
+  flattenGroupPlans,
+  resolveCollectionGroupPlans,
+  schemeAssignmentSources,
+  schemeStopRuleSources,
+  schemeValidationGroups,
+  type CollectionGroupResolution,
+} from "./groups"
+import { schemesInPlanning } from "./lifecycle"
+import { vehicleTypeOfRecord } from "./matching"
+import type { GuidedSchemeData } from "./quick-create"
+import type { SchemeRecurrence } from "./recurrence"
+import {
+  allocationConflictSources,
+  validateScheme,
+  type SchemeDayPlan,
+  type SchemeFrequencyPromise,
+  type SchemeValidationResult,
+} from "./validation"
+
+const draftProjectIds = (data: GuidedSchemeData): string[] | undefined =>
+  data.projectId ? [data.projectId] : undefined
+
+/**
+ * The draft's collection groups resolved per day against the live container
+ * records — the same seam generation uses once the scheme is saved (manual
+ * picks, rule matches, and the manual-beats-rule / first-rule-group-wins
+ * tie-breaks between groups on a shared day).
+ */
+export function resolvedDraftGroups(
+  data: GuidedSchemeData,
+  containers: readonly BusinessRecord[],
+): CollectionGroupResolution {
+  return resolveCollectionGroupPlans({
+    groups: data.groups,
+    serviceDays: data.serviceDays,
+    areaId: data.planningAreaId,
+    projectIds: draftProjectIds(data),
+    containers,
+  })
+}
+
+/** Day-flattened view: every stop any group serves per service day (counts line). */
+export function resolvedDraftPlans(
+  data: GuidedSchemeData,
+  containers: readonly BusinessRecord[],
+): SchemeDayPlan[] {
+  return flattenGroupPlans(resolvedDraftGroups(data, containers), data.serviceDays)
+}
+
+/**
+ * FR-5 over the wizard draft plus every existing scheme's planned assignments
+ * and the Vehicle Planning allocations (issue #11); the selected Collection
+ * Calendar adds non-blocking warnings (Q6/Q7). Groups validate their own
+ * days, assignment, and stops (D33–D35) — the containers and vehicles are
+ * needed to resolve the matches and each group's vehicle type. The resolved
+ * stops also feed the promised-service-frequency reconciliation (issue #21).
+ */
+export function validateGuidedScheme(
+  data: GuidedSchemeData,
+  existingSchemes: readonly BusinessRecord[],
+  calendar: CollectionCalendar | null | undefined,
+  allocations: readonly BusinessRecord[],
+  containers: readonly BusinessRecord[],
+  vehicles: readonly BusinessRecord[],
+): SchemeValidationResult {
+  // Soft-deleted schemes have left planning (issue #34) — the same sibling
+  // filter the edit path's schemeLiveValidation applies.
+  const siblings = schemesInPlanning(existingSchemes)
+  const resolution = resolvedDraftGroups(data, containers)
+  const linkedContainerIds = new Set(collectionGroupContainerIds(resolution))
+  const promises = containers
+    .filter((container) => linkedContainerIds.has(container.id))
+    .map((container) => schemeFrequencyPromiseOfRecord(container))
+    .filter((promise): promise is SchemeFrequencyPromise => promise !== null)
+  return validateScheme(
+    {
+      serviceDays: data.serviceDays,
+      effectiveFrom: data.effectiveFrom,
+      effectiveTo: data.effectiveTo,
+      areaId: data.planningAreaId,
+      calendar,
+      frequencyReconciliation: { frequency: data.frequency, promises },
+      ...schemeValidationGroups(
+        data.groups,
+        resolution,
+        (vehicleId) =>
+          vehicleTypeOfRecord(vehicles.find((vehicle) => vehicle.id === vehicleId)),
+        (containerId) => containers.find((container) => container.id === containerId)?.name,
+      ),
+    },
+    siblings.flatMap((record) => schemeAssignmentSources(record.name, record.submittedValues)),
+    allocationConflictSources(allocations),
+    schemeStopRuleSources(siblings),
+  )
+}
+
+/** The draft's recurrence, or null while it has no service days or start date. */
+export function draftRecurrence(data: GuidedSchemeData): SchemeRecurrence | null {
+  if (data.serviceDays.length === 0 || !data.effectiveFrom) return null
+  return {
+    frequency: data.frequency,
+    serviceDays: data.serviceDays,
+    ...(data.frequency === "every-2-weeks" ? { weekRotation: data.weekRotation } : {}),
+    effectiveFrom: data.effectiveFrom,
+    effectiveTo: data.effectiveTo,
+    startTime: data.plannedStartTime,
+  }
+}

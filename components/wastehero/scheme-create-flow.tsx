@@ -90,104 +90,21 @@ import {
 } from "@/lib/route-schemes/validation"
 import { schemesInPlanning } from "@/lib/route-schemes/lifecycle"
 import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
+import {
+  draftRecurrence,
+  resolvedDraftGroups,
+  resolvedDraftPlans,
+  validateGuidedScheme,
+} from "@/lib/route-schemes/draft"
+import { SchemeWizard } from "@/components/wastehero/scheme-wizard/scheme-wizard"
 import { cn } from "@/lib/utils"
 
 // The wizard's draft shape lives in lib/route-schemes/quick-create (issue
 // #31) so Quick Create's value mapping can share it without pulling in UI
-// code; re-exported here for the existing import sites.
+// code; the draft readers moved to lib/route-schemes/draft (2026-09-16).
+// Both are re-exported here for the existing import sites.
 export type { GuidedSchemeData }
-
-const draftProjectIds = (data: GuidedSchemeData): string[] | undefined =>
-  data.projectId ? [data.projectId] : undefined
-
-/**
- * The draft's collection groups resolved per day against the live container
- * records — the same seam generation uses once the scheme is saved (manual
- * picks, rule matches, and the manual-beats-rule / first-rule-group-wins
- * tie-breaks between groups on a shared day).
- */
-export function resolvedDraftGroups(
-  data: GuidedSchemeData,
-  containers: readonly BusinessRecord[],
-): CollectionGroupResolution {
-  return resolveCollectionGroupPlans({
-    groups: data.groups,
-    serviceDays: data.serviceDays,
-    areaId: data.planningAreaId,
-    projectIds: draftProjectIds(data),
-    containers,
-  })
-}
-
-/** Day-flattened view: every stop any group serves per service day (counts line). */
-export function resolvedDraftPlans(
-  data: GuidedSchemeData,
-  containers: readonly BusinessRecord[],
-): SchemeDayPlan[] {
-  return flattenGroupPlans(resolvedDraftGroups(data, containers), data.serviceDays)
-}
-
-/**
- * FR-5 over the wizard draft plus every existing scheme's planned assignments
- * and the Vehicle Planning allocations (issue #11); the selected Collection
- * Calendar adds non-blocking warnings (Q6/Q7). Groups validate their own
- * days, assignment, and stops (D33–D35) — the containers and vehicles are
- * needed to resolve the matches and each group's vehicle type. The resolved
- * stops also feed the promised-service-frequency reconciliation (issue #21):
- * every linked container with a standing promise is compared against the
- * draft's recurrence cadence.
- */
-export function validateGuidedScheme(
-  data: GuidedSchemeData,
-  existingSchemes: readonly BusinessRecord[],
-  calendar: CollectionCalendar | null | undefined,
-  allocations: readonly BusinessRecord[],
-  containers: readonly BusinessRecord[],
-  vehicles: readonly BusinessRecord[],
-): SchemeValidationResult {
-  // Soft-deleted schemes have left planning (issue #34) — the same sibling
-  // filter the edit path's schemeLiveValidation applies, so create and edit
-  // never disagree about who can conflict.
-  const siblings = schemesInPlanning(existingSchemes)
-  const resolution = resolvedDraftGroups(data, containers)
-  const linkedContainerIds = new Set(collectionGroupContainerIds(resolution))
-  const promises = containers
-    .filter((container) => linkedContainerIds.has(container.id))
-    .map((container) => schemeFrequencyPromiseOfRecord(container))
-    .filter((promise): promise is SchemeFrequencyPromise => promise !== null)
-  return validateScheme(
-    {
-      serviceDays: data.serviceDays,
-      effectiveFrom: data.effectiveFrom,
-      effectiveTo: data.effectiveTo,
-      areaId: data.planningAreaId,
-      calendar,
-      frequencyReconciliation: { frequency: data.frequency, promises },
-      ...schemeValidationGroups(
-        data.groups,
-        resolution,
-        (vehicleId) =>
-          vehicleTypeOfRecord(vehicles.find((vehicle) => vehicle.id === vehicleId)),
-        (containerId) => containers.find((container) => container.id === containerId)?.name,
-      ),
-    },
-    siblings.flatMap((record) => schemeAssignmentSources(record.name, record.submittedValues)),
-    allocationConflictSources(allocations),
-    schemeStopRuleSources(siblings),
-  )
-}
-
-function draftRecurrence(data: GuidedSchemeData): SchemeRecurrence | null {
-  if (data.serviceDays.length === 0 || !data.effectiveFrom) return null
-  return {
-    frequency: data.frequency,
-    serviceDays: data.serviceDays,
-    ...(data.frequency === "every-2-weeks" ? { weekRotation: data.weekRotation } : {}),
-    effectiveFrom: data.effectiveFrom,
-    effectiveTo: data.effectiveTo,
-    startTime: data.plannedStartTime,
-  }
-}
+export { resolvedDraftGroups, resolvedDraftPlans, validateGuidedScheme }
 
 interface SchemeCreateEntryProps {
   submitLabel: string
@@ -225,8 +142,11 @@ export function SchemeCreateEntry({
         />
       )}
       {isGuidedOpen && (
-        <GuidedSchemeWizardOverlay
-          onClose={() => setIsGuidedOpen(false)}
+        <SchemeWizard
+          open
+          onOpenChange={(open) => {
+            if (!open) setIsGuidedOpen(false)
+          }}
           onCreate={(data) => {
             setIsGuidedOpen(false)
             onGuidedCreate(data)
