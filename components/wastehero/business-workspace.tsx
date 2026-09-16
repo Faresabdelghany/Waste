@@ -272,6 +272,7 @@ import {
 import { ServiceProviderDetailsPage } from "@/components/wastehero/service-provider-details-page"
 import { ContainerDetailsSheet } from "@/components/wastehero/containers-assets-register"
 import { MapPlanningView } from "@/components/wastehero/map-planning/map-planning-view"
+import { SERVICE_AREAS_MODULE } from "@/lib/map-planning/service-areas"
 import { RouteDetailsPage } from "@/components/wastehero/route-details-page"
 import { TicketDetailsDialog } from "@/components/tickets/TicketDetailsDialog"
 import { useOrganizationStore } from "@/components/settings/organization-store"
@@ -347,6 +348,8 @@ type RelatedCreateTarget = {
   moduleId: string
   initialValues: BusinessFormValues
   schemaOverride?: BusinessFormSchema
+  /** Stored on the created record without a form field — e.g. a map-drawn polygon. */
+  extraValues?: BusinessFormValues
 }
 
 function configuredAssetFormSchema(
@@ -1178,6 +1181,12 @@ export function BusinessWorkspace({
     : null
   const hasGrant = (action: RolePermissionAction) =>
     activeModuleGrants === null || activeModuleGrants.includes(action)
+  // A grant on another module — Map Planning creates Service Areas, so it
+  // follows the Service Areas module's create grant, not Plan's.
+  const hasGrantOn = (workspaceId: WorkspaceId, moduleId: string, action: RolePermissionAction) => {
+    if (!roleAccess) return true
+    return (roleAccess[`${workspaceId}.${moduleId}`] ?? []).includes(action)
+  }
   const isContainersAssetsView =
     workspace.id === "resources" && activeModule.id === "containers"
   // Map Planning (2026-09-16) renders its own page below the header: no
@@ -3787,7 +3796,7 @@ export function BusinessWorkspace({
           ? values.serviceProviderId
           : serviceProviderScopeId,
       recordKind: formSchema.recordKind,
-      submittedValues: values,
+      submittedValues: { ...values, ...(relatedCreateTarget?.extraValues ?? {}) },
       relationRefs,
     }
     if (resolvedTarget.module.id === "price-rows") {
@@ -4885,6 +4894,15 @@ export function BusinessWorkspace({
           pickups={mapPlanningRecords.pickups}
           containersModule={containersModuleDefinition}
           canCreateScheme={hasGrant("create")}
+          canCreateServiceArea={hasGrantOn(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId, "create")}
+          onCreateServiceArea={(seed) =>
+            setRelatedCreateTarget({
+              workspaceId: SERVICE_AREAS_MODULE.workspaceId,
+              moduleId: SERVICE_AREAS_MODULE.moduleId,
+              initialValues: seed.initialValues,
+              extraValues: seed.extraValues,
+            })
+          }
           onCreateScheme={handleGuidedSchemeCreate}
         />
       ) : (

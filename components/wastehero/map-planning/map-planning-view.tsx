@@ -52,6 +52,12 @@ import { containerLocation } from "@/lib/map-planning/positions"
 import { routesInSelection, routesInWindow, type AreaRoute } from "@/lib/map-planning/routes"
 import type { SavedSelection } from "@/lib/map-planning/saved-selections"
 import {
+  serviceAreaLayers,
+  serviceAreaSeedFromSelection,
+  type ServiceAreaLayer,
+  type ServiceAreaSeed,
+} from "@/lib/map-planning/service-areas"
+import {
   COLLECTION_WINDOW_LABELS,
   DEFAULT_COLLECTION_WINDOW,
   collectionWindowRange,
@@ -98,6 +104,9 @@ export type MapPlanningViewProps = {
   containersModule: ModuleDefinition
   canCreateScheme: boolean
   onCreateScheme: (data: GuidedSchemeData) => void
+  canCreateServiceArea: boolean
+  /** Opens the Service Area create dialog seeded from the selection. */
+  onCreateServiceArea: (seed: ServiceAreaSeed) => void
 }
 
 type ClusterList = { cluster: MapCluster; anchor: { x: number; y: number } }
@@ -117,6 +126,8 @@ export function MapPlanningView({
   containersModule,
   canCreateScheme,
   onCreateScheme,
+  canCreateServiceArea,
+  onCreateServiceArea,
 }: MapPlanningViewProps) {
   const { resolvedTheme } = useTheme()
   const { containerTypes, wasteFractions } = useAssetManagementStore()
@@ -142,6 +153,7 @@ export function MapPlanningView({
   // null = follow the app theme until the user picks a base map.
   const [baseMapChoice, setBaseMapChoice] = useState<BaseMapId | null>(null)
   const [enabledAreaIds, setEnabledAreaIds] = useState<ReadonlySet<string>>(() => new Set())
+  const [enabledServiceAreaIds, setEnabledServiceAreaIds] = useState<ReadonlySet<string>>(() => new Set())
 
   // The base map choice lives in the browser only; read it after mount so
   // SSR and the first client render agree.
@@ -195,6 +207,24 @@ export function MapPlanningView({
     () => areaLayers.filter((area) => area.bounds !== null && enabledAreaIds.has(area.id)),
     [areaLayers, enabledAreaIds],
   )
+  // Service areas drawn on the map — only the ones created here carry a polygon.
+  const drawnServiceAreas = useMemo(() => serviceAreaLayers(serviceAreas), [serviceAreas])
+  const visibleServiceAreas = useMemo(
+    () => drawnServiceAreas.filter((area) => enabledServiceAreaIds.has(area.id)),
+    [drawnServiceAreas, enabledServiceAreaIds],
+  )
+  // A service area created during this visit switches itself on, so the
+  // boundary just drawn is seen right away; areas from earlier stay as left.
+  const knownServiceAreaIds = useRef<ReadonlySet<string> | null>(null)
+  useEffect(() => {
+    const ids = new Set(drawnServiceAreas.map((area) => area.id))
+    const known = knownServiceAreaIds.current
+    knownServiceAreaIds.current = ids
+    if (!known) return
+    const fresh = Array.from(ids).filter((id) => !known.has(id))
+    if (fresh.length === 0) return
+    setEnabledServiceAreaIds((current) => new Set([...current, ...fresh]))
+  }, [drawnServiceAreas])
   const selectedContainers = useMemo(
     () => filteredContainers.filter((record) => selectedContainerIds.has(record.id)),
     [filteredContainers, selectedContainerIds],
@@ -347,6 +377,24 @@ export function MapPlanningView({
   const zoomToArea = (area: PlanningAreaLayer) => {
     if (area.bounds) mapApi.current?.fitBounds(area.bounds)
   }
+  const toggleServiceArea = (id: string, enabled: boolean) =>
+    setEnabledServiceAreaIds((current) => {
+      const next = new Set(current)
+      if (enabled) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  const zoomToServiceArea = (area: ServiceAreaLayer) => mapApi.current?.fitBounds(area.bounds)
+
+  const startServiceArea = () =>
+    onCreateServiceArea(
+      serviceAreaSeedFromSelection({
+        selected: selectedContainers,
+        shape,
+        planningAreas,
+        properties: stats.properties,
+      }),
+    )
 
   const goToHit = (hit: SearchHit) => {
     if (hit.kind === "area") {
@@ -387,6 +435,7 @@ export function MapPlanningView({
           editingShape={editingShape}
           onShapeChange={changeShape}
           areaLayers={visibleAreaLayers}
+          serviceAreaLayers={visibleServiceAreas}
           routeLines={routeLines}
           onRouteClick={(route, anchor) => setRouteCard({ route, anchor })}
           highlightedIds={highlightedIds}
@@ -447,6 +496,8 @@ export function MapPlanningView({
             onToggleEdit={() => setEditingShape((current) => !current)}
             canCreateScheme={canCreateScheme}
             onCreateScheme={startWizard}
+            canCreateServiceArea={canCreateServiceArea}
+            onCreateServiceArea={startServiceArea}
             onClose={clearSelection}
             className="absolute bottom-8 left-3 top-14 z-30 w-[min(420px,calc(100%-24px))]"
           />
@@ -462,6 +513,10 @@ export function MapPlanningView({
             onShowAllAreas={showAllAreas}
             onHideAllAreas={hideAllAreas}
             onZoomToArea={zoomToArea}
+            serviceAreas={drawnServiceAreas}
+            enabledServiceAreaIds={enabledServiceAreaIds}
+            onToggleServiceArea={toggleServiceArea}
+            onZoomToServiceArea={zoomToServiceArea}
             routes={windowRoutes}
             routesOnMap={windowRoutesOnMap}
             onToggleRoutes={setWindowRoutesOnMap}

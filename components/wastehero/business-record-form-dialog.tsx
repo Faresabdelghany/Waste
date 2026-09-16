@@ -202,11 +202,11 @@ function MultiSelectField({
           id={`business-form-${field.id}`}
           aria-invalid={Boolean(error)}
           disabled={field.readOnly}
-          className="h-9 w-full justify-between px-3 font-normal hover:bg-transparent"
+          className="h-9 w-full min-w-0 justify-between px-3 font-normal hover:bg-transparent"
         >
           <span
             className={cn(
-              "truncate",
+              "min-w-0 flex-1 truncate text-left",
               selected.length === 0 && "text-muted-foreground",
             )}
           >

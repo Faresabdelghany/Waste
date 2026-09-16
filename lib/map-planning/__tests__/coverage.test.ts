@@ -63,3 +63,23 @@ describe("serviceAreasForSelection", () => {
     assert.deepEqual(serviceAreasForSelection([], serviceAreas), [])
   })
 })
+
+describe("serviceAreasForSelection with a drawn boundary", () => {
+  test("a container inside a service area's stored polygon counts as covered without any planning-area link", () => {
+    const copenhagen = [
+      { lng: 12.4, lat: 55.6 },
+      { lng: 12.7, lat: 55.6 },
+      { lng: 12.7, lat: 55.75 },
+      { lng: 12.4, lat: 55.75 },
+    ]
+    const drawn = record(
+      "sa-drawn",
+      { "Service provider": "CityHaul", Services: "Residual" },
+      { name: "CA-Drawn", submittedValues: { boundaryPolygon: JSON.stringify(copenhagen) } },
+    )
+    const located = record("loc", { Address: "Parkvej 18, 2100 Copenhagen Ø", "Planning area": "Nowhere Zone" })
+    const unlocated = record("unloc", { "Planning area": "Nowhere Zone" })
+    const rows = serviceAreasForSelection([located, unlocated], [drawn])
+    assert.deepEqual(rows.map((row) => [row.id, row.containers]), [["sa-drawn", 1]])
+  })
+})

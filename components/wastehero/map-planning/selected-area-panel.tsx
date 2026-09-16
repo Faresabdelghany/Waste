@@ -10,7 +10,7 @@
 // sections so each block folds away; every number comes from
 // lib/map-planning/statistics.ts, coverage.ts, and routes.ts at render time.
 
-import { CaretDown, MapTrifold, PencilSimple, Plus, X } from "@phosphor-icons/react/dist/ssr"
+import { CaretDown, Handshake, MapTrifold, PencilSimple, Plus, X } from "@phosphor-icons/react/dist/ssr"
 
 import {
   Accordion,
@@ -56,6 +56,8 @@ export type SelectedAreaPanelProps = {
   onToggleEdit: () => void
   canCreateScheme: boolean
   onCreateScheme: () => void
+  canCreateServiceArea: boolean
+  onCreateServiceArea: () => void
   onClose: () => void
   className?: string
 }
@@ -90,6 +92,8 @@ export function SelectedAreaPanel({
   onToggleEdit,
   canCreateScheme,
   onCreateScheme,
+  canCreateServiceArea,
+  onCreateServiceArea,
   onClose,
   className,
 }: SelectedAreaPanelProps) {
@@ -353,14 +357,27 @@ export function SelectedAreaPanel({
         </Accordion>
       </div>
 
-      {canCreateScheme && (
+      {(canCreateScheme || canCreateServiceArea) && (
         <>
           <Separator />
-          <footer className="px-5 py-4">
-            <Button className="h-9 w-full" onClick={onCreateScheme} disabled={stats.containers === 0}>
-              <Plus className="h-4 w-4" weight="bold" />
-              Create route scheme
-            </Button>
+          <footer className="flex flex-col gap-2 px-5 py-4">
+            {canCreateScheme && (
+              <Button className="h-9 w-full" onClick={onCreateScheme} disabled={stats.containers === 0}>
+                <Plus className="h-4 w-4" weight="bold" />
+                Create route scheme
+              </Button>
+            )}
+            {canCreateServiceArea && (
+              <Button
+                variant="outline"
+                className="h-9 w-full"
+                onClick={onCreateServiceArea}
+                disabled={stats.containers === 0}
+              >
+                <Handshake className="h-4 w-4" />
+                Create service area
+              </Button>
+            )}
           </footer>
         </>
       )}

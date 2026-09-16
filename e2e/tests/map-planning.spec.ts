@@ -444,3 +444,46 @@ test("a selection saves with its window, survives a reload, loads back, and can 
   await menu().getByRole("button", { name: "Delete Vesterbro & Frederiksberg" }).click()
   await expect(menu()).toContainText("Nothing saved yet.")
 })
+
+test("Create service area opens the Service Area form seeded from the selection; the new area is drawn and covers the selection", async ({ page }) => {
+  await selectRectangle(page)
+  const panel = page.getByRole("region", { name: "Selected area" })
+  const rowCount = await panel.getByTestId("selected-containers").locator("[data-container-row]").count()
+  await panel.getByRole("button", { name: "Create service area" }).click()
+
+  const dialog = page.getByRole("dialog", { name: "Create service area" })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByLabel(/^Project/)).toContainText("Copenhagen Central")
+  await expect(dialog.getByLabel("Geographic boundary")).toHaveValue(
+    new RegExp(`^Drawn on Map Planning · ${rowCount} containers across \\d+ propert`),
+  )
+  await expect(dialog.getByLabel(/^Planning areas/)).not.toContainText("Select planning areas")
+
+  await dialog.getByLabel("Service area name").fill("Vesterbro west award")
+  await dialog.getByLabel("Area code").fill("CA-VW-1")
+  await dialog.getByLabel(/^Service provider/).click()
+  await page.getByRole("option").first().click()
+  await dialog.getByLabel(/^Service responsibilities/).click()
+  await page.getByRole("option", { name: "Residual waste collection" }).click()
+  await page.keyboard.press("Escape")
+  await expect(dialog).toBeVisible()
+  await dialog.getByLabel(/^Starts/).fill("2026-10-01")
+  await dialog.getByLabel(/^Ends/).fill("2027-09-30")
+  await dialog.getByRole("button", { name: "Create service area" }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByRole("region", { name: "Notifications alt+T" })).toContainText("Service area created")
+
+  // The drawn boundary switches itself on and covers every selected container.
+  const outline = page.locator("[data-service-area-outline]")
+  await expect(outline).toHaveCount(1)
+  await expect(outline).toContainText("Vesterbro west award")
+  const coverage = panel.locator("li", { hasText: "Vesterbro west award" })
+  await expect(coverage).toContainText(`${rowCount} containers`)
+
+  await page.getByRole("button", { name: /^Layers/ }).click()
+  const layers = page.getByRole("dialog", { name: "Layers" })
+  const toggle = layers.getByTestId("service-areas-layer").getByRole("checkbox", { name: /Vesterbro west award/ })
+  await expect(toggle).toBeChecked()
+  await toggle.click()
+  await expect(outline).toHaveCount(0)
+})

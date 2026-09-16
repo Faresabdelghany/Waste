@@ -40,6 +40,7 @@ import type { MapPoint } from "@/lib/map-planning/points"
 import { COPENHAGEN_CENTER } from "@/lib/map-planning/positions"
 import type { AreaRoute } from "@/lib/map-planning/routes"
 import type { SelectionShape } from "@/lib/map-planning/selection"
+import type { ServiceAreaLayer } from "@/lib/map-planning/service-areas"
 import { cn } from "@/lib/utils"
 
 export type DrawTool = "none" | "rectangle" | "polygon"
@@ -84,6 +85,8 @@ export type PlanningMapProps = {
   onShapeChange: (polygon: LngLat[]) => void
   /** Planning-area outlines that are switched on. */
   areaLayers: readonly PlanningAreaLayer[]
+  /** Drawn service-area boundaries that are switched on. */
+  serviceAreaLayers: readonly ServiceAreaLayer[]
   /** Routes to draw as stop-to-stop lines ("See on map", the Routes layer). */
   routeLines: readonly AreaRoute[]
   /** A click on a route line — open its card at that point. */
@@ -134,6 +137,7 @@ export function PlanningMap({
   editingShape,
   onShapeChange,
   areaLayers,
+  serviceAreaLayers,
   routeLines,
   onRouteClick,
   highlightedIds,
@@ -294,6 +298,7 @@ export function PlanningMap({
       {ready && (
         <ShapesOverlay
           areas={areaLayers}
+          serviceAreas={serviceAreaLayers}
           routes={routeLines}
           shape={shape}
           editing={editingShape && drawTool === "none"}
@@ -456,6 +461,7 @@ function moveRectangleCorner(corners: readonly ScreenPoint[], index: number, nex
 
 function ShapesOverlay({
   areas,
+  serviceAreas,
   routes,
   shape,
   editing,
@@ -467,6 +473,7 @@ function ShapesOverlay({
   onHoverRoute,
 }: {
   areas: readonly PlanningAreaLayer[]
+  serviceAreas: readonly ServiceAreaLayer[]
   routes: readonly AreaRoute[]
   shape: SelectionShape | null
   editing: boolean
@@ -544,6 +551,39 @@ function ShapesOverlay({
               <text
                 x={label.x}
                 y={label.y}
+                textAnchor="middle"
+                className="text-[11px] font-semibold"
+                fill={area.color}
+                stroke="white"
+                strokeWidth={3}
+                paintOrder="stroke"
+              >
+                {area.name}
+              </text>
+            )}
+          </g>
+        )
+      })}
+
+      {serviceAreas.map((area) => {
+        const outline = area.polygon.map(project).filter((point): point is ScreenPoint => point !== null)
+        if (outline.length < 3) return null
+        const label = project(polygonCentroid(area.polygon))
+        return (
+          <g key={area.id} data-service-area-outline={area.id}>
+            <polygon
+              points={toPoints(outline)}
+              fill={area.color}
+              fillOpacity={0.06}
+              stroke={area.color}
+              strokeWidth={2.5}
+              strokeDasharray="10 5"
+              strokeLinejoin="round"
+            />
+            {label && (
+              <text
+                x={label.x}
+                y={label.y + 14}
                 textAnchor="middle"
                 className="text-[11px] font-semibold"
                 fill={area.color}

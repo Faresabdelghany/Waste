@@ -4,8 +4,9 @@
 // and its panel — the base map picker (CSS-drawn swatches, no network), the
 // planning-area outlines, each with a checkbox and a zoom-to button, and the
 // Routes layer: every drawable route in the collection window, counted by
-// status. Areas come from lib/map-planning/areas.ts and routes from
-// lib/map-planning/routes.ts; the map draws the ones that are on.
+// status, and the service areas drawn on the map. Areas come from
+// lib/map-planning/areas.ts, routes from routes.ts, service areas from
+// service-areas.ts; the map draws the ones that are on.
 
 import { Check, Crosshair, Stack } from "@phosphor-icons/react/dist/ssr"
 
@@ -16,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { PlanningAreaLayer } from "@/lib/map-planning/areas"
 import { BASE_MAPS, type BaseMap, type BaseMapId } from "@/lib/map-planning/base-maps"
 import { ROUTE_BUCKET_COLORS, type AreaRoute, type RouteBucket } from "@/lib/map-planning/routes"
+import type { ServiceAreaLayer } from "@/lib/map-planning/service-areas"
 import { cn } from "@/lib/utils"
 
 export type LayersPanelProps = {
@@ -27,6 +29,11 @@ export type LayersPanelProps = {
   onShowAllAreas: () => void
   onHideAllAreas: () => void
   onZoomToArea: (area: PlanningAreaLayer) => void
+  /** Service areas that carry a drawn boundary. */
+  serviceAreas: readonly ServiceAreaLayer[]
+  enabledServiceAreaIds: ReadonlySet<string>
+  onToggleServiceArea: (id: string, enabled: boolean) => void
+  onZoomToServiceArea: (area: ServiceAreaLayer) => void
   /** Every drawable route in the collection window. */
   routes: readonly AreaRoute[]
   routesOnMap: boolean
@@ -52,6 +59,10 @@ export function LayersPanel({
   onShowAllAreas,
   onHideAllAreas,
   onZoomToArea,
+  serviceAreas,
+  enabledServiceAreaIds,
+  onToggleServiceArea,
+  onZoomToServiceArea,
   routes,
   routesOnMap,
   onToggleRoutes,
@@ -132,6 +143,57 @@ export function LayersPanel({
               )}
             </label>
           </div>
+        </div>
+        <div className="border-b border-border px-3 py-3" data-testid="service-areas-layer">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">Service areas</p>
+          {serviceAreas.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              No service area has a drawn boundary yet. Create one from a selection.
+            </p>
+          ) : (
+            <ul className="max-h-40 space-y-0.5 overflow-y-auto">
+              {serviceAreas.map((area) => {
+                const checkboxId = `service-area-layer-${area.id}`
+                return (
+                  <li key={area.id} className="flex items-center gap-2 rounded-md px-1 py-1 hover:bg-accent/60">
+                    <Checkbox
+                      id={checkboxId}
+                      checked={enabledServiceAreaIds.has(area.id)}
+                      onCheckedChange={(checked) => onToggleServiceArea(area.id, checked === true)}
+                    />
+                    <label htmlFor={checkboxId} className="min-w-0 flex-1 cursor-pointer">
+                      <span className="flex items-center gap-1.5">
+                        <span
+                          className="size-2.5 shrink-0 rounded-sm border-2 border-dashed"
+                          style={{ borderColor: area.color }}
+                        />
+                        <span className="truncate">{area.name}</span>
+                      </span>
+                      <span className="block truncate pl-4 text-[11px] text-muted-foreground">
+                        {area.serviceProvider} · {area.status}
+                      </span>
+                    </label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground"
+                          aria-label={`Zoom to ${area.name}`}
+                          onClick={() => onZoomToServiceArea(area)}
+                        >
+                          <Crosshair className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" className="text-xs">
+                        Zoom to {area.name}
+                      </TooltipContent>
+                    </Tooltip>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </div>
         <div className="px-3 py-3">
           <div className="mb-2 flex items-center justify-between">

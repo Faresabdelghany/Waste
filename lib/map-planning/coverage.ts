@@ -1,12 +1,17 @@
 // What already covers a map selection (2026-09-16): the Service Areas whose
-// planning areas hold the selected containers. Read, never guessed — a
-// container names its planning area (typed id, else the display fact); a
-// service area names its planning areas through the zoneIds reference
-// (typed, else the relation refs). The dated Routes over a selection live
-// in routes.ts. Pure data logic for the Selected area panel.
+// planning areas hold the selected containers, or whose drawn boundary
+// contains them. Read, never guessed — a container names its planning area
+// (typed id, else the display fact); a service area names its planning areas
+// through the zoneIds reference (typed, else the relation refs) and, when it
+// was created from the map, keeps its polygon (service-areas.ts). The dated
+// Routes over a selection live in routes.ts. Pure data logic for the
+// Selected area panel.
 
 import type { BusinessRecord } from "../data/business-modules"
 import { isSoftDeleted } from "../data/record-visibility"
+import { pointInPolygon } from "./geo"
+import { containerLocation } from "./positions"
+import { serviceAreaPolygon } from "./service-areas"
 
 export type ServiceAreaCoverage = {
   id: string
@@ -54,7 +59,12 @@ export function serviceAreasForSelection(
   for (const area of serviceAreas) {
     if (isSoftDeleted(area)) continue
     const zones = serviceAreaZones(area)
+    const polygon = serviceAreaPolygon(area)
     const count = containers.filter((container) => {
+      if (polygon) {
+        const spot = containerLocation(container)
+        if (spot && pointInPolygon(spot, polygon)) return true
+      }
       const typed = clean(container.submittedValues?.planningAreaId)
       if (typed) return zones.ids.has(typed)
       const fact = clean(container.facts["Planning area"])
