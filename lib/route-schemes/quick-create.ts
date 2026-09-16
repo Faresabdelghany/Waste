@@ -35,7 +35,6 @@ export interface GuidedSchemeData {
   schemeName: string
   projectId?: string
   planningAreaId?: string
-  calendarId?: string
   frequency: RecurrenceFrequency
   weekRotation: WeekRotation
   serviceDays: ServiceDay[]
@@ -89,7 +88,6 @@ export const QUICK_SCHEME_DRAFT_FIELD_IDS: ReadonlySet<string> = new Set([
   "schemeName",
   "projectId",
   "planningAreaId",
-  "calendarId",
   "frequency",
   "weekRotation",
   "serviceDays",
@@ -161,7 +159,6 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
     schemeName,
     projectId: optionalId(values, "projectId"),
     planningAreaId: optionalId(values, "planningAreaId"),
-    calendarId: optionalId(values, "calendarId"),
     frequency: isRecurrenceFrequency(frequency) ? frequency : "weekly",
     weekRotation: weekRotation === "even" ? "even" : "odd",
     serviceDays,

@@ -52,15 +52,6 @@ export function StepScope({
             placeholder="Select planning area"
           />
         </Field>
-        <Field id="scheme-calendar" label="Collection calendar">
-          <SimpleSelect
-            id="scheme-calendar"
-            value={data.calendarId}
-            onChange={(calendarId) => update({ calendarId })}
-            options={toOptions(records.calendars)}
-            placeholder="Select collection calendar"
-          />
-        </Field>
       </div>
       <Separator />
       <div className="text-sm text-muted-foreground">Operational defaults (optional)</div>

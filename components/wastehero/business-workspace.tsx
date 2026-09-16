@@ -3997,7 +3997,6 @@ export function BusinessWorkspace({
       PLANNING_AREAS_MODULE.moduleId,
       data.planningAreaId,
     )
-    const calendar = linkRecord("calendarId", "plan", "calendars", data.calendarId)
     const depot = linkRecord("depotId", "resources", "depots", data.depotId)
     const unloadingStation = linkRecord(
       "unloadingStationId",
@@ -4091,7 +4090,6 @@ export function BusinessWorkspace({
       schemeName: data.schemeName.trim(),
       projectId: data.projectId ?? "",
       planningAreaId: data.planningAreaId ?? "",
-      calendarId: data.calendarId ?? "",
       frequency: data.frequency,
       weekRotation: data.frequency === "every-2-weeks" ? data.weekRotation : "",
       serviceDays: data.serviceDays.join(", "),
@@ -4129,7 +4127,6 @@ export function BusinessWorkspace({
         Version: "v1",
         ...(project ? { Project: project.name } : {}),
         ...(area ? { "Planning area": area.name } : {}),
-        ...(calendar ? { "Collection calendar": calendar.name } : {}),
         // Holidays follow the project (holiday model 2026-09-16).
         "Holiday list":
           projectHolidaySource(project, moduleRecords("plan", "calendars"))?.name ??

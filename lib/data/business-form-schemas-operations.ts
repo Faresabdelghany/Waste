@@ -1011,13 +1011,8 @@ export const operationsBusinessFormSchemas = [
             requiredWhen: { fieldId: "stopSelection", equals: "rule" },
             relation: { workspaceId: "configure", moduleId: "areas" },
           },
-          {
-            id: "calendarId",
-            label: "Collection calendar",
-            type: "select",
-            required: true,
-            relation: { workspaceId: "plan", moduleId: "calendars" },
-          },
+          // No Collection calendar field: holidays follow the project (holiday
+          // model 2026-09-16, lib/route-schemes/holidays.ts).
           {
             id: "effectiveFrom",
             label: "Effective from",

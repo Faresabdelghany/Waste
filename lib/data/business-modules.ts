@@ -2136,7 +2136,6 @@ const plan: WorkspaceDefinition = {
           submittedValues: {
             schemeName: "RS-Central · Week A",
             planningAreaId: "area-indreby",
-            calendarId: "calendar-central",
             frequency: "weekly",
             serviceDays: "monday, tuesday, wednesday, thursday, friday",
             effectiveFrom: "2026-06-01",
@@ -2181,7 +2180,6 @@ const plan: WorkspaceDefinition = {
           ),
           submittedValues: {
             schemeName: "RS-Østerbro · Organic B",
-            calendarId: "calendar-central",
             frequency: "every-2-weeks",
             weekRotation: "even",
             serviceDays: "tuesday, thursday",
