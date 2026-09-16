@@ -11,7 +11,7 @@ import { useAssetManagementStore } from "@/components/settings/asset-management-
 import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
-import { fallbackContainerWeightKg, type ContainerWeightResolver } from "@/lib/route-schemes/estimates"
+import { fallbackContainerWeight, type ContainerWeightResolver } from "@/lib/route-schemes/estimates"
 import {
   collectionVehicles,
   driverProfile,
@@ -66,8 +66,8 @@ export function useWizardRecords(): WizardRecords {
       const weight =
         catalogued && fraction ? catalogued.wasteFractionWeights[fraction.toLowerCase()] : undefined
       return typeof weight === "number" && weight > 0
-        ? weight
-        : fallbackContainerWeightKg(containerType, fraction)
+        ? { kg: weight, fallback: false }
+        : fallbackContainerWeight(containerType, fraction)
     }
   }, [containerTypes])
 

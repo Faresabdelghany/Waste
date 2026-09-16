@@ -2,11 +2,13 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import {
-  estimateLoadTonnes,
+  estimateLoad,
   estimateRoute,
+  fallbackContainerWeight,
   fallbackContainerWeightKg,
   routeEstimateAdapter,
   formatMinutes,
+  type ContainerWeightResolver,
 } from "../estimates"
 
 describe("estimateRoute", () => {
@@ -41,17 +43,35 @@ describe("load estimate", () => {
     assert.equal(fallbackContainerWeightKg(undefined, undefined), 20)
   })
 
-  test("prototype value: 380 residual 240 L bins ≈ 3.8 t", () => {
+  test("prototype value: 380 residual 240 L bins ≈ 3.8 t, all from the fallback table", () => {
     const containers = Array.from({ length: 380 }, () => ({
       containerType: "Two-wheel bin · 240 L",
       fractions: ["Residual"],
     }))
-    assert.equal(estimateLoadTonnes(containers), 3.8)
+    assert.deepEqual(estimateLoad(containers), { loadT: 3.8, fallbackWeight: true })
+    assert.deepEqual(fallbackContainerWeight("Two-wheel bin · 240 L", "Residual"), { kg: 10, fallback: true })
   })
 
-  test("a catalogue resolver overrides the fallback", () => {
+  test("a catalogue resolver overrides the fallback and clears the flag", () => {
     const containers = [{ containerType: "Two-wheel bin · 240 L", fractions: ["Residual"] }]
-    assert.equal(estimateLoadTonnes(containers, () => 1800), 1.8)
+    const catalogue: ContainerWeightResolver = () => ({ kg: 1800, fallback: false })
+    assert.deepEqual(estimateLoad(containers, catalogue), { loadT: 1.8, fallbackWeight: false })
+  })
+
+  test("one fallback-weighted container type flags the whole group", () => {
+    const catalogue: ContainerWeightResolver = (containerType, fraction) =>
+      containerType === "Two-wheel bin · 240 L"
+        ? { kg: 18, fallback: false }
+        : fallbackContainerWeight(containerType, fraction)
+    const load = estimateLoad(
+      [
+        { containerType: "Two-wheel bin · 240 L", fractions: ["Residual"] },
+        { containerType: "Two-wheel bin · 140 L", fractions: ["Residual"] },
+      ],
+      catalogue,
+    )
+    assert.deepEqual(load, { loadT: 0, fallbackWeight: true })
+    assert.equal(estimateLoad([], catalogue).fallbackWeight, false)
   })
 })
 
@@ -70,7 +90,10 @@ describe("routeEstimateAdapter", () => {
       routeEstimateAdapter.route({ stops: 381, loadT: 3.8, capacityT: 10 }),
       estimateRoute({ stops: 381, loadT: 3.8, capacityT: 10 }),
     )
-    assert.equal(routeEstimateAdapter.loadTonnes([], fallbackContainerWeightKg), 0)
+    assert.deepEqual(routeEstimateAdapter.load([], fallbackContainerWeight), {
+      loadT: 0,
+      fallbackWeight: false,
+    })
   })
 
   test("verdicts are information only — the estimate carries no blocking flag", () => {

@@ -7,6 +7,7 @@ import {
   fillGroup,
   fillRecurrence,
   fillScope,
+  groupEditor,
   nextStep,
   openGroupEditor,
   pickOption,
@@ -75,12 +76,52 @@ test("a complete group clears step 3 and the Containers cell carries no +/− co
 }) => {
   await buildBaselineScheme(page, "Baseline groups")
   const root = wizard(page)
-  await expect(root.getByRole("row").filter({ hasText: "Residual · bins" })).toBeVisible()
+  const row = root.getByRole("row").filter({ hasText: "Residual · bins" })
+  await expect(row).toBeVisible()
   await expect(root.getByText(/\+\d+ \/ −\d+/)).toHaveCount(0)
-  await expect(root.getByText("Estimate", { exact: true })).toBeVisible()
+  // No column-level estimate qualifier on step 3; the flag is per row — the
+  // baseline's 140 L bins have no catalogue weight, so this row carries it.
+  await expect(root.getByText("Estimate", { exact: true })).toHaveCount(0)
+  await expect(row.getByText("Fallback weight")).toBeVisible()
+  await row.getByRole("button", { name: "Edit Residual · bins" }).click()
+  const editor = groupEditor(page)
+  await expect(editor.getByText("Fallback weight")).toBeVisible()
+  await editor.getByRole("button", { name: "Cancel" }).click()
   await expect(root.getByRole("alert")).toHaveCount(0)
   await nextStep(page)
   await expect(stepHeading(page)).toHaveText("How do the generated routes look?")
+})
+
+test("a group whose container types all have catalogue weights carries no Fallback weight badge", async ({
+  page,
+}) => {
+  await startGuided(page)
+  // Østerbro Zone 2 is the fixture area whose Residual bins are 240 L — the
+  // one bin the asset catalogue weighs for Residual.
+  await fillScope(page, {
+    name: "Catalogue weights",
+    project: "Copenhagen Central",
+    area: "Østerbro Zone 2",
+    fraction: "Residual",
+    serviceType: BASELINE_SERVICE_TYPE,
+  })
+  await nextStep(page)
+  await fillRecurrence(page, { days: ["Monday"] })
+  await nextStep(page)
+  const editor = await openGroupEditor(page)
+  await fillGroup(page, {
+    name: "Residual · 240 L",
+    days: ["Monday"],
+    vehicle: CLEAN_VEHICLE,
+    driver: CLEAN_DRIVER,
+    containerTypes: ["Two-wheel bin · 240 L"],
+  })
+  await expect(editor.getByText("Matching containers")).toBeVisible()
+  await expect(editor.getByText("Fallback weight")).toHaveCount(0)
+  await saveGroup(page)
+  const row = wizard(page).getByRole("row").filter({ hasText: "Residual · 240 L" })
+  await expect(row).toBeVisible()
+  await expect(row.getByText("Fallback weight")).toHaveCount(0)
 })
 
 test("the group editor offers only the container types of the scheme's service type", async ({

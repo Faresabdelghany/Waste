@@ -8,10 +8,11 @@
 // are heuristics (the prototype's coefficients), and container weights come
 // from the asset-management catalogue where it has the type (4 of the 7
 // display types today; the caller passes that resolver) and from the
-// fallback table below otherwise. The UI reads all of it through
-// routeEstimateAdapter — the single place a real optimiser response plugs in
-// (see the adapter's doc) — and labels the numbers with the adapter's
-// qualifier. The verdicts never gate Next or Create.
+// fallback table below otherwise. Each weight says which it was, so a group
+// whose containers use any fallback weight is flagged per row ("Fallback
+// weight") instead of qualifying the whole column. The UI reads all of it
+// through routeEstimateAdapter — the single place a real optimiser response
+// plugs in (see the adapter's doc). The verdicts never gate Next or Create.
 
 import type { ContainerMatchProfile } from "./matching"
 
@@ -53,22 +54,47 @@ export function fallbackContainerWeightKg(
   return base * factor
 }
 
-/** Resolves kg for (container type, fraction); the UI layer wraps the catalogue around the fallback. */
+/** A resolved container weight and where it came from. */
+export type ContainerWeight = {
+  kg: number
+  /** True when the fallback table supplied the weight, not the asset catalogue. */
+  fallback: boolean
+}
+
+/** The fallback tables' weight, flagged as such. */
+export function fallbackContainerWeight(
+  containerType: string | undefined,
+  fraction: string | undefined,
+): ContainerWeight {
+  return { kg: fallbackContainerWeightKg(containerType, fraction), fallback: true }
+}
+
+/** Resolves the weight for (container type, fraction); the UI layer wraps the catalogue around the fallback. */
 export type ContainerWeightResolver = (
   containerType: string | undefined,
   fraction: string | undefined,
-) => number
+) => ContainerWeight
 
-/** Total load in tonnes (one decimal) for emptying every container once. */
-export function estimateLoadTonnes(
+export type LoadEstimate = {
+  /** Total load in tonnes (one decimal) for emptying every container once. */
+  loadT: number
+  /** True when any container's weight came from the fallback table. */
+  fallbackWeight: boolean
+}
+
+/** The load for emptying every container once, and whether any weight was a fallback. */
+export function estimateLoad(
   containers: readonly Pick<ContainerMatchProfile, "containerType" | "fractions">[],
-  weightKg: ContainerWeightResolver = fallbackContainerWeightKg,
-): number {
-  const kg = containers.reduce(
-    (sum, container) => sum + weightKg(container.containerType, container.fractions[0]),
-    0,
-  )
-  return Math.round(kg / 100) / 10
+  weight: ContainerWeightResolver = fallbackContainerWeight,
+): LoadEstimate {
+  let kg = 0
+  let fallbackWeight = false
+  for (const container of containers) {
+    const resolved = weight(container.containerType, container.fractions[0])
+    kg += resolved.kg
+    fallbackWeight ||= resolved.fallback
+  }
+  return { loadT: Math.round(kg / 100) / 10, fallbackWeight }
 }
 
 export type RouteEstimateStatus = "within" | "tight" | "over-capacity" | "over-shift"
@@ -121,21 +147,22 @@ export function estimateRoute(input: {
  * model, group editor, route map, and review call these three members and
  * nothing else in this module, so swapping in a real optimiser means one
  * change here: return its distance / duration / load from `route` and
- * `loadTonnes`, and set `label` to what the numbers then are.
+ * `load`, and set `label` to what the numbers then are.
  */
 export type RouteEstimateAdapter = {
-  /** The qualifier the UI shows beside every number this adapter produces. */
+  /** The qualifier the route map shows beside the numbers this adapter produces. */
   label: string
-  loadTonnes: (
+  /** Per group: its load and whether any of its container weights is a fallback. */
+  load: (
     containers: readonly Pick<ContainerMatchProfile, "containerType" | "fractions">[],
-    weightKg: ContainerWeightResolver,
-  ) => number
+    weight: ContainerWeightResolver,
+  ) => LoadEstimate
   route: (input: { stops: number; loadT: number; capacityT: number | null | undefined }) => RouteEstimate
 }
 
 export const routeEstimateAdapter: RouteEstimateAdapter = {
   label: "Estimate",
-  loadTonnes: estimateLoadTonnes,
+  load: estimateLoad,
   route: estimateRoute,
 }
 

@@ -17,7 +17,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { routeEstimateAdapter } from "@/lib/route-schemes/estimates"
 import type { CollectionGroup } from "@/lib/route-schemes/groups"
 import { containerTypeShortLabel } from "@/lib/route-schemes/matching"
 import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
@@ -129,12 +128,7 @@ export function StepGroups({
                 <TableHead>Vehicle</TableHead>
                 <TableHead>Default driver</TableHead>
                 <TableHead>Containers</TableHead>
-                <TableHead>
-                  Est. load per route
-                  <span className="block text-xs font-normal text-muted-foreground">
-                    {routeEstimateAdapter.label}
-                  </span>
-                </TableHead>
+                <TableHead>Est. load per route</TableHead>
                 <TableHead className="pr-3 text-right">
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -142,7 +136,7 @@ export function StepGroups({
             </TableHeader>
             <TableBody>
               {groups.map((summary) => {
-                const { group, vehicle, driver, estimate, color } = summary
+                const { group, vehicle, driver, estimate, color, fallbackWeight } = summary
                 const clash = issues.some(
                   (issue) => issue.kind === "vehicle" && issue.groupIds.includes(group.id),
                 )
@@ -203,6 +197,11 @@ export function StepGroups({
                     </TableCell>
                     <TableCell>
                       <LoadMeter estimate={estimate} />
+                      {fallbackWeight && (
+                        <Badge variant="secondary" className="mt-1.5 bg-amber-50 text-amber-800">
+                          Fallback weight
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className="pr-3 text-right">
                       <div className="inline-flex gap-1">

@@ -9,6 +9,7 @@
 
 import { useMemo, useState } from "react"
 
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -147,7 +148,9 @@ export function GroupEditor({
   }, [fraction, containerTypes, data.planningAreaId, data.projectId, records.containers])
 
   const count = matches ? matches.matched.length : 0
-  const loadT = matches ? routeEstimateAdapter.loadTonnes(matches.matched, records.weightKg) : 0
+  const load = matches
+    ? routeEstimateAdapter.load(matches.matched, records.weightKg)
+    : { loadT: 0, fallbackWeight: false }
 
   const valid = Boolean(
     group.name.trim() &&
@@ -322,10 +325,17 @@ export function GroupEditor({
                 </div>
               </div>
               <div>
-                <div className="text-xs text-muted-foreground">Est. load per route</div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  Est. load per route
+                  {load.fallbackWeight && (
+                    <Badge variant="secondary" className="h-5 bg-amber-50 px-1.5 text-[11px] text-amber-800">
+                      Fallback weight
+                    </Badge>
+                  )}
+                </div>
                 <div className="font-medium tabular-nums">
                   {matches
-                    ? `${loadT} t${vehicle?.capacityT != null ? ` / ${vehicle.capacityT} t` : ""}`
+                    ? `${load.loadT} t${vehicle?.capacityT != null ? ` / ${vehicle.capacityT} t` : ""}`
                     : "—"}
                 </div>
               </div>

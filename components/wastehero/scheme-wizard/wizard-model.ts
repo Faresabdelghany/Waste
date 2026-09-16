@@ -66,6 +66,8 @@ export type WizardGroupSummary = {
   /** Stops on the group's fullest day after tie-breaks. */
   stops: number
   loadT: number
+  /** True when any of the group's container weights comes from the fallback table. */
+  fallbackWeight: boolean
   estimate: RouteEstimate
 }
 
@@ -172,7 +174,7 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
       null,
     )
     const stopProfiles = fullest ? profilesOf(fullest.containerIds) : matched
-    const loadT = routeEstimateAdapter.loadTonnes(stopProfiles, records.weightKg)
+    const { loadT, fallbackWeight } = routeEstimateAdapter.load(stopProfiles, records.weightKg)
     const stops = fullest ? fullest.containerIds.length : matched.length
     return {
       group,
@@ -182,6 +184,7 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
       matched,
       stops,
       loadT,
+      fallbackWeight,
       estimate: routeEstimateAdapter.route({ stops, loadT, capacityT: vehicle?.capacityT }),
     }
   })
@@ -193,7 +196,7 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
       .flatMap((plan) => {
         const summary = summaryById.get(plan.groupId)
         if (!summary) return []
-        const loadT = routeEstimateAdapter.loadTonnes(profilesOf(plan.containerIds), records.weightKg)
+        const { loadT } = routeEstimateAdapter.load(profilesOf(plan.containerIds), records.weightKg)
         return [
           {
             day,
