@@ -41,6 +41,46 @@ const localToday = () => {
 }
 
 const SEEDED_ROUTE_ID = "route-e2e-9001"
+const OSRM_ROUTES = "https://router.project-osrm.org/**"
+
+/**
+ * Stand in for the routing server: the road through the requested stops
+ * with one vertex bent 20 m or so off each straight leg (so it is plainly a
+ * road, not the straight line), every leg 500 m and 90 s — or refuse every
+ * request, which the map must survive by drawing straight dashed lines.
+ */
+async function stubRoads(page: Page, answer: "roads" | "refuse" = "roads"): Promise<void> {
+  await page.route(OSRM_ROUTES, async (route) => {
+    if (answer === "refuse") {
+      await route.abort("failed")
+      return
+    }
+    const path = new URL(route.request().url()).pathname.split("/driving/")[1] ?? ""
+    const stops = path.split(";").map((pair) => pair.split(",").map(Number) as [number, number])
+    const coordinates: [number, number][] = []
+    stops.forEach(([lng, lat], index) => {
+      if (index > 0) {
+        const [previousLng, previousLat] = stops[index - 1]
+        coordinates.push([(previousLng + lng) / 2, (previousLat + lat) / 2 + 0.0002])
+      }
+      coordinates.push([lng, lat])
+    })
+    await route.fulfill({
+      json: {
+        code: "Ok",
+        routes: [
+          {
+            distance: 500 * (stops.length - 1),
+            duration: 90 * (stops.length - 1),
+            geometry: { type: "LineString", coordinates },
+            legs: stops.slice(1).map(() => ({ distance: 500, duration: 90 })),
+          },
+        ],
+        waypoints: stops.map(([lng, lat]) => ({ location: [lng, lat] })),
+      },
+    })
+  })
+}
 
 /**
  * Fixture route days name pickups outside the registry, so nothing is
@@ -52,7 +92,9 @@ const SEEDED_ROUTE_ID = "route-e2e-9001"
 async function seedDrawableRoute(
   page: Page,
   stops: readonly string[] = ["asset-82014", "asset-66420", "asset-44831"],
+  roads: "roads" | "refuse" = "roads",
 ): Promise<void> {
+  await stubRoads(page, roads)
   const blank = { context: "", owner: "", updated: "", description: "", related: [], source: "", freshness: "" }
   const seeded = {
     "route-studio.routes": [
@@ -309,7 +351,9 @@ test("the Routes layer draws a dated route coloured by status and a click on its
   const line = page.locator(`[data-route-line="${SEEDED_ROUTE_ID}"]`)
   await expect(line).toBeVisible()
   await expect(line).toHaveAttribute("data-route-status", "awaiting")
-  await expect(line.locator("polyline").first()).toHaveAttribute("stroke", "#f59e0b")
+  // The line follows the road the routing server answered with, in the status colour.
+  await expect(line).toHaveAttribute("data-route-geometry", "road")
+  await expect(line.locator(`[data-route-road="${SEEDED_ROUTE_ID}"]`)).toHaveAttribute("stroke", "#f59e0b")
   await page.keyboard.press("Escape")
   await expect(layers).toHaveCount(0)
 
@@ -327,6 +371,8 @@ test("the Routes layer draws a dated route coloured by status and a click on its
   await expect(card).toContainText("Mads Jensen")
   await expect(card).toContainText("06:00–14:00")
   await expect(card).toContainText("3")
+  // Two legs of the stubbed road: 1 km in 3 minutes.
+  await expect(card.getByTestId("route-card-drive")).toHaveText("1.0 km · 3 min")
   await expect(card.getByRole("link", { name: "Open route" })).toHaveAttribute(
     "href",
     `/route-studio?module=routes&record=${SEEDED_ROUTE_ID}`,
@@ -373,6 +419,23 @@ test("the Containers list mirrors the selection and hover highlights run both wa
   const label = await firstRow.locator("span.font-medium").innerText()
   await firstRow.click()
   await expect(page.getByRole("dialog")).toContainText(label)
+})
+
+test("a route whose road cannot be fetched is drawn straight and dashed", async ({ page }) => {
+  await seedDrawableRoute(page, undefined, "refuse")
+  await page.getByRole("button", { name: /^Layers/ }).click()
+  const layers = page.getByRole("dialog", { name: "Layers" })
+  await layers.getByTestId("routes-layer").getByRole("checkbox", { name: /Routes in the collection window/ }).click()
+  const line = page.locator(`[data-route-line="${SEEDED_ROUTE_ID}"]`)
+  await expect(line).toBeVisible()
+  await expect(line).toHaveAttribute("data-route-geometry", "straight")
+  await expect(line.locator("polyline").first()).toHaveAttribute("stroke-dasharray", "6 6")
+  await expect(line.locator("[data-route-road]")).toHaveCount(0)
+  // Still a route: its card opens from the dashed line.
+  await clickRouteLine(page, SEEDED_ROUTE_ID)
+  const card = page.getByTestId("route-card")
+  await expect(card).toContainText("RC-9001")
+  await expect(card.getByTestId("route-card-drive")).toHaveCount(0)
 })
 
 test("hovering a route row highlights its line and hovering the line highlights the row", async ({ page }) => {

@@ -45,7 +45,7 @@ import type { MapCluster } from "@/lib/map-planning/clusters"
 import { fractionColor } from "@/lib/map-planning/colors"
 import { serviceAreasForSelection } from "@/lib/map-planning/coverage"
 import { MAP_FILTER_READERS } from "@/lib/map-planning/filters"
-import { formatDateRange, formatShortDate } from "@/lib/map-planning/format"
+import { formatDateRange, formatDistance, formatDuration, formatShortDate } from "@/lib/map-planning/format"
 import { boundsFromPolygon, pointInPolygon, type LngLat } from "@/lib/map-planning/geo"
 import { containerPoints, type MapPoint } from "@/lib/map-planning/points"
 import { containerLocation } from "@/lib/map-planning/positions"
@@ -78,6 +78,7 @@ import { todayIso } from "@/lib/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
 
 import { LayersPanel } from "./layers-panel"
+import { useRoadGeometries } from "./use-road-geometries"
 import { MapSearch } from "./map-search"
 import { MapToolbar } from "./map-toolbar"
 import { SavedSelectionsMenu } from "./saved-selections-menu"
@@ -269,6 +270,8 @@ export function MapPlanningView({
     if (windowRoutesOnMap) for (const route of windowRoutes) lines.set(route.id, route)
     return Array.from(lines.values())
   }, [areaRoutes.routes, routesOnMap, windowRoutes, windowRoutesOnMap])
+  const roadGeometries = useRoadGeometries(routeLines)
+  const routeCardRoad = routeCard ? roadGeometries.get(routeCard.route.id) : undefined
 
   const activeChips = businessFilterChips(filters).length
   const canReset = activeChips > 0 || window !== DEFAULT_COLLECTION_WINDOW
@@ -437,6 +440,7 @@ export function MapPlanningView({
           areaLayers={visibleAreaLayers}
           serviceAreaLayers={visibleServiceAreas}
           routeLines={routeLines}
+          roadGeometries={roadGeometries}
           onRouteClick={(route, anchor) => setRouteCard({ route, anchor })}
           highlightedIds={highlightedIds}
           highlightedRouteId={highlightedRouteId}
@@ -562,6 +566,15 @@ export function MapPlanningView({
                     ? ` · ${routeCard.route.stops.length} on the map`
                     : ""}
                 </dd>
+                {routeCardRoad?.status === "ready" && routeCardRoad.geometry.legs.length > 0 && (
+                  <>
+                    <dt className="text-muted-foreground">Drive</dt>
+                    <dd className="tabular-nums" data-testid="route-card-drive">
+                      {formatDistance(routeCardRoad.geometry.distanceMetres)} ·{" "}
+                      {formatDuration(routeCardRoad.geometry.durationSeconds)}
+                    </dd>
+                  </>
+                )}
               </dl>
               <Button asChild variant="outline" size="sm" className="mt-3 h-8 w-full gap-1.5 text-xs">
                 <Link href={routeCard.route.href}>

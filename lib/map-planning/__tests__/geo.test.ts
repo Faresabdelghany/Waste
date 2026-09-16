@@ -5,6 +5,7 @@ import {
   boundsFromPolygon,
   inBounds,
   pointInPolygon,
+  simplifyPath,
   worldPoint,
   type LngLat,
 } from "../geo"
@@ -57,5 +58,32 @@ describe("bounds", () => {
     assert.deepEqual(bounds, { west: 12.5, south: 55.6, east: 12.6, north: 55.7 })
     assert.equal(inBounds({ lng: 12.55, lat: 55.65 }, bounds), true)
     assert.equal(inBounds({ lng: 12.45, lat: 55.65 }, bounds), false)
+  })
+})
+
+describe("simplifyPath", () => {
+  test("drops vertices that sit on the line between their neighbours and keeps the corners", () => {
+    const path: LngLat[] = [
+      { lng: 12.5, lat: 55.6 },
+      { lng: 12.55, lat: 55.6 },
+      { lng: 12.6, lat: 55.6 },
+      { lng: 12.6, lat: 55.65 },
+      { lng: 12.6, lat: 55.7 },
+    ]
+    assert.deepEqual(simplifyPath(path, 2), [
+      { lng: 12.5, lat: 55.6 },
+      { lng: 12.6, lat: 55.6 },
+      { lng: 12.6, lat: 55.7 },
+    ])
+  })
+
+  test("keeps a bend wider than the tolerance and a short path untouched", () => {
+    const bend: LngLat[] = [
+      { lng: 12.5, lat: 55.6 },
+      { lng: 12.55, lat: 55.601 },
+      { lng: 12.6, lat: 55.6 },
+    ]
+    assert.deepEqual(simplifyPath(bend, 2), bend)
+    assert.deepEqual(simplifyPath(bend.slice(0, 2), 2), bend.slice(0, 2))
   })
 })

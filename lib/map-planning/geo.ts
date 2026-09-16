@@ -174,3 +174,44 @@ export function expandPolygon(polygon: readonly LngLat[], metres: number): LngLa
     return offsetMetres(point, (dx / length) * metres, (dy / length) * metres)
   })
 }
+
+/** Perpendicular distance in metres from `point` to the segment `a`–`b`. */
+function distanceToSegmentMetres(point: LngLat, a: LngLat, b: LngLat): number {
+  const origin = localMetres(a, a.lat)
+  const p = { x: localMetres(point, a.lat).x - origin.x, y: localMetres(point, a.lat).y - origin.y }
+  const q = { x: localMetres(b, a.lat).x - origin.x, y: localMetres(b, a.lat).y - origin.y }
+  const lengthSquared = q.x * q.x + q.y * q.y
+  const t = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1, (p.x * q.x + p.y * q.y) / lengthSquared))
+  const dx = p.x - t * q.x
+  const dy = p.y - t * q.y
+  return Math.hypot(dx, dy)
+}
+
+/**
+ * Douglas–Peucker: the path with every vertex that strays less than
+ * `toleranceMetres` from the line between its kept neighbours removed. The
+ * endpoints always stay; a path of two points or fewer is returned as is.
+ */
+export function simplifyPath(path: readonly LngLat[], toleranceMetres: number): LngLat[] {
+  if (path.length <= 2) return [...path]
+  const keep = new Array<boolean>(path.length).fill(false)
+  keep[0] = true
+  keep[path.length - 1] = true
+  const stack: Array<[number, number]> = [[0, path.length - 1]]
+  while (stack.length > 0) {
+    const [start, end] = stack.pop()!
+    let farthest = -1
+    let farthestDistance = toleranceMetres
+    for (let index = start + 1; index < end; index += 1) {
+      const distance = distanceToSegmentMetres(path[index], path[start], path[end])
+      if (distance > farthestDistance) {
+        farthestDistance = distance
+        farthest = index
+      }
+    }
+    if (farthest === -1) continue
+    keep[farthest] = true
+    stack.push([start, farthest], [farthest, end])
+  }
+  return path.filter((_, index) => keep[index])
+}

@@ -63,3 +63,15 @@ export function formatShortDate(iso: string): string {
   const [year, month, day] = iso.split("-").map((part) => Number.parseInt(part, 10))
   return `${day} ${SHORT_MONTHS[(month ?? 1) - 1] ?? SHORT_MONTHS[0]} ${year}`
 }
+
+/** "850 m" under a kilometre, "12.4 km" above. */
+export function formatDistance(metres: number): string {
+  return metres < 1000 ? `${enUS(Math.round(metres))} m` : `${enUS(metres / 1000, 1)} km`
+}
+
+/** "38 min" under an hour, "1 h 05 min" above; never less than a minute. */
+export function formatDuration(seconds: number): string {
+  const minutes = Math.max(1, Math.round(seconds / 60))
+  if (minutes < 60) return `${minutes} min`
+  return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")} min`
+}

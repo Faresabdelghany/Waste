@@ -1,7 +1,15 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { formatArea, formatDateRange, formatLongDate, formatVolume, formatWeight } from "../format"
+import {
+  formatArea,
+  formatDateRange,
+  formatDistance,
+  formatDuration,
+  formatLongDate,
+  formatVolume,
+  formatWeight,
+} from "../format"
 
 describe("formatArea", () => {
   test("small shapes read in square metres, larger ones in km² with two decimals", () => {
@@ -38,5 +46,21 @@ describe("formatShortDate", () => {
   test("reads like the registry facts", async () => {
     const { formatShortDate } = await import("../format")
     assert.equal(formatShortDate("2026-09-18"), "18 Sep 2026")
+  })
+})
+
+describe("formatDistance", () => {
+  test("metres under a kilometre, kilometres with one decimal above", () => {
+    assert.equal(formatDistance(850), "850 m")
+    assert.equal(formatDistance(12_440), "12.4 km")
+    assert.equal(formatDistance(0), "0 m")
+  })
+})
+
+describe("formatDuration", () => {
+  test("minutes under an hour, hours and minutes above", () => {
+    assert.equal(formatDuration(38 * 60), "38 min")
+    assert.equal(formatDuration(65 * 60 + 20), "1 h 05 min")
+    assert.equal(formatDuration(30), "1 min")
   })
 })

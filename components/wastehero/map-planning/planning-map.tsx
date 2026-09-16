@@ -26,6 +26,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react"
@@ -35,13 +36,16 @@ import type { PlanningAreaLayer } from "@/lib/map-planning/areas"
 import { baseMapById, type BaseMapId } from "@/lib/map-planning/base-maps"
 import { clusterPoints, type MapCluster } from "@/lib/map-planning/clusters"
 import { NO_FRACTION_COLOR, SELECTION_COLOR } from "@/lib/map-planning/colors"
-import { polygonCentroid, type LngLat, type LngLatBounds } from "@/lib/map-planning/geo"
+import { polygonCentroid, worldPoint, type LngLat, type LngLatBounds } from "@/lib/map-planning/geo"
 import type { MapPoint } from "@/lib/map-planning/points"
 import { COPENHAGEN_CENTER } from "@/lib/map-planning/positions"
+import { chevronsAlong, localPathData, roadPath } from "@/lib/map-planning/road-geometry"
 import type { AreaRoute } from "@/lib/map-planning/routes"
 import type { SelectionShape } from "@/lib/map-planning/selection"
 import type { ServiceAreaLayer } from "@/lib/map-planning/service-areas"
 import { cn } from "@/lib/utils"
+
+import type { RoadGeometryState } from "./use-road-geometries"
 
 export type DrawTool = "none" | "rectangle" | "polygon"
 
@@ -64,6 +68,14 @@ const MIN_RECTANGLE_PX = 6
 const FIT_PADDING_PX = 48
 const FIT_MAX_ZOOM = 16
 const FLY_ZOOM = 17
+/** Road paths are built once in world pixels at this zoom and moved by one group transform. */
+const ROAD_REF_ZOOM = 16
+/** A second fixed point: its screen distance from the centre gives the live scale. */
+const ROAD_PROBE: LngLat = { lng: COPENHAGEN_CENTER.lng + 0.01, lat: COPENHAGEN_CENTER.lat }
+const ROAD_PROBE_WORLD_DX = worldPoint(ROAD_PROBE, ROAD_REF_ZOOM).x - worldPoint(COPENHAGEN_CENTER, ROAD_REF_ZOOM).x
+const CHEVRON_SPACING_PX = 140
+/** Direction chevrons only once streets are legible — at city zoom they read as gaps in the line. */
+const CHEVRON_MIN_SCALE = 2 ** (14 - ROAD_REF_ZOOM)
 
 /** What the page can ask the map to do. */
 export type PlanningMapApi = {
@@ -89,6 +101,8 @@ export type PlanningMapProps = {
   serviceAreaLayers: readonly ServiceAreaLayer[]
   /** Routes to draw as stop-to-stop lines ("See on map", the Routes layer). */
   routeLines: readonly AreaRoute[]
+  /** The road through each drawn route's stops, by route id — a pending or refused road draws straight and dashed. */
+  roadGeometries: ReadonlyMap<string, RoadGeometryState>
   /** A click on a route line — open its card at that point. */
   onRouteClick: (route: AreaRoute, anchor: { x: number; y: number }) => void
   /** Container ids the panel is pointing at — their markers stand out. */
@@ -139,6 +153,7 @@ export function PlanningMap({
   areaLayers,
   serviceAreaLayers,
   routeLines,
+  roadGeometries,
   onRouteClick,
   highlightedIds,
   highlightedRouteId,
@@ -178,7 +193,14 @@ export function PlanningMap({
       attributionControl: { compact: true },
       // The draw overlay and the toolbar own double-click; the map keeps scroll and drag.
       doubleClickZoom: false,
+      // A planning map stays north-up and flat: the road overlay moves with
+      // one translate-and-scale transform, which assumes no rotation or pitch.
+      dragRotate: false,
+      pitchWithRotate: false,
+      touchPitch: false,
     })
+    map.touchZoomRotate.disableRotation()
+    map.keyboard.disableRotation()
     map.addControl(new NavigationControl({ showCompass: false }), "top-right")
     // State flags for tests and debugging: the container says when a style
     // has loaded and when the map is idle (every visible tile drawn).
@@ -300,6 +322,7 @@ export function PlanningMap({
           areas={areaLayers}
           serviceAreas={serviceAreaLayers}
           routes={routeLines}
+          roadGeometries={roadGeometries}
           shape={shape}
           editing={editingShape && drawTool === "none"}
           project={project}
@@ -463,6 +486,7 @@ function ShapesOverlay({
   areas,
   serviceAreas,
   routes,
+  roadGeometries,
   shape,
   editing,
   project,
@@ -475,6 +499,7 @@ function ShapesOverlay({
   areas: readonly PlanningAreaLayer[]
   serviceAreas: readonly ServiceAreaLayer[]
   routes: readonly AreaRoute[]
+  roadGeometries: ReadonlyMap<string, RoadGeometryState>
   shape: SelectionShape | null
   editing: boolean
   project: (lngLat: LngLat) => ScreenPoint | null
@@ -491,6 +516,25 @@ function ShapesOverlay({
     ? shape.polygon.map(project).filter((point): point is ScreenPoint => point !== null)
     : []
   const screen = drag ? drag.screen : projected
+
+  // Road paths are built once, in world pixels at ROAD_REF_ZOOM relative to
+  // the city centre; per frame only the group transform below changes.
+  const roadPaths = useMemo(() => {
+    const paths = new Map<string, string>()
+    for (const route of routes) {
+      const state = roadGeometries.get(route.id)
+      if (state?.status === "ready" && state.geometry.legs.length > 0) {
+        paths.set(route.id, localPathData(roadPath(state.geometry), ROAD_REF_ZOOM, COPENHAGEN_CENTER))
+      }
+    }
+    return paths
+  }, [roadGeometries, routes])
+  const originScreen = project(COPENHAGEN_CENTER)
+  const probeScreen = project(ROAD_PROBE)
+  const roadScale = originScreen && probeScreen ? (probeScreen.x - originScreen.x) / ROAD_PROBE_WORLD_DX : null
+  const roadTransform =
+    originScreen && roadScale !== null ? `translate(${originScreen.x} ${originScreen.y}) scale(${roadScale})` : null
+  const showChevrons = roadScale !== null && roadScale >= CHEVRON_MIN_SCALE
 
   const local = (event: { clientX: number; clientY: number }): ScreenPoint => {
     const rect = svgRef.current?.getBoundingClientRect()
@@ -602,73 +646,144 @@ function ShapesOverlay({
       {[...routes]
         .sort((a, b) => Number(a.id === highlightedRouteId) - Number(b.id === highlightedRouteId))
         .map((route) => {
-        const stops = route.stops.map(project).filter((point): point is ScreenPoint => point !== null)
-        if (stops.length === 0) return null
-        const open = (event: { clientX: number; clientY: number }) => onRouteClick(route, local(event))
-        const highlighted = highlightedRouteId === route.id
-        const faded = highlightedRouteId !== null && !highlighted
-        return (
-          <g
-            key={route.id}
-            data-route-line={route.id}
-            data-route-status={route.bucket}
-            data-highlighted={highlighted ? "true" : undefined}
-            opacity={faded ? 0.3 : 1}
-          >
-            {stops.length >= 2 && (
-              <polyline
-                points={toPoints(stops)}
-                fill="none"
-                stroke={route.color}
-                strokeWidth={highlighted ? 5 : 3}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                strokeOpacity={highlighted ? 1 : 0.85}
-              />
-            )}
-            {stops.map((stop, index) => (
-              <circle key={index} cx={stop.x} cy={stop.y} r={highlighted ? 5 : 4} fill="white" stroke={route.color} strokeWidth={2} />
-            ))}
-            {/* A wide, invisible stroke makes the line easy to hit; it is the interactive element. */}
-            <polyline
-              points={toPoints(stops.length >= 2 ? stops : [stops[0], stops[0]])}
-              fill="none"
-              stroke="transparent"
-              strokeWidth={14}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              role="button"
-              tabIndex={0}
-              aria-label={`Route ${route.name}, ${route.status}`}
-              data-route-hit={route.id}
-              className="cursor-pointer focus-visible:outline-none"
-              style={{ pointerEvents: "stroke" }}
-              onClick={open}
-              onMouseEnter={() => onHoverRoute(route.id)}
-              onMouseLeave={() => onHoverRoute(null)}
-              onFocus={() => onHoverRoute(route.id)}
-              onBlur={() => onHoverRoute(null)}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") return
-                event.preventDefault()
-                const box = event.currentTarget.getBoundingClientRect()
-                open({ clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 })
-              }}
-            />
-            <text
-              x={stops[0].x + 8}
-              y={stops[0].y - 8}
-              className="text-[11px] font-semibold"
-              fill={route.color}
-              stroke="white"
-              strokeWidth={3}
-              paintOrder="stroke"
+          const state = roadGeometries.get(route.id)
+          const road = state?.status === "ready" && state.geometry.legs.length > 0 ? state.geometry : null
+          const anchors = (road ? road.snappedStops : route.stops)
+            .map(project)
+            .filter((point): point is ScreenPoint => point !== null)
+          if (anchors.length === 0) return null
+          const open = (event: { clientX: number; clientY: number }) => onRouteClick(route, local(event))
+          const highlighted = highlightedRouteId === route.id
+          const faded = highlightedRouteId !== null && !highlighted
+          const width = highlighted ? 5 : 3.5
+          const roadData = road && roadTransform ? roadPaths.get(route.id) : undefined
+          const straight = toPoints(anchors.length >= 2 ? anchors : [anchors[0], anchors[0]])
+          const chevrons =
+            highlighted && road && showChevrons
+              ? chevronsAlong(
+                  roadPath(road)
+                    .map(project)
+                    .filter((point): point is ScreenPoint => point !== null),
+                  CHEVRON_SPACING_PX,
+                )
+              : []
+          // A wide, invisible stroke makes the line easy to hit; it is the interactive element.
+          const hitProps = {
+            fill: "none",
+            stroke: "transparent",
+            strokeWidth: 14,
+            strokeLinejoin: "round" as const,
+            strokeLinecap: "round" as const,
+            role: "button",
+            tabIndex: 0,
+            "aria-label": `Route ${route.name}, ${route.status}`,
+            "data-route-hit": route.id,
+            className: "cursor-pointer focus-visible:outline-none",
+            style: { pointerEvents: "stroke" as const },
+            onClick: open,
+            onMouseEnter: () => onHoverRoute(route.id),
+            onMouseLeave: () => onHoverRoute(null),
+            onFocus: () => onHoverRoute(route.id),
+            onBlur: () => onHoverRoute(null),
+            onKeyDown: (event: ReactKeyboardEvent<SVGElement>) => {
+              if (event.key !== "Enter" && event.key !== " ") return
+              event.preventDefault()
+              const box = event.currentTarget.getBoundingClientRect()
+              open({ clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 })
+            },
+          }
+          return (
+            <g
+              key={route.id}
+              data-route-line={route.id}
+              data-route-status={route.bucket}
+              data-route-geometry={roadData ? "road" : state?.status === "failed" ? "straight" : "pending"}
+              data-highlighted={highlighted ? "true" : undefined}
+              opacity={faded ? 0.3 : 1}
             >
-              {route.name}
-            </text>
-          </g>
-        )
-      })}
+              {roadData ? (
+                <g transform={roadTransform ?? undefined}>
+                  {/* A white casing under the coloured road so it reads on any base map. */}
+                  <path
+                    d={roadData}
+                    fill="none"
+                    stroke="white"
+                    strokeWidth={width + 3}
+                    strokeOpacity={0.9}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <path
+                    d={roadData}
+                    data-route-road={route.id}
+                    fill="none"
+                    stroke={route.color}
+                    strokeWidth={width}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </g>
+              ) : (
+                anchors.length >= 2 && (
+                  /* No road yet, or none to be had: the stops joined straight, dashed to say so. */
+                  <polyline
+                    points={straight}
+                    fill="none"
+                    stroke={route.color}
+                    strokeWidth={highlighted ? 4 : 2.5}
+                    strokeDasharray="6 6"
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    strokeOpacity={0.85}
+                  />
+                )
+              )}
+              {chevrons.map((chevron, index) => (
+                <path
+                  key={index}
+                  d="M-3.5 -3 L0 0 L-3.5 3"
+                  fill="none"
+                  stroke="white"
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  transform={`translate(${chevron.x} ${chevron.y}) rotate(${chevron.angle})`}
+                />
+              ))}
+              {anchors.map((stop, index) => (
+                <circle
+                  key={index}
+                  cx={stop.x}
+                  cy={stop.y}
+                  r={highlighted ? 5 : 4}
+                  fill="white"
+                  stroke={route.color}
+                  strokeWidth={2}
+                />
+              ))}
+              {roadData ? (
+                <g transform={roadTransform ?? undefined}>
+                  <path d={roadData} vectorEffect="non-scaling-stroke" {...hitProps} />
+                </g>
+              ) : (
+                <polyline points={straight} {...hitProps} />
+              )}
+              <text
+                x={anchors[0].x + 8}
+                y={anchors[0].y - 8}
+                className="text-[11px] font-semibold"
+                fill={route.color}
+                stroke="white"
+                strokeWidth={3}
+                paintOrder="stroke"
+              >
+                {route.name}
+              </text>
+            </g>
+          )
+        })}
 
       {shape && screen.length >= 3 && (
         <g data-selection-shape={shape.kind} data-editing={editing ? "true" : undefined}>
