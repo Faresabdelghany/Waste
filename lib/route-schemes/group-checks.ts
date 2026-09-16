@@ -1,19 +1,22 @@
 // Collection-group checks for the guided setup's step 3 (2026-09-16
-// redesign): every scheme service day has a group, and no vehicle or driver
-// is on two groups the same day. Pure data logic — no UI or store
+// redesign): every scheme service day has a group, no vehicle or driver is
+// on two groups the same day, and no group collects container types outside
+// the scheme's service type (round 3). Pure data logic — no UI or store
 // dependencies. Messages are the product's exact wording; the engine's
-// validateScheme raises the same three conditions with older wording, which
+// validateScheme raises the first three conditions with older wording, which
 // withoutDuplicatedEngineIssues filters so the wizard never lists one
 // problem twice.
 
 import type { CollectionGroup } from "./groups"
+import { containerTypeShortLabel } from "./matching"
 import {
   SERVICE_DAY_LABELS,
   sortServiceDays,
   type ServiceDay,
 } from "./recurrence"
+import { containerTypesOutsideServiceType } from "./scope"
 
-export type GroupCheckKind = "coverage" | "vehicle" | "driver"
+export type GroupCheckKind = "coverage" | "vehicle" | "driver" | "service-type"
 
 export type GroupCheckIssue = {
   kind: GroupCheckKind
@@ -28,6 +31,8 @@ export type GroupCheckIssue = {
 export type GroupCheckInput = {
   groups: readonly CollectionGroup[]
   serviceDays: readonly ServiceDay[]
+  /** The scheme's service type (scope.ts); absent = no container-type restriction. */
+  serviceType?: string
   /** Display label for a vehicle id ("WH-07"); falls back to the id. */
   vehicleLabelOf?: (vehicleId: string) => string | undefined
   /** Display name for a driver id; falls back to the id. */
@@ -80,10 +85,31 @@ function clashes(
   })
 }
 
+/** "Residual · medium bins has container types outside Kerbside collection: 660 L" — a step 1 change left the group out of scope. */
+function outsideServiceType(input: GroupCheckInput): GroupCheckIssue[] {
+  if (!input.serviceType) return []
+  const serviceType = input.serviceType
+  return input.groups.flatMap((group) => {
+    const outside = containerTypesOutsideServiceType(group.containerTypes ?? [], serviceType)
+    if (outside.length === 0) return []
+    return [
+      {
+        kind: "service-type" as const,
+        text: `${group.name} has container types outside ${serviceType}: ${outside
+          .map(containerTypeShortLabel)
+          .join(", ")}`,
+        groupIds: [group.id],
+        days: sortServiceDays(group.days),
+      },
+    ]
+  })
+}
+
 /**
  * The step's issue list: uncovered days first ("Friday has no collection
  * group"), then vehicle clashes, then driver clashes ("Vehicle WH-07 is on
- * Residual · large bins and Organic on Tuesday, Thursday").
+ * Residual · large bins and Organic on Tuesday, Thursday"), then groups
+ * outside the scheme's service type.
  */
 export function checkCollectionGroups(input: GroupCheckInput): GroupCheckIssue[] {
   const issues: GroupCheckIssue[] = []
@@ -98,6 +124,7 @@ export function checkCollectionGroups(input: GroupCheckInput): GroupCheckIssue[]
   }
   issues.push(...clashes(input, "vehicleId", "vehicle"))
   issues.push(...clashes(input, "driverId", "driver"))
+  issues.push(...outsideServiceType(input))
   return issues
 }
 

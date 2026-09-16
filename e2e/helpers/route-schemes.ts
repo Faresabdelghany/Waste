@@ -224,6 +224,8 @@ export function schemeRow(page: Page, name: string): Locator {
 /** Fixture crew no fixture scheme plans (RS-Central holds WH-24 + Mads Mon–Fri). */
 export const CLEAN_VEHICLE = "WH-31 · Glass crane · 16 t"
 export const CLEAN_DRIVER = "Freja Nielsen · C, CE"
+/** The service type whose container types include the baseline 140 L / 240 L bins. */
+export const BASELINE_SERVICE_TYPE = "Kerbside collection"
 
 /** A complete, issue-free scheme through step 3 (one Monday group). */
 export async function buildBaselineScheme(page: Page, name: string): Promise<void> {
@@ -233,7 +235,7 @@ export async function buildBaselineScheme(page: Page, name: string): Promise<voi
     project: "Copenhagen Central",
     area: "Indre By Operations",
     fraction: "Residual",
-    serviceType: "Collection",
+    serviceType: BASELINE_SERVICE_TYPE,
   })
   await nextStep(page)
   await expect(stepHeading(page)).toHaveText("When does this scheme collect?")

@@ -222,6 +222,7 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
     ...checkCollectionGroups({
       groups: data.groups,
       serviceDays,
+      serviceType: data.serviceType,
       vehicleLabelOf: (id) => vehicleById(id)?.callsign,
       driverNameOf: (id) => driverById(id)?.name,
     }).map((issue) => ({
@@ -244,7 +245,11 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
   )
 
   const step1Ok = Boolean(
-    data.schemeName.trim() && data.projectId && data.planningAreaId && data.wasteFraction,
+    data.schemeName.trim() &&
+      data.projectId &&
+      data.planningAreaId &&
+      data.wasteFraction &&
+      data.serviceType,
   )
   const step2Ok = serviceDays.length > 0 && occurrences.rows.length > 0
   const step3Ok = issues.length === 0

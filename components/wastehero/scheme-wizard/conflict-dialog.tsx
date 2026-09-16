@@ -1,7 +1,8 @@
 "use client"
 
-// "N issues block route generation" — the blocking dialog Next opens on
-// Step 3 while coverage, vehicle, or driver issues remain.
+// "1 issue blocks route generation" / "N issues block route generation" —
+// the blocking dialog Next opens on Step 3 while coverage, vehicle, driver,
+// or service-type issues remain.
 
 import { Button } from "@/components/ui/button"
 import {
@@ -29,7 +30,9 @@ export function ConflictDialog({
       <DialogContent className="max-w-md rounded-2xl bg-background">
         <DialogHeader className="text-left">
           <DialogTitle>
-            {issues.length} issue{issues.length === 1 ? "" : "s"} block route generation
+            {issues.length === 1
+              ? "1 issue blocks route generation"
+              : `${issues.length} issues block route generation`}
           </DialogTitle>
           <DialogDescription className="sr-only">
             Resolve the listed issues before continuing

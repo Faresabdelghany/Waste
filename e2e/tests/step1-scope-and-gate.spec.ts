@@ -1,5 +1,5 @@
 import { expect, test } from "../fixtures"
-import { fillScope, nextButton, startGuided, wizard } from "../helpers/route-schemes"
+import { fillScope, nextButton, optionTexts, startGuided, wizard } from "../helpers/route-schemes"
 
 test("step 1 asks for the real scope and has no Collection calendar", async ({ page }) => {
   await startGuided(page)
@@ -19,7 +19,7 @@ test("step 1 asks for the real scope and has no Collection calendar", async ({ p
   await expect(root.getByText("Collection calendar")).toHaveCount(0)
 })
 
-test("step 1 gates on name, project, planning area, and waste fraction — not service type", async ({
+test("step 1 gates on name, project, planning area, waste fraction, and service type", async ({
   page,
 }) => {
   await startGuided(page)
@@ -31,5 +31,16 @@ test("step 1 gates on name, project, planning area, and waste fraction — not s
   await fillScope(page, { area: "Indre By Operations" })
   await expect(nextButton(page)).toBeDisabled()
   await fillScope(page, { fraction: "Residual" })
+  await expect(nextButton(page)).toBeDisabled()
+  await fillScope(page, { serviceType: "Container collection" })
   await expect(nextButton(page)).toBeEnabled()
+})
+
+test("the service type offers the three collection types, nothing else", async ({ page }) => {
+  await startGuided(page)
+  expect(await optionTexts(page, wizard(page), "Service type")).toEqual([
+    "Container collection",
+    "Underground collection",
+    "Kerbside collection",
+  ])
 })

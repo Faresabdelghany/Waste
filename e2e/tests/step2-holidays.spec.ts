@@ -1,5 +1,6 @@
 import { expect, test } from "../fixtures"
 import {
+  BASELINE_SERVICE_TYPE,
   fillRecurrence,
   fillScope,
   projectCalendarField,
@@ -26,6 +27,7 @@ async function toStep2(page: Parameters<typeof startGuided>[0], project: string)
     project,
     area: AREA_BY_PROJECT[project],
     fraction: "Residual",
+    serviceType: BASELINE_SERVICE_TYPE,
   })
   await nextStep(page)
   await expect(stepHeading(page)).toHaveText("When does this scheme collect?")

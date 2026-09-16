@@ -52,6 +52,7 @@ import {
   type StopMatchResult,
 } from "@/lib/route-schemes/matching"
 import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
+import { allowedContainerTypes } from "@/lib/route-schemes/scope"
 import {
   SERVICE_DAY_LABELS,
   SERVICE_DAY_SHORT_LABELS,
@@ -78,13 +79,16 @@ export function newWizardGroup(): CollectionGroup {
   }
 }
 
-/** The container types the container records actually carry. */
-function useContainerVocabulary(records: WizardRecords) {
+/** The container types the container records actually carry, limited to the scheme's service type. */
+function useContainerVocabulary(records: WizardRecords, serviceType: string) {
   return useMemo(() => {
+    const allowed = allowedContainerTypes(serviceType)
     const types = new Set<string>()
     for (const record of records.containers) {
       const profile = containerMatchProfile(record)
-      if (profile.containerType) types.add(profile.containerType)
+      if (!profile.containerType) continue
+      if (allowed && !allowed.includes(profile.containerType)) continue
+      types.add(profile.containerType)
     }
     const order = (type: string) => {
       const index = CONTAINER_TYPE_VOCABULARY.indexOf(type)
@@ -93,7 +97,7 @@ function useContainerVocabulary(records: WizardRecords) {
     return {
       containerTypes: [...types].sort((a, b) => order(a) - order(b) || a.localeCompare(b)),
     }
-  }, [records.containers])
+  }, [records.containers, serviceType])
 }
 
 export function GroupEditor({
@@ -119,7 +123,7 @@ export function GroupEditor({
     editor.mode === "edit" ? editor.group : newWizardGroup(),
   )
   const [reviewOpen, setReviewOpen] = useState(false)
-  const vocabulary = useContainerVocabulary(records)
+  const vocabulary = useContainerVocabulary(records, data.serviceType)
   const schemeDays = model.serviceDays
 
   const vehicle = model.vehicleById(group.vehicleId)

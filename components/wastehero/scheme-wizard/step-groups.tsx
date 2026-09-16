@@ -77,6 +77,16 @@ export function StepGroups({
 
   return (
     <div className="space-y-5">
+      {/* The scope every group inherits — fraction and service type — with
+          its own way back to step 1. */}
+      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+        <span>
+          {[data.wasteFraction, data.serviceType].filter(Boolean).join(" · ") || "—"}
+        </span>
+        <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => go(1)}>
+          Change
+        </Button>
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2" aria-label="Service day coverage">
           {coverage.map(({ day, count }) => (

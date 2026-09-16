@@ -80,6 +80,37 @@ describe("checkCollectionGroups", () => {
     const groups = [group({ id: "a", name: "A", days: [...weekdays], vehicleId: "v1", driverId: "d1" })]
     assert.deepEqual(checkCollectionGroups({ groups, serviceDays: weekdays }), [])
   })
+
+  test("a group whose container types fall outside the scheme's service type is named with the exact wording", () => {
+    const groups = [
+      group({
+        id: "g",
+        name: "Residual · medium bins",
+        days: ["monday"],
+        vehicleId: "v1",
+        driverId: "d1",
+        containerTypes: ["Four-wheel bin · 660 L"],
+      }),
+    ]
+    const issues = checkCollectionGroups({
+      groups,
+      serviceDays: ["monday"],
+      serviceType: "Kerbside collection",
+    })
+    assert.deepEqual(issues.map((issue) => [issue.kind, issue.text, issue.groupIds]), [
+      [
+        "service-type",
+        "Residual · medium bins has container types outside Kerbside collection: 660 L",
+        ["g"],
+      ],
+    ])
+    // In scope, or no service type on the scheme: nothing to raise.
+    assert.deepEqual(
+      checkCollectionGroups({ groups, serviceDays: ["monday"], serviceType: "Container collection" }),
+      [],
+    )
+    assert.deepEqual(checkCollectionGroups({ groups, serviceDays: ["monday"] }), [])
+  })
 })
 
 describe("withoutDuplicatedEngineIssues", () => {
