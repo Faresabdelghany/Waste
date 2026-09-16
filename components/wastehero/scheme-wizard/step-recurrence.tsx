@@ -1,9 +1,11 @@
 "use client"
 
 // Step 2 — When does this scheme collect? Effective window, cadence, start
-// time, service days, holiday policy, and the live next-dates table.
+// time, service days, the holiday policy with its project-scoped holiday
+// source, and the live next-dates table.
 
 import { useState } from "react"
+import Link from "next/link"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -18,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { HOLIDAY_SETTINGS_HREF, holidaySourceLabel } from "@/lib/route-schemes/holidays"
 import {
   formatClockTime,
   formatOccurrenceDate,
@@ -161,7 +164,7 @@ export function StepRecurrence({
             ))}
           </ToggleGroup>
         </div>
-        <Field id="scheme-holiday" label="On a calendar holiday" className="min-w-64 flex-1">
+        <Field id="scheme-holiday" label="On a public holiday" className="min-w-64 flex-1">
           <SimpleSelect
             id="scheme-holiday"
             value={data.holidayPolicy}
@@ -169,6 +172,18 @@ export function StepRecurrence({
             options={HOLIDAY_POLICY_OPTIONS}
             placeholder="Select"
           />
+          <div
+            className={cn(
+              "flex items-center gap-2 text-xs",
+              model.holidaySource ? "text-muted-foreground" : "text-amber-700 dark:text-amber-400",
+            )}
+            data-testid="holiday-source"
+          >
+            <span className="truncate">{holidaySourceLabel(model.holidaySource)}</span>
+            <Button variant="link" size="sm" className="h-auto shrink-0 p-0 text-xs" asChild>
+              <Link href={HOLIDAY_SETTINGS_HREF}>View in Settings</Link>
+            </Button>
+          </div>
         </Field>
       </div>
 

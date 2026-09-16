@@ -16,6 +16,7 @@
 import type { BusinessRecord } from "../data/business-modules"
 import { canonicalCalendarName } from "./calendar"
 import { formatWorkingDays } from "./calendar-list"
+import { schemeHolidayListName, schemeProjectId } from "./holidays"
 import {
   recurrenceCadenceLabel,
   recurrenceFromValues,
@@ -93,35 +94,34 @@ export function schemeRecurrenceSummary(record: BusinessRecord): string {
 }
 
 /**
- * The Collection calendar column: the linked calendar record's live name. A
- * structured `calendarId` that no longer resolves renders "—" (the calendar
- * was deleted); only a record with no structured id at all falls back to its
- * legacy display fact (D28i), folded through canonicalCalendarName so
- * pre-rename copies agree with the filter facet.
+ * The Holiday list column: the name of the scheme's project's holiday list
+ * (holiday model 2026-09-16 — holidays follow the project, never the scheme).
+ * "—" when the project has no list. A legacy record without a project falls
+ * back to its stored display fact (D28i), folded through
+ * canonicalCalendarName so pre-rename copies agree with the filter facet.
  */
-export function schemeCalendarName(
+export function schemeHolidayListLabel(
   record: BusinessRecord,
   calendars: readonly BusinessRecord[],
+  projects: readonly BusinessRecord[],
 ): string {
-  const calendarId = stringValue(record.submittedValues ?? {}, "calendarId")
-  if (calendarId) {
-    return calendars.find((calendar) => calendar.id === calendarId)?.name ?? EMPTY
-  }
+  if (schemeProjectId(record)) return schemeHolidayListName(record, calendars, projects)
   return canonicalCalendarName(factOf(record, "Collection calendar")) ?? EMPTY
 }
 
 export type SchemeRowSummary = {
   recurrence: string
-  calendar: string
+  holidays: string
 }
 
 /** The derived table cells for one scheme row (D15). */
 export function schemeRowSummary(
   record: BusinessRecord,
   calendars: readonly BusinessRecord[],
+  projects: readonly BusinessRecord[],
 ): SchemeRowSummary {
   return {
     recurrence: schemeRecurrenceSummary(record),
-    calendar: schemeCalendarName(record, calendars),
+    holidays: schemeHolidayListLabel(record, calendars, projects),
   }
 }

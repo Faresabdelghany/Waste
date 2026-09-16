@@ -6,6 +6,7 @@
 import type { ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
+import { NO_HOLIDAY_LIST_LABEL } from "@/lib/route-schemes/holidays"
 import { HOLIDAY_POLICY_LABELS, formatClockTime, formatOccurrenceDate } from "@/lib/route-schemes/occurrences"
 import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
 import { recurrenceCadenceLabel, serviceDaysRangeLabel } from "@/lib/route-schemes/recurrence"
@@ -79,7 +80,6 @@ export function StepReview({
             label="Planning area"
             value={model.nameOf(records.areas, data.planningAreaId) ?? DASH}
           />
-          <ReviewRow label="Calendar" value={model.nameOf(records.calendars, data.calendarId) ?? DASH} />
           <ReviewRow
             label="Depot · station"
             value={`${model.nameOf(records.depots, data.depotId) ?? DASH} · ${
@@ -98,6 +98,7 @@ export function StepReview({
               occurrences.ongoing ? " in the next 12 months" : ""
             }`}
           />
+          <ReviewRow label="Holiday list" value={model.holidaySource?.name ?? NO_HOLIDAY_LIST_LABEL} />
           <ReviewRow label="Holidays" value={HOLIDAY_POLICY_LABELS[data.holidayPolicy]} />
         </ReviewSection>
       </div>

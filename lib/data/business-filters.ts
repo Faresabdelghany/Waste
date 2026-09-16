@@ -55,7 +55,7 @@ export const BUSINESS_FILTER_CHIP_LABELS: Readonly<Record<BusinessFilterKey, str
   serviceDates: "Service date",
   serviceFrequencies: "Service frequency",
   routeSchemes: "Route scheme",
-  collectionCalendars: "Collection calendar",
+  collectionCalendars: "Holiday list",
   propertyTypes: "Property type",
   serviceAreas: "Service area",
   serviceScopes: "Service scope",

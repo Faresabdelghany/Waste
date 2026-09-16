@@ -5,8 +5,7 @@
 // Steps render this; nothing here touches React or the store.
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
-import { calendarFromRecord, type CollectionCalendar } from "@/lib/route-schemes/calendar"
-import { holidayListFromDates } from "@/lib/route-schemes/holidays"
+import { projectHolidaySource, type HolidaySource } from "@/lib/route-schemes/holidays"
 import { draftRecurrence, resolvedDraftGroups, validateGuidedScheme } from "@/lib/route-schemes/draft"
 import {
   estimateLoadTonnes,
@@ -79,8 +78,8 @@ export type WizardIssue = {
 }
 
 export type WizardModel = {
-  calendar: CollectionCalendar | null
-  calendarRecord: BusinessRecord | undefined
+  /** The project's holiday list; null while no project is picked or it has none. */
+  holidaySource: HolidaySource | null
   recurrence: SchemeRecurrence | null
   occurrences: OccurrencePreview
   resolution: CollectionGroupResolution
@@ -109,11 +108,16 @@ export function groupColor(index: number): string {
 export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords): WizardModel {
   const nameOf = (list: readonly BusinessRecord[], id: string | undefined) =>
     id ? list.find((record) => record.id === id)?.name : undefined
-  const calendarRecord = records.calendars.find((record) => record.id === data.calendarId)
-  const calendar = calendarFromRecord(calendarRecord)
+  // Holidays follow the project (holiday model 2026-09-16): its per-year
+  // lists, read from the calendar records scoped to it. No list = every date
+  // is a working day.
+  const holidaySource = projectHolidaySource(
+    records.projects.find((record) => record.id === data.projectId),
+    records.calendars,
+  )
+  const holidays = holidaySource?.list ?? NO_HOLIDAYS
   const recurrence = draftRecurrence(data)
   const serviceDays = sortServiceDays(data.serviceDays)
-  const holidays = calendar ? holidayListFromDates(calendar.holidayDates) : NO_HOLIDAYS
   const occurrences = recurrence
     ? occurrencePreview({ recurrence, holidayPolicy: data.holidayPolicy, holidays })
     : { rows: [], ongoing: !data.effectiveTo, horizon: null, count: 0 }
@@ -232,9 +236,7 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
   const step3Ok = issues.length === 0
 
   const summaries: WizardModel["summaries"] = {
-    1: [nameOf(records.areas, data.planningAreaId), nameOf(records.calendars, data.calendarId)]
-      .filter(Boolean)
-      .join(" · "),
+    1: nameOf(records.areas, data.planningAreaId) ?? "",
     2:
       recurrence && serviceDays.length > 0
         ? [
@@ -253,8 +255,7 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
   }
 
   return {
-    calendar,
-    calendarRecord,
+    holidaySource,
     recurrence,
     occurrences,
     resolution,

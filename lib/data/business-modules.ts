@@ -88,6 +88,7 @@ const copenhagenFixtureRecordIds = [
   "scheme-central-a",
   "scheme-osterbro-b",
   "calendar-central",
+  "calendar-central-2027",
   "area-indreby",
   "area-osterbro-contract",
   "area-amager-1",
@@ -2252,6 +2253,36 @@ const plan: WorkspaceDefinition = {
               "2026-01-01, 2026-04-02, 2026-04-03, 2026-04-05, 2026-04-06, 2026-05-14, 2026-05-24, 2026-05-25, 2026-06-05, 2026-12-25, 2026-12-26",
             validFrom: "2026-01-01",
             validTo: "2026-12-31",
+            timezone: "Europe/Copenhagen",
+          },
+        },
+        // The project's holiday list is maintained per year (holiday model
+        // 2026-09-16): the 2027 record carries the 11 Danish public holidays
+        // of 2027 so open-ended schemes see holidays across the year boundary.
+        {
+          ...record(
+            "calendar-central-2027",
+            "Copenhagen Central 2027",
+            "Copenhagen Central · Europe/Copenhagen",
+            "Active",
+            "Operations Admin",
+            "1 Jan",
+            "2 days ago",
+            "Project collection calendar with the Danish holidays of 2027.",
+            { WeekStart: "Monday", Holidays: "11", WorkingDays: "Mon–Fri", Timezone: "Europe/Copenhagen", Validity: "1 Jan – 31 Dec 2027" },
+            ["38 route schemes", "1,602 properties", "11 holidays"],
+            "Project configuration",
+            "2 days",
+            ["Create next year", "Archive"],
+          ),
+          submittedValues: {
+            calendarName: "Copenhagen Central 2027",
+            weekStart: "monday",
+            workingDays: "monday, tuesday, wednesday, thursday, friday",
+            holidayDates:
+              "2027-01-01, 2027-03-25, 2027-03-26, 2027-03-28, 2027-03-29, 2027-05-06, 2027-05-16, 2027-05-17, 2027-06-05, 2027-12-25, 2027-12-26",
+            validFrom: "2027-01-01",
+            validTo: "2027-12-31",
             timezone: "Europe/Copenhagen",
           },
         },

@@ -1,7 +1,7 @@
 "use client"
 
 // Scheme detail as a dedicated full page (issue #29): Details · Routes ·
-// Stops · Collection Calendar tabs, replacing the generic record side sheet for Route Schemes.
+// Stops · Holidays tabs, replacing the generic record side sheet for Route Schemes.
 // Every displayed value is read from the canonical scheme record and the live
 // related records at render time — never from stale display copies. Rule
 // matches are a preview of containers; Stops exist only once routes are
@@ -37,10 +37,6 @@ import type {
 } from "@/lib/data/business-modules"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import {
-  calendarFromRecord,
-  type CollectionCalendar,
-} from "@/lib/route-schemes/calendar"
-import {
   lastGeneratedAt,
   routeDeviationNote,
   schemeGeneratedRoutes,
@@ -55,6 +51,16 @@ import {
   type SchemeRelatedRecords,
 } from "@/lib/route-schemes/lifecycle"
 import { schemeGroupPlans } from "@/lib/route-schemes/groups"
+import {
+  HOLIDAY_SETTINGS_HREF,
+  NO_HOLIDAY_LIST_LABEL,
+  holidaySourceLabel,
+  projectHolidaySource,
+  schemeHolidayPolicy,
+  schemeProjectId,
+  type HolidaySource,
+} from "@/lib/route-schemes/holidays"
+import { HOLIDAY_POLICY_LABELS, type HolidayPolicy } from "@/lib/route-schemes/occurrences"
 import { stopRuleSummary } from "@/lib/route-schemes/matching"
 import { isPlanAheadEnabled, setPlanAhead } from "@/lib/route-schemes/plan-ahead"
 import { schemeAreaName } from "@/lib/route-schemes/scheme-list"
@@ -170,16 +176,6 @@ function effectivePeriodLabel(
   return effectiveTo ? `${from} → ${formatServiceDate(effectiveTo)}` : `${from} → ongoing`
 }
 
-/** The calendar's validity period, open sides spelled out. */
-function calendarValidityLabel(calendar: CollectionCalendar | null): string {
-  if (!calendar || (!calendar.validFrom && !calendar.validTo)) return "Open-ended"
-  const from = calendar.validFrom
-    ? formatServiceDate(calendar.validFrom)
-    : "Open start"
-  const to = calendar.validTo ? formatServiceDate(calendar.validTo) : "open-ended"
-  return `${from} → ${to}`
-}
-
 export function SchemeDetailsPage({
   module,
   record,
@@ -209,6 +205,7 @@ export function SchemeDetailsPage({
   const allRoutes = useModuleRecords("route-studio", "routes")
   const allPickups = useModuleRecords("route-studio", "pickups")
   const calendarRecords = useModuleRecords("plan", "calendars")
+  const projects = useModuleRecords("configure", "organization")
   const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId)
   const allocations = useModuleRecords("fleet", "vehicle-planning")
   const containers = useModuleRecords("resources", "containers")
@@ -296,11 +293,13 @@ export function SchemeDetailsPage({
     [routesById, schemePickups],
   )
 
-  const calendarId = stringValue(values, "calendarId")
-  const calendarRecord = calendarId
-    ? calendarRecords.find((candidate) => candidate.id === calendarId)
-    : undefined
-  const calendar = calendarFromRecord(calendarRecord)
+  // Holidays follow the scheme's project (holiday model 2026-09-16): the
+  // project's per-year lists, read from the calendar records scoped to it.
+  const holidaySource = projectHolidaySource(
+    projects.find((candidate) => candidate.id === schemeProjectId(record)),
+    calendarRecords,
+  )
+  const holidayPolicy = schemeHolidayPolicy(values)
 
   const togglePlanAhead = () => {
     const enabled = !planAheadOn
@@ -417,7 +416,7 @@ export function SchemeDetailsPage({
                   ["details", "Details", null],
                   ["routes", "Routes", schemeRoutes.length],
                   ["stops", "Stops", schemeStops.length],
-                  ["calendar", "Collection Calendar", null],
+                  ["holidays", "Holidays", null],
                 ] as const
               ).map(([value, label, count]) => (
                 <TabsTrigger
@@ -445,8 +444,8 @@ export function SchemeDetailsPage({
             containers={containers}
             vehicles={vehicles}
             drivers={drivers}
-            calendarRecord={calendarRecord}
-            calendar={calendar}
+            holidaySource={holidaySource}
+            holidayPolicy={holidayPolicy}
             planAheadOn={planAheadOn}
             blockingIssues={blockingIssues}
             draftPendingResave={draftPendingResave}
@@ -464,13 +463,8 @@ export function SchemeDetailsPage({
         <TabsContent value="stops" className="mt-0 min-h-0 flex-1 overflow-y-auto">
           <SchemeStopsTab stops={schemeStops} generationBlocked={!canGenerate} />
         </TabsContent>
-        <TabsContent value="calendar" className="mt-0 min-h-0 flex-1 overflow-y-auto">
-          <SchemeCalendarTab
-            calendarId={calendarId}
-            calendarRecord={calendarRecord}
-            calendar={calendar}
-            today={today}
-          />
+        <TabsContent value="holidays" className="mt-0 min-h-0 flex-1 overflow-y-auto">
+          <SchemeHolidaysTab source={holidaySource} policy={holidayPolicy} today={today} />
         </TabsContent>
       </Tabs>
     </div>
@@ -486,8 +480,8 @@ function SchemeDetailsTab({
   containers,
   vehicles,
   drivers,
-  calendarRecord,
-  calendar,
+  holidaySource,
+  holidayPolicy,
   planAheadOn,
   blockingIssues,
   draftPendingResave,
@@ -500,8 +494,8 @@ function SchemeDetailsTab({
   containers: readonly BusinessRecord[]
   vehicles: readonly BusinessRecord[]
   drivers: readonly BusinessRecord[]
-  calendarRecord: BusinessRecord | undefined
-  calendar: CollectionCalendar | null
+  holidaySource: HolidaySource | null
+  holidayPolicy: HolidayPolicy
   planAheadOn: boolean
   blockingIssues: readonly string[]
   /** Persisted Draft whose live validation is now clean — needs a re-save. */
@@ -637,30 +631,18 @@ function SchemeDetailsTab({
           <StatRow label="Plan Ahead" value={planAheadOn ? "On" : "Off"} />
         </DetailCard>
 
-        <DetailCard title="Collection calendar">
-          {calendarRecord ? (
-            <>
-              <StatRow label="Calendar" value={calendarRecord.name} />
-              <StatRow label="Status" value={calendarRecord.status} />
-              <StatRow label="Validity" value={calendarValidityLabel(calendar)} />
-              <StatRow
-                label="Holidays"
-                value={String(calendar?.holidayDates.length ?? 0)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Shared calendar — owned in Plan, selected by this scheme. See
-                the Collection Calendar tab.
-              </p>
-            </>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              {stringValue(values, "calendarId")
-                ? "The selected Collection Calendar record no longer exists."
-                : facts["Collection calendar"]
-                  ? `${facts["Collection calendar"]} (legacy label — no linked calendar record).`
-                  : "No Collection Calendar selected — dates are only bounded by the effective period."}
-            </p>
-          )}
+        <DetailCard title="Holidays">
+          <StatRow
+            label="Holiday list"
+            value={holidaySource ? holidaySource.name : NO_HOLIDAY_LIST_LABEL}
+          />
+          <StatRow label="Policy" value={HOLIDAY_POLICY_LABELS[holidayPolicy]} />
+          <StatRow label="Dates" value={String(holidaySource?.list.size ?? 0)} />
+          <p className="text-xs text-muted-foreground">
+            {holidaySource
+              ? `From project ${holidaySource.projectName} — see the Holidays tab.`
+              : "Every date counts as a working day."}
+          </p>
         </DetailCard>
 
         <DetailCard title="Recurrence">
@@ -1219,89 +1201,58 @@ function SchemeStopsTab({
   )
 }
 
-/* --------------------------- Collection Calendar tab ---------------------- */
+/* ------------------------------ Holidays tab ------------------------------ */
 
-function SchemeCalendarTab({
-  calendarId,
-  calendarRecord,
-  calendar,
+function SchemeHolidaysTab({
+  source,
+  policy,
   today,
 }: {
-  calendarId: string | undefined
-  calendarRecord: BusinessRecord | undefined
-  calendar: CollectionCalendar | null
+  source: HolidaySource | null
+  policy: HolidayPolicy
   today: string
 }) {
-  if (!calendarRecord) {
+  const settingsLink = (
+    <Button size="sm" variant="outline" asChild>
+      <Link href={HOLIDAY_SETTINGS_HREF}>
+        <ArrowSquareOut className="h-4 w-4" />
+        View in Settings
+      </Link>
+    </Button>
+  )
+  if (!source) {
     return (
       <div className="flex h-full min-h-64 items-center justify-center p-8">
         <div className="max-w-sm text-center">
           <CalendarBlank className="mx-auto h-6 w-6 text-muted-foreground" />
-          <p className="mt-2 text-sm font-medium">
-            {calendarId
-              ? "The selected Collection Calendar record no longer exists"
-              : "No Collection Calendar selected"}
+          <p className="mt-2 text-sm font-medium text-amber-700 dark:text-amber-400">
+            {NO_HOLIDAY_LIST_LABEL}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Select a shared calendar via Edit — the scheme uses it to decide
-            which planned service dates are valid.
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Every date counts as a working day.</p>
+          <div className="mt-3">{settingsLink}</div>
         </div>
       </div>
     )
   }
 
-  const upcomingHolidays =
-    calendar?.holidayDates.filter((date) => date >= today) ?? []
-  const pastHolidays =
-    calendar?.holidayDates.filter((date) => date < today) ?? []
+  const dates = [...source.list.entries()]
+  const upcoming = dates.filter(([date]) => date >= today)
+  const past = dates.filter(([date]) => date < today)
 
   return (
     <div className="space-y-4 p-4">
       <section className="rounded-xl border border-border/60 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-semibold">{calendarRecord.name}</h3>
-              <Badge
-                variant="outline"
-                className={cn(
-                  "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                  statusClasses(calendarRecord.status),
-                )}
-              >
-                {calendarRecord.status}
-              </Badge>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Read-only — this shared calendar is owned and edited in Plan. The
-              scheme selects it and never redefines it.
-            </p>
+            <h3 className="text-sm font-semibold">{source.name}</h3>
+            <p className="mt-1 text-xs text-muted-foreground">{holidaySourceLabel(source)}</p>
           </div>
-          <Button size="sm" variant="outline" asChild>
-            <Link href={`/plan?module=calendars&record=${calendarRecord.id}`}>
-              <ArrowSquareOut className="h-4 w-4" />
-              Open in Plan
-            </Link>
-          </Button>
+          {settingsLink}
         </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <StatRow
-            label="Working days"
-            value={
-              calendar && calendar.workingDays.length > 0
-                ? calendar.workingDays
-                    .map((day) => SERVICE_DAY_SHORT_LABELS[day])
-                    .join(", ")
-                : "Unconstrained"
-            }
-          />
-          <StatRow label="Validity" value={calendarValidityLabel(calendar)} />
-          <StatRow
-            label="Holidays"
-            value={String(calendar?.holidayDates.length ?? 0)}
-          />
-          <StatRow label="Timezone" value={calendar?.timezone ?? "—"} />
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <StatRow label="Lists" value={source.records.map((record) => record.name).join(", ")} />
+          <StatRow label="Dates" value={String(source.list.size)} />
+          <StatRow label="Policy" value={HOLIDAY_POLICY_LABELS[policy]} />
         </div>
       </section>
 
@@ -1309,43 +1260,34 @@ function SchemeCalendarTab({
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
           Holiday dates
         </h3>
-        {calendar && calendar.holidayDates.length > 0 ? (
-          <div className="mt-3 space-y-3">
-            {upcomingHolidays.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {upcomingHolidays.map((date) => (
-                  <Badge
-                    key={date}
-                    variant="outline"
-                    className="rounded-full px-2 py-0.5 text-[11px] font-normal"
-                  >
-                    {formatServiceDate(date)}
-                  </Badge>
-                ))}
-              </div>
-            )}
-            {pastHolidays.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {pastHolidays.map((date) => (
-                  <Badge
-                    key={date}
-                    variant="outline"
-                    className="rounded-full px-2 py-0.5 text-[11px] font-normal text-muted-foreground"
-                  >
-                    {formatServiceDate(date)}
-                  </Badge>
-                ))}
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Holiday and non-working dates are skipped at generation.
-            </p>
-          </div>
-        ) : (
-          <p className="mt-3 text-xs text-muted-foreground">
-            No holiday dates on this calendar.
-          </p>
-        )}
+        <div className="mt-3 space-y-3">
+          {upcoming.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {upcoming.map(([date, name]) => (
+                <Badge
+                  key={date}
+                  variant="outline"
+                  className="rounded-full px-2 py-0.5 text-[11px] font-normal"
+                >
+                  {formatServiceDate(date)} · {name}
+                </Badge>
+              ))}
+            </div>
+          )}
+          {past.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {past.map(([date, name]) => (
+                <Badge
+                  key={date}
+                  variant="outline"
+                  className="rounded-full px-2 py-0.5 text-[11px] font-normal text-muted-foreground"
+                >
+                  {formatServiceDate(date)} · {name}
+                </Badge>
+              ))}
+            </div>
+          )}
+        </div>
       </section>
     </div>
   )

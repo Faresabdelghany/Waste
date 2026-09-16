@@ -61,6 +61,7 @@ import {
   SCHEME_EDIT_POLICY_LABELS,
   planSchemeCreation,
 } from "@/lib/route-schemes/creation"
+import { NO_HOLIDAY_LIST_LABEL, projectHolidaySource } from "@/lib/route-schemes/holidays"
 import { HOLIDAY_POLICY_LABELS } from "@/lib/route-schemes/occurrences"
 import { planSchemeDeletion } from "@/lib/route-schemes/deletion"
 import {
@@ -1508,7 +1509,7 @@ export function BusinessWorkspace({
       const matchesCollectionCalendar = matchesFactFilter(
         record,
         businessFilters.collectionCalendars,
-        "Collection calendar",
+        ["Holiday list", "Collection calendar"],
         false,
         // Legacy fallback: pre-rename records carry the drifted calendar name.
         canonicalCalendarName,
@@ -1656,6 +1657,7 @@ export function BusinessWorkspace({
       return module ? getRecords(workspaceId, module.id, module.records) : []
     }
     const calendars = relatedModuleRecords("plan", "calendars")
+    const projects = relatedModuleRecords("configure", "organization")
     const related = {
       schemes: activeRecords,
       allocations: relatedModuleRecords("fleet", "vehicle-planning"),
@@ -1666,7 +1668,7 @@ export function BusinessWorkspace({
       activeRecords.map((record) => [
         record.id,
         {
-          ...schemeRowSummary(record, calendars),
+          ...schemeRowSummary(record, calendars, projects),
           attention: schemeAttention(record, related),
         },
       ]),
@@ -4128,6 +4130,10 @@ export function BusinessWorkspace({
         ...(project ? { Project: project.name } : {}),
         ...(area ? { "Planning area": area.name } : {}),
         ...(calendar ? { "Collection calendar": calendar.name } : {}),
+        // Holidays follow the project (holiday model 2026-09-16).
+        "Holiday list":
+          projectHolidaySource(project, moduleRecords("plan", "calendars"))?.name ??
+          NO_HOLIDAY_LIST_LABEL,
         ...(recurrence ? { Recurrence: recurrenceSentence(recurrence) } : {}),
         ...(data.effectiveFrom
           ? {
@@ -5001,7 +5007,7 @@ export function BusinessWorkspace({
                             {isSchemesView ? (
                               <>
                                 <TableHead>Recurrence</TableHead>
-                                <TableHead>Collection calendar</TableHead>
+                                <TableHead>Holiday list</TableHead>
                               </>
                             ) : (
                               !isServiceProviderUsersView && (
@@ -5309,7 +5315,7 @@ export function BusinessWorkspace({
                                       {schemeRowsById.get(record.id)?.recurrence ?? "—"}
                                     </TableCell>
                                     <TableCell className="min-w-[180px] whitespace-nowrap text-sm text-muted-foreground">
-                                      {schemeRowsById.get(record.id)?.calendar ?? "—"}
+                                      {schemeRowsById.get(record.id)?.holidays ?? "—"}
                                     </TableCell>
                                   </>
                                 ) : (

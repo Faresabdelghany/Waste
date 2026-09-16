@@ -47,13 +47,13 @@ export const RICH_MODULE_TABLES: Readonly<Record<string, RichModuleTable>> = {
     excludedColumnFacts: new Set(["Project", "Area"]),
   },
   // Schemes default to the five artboard-1 columns (issue #30, D15) —
-  // Recurrence and Collection calendar render as derived cells, so no fact
+  // Recurrence and Holiday list render as derived cells, so no fact
   // columns are seeded; users can still add others via view options.
   schemes: {
     seededFactColumns: [],
     // Offering the stored display facts beside the derived columns would put
     // a stale duplicate next to the derived truth.
-    excludedColumnFacts: new Set(["Recurrence", "Collection calendar", "Planning area"]),
+    excludedColumnFacts: new Set(["Recurrence", "Holiday list", "Collection calendar", "Planning area"]),
   },
   pickups: {
     seededFactColumns: ["Address", "Container ID", "Container Type", "Waste fraction", "Weight"],

@@ -146,8 +146,11 @@ const containerCategories: FilterDefinition[] = [
   },
   {
     id: "collectionCalendars",
-    label: "Collection calendar",
-    values: (record) => singleFilterValue(canonicalCalendarName(record.facts["Collection calendar"])),
+    label: "Holiday list",
+    values: (record) =>
+      singleFilterValue(
+        record.facts["Holiday list"] ?? canonicalCalendarName(record.facts["Collection calendar"]),
+      ),
   },
   {
     id: "propertyTypes",
