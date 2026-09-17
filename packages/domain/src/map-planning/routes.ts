@@ -11,9 +11,9 @@
 // that address when its street is in the gazetteer. Cancelled routes are
 // never counted. Pure data logic.
 
-import type { BusinessRecord } from "../data/business-modules"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
-import { isIsoDate } from "@waste/domain/route-schemes/recurrence"
+import type { BusinessRecord } from "../prototype-record"
+import { isSoftDeleted } from "../record-visibility"
+import { isIsoDate } from "../route-schemes/recurrence"
 import type { LngLat } from "./geo"
 import { containerLocation, knownAddressLocation } from "./positions"
 import { parseDisplayDate } from "./schedule"

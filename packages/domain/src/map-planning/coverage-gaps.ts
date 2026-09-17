@@ -8,11 +8,11 @@
 // consumer resolves a scheme's stops through. Drafts promise nothing and
 // expired schemes no longer do. Pure data logic.
 
-import type { BusinessRecord } from "../data/business-modules"
-import { effectiveStopPlans } from "@waste/domain/route-schemes/groups"
-import { effectiveSchemeStatus, schemesInPlanning } from "@waste/domain/route-schemes/lifecycle"
-import { ELIGIBLE_CONTAINER_STATUSES } from "@waste/domain/route-schemes/matching"
-import { recurrenceFromValues } from "@waste/domain/route-schemes/recurrence"
+import type { BusinessRecord } from "../prototype-record"
+import { effectiveStopPlans } from "../route-schemes/groups"
+import { effectiveSchemeStatus, schemesInPlanning } from "../route-schemes/lifecycle"
+import { ELIGIBLE_CONTAINER_STATUSES } from "../route-schemes/matching"
+import { recurrenceFromValues } from "../route-schemes/recurrence"
 
 export type CoverageGaps = {
   /** Containers that need service. */

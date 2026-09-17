@@ -6,13 +6,15 @@
 // from the map carry a polygon; fixture areas are covered through their
 // planning areas (coverage.ts). Pure data logic.
 
-import type { BusinessFormValues } from "../data/business-form-types"
-import type { BusinessRecord } from "../data/business-modules"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
+import type { BusinessRecord } from "../prototype-record"
+import { isSoftDeleted } from "../record-visibility"
 import { boundsFromPolygon, type LngLat, type LngLatBounds } from "./geo"
 import type { SelectionShape } from "./selection"
 
 /** Where Service Areas live — the module the create dialog targets. */
+/** The typed form payload, as BusinessRecord.submittedValues carries it. */
+type SubmittedValues = NonNullable<BusinessRecord["submittedValues"]>
+
 export const SERVICE_AREAS_MODULE = { workspaceId: "service-providers", moduleId: "service-areas" } as const
 
 /** The typed value a map-drawn service area keeps its boundary under (JSON LngLat[]). */
@@ -20,9 +22,9 @@ export const SERVICE_AREA_POLYGON_KEY = "boundaryPolygon"
 
 export type ServiceAreaSeed = {
   /** Values the form shows and the user can change. */
-  initialValues: BusinessFormValues
+  initialValues: SubmittedValues
   /** Values stored on the record without a form field — the polygon. */
-  extraValues: BusinessFormValues
+  extraValues: SubmittedValues
 }
 
 export type ServiceAreaLayer = {
@@ -99,7 +101,7 @@ export function serviceAreaSeedFromSelection({
   planningAreas: readonly BusinessRecord[]
   properties: number
 }): ServiceAreaSeed {
-  const initialValues: BusinessFormValues = {}
+  const initialValues: SubmittedValues = {}
   const project = uniform(
     selected.map(
       (container) =>
@@ -111,7 +113,7 @@ export function serviceAreaSeedFromSelection({
   const zones = planningAreaIds(selected, planningAreas)
   if (zones.length) initialValues.zoneIds = zones.join(",")
   initialValues.boundary = `${shape ? "Drawn" : "Selected"} on Map Planning · ${plural(selected.length, "container")} across ${plural(properties, "property").replace("propertys", "properties")}`
-  const extraValues: BusinessFormValues = shape ? { [SERVICE_AREA_POLYGON_KEY]: JSON.stringify(shape.polygon) } : {}
+  const extraValues: SubmittedValues = shape ? { [SERVICE_AREA_POLYGON_KEY]: JSON.stringify(shape.polygon) } : {}
   return { initialValues, extraValues }
 }
 

@@ -5,7 +5,7 @@
 // planning-area outlines, each with a checkbox and a zoom-to button, and the
 // Routes layer: every drawable route in the collection window, counted by
 // status, and the service areas drawn on the map. Areas come from
-// lib/map-planning/areas.ts, routes from routes.ts, service areas from
+// @waste/domain/map-planning/areas, routes from routes.ts, service areas from
 // service-areas.ts; the map draws the ones that are on.
 
 import { Check, Crosshair, Stack } from "@phosphor-icons/react/dist/ssr"
@@ -14,12 +14,12 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import type { PlanningAreaLayer } from "@/lib/map-planning/areas"
+import type { PlanningAreaLayer } from "@waste/domain/map-planning/areas"
 import { BASE_MAPS, type BaseMap, type BaseMapId } from "@/lib/map-planning/base-maps"
-import { UNCOVERED_COLOR } from "@/lib/map-planning/coverage-gaps"
-import { COMPARE_COLORS, type SchemeStopSet } from "@/lib/map-planning/scheme-compare"
-import { ROUTE_BUCKET_COLORS, type AreaRoute, type RouteBucket } from "@/lib/map-planning/routes"
-import type { ServiceAreaLayer } from "@/lib/map-planning/service-areas"
+import { UNCOVERED_COLOR } from "@waste/domain/map-planning/coverage-gaps"
+import { COMPARE_COLORS, type SchemeStopSet } from "@waste/domain/map-planning/scheme-compare"
+import { ROUTE_BUCKET_COLORS, type AreaRoute, type RouteBucket } from "@waste/domain/map-planning/routes"
+import type { ServiceAreaLayer } from "@waste/domain/map-planning/service-areas"
 import { cn } from "@/lib/utils"
 
 export type LayersPanelProps = {

@@ -3,8 +3,8 @@
 // map (which matches records against the picks), so both read the same
 // facts — the @waste/domain/business-filters contract.
 
-import type { BusinessRecord } from "../data/business-modules"
-import { singleFilterValue, type FilterValueReaders } from "@waste/domain/business-filters"
+import type { BusinessRecord } from "../prototype-record"
+import { singleFilterValue, type FilterValueReaders } from "../business-filters"
 import { containerFractions } from "./points"
 
 const fact = (record: BusinessRecord, key: string) => singleFilterValue(record.facts[key])

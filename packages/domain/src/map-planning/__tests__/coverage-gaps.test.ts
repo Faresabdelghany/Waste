@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import type { BusinessRecord } from "../../data/business-modules"
+import type { BusinessRecord } from "../../prototype-record"
 import { coverageGaps, coverageInSelection, needsService } from "../coverage-gaps"
 
 function record(id: string, extra: Partial<BusinessRecord> = {}): BusinessRecord {

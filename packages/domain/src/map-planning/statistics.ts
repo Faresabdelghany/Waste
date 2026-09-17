@@ -8,9 +8,9 @@
 // service frequency. Collected weight sums the Weight of completed Pickups
 // for those containers in the range. Pure data logic.
 
-import type { BusinessRecord } from "../data/business-modules"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
-import { addDays, isIsoDate } from "@waste/domain/route-schemes/recurrence"
+import type { BusinessRecord } from "../prototype-record"
+import { isSoftDeleted } from "../record-visibility"
+import { addDays, isIsoDate } from "../route-schemes/recurrence"
 import { containerFractions, rankFractions } from "./points"
 import { containerPropertyKey } from "./positions"
 import { nextCollectionDate, parseDisplayDate } from "./schedule"
@@ -27,7 +27,7 @@ export type StatisticsInputs = {
   }>
   /** Settings › Asset management waste fractions — the kg/L fallback. */
   wasteFractions: ReadonlyArray<{ id: string; name: string; weightToVolumeRatio: number }>
-  /** Container id → generated collection dates (lib/map-planning/schedule.ts). */
+  /** Container id → generated collection dates (@waste/domain/map-planning/schedule). */
   stopIndex: ReadonlyMap<string, readonly string[]>
   pickups: readonly BusinessRecord[]
   /** Inclusive ISO range, or null for "one collection of everything". */

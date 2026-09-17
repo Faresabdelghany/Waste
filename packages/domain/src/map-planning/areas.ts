@@ -5,8 +5,8 @@
 // containers has no geometry and cannot be shown or zoomed to. Pure data
 // logic; the map draws the polygons, the panel lists the rows.
 
-import type { BusinessRecord } from "../data/business-modules"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
+import type { BusinessRecord } from "../prototype-record"
+import { isSoftDeleted } from "../record-visibility"
 import {
   boundsFromPolygon,
   boundsPolygon,

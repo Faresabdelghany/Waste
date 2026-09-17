@@ -7,8 +7,8 @@
 // Routes over a selection live in routes.ts. Pure data logic for the
 // Selected area panel.
 
-import type { BusinessRecord } from "../data/business-modules"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
+import type { BusinessRecord } from "../prototype-record"
+import { isSoftDeleted } from "../record-visibility"
 import { pointInPolygon } from "./geo"
 import { containerLocation } from "./positions"
 import { serviceAreaPolygon } from "./service-areas"

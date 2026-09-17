@@ -4,9 +4,9 @@
 // containers, then areas; within a kind, prefix matches lead. Pure data
 // logic over the points and area layers the map already holds.
 
-import type { PlanningAreaLayer } from "./areas"
-import type { LngLat, LngLatBounds } from "./geo"
-import type { MapPoint } from "./points"
+import type { PlanningAreaLayer } from "@waste/domain/map-planning/areas"
+import type { LngLat, LngLatBounds } from "@waste/domain/map-planning/geo"
+import type { MapPoint } from "@waste/domain/map-planning/points"
 
 export type SearchHitKind = "property" | "container" | "area"
 

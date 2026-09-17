@@ -8,8 +8,8 @@
 // record that carries typed `latitude` / `longitude` submitted values wins
 // outright. Pure data logic — no map library, no store.
 
-import type { BusinessRecord } from "../data/business-modules"
-import { avalancheHash } from "@waste/domain/route-schemes/hash"
+import type { BusinessRecord } from "../prototype-record"
+import { avalancheHash } from "../route-schemes/hash"
 import { offsetMetres, type LngLat, type LngLatBounds } from "./geo"
 
 /** The default viewport centre: the sidebar identity is Copenhagen Central. */

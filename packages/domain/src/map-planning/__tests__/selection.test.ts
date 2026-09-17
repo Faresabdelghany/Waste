@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import type { BusinessRecord } from "../../data/business-modules"
+import type { BusinessRecord } from "../../prototype-record"
 import { MAP_FILTER_READERS } from "../filters"
 import type { MapPoint } from "../points"
 import { containerIdsWithFraction, schemeDraftFromSelection, selectedContainerRows, selectionSummary } from "../selection"

@@ -2,8 +2,8 @@
 // container. Pure data logic over business records — positions come from
 // positions.ts, the rendering from components/wastehero/map-planning.
 
-import type { BusinessRecord } from "../data/business-modules"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
+import type { BusinessRecord } from "../prototype-record"
+import { isSoftDeleted } from "../record-visibility"
 import type { LngLat } from "./geo"
 import { containerLocation, containerPropertyKey } from "./positions"
 
