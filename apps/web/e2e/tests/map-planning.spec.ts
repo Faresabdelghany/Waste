@@ -283,6 +283,28 @@ test("the collection window dates the quantities and Reset all restores Per coll
   await expect(reset).toBeDisabled()
 })
 
+test("removing a filter chip lifts the filter (#55)", async ({ page }) => {
+  const reset = page.getByRole("button", { name: "Reset all" })
+  const markersBefore = await page.locator("[data-marker]").count()
+
+  await page.getByRole("button", { name: "Filter", exact: true }).click()
+  const popover = page.getByRole("dialog")
+  await popover.getByRole("button", { name: /^Status\b/ }).click()
+  const option = popover.locator("label").first()
+  const value = (await option.locator("span").first().innerText()).trim()
+  await option.getByRole("checkbox").check()
+  await popover.getByRole("button", { name: "Apply filters" }).click()
+
+  const chip = page.getByText(`Status: ${value}`, { exact: true })
+  await expect(chip).toBeVisible()
+  await expect(reset).toBeEnabled()
+
+  await page.getByRole("button", { name: `Remove Status: ${value}` }).click()
+  await expect(chip).toHaveCount(0)
+  await expect(reset).toBeDisabled()
+  await expect(page.locator("[data-marker]")).toHaveCount(markersBefore)
+})
+
 test("the Layers control switches the base map and draws planning-area outlines", async ({ page }) => {
   await page.getByRole("button", { name: /^Layers/ }).click()
   const layers = page.getByRole("dialog", { name: "Layers" })
