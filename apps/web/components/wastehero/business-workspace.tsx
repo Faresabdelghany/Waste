@@ -213,6 +213,7 @@ import {
   emptyBusinessFilters,
   matchesBusinessQuery,
   removeBusinessFilterValue,
+  type BusinessFilterKey,
   type BusinessFilters,
 } from "@waste/domain/business-filters"
 import { RecordSearchInput } from "@/components/wastehero/record-search-input"
@@ -1930,7 +1931,7 @@ export function BusinessWorkspace({
     setTablePage(1)
   }, [activeModuleId])
 
-  const removeFilterChip = (key: string, value: string) => {
+  const removeFilterChip = (key: BusinessFilterKey, value: string) => {
     setBusinessFilters((current) => removeBusinessFilterValue(current, key, value))
   }
 

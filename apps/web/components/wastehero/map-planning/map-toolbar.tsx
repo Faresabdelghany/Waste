@@ -101,7 +101,7 @@ export function MapToolbar({
         <ChipOverflow
           chips={chips}
           maxVisible={6}
-          onRemove={(label, value) => onFiltersChange(removeBusinessFilterValue(filters, label, value))}
+          onRemove={(key, value) => onFiltersChange(removeBusinessFilterValue(filters, key, value))}
         />
       )}
     </div>

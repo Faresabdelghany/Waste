@@ -147,31 +147,32 @@ export function applyBusinessFilters<T extends BusinessRecord>(
   )
 }
 
-export type BusinessFilterChip = { key: string; value: string }
+/**
+ * One active selection as a removable chip: the category it is removed by,
+ * that category's display label, and the value. The chip carries its key so
+ * no remove path has to look the key up from the label — the label handed
+ * where the key belonged was the defect of #55.
+ */
+export type BusinessFilterChip = { key: BusinessFilterKey; label: string; value: string }
 
 /** Active selections as removable chips, in category order. */
 export function businessFilterChips(filters: BusinessFilters): BusinessFilterChip[] {
   const chips: BusinessFilterChip[] = []
   for (const key of BUSINESS_FILTER_KEYS) {
     for (const value of filters[key]) {
-      chips.push({ key: BUSINESS_FILTER_CHIP_LABELS[key], value })
+      chips.push({ key, label: BUSINESS_FILTER_CHIP_LABELS[key], value })
     }
   }
   return chips
 }
 
-export function filterKeyForChipLabel(label: string): BusinessFilterKey | undefined {
-  return BUSINESS_FILTER_KEYS.find((key) => BUSINESS_FILTER_CHIP_LABELS[key] === label)
-}
-
-/** Removes one chip's value; labels that are not business filter chips are untouched. */
+/** Removes one value from one category; a value that is not selected leaves the filters as they are. */
 export function removeBusinessFilterValue(
   filters: BusinessFilters,
-  chipLabel: string,
+  key: BusinessFilterKey,
   value: string,
 ): BusinessFilters {
-  const key = filterKeyForChipLabel(chipLabel)
-  if (!key) return filters
+  if (!filters[key].includes(value)) return filters
   return {
     ...filters,
     [key]: filters[key].filter((candidate) => candidate !== value),
