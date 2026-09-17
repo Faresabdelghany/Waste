@@ -109,7 +109,6 @@ describe("route details", () => {
     assert.equal(fixture.driver, "Mads Jensen")
     assert.equal(fixture.timeWindow, "06:10–14:18")
     assert.equal(fixture.stopCount, 42, "the record's own stop count wins over the partial fixture pickups")
-    assert.equal(fixture.href, "/route-studio?module=routes&record=route-day-1044")
     const generated = summary.routes.find((route) => route.id === "route-gen-1")!
     assert.equal(generated.vehicle, null)
     assert.equal(generated.stopCount, 3, "a generated route counts its pickups")

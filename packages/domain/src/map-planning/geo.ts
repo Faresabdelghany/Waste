@@ -1,5 +1,5 @@
 // Map Planning geometry (2026-09-16). Pure data logic — no map library, no
-// DOM — shared by clustering (lib/map-planning/clusters.ts), the draw tools'
+// DOM — shared by the web app's clustering, the draw tools'
 // selection resolution, and the tests. Coordinates are WGS84 lng/lat; the
 // pixel space is the web-mercator "world" MapLibre uses: 512 px at zoom 0,
 // doubling per level.
@@ -11,7 +11,7 @@ export type WorldPoint = { x: number; y: number }
 export type LngLatBounds = { west: number; south: number; east: number; north: number }
 
 /** World size in pixels at a zoom level (MapLibre's 512 px tile convention). */
-export function worldSize(zoom: number): number {
+function worldSize(zoom: number): number {
   return 512 * 2 ** zoom
 }
 
@@ -24,15 +24,6 @@ export function worldPoint(point: LngLat, zoom: number): WorldPoint {
     x: ((point.lng + 180) / 360) * size,
     y: (1 - mercN / Math.PI) * (size / 2),
   }
-}
-
-/** Inverse of worldPoint. */
-export function worldToLngLat(point: WorldPoint, zoom: number): LngLat {
-  const size = worldSize(zoom)
-  const lng = (point.x / size) * 360 - 180
-  const n = Math.PI - (2 * Math.PI * point.y) / size
-  const lat = (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)))
-  return { lng, lat }
 }
 
 /**

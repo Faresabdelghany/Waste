@@ -6,16 +6,10 @@
 // from the map carry a polygon; fixture areas are covered through their
 // planning areas (coverage.ts). Pure data logic.
 
-import type { BusinessRecord } from "../prototype-record"
+import type { BusinessRecord, SubmittedValues } from "../prototype-record"
 import { isSoftDeleted } from "../record-visibility"
 import { boundsFromPolygon, type LngLat, type LngLatBounds } from "./geo"
 import type { SelectionShape } from "./selection"
-
-/** Where Service Areas live — the module the create dialog targets. */
-/** The typed form payload, as BusinessRecord.submittedValues carries it. */
-type SubmittedValues = NonNullable<BusinessRecord["submittedValues"]>
-
-export const SERVICE_AREAS_MODULE = { workspaceId: "service-providers", moduleId: "service-areas" } as const
 
 /** The typed value a map-drawn service area keeps its boundary under (JSON LngLat[]). */
 export const SERVICE_AREA_POLYGON_KEY = "boundaryPolygon"

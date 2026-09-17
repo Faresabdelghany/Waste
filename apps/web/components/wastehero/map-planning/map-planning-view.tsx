@@ -33,6 +33,7 @@ import {
   type BusinessFilters,
 } from "@waste/domain/business-filters"
 import type { BusinessRecord, ModuleDefinition } from "@/lib/data/business-modules"
+import { getBusinessModuleHref } from "@/lib/data/business-links"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 import { planningAreaLayers, type PlanningAreaLayer } from "@waste/domain/map-planning/areas"
 import {
@@ -788,7 +789,7 @@ export function MapPlanningView({
                   Play route
                 </Button>
                 <Button asChild variant="outline" size="sm" className="h-8 flex-1 gap-1.5 text-xs">
-                  <Link href={routeCard.route.href}>
+                  <Link href={getBusinessModuleHref("route-studio", "routes", routeCard.route.id)}>
                     Open route
                     <ArrowSquareOut className="h-3.5 w-3.5" />
                   </Link>

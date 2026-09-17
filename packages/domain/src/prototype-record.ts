@@ -13,6 +13,12 @@
 // today. Do not grow this file into a second registry: no fixture ids, no
 // module lists, no workspace or form vocabulary.
 
+/** One typed form value. */
+export type SubmittedValue = string | boolean
+
+/** The typed form payload a record carries. */
+export type SubmittedValues = Record<string, SubmittedValue>
+
 export type BusinessRecord = {
   id: string
   name: string
@@ -42,7 +48,7 @@ export type BusinessRecord = {
    * of relying on flattened display text.
    */
   recordKind?: string
-  submittedValues?: Record<string, string | boolean>
+  submittedValues?: SubmittedValues
   relationRefs?: Array<{
     fieldId: string
     /** A web workspace id. The union of ids is the web registry's, not the domain's. */

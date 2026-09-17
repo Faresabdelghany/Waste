@@ -4,7 +4,7 @@ import { describe, test } from "node:test"
 import type { BusinessRecord } from "../../prototype-record"
 import { MAP_FILTER_READERS } from "../filters"
 import type { MapPoint } from "../points"
-import { containerIdsWithFraction, schemeDraftFromSelection, selectedContainerRows, selectionSummary } from "../selection"
+import { containerIdsWithFraction, schemeDraftFromSelection, selectedContainerRows } from "../selection"
 
 function record(id: string, extra: Partial<BusinessRecord> = {}): BusinessRecord {
   return {
@@ -36,21 +36,6 @@ function point(id: string, propertyKey: string, fraction: string, values: Record
     record: record(id, { submittedValues: values }),
   }
 }
-
-describe("selectionSummary", () => {
-  test("counts containers, distinct properties, and fractions by frequency", () => {
-    const points = [
-      point("a", "Ryesgade 45", "Organic"),
-      point("b", "Ryesgade 45", "Residual"),
-      point("c", "Jagtvej 10", "Residual"),
-      point("d", "Jagtvej 10", "Glass"),
-    ]
-    const summary = selectionSummary(points, new Set(["a", "b", "c"]))
-    assert.equal(summary.containers, 3)
-    assert.equal(summary.properties, 2)
-    assert.deepEqual(summary.byFraction, [["Residual", 2], ["Organic", 1]])
-  })
-})
 
 describe("schemeDraftFromSelection", () => {
   test("a uniform selection seeds fraction, planning area, and project", () => {

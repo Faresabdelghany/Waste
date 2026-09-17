@@ -228,15 +228,23 @@ describe("packages/domain tsconfig", () => {
     ts.sys,
     PKG_DIR,
   )
+  const relativeTo = (fileNames: readonly string[]) =>
+    new Set(fileNames.map((f) => path.relative(SRC_DIR, f).split(path.sep).join("/")))
+  const sources = readSources(SRC_DIR).map((f) => f.file)
+  const isTest = (file: string) => file.split("/").includes("__tests__")
 
-  test("the shipping config covers the modules and none of the tests", () => {
-    assert.ok(shipping.fileNames.some((f) => f.endsWith("/route-schemes/generation.ts")))
-    assert.deepEqual(shipping.fileNames.filter((f) => f.includes("__tests__")), [])
+  test("the shipping config covers every module and none of the tests", () => {
+    const covered = relativeTo(shipping.fileNames)
+    const missing = sources.filter((f) => !isTest(f) && !covered.has(f))
+    assert.deepEqual(missing, [], `modules outside the shipping program: ${missing.join(", ")}`)
+    assert.deepEqual([...covered].filter(isTest), [], "tests inside the shipping program")
+    assert.ok(covered.size >= 40, `expected the moved modules, found ${covered.size}`)
   })
 
-  test("the test config covers the tests", () => {
-    assert.ok(tests.fileNames.some((f) => f.endsWith("/__tests__/purity.test.ts")))
-    assert.ok(tests.fileNames.some((f) => f.endsWith("/route-schemes/__tests__/generation.test.ts")))
+  test("the test config covers every test file", () => {
+    const covered = relativeTo(tests.fileNames)
+    const missing = sources.filter((f) => isTest(f) && !covered.has(f))
+    assert.deepEqual(missing, [], `tests outside the test program: ${missing.join(", ")}`)
   })
 
   test("the shipping config rejects browser and Node globals and accepts plain ECMAScript", () => {

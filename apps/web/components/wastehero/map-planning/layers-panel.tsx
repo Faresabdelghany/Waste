@@ -4,9 +4,9 @@
 // and its panel — the base map picker (CSS-drawn swatches, no network), the
 // planning-area outlines, each with a checkbox and a zoom-to button, and the
 // Routes layer: every drawable route in the collection window, counted by
-// status, and the service areas drawn on the map. Areas come from
-// @waste/domain/map-planning/areas, routes from routes.ts, service areas from
-// service-areas.ts; the map draws the ones that are on.
+// status, and the service areas drawn on the map. Areas, routes and
+// service areas come from @waste/domain/map-planning/{areas,routes,service-areas};
+// the map draws the ones that are on.
 
 import { Check, Crosshair, Stack } from "@phosphor-icons/react/dist/ssr"
 

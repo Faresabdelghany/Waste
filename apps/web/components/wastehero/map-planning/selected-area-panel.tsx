@@ -8,7 +8,7 @@
 // switch that draws them on the map — and what can happen to it: edit the
 // shape, hand it to the Guided Setup wizard, or clear it. shadcn Accordion
 // sections so each block folds away; every number comes from
-// @waste/domain/map-planning/statistics, coverage.ts, and routes.ts at render time.
+// @waste/domain/map-planning/{statistics,coverage,routes} at render time.
 
 import { CaretDown, Handshake, MapTrifold, PencilSimple, Plus, X, Play } from "@phosphor-icons/react/dist/ssr"
 

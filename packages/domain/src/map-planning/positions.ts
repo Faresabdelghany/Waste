@@ -31,7 +31,7 @@ type StreetAnchor = {
 }
 
 /**
- * Fixture streets (lib/data/business-modules.ts seeded properties and the
+ * Fixture streets (the web registry's seeded properties and the
  * explicit container fixtures) with approximate real anchors. Keys are
  * lower-cased street names; the numbering direction is approximate — the
  * picture only has to be plausible and stable.

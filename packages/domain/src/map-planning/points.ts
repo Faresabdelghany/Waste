@@ -1,6 +1,6 @@
 // The planning map's marker vocabulary (2026-09-16): one MapPoint per located
 // container. Pure data logic over business records — positions come from
-// positions.ts, the rendering from components/wastehero/map-planning.
+// positions.ts, the rendering from the web app's map components.
 
 import type { BusinessRecord } from "../prototype-record"
 import { isSoftDeleted } from "../record-visibility"
