@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Shipping code sees ECMAScript only, exactly as packages/domain does:
+    // these schemas run in the browser bundle and on the server alike.
+    "lib": ["esnext"],
+    "types": [],
+    "target": "es2022",
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/__tests__/**"]
+}

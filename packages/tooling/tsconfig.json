@@ -1,0 +1,12 @@
+{
+  // Node tooling: it reads files and drives the TypeScript API, so it keeps
+  // Node's types. It is a devDependency of the packages it checks, never a
+  // runtime one.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["esnext"],
+    "target": "es2022",
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"]
+}
