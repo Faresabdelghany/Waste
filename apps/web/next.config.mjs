@@ -15,6 +15,9 @@ const nextConfig = {
   partialPrefetching: true,
   experimental: {
     turbopackRustReactCompiler: true,
+    // Failed navigations, prefetches and Server Actions stay pending and
+    // retry when the connection returns instead of throwing (#51).
+    useOffline: true,
   },
   images: {
     unoptimized: true,
