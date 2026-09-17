@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import {
+  BUSINESS_FILTER_CHIP_LABELS,
+  BUSINESS_FILTER_KEYS,
   businessFilterChips,
   emptyBusinessFilters,
   removeBusinessFilterValue,
@@ -25,6 +27,16 @@ describe("businessFilterChips", () => {
 
   test("no selection, no chips", () => {
     assert.deepEqual(businessFilterChips(emptyBusinessFilters), [])
+  })
+
+  test("every category yields a chip whose label is the category's label, in category order", () => {
+    const one = Object.fromEntries(BUSINESS_FILTER_KEYS.map((key) => [key, ["v"]])) as BusinessFilters
+    const chips = businessFilterChips(one)
+    assert.deepEqual(
+      chips.map((chip) => chip.key),
+      [...BUSINESS_FILTER_KEYS],
+    )
+    for (const chip of chips) assert.equal(chip.label, BUSINESS_FILTER_CHIP_LABELS[chip.key])
   })
 })
 

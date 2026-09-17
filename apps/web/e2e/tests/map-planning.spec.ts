@@ -288,7 +288,7 @@ test("removing a filter chip lifts the filter (#55)", async ({ page }) => {
   const markersBefore = await page.locator("[data-marker]").count()
 
   await page.getByRole("button", { name: "Filter", exact: true }).click()
-  const popover = page.getByRole("dialog")
+  const popover = page.getByRole("dialog").filter({ has: page.getByPlaceholder("Find a filter") })
   await popover.getByRole("button", { name: /^Status\b/ }).click()
   const option = popover.locator("label").first()
   const value = (await option.locator("span").first().innerText()).trim()
@@ -302,6 +302,8 @@ test("removing a filter chip lifts the filter (#55)", async ({ page }) => {
   await page.getByRole("button", { name: `Remove Status: ${value}` }).click()
   await expect(chip).toHaveCount(0)
   await expect(reset).toBeDisabled()
+  // The chip row coming and going resizes the map; the count proves the camera
+  // held, not that the filter narrowed the set (the chip and Reset all do that).
   await expect(page.locator("[data-marker]")).toHaveCount(markersBefore)
 })
 
