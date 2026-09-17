@@ -99,6 +99,20 @@ describe("the gazetteer is the caller's", () => {
     )
   })
 
+  test("a street name that is only an Object.prototype key is unknown, not an anchor", () => {
+    assert.equal(knownAddressLocation("Constructor 5, 2100 København Ø", TEST_GAZETTEER), null)
+    assert.equal(knownAddressLocation("__proto__ 3, 2100 København Ø", TEST_GAZETTEER), null)
+    assert.equal(knownAddressLocation("toString 1", TEST_GAZETTEER), null)
+  })
+
+  test("a decomposed (NFD) spelling of an accented street finds the composed key", () => {
+    const composed = "Falkoner Allé 12, 2000 Frederiksberg"
+    const decomposed = composed.normalize("NFD")
+    assert.notEqual(composed, decomposed, "the specimen really is spelled differently")
+    assert.deepEqual(knownAddressLocation(decomposed, TEST_GAZETTEER), knownAddressLocation(composed, TEST_GAZETTEER))
+    assert.ok(knownAddressLocation(decomposed, TEST_GAZETTEER))
+  })
+
   test("a street the given gazetteer lists is placed at that gazetteer's anchor", () => {
     const elsewhere = { ryesgade: { start: { lng: 10.2, lat: 56.15 }, bearing: 90 } }
     const placed = knownAddressLocation("Ryesgade 1, 8000 Aarhus C", elsewhere)

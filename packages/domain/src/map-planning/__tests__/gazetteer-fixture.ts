@@ -11,4 +11,5 @@ export const TEST_GAZETTEER: Gazetteer = {
   sundkrogsgade: { start: { lng: 12.5905, lat: 55.7065 }, bearing: 40 },
   parkvej: { start: { lng: 12.5745, lat: 55.7025 }, bearing: 60 },
   "harbor offices": { start: { lng: 12.5975, lat: 55.7085 }, bearing: 60 },
+  "falkoner allé": { start: { lng: 12.5335, lat: 55.6765 }, bearing: 10 },
 }

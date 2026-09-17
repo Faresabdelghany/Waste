@@ -1,13 +1,17 @@
-// Where the fixture streets are (2026-09-16, moved here from @waste/domain
-// by issue #58). Container and property fixtures carry no coordinates, so
-// the map derives a position from the address through
+// Where the fixture streets are (written 2026-09-16 in @waste/domain, moved
+// here 2026-09-17 by issue #58). Container and property fixtures carry no
+// coordinates, so the map derives a position from the address through
 // @waste/domain/map-planning/positions, which places an address only on a
 // street this table lists. The table mirrors the registry beside it:
 // SEEDED_COPENHAGEN_STREETS and SEEDED_HARBOR_STREETS in business-modules.ts
-// plus the explicit container fixtures, and it decides which fixture route
-// days the Routes layer can draw (a pickup at no registry container is placed
-// by its address only on a listed street). Keys are lower-cased street names
-// as the domain parses them;
+// plus the explicit container fixtures. It deliberately does NOT mirror the
+// fixture pickups' streets: a pickup at no registry container is placed by
+// its address only on a listed street, and most fixture stops are on
+// unlisted ones, so a fixture route day is drawable through its one or two
+// stops on a listed street (RC-1042, RC-1044, RC-1048) or not at all
+// (RC-1058, whose depot is on Gammel Køge Landevej — listing it would add an
+// awaiting route to the Routes layer, a fixture decision, not a gazetteer one).
+// Keys are lower-cased, NFC-composed street names as the domain parses them;
 // anchors are approximate real coordinates of the low-number end, with the
 // bearing the numbers grow along — the picture only has to be plausible and
 // stable. lib/data/__tests__/street-gazetteer.test.ts holds this table and

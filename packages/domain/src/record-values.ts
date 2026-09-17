@@ -1,8 +1,12 @@
-// Reading the transitional BusinessRecord (prototype-record.ts): a display
-// fact whose value is the em-dash placeholder is absent, a typed submitted
-// value counts only when it is a non-blank string, and several records
-// "agree" on a value only when every one of them carries the same one.
-// These were private copies in a dozen modules before issue #58 hoisted them.
+// Reading the transitional BusinessRecord (prototype-record.ts) with one
+// rule: a value is absent when it is blank, not a string, or the em-dash
+// placeholder a fixture shows for "nothing" — whether it is a display fact
+// or a typed submitted value — and several records "agree" on a value only
+// when every one of them carries the same one. Issue #58 hoisted these from
+// the private copies the map-planning and route-scheme modules carried; the
+// readers with a different contract stay where they are and say so
+// (validation.ts's stringValue keeps whitespace, service-frequencies'
+// stringValue reads a bare value, groups.ts's optionalString reads unknown).
 
 import type { SubmittedValue } from "./prototype-record"
 
@@ -15,10 +19,9 @@ export function cleanFact(value: string | boolean | undefined): string | undefin
   return trimmed && trimmed !== EMPTY_FACT ? trimmed : undefined
 }
 
-/** A trimmed typed value, or undefined when blank, missing, or not a string. */
+/** A trimmed typed value, or undefined when blank, missing, the placeholder, or not a string. */
 export function typedString(values: Readonly<Record<string, SubmittedValue | undefined>> | undefined, key: string): string | undefined {
-  const value = values?.[key]
-  return typeof value === "string" && value.trim() ? value.trim() : undefined
+  return cleanFact(values?.[key])
 }
 
 /**
@@ -27,7 +30,6 @@ export function typedString(values: Readonly<Record<string, SubmittedValue | und
  * value like any other — clean the entries first.
  */
 export function uniform<T>(values: ReadonlyArray<T | undefined>): T | undefined {
-  const first = values[0]
-  if (first === undefined) return undefined
-  return values.every((value) => value === first) ? first : undefined
+  const [first] = values
+  return first !== undefined && values.every((value) => value === first) ? first : undefined
 }

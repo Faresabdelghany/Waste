@@ -7,10 +7,10 @@
 // creation orchestration (planSchemeCreation). Parity holds by construction —
 // there is no second create path to drift.
 
+import { typedString } from "../record-values"
 import { isSchemeCreateAs, type SchemeCreateAs } from "./creation"
 import { IMPLICIT_GROUP_ID, type CollectionGroup } from "./groups"
 import { matchPlansFromValues, stopSelectionMode } from "./matching"
-import { typedString } from "../record-values"
 import { isHolidayPolicy, type HolidayPolicy } from "./occurrences"
 import {
   SERVICE_DAYS,
@@ -75,7 +75,7 @@ type StoredValues = Record<string, string | boolean | undefined>
 /** Quick Create reads its form values as strings; a missing one is "". */
 const stringOf = (values: StoredValues, key: string): string => typedString(values, key) ?? ""
 
-const optionalId = (values: StoredValues, key: string): string | undefined => typedString(values, key)
+const optionalId = typedString
 
 /**
  * The `route-studio.schemes` form fields quickSchemeDraftFromValues consumes

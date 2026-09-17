@@ -32,6 +32,11 @@ describe("typedString", () => {
   test("a record without typed values reads as nothing", () => {
     assert.equal(typedString(undefined, "projectId"), undefined)
   })
+
+  test("the placeholder is not a typed value either — one rule for facts and typed values", () => {
+    assert.equal(typedString({ projectId: "—" }, "projectId"), undefined)
+    assert.equal(typedString({ projectId: " — " }, "projectId"), undefined)
+  })
 })
 
 describe("uniform", () => {

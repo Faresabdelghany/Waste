@@ -14,6 +14,7 @@
 // reproduce.
 
 import type { BusinessRecord } from "../prototype-record"
+import { EMPTY_FACT, cleanFact } from "../record-values"
 import { formatWorkingDays } from "./calendar-list"
 import { matchPlansFromValues } from "./matching"
 import {
@@ -22,14 +23,9 @@ import {
   serviceDaysFromValues,
 } from "./recurrence"
 import { stringValue } from "./validation"
-import { EMPTY_FACT } from "../record-values"
 
-
-/** A display fact, with blank/whitespace-only values treated as absent. */
-function factOf(record: BusinessRecord, label: string): string | undefined {
-  const value = record.facts?.[label]?.trim()
-  return value ? value : undefined
-}
+/** A display fact, with blank and placeholder values treated as absent. */
+const factOf = (record: BusinessRecord, label: string): string | undefined => cleanFact(record.facts?.[label])
 
 /**
  * The scheme's planning-area name: the live area record when the structured

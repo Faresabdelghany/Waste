@@ -12,7 +12,7 @@
 // never counted. Pure data logic.
 
 import type { BusinessRecord } from "../prototype-record"
-import { cleanFact } from "../record-values"
+import { cleanFact, typedString } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
 import { isIsoDate } from "../route-schemes/recurrence"
 import type { LngLat } from "./geo"
@@ -93,7 +93,7 @@ export function routeBucket(status: string): RouteBucket | null {
 }
 
 function routeDate(route: BusinessRecord): string | null {
-  const typed = cleanFact(route.submittedValues?.actualDate) ?? cleanFact(route.submittedValues?.serviceDate)
+  const typed = typedString(route.submittedValues, "actualDate") ?? typedString(route.submittedValues, "serviceDate")
   if (typed && isIsoDate(typed)) return typed
   return parseDisplayDate(route.facts.Date)
 }
@@ -111,14 +111,14 @@ const stopNumber = (pickup: BusinessRecord): number => {
 
 /** Every key a pickup may use to name its container. */
 function pickupContainerKeys(pickup: BusinessRecord): string[] {
-  return [cleanFact(pickup.submittedValues?.containerId), cleanFact(pickup.facts["Container ID"])?.toLowerCase()].filter(
+  return [typedString(pickup.submittedValues, "containerId"), cleanFact(pickup.facts["Container ID"])?.toLowerCase()].filter(
     (key): key is string => Boolean(key),
   )
 }
 
 /** Every key a pickup may use to name its route. */
 function pickupRouteKeys(pickup: BusinessRecord): string[] {
-  return [cleanFact(pickup.submittedValues?.routeId), cleanFact(pickup.facts.Route)?.toLowerCase()].filter(
+  return [typedString(pickup.submittedValues, "routeId"), cleanFact(pickup.facts.Route)?.toLowerCase()].filter(
     (key): key is string => Boolean(key),
   )
 }

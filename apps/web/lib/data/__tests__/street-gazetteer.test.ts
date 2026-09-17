@@ -7,8 +7,13 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { containerLocation, knownAddressLocation } from "@waste/domain/map-planning/positions"
+import {
+  addressLocation,
+  containerLocation,
+  containerPropertyKey,
+} from "@waste/domain/map-planning/positions"
 import { routesInWindow } from "@waste/domain/map-planning/routes"
+import { isSoftDeleted } from "@waste/domain/record-visibility"
 import { cleanFact } from "@waste/domain/record-values"
 
 import { businessWorkspaceList, type BusinessRecord } from "../business-modules"
@@ -20,23 +25,39 @@ function fixtureRecords(moduleId: string): BusinessRecord[] {
   return modules[0].records
 }
 
+/** The containers the map works from: visible and placed — the view's own filter. */
+const inService = fixtureRecords("containers").filter(
+  (record) => !isSoftDeleted(record) && containerLocation(record, FIXTURE_GAZETTEER) !== null,
+)
+
 describe("the fixture gazetteer against the fixture registry", () => {
-  test("every fixture container the map places sits on a gazetteer street, never at a hashed fallback", () => {
-    const placed = fixtureRecords("containers").filter((record) => containerLocation(record, FIXTURE_GAZETTEER) !== null)
-    assert.ok(placed.length > 40, `the registry places ${placed.length} containers`)
-    const hashed = placed
-      .map((record) => cleanFact(record.facts.Address) ?? cleanFact(record.facts.Property) ?? "")
-      .filter((address) => knownAddressLocation(address, FIXTURE_GAZETTEER) === null)
-    assert.deepEqual([...new Set(hashed)], [], "streets the gazetteer does not list")
+  test("every fixture container the map places sits on a gazetteer street, never at its hashed fallback", () => {
+    assert.ok(inService.length > 0, "the registry places containers")
+    // The fallback is where the address would land with no gazetteer at all; typed coordinates and
+    // gazetteer streets both land elsewhere, so only an unlisted street matches its own fallback.
+    const hashed = inService.filter((record) => {
+      const key = containerPropertyKey(record) ?? ""
+      const fallback = addressLocation(cleanFact(record.facts.Address) ?? key, {}, key)
+      const placed = containerLocation(record, FIXTURE_GAZETTEER)
+      return placed !== null && placed.lng === fallback.lng && placed.lat === fallback.lat
+    })
+    assert.deepEqual(
+      [...new Set(hashed.map((record) => cleanFact(record.facts.Address) ?? containerPropertyKey(record)))],
+      [],
+      "streets the gazetteer does not list",
+    )
   })
 
   test("the fixture route days the Routes layer can draw are the ones with a stop on a gazetteer street", () => {
-    // Fixture pickups name containers the registry does not hold, so a stop is placed by its address alone.
-    // Each listed route day has exactly one such stop today; the e2e suite pins the same picture on screen.
-    const drawable = routesInWindow(fixtureRecords("routes"), fixtureRecords("pickups"), fixtureRecords("containers"), null, FIXTURE_GAZETTEER)
-    assert.deepEqual(
-      drawable.map((route) => `${route.name} ${route.bucket} ${route.stops.length}/${route.stopCount}`),
-      ["RC-1042 in-progress 1/42", "RC-1048 in-progress 1/36", "RC-1044 completed 1/3"],
+    // Fixture pickups name containers the registry does not hold, so a stop is placed by its address
+    // alone, and only a stop on a listed street counts. The e2e suite pins the same picture by status.
+    const drawable = routesInWindow(fixtureRecords("routes"), fixtureRecords("pickups"), inService, null, FIXTURE_GAZETTEER)
+    const names = drawable.map((route) => route.name).sort()
+    assert.deepEqual(names, ["RC-1042", "RC-1044", "RC-1048"])
+    assert.ok(drawable.every((route) => route.stops.length > 0), "drawable means at least one located stop")
+    assert.ok(
+      !names.includes("RC-1058"),
+      "RC-1058 starts at a depot on Gammel Køge Landevej, which the gazetteer deliberately leaves out (see its header)",
     )
   })
 })

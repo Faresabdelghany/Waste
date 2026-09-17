@@ -8,7 +8,7 @@
 // Selected area panel.
 
 import type { BusinessRecord } from "../prototype-record"
-import { cleanFact } from "../record-values"
+import { EMPTY_FACT, cleanFact, typedString } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
 import { pointInPolygon } from "./geo"
 import { containerLocation, type Gazetteer } from "./positions"
@@ -24,14 +24,13 @@ export type ServiceAreaCoverage = {
   containers: number
 }
 
-
 const lower = (value: string) => value.trim().toLowerCase()
 
 /** The planning-area ids a service area covers, plus the names its refs and facts carry. */
 function serviceAreaZones(area: BusinessRecord): { ids: Set<string>; names: Set<string> } {
   const ids = new Set<string>()
   const names = new Set<string>()
-  for (const id of cleanFact(area.submittedValues?.zoneIds)?.split(",") ?? []) {
+  for (const id of typedString(area.submittedValues, "zoneIds")?.split(",") ?? []) {
     if (id.trim()) ids.add(id.trim())
   }
   for (const ref of area.relationRefs ?? []) {
@@ -61,7 +60,7 @@ export function serviceAreasForSelection(
         const spot = containerLocation(container, gazetteer)
         if (spot && pointInPolygon(spot, polygon)) return true
       }
-      const typed = cleanFact(container.submittedValues?.planningAreaId)
+      const typed = typedString(container.submittedValues, "planningAreaId")
       if (typed) return zones.ids.has(typed)
       const fact = cleanFact(container.facts["Planning area"])
       return fact ? zones.names.has(lower(fact)) : false
@@ -70,9 +69,9 @@ export function serviceAreasForSelection(
     rows.push({
       id: area.id,
       name: area.name,
-      serviceProvider: cleanFact(area.facts["Service provider"]) ?? "—",
+      serviceProvider: cleanFact(area.facts["Service provider"]) ?? EMPTY_FACT,
       status: area.status,
-      services: cleanFact(area.facts.Services) ?? "—",
+      services: cleanFact(area.facts.Services) ?? EMPTY_FACT,
       containers: count,
     })
   }

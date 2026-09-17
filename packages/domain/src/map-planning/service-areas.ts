@@ -105,14 +105,14 @@ export function serviceAreaSeedFromSelection({
     selected.map(
       (container) =>
         typedString(container.submittedValues, "projectId") ??
-        (container.projectIds?.length === 1 ? container.projectIds[0] : undefined),
+        (container.projectIds?.length === 1 ? cleanFact(container.projectIds[0]) : undefined),
     ),
   )
   return {
     projectId: project ?? null,
     planningAreaIds: planningAreaIds(selected, planningAreas),
-    boundary: `${shape ? "Drawn" : "Selected"} on Map Planning · ${count(selected.length, "container")} across ${count(properties, "property")}`,
-    polygon: shape ? shape.polygon.map((point) => ({ lng: point.lng, lat: point.lat })) : null,
+    boundary: `${shape ? "Drawn" : "Selected"} on Map Planning · ${count(selected.length, "container")} across ${count(properties, "property", "properties")}`,
+    polygon: shape?.polygon ?? null,
   }
 }
 

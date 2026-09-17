@@ -95,6 +95,23 @@ describe("serviceAreaSeedFromSelection", () => {
     assert.equal(seed.boundary, "Selected on Map Planning · 1 container across 1 property")
   })
 
+  test("a typed placeholder is not a project, and an empty record scope is null rather than blank", () => {
+    const placeholder = serviceAreaSeedFromSelection({
+      selected: [record("g", {}, { projectIds: ["project-copenhagen"], submittedValues: { projectId: "—" } })],
+      shape: null,
+      planningAreas,
+      properties: 1,
+    })
+    assert.equal(placeholder.projectId, "project-copenhagen", "the placeholder falls back to record scope")
+    const blank = serviceAreaSeedFromSelection({
+      selected: [record("h", {}, { projectIds: [""] }), record("i", {}, { projectIds: [""] })],
+      shape: null,
+      planningAreas,
+      properties: 2,
+    })
+    assert.equal(blank.projectId, null)
+  })
+
   test("a typed project wins over record scope, and containers naming no known area contribute none", () => {
     const seed = serviceAreaSeedFromSelection({
       selected: [

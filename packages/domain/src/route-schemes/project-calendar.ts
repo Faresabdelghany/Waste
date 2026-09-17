@@ -12,6 +12,7 @@
 // Pure data logic (type-only import of BusinessRecord).
 
 import type { BusinessRecord } from "../prototype-record"
+import { typedString } from "../record-values"
 import { formatWorkingDays } from "./calendar-list"
 import { holidayNamesFor } from "./holiday-names"
 import {
@@ -22,7 +23,6 @@ import {
 } from "./holidays"
 import { NO_HOLIDAYS, type HolidayList, type SchemeCalendar } from "./occurrences"
 import { parseServiceDays, type ServiceDay } from "./recurrence"
-import { typedString } from "../record-values"
 
 /** The weekend a project takes when it has none set. */
 export const DEFAULT_WEEKEND: readonly ServiceDay[] = ["saturday", "sunday"]

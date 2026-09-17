@@ -53,11 +53,15 @@ const KERB_OFFSET_METRES = 14
 // ("Harbor Offices, Dock 4") and miss the gazetteer.
 const ADDRESS_SHAPE = /^\s*([^\d,]+?)\s*(?:(\d+)\s*[a-zA-Z]?)?\s*(?:,|$)/
 
-/** "Ryesgade 45, 2200 København N" → { street: "ryesgade", number: 45 }. */
+/**
+ * "Ryesgade 45, 2200 København N" → { street: "ryesgade", number: 45 }. The
+ * street is composed (NFC) before lower-casing, so a decomposed "é" from a
+ * paste still meets the gazetteer's key.
+ */
 function parseAddress(address: string): { street: string; number: number | null } | null {
   const match = ADDRESS_SHAPE.exec(address)
   if (!match) return null
-  const street = match[1].trim().toLowerCase()
+  const street = match[1].trim().normalize("NFC").toLowerCase()
   if (!street) return null
   return { street, number: match[2] ? Number.parseInt(match[2], 10) : null }
 }
@@ -94,7 +98,8 @@ export function addressLocation(address: string, gazetteer: Gazetteer, seed = ad
  */
 export function knownAddressLocation(address: string, gazetteer: Gazetteer, seed = address): LngLat | null {
   const parsed = parseAddress(address)
-  const anchor = parsed ? gazetteer[parsed.street] : undefined
+  // Own keys only: a street called "constructor" must not find Object.prototype.
+  const anchor = parsed && Object.hasOwn(gazetteer, parsed.street) ? gazetteer[parsed.street] : undefined
   if (!parsed || !anchor) return null
   const number = parsed.number ?? 1 + (avalancheHash(seed || address) % 40)
   const along = bearingOffset(anchor.start, number * METRES_PER_HOUSE_NUMBER, anchor.bearing)

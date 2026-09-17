@@ -24,6 +24,7 @@
 // facts from it, so it must not import fixture data back (type-only imports
 // are fine).
 
+import { EMPTY_FACT } from "./record-values"
 import {
   RECURRENCE_WEEKLY_RATES,
   type RecurrenceFrequency,
@@ -136,7 +137,7 @@ const definitionByName = new Map(
 export function resolveServiceFrequencyValue(
   value: string | undefined,
 ): ServiceFrequencyDefinition | null {
-  if (!value || value === "—") return null
+  if (!value || value === EMPTY_FACT) return null
   const direct =
     serviceFrequencyById.get(value) ??
     (Object.prototype.hasOwnProperty.call(LEGACY_FREQUENCY_OPTION_IDS, value)
@@ -189,7 +190,7 @@ export function canonicalServiceFrequencyName(value: string | undefined) {
 
 /** Derived fact value for a typed reference; "—" when there is none. */
 export function serviceFrequencyFactValue(id: string | null | undefined) {
-  return (id && serviceFrequencyById.get(id)?.name) || "—"
+  return (id && serviceFrequencyById.get(id)?.name) || EMPTY_FACT
 }
 
 /**

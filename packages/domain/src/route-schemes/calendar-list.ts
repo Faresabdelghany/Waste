@@ -6,6 +6,7 @@
 // from display facts, stored value strings, or the module's static metrics.
 
 import type { BusinessRecord } from "../prototype-record"
+import { EMPTY_FACT } from "../record-values"
 import { calendarFromRecord } from "./calendar"
 import {
   addDays,
@@ -13,7 +14,6 @@ import {
   SERVICE_DAY_SHORT_LABELS,
   type ServiceDay,
 } from "./recurrence"
-import { EMPTY_FACT } from "../record-values"
 
 // Hand-rolled month labels (like SERVICE_DAY_SHORT_LABELS) rather than
 // Intl "en-GB", whose ICU-dependent "Sept" would disagree with the "Sep"
