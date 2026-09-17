@@ -4,18 +4,31 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { FilterChip } from "@/components/filter-chip"
 import { cn } from "@/lib/utils"
 
-export type Chip = { key: string; value: string }
+/**
+ * A removable chip: `key` is what the consumer removes by, `label` what the
+ * chip shows before the value. A chip without a label shows its key. Typing
+ * `key` narrower than string (the business filter chips carry their filter
+ * key) makes `onRemove` hand that key back, so a caller cannot pass the label
+ * on where a key belongs.
+ */
+export type Chip<K extends string = string> = { key: K; label?: string; value: string }
 
-interface ChipOverflowProps {
-  chips: Chip[]
-  onRemove: (key: string, value: string) => void
+interface ChipOverflowProps<K extends string> {
+  chips: Chip<K>[]
+  onRemove: (key: K, value: string) => void
   maxVisible?: number
   className?: string
 }
 
-export function ChipOverflow({ chips, onRemove, maxVisible = 4, className }: ChipOverflowProps) {
+export function ChipOverflow<K extends string = string>({
+  chips,
+  onRemove,
+  maxVisible = 4,
+  className,
+}: ChipOverflowProps<K>) {
   const visible = chips.slice(0, Math.max(0, maxVisible))
   const hidden = chips.slice(Math.max(0, maxVisible))
+  const text = (chip: Chip<K>) => `${chip.label ?? chip.key}: ${chip.value}`
 
   if (chips.length === 0) return null
 
@@ -24,7 +37,7 @@ export function ChipOverflow({ chips, onRemove, maxVisible = 4, className }: Chi
       {visible.map((chip) => (
         <FilterChip
           key={`${chip.key}-${chip.value}`}
-          label={`${chip.key}: ${chip.value}`}
+          label={text(chip)}
           onRemove={() => onRemove(chip.key, chip.value)}
         />
       ))}
@@ -41,7 +54,7 @@ export function ChipOverflow({ chips, onRemove, maxVisible = 4, className }: Chi
               {hidden.map((chip) => (
                 <div key={`${chip.key}-${chip.value}`} className="shrink-0">
                   <FilterChip
-                    label={`${chip.key}: ${chip.value}`}
+                    label={text(chip)}
                     onRemove={() => onRemove(chip.key, chip.value)}
                   />
                 </div>

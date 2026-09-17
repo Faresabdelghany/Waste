@@ -19,7 +19,6 @@ import {
 import { BusinessFilterPopover } from "@/components/wastehero/business-filter-popover"
 import {
   businessFilterChips,
-  filterKeyForChipLabel,
   removeBusinessFilterValue,
   type BusinessFilters,
 } from "@waste/domain/business-filters"
@@ -102,10 +101,7 @@ export function MapToolbar({
         <ChipOverflow
           chips={chips}
           maxVisible={6}
-          onRemove={(label, value) => {
-            const key = filterKeyForChipLabel(label)
-            if (key) onFiltersChange(removeBusinessFilterValue(filters, key, value))
-          }}
+          onRemove={(key, value) => onFiltersChange(removeBusinessFilterValue(filters, key, value))}
         />
       )}
     </div>
