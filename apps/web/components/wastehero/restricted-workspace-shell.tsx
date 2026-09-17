@@ -1,3 +1,5 @@
+import { Suspense } from "react"
+
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { BusinessWorkspace } from "@/components/wastehero/business-workspace"
 import { ServiceProviderDashboard } from "@/components/wastehero/service-provider-dashboard"
@@ -148,24 +150,28 @@ export function RestrictedWorkspaceShell({
     <SidebarProvider>
       <RestrictedPersonaSidebar persona={persona} />
       <SidebarInset>
-        <BusinessWorkspace
-          workspaceId={page.workspaceId}
-          initialModuleId={page.moduleId}
-          allowedModuleIds={page.moduleIds}
-          allowedRecordIds={page.recordIds}
-          workspaceLabel={page.workspaceLabel}
-          workspaceDescription={page.workspaceDescription}
-          fixedProjectScope={definition.fixedProjectScope}
-          fixedScopeLabel={definition.fixedScopeLabel}
-          navigationBasePath={page.navigationBasePath}
-          showDeepLinks={false}
-          showExportAction={false}
-          showPrimaryAction={page.showWorkspaceActions}
-          showFilters={page.showFilters}
-          serviceProviderScopeId={definition.serviceProviderScopeId}
-          permissionsRoleId={definition.permissionsRoleId}
-          actorName={definition.actorName}
-        />
+        {/* Suspense above useSearchParams: under Cache Components the URL is request
+            data, so the workspace streams in after the static shell. */}
+        <Suspense fallback={null}>
+          <BusinessWorkspace
+            workspaceId={page.workspaceId}
+            initialModuleId={page.moduleId}
+            allowedModuleIds={page.moduleIds}
+            allowedRecordIds={page.recordIds}
+            workspaceLabel={page.workspaceLabel}
+            workspaceDescription={page.workspaceDescription}
+            fixedProjectScope={definition.fixedProjectScope}
+            fixedScopeLabel={definition.fixedScopeLabel}
+            navigationBasePath={page.navigationBasePath}
+            showDeepLinks={false}
+            showExportAction={false}
+            showPrimaryAction={page.showWorkspaceActions}
+            showFilters={page.showFilters}
+            serviceProviderScopeId={definition.serviceProviderScopeId}
+            permissionsRoleId={definition.permissionsRoleId}
+            actorName={definition.actorName}
+          />
+        </Suspense>
       </SidebarInset>
     </SidebarProvider>
   )

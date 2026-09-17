@@ -1,3 +1,5 @@
+import { Suspense } from "react"
+
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { BusinessWorkspace } from "@/components/wastehero/business-workspace"
@@ -29,13 +31,17 @@ export function WorkspacePageShell({
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <BusinessWorkspace
-          workspaceId={workspaceId}
-          initialModuleId={initialModuleId}
-          allowedModuleIds={
-            allowedModuleIds ?? publicModuleIdsByWorkspace[workspaceId]
-          }
-        />
+        {/* Suspense above useSearchParams: under Cache Components the URL is request
+            data, so the workspace streams in after the static shell. */}
+        <Suspense fallback={null}>
+          <BusinessWorkspace
+            workspaceId={workspaceId}
+            initialModuleId={initialModuleId}
+            allowedModuleIds={
+              allowedModuleIds ?? publicModuleIdsByWorkspace[workspaceId]
+            }
+          />
+        </Suspense>
       </SidebarInset>
     </SidebarProvider>
   )
