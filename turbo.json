@@ -19,6 +19,11 @@
       "cache": false,
       "persistent": true
     },
+    "@waste/api#dev": {
+      "cache": false,
+      "persistent": true,
+      "env": ["HOST", "PORT"]
+    },
     "lint": {
       "dependsOn": [
         "^lint"
