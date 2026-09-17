@@ -1,13 +1,13 @@
 // Collection Calendar model. Pure data logic — no UI or store dependencies.
 // A calendar record carries holiday dates and a validity period; since the
 // 2026-09-16 holiday model only its holiday DATES feed the scheme engine
-// (lib/route-schemes/holidays.ts builds the holiday list from them). The
+// (@waste/domain/route-schemes/holidays.ts builds the holiday list from them). The
 // working week is a PROJECT attribute (project-calendar.ts, round 3) — the
 // calendar-level working days were retired so the weekend is defined once.
 // Validity is display data for the Collection Calendars list. Timezone is
 // display-only (Q9): all date math is day-granular ISO.
 
-import type { BusinessRecord } from "../data/business-modules"
+import type { BusinessRecord } from "../prototype-record"
 import { isIsoDate } from "./recurrence"
 import { stringValue } from "./validation"
 

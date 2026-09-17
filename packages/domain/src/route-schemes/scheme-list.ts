@@ -13,7 +13,7 @@
 // "Copenhagen Central · By Operations" was a copy bug, not a layout to
 // reproduce.
 
-import type { BusinessRecord } from "../data/business-modules"
+import type { BusinessRecord } from "../prototype-record"
 import { formatWorkingDays } from "./calendar-list"
 import { matchPlansFromValues } from "./matching"
 import {

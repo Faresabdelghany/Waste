@@ -9,50 +9,50 @@ import {
   resolveProjectCalendar,
   schemeCalendarOf,
   type ProjectCalendar,
-} from "@/lib/route-schemes/project-calendar"
+} from "@waste/domain/route-schemes/project-calendar"
 import {
   draftGroups,
   draftRecurrence,
   resolvedDraftGroups,
   validateGuidedScheme,
-} from "@/lib/route-schemes/draft"
+} from "@waste/domain/route-schemes/draft"
 import {
   routeEstimateAdapter,
   type ContainerWeightResolver,
   type RouteEstimate,
-} from "@/lib/route-schemes/estimates"
-import type { DriverProfile, VehicleProfile } from "@/lib/route-schemes/fleet-profiles"
+} from "@waste/domain/route-schemes/estimates"
+import type { DriverProfile, VehicleProfile } from "@waste/domain/route-schemes/fleet-profiles"
 import {
   checkCollectionGroups,
   withoutDuplicatedEngineIssues,
   type GroupCheckKind,
-} from "@/lib/route-schemes/group-checks"
+} from "@waste/domain/route-schemes/group-checks"
 import {
   issuesByGroup,
   type CollectionGroup,
   type CollectionGroupDayPlan,
   type CollectionGroupResolution,
-} from "@/lib/route-schemes/groups"
-import { SCHEME_GROUP_COLORS } from "@/lib/route-schemes/map"
+} from "@waste/domain/route-schemes/groups"
+import { SCHEME_GROUP_COLORS } from "@waste/domain/route-schemes/map"
 import {
   containerMatchProfile,
   resolveStopMatches,
   type ContainerMatchProfile,
-} from "@/lib/route-schemes/matching"
+} from "@waste/domain/route-schemes/matching"
 import {
   formatClockTime,
   occurrencePreview,
   type OccurrencePreview,
-} from "@/lib/route-schemes/occurrences"
-import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
+} from "@waste/domain/route-schemes/occurrences"
+import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import {
   recurrenceCadenceLabel,
   serviceDaysRangeLabel,
   sortServiceDays,
   type SchemeRecurrence,
   type ServiceDay,
-} from "@/lib/route-schemes/recurrence"
-import type { SchemeValidationResult } from "@/lib/route-schemes/validation"
+} from "@waste/domain/route-schemes/recurrence"
+import type { SchemeValidationResult } from "@waste/domain/route-schemes/validation"
 
 import type { WizardRecords } from "./use-wizard-records"
 

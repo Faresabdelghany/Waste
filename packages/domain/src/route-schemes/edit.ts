@@ -15,7 +15,7 @@
 // its future refreshable routes with the generation-authored resurrection
 // marker; a later valid save re-materializes them idempotently.
 
-import type { BusinessRecord } from "../data/business-modules"
+import type { BusinessRecord } from "../prototype-record"
 import {
   applySchemeGeneration,
   cancelSchemeFutureRoutes,

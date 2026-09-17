@@ -16,7 +16,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog"
-import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
+import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { cn } from "@/lib/utils"
 
 import { ConflictDialog } from "./conflict-dialog"

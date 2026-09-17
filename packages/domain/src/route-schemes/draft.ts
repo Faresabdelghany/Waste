@@ -4,8 +4,8 @@
 // resolve the same draft the same way. Moved here from the wizard component
 // (2026-09-16) so the wizard can import them without an import cycle.
 
-import type { BusinessRecord } from "../data/business-modules"
-import { schemeFrequencyPromiseOfRecord } from "../data/service-frequencies"
+import type { BusinessRecord } from "../prototype-record"
+import { schemeFrequencyPromiseOfRecord } from "../service-frequencies"
 import {
   collectionGroupContainerIds,
   flattenGroupPlans,

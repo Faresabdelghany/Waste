@@ -8,7 +8,7 @@
 
 import type { BusinessFormValues } from "../data/business-form-types"
 import type { BusinessRecord } from "../data/business-modules"
-import { isSoftDeleted } from "../data/record-visibility"
+import { isSoftDeleted } from "@waste/domain/record-visibility"
 import { boundsFromPolygon, type LngLat, type LngLatBounds } from "./geo"
 import type { SelectionShape } from "./selection"
 

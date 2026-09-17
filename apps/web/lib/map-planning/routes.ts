@@ -12,8 +12,8 @@
 // never counted. Pure data logic.
 
 import type { BusinessRecord } from "../data/business-modules"
-import { isSoftDeleted } from "../data/record-visibility"
-import { isIsoDate } from "../route-schemes/recurrence"
+import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { isIsoDate } from "@waste/domain/route-schemes/recurrence"
 import type { LngLat } from "./geo"
 import { containerLocation, knownAddressLocation } from "./positions"
 import { parseDisplayDate } from "./schedule"

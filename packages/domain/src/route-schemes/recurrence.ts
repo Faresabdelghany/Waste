@@ -87,7 +87,7 @@ export const OFFERED_RECURRENCE_FREQUENCIES: readonly RecurrenceFrequency[] = [
  * recurrence against promised service frequencies on. Monthly is 12
  * collections across a 52-week year, not 1/4: the first-weekday rule serves
  * calendar months. The promise side derives its rate from the interval
- * vocabulary (lib/data/service-frequencies promisedCollectionsPerWeek), so
+ * vocabulary (@waste/domain/service-frequencies promisedCollectionsPerWeek), so
  * every-N-weeks promises order naturally against these without needing a
  * scheme-cadence counterpart.
  */

@@ -18,13 +18,13 @@
 //   whose collection group the scheme no longer plans on that date:
 //     still Planned → cancel ("scheme no longer serves this date"); else leave.
 //   Collection groups (D33/D36): the scheme's groups resolve per day
-//   (lib/route-schemes/groups) and generation writes ONE route per group per
+//   (@waste/domain/route-schemes/groups) and generation writes ONE route per group per
 //   applicable day, carrying the group's vehicle, default driver, and service
 //   provider. Route identity is (schemeId, serviceDate) for the implicit legacy
 //   group and (schemeId, groupId, serviceDate) for explicit groups —
 //   deterministic ids, never Date.now().
 
-import type { BusinessRecord } from "../data/business-modules"
+import type { BusinessRecord } from "../prototype-record"
 import { schemeGroupPlans, type ResolvedCollectionGroup } from "./groups"
 import { avalancheHash } from "./hash"
 import { schemeHolidayPolicy } from "./holidays"
@@ -195,10 +195,10 @@ export const WALK_CAP_DAYS = 366
  * never the raw window end, or an over-long window would cancel still-served
  * routes past the truncation point. An inverted window walks nothing.
  */
-function walkEndOf(window: GenerationWindow): string {
-  if (window.to < window.from) return window.from
-  const cap = addDays(window.from, WALK_CAP_DAYS)
-  return window.to < cap ? window.to : cap
+function walkEndOf(generationWindow: GenerationWindow): string {
+  if (generationWindow.to < generationWindow.from) return generationWindow.from
+  const cap = addDays(generationWindow.from, WALK_CAP_DAYS)
+  return generationWindow.to < cap ? generationWindow.to : cap
 }
 
 /** The preview / deviation wording for an occurrence the holiday policy touched. */
@@ -233,7 +233,7 @@ export function planSchemeGeneration(input: {
    */
   calendar?: SchemeCalendar | null
 }): SchemeGenerationPlan | null {
-  const { scheme, window } = input
+  const { scheme, window: generationWindow } = input
   const recurrence = recurrenceFromValues(scheme.submittedValues ?? {})
   if (!recurrence) return null
 
@@ -287,10 +287,10 @@ export function planSchemeGeneration(input: {
   const routes: PlannedRoute[] = []
   const servedDates = new Set<string>()
   const plannedIdentities = new Set<string>()
-  const walkEnd = walkEndOf(window)
+  const walkEnd = walkEndOf(generationWindow)
   const occurrences = generateOccurrences({
     recurrence,
-    window: { from: window.from, to: walkEnd },
+    window: { from: generationWindow.from, to: walkEnd },
     holidayPolicy: schemeHolidayPolicy(scheme.submittedValues),
     calendar: input.calendar ?? { holidays: NO_HOLIDAYS, weekend: DEFAULT_WEEKEND },
   })
@@ -406,11 +406,11 @@ export function planSchemeGeneration(input: {
   // Routes this scheme once generated inside the window but no longer plans —
   // the date is no longer served, or the collection group no longer runs on
   // it: still Planned → cancel; any further state is operational reality we
-  // keep. Bounded by walkEnd, not window.to — dates past the walk cap were
+  // keep. Bounded by walkEnd, not the window's end — dates past the walk cap were
   // never examined, so their routes must not be judged "no longer served".
   for (const [identity, { route: existing, serviceDate, groupId }] of existingByIdentity) {
     if (plannedIdentities.has(identity)) continue
-    if (serviceDate < window.from || serviceDate > walkEnd) continue
+    if (serviceDate < generationWindow.from || serviceDate > walkEnd) continue
     if (existing.status !== "Planned") continue
     routes.push({
       action: "cancel",
@@ -435,7 +435,7 @@ export function planSchemeGeneration(input: {
 
   routes.sort((a, b) => a.serviceDate.localeCompare(b.serviceDate))
 
-  return { scheme, schemeVersion: schemeVersionOf(scheme), window, routes }
+  return { scheme, schemeVersion: schemeVersionOf(scheme), window: generationWindow, routes }
 }
 
 /* ------------------------ scheme route list (FR-13) ----------------------- */

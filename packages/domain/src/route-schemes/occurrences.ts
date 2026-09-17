@@ -155,12 +155,12 @@ const byDate = (a: Occurrence, b: Occurrence) =>
  * window bounds the recurrence dates; a shift may land just outside it.
  */
 export function generateOccurrences(input: GenerateOccurrencesInput): Occurrence[] {
-  const { recurrence, window, holidayPolicy, calendar } = input
+  const { recurrence, window: occurrenceWindow, holidayPolicy, calendar } = input
   const rows: Occurrence[] = []
-  if (!isIsoDate(window.from) || !isIsoDate(window.to) || window.to < window.from) return rows
+  if (!isIsoDate(occurrenceWindow.from) || !isIsoDate(occurrenceWindow.to) || occurrenceWindow.to < occurrenceWindow.from) return rows
   if (recurrence.serviceDays.length === 0) return rows
 
-  for (let cursor = window.from; cursor <= window.to; cursor = addDays(cursor, 1)) {
+  for (let cursor = occurrenceWindow.from; cursor <= occurrenceWindow.to; cursor = addDays(cursor, 1)) {
     if (!matchesRecurrence(recurrence, cursor)) continue
     const note = calendar.holidays.get(cursor)
     if (note === undefined) {

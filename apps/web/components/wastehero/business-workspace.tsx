@@ -57,38 +57,38 @@ import {
   calendarRowSummary,
   withDerivedCalendarValue,
   type CalendarRowSummary,
-} from "@/lib/route-schemes/calendar-list"
+} from "@waste/domain/route-schemes/calendar-list"
 import {
   DEFAULT_SCHEME_EDIT_POLICY,
   planSchemeCreation,
-} from "@/lib/route-schemes/creation"
-import { draftGroups } from "@/lib/route-schemes/draft"
+} from "@waste/domain/route-schemes/creation"
+import { draftGroups } from "@waste/domain/route-schemes/draft"
 import {
   driverFormOptions,
   driverIneligibilityReason,
-} from "@/lib/route-schemes/fleet-profiles"
-import { NO_HOLIDAY_LIST_LABEL, resolveProjectCalendar } from "@/lib/route-schemes/project-calendar"
-import { HOLIDAY_POLICY_LABELS } from "@/lib/route-schemes/occurrences"
-import { planSchemeDeletion } from "@/lib/route-schemes/deletion"
+} from "@waste/domain/route-schemes/fleet-profiles"
+import { NO_HOLIDAY_LIST_LABEL, resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
+import { HOLIDAY_POLICY_LABELS } from "@waste/domain/route-schemes/occurrences"
+import { planSchemeDeletion } from "@waste/domain/route-schemes/deletion"
 import {
   planSchemeEditReconciliation,
   type SchemeEditReconciliationPlan,
-} from "@/lib/route-schemes/edit"
+} from "@waste/domain/route-schemes/edit"
 import {
   schemeAttention,
   schemeCanGenerateRoutes,
   withEffectiveSchemeStatus,
-} from "@/lib/route-schemes/lifecycle"
+} from "@waste/domain/route-schemes/lifecycle"
 import {
   isPlanAheadEnabled,
   setPlanAhead,
-} from "@/lib/route-schemes/plan-ahead"
+} from "@waste/domain/route-schemes/plan-ahead"
 import {
   GROUP_OWNED_SCHEME_FIELD_IDS,
   QUICK_SCHEME_DRAFT_FIELD_IDS,
   quickSchemeDraftFromValues,
   seedSchemeEditValues,
-} from "@/lib/route-schemes/quick-create"
+} from "@waste/domain/route-schemes/quick-create"
 import {
   collectionGroupContainerIds,
   collectionGroupSummary,
@@ -98,12 +98,12 @@ import {
   schemeGroupPlans,
   sharedServiceProvider,
   type CollectionGroup,
-} from "@/lib/route-schemes/groups"
+} from "@waste/domain/route-schemes/groups"
 import {
   schemeRowSummary,
   withDerivedSchemeContext,
   type SchemeRowSummary,
-} from "@/lib/route-schemes/scheme-list"
+} from "@waste/domain/route-schemes/scheme-list"
 import {
   SERVICE_DAY_SHORT_LABELS,
   formatServiceDate,
@@ -111,21 +111,21 @@ import {
   recurrenceSentence,
   serviceDaysFromValues,
   todayIso,
-} from "@/lib/route-schemes/recurrence"
+} from "@waste/domain/route-schemes/recurrence"
 import {
   effectiveDayRules,
   matchPlansFromValues,
   stopRuleSummary,
   stopSelectionMode,
-} from "@/lib/route-schemes/matching"
-import { dayPlanCountSummary } from "@/lib/route-schemes/validation"
+} from "@waste/domain/route-schemes/matching"
+import { dayPlanCountSummary } from "@waste/domain/route-schemes/validation"
 import type {
   BusinessFormField,
   BusinessFormOption,
   BusinessFormSchema,
   BusinessFormValues,
 } from "@/lib/data/business-form-types"
-import { softDeletedRecord } from "@/lib/data/record-visibility"
+import { softDeletedRecord } from "@waste/domain/record-visibility"
 import {
   applyIndexToRate,
   serviceProviderPriceToRecord,
@@ -214,14 +214,14 @@ import {
   matchesBusinessQuery,
   removeBusinessFilterValue,
   type BusinessFilters,
-} from "@/lib/data/business-filters"
+} from "@waste/domain/business-filters"
 import { RecordSearchInput } from "@/components/wastehero/record-search-input"
 import {
   canonicalServiceFrequencyName,
   resolveServiceFrequencyValue,
   serviceFrequencyById,
   serviceFrequencyOfRecord,
-} from "@/lib/data/service-frequencies"
+} from "@waste/domain/service-frequencies"
 import {
   BusinessViewOptionsPopover,
   defaultBusinessViewOptions,
@@ -3424,7 +3424,7 @@ export function BusinessWorkspace({
 
     // A scheme's recurrence is machine-readable in submittedValues (frequency,
     // serviceDays, weekRotation, effectiveFrom/To, plannedStartTime — the shape
-    // lib/route-schemes/recurrence reads); the facts get the one-line summary
+    // @waste/domain/route-schemes/recurrence reads); the facts get the one-line summary
     // the record detail shows.
     const normalizeRouteSchemeRecord = (record: BusinessRecord): BusinessRecord => {
       let nextFacts = { ...record.facts }

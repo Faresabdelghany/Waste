@@ -4,7 +4,7 @@
 // against or plans from records must skip marked ones — or a deleted record
 // gets counted, adjusted, generated for, or resurrected.
 
-import type { BusinessRecord } from "./business-modules"
+import type { BusinessRecord } from "./prototype-record"
 
 export const REGISTRY_VISIBILITY_FACT = "Registry visibility"
 export const SOFT_DELETED = "Soft deleted"
@@ -27,7 +27,7 @@ export type SoftDeletion = {
  * The one soft-delete shape: the record marked with the visibility fact, the
  * structured reason and actor, and a link to its deletion-log audit event.
  * Written by commitRecordAction (business-workspace.tsx) for every module
- * and by planSchemeDeletion (lib/route-schemes/deletion.ts) for route
+ * and by planSchemeDeletion (@waste/domain/route-schemes/deletion.ts) for route
  * schemes; the input is left untouched.
  */
 export function softDeletedRecord(

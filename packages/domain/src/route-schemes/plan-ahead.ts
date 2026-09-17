@@ -11,8 +11,8 @@
 //   never Expired), structurally able to generate, and whose effective
 //   window overlaps the run window.
 
-import type { BusinessRecord } from "../data/business-modules"
-import { isSoftDeleted } from "../data/record-visibility"
+import type { BusinessRecord } from "../prototype-record"
+import { isSoftDeleted } from "../record-visibility"
 import { schemeGenerationCalendar } from "./project-calendar"
 import {
   applySchemeGeneration,
@@ -73,9 +73,9 @@ export function schemeAutoGenerates(
   if (status === "Draft" || status === "Expired") return false
   const recurrence = recurrenceFromValues(scheme.submittedValues ?? {})
   if (!recurrence) return false
-  const window = planAheadWindow(today)
-  if (recurrence.effectiveFrom > window.to) return false
-  if (recurrence.effectiveTo && recurrence.effectiveTo < window.from) return false
+  const runWindow = planAheadWindow(today)
+  if (recurrence.effectiveFrom > runWindow.to) return false
+  if (recurrence.effectiveTo && recurrence.effectiveTo < runWindow.from) return false
   return true
 }
 
@@ -124,7 +124,7 @@ export function runPlanAhead(input: {
   /** ISO datetime stamped on every written route (FR-13's "Last generated"). */
   generatedAt?: string
 }): PlanAheadRunResult {
-  const window = planAheadWindow(input.today)
+  const runWindow = planAheadWindow(input.today)
   const calendarRecords = input.calendarRecords ?? []
   const projectRecords = input.projectRecords ?? []
   const routes: BusinessRecord[] = []
@@ -144,7 +144,7 @@ export function runPlanAhead(input: {
     if (!schemeAutoGenerates(scheme, input.today)) continue
     const plan = planSchemeGeneration({
       scheme,
-      window,
+      window: runWindow,
       existingRoutes: input.existingRoutes,
       // Rule-mode schemes (issue #19) resolve their stop-matching rules
       // against these records — the same set manual generation uses.

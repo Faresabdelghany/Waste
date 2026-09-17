@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import type { BusinessRecord } from "../../data/business-modules"
-import { schemeRowSummary, schemeWasteFractionLabel } from "../scheme-list"
+import type { BusinessRecord } from "../../prototype-record"
+import { schemeWasteFractionLabel } from "../scheme-list"
 
 function stub(extra: Partial<BusinessRecord> = {}): BusinessRecord {
   return {

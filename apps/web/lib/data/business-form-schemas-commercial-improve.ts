@@ -1,5 +1,5 @@
 import type { BusinessFormSchema } from "@/lib/data/business-form-types"
-import { SERVICE_FREQUENCIES } from "@/lib/data/service-frequencies"
+import { SERVICE_FREQUENCIES } from "@waste/domain/service-frequencies"
 
 /**
  * Commercial, Improve, and Control Center creation contracts.

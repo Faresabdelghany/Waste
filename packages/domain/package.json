@@ -1,0 +1,21 @@
+{
+  "name": "@waste/domain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure, deterministic planning logic (ADR-0002). No React, Next, MapLibre, browser APIs, network, or fixture registry; src/__tests__/purity.test.ts enforces it.",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "tsx": "^4.23.12",
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
+  }
+}

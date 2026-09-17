@@ -13,7 +13,6 @@ import {
   addDays,
   isIsoDate,
   serviceDayOf,
-  serviceDaysFromValues,
   sortServiceDays,
   type RecurrenceFrequency,
   type ServiceDay,
@@ -63,7 +62,7 @@ export function dayPlanCountSummary(plans: readonly SchemeDayPlan[]): string {
 /**
  * One collection group as validation sees it (D33–D35): the group's days,
  * assignment, stop source, and — pre-resolved by the caller through
- * lib/route-schemes/groups resolveCollectionGroupPlans, so validation stays
+ * @waste/domain/route-schemes/groups resolveCollectionGroupPlans, so validation stays
  * pure data logic — the stops it actually serves per applicable day after the
  * manual-beats-rule / first-rule-group-wins tie-breaks.
  */
@@ -122,7 +121,7 @@ export type SchemeValidationInput = {
    * Present when the caller can resolve the linked containers' promised
    * service frequencies (issue #21): the scheme's recurrence cadence plus one
    * pre-resolved promise per linked container that carries one — resolved by
-   * the caller (lib/data/service-frequencies schemeFrequencyPromiseOfRecord;
+   * the caller (@waste/domain/service-frequencies schemeFrequencyPromiseOfRecord;
    * validation stays pure data logic). Containers whose promise the scheme's
    * cadence under- or over-serves come back as non-blocking warnings — the
    * deferred "week-parity vs pickup settings" reconciliation class, which
@@ -166,7 +165,7 @@ export type SchemeStopRuleSource = {
 
 /**
  * What FR-5(d) needs to know about an already-existing scheme's planned
- * assignment: one source per collection group (lib/route-schemes/groups
+ * assignment: one source per collection group (@waste/domain/route-schemes/groups
  * schemeAssignmentSources) — a legacy single-assignment scheme is one source.
  */
 export type SchemeDefaultsSource = {

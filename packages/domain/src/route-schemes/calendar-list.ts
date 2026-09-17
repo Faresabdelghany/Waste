@@ -5,7 +5,7 @@
 // `submittedValues` a calendar record carries (via calendarFromRecord) — never
 // from display facts, stored value strings, or the module's static metrics.
 
-import type { BusinessRecord } from "../data/business-modules"
+import type { BusinessRecord } from "../prototype-record"
 import { calendarFromRecord } from "./calendar"
 import {
   addDays,

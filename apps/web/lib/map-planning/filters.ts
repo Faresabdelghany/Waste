@@ -1,10 +1,10 @@
 // The planning map's filter readers (2026-09-16): one function per filter
 // category, shared by the toolbar popover (which offers the values) and the
 // map (which matches records against the picks), so both read the same
-// facts — the lib/data/business-filters.ts contract.
+// facts — the @waste/domain/business-filters.ts contract.
 
 import type { BusinessRecord } from "../data/business-modules"
-import { singleFilterValue, type FilterValueReaders } from "../data/business-filters"
+import { singleFilterValue, type FilterValueReaders } from "@waste/domain/business-filters"
 import { containerFractions } from "./points"
 
 const fact = (record: BusinessRecord, key: string) => singleFilterValue(record.facts[key])

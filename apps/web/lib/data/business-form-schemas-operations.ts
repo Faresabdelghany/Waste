@@ -1012,7 +1012,7 @@ export const operationsBusinessFormSchemas = [
             relation: { workspaceId: "configure", moduleId: "areas" },
           },
           // No Collection calendar field: holidays follow the project (holiday
-          // model 2026-09-16, lib/route-schemes/holidays.ts).
+          // model 2026-09-16, @waste/domain/route-schemes/holidays.ts).
           {
             id: "effectiveFrom",
             label: "Effective from",

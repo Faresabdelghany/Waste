@@ -22,7 +22,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr"
 
 import type { BusinessRecord, ModuleDefinition } from "@/lib/data/business-modules"
-import { serviceFrequencyOfRecord } from "@/lib/data/service-frequencies"
+import { serviceFrequencyOfRecord } from "@waste/domain/service-frequencies"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

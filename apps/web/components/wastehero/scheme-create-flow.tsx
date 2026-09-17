@@ -20,12 +20,12 @@ import {
   resolvedDraftGroups,
   resolvedDraftPlans,
   validateGuidedScheme,
-} from "@/lib/route-schemes/draft"
-import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
+} from "@waste/domain/route-schemes/draft"
+import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 
-// The wizard's draft shape lives in lib/route-schemes/quick-create (issue
+// The wizard's draft shape lives in @waste/domain/route-schemes/quick-create (issue
 // #31) so Quick Create's value mapping can share it without pulling in UI
-// code; the draft readers live in lib/route-schemes/draft. Both are
+// code; the draft readers live in @waste/domain/route-schemes/draft. Both are
 // re-exported here for the existing import sites.
 export type { GuidedSchemeData }
 export { resolvedDraftGroups, resolvedDraftPlans, validateGuidedScheme }

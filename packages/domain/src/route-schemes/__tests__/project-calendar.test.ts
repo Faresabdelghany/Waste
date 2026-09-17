@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import type { BusinessRecord } from "../../data/business-modules"
+import type { BusinessRecord } from "../../prototype-record"
 import { egyptianHolidayName, holidayNamesFor } from "../holiday-names"
 import { holidayListFromDates } from "../holidays"
 import { generateOccurrences, occurrencePreview } from "../occurrences"

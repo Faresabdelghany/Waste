@@ -14,7 +14,7 @@
 // scheduling; only a technical failure leaves the scheme Validated (D25).
 // Generation stays decoupled from Vehicle Planning.
 
-import type { BusinessRecord } from "../data/business-modules"
+import type { BusinessRecord } from "../prototype-record"
 import {
   applySchemeGeneration,
   planSchemeGeneration,
@@ -199,13 +199,13 @@ export function planSchemeCreation(
   // Plan Ahead on by default for generation-ready schemes (D18) — set before
   // the run so even a failed generation leaves the scheme armed.
   const armed = setPlanAhead(scheme, true)
-  const window = initialGenerationWindow(today, stringValueOf(scheme, "effectiveFrom"))
-  const windowLabel = `${formatServiceDate(window.from)} → ${formatServiceDate(window.to)}`
+  const generationWindow = initialGenerationWindow(today, stringValueOf(scheme, "effectiveFrom"))
+  const windowLabel = `${formatServiceDate(generationWindow.from)} → ${formatServiceDate(generationWindow.to)}`
   const failed = (): SchemeCreationPlan => ({
     scheme: armed,
     routes: [],
     pickups: [],
-    window,
+    window: generationWindow,
     summary: null,
     outcome: "generation-failed",
     message:
@@ -215,7 +215,7 @@ export function planSchemeCreation(
   try {
     const plan = planSchemeGeneration({
       scheme,
-      window,
+      window: generationWindow,
       existingRoutes: related.existingRoutes,
       containers: related.containers,
       calendar: schemeGenerationCalendar(scheme, {
@@ -242,7 +242,7 @@ export function planSchemeCreation(
       scheme: scheduled,
       routes: result.routes,
       pickups: result.pickups,
-      window,
+      window: generationWindow,
       summary: result.summary,
       outcome: "scheduled",
       message:
@@ -335,10 +335,10 @@ export function previewSchemeCreation(
       [COLLECTION_GROUPS_KEY]: JSON.stringify(groups),
     },
   }
-  const window = initialGenerationWindow(input.today, input.effectiveFrom)
+  const generationWindow = initialGenerationWindow(input.today, input.effectiveFrom)
   const plan = planSchemeGeneration({
     scheme,
-    window,
+    window: generationWindow,
     existingRoutes: [],
     containers: [],
     calendar: input.calendar ?? null,
@@ -346,7 +346,7 @@ export function previewSchemeCreation(
   if (!plan) return null
   const creates = plan.routes.filter((route) => route.action === "create")
   return {
-    window,
+    window: generationWindow,
     routeDates: Array.from(new Set(creates.map((route) => route.actualDate))),
     routeCount: creates.length,
     estimatedStops: creates.reduce(

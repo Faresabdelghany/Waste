@@ -6,7 +6,7 @@
 // logic; the map draws the polygons, the panel lists the rows.
 
 import type { BusinessRecord } from "../data/business-modules"
-import { isSoftDeleted } from "../data/record-visibility"
+import { isSoftDeleted } from "@waste/domain/record-visibility"
 import {
   boundsFromPolygon,
   boundsPolygon,

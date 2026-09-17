@@ -19,7 +19,7 @@
 // groups keep the legacy route identity (schemeId, serviceDate), so nothing
 // already generated moves; explicit groups extend it with the group id.
 
-import type { BusinessRecord } from "../data/business-modules"
+import type { BusinessRecord } from "../prototype-record"
 import {
   EMPTY_STOP_MATCH_RULE,
   matchPlansFromValues,

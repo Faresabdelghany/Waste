@@ -3,13 +3,13 @@
 // The route map: an abstract block map with the departure depot bottom-left,
 // the unloading station top-right, and one polyline per route through its
 // stops. Stop positions come from the shared deterministic geometry
-// (lib/route-schemes/map.ts stopPosition), so the same container always
+// (@waste/domain/route-schemes/map.ts stopPosition), so the same container always
 // lands on the same spot across the wizard and the scheme detail.
 
 import { useMemo } from "react"
 
-import { MAP_VIEWBOX, stopPosition } from "@/lib/route-schemes/map"
-import { SERVICE_DAY_LABELS, type ServiceDay } from "@/lib/route-schemes/recurrence"
+import { MAP_VIEWBOX, stopPosition } from "@waste/domain/route-schemes/map"
+import { SERVICE_DAY_LABELS, type ServiceDay } from "@waste/domain/route-schemes/recurrence"
 
 import type { WizardRoute } from "./wizard-model"
 

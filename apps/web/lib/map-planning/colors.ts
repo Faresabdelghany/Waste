@@ -4,7 +4,7 @@
 // user-typed fraction) fall back to a stable hue from a fixed palette so a
 // legend swatch and its markers always agree. Pure data logic.
 
-import { avalancheHash } from "../route-schemes/hash"
+import { avalancheHash } from "@waste/domain/route-schemes/hash"
 
 export type ConfiguredFractionColor = { name: string; color: string }
 

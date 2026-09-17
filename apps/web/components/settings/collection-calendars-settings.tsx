@@ -3,7 +3,7 @@
 // Settings › Operations › Collection calendars: the per-year holiday calendar
 // records of each project (moved from the Plan workspace 2026-09-16, when
 // Plan became Map Planning). Every table cell derives from the record's
-// typed values at render time (lib/route-schemes/calendar-list.ts) — never
+// typed values at render time (@waste/domain/route-schemes/calendar-list.ts) — never
 // from stored display copies. Create and edit go through the shared form
 // dialog with the module's own schema; the record shape is owned by
 // lib/data/collection-calendars.ts.
@@ -58,10 +58,10 @@ import {
   updateCollectionCalendarRecord,
   type CollectionCalendarLookups,
 } from "@/lib/data/collection-calendars"
-import { isSoftDeleted } from "@/lib/data/record-visibility"
-import { calendarRowSummary } from "@/lib/route-schemes/calendar-list"
-import { resolveProjectCalendar } from "@/lib/route-schemes/project-calendar"
-import { todayIso } from "@/lib/route-schemes/recurrence"
+import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { calendarRowSummary } from "@waste/domain/route-schemes/calendar-list"
+import { resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
+import { todayIso } from "@waste/domain/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
 
 const ACTOR_NAME = "Olivia Larsen"

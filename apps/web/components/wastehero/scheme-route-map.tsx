@@ -24,12 +24,12 @@ import {
   schemeMapPins,
   type SchemeMapDayGroup,
   type SchemeMapPlan,
-} from "@/lib/route-schemes/map"
+} from "@waste/domain/route-schemes/map"
 import {
   SERVICE_DAY_SHORT_LABELS,
   sortServiceDays,
   type ServiceDay,
-} from "@/lib/route-schemes/recurrence"
+} from "@waste/domain/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
 
 /** Store-merged records of one module — fixtures plus user-created. */

@@ -1,4 +1,9 @@
 import type { WorkspaceId } from "@/lib/data/business-modules"
+import type { BusinessFormOption } from "@waste/domain/prototype-record"
+
+// The option shape the domain package builds (fleet-profiles) lives there;
+// re-exported so form schemas keep importing it from here.
+export type { BusinessFormOption }
 
 export type BusinessFormMode = "create" | "action" | "disabled"
 
@@ -14,13 +19,6 @@ export type BusinessFormFieldType =
   | "multiselect"
   | "checkbox"
   | "file"
-
-export type BusinessFormOption = {
-  value: string
-  label: string
-  /** Listed but not selectable — the label carries the reason. */
-  disabled?: boolean
-}
 
 export type BusinessRelationTarget = {
   workspaceId: WorkspaceId

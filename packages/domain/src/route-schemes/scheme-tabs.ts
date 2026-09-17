@@ -1,6 +1,6 @@
 // Scheme detail Routes / Stops tabs (D9, D17): the derivations that let both
 // tabs render and filter through the shared filter model
-// (lib/data/business-filters.ts) exactly like the workspace record tables.
+// (@waste/domain/business-filters.ts) exactly like the workspace record tables.
 //
 // A generated route carries no waste-fraction fact of its own — its fractions
 // are whatever the Stops still in its plan serve, read live so a Stop
@@ -10,12 +10,12 @@
 // only and are never written back to the store.
 //
 // Reader declaration order is the category order the filter popover shows.
-import type { BusinessRecord } from "../data/business-modules"
+import type { BusinessRecord } from "../prototype-record"
 import {
   singleFilterValue,
   splitFilterValues,
   type FilterValueReaders,
-} from "../data/business-filters"
+} from "../business-filters"
 import { pickupRemovedFromPlan, stringValueOf } from "./generation"
 
 /** Fact the Routes tab exposes derived fractions under — the containers convention. */

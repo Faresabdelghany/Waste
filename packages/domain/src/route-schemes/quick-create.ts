@@ -46,7 +46,7 @@ export interface GuidedSchemeData {
   plannedStartTime: string
   /**
    * What a collection on a holiday does (guided setup 2026-09-16). Applied by
-   * generateOccurrences (lib/route-schemes/occurrences.ts) — the preview and
+   * generateOccurrences (@waste/domain/route-schemes/occurrences.ts) — the preview and
    * generation share it.
    */
   holidayPolicy: HolidayPolicy

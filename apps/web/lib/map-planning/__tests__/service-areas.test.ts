@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { BusinessRecord } from "../../data/business-modules"
-import { REGISTRY_VISIBILITY_FACT, SOFT_DELETED } from "../../data/record-visibility"
+import { REGISTRY_VISIBILITY_FACT, SOFT_DELETED } from "@waste/domain/record-visibility"
 import {
   SERVICE_AREA_POLYGON_KEY,
   serviceAreaLayers,

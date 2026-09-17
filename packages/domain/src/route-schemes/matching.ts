@@ -10,7 +10,7 @@
 // of BusinessRecord), mirroring validation.ts, so the resolver can be
 // exercised without a browser.
 
-import type { BusinessRecord } from "../data/business-modules"
+import type { BusinessRecord } from "../prototype-record"
 import { SERVICE_DAYS, sortServiceDays, type ServiceDay } from "./recurrence"
 import { stringValue } from "./validation"
 

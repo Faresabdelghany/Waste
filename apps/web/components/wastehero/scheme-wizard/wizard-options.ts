@@ -2,10 +2,10 @@
 // opens with. The frequency options are the product's four cadences mapped
 // onto the engine's (frequency, weekRotation) pair.
 
-import { SCHEME_CREATE_AS_LABELS } from "@/lib/route-schemes/creation"
-import { HOLIDAY_POLICIES, HOLIDAY_POLICY_LABELS } from "@/lib/route-schemes/occurrences"
-import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
-import { SCHEME_SERVICE_TYPES } from "@/lib/route-schemes/scope"
+import { SCHEME_CREATE_AS_LABELS } from "@waste/domain/route-schemes/creation"
+import { HOLIDAY_POLICIES, HOLIDAY_POLICY_LABELS } from "@waste/domain/route-schemes/occurrences"
+import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
+import { SCHEME_SERVICE_TYPES } from "@waste/domain/route-schemes/scope"
 import {
   OFFERED_RECURRENCE_FREQUENCIES,
   RECURRENCE_FREQUENCY_LABELS,
@@ -15,7 +15,7 @@ import {
   isoWeekRotation,
   todayIso,
   type RecurrenceFrequency,
-} from "@/lib/route-schemes/recurrence"
+} from "@waste/domain/route-schemes/recurrence"
 
 import type { SelectOption } from "./wizard-fields"
 

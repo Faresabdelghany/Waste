@@ -14,9 +14,9 @@
 // configuration plus the current related records at render time. Persisted
 // "Validation warnings" facts remain for history/debugging only.
 
-import type { BusinessRecord } from "../data/business-modules"
-import { isSoftDeleted } from "../data/record-visibility"
-import { schemeFrequencyPromiseOfRecord } from "../data/service-frequencies"
+import type { BusinessRecord } from "../prototype-record"
+import { isSoftDeleted } from "../record-visibility"
+import { schemeFrequencyPromiseOfRecord } from "../service-frequencies"
 import {
   collectionGroupContainerIds,
   schemeAssignmentSources,

@@ -8,8 +8,8 @@
 // reality (past or today's, Ready/Active/Completed, operationally Cancelled)
 // stays exactly as stored, Stops/Pickups included, as history.
 
-import type { BusinessRecord } from "../data/business-modules"
-import { softDeletedRecord, type SoftDeletion } from "../data/record-visibility"
+import type { BusinessRecord } from "../prototype-record"
+import { softDeletedRecord, type SoftDeletion } from "../record-visibility"
 import { cancelSchemeFutureRoutes, stringValueOf } from "./generation"
 import { setPlanAhead } from "./plan-ahead"
 import { addDays } from "./recurrence"

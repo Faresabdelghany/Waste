@@ -7,7 +7,7 @@
 // together with the weekend; this module only reads the dated records and
 // names their dates. Pure data logic (type-only import of BusinessRecord).
 
-import type { BusinessRecord } from "../data/business-modules"
+import type { BusinessRecord } from "../prototype-record"
 import { calendarFromRecord } from "./calendar"
 import { holidayLabel, type HolidayNameLookup } from "./holiday-names"
 import { isHolidayPolicy, type HolidayList, type HolidayPolicy } from "./occurrences"

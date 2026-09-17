@@ -7,7 +7,7 @@
 // key, oldest first, capped. Everything here is pure except fetchRoadGeometry,
 // which takes its fetch — the tests hand it a fake, the hook the real one.
 
-import { avalancheHash } from "../route-schemes/hash"
+import { avalancheHash } from "@waste/domain/route-schemes/hash"
 import { simplifyPath, worldPoint, type LngLat } from "./geo"
 
 export const OSRM_BASE_URL = "https://router.project-osrm.org"

@@ -13,8 +13,8 @@
 // vehicle. The driver is still listed, disabled, with the reason beside the
 // name — the one case that cannot be verified must never pass.
 
-import type { BusinessFormOption } from "../data/business-form-types"
-import type { BusinessRecord } from "../data/business-modules"
+import type { BusinessFormOption } from "../prototype-record"
+import type { BusinessRecord } from "../prototype-record"
 import { vehicleTypeOfRecord } from "./matching"
 
 type RecordLike = Pick<BusinessRecord, "id" | "name" | "context" | "facts" | "submittedValues">

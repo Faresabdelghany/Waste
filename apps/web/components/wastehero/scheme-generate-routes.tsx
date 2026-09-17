@@ -31,18 +31,18 @@ import {
   applySchemeGeneration,
   planSchemeGeneration,
   type PlannedRouteAction,
-} from "@/lib/route-schemes/generation"
-import { schemeGenerationCalendar } from "@/lib/route-schemes/project-calendar"
+} from "@waste/domain/route-schemes/generation"
+import { schemeGenerationCalendar } from "@waste/domain/route-schemes/project-calendar"
 import {
   recordSchemeGeneration,
   schemeGenerationRecorded,
-} from "@/lib/route-schemes/lifecycle"
+} from "@waste/domain/route-schemes/lifecycle"
 import {
   SERVICE_DAY_SHORT_LABELS,
   addDays,
   formatServiceDate,
   todayIso,
-} from "@/lib/route-schemes/recurrence"
+} from "@waste/domain/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
 
 const ACTION_LABELS: Record<PlannedRouteAction, string> = {

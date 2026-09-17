@@ -6,10 +6,10 @@
 import type { ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
-import { projectCalendarLabel } from "@/lib/route-schemes/project-calendar"
-import { HOLIDAY_POLICY_LABELS, formatClockTime, formatOccurrenceDate } from "@/lib/route-schemes/occurrences"
-import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
-import { recurrenceCadenceLabel, serviceDaysRangeLabel } from "@/lib/route-schemes/recurrence"
+import { projectCalendarLabel } from "@waste/domain/route-schemes/project-calendar"
+import { HOLIDAY_POLICY_LABELS, formatClockTime, formatOccurrenceDate } from "@waste/domain/route-schemes/occurrences"
+import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
+import { recurrenceCadenceLabel, serviceDaysRangeLabel } from "@waste/domain/route-schemes/recurrence"
 
 import type { WizardRecords } from "./use-wizard-records"
 import type { WizardModel } from "./wizard-model"

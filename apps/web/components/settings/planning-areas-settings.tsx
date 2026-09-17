@@ -63,8 +63,8 @@ import {
   updatePlanningAreaRecord,
   type PlanningAreaLookups,
 } from "@/lib/data/planning-areas"
-import { isSoftDeleted } from "@/lib/data/record-visibility"
-import { todayIso } from "@/lib/route-schemes/recurrence"
+import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { todayIso } from "@waste/domain/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
 
 const ACTOR_NAME = "Olivia Larsen"

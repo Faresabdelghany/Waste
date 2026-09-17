@@ -9,8 +9,8 @@
 // for those containers in the range. Pure data logic.
 
 import type { BusinessRecord } from "../data/business-modules"
-import { isSoftDeleted } from "../data/record-visibility"
-import { addDays, isIsoDate } from "../route-schemes/recurrence"
+import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { addDays, isIsoDate } from "@waste/domain/route-schemes/recurrence"
 import { containerFractions, rankFractions } from "./points"
 import { containerPropertyKey } from "./positions"
 import { nextCollectionDate, parseDisplayDate } from "./schedule"

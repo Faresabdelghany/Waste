@@ -11,7 +11,7 @@
 //                edits both; the wizard only reads them.
 // Pure data logic (type-only import of BusinessRecord).
 
-import type { BusinessRecord } from "../data/business-modules"
+import type { BusinessRecord } from "../prototype-record"
 import { formatWorkingDays } from "./calendar-list"
 import { holidayNamesFor } from "./holiday-names"
 import {

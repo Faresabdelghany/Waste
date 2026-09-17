@@ -5,8 +5,8 @@
 // fact second, when that date is not already in the past. Pure data logic.
 
 import type { BusinessRecord } from "../data/business-modules"
-import { isSoftDeleted } from "../data/record-visibility"
-import { addDays, isIsoDate } from "../route-schemes/recurrence"
+import { isSoftDeleted } from "@waste/domain/record-visibility"
+import { addDays, isIsoDate } from "@waste/domain/route-schemes/recurrence"
 
 export type CollectionWindow = "any" | "today" | "next-7" | "next-14" | "next-30"
 

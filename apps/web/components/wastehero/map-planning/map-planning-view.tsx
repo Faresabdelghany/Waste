@@ -31,9 +31,9 @@ import {
   businessFilterChips,
   emptyBusinessFilters,
   type BusinessFilters,
-} from "@/lib/data/business-filters"
+} from "@waste/domain/business-filters"
 import type { BusinessRecord, ModuleDefinition } from "@/lib/data/business-modules"
-import { isSoftDeleted } from "@/lib/data/record-visibility"
+import { isSoftDeleted } from "@waste/domain/record-visibility"
 import { planningAreaLayers, type PlanningAreaLayer } from "@/lib/map-planning/areas"
 import {
   BASE_MAP_STORAGE_KEY,
@@ -76,8 +76,8 @@ import {
   type SelectionShape,
 } from "@/lib/map-planning/selection"
 import { selectionStatistics } from "@/lib/map-planning/statistics"
-import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
-import { todayIso } from "@/lib/route-schemes/recurrence"
+import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
+import { todayIso } from "@waste/domain/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
 
 import { LayersPanel } from "./layers-panel"

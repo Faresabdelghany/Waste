@@ -1,17 +1,10 @@
-import { serviceFrequencyFactValue } from "./service-frequencies"
+import { serviceFrequencyFactValue } from "@waste/domain/service-frequencies"
+import type { BusinessRecord, WorkspaceId } from "@waste/domain/prototype-record"
 
-export type WorkspaceId =
-  | "operate"
-  | "plan"
-  | "route-studio"
-  | "fleet"
-  | "customers"
-  | "resources"
-  | "service-providers"
-  | "commercial"
-  | "improve"
-  | "configure"
-  | "control-center"
+// The prototype record model lives in @waste/domain (src/prototype-record.ts)
+// so the domain package needs nothing from this registry. Re-exported here so
+// the web imports of these two names did not have to change.
+export type { BusinessRecord, WorkspaceId }
 
 export const FIXTURE_COMPANY_ID = "company-wastehero-dk"
 
@@ -346,45 +339,6 @@ function buildFixtureRecordScopeRegistry(): Readonly<
 }
 
 export const fixtureRecordScopeById = buildFixtureRecordScopeRegistry()
-
-export type BusinessRecord = {
-  id: string
-  name: string
-  context: string
-  status: string
-  owner: string
-  value: string
-  updated: string
-  description: string
-  facts: Record<string, string>
-  related: string[]
-  source: string
-  freshness: string
-  allowedTransitions?: string[]
-  deepLink?: string
-  /**
-   * Fixture records always carry explicit scope. These remain optional so
-   * temporary, client-created records can be introduced before persistence
-   * assigns their canonical scope.
-   */
-  companyId?: string
-  projectIds?: string[]
-  serviceProviderId?: string
-  /**
-   * Client-created records retain their typed form payload and relation
-   * references so later forms can use them as real upstream choices instead
-   * of relying on flattened display text.
-   */
-  recordKind?: string
-  submittedValues?: Record<string, string | boolean>
-  relationRefs?: Array<{
-    fieldId: string
-    workspaceId: WorkspaceId
-    moduleId: string
-    recordId: string
-    label: string
-  }>
-}
 
 export type ModuleMetric = {
   label: string
@@ -2111,7 +2065,7 @@ const plan: WorkspaceDefinition = {
       description: "Effective-dated recurring templates for generating executable routes.",
       entityLabel: "Route scheme",
       // Rendered as the derived "area/project · service days" context (issue
-      // #30, D15) — see lib/route-schemes/scheme-list.ts.
+      // #30, D15) — see @waste/domain/route-schemes/scheme-list.ts.
       contextLabel: "Project · service days",
       valueLabel: "Demand",
       primaryAction: "New route scheme",
@@ -2247,7 +2201,7 @@ const plan: WorkspaceDefinition = {
       primaryAction: "New calendar",
       // No KPI tiles above the calendars list; the table cells derive from
       // real calendar records at render time (issue #27) — see
-      // lib/route-schemes/calendar-list.ts.
+      // @waste/domain/route-schemes/calendar-list.ts.
       metrics: [],
       lifecycle: ["Draft", "Active", "Superseded", "Archived"],
       rules: [

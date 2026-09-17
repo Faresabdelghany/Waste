@@ -7,7 +7,7 @@
  * with legacy-key fallbacks; both read this file for the shape and labels so
  * a new category is declared in exactly one place.
  */
-import type { BusinessRecord } from "./business-modules"
+import type { BusinessRecord } from "./prototype-record"
 
 export type BusinessFilters = {
   statuses: string[]
