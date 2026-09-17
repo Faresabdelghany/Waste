@@ -23,7 +23,7 @@ The domain glossary is `CONTEXT.md` at the repository root, not here. Every term
 
 ## Index
 
-- [Backend architecture](architecture/backend-architecture.md) — bounded contexts, invariants, stack, deployment shape, build order, external deadlines
+- [Backend architecture](architecture/backend-architecture.md) — bounded contexts, invariants, deployment shape, stack, data model rules, build order, external deadlines, sources
 - [ADR-0001 Single domain data path](adr/0001-single-domain-data-path.md) — accepted
 - [ADR-0002 Deterministic generation, separate optimisation](adr/0002-deterministic-generation-separate-from-optimisation.md) — accepted
 - [ADR-0003 Container lifecycle consistency](adr/0003-container-lifecycle-consistency.md) — accepted

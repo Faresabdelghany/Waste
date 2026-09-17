@@ -9,7 +9,7 @@
 
 ## Overview
 
-This repository is a **UI-only prototype** of the  operations platform, built with:
+This repository holds the **UI prototype** of the operations platform in `apps/web`, and the scaffold of its API in `apps/api`. The web app is built with:
 
 - **Next.js (App Router)**
 - **TypeScript**

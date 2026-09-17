@@ -1,6 +1,6 @@
 # Backend architecture
 
-Status: agreed 2026-09-17. This repository is the frontend of a new system built from scratch. This document describes the backend that system gets. The five invariants and the optimiser choice are recorded as ADRs under `../adr/`; stack choices and their rejected alternatives live in the table below. This document is the readable whole and is updated when an ADR changes it. Terms follow `CONTEXT.md`.
+Status: agreed 2026-09-17. This repository is the monorepo of a new system built from scratch: it began as the system's frontend, now `apps/web`, and the backend described here is built beside it, `apps/api` first. This document describes that backend. The five invariants and the optimiser choice are recorded as ADRs under `../adr/`; stack choices and their rejected alternatives live in the table below. This document is the readable whole and is updated when an ADR changes it. Terms follow `CONTEXT.md`.
 
 ## Bounded contexts
 
@@ -36,7 +36,7 @@ These are architectural constraints, not implementation preferences. Each has an
           |  HTTPS, OpenAPI               |  PowerSync sync + HTTPS commands
           v                               v
  +--------------------------------------------------+
- |  Hono API  (identity from Supabase JWT,           |
+ |  Hono API, this repo (identity from Supabase JWT, |
  |  scoped repositories, domain package, Drizzle)    |
  +--------------------------------------------------+
           |                      |
@@ -65,8 +65,8 @@ These are architectural constraints, not implementation preferences. Each has an
 | Optimisation | PyVRP 0.14 as a Python sidecar behind one HTTP contract (ADR-0006) | Multi-dimensional capacity plus reloads in one model, verified by spike. Its reload empties every compartment, which matches Danish and Swedish practice. The only non-TypeScript component; OR-Tools replaces it behind the same contract if partial unloading is ever required. ADR-0006. |
 | Map data | GeoJSON with client clustering; Martin vector tiles above roughly 50k features | Martin is maintained by the MapLibre organisation. pg_tileserv has stalled. |
 | Danish addresses and basemap | Adressevælger (autocomplete), Datafordeleren (reverse geocoding, DAR, DAGI polygons), Dataforsyningen Skærmkort vector tiles | DAWA shuts down 2026-10-01. Every provider URL sits behind one config seam. |
-| Monorepo | pnpm 12 workspaces with Turborepo | Web, api, worker, driver apps; domain, db, contracts packages. |
-| Tests | Node's built-in runner through tsx, Playwright | 227 unit tests already run on it. No migration to Vitest. |
+| Monorepo | pnpm 12 workspaces with Turborepo | Web, api, worker, driver apps; domain, contracts, db packages; a development-only tooling package for the purity gate. |
+| Tests | Node's built-in runner through tsx, Playwright | The unit suite already ran on it when this was decided. No migration to Vitest. |
 
 ## Data model rules
 
@@ -82,8 +82,8 @@ These are architectural constraints, not implementation preferences. Each has an
 ## Build order
 
 1. **Now, in parallel with everything:** request the Adressevælger token from Klimadatastyrelsen and a Dataforsyningen token; snapshot municipality and postcode GeoJSON from DAWA before 2026-10-01.
-2. **Monorepo.** Done 2026-09-17. This app is `apps/web`; the pure logic of `lib/route-schemes` and `lib/map-planning` is `packages/domain`, with its tests and a mechanical purity gate (`packages/tooling`, development-only) that allows it no dependency and no browser global; `packages/contracts` holds the shared wire primitives on zod 4 (ids, dates, GeoJSON, pagination, health); `apps/api` is a Hono scaffold serving `/healthz` and its OpenAPI 3.1 document. The module contracts derived from the form schemas were not built here: they come with step 3, as their tables are designed.
-3. **Organisation & Access and Registry schema.** Effective dating, geometry types, Supabase Auth with the access token hook, grant tables seeded from the demo accounts and role matrix.
+2. **Monorepo.** Done in the repository 2026-09-17; the deployment's root directory and an e2e run against the moved app are still open. This app is `apps/web`. The domain logic of `lib/route-schemes` (all of it) and of `lib/map-planning` (the planning questions; the map-view mechanics stayed in `apps/web/lib/map-planning`), with the pure record helpers from `lib/data`, is `packages/domain`, kept free of every dependency and browser global by a mechanical purity gate in the development-only `packages/tooling`. `packages/contracts` holds the shared wire primitives on zod 4, and `apps/api` is a Hono scaffold that serves its health and its OpenAPI 3.1 document; the root `CLAUDE.md` describes the layout. The module contracts derived from the form schemas were not built here: each context's arrive with its tables, from step 3 on.
+3. **Organisation & Access and Registry schema.** Effective dating, geometry types, Supabase Auth with the access token hook, grant tables seeded from the demo accounts and role matrix. The first module contracts, derived from these contexts' form schemas, into `packages/contracts`.
 4. **Frontend adapter.** A server-backed implementation behind the record store's `getRecords` and `upsertRecord`, switched module by module. Fixtures become seed data.
 5. **Planning and the generation worker.** Nightly cron plus on-demand, Valhalla for legs.
 6. **Execution.** Proof of Service and Unload, outbox, Expo driver app on PowerSync, live dashboard.
