@@ -6,3 +6,5 @@ allowBuilds:
   '@tailwindcss/oxide': true
   esbuild: true
   sharp: true
+  # Ships prebuilt @unrs/resolver-binding-* optional dependencies; the postinstall is only a download fallback.
+  unrs-resolver: false

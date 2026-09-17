@@ -11,7 +11,7 @@ The frontend of a new WasteHero operations platform (waste/recycling logistics),
 - `pnpm dev` — dev server at http://localhost:3000
 - `pnpm build` / `pnpm start` — production build / serve
 - `npx tsc --noEmit` — type check. `next.config.mjs` sets `typescript.ignoreBuildErrors: true`, so `pnpm build` does NOT catch type errors; run tsc explicitly.
-- `pnpm lint` is defined (`eslint .`) but eslint is not installed, so it currently fails.
+- `pnpm lint` — ESLint 9 with the Next rule set, one flat config at the repository root (`eslint.config.mjs`), run per package through turbo. Errors fail CI; warnings do not. Every rule that is switched off or downgraded there carries the reason in a comment.
 - `pnpm test` — unit tests on Node's built-in runner through tsx (`lib/**/__tests__/*.test.ts`, 33 files, 227 tests as of 2026-09-17).
 - `pnpm test:e2e` — Playwright against an already running dev server at http://localhost:3000 (no managed webServer; start `pnpm dev` yourself). `pnpm typecheck:e2e` type-checks the e2e folder, which the root tsconfig excludes.
 
