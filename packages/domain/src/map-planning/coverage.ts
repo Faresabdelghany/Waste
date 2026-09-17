@@ -8,6 +8,7 @@
 // Selected area panel.
 
 import type { BusinessRecord } from "../prototype-record"
+import { cleanFact } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
 import { pointInPolygon } from "./geo"
 import { containerLocation } from "./positions"
@@ -23,12 +24,6 @@ export type ServiceAreaCoverage = {
   containers: number
 }
 
-const EMPTY_FACT = "—"
-
-const clean = (value: string | boolean | undefined): string | undefined => {
-  const trimmed = typeof value === "string" ? value.trim() : ""
-  return trimmed && trimmed !== EMPTY_FACT ? trimmed : undefined
-}
 
 const lower = (value: string) => value.trim().toLowerCase()
 
@@ -36,7 +31,7 @@ const lower = (value: string) => value.trim().toLowerCase()
 function serviceAreaZones(area: BusinessRecord): { ids: Set<string>; names: Set<string> } {
   const ids = new Set<string>()
   const names = new Set<string>()
-  for (const id of clean(area.submittedValues?.zoneIds)?.split(",") ?? []) {
+  for (const id of cleanFact(area.submittedValues?.zoneIds)?.split(",") ?? []) {
     if (id.trim()) ids.add(id.trim())
   }
   for (const ref of area.relationRefs ?? []) {
@@ -44,7 +39,7 @@ function serviceAreaZones(area: BusinessRecord): { ids: Set<string>; names: Set<
     ids.add(ref.recordId)
     names.add(lower(ref.label))
   }
-  for (const name of clean(area.facts["Planning areas"])?.split(/[·,]/) ?? []) {
+  for (const name of cleanFact(area.facts["Planning areas"])?.split(/[·,]/) ?? []) {
     if (name.trim()) names.add(lower(name))
   }
   return { ids, names }
@@ -65,18 +60,18 @@ export function serviceAreasForSelection(
         const spot = containerLocation(container)
         if (spot && pointInPolygon(spot, polygon)) return true
       }
-      const typed = clean(container.submittedValues?.planningAreaId)
+      const typed = cleanFact(container.submittedValues?.planningAreaId)
       if (typed) return zones.ids.has(typed)
-      const fact = clean(container.facts["Planning area"])
+      const fact = cleanFact(container.facts["Planning area"])
       return fact ? zones.names.has(lower(fact)) : false
     }).length
     if (count === 0) continue
     rows.push({
       id: area.id,
       name: area.name,
-      serviceProvider: clean(area.facts["Service provider"]) ?? "—",
+      serviceProvider: cleanFact(area.facts["Service provider"]) ?? "—",
       status: area.status,
-      services: clean(area.facts.Services) ?? "—",
+      services: cleanFact(area.facts.Services) ?? "—",
       containers: count,
     })
   }

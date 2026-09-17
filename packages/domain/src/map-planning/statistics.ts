@@ -9,6 +9,7 @@
 // for those containers in the range. Pure data logic.
 
 import type { BusinessRecord } from "../prototype-record"
+import { EMPTY_FACT, cleanFact, typedString } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
 import { addDays, isIsoDate } from "../route-schemes/recurrence"
 import { containerFractions, rankFractions } from "./points"
@@ -49,21 +50,10 @@ export type SelectionStatistics = {
   activeAgreements: number
 }
 
-const EMPTY_FACT = "—"
 /** kg per litre when neither the type nor the fraction says. */
 const DEFAULT_KG_PER_LITRE = 0.12
 /** Guard against runaway projections (daily over a long range is still < 400). */
 const MAX_PROJECTED_COLLECTIONS = 400
-
-const clean = (value: string | undefined): string | undefined => {
-  const trimmed = value?.trim()
-  return trimmed && trimmed !== EMPTY_FACT ? trimmed : undefined
-}
-
-const stringOf = (record: BusinessRecord, key: string): string | undefined => {
-  const value = record.submittedValues?.[key]
-  return typeof value === "string" && value.trim() ? value.trim() : undefined
-}
 
 /** "Two-wheel bin · 240 L" / "Igloo · 3,000 L" / "2.5 m³ skip" → litres, or null. */
 export function litresFromTypeName(name: string): number | null {
@@ -99,7 +89,7 @@ function containerVolumeLitres(
   container: BusinessRecord,
   types: StatisticsInputs["containerTypes"],
 ): number {
-  const typeName = clean(container.facts["Container type"])
+  const typeName = cleanFact(container.facts["Container type"])
   if (!typeName) return 0
   const type = types.find((candidate) => candidate.name.trim().toLowerCase() === typeName.toLowerCase())
   if (type) return type.volumeUnit === "m³" ? type.volume * 1000 : type.volume
@@ -111,7 +101,7 @@ function containerUnitWeightKg(
   inputs: StatisticsInputs,
   volumeLitres: number,
 ): number {
-  const typeName = clean(container.facts["Container type"])?.toLowerCase()
+  const typeName = cleanFact(container.facts["Container type"])?.toLowerCase()
   const type = inputs.containerTypes.find((candidate) => candidate.name.trim().toLowerCase() === typeName)
   const primary = containerFractions(container)[0]
   const fraction = primary
@@ -149,9 +139,9 @@ function pickupDate(
   pickup: BusinessRecord,
   routeDates: ReadonlyMap<string, string>,
 ): string | null {
-  const own = stringOf(pickup, "serviceDate")
+  const own = typedString(pickup.submittedValues, "serviceDate")
   if (own && isIsoDate(own)) return own
-  const routeId = stringOf(pickup, "routeId")
+  const routeId = typedString(pickup.submittedValues, "routeId")
   return (routeId && routeDates.get(routeId)) ?? parseDisplayDate(pickup.facts.Date)
 }
 
@@ -161,14 +151,14 @@ function collectedWeight(
 ): number {
   const ids = new Set(containers.map((container) => container.id))
   const labels = new Set(
-    containers.map((container) => clean(container.facts["Container ID"])?.toLowerCase()).filter(Boolean),
+    containers.map((container) => cleanFact(container.facts["Container ID"])?.toLowerCase()).filter(Boolean),
   )
   // The stop index already resolved route dates; invert it for the pickups
   // that name a route but no date of their own.
   const routeDates = new Map<string, string>()
   for (const pickup of inputs.pickups) {
-    const routeId = stringOf(pickup, "routeId")
-    const containerId = stringOf(pickup, "containerId")
+    const routeId = typedString(pickup.submittedValues, "routeId")
+    const containerId = typedString(pickup.submittedValues, "containerId")
     if (!routeId || !containerId) continue
     const dates = inputs.stopIndex.get(containerId)
     if (dates?.length === 1) routeDates.set(routeId, dates[0])
@@ -176,8 +166,8 @@ function collectedWeight(
   let total = 0
   for (const pickup of inputs.pickups) {
     if (isSoftDeleted(pickup) || pickup.status !== "Completed") continue
-    const typedId = stringOf(pickup, "containerId")
-    const label = clean(pickup.facts["Container ID"])?.toLowerCase()
+    const typedId = typedString(pickup.submittedValues, "containerId")
+    const label = cleanFact(pickup.facts["Container ID"])?.toLowerCase()
     if (!(typedId && ids.has(typedId)) && !(label && labels.has(label))) continue
     if (inputs.range) {
       const date = pickupDate(pickup, routeDates)
@@ -205,7 +195,7 @@ export function selectionStatistics(
   for (const container of containers) {
     const property = containerPropertyKey(container) ?? container.id
     properties.add(property)
-    collectionPoints.add(`${property}|${clean(container.facts["Curb location"]) ?? ""}`)
+    collectionPoints.add(`${property}|${cleanFact(container.facts["Curb location"]) ?? ""}`)
     const agreement = ACTIVE_AGREEMENT.exec(container.facts.Agreement ?? "")
     if (agreement) agreements.add(agreement[1].toUpperCase())
     for (const fraction of containerFractions(container)) {

@@ -3,6 +3,7 @@
 // positions.ts, the rendering from the web app's map components.
 
 import type { BusinessRecord } from "../prototype-record"
+import { EMPTY_FACT } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
 import type { LngLat } from "./geo"
 import { containerLocation, containerPropertyKey } from "./positions"
@@ -23,8 +24,6 @@ export type MapPoint = {
   /** The container record a click opens. */
   record: BusinessRecord
 }
-
-const EMPTY_FACT = "—"
 
 /** "Residual · Mixed" → ["Residual", "Mixed"]; the empty fact → []. */
 export function containerFractions(record: BusinessRecord): string[] {

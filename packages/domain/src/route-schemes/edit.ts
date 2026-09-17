@@ -28,7 +28,7 @@ import {
 import { schemeGenerationCalendar } from "./project-calendar"
 import { recordSchemeGeneration, schemeLiveValidation } from "./lifecycle"
 import { addDays } from "./recurrence"
-import { count } from "./text"
+import { count } from "../text"
 import type { SchemeValidationResult } from "./validation"
 
 const EDIT_WINDOW_DAYS = 7
