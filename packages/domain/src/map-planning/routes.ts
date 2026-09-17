@@ -16,7 +16,7 @@ import { cleanFact } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
 import { isIsoDate } from "../route-schemes/recurrence"
 import type { LngLat } from "./geo"
-import { containerLocation, knownAddressLocation } from "./positions"
+import { containerLocation, knownAddressLocation, type Gazetteer } from "./positions"
 import { parseDisplayDate } from "./schedule"
 import type { QuantityRange } from "./statistics"
 
@@ -190,10 +190,14 @@ function clockOf(value: string | undefined): string | null {
 const streetLine = (address: string | undefined) => cleanFact(address)?.split(",")[0]?.trim()
 
 /** The located stop a pickup stands for, or null when nothing places it on the map. */
-function routeStop({ pickup, container }: LinkedStop, position: number): RouteStop | null {
+function routeStop({ pickup, container }: LinkedStop, position: number, gazetteer: Gazetteer): RouteStop | null {
   const address = cleanFact(pickup.facts.Address)
   // No container: the address places the stop, but only on a gazetteer street — never a hashed spot.
-  const lngLat = container ? containerLocation(container) : address ? knownAddressLocation(address) : null
+  const lngLat = container
+    ? containerLocation(container, gazetteer)
+    : address
+      ? knownAddressLocation(address, gazetteer)
+      : null
   if (!lngLat) return null
   const order = stopNumber(pickup)
   const nameTail = pickup.name.split("·")[1]?.trim()
@@ -209,7 +213,7 @@ function routeStop({ pickup, container }: LinkedStop, position: number): RouteSt
   }
 }
 
-function toAreaRoute({ route, bucket, pickups, stops: linkedStops }: LinkedRoute): AreaRoute {
+function toAreaRoute({ route, bucket, pickups, stops: linkedStops }: LinkedRoute, gazetteer: Gazetteer): AreaRoute {
   const containerIds: string[] = []
   const stops: RouteStop[] = []
   for (const [position, linked] of linkedStops.entries()) {
@@ -218,7 +222,7 @@ function toAreaRoute({ route, bucket, pickups, stops: linkedStops }: LinkedRoute
       if (containerIds.includes(linked.container.id)) continue
       containerIds.push(linked.container.id)
     }
-    const stop = routeStop(linked, position)
+    const stop = routeStop(linked, position, gazetteer)
     if (stop) stops.push(stop)
   }
   return {
@@ -247,6 +251,7 @@ export function routesInSelection(
   routes: readonly BusinessRecord[],
   pickups: readonly BusinessRecord[],
   allContainers: readonly BusinessRecord[],
+  gazetteer: Gazetteer,
 ): AreaRoutes {
   const empty: AreaRoutes = { total: 0, awaiting: 0, inProgress: 0, completed: 0, routes: [] }
   if (selected.length === 0) return empty
@@ -262,7 +267,7 @@ export function routesInSelection(
         linked.stopContainers.some((container) => selectedIds.has(container.id)) ||
         (linked.pickups.length === 0 && areaMatches(linked.route, selectedAreas)),
     )
-    .map(toAreaRoute)
+    .map((linked) => toAreaRoute(linked, gazetteer))
     .sort(byBucketDateName)
 
   return {
@@ -284,9 +289,10 @@ export function routesInWindow(
   pickups: readonly BusinessRecord[],
   allContainers: readonly BusinessRecord[],
   range: QuantityRange,
+  gazetteer: Gazetteer,
 ): AreaRoute[] {
   return linkRoutes(routes, pickups, allContainers)
-    .map(toAreaRoute)
+    .map((linked) => toAreaRoute(linked, gazetteer))
     .filter((route) => route.stops.length > 0)
     .filter((route) => (range ? route.date !== null && route.date >= range.from && route.date <= range.to : true))
     .sort(byBucketDateName)

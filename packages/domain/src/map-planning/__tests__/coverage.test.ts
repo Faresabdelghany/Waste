@@ -3,6 +3,7 @@ import { describe, test } from "node:test"
 
 import type { BusinessRecord } from "../../prototype-record"
 import { serviceAreasForSelection } from "../coverage"
+import { TEST_GAZETTEER } from "./gazetteer-fixture"
 
 function record(id: string, facts: Record<string, string> = {}, extra: Partial<BusinessRecord> = {}): BusinessRecord {
   return {
@@ -48,7 +49,7 @@ const serviceAreas = [
 
 describe("serviceAreasForSelection", () => {
   test("lists the service areas whose zones hold the selected containers, busiest first", () => {
-    const areas = serviceAreasForSelection(containers, serviceAreas)
+    const areas = serviceAreasForSelection(containers, serviceAreas, TEST_GAZETTEER)
     assert.deepEqual(
       areas.map((area) => [area.name, area.serviceProvider, area.status, area.containers]),
       [
@@ -60,7 +61,7 @@ describe("serviceAreasForSelection", () => {
   })
 
   test("nothing selected, nothing covered", () => {
-    assert.deepEqual(serviceAreasForSelection([], serviceAreas), [])
+    assert.deepEqual(serviceAreasForSelection([], serviceAreas, TEST_GAZETTEER), [])
   })
 })
 
@@ -79,7 +80,7 @@ describe("serviceAreasForSelection with a drawn boundary", () => {
     )
     const located = record("loc", { Address: "Parkvej 18, 2100 Copenhagen Ø", "Planning area": "Nowhere Zone" })
     const unlocated = record("unloc", { "Planning area": "Nowhere Zone" })
-    const rows = serviceAreasForSelection([located, unlocated], [drawn])
+    const rows = serviceAreasForSelection([located, unlocated], [drawn], TEST_GAZETTEER)
     assert.deepEqual(rows.map((row) => [row.id, row.containers]), [["sa-drawn", 1]])
   })
 })

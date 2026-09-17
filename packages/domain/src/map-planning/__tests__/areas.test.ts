@@ -5,6 +5,7 @@ import type { BusinessRecord } from "../../prototype-record"
 import { AREA_LAYER_PALETTE, planningAreaLayers } from "../areas"
 import { pointInPolygon } from "../geo"
 import { containerLocation } from "../positions"
+import { TEST_GAZETTEER } from "./gazetteer-fixture"
 
 function record(id: string, facts: Record<string, string>, extra: Partial<BusinessRecord> = {}): BusinessRecord {
   return {
@@ -47,7 +48,7 @@ describe("planningAreaLayers", () => {
   ]
 
   test("every visible area gets a row; geometry wraps its located containers", () => {
-    const layers = planningAreaLayers(areas, containers)
+    const layers = planningAreaLayers(areas, containers, TEST_GAZETTEER)
     assert.deepEqual(layers.map((layer) => layer.id), ["area-a", "area-b", "area-empty"])
     const a = layers[0]
     assert.equal(a.name, "Indre By Operations")
@@ -55,17 +56,17 @@ describe("planningAreaLayers", () => {
     assert.ok(a.polygon.length >= 3)
     assert.ok(a.bounds)
     for (const id of ["c1", "c2", "c3", "c4"]) {
-      const spot = containerLocation(containers.find((c) => c.id === id)!)!
+      const spot = containerLocation(containers.find((c) => c.id === id)!, TEST_GAZETTEER)!
       assert.ok(pointInPolygon(spot, a.polygon), `${id} sits inside its area`)
     }
   })
 
   test("a single located container still yields a small box; none yields no geometry", () => {
-    const layers = planningAreaLayers(areas, containers)
+    const layers = planningAreaLayers(areas, containers, TEST_GAZETTEER)
     const b = layers[1]
     assert.equal(b.containerCount, 1)
     assert.equal(b.polygon.length, 4)
-    assert.ok(pointInPolygon(containerLocation(containers[4])!, b.polygon))
+    assert.ok(pointInPolygon(containerLocation(containers[4], TEST_GAZETTEER)!, b.polygon))
     const empty = layers[2]
     assert.equal(empty.containerCount, 0)
     assert.deepEqual(empty.polygon, [])
@@ -76,6 +77,7 @@ describe("planningAreaLayers", () => {
     const layers = planningAreaLayers(
       [...areas, record("gone", { "Registry visibility": "Soft deleted" }, { name: "Gone" })],
       containers,
+      TEST_GAZETTEER,
     )
     assert.equal(layers.length, 3)
     assert.equal(layers[0].color, AREA_LAYER_PALETTE[0])

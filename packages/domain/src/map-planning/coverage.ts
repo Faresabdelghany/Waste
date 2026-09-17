@@ -11,7 +11,7 @@ import type { BusinessRecord } from "../prototype-record"
 import { cleanFact } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
 import { pointInPolygon } from "./geo"
-import { containerLocation } from "./positions"
+import { containerLocation, type Gazetteer } from "./positions"
 import { serviceAreaPolygon } from "./service-areas"
 
 export type ServiceAreaCoverage = {
@@ -48,6 +48,7 @@ function serviceAreaZones(area: BusinessRecord): { ids: Set<string>; names: Set<
 export function serviceAreasForSelection(
   containers: readonly BusinessRecord[],
   serviceAreas: readonly BusinessRecord[],
+  gazetteer: Gazetteer,
 ): ServiceAreaCoverage[] {
   if (containers.length === 0) return []
   const rows: ServiceAreaCoverage[] = []
@@ -57,7 +58,7 @@ export function serviceAreasForSelection(
     const polygon = serviceAreaPolygon(area)
     const count = containers.filter((container) => {
       if (polygon) {
-        const spot = containerLocation(container)
+        const spot = containerLocation(container, gazetteer)
         if (spot && pointInPolygon(spot, polygon)) return true
       }
       const typed = cleanFact(container.submittedValues?.planningAreaId)

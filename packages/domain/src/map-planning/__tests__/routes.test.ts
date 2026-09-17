@@ -3,6 +3,7 @@ import { describe, test } from "node:test"
 
 import type { BusinessRecord } from "../../prototype-record"
 import { ROUTE_BUCKET_COLORS, routesInSelection, routesInWindow } from "../routes"
+import { TEST_GAZETTEER } from "./gazetteer-fixture"
 
 function record(id: string, facts: Record<string, string> = {}, extra: Partial<BusinessRecord> = {}): BusinessRecord {
   return {
@@ -62,7 +63,7 @@ const pickups = [
 
 describe("routesInSelection", () => {
   test("counts the routes whose stops touch the selection by status bucket", () => {
-    const summary = routesInSelection(containers.slice(0, 3), routes, pickups, containers)
+    const summary = routesInSelection(containers.slice(0, 3), routes, pickups, containers, TEST_GAZETTEER)
     assert.equal(summary.total, 3, "RC-7001 (pickups), RC-1044 (display pickup), RC-1048 (area fact)")
     assert.equal(summary.awaiting, 1)
     assert.equal(summary.inProgress, 1)
@@ -71,7 +72,7 @@ describe("routesInSelection", () => {
   })
 
   test("a route carries its date, bucket, colour, and its located stops in stop order", () => {
-    const summary = routesInSelection(containers.slice(0, 3), routes, pickups, containers)
+    const summary = routesInSelection(containers.slice(0, 3), routes, pickups, containers, TEST_GAZETTEER)
     const gen = summary.routes.find((route) => route.id === "route-gen-1")!
     assert.equal(gen.bucket, "awaiting")
     assert.equal(gen.date, "2026-09-18")
@@ -85,15 +86,15 @@ describe("routesInSelection", () => {
   })
 
   test("the actual date wins over the service date; nothing selected means no routes", () => {
-    const summary = routesInSelection([containers[3]], routes, pickups, containers)
+    const summary = routesInSelection([containers[3]], routes, pickups, containers, TEST_GAZETTEER)
     assert.deepEqual(summary.routes.map((route) => [route.name, route.date]), [["RC-7002", "2026-09-17"]])
-    assert.deepEqual(routesInSelection([], routes, pickups, containers).total, 0)
+    assert.deepEqual(routesInSelection([], routes, pickups, containers, TEST_GAZETTEER).total, 0)
   })
 })
 
 describe("route colours", () => {
   test("a route is coloured by its status bucket, not its position in the list", () => {
-    const summary = routesInSelection(containers.slice(0, 3), routes, pickups, containers)
+    const summary = routesInSelection(containers.slice(0, 3), routes, pickups, containers, TEST_GAZETTEER)
     const byId = new Map(summary.routes.map((route) => [route.id, route]))
     assert.equal(byId.get("route-gen-1")!.color, ROUTE_BUCKET_COLORS.awaiting)
     assert.equal(byId.get("route-day-1048")!.color, ROUTE_BUCKET_COLORS["in-progress"])
@@ -103,7 +104,7 @@ describe("route colours", () => {
 
 describe("route details", () => {
   test("a route carries vehicle, driver, time window, its stop count, and a Route Studio link", () => {
-    const summary = routesInSelection(containers.slice(0, 3), routes, pickups, containers)
+    const summary = routesInSelection(containers.slice(0, 3), routes, pickups, containers, TEST_GAZETTEER)
     const fixture = summary.routes.find((route) => route.id === "route-day-1044")!
     assert.equal(fixture.vehicle, "WH-24")
     assert.equal(fixture.driver, "Mads Jensen")
@@ -117,7 +118,7 @@ describe("route details", () => {
 
 describe("routesInWindow", () => {
   test("without a window every drawable route is returned, selected or not", () => {
-    const rows = routesInWindow(routes, pickups, containers, null)
+    const rows = routesInWindow(routes, pickups, containers, null, TEST_GAZETTEER)
     assert.deepEqual(
       rows.map((route) => route.name),
       ["RC-7001", "RC-7002", "RC-1044"],
@@ -127,11 +128,11 @@ describe("routesInWindow", () => {
   })
 
   test("with a window only routes dated inside it remain; the actual date wins; dateless routes drop out", () => {
-    const seventeenth = routesInWindow(routes, pickups, containers, { from: "2026-09-17", to: "2026-09-17" })
+    const seventeenth = routesInWindow(routes, pickups, containers, { from: "2026-09-17", to: "2026-09-17" }, TEST_GAZETTEER)
     assert.deepEqual(seventeenth.map((route) => route.name), ["RC-7002"])
-    const later = routesInWindow(routes, pickups, containers, { from: "2026-09-18", to: "2026-09-30" })
+    const later = routesInWindow(routes, pickups, containers, { from: "2026-09-18", to: "2026-09-30" }, TEST_GAZETTEER)
     assert.deepEqual(later.map((route) => route.name), ["RC-7001"])
-    const sixteenth = routesInWindow(routes, pickups, containers, { from: "2026-09-16", to: "2026-09-16" })
+    const sixteenth = routesInWindow(routes, pickups, containers, { from: "2026-09-16", to: "2026-09-16" }, TEST_GAZETTEER)
     assert.deepEqual(sixteenth, [], "RC-7002 moved to the 17th; RC-1044 has no date")
   })
 })
@@ -153,7 +154,7 @@ describe("route stops", () => {
       { Stop: "3" },
       { name: "Stop 3 · Ryesgade 12", status: "Planned", value: "06:50 · Scheduled", submittedValues: { routeId: "route-gen-2", containerId: "a" } },
     )
-    const [route] = routesInWindow([routes[1]], [depot, collected, planned], containers, null)
+    const [route] = routesInWindow([routes[1]], [depot, collected, planned], containers, null, TEST_GAZETTEER)
     assert.deepEqual(
       route.stops.map((stop) => [stop.index, stop.kind, stop.containerId, stop.label, stop.planned, stop.actual, stop.status]),
       [
@@ -170,7 +171,7 @@ describe("route stops", () => {
   test("a pickup at an unknown container with no address has no place on the map and is skipped", () => {
     const lost = record("p9", { Stop: "1" }, { status: "Planned", submittedValues: { routeId: "route-gen-1", containerId: "zzz" } })
     const kept = record("p10", { Stop: "2" }, { status: "Planned", submittedValues: { routeId: "route-gen-1", containerId: "a" } })
-    const [route] = routesInWindow([routes[0]], [lost, kept], containers, null)
+    const [route] = routesInWindow([routes[0]], [lost, kept], containers, null, TEST_GAZETTEER)
     assert.deepEqual(route.stops.map((stop) => stop.containerId), ["a"])
     assert.equal(route.stopCount, 2, "the record still counts both pickups")
   })
@@ -189,7 +190,7 @@ describe("address-only stops", () => {
       { name: "Stop 2 · Nowhere Lane 3", status: "Planned", submittedValues: { routeId: "route-gen-1" } },
     )
     const served = record("p13", { Stop: "3" }, { status: "Planned", submittedValues: { routeId: "route-gen-1", containerId: "a" } })
-    const [route] = routesInWindow([routes[0]], [known, unknown, served], containers, null)
+    const [route] = routesInWindow([routes[0]], [known, unknown, served], containers, null, TEST_GAZETTEER)
     assert.deepEqual(
       route.stops.map((stop) => [stop.index, stop.kind, stop.label]),
       [

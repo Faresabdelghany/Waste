@@ -17,7 +17,7 @@ import {
   type LngLat,
   type LngLatBounds,
 } from "./geo"
-import { containerLocation } from "./positions"
+import { containerLocation, type Gazetteer } from "./positions"
 
 export type PlanningAreaLayer = {
   id: string
@@ -66,10 +66,11 @@ function outline(spots: readonly LngLat[]): LngLat[] {
 export function planningAreaLayers(
   areas: readonly BusinessRecord[],
   containers: readonly BusinessRecord[],
+  gazetteer: Gazetteer,
 ): PlanningAreaLayer[] {
   const located = containers
     .filter((container) => !isSoftDeleted(container))
-    .map((container) => ({ container, spot: containerLocation(container) }))
+    .map((container) => ({ container, spot: containerLocation(container, gazetteer) }))
     .filter((entry): entry is { container: BusinessRecord; spot: LngLat } => entry.spot !== null)
 
   return areas

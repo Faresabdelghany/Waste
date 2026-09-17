@@ -34,6 +34,7 @@ import {
 } from "@waste/domain/business-filters"
 import type { BusinessRecord, ModuleDefinition } from "@/lib/data/business-modules"
 import { getBusinessModuleHref } from "@/lib/data/business-links"
+import { FIXTURE_GAZETTEER } from "@/lib/data/street-gazetteer"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 import { planningAreaLayers, type PlanningAreaLayer } from "@waste/domain/map-planning/areas"
 import {
@@ -201,7 +202,7 @@ export function MapPlanningView({
 
   // The registry the map can place: in service, visible, and located.
   const inServiceContainers = useMemo(
-    () => containers.filter((record) => !isSoftDeleted(record) && containerLocation(record) !== null),
+    () => containers.filter((record) => !isSoftDeleted(record) && containerLocation(record, FIXTURE_GAZETTEER) !== null),
     [containers],
   )
   const stopIndex = useMemo(() => routeStopIndex(routes, pickups), [routes, pickups])
@@ -215,10 +216,10 @@ export function MapPlanningView({
     [inServiceContainers, stopIndex, today],
   )
   const filteredContainers = useMemo(() => containersFor(filters, window), [containersFor, filters, window])
-  const points = useMemo(() => containerPoints(filteredContainers), [filteredContainers])
+  const points = useMemo(() => containerPoints(filteredContainers, FIXTURE_GAZETTEER), [filteredContainers])
   // Area outlines wrap every in-service container, whatever the filters hide.
   const areaLayers = useMemo(
-    () => planningAreaLayers(planningAreas, inServiceContainers),
+    () => planningAreaLayers(planningAreas, inServiceContainers, FIXTURE_GAZETTEER),
     [inServiceContainers, planningAreas],
   )
   const visibleAreaLayers = useMemo(
@@ -270,15 +271,15 @@ export function MapPlanningView({
     [containerTypes, pickups, quantityRange, selectedContainers, stopIndex, today, wasteFractions],
   )
   const serviceAreaRows = useMemo(
-    () => serviceAreasForSelection(selectedContainers, serviceAreas),
+    () => serviceAreasForSelection(selectedContainers, serviceAreas, FIXTURE_GAZETTEER),
     [selectedContainers, serviceAreas],
   )
   const windowRoutes = useMemo(
-    () => routesInWindow(routes, pickups, inServiceContainers, quantityRange),
+    () => routesInWindow(routes, pickups, inServiceContainers, quantityRange, FIXTURE_GAZETTEER),
     [inServiceContainers, pickups, quantityRange, routes],
   )
   const areaRoutes = useMemo(
-    () => routesInSelection(selectedContainers, routes, pickups, inServiceContainers),
+    () => routesInSelection(selectedContainers, routes, pickups, inServiceContainers, FIXTURE_GAZETTEER),
     [inServiceContainers, pickups, routes, selectedContainers],
   )  // Both sources may name the same route; the layer's copy stands for it.
   // The replayed route, wherever it was picked from; it stays drawn while it plays.
@@ -368,7 +369,7 @@ export function MapPlanningView({
     if (compareIds.length !== 2) return null
     const a = stopSets.find((set) => set.id === compareIds[0])
     const b = stopSets.find((set) => set.id === compareIds[1])
-    return a && b ? compareSchemes(a, b, containers, gaps.needing) : null
+    return a && b ? compareSchemes(a, b, containers, gaps.needing, FIXTURE_GAZETTEER) : null
   }, [compareIds, containers, gaps.needing, stopSets])
   useEffect(() => {
     // A compared scheme that left planning (deleted, recurrence broken) drops out of the pair.
@@ -407,7 +408,7 @@ export function MapPlanningView({
     setRoutesOnMap(false)
     setHighlight(null)
     setDrawTool("none")
-    const visible = containerPoints(containersFor(saved.filters, saved.window))
+    const visible = containerPoints(containersFor(saved.filters, saved.window), FIXTURE_GAZETTEER)
     setSelectedContainerIds(
       new Set(visible.filter((point) => pointInPolygon(point.lngLat, saved.shape.polygon)).map((point) => point.id)),
     )
