@@ -221,6 +221,9 @@ export function PlanningMap({
   const mapRef = useRef<MapLibreMap | null>(null)
   const loadedRef = useRef(false)
   const [ready, setReady] = useState(false)
+  // The map instance also lives in state because `project` runs during render
+  // (marker positions); the ref serves handlers and effects.
+  const [mapInstance, setMapInstance] = useState<MapLibreMap | null>(null)
   const [zoom, setZoom] = useState(INITIAL_ZOOM)
   // Bumped on every camera change so marker positions re-project.
   const [, setFrame] = useState(0)
@@ -282,6 +285,7 @@ export function PlanningMap({
     map.on("move", onMove)
     map.on("resize", onMove)
     mapRef.current = map
+    setMapInstance(map)
     if (apiRef) {
       apiRef.current = {
         fitBounds: (bounds) =>
@@ -300,6 +304,7 @@ export function PlanningMap({
     return () => {
       map.remove()
       mapRef.current = null
+      setMapInstance(null)
       loadedRef.current = false
       if (apiRef) apiRef.current = null
     }
@@ -326,11 +331,10 @@ export function PlanningMap({
   const clusters = useMemo(() => clusterPoints(points, clusterZoom), [points, clusterZoom])
 
   const project = useCallback((lngLat: LngLat): ScreenPoint | null => {
-    const map = mapRef.current
-    if (!map) return null
-    const point = map.project([lngLat.lng, lngLat.lat])
+    if (!mapInstance) return null
+    const point = mapInstance.project([lngLat.lng, lngLat.lat])
     return { x: point.x, y: point.y }
-  }, [])
+  }, [mapInstance])
 
   const unproject = useCallback((screen: ScreenPoint): LngLat => {
     const map = mapRef.current

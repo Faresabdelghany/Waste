@@ -15,7 +15,7 @@ env:
 
 jobs:
   verify:
-    name: Install, typecheck, test, build
+    name: Install, typecheck, lint, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -31,5 +31,6 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      - run: pnpm lint
       - run: pnpm test
       - run: pnpm build

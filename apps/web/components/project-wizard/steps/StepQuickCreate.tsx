@@ -396,7 +396,7 @@ export function StepQuickCreate({
                   </defs>
                 </Wrapper>
                 {status.id !== "backlog" && (
-                  <div className={cn("size-2 rounded-full", (status as any).dotClass)} />
+                  <div className={cn("size-2 rounded-full", status.dotClass)} />
                 )}
                 <span className="font-medium text-foreground text-sm leading-5">
                   {status.label}

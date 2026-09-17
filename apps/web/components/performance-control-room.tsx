@@ -835,6 +835,7 @@ export function PerformanceControlRoom({
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation()
+                                // eslint-disable-next-line react-hooks/refs -- runs on click; focusRoute reads the ref inside requestAnimationFrame, never during render
                                 openRoute(row.id)
                               }}
                               className="flex min-w-0 items-center gap-2 text-left"
