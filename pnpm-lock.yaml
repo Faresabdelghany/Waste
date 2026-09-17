@@ -452,6 +452,10 @@ importers:
         version: '@typescript/typescript6@6.0.2'
 
   packages/tooling:
+    dependencies:
+      typescript:
+        specifier: npm:@typescript/typescript6@^6.0.2
+        version: '@typescript/typescript6@6.0.2'
     devDependencies:
       '@types/node':
         specifier: ^22
@@ -462,9 +466,6 @@ importers:
       tsx:
         specifier: ^4.23.12
         version: 4.23.12
-      typescript:
-        specifier: npm:@typescript/typescript6@^6.0.2
-        version: '@typescript/typescript6@6.0.2'
 
 packages:
 

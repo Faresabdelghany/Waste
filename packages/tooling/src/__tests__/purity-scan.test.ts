@@ -1,15 +1,25 @@
-// Specimens for the scanner and the manifest check. The gate itself
-// (definePurityTests) is exercised by its consumers: packages/domain and
-// packages/contracts each run it against their real tree.
+// Specimens for the scanner, the walker and the manifest check. The gate
+// itself (definePurityTests) is exercised by its consumers: packages/domain
+// and packages/contracts each run it against their real tree.
 import assert from "node:assert/strict"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { describe, test } from "node:test"
 
 import { manifestProblems, type PackageManifest } from "../purity"
-import { findPurityViolations, packageNameOf, type PurityAllowance, type PurityScanOptions } from "../purity-scan"
+import {
+  findPurityViolations,
+  packageNameOf,
+  readSources,
+  testDirectoriesOf,
+  type PurityAllowance,
+  type PurityScanOptions,
+} from "../purity-scan"
 
-const TEST_PACKAGES: PurityScanOptions = { allowedTestPackages: ["typescript"] }
+const TEST_IMPORTS: PurityScanOptions = { allowedTestImports: ["typescript"] }
 
-function scan(file: string, source: string, options: PurityScanOptions = TEST_PACKAGES) {
+function scan(file: string, source: string, options: PurityScanOptions = TEST_IMPORTS) {
   return findPurityViolations([{ file, source }], options)
 }
 
@@ -25,6 +35,8 @@ describe("findPurityViolations: bare imports", () => {
     ["a Node built-in without the prefix", 'import { readFileSync } from "fs"'],
     ["a type-only import", 'import type { FC } from "react"'],
     ["a re-export", 'export { useMemo } from "react"'],
+    ["an import in a type position", 'export type P = import("react").FC<unknown>'],
+    ["a typeof import", 'export const t: typeof import("react") = null!'],
   ]
   for (const [label, statement] of bare) {
     test(`flags ${label} in shipping code`, () => {
@@ -68,11 +80,12 @@ describe("findPurityViolations: bare imports", () => {
       '/* import { a } from "maplibre-gl" */',
       'export const label = `from "@/lib"`',
       'export const other = "require(\\"fs\\")"',
+      'export const third = "/// <reference lib=\\"dom\\" />"',
     ].join("\n")
     assert.deepEqual(scan("x.ts", source), [])
   })
 
-  test("accepts Node built-ins and the listed test packages inside __tests__", () => {
+  test("accepts Node built-ins and the listed test imports inside __tests__", () => {
     const source = [
       'import assert from "node:assert/strict"',
       'import { test } from "node:test"',
@@ -89,7 +102,7 @@ describe("findPurityViolations: bare imports", () => {
     assert.deepEqual(violations.map((v) => v.rule), ["bare-import"])
   })
 
-  test("with no test packages listed, tests may add Node built-ins only", () => {
+  test("with no test imports listed, tests may add Node built-ins only", () => {
     const source = 'import { test } from "node:test"\nimport ts from "typescript"\ntest("x", () => ts)\n'
     const violations = scan("__tests__/x.test.ts", source, {})
     assert.deepEqual(violations.map((v) => [v.rule, v.line]), [["bare-import", 2]])
@@ -97,27 +110,35 @@ describe("findPurityViolations: bare imports", () => {
   })
 })
 
-describe("findPurityViolations: allowed packages", () => {
-  const options: PurityScanOptions = { allowedPackages: ["zod"], allowedTestPackages: ["@waste/tooling"] }
+describe("findPurityViolations: allowed imports are exact specifiers", () => {
+  const options: PurityScanOptions = { allowedImports: ["zod"], allowedTestImports: ["@waste/tooling/purity"] }
 
-  test("an allowed package may be imported by shipping code, by root and by subpath", () => {
-    const source = 'import { z } from "zod"\nimport * as v4 from "zod/v4"\nexport const s = [z, v4]\n'
-    assert.deepEqual(scan("geojson.ts", source, options), [])
+  test("an allowed specifier may be imported by shipping code", () => {
+    assert.deepEqual(scan("geojson.ts", 'import * as z from "zod"\nexport const s = z\n', options), [])
   })
 
-  test("an allowed package may be imported by tests too, and so may the test packages", () => {
+  test("a subpath of an allowed package is a different specifier and is refused", () => {
+    for (const subpath of ["zod/v3", "zod/mini", "zod/v4-mini", "zod/v4/core", "zod/locales"]) {
+      const violations = scan("geojson.ts", `import * as z from "${subpath}"\nexport const s = z\n`, options)
+      assert.deepEqual(violations.map((v) => v.rule), ["bare-import"], subpath)
+      assert.match(violations[0].detail, /may import only zod$/)
+    }
+  })
+
+  test("an allowed import may be used by tests too, and so may the allowed test imports", () => {
     const source = [
-      'import { z } from "zod"',
+      'import * as z from "zod"',
       'import { definePurityTests } from "@waste/tooling/purity"',
       "export const s = [z, definePurityTests]",
     ].join("\n")
     assert.deepEqual(scan("__tests__/x.test.ts", source, options), [])
   })
 
-  test("a test package is not thereby allowed in shipping code", () => {
-    const violations = scan("ids.ts", 'import { definePurityTests } from "@waste/tooling/purity"\n', options)
-    assert.deepEqual(violations.map((v) => v.rule), ["bare-import"])
-    assert.match(violations[0].detail, /may import only zod/)
+  test("a test import is not thereby allowed in shipping code, nor is the rest of its package in tests", () => {
+    const shipping = scan("ids.ts", 'import { definePurityTests } from "@waste/tooling/purity"\n', options)
+    assert.deepEqual(shipping.map((v) => v.rule), ["bare-import"])
+    const other = scan("__tests__/x.test.ts", 'import { readSources } from "@waste/tooling/purity-scan"\n', options)
+    assert.deepEqual(other.map((v) => v.rule), ["bare-import"])
   })
 
   test("every other package is still flagged", () => {
@@ -137,11 +158,17 @@ describe("findPurityViolations: relative imports", () => {
     assert.deepEqual(violations.map((v) => v.rule), ["escapes-package"])
   })
 
+  test("flags a type-position import that leaves the package", () => {
+    const violations = scan("x.ts", 'export type R = import("../../apps/web/lib/x").Y\n')
+    assert.deepEqual(violations.map((v) => v.rule), ["escapes-package"])
+  })
+
   test("accepts relative imports that stay inside the package", () => {
     const source = [
       'import { isSoftDeleted } from "../record-visibility"',
       'import { addDays } from "./recurrence"',
       'export type { X } from "./types"',
+      'export type Y = import("./types").X',
       "export const z = [isSoftDeleted, addDays]",
     ].join("\n")
     assert.deepEqual(scan("route-schemes/x.ts", source), [])
@@ -162,6 +189,51 @@ describe("findPurityViolations: computed specifiers", () => {
   test("accepts a template literal without substitutions as a plain specifier", () => {
     const source = "export const p = import(`./recurrence`)\n"
     assert.deepEqual(scan("x.ts", source), [])
+  })
+})
+
+describe("findPurityViolations: reference directives and ambient declarations", () => {
+  test("flags every triple-slash reference directive, in tests too", () => {
+    const source = [
+      '/// <reference lib="dom" />',
+      '/// <reference types="node" />',
+      '/// <reference path="../../apps/web/globals.d.ts" />',
+      'export const l = localStorage.getItem("k")',
+    ].join("\n")
+    const violations = scan("x.ts", source)
+    assert.deepEqual(
+      violations.map((v) => [v.rule, v.line]),
+      [
+        ["reference-directive", 1],
+        ["reference-directive", 2],
+        ["reference-directive", 3],
+      ],
+    )
+    assert.match(violations[0].detail, /lib="dom"/)
+    assert.equal(scan("__tests__/x.test.ts", '/// <reference lib="dom" />\n').length, 1)
+  })
+
+  test("flags declare global and declare module augmentations", () => {
+    const source = [
+      "declare global {",
+      "  interface Window { waste: string }",
+      "}",
+      'declare module "zod" {',
+      "  interface ZodType { extra: string }",
+      "}",
+      "export const x = 1",
+    ].join("\n")
+    assert.deepEqual(
+      scan("x.ts", source).map((v) => [v.rule, v.line]),
+      [
+        ["ambient-declaration", 1],
+        ["ambient-declaration", 4],
+      ],
+    )
+  })
+
+  test("a plain namespace is not an ambient declaration", () => {
+    assert.deepEqual(scan("x.ts", "export namespace Shapes {\n  export const n = 1\n}\n"), [])
   })
 })
 
@@ -189,6 +261,56 @@ describe("packageNameOf", () => {
   })
 })
 
+describe("readSources and testDirectoriesOf", () => {
+  const withFixtureTree = (run: (root: string) => void) => {
+    const root = mkdtempSync(path.join(tmpdir(), "purity-walker-"))
+    try {
+      const write = (file: string, text = "export const x = 1\n") => {
+        mkdirSync(path.dirname(path.join(root, file)), { recursive: true })
+        writeFileSync(path.join(root, file), text)
+      }
+      write("zeta.ts")
+      write("alpha/deep/leaf.ts")
+      write("alpha/__tests__/leaf.test.ts")
+      write("alpha/__tests__/nested/more.test.ts")
+      write("__tests__/purity.test.ts")
+      write("beta/data.json", "{}")
+      write(".DS_Store", "")
+      write("alpha/.leaf.ts.swp", "")
+      write(".hidden/secret.ts")
+      run(root)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  }
+
+  test("walks every directory, returns sorted posix paths and skips hidden entries", () => {
+    withFixtureTree((root) => {
+      const files = readSources(root)
+      assert.deepEqual(
+        files.map((f) => f.file),
+        [
+          "__tests__/purity.test.ts",
+          "alpha/__tests__/leaf.test.ts",
+          "alpha/__tests__/nested/more.test.ts",
+          "alpha/deep/leaf.ts",
+          "beta/data.json",
+          "zeta.ts",
+        ],
+      )
+      assert.equal(files.find((f) => f.file === "beta/data.json")?.source, "{}")
+    })
+  })
+
+  test("the test directories are the __tests__ segments of the test files, once each", () => {
+    withFixtureTree((root) => {
+      const dirs = testDirectoriesOf(readSources(root).map((f) => f.file))
+      assert.deepEqual(dirs, ["__tests__", "alpha/__tests__"])
+    })
+    assert.deepEqual(testDirectoriesOf(["a.ts", "b/c.ts"]), [])
+  })
+})
+
 describe("manifestProblems", () => {
   const good: PackageManifest = {
     name: "@waste/contracts",
@@ -196,25 +318,30 @@ describe("manifestProblems", () => {
     dependencies: { zod: "^4.6.5" },
     devDependencies: { "@waste/tooling": "workspace:*" },
   }
-  const options = { allowedPackages: ["zod"], allowedTestPackages: ["@waste/tooling"] }
+  const options = { allowedImports: ["zod"], allowedTestImports: ["@waste/tooling/purity"] }
 
   test("a manifest in order has no problems", () => {
     assert.deepEqual(manifestProblems(good, ["__tests__"], options), [])
   })
 
-  test("dependencies must be exactly the allowed packages, in either direction", () => {
+  test("dependencies must be exactly the packages of the allowed imports, in either direction", () => {
     const extra = manifestProblems({ ...good, dependencies: { zod: "^4", react: "^19" } }, ["__tests__"], options)
     assert.equal(extra.length, 1)
     assert.match(extra[0], /declared \[react, zod\], allowed \[zod\]/)
     const missing = manifestProblems({ ...good, dependencies: {} }, ["__tests__"], options)
     assert.match(missing[0], /declared \[\], allowed \[zod\]/)
-    const none = manifestProblems({ ...good, dependencies: undefined }, ["__tests__"], { allowedPackages: [] })
+    const none = manifestProblems({ ...good, dependencies: undefined }, ["__tests__"], { allowedImports: [] })
     assert.deepEqual(none.filter((p) => p.startsWith("dependencies")), [])
   })
 
-  test("an allowed test package must be a devDependency", () => {
+  test("several allowed specifiers of one package count as one dependency", () => {
+    const options = { allowedImports: ["zod", "zod/mini"] }
+    assert.deepEqual(manifestProblems(good, ["__tests__"], options), [])
+  })
+
+  test("the package of an allowed test import must be a devDependency", () => {
     const problems = manifestProblems({ ...good, devDependencies: {} }, ["__tests__"], options)
-    assert.deepEqual(problems, ['tests may import "@waste/tooling", so it must be a devDependency'])
+    assert.deepEqual(problems, ['tests may import from "@waste/tooling", so it must be a devDependency'])
   })
 
   test("source is exported by subpath alongside the manifest", () => {

@@ -2,7 +2,7 @@
 // date (a Collection Calendar entry, a Route's service date) and an instant
 // with its UTC offset for anything that happened (a Pickup's Completed-at).
 // A wall-clock time without an offset is ambiguous and is rejected.
-import { z } from "zod"
+import * as z from "zod"
 
 /** A calendar day, `YYYY-MM-DD`. */
 export const IsoDate = z.iso.date()

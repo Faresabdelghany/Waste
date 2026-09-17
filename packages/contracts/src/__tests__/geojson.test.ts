@@ -63,6 +63,12 @@ describe("LinearRing", () => {
     assert.equal(LinearRing.safeParse([]).success, false)
   })
 
+  test("rejects a ring whose positions enclose no area", () => {
+    assert.equal(LinearRing.safeParse([[0, 0], [0, 0], [0, 0], [0, 0]]).success, false, "one point four times")
+    assert.equal(LinearRing.safeParse([[0, 0], [1, 1], [0, 0], [1, 1], [0, 0]]).success, false, "two points")
+    assert.ok(LinearRing.safeParse([[0, 0], [1, 1], [0, 0], [2, 2], [0, 0]]).success, "three distinct, degenerate or not")
+  })
+
   test("compares the whole position when checking closure", () => {
     assert.equal(LinearRing.safeParse([[12.5, 55.6, 0], [12.6, 55.6], [12.6, 55.7], [12.5, 55.6]]).success, false)
   })

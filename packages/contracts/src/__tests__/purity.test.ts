@@ -8,6 +8,6 @@ import { definePurityTests } from "@waste/tooling/purity"
 
 definePurityTests({
   packageDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."),
-  allowedPackages: ["zod"],
-  allowedTestPackages: ["@waste/tooling"],
+  allowedImports: ["zod"],
+  allowedTestImports: ["@waste/tooling/purity"],
 })

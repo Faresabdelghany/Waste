@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
-import { z } from "zod"
+import * as z from "zod"
 
 import { PAGE_LIMIT_DEFAULT, PAGE_LIMIT_MAX, Page, PageRequest } from "../pagination"
 
@@ -14,10 +14,23 @@ describe("PageRequest", () => {
   test("reads the limit from a query string and keeps it a whole number in range", () => {
     assert.deepEqual(PageRequest.parse({ limit: "25", cursor: "opaque" }), { limit: 25, cursor: "opaque" })
     assert.equal(PageRequest.parse({ limit: 200 }).limit, 200)
+    assert.equal(PageRequest.parse({ limit: 1 }).limit, 1)
     assert.equal(PageRequest.safeParse({ limit: "0" }).success, false)
     assert.equal(PageRequest.safeParse({ limit: "201" }).success, false)
     assert.equal(PageRequest.safeParse({ limit: "2.5" }).success, false)
+    assert.equal(PageRequest.safeParse({ limit: 2.5 }).success, false)
     assert.equal(PageRequest.safeParse({ limit: "many" }).success, false)
+  })
+
+  test("an empty or null limit is not given and takes the default", () => {
+    assert.deepEqual(PageRequest.parse({ limit: "" }), { limit: PAGE_LIMIT_DEFAULT })
+    assert.deepEqual(PageRequest.parse({ limit: null }), { limit: PAGE_LIMIT_DEFAULT })
+  })
+
+  test("coerces decimal digits only: no booleans, arrays, hex, exponents or padding", () => {
+    for (const value of [true, ["25"], ["25", "30"], "0x19", "1e1", " 25 ", "+25", "25px"]) {
+      assert.equal(PageRequest.safeParse({ limit: value }).success, false, JSON.stringify(value))
+    }
   })
 
   test("rejects an empty cursor: absent means the first page", () => {

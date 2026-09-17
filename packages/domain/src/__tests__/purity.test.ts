@@ -10,5 +10,5 @@ import { definePurityTests } from "@waste/tooling/purity"
 
 definePurityTests({
   packageDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."),
-  allowedTestPackages: ["@waste/tooling"],
+  allowedTestImports: ["@waste/tooling/purity"],
 })

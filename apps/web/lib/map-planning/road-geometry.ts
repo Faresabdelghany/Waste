@@ -9,7 +9,7 @@
 
 import { avalancheHash } from "@waste/domain/route-schemes/hash"
 import { simplifyPath, worldPoint, type LngLat } from "@waste/domain/map-planning/geo"
-import { Position } from "@waste/contracts/geojson"
+import type { Position } from "@waste/contracts/geojson"
 
 export const OSRM_BASE_URL = "https://router.project-osrm.org"
 export const ROAD_GEOMETRY_STORAGE_KEY = "wastehero-map-road-geometry-v1"
@@ -62,8 +62,13 @@ type OsrmAnswer = {
   waypoints?: Array<{ location?: unknown }>
 }
 
-/** A GeoJSON position as OSRM sends them; anything else in the geometry is dropped. */
-const isPosition = (value: unknown): value is Position => Position.safeParse(value).success
+/**
+ * A GeoJSON position as OSRM sends them, checked structurally; anything else
+ * in the geometry is dropped. The contracts type, not its schema: a runtime
+ * zod import here would land in the client bundle of every workspace route.
+ */
+const isPosition = (value: unknown): value is Position =>
+  Array.isArray(value) && (value.length === 2 || value.length === 3) && value.every((n) => typeof n === "number")
 
 const toLngLat = ([lng, lat]: Position): LngLat => ({ lng, lat })
 
