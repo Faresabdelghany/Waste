@@ -3,6 +3,13 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // React Compiler through Turbopack's native Rust port (#51). No Babel
+  // plugin is needed on this path. Components that break the hooks rules
+  // are skipped by the compiler, not broken.
+  reactCompiler: true,
+  experimental: {
+    turbopackRustReactCompiler: true,
+  },
   images: {
     unoptimized: true,
   },
