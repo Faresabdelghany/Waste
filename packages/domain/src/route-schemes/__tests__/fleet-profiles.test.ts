@@ -5,7 +5,6 @@ import {
   NO_LICENCE_ON_RECORD,
   collectionVehicles,
   driverEligibility,
-  driverFormOptions,
   driverHoldsLicence,
   driverIneligibilityReason,
   driverOptionLabel,
@@ -159,20 +158,10 @@ describe("drivers", () => {
     assert.equal(driverOptionLabel(unknown), "New Driver")
   })
 
-  test("the quick form's driver options come from the same rule: disabled with the reason, unknown ⇒ ineligible", () => {
+  test("driverIneligibilityReason: the reason beside a disabled driver, unknown ⇒ ineligible, nothing judged without a vehicle", () => {
     const madsRecord = record("driver-mads", "Mads Jensen", "WasteHero", { Licence: "C/CE · valid 2028" })
     const emilRecord = record("driver-emil", "Emil Kristensen", "WasteHero", { Licence: "B · valid 2030" })
     const unknownRecord = record("driver-new", "New Driver", "WasteHero", {})
-    assert.deepEqual(driverFormOptions([madsRecord, emilRecord, unknownRecord], wh24), [
-      { value: "driver-mads", label: "Mads Jensen · C, CE" },
-      { value: "driver-emil", label: "Emil Kristensen · B · Needs C licence", disabled: true },
-      { value: "driver-new", label: "New Driver · No licence on record", disabled: true },
-    ])
-    // Without a vehicle nothing is judged.
-    assert.deepEqual(driverFormOptions([emilRecord, unknownRecord], undefined), [
-      { value: "driver-emil", label: "Emil Kristensen · B" },
-      { value: "driver-new", label: "New Driver" },
-    ])
     assert.equal(driverIneligibilityReason(emilRecord, wh24), "Needs C licence")
     assert.equal(driverIneligibilityReason(unknownRecord, wh24), NO_LICENCE_ON_RECORD)
     assert.equal(driverIneligibilityReason(madsRecord, wh24), undefined)

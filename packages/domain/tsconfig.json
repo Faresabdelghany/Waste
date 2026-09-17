@@ -1,11 +1,15 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    // No "dom": this package runs the same in the browser bundle and on the
-    // server, so window/document/localStorage must not even type-check here.
+    // Shipping code sees ECMAScript only. No DOM lib and no ambient @types, so
+    // window, document, localStorage, fetch, process and Buffer are not even
+    // names here; src/__tests__/purity.test.ts proves that holds. The tests,
+    // which do need Node, are checked through tsconfig.test.json.
     "lib": ["esnext"],
+    "types": [],
     "target": "es2022",
     "noEmit": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/__tests__/**"]
 }

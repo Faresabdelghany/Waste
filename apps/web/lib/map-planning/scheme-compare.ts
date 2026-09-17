@@ -2,7 +2,7 @@
 // Every non-deleted scheme with a readable recurrence is comparable, drafts
 // included — asking how a draft overlaps the effective scheme is a planning
 // question. Each scheme's stops resolve through the collection-group seam
-// (@waste/domain/route-schemes/groups.ts) against the registry as it is now; the
+// (@waste/domain/route-schemes/groups) against the registry as it is now; the
 // comparison splits them into A only, B only, and both, and names the
 // orphans: containers needing service that sit inside the hull of both
 // schemes' located stops yet belong to neither. Pure data logic.

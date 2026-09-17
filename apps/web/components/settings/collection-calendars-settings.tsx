@@ -3,7 +3,7 @@
 // Settings › Operations › Collection calendars: the per-year holiday calendar
 // records of each project (moved from the Plan workspace 2026-09-16, when
 // Plan became Map Planning). Every table cell derives from the record's
-// typed values at render time (@waste/domain/route-schemes/calendar-list.ts) — never
+// typed values at render time (@waste/domain/route-schemes/calendar-list) — never
 // from stored display copies. Create and edit go through the shared form
 // dialog with the module's own schema; the record shape is owned by
 // lib/data/collection-calendars.ts.

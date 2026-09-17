@@ -3,9 +3,6 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  // Workspace packages ship TypeScript source (package.json exports point at
-  // src/*.ts), so Next compiles them like app code.
-  transpilePackages: ["@waste/domain"],
   // React Compiler through Turbopack's native Rust port (#51). No Babel
   // plugin is needed on this path. Components that break the hooks rules
   // are skipped by the compiler, not broken.

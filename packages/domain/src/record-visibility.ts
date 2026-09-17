@@ -27,7 +27,7 @@ export type SoftDeletion = {
  * The one soft-delete shape: the record marked with the visibility fact, the
  * structured reason and actor, and a link to its deletion-log audit event.
  * Written by commitRecordAction (business-workspace.tsx) for every module
- * and by planSchemeDeletion (@waste/domain/route-schemes/deletion.ts) for route
+ * and by planSchemeDeletion (@waste/domain/route-schemes/deletion) for route
  * schemes; the input is left untouched.
  */
 export function softDeletedRecord(

@@ -36,6 +36,9 @@ const workspacePaths: Record<Exclude<WorkspaceId, "configure">, string> = {
   "control-center": "/control-center",
 }
 
+/** Where the project calendar (weekend, holidays) is managed: Settings › Operations setup. */
+export const HOLIDAY_SETTINGS_HREF = "/settings?pane=operations-setup"
+
 const settingsPaneByModule: Record<string, string> = {
   ...Object.fromEntries(
     settingsModuleDomains.map((module) => [module.moduleId, module.settingsPaneId]),
