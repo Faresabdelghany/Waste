@@ -7,10 +7,10 @@
 //
 // The prototype does not store this shape yet: service areas and saved
 // selections keep an unclosed `{ lng, lat }[]` in a JSON field and planning
-// areas carry no geometry at all. Where that list becomes a closed ring is a
-// decision for the Data step; neither this package (zod only) nor
-// @waste/domain (nothing) may import the other, so the converter cannot live
-// in either without a layering decision.
+// areas carry no geometry at all. Where that list becomes a closed ring is
+// decided with the tables that store it (build-order step 3); neither this
+// package (zod only) nor @waste/domain (nothing) may import the other, so the
+// converter cannot live in either without a layering decision.
 import * as z from "zod"
 
 export const Longitude = z.number().min(-180).max(180)

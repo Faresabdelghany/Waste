@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Shared wire primitives on zod 4: ids (UUIDv7), ISO dates, GeoJSON Position, Point and Polygon, cursor pagination. Consumed by apps/web and apps/api. No module schemas yet; those are derived from the form schemas in the Data step. Ships TypeScript source for bundler and tsx consumers.",
+  "description": "Shared wire primitives on zod 4: ids (UUIDv7), ISO dates, GeoJSON Position, Point and Polygon, cursor pagination, the health response. Consumed by apps/web and apps/api. No module schemas yet; each context's are derived from its form schemas when its tables are designed (build-order step 3 on). Ships TypeScript source for bundler and tsx consumers.",
   "exports": {
     "./package.json": "./package.json",
     "./__tests__/*": null,
