@@ -9,6 +9,7 @@
 
 import { avalancheHash } from "@waste/domain/route-schemes/hash"
 import { simplifyPath, worldPoint, type LngLat } from "@waste/domain/map-planning/geo"
+import { Position } from "@waste/contracts/geojson"
 
 export const OSRM_BASE_URL = "https://router.project-osrm.org"
 export const ROAD_GEOMETRY_STORAGE_KEY = "wastehero-map-road-geometry-v1"
@@ -61,10 +62,10 @@ type OsrmAnswer = {
   waypoints?: Array<{ location?: unknown }>
 }
 
-const isPair = (value: unknown): value is [number, number] =>
-  Array.isArray(value) && value.length >= 2 && typeof value[0] === "number" && typeof value[1] === "number"
+/** A GeoJSON position as OSRM sends them; anything else in the geometry is dropped. */
+const isPosition = (value: unknown): value is Position => Position.safeParse(value).success
 
-const toLngLat = ([lng, lat]: [number, number]): LngLat => ({ lng, lat })
+const toLngLat = ([lng, lat]: Position): LngLat => ({ lng, lat })
 
 const squaredDistance = (a: LngLat, b: LngLat) => (a.lng - b.lng) ** 2 + (a.lat - b.lat) ** 2
 
@@ -87,9 +88,9 @@ export function parseOsrmRoute(payload: unknown, stopCount: number): RoadGeometr
   if (waypoints.length !== stopCount) {
     throw new Error(`OSRM answered with ${waypoints.length} waypoints for ${stopCount} stops`)
   }
-  const path = coordinates.filter(isPair).map(toLngLat)
+  const path = coordinates.filter(isPosition).map(toLngLat)
   const snappedStops = waypoints.map((waypoint) => {
-    if (!isPair(waypoint.location)) throw new Error("OSRM answered with an unlocated waypoint")
+    if (!isPosition(waypoint.location)) throw new Error("OSRM answered with an unlocated waypoint")
     return toLngLat(waypoint.location)
   })
   if (path.length === 0) throw new Error("OSRM answered with an empty geometry")

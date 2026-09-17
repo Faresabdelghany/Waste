@@ -304,6 +304,9 @@ importers:
       '@vercel/analytics':
         specifier: 1.3.1
         version: 1.3.1(next@16.3.5(@babel/core@7.29.7(supports-color@7.2.0))(@playwright/test@1.62.1)(@types/node@22.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)
+      '@waste/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@waste/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -373,9 +376,6 @@ importers:
       vaul:
         specifier: ^1.1.2
         version: 1.1.2(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      zod:
-        specifier: 3.25.76
-        version: 3.25.76
     devDependencies:
       '@playwright/test':
         specifier: 1.62.1
