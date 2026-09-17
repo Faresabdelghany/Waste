@@ -33,7 +33,7 @@ import {
   reassignRoutePickups,
   routeDeviationNote,
   stringValueOf,
-} from "@/lib/route-schemes/generation"
+} from "@waste/domain/route-schemes/generation"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

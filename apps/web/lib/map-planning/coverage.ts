@@ -8,7 +8,7 @@
 // Selected area panel.
 
 import type { BusinessRecord } from "../data/business-modules"
-import { isSoftDeleted } from "../data/record-visibility"
+import { isSoftDeleted } from "@waste/domain/record-visibility"
 import { pointInPolygon } from "./geo"
 import { containerLocation } from "./positions"
 import { serviceAreaPolygon } from "./service-areas"

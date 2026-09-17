@@ -21,14 +21,14 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { HOLIDAY_SETTINGS_HREF, projectCalendarLabel } from "@/lib/route-schemes/project-calendar"
+import { HOLIDAY_SETTINGS_HREF, projectCalendarLabel } from "@waste/domain/route-schemes/project-calendar"
 import {
   formatClockTime,
   formatOccurrenceDate,
   shiftedNote,
   type Occurrence,
-} from "@/lib/route-schemes/occurrences"
-import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
+} from "@waste/domain/route-schemes/occurrences"
+import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import {
   SERVICE_DAYS,
   SERVICE_DAY_LABELS,
@@ -36,7 +36,7 @@ import {
   serviceDayOf,
   sortServiceDays,
   type ServiceDay,
-} from "@/lib/route-schemes/recurrence"
+} from "@waste/domain/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
 
 import type { WizardModel } from "./wizard-model"

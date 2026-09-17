@@ -4,15 +4,15 @@
 // fact does not say ended, paused, or future (no fact at all is not a reason
 // to skip it). A container is covered when a scheme that still takes part in
 // planning and is Validated, Scheduled, or Effective resolves it as a stop on
-// any service day — through lib/route-schemes/groups.ts, the one seam every
+// any service day — through @waste/domain/route-schemes/groups.ts, the one seam every
 // consumer resolves a scheme's stops through. Drafts promise nothing and
 // expired schemes no longer do. Pure data logic.
 
 import type { BusinessRecord } from "../data/business-modules"
-import { effectiveStopPlans } from "../route-schemes/groups"
-import { effectiveSchemeStatus, schemesInPlanning } from "../route-schemes/lifecycle"
-import { ELIGIBLE_CONTAINER_STATUSES } from "../route-schemes/matching"
-import { recurrenceFromValues } from "../route-schemes/recurrence"
+import { effectiveStopPlans } from "@waste/domain/route-schemes/groups"
+import { effectiveSchemeStatus, schemesInPlanning } from "@waste/domain/route-schemes/lifecycle"
+import { ELIGIBLE_CONTAINER_STATUSES } from "@waste/domain/route-schemes/matching"
+import { recurrenceFromValues } from "@waste/domain/route-schemes/recurrence"
 
 export type CoverageGaps = {
   /** Containers that need service. */

@@ -3,7 +3,7 @@
 // Est. load per route: "3.8 t / 10 t", the percentage, and a thin bar —
 // amber from 90 %, red above 100 %.
 
-import type { RouteEstimate } from "@/lib/route-schemes/estimates"
+import type { RouteEstimate } from "@waste/domain/route-schemes/estimates"
 import { cn } from "@/lib/utils"
 
 export function LoadMeter({ estimate }: { estimate: RouteEstimate }) {

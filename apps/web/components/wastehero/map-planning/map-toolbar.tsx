@@ -22,7 +22,7 @@ import {
   filterKeyForChipLabel,
   removeBusinessFilterValue,
   type BusinessFilters,
-} from "@/lib/data/business-filters"
+} from "@waste/domain/business-filters"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { MAP_FILTER_READERS } from "@/lib/map-planning/filters"
 import {

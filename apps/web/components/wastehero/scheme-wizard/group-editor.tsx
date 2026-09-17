@@ -37,29 +37,29 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { routeEstimateAdapter } from "@/lib/route-schemes/estimates"
+import { routeEstimateAdapter } from "@waste/domain/route-schemes/estimates"
 import {
   driverHoldsLicence,
   driverOptionLabel,
   driverOptions,
   vehicleOptionLabel,
-} from "@/lib/route-schemes/fleet-profiles"
-import type { CollectionGroup } from "@/lib/route-schemes/groups"
+} from "@waste/domain/route-schemes/fleet-profiles"
+import type { CollectionGroup } from "@waste/domain/route-schemes/groups"
 import {
   CONTAINER_TYPE_VOCABULARY,
   containerMatchProfile,
   containerTypeShortLabel,
   resolveStopMatches,
   type StopMatchResult,
-} from "@/lib/route-schemes/matching"
-import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
-import { allowedContainerTypes } from "@/lib/route-schemes/scope"
+} from "@waste/domain/route-schemes/matching"
+import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
+import { allowedContainerTypes } from "@waste/domain/route-schemes/scope"
 import {
   SERVICE_DAY_LABELS,
   SERVICE_DAY_SHORT_LABELS,
   sortServiceDays,
   type ServiceDay,
-} from "@/lib/route-schemes/recurrence"
+} from "@waste/domain/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
 
 import type { WizardRecords } from "./use-wizard-records"

@@ -30,7 +30,7 @@ import {
   removeBusinessFilterValue,
   type BusinessFilters,
   type FilterValueReaders,
-} from "@/lib/data/business-filters"
+} from "@waste/domain/business-filters"
 import type {
   BusinessRecord,
   ModuleDefinition,
@@ -44,26 +44,26 @@ import {
   schemePlannedStartTime,
   schemeVersionOf,
   stringValueOf,
-} from "@/lib/route-schemes/generation"
+} from "@waste/domain/route-schemes/generation"
 import {
   schemeCanGenerateRoutes,
   schemeFuturePlanningStopped,
   schemeLiveValidation,
   type SchemeRelatedRecords,
-} from "@/lib/route-schemes/lifecycle"
-import { schemeGroupPlans } from "@/lib/route-schemes/groups"
-import { schemeHolidayPolicy, schemeProjectId } from "@/lib/route-schemes/holidays"
+} from "@waste/domain/route-schemes/lifecycle"
+import { schemeGroupPlans } from "@waste/domain/route-schemes/groups"
+import { schemeHolidayPolicy, schemeProjectId } from "@waste/domain/route-schemes/holidays"
 import {
   HOLIDAY_SETTINGS_HREF,
   NO_HOLIDAY_LIST_LABEL,
   resolveProjectCalendar,
   weekendLabel,
   type ProjectCalendar,
-} from "@/lib/route-schemes/project-calendar"
-import { HOLIDAY_POLICY_LABELS, type HolidayPolicy } from "@/lib/route-schemes/occurrences"
-import { stopRuleSummary } from "@/lib/route-schemes/matching"
-import { isPlanAheadEnabled, setPlanAhead } from "@/lib/route-schemes/plan-ahead"
-import { schemeAreaName } from "@/lib/route-schemes/scheme-list"
+} from "@waste/domain/route-schemes/project-calendar"
+import { HOLIDAY_POLICY_LABELS, type HolidayPolicy } from "@waste/domain/route-schemes/occurrences"
+import { stopRuleSummary } from "@waste/domain/route-schemes/matching"
+import { isPlanAheadEnabled, setPlanAhead } from "@waste/domain/route-schemes/plan-ahead"
+import { schemeAreaName } from "@waste/domain/route-schemes/scheme-list"
 import {
   SCHEME_ROUTE_FILTER_READERS,
   SCHEME_STOP_FILTER_READERS,
@@ -72,7 +72,7 @@ import {
   schemeStopContainerType,
   withRouteWasteFractions,
   withStopServiceDate,
-} from "@/lib/route-schemes/scheme-tabs"
+} from "@waste/domain/route-schemes/scheme-tabs"
 import {
   SERVICE_DAY_SHORT_LABELS,
   formatServiceDate,
@@ -80,8 +80,8 @@ import {
   recurrenceSentence,
   serviceDaysFromValues,
   todayIso,
-} from "@/lib/route-schemes/recurrence"
-import { stringValue } from "@/lib/route-schemes/validation"
+} from "@waste/domain/route-schemes/recurrence"
+import { stringValue } from "@waste/domain/route-schemes/validation"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // No "dom": this package runs the same in the browser bundle and on the
+    // server, so window/document/localStorage must not even type-check here.
+    "lib": ["esnext"],
+    "target": "es2022",
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"]
+}

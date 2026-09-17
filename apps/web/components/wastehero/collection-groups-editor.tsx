@@ -41,19 +41,19 @@ import {
   resolveCollectionGroupPlans,
   type CollectionGroup,
   type CollectionGroupResolution,
-} from "@/lib/route-schemes/groups"
-import { schemeLiveValidation } from "@/lib/route-schemes/lifecycle"
+} from "@waste/domain/route-schemes/groups"
+import { schemeLiveValidation } from "@waste/domain/route-schemes/lifecycle"
 import {
   STOP_MATCH_VEHICLE_TYPES,
   resolveStopMatches,
   type StopMatchRule,
-} from "@/lib/route-schemes/matching"
+} from "@waste/domain/route-schemes/matching"
 import {
   SERVICE_DAY_SHORT_LABELS,
   serviceDaysFromValues,
   sortServiceDays,
   type ServiceDay,
-} from "@/lib/route-schemes/recurrence"
+} from "@waste/domain/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
 
 /* ------------------------------ shared inputs ------------------------------ */

@@ -16,10 +16,10 @@ import {
   formatMinutes,
   routeEstimateAdapter,
   type RouteEstimateStatus,
-} from "@/lib/route-schemes/estimates"
-import { formatClockTime } from "@/lib/route-schemes/occurrences"
-import type { GuidedSchemeData } from "@/lib/route-schemes/quick-create"
-import { SERVICE_DAY_LABELS, type ServiceDay } from "@/lib/route-schemes/recurrence"
+} from "@waste/domain/route-schemes/estimates"
+import { formatClockTime } from "@waste/domain/route-schemes/occurrences"
+import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
+import { SERVICE_DAY_LABELS, type ServiceDay } from "@waste/domain/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
 
 import { RouteMapSvg } from "./route-map-svg"

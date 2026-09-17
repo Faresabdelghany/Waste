@@ -3,7 +3,7 @@
 // positions.ts, the rendering from components/wastehero/map-planning.
 
 import type { BusinessRecord } from "../data/business-modules"
-import { isSoftDeleted } from "../data/record-visibility"
+import { isSoftDeleted } from "@waste/domain/record-visibility"
 import type { LngLat } from "./geo"
 import { containerLocation, containerPropertyKey } from "./positions"
 

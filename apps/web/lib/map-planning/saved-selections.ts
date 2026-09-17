@@ -9,7 +9,7 @@ import {
   BUSINESS_FILTER_KEYS,
   emptyBusinessFilters,
   type BusinessFilters,
-} from "../data/business-filters"
+} from "@waste/domain/business-filters"
 import type { LngLat } from "./geo"
 import { isCollectionWindow, type CollectionWindow } from "./schedule"
 import type { SelectionShape } from "./selection"

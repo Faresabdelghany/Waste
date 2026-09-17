@@ -24,7 +24,7 @@ import {
   nextServiceDates,
   recurrenceFromValues,
   recurrenceSentence,
-} from "@/lib/route-schemes/recurrence"
+} from "@waste/domain/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"

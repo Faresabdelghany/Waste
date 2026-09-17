@@ -4,7 +4,7 @@
 // agrees on, so the wizard never inherits a guess. The Selected area panel's
 // numbers live in statistics.ts. Pure data logic.
 
-import type { GuidedSchemeData } from "../route-schemes/quick-create"
+import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import type { LngLat } from "./geo"
 import type { MapPoint } from "./points"
 import { rankFractions } from "./points"

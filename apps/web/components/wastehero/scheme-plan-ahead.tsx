@@ -15,8 +15,8 @@ import {
 } from "@/components/wastehero/business-record-store"
 import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
-import { runPlanAhead } from "@/lib/route-schemes/plan-ahead"
-import { todayIso } from "@/lib/route-schemes/recurrence"
+import { runPlanAhead } from "@waste/domain/route-schemes/plan-ahead"
+import { todayIso } from "@waste/domain/route-schemes/recurrence"
 
 export function SchemePlanAheadRunner({ actorName }: { actorName: string }) {
   const hydrated = useBusinessRecordsHydrated()

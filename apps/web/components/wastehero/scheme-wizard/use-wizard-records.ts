@@ -12,14 +12,14 @@ import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
-import { fallbackContainerWeight, type ContainerWeightResolver } from "@/lib/route-schemes/estimates"
+import { fallbackContainerWeight, type ContainerWeightResolver } from "@waste/domain/route-schemes/estimates"
 import {
   collectionVehicles,
   driverProfile,
   vehicleProfile,
   type DriverProfile,
   type VehicleProfile,
-} from "@/lib/route-schemes/fleet-profiles"
+} from "@waste/domain/route-schemes/fleet-profiles"
 
 export type WizardRecords = {
   projects: BusinessRecord[]
