@@ -1,10 +1,11 @@
-// Test support for purity.test.ts. Module specifiers are read from the
-// TypeScript AST (typescript is a devDependency of this package), so comments
-// and strings cannot fool the scan, a wrapped import reports the line of its
-// specifier, and a computed `import(x)` is a finding of its own.
+// The import scan behind the purity gate (see purity.ts). Module specifiers
+// are read from the TypeScript AST, so comments and strings cannot fool the
+// scan, a wrapped import reports the line of its specifier, and a computed
+// `import(x)` is a finding of its own.
 //
-// Browser and Node globals are not this scanner's job: tsconfig.json gives
-// shipping code no DOM lib and no ambient types, so the compiler rejects them.
+// Browser and Node globals are not this scanner's job: the checked package's
+// tsconfig.json gives shipping code no DOM lib and no ambient types, so the
+// compiler rejects them; purity.ts proves that with a specimen compile.
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { isBuiltin } from "node:module"
 import path from "node:path"
@@ -29,18 +30,21 @@ export type PurityAllowance = {
   reason: string
 }
 
+export type PurityScanOptions = {
+  /** Packages shipping code may import. Empty: the package depends on nothing. */
+  allowedPackages?: readonly string[]
+  /** Packages tests may import besides Node built-ins and allowedPackages. */
+  allowedTestPackages?: readonly string[]
+  /** The whole exception list. Every entry carries a reason a reviewer can check. */
+  allowances?: readonly PurityAllowance[]
+}
+
 export type SourceFile = { file: string; source: string }
 
-/** Packages shipping code may import. Empty on purpose: the domain depends on nothing. */
-export const ALLOWED_PACKAGES: readonly string[] = []
-
-/** Packages tests may import besides Node built-ins. */
-export const ALLOWED_TEST_PACKAGES: readonly string[] = ["typescript"]
-
-export function findPurityViolations(
-  files: SourceFile[],
-  allowances: PurityAllowance[] = [],
-): PurityViolation[] {
+export function findPurityViolations(files: readonly SourceFile[], options: PurityScanOptions = {}): PurityViolation[] {
+  const allowedPackages = options.allowedPackages ?? []
+  const allowedTestPackages = options.allowedTestPackages ?? []
+  const allowances = options.allowances ?? []
   const violations: PurityViolation[] = []
   for (const { file, source } of files) {
     const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true)
@@ -50,7 +54,7 @@ export function findPurityViolations(
         violations.push({ file, line, rule: "computed-import", detail: `${found.kind} with a computed specifier` })
         continue
       }
-      const verdict = judge(file, found.specifier)
+      const verdict = judge(file, found.specifier, allowedPackages, allowedTestPackages)
       if (verdict) violations.push({ file, line, ...verdict })
     }
   }
@@ -90,7 +94,12 @@ function literalText(node: ts.Node): string | null {
   return ts.isStringLiteralLike(node) ? node.text : null
 }
 
-function judge(file: string, specifier: string): { rule: PurityRule; detail: string } | null {
+function judge(
+  file: string,
+  specifier: string,
+  allowedPackages: readonly string[],
+  allowedTestPackages: readonly string[],
+): { rule: PurityRule; detail: string } | null {
   if (specifier.startsWith(".")) {
     const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier))
     if (resolved.startsWith("..")) {
@@ -99,33 +108,31 @@ function judge(file: string, specifier: string): { rule: PurityRule; detail: str
     return null
   }
   const packageName = packageNameOf(specifier)
-  if (ALLOWED_PACKAGES.includes(packageName)) return null
+  if (allowedPackages.includes(packageName)) return null
   if (isTestFile(file)) {
-    if (isBuiltin(specifier) || ALLOWED_TEST_PACKAGES.includes(packageName)) return null
-    return {
-      rule: "bare-import",
-      detail: `imports "${specifier}"; tests may add only Node built-ins and ${ALLOWED_TEST_PACKAGES.join(", ")}`,
-    }
+    if (isBuiltin(specifier) || allowedTestPackages.includes(packageName)) return null
+    const extra = allowedTestPackages.length > 0 ? ` and ${allowedTestPackages.join(", ")}` : ""
+    return { rule: "bare-import", detail: `imports "${specifier}"; tests may add only Node built-ins${extra}` }
   }
-  return { rule: "bare-import", detail: `imports "${specifier}"; the domain package depends on nothing` }
+  const allowed = allowedPackages.length > 0 ? `only ${allowedPackages.join(", ")}` : "nothing"
+  return { rule: "bare-import", detail: `imports "${specifier}"; shipping code may import ${allowed}` }
 }
 
-function packageNameOf(specifier: string): string {
+/** The package a specifier addresses: `zod/v4` is zod, `@waste/tooling/purity` is @waste/tooling. */
+export function packageNameOf(specifier: string): string {
   const parts = specifier.split("/")
   return specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0]
 }
 
-function isTestFile(file: string): boolean {
+export function isTestFile(file: string): boolean {
   return file.split("/").includes("__tests__")
 }
 
-function isAllowed(violation: PurityViolation, allowances: PurityAllowance[]): boolean {
-  return allowances.some(
-    (a) => a.file === violation.file && (a.rule === undefined || a.rule === violation.rule),
-  )
+function isAllowed(violation: PurityViolation, allowances: readonly PurityAllowance[]): boolean {
+  return allowances.some((a) => a.file === violation.file && (a.rule === undefined || a.rule === violation.rule))
 }
 
-/** Every file under rootDir, whatever its extension, relative posix paths. */
+/** Every file under rootDir, whatever its extension, relative posix paths, sorted. */
 export function readSources(rootDir: string): SourceFile[] {
   const files: SourceFile[] = []
   const walk = (dir: string) => {
@@ -143,4 +150,19 @@ export function readSources(rootDir: string): SourceFile[] {
   }
   walk(rootDir)
   return files
+}
+
+/** Every `__tests__` directory under rootDir, relative posix paths, sorted. */
+export function testDirectories(rootDir: string): string[] {
+  const dirs: string[] = []
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir).sort()) {
+      const full = path.join(dir, entry)
+      if (!statSync(full).isDirectory()) continue
+      if (entry === "__tests__") dirs.push(path.relative(rootDir, full).split(path.sep).join("/"))
+      else walk(full)
+    }
+  }
+  walk(rootDir)
+  return dirs
 }
