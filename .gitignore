@@ -1,14 +1,14 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
+node_modules/
 
 # next.js
-/.next/
-/out/
+.next/
+out/
 
 # production
-/build
+build/
 
 # debug
 npm-debug.log*
@@ -40,9 +40,9 @@ next-env.d.ts
 .DS_Store
 
 # Playwright
-/test-results/
-/playwright-report/
-/.playwright-cli/
+test-results/
+playwright-report/
+.playwright-cli/
 
 # Turborepo
 .turbo/
