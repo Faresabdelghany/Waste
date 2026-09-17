@@ -16,7 +16,7 @@ This repository is a **UI-only prototype** of the  operations platform, built wi
 - **Tailwind CSS v4**
 - **shadcn/ui + Radix UI primitives**
 
-There is no backend, API, or real authentication. All data is fixture data in `lib/data/`, merged with user-created records in client-side stores persisted to `localStorage`. The goal is to explore and validate the product's information architecture, workflows, and UI patterns before backend integration.
+There is no database or real authentication yet. All data is fixture data in `lib/data/`, merged with user-created records in client-side stores persisted to `localStorage`; `apps/api` is a Hono scaffold that serves only its health and its OpenAPI document. The goal is to explore and validate the product's information architecture, workflows, and UI patterns before backend integration.
 
 ## Workspaces
 

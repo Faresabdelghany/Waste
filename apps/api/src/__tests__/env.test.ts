@@ -20,6 +20,18 @@ describe("parseEnv", () => {
     assert.deepEqual(parseEnv({ PATH: "/usr/bin", HOME: "/home/api", PORT: "1" }), { HOST: "127.0.0.1", PORT: 1 })
   })
 
+  test("accepts an IP address or a host name for HOST", () => {
+    for (const value of ["0.0.0.0", "::", "::1", "localhost", "api.internal", "waste_api"]) {
+      assert.equal(parseEnv({ HOST: value }).HOST, value)
+    }
+  })
+
+  test("refuses a HOST with whitespace, brackets, a scheme or an IPv6 zone id, and names the variable", () => {
+    for (const value of [" ", "127.0.0.1 ", "[::1]", "http://0.0.0.0", "fe80::1%lo0"]) {
+      assert.throws(() => parseEnv({ HOST: value }), (error: unknown) => error instanceof Error && /HOST/.test(error.message), value)
+    }
+  })
+
   test("refuses a port that is not a whole number in 1..65535 and names the variable", () => {
     for (const value of ["0", "65536", "abc", "80.5", " 80", "+80", "0x50"]) {
       assert.throws(() => parseEnv({ PORT: value }), (error: unknown) => error instanceof Error && /PORT/.test(error.message), value)

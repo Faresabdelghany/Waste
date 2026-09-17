@@ -4,6 +4,7 @@ import { describe, test } from "node:test"
 import { Validator } from "@seriousme/openapi-schema-validator"
 import { HealthResponse } from "@waste/contracts/health"
 
+import manifest from "../../package.json" with { type: "json" }
 import { createApp } from "../app"
 
 const at = new Date("2026-09-17T13:41:00Z")
@@ -46,7 +47,7 @@ describe("GET /openapi.json", () => {
     const document = (await response.json()) as Spec
     assert.equal(document.openapi, "3.1.0")
     assert.equal(document.info.title, "WasteHero API")
-    assert.match(document.info.version, /^\d+\.\d+\.\d+$/)
+    assert.equal(document.info.version, manifest.version)
     const result = await new Validator().validate(document)
     assert.equal(result.valid, true, JSON.stringify(result.errors))
   })
