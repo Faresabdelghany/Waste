@@ -20,6 +20,10 @@ _Avoid_: Company manager, company owner, master user
 An explicit grant that permits a company user to work within one or more of that company's projects.
 _Avoid_: Company membership, active project
 
+**Service Provider Access**:
+An explicit grant that permits a service provider's user to work within the Service Areas currently assigned to that provider, for the operations the grant's role allows. It originates from the Service Area relationship, never from company membership.
+_Avoid_: Project access (for provider users), contractor login, company membership
+
 **Customer**:
 A person or organization that receives or finances a service.
 _Avoid_: Property, payer, account
@@ -62,8 +66,16 @@ _Avoid_: Container type, stock movement, inventory quantity, generic asset
 An umbrella navigation term for physical-resource registries; it is not a separate container lifecycle entity.
 _Avoid_: Container when referring to a specific physical bin, tank, or unit
 
+**Container Service Placement**:
+The effective-dated record, owned by the Registry, of where a Container serves: the property or shared collection point, the agreement, the product, and the waste fraction. A Container has at most one placement valid at a time.
+_Avoid_: Installation record, container location, container address
+
+**Container Asset State**:
+The Container's current lifecycle position — in warehouse, in service, in maintenance, or retired — projected from its Stock Movements and never edited directly. Entering service and creating a Service Placement are one action.
+_Avoid_: Container status, location field, two Container aggregates
+
 **Vehicle**:
-A powered or towed fleet resource with capacity, compatibility, ownership, and availability used to execute collection work.
+A powered or towed fleet resource with one or more compartments, each with a capacity for one or more waste fractions, plus compatibility, ownership, and availability, used to execute collection work.
 _Avoid_: Route, vehicle allocation, actual assignment
 
 **Driver**:
@@ -129,12 +141,16 @@ The driver, vehicle, trailer, depot, or service provider that performed the rout
 _Avoid_: Planned assignment
 
 **Pickup**:
-One stop-level service action generated inside a dated Route. It exists from planning through execution, and its outcome and proof are recorded on that same Pickup.
+One stop-level service action generated inside a dated Route. It exists from planning through execution, and its outcome and proof are recorded against that same Pickup.
 _Avoid_: Pickup history, separate service event, property, route
 
 **Stop**:
 The route-line presentation of a Pickup — one position (#) within a dated Route's stop list. Presentation only: the Pickup remains the persisted record. Stops exist only once routes are generated; Stop Matching Rule matches are a preview and are never presented as Stops.
 _Avoid_: Pickup (as the stored record), matched container, stop preview
+
+**Fact**:
+A presentation-only label-and-value line shown on a record in the prototype. The platform stores no Facts: their content lives in typed fields, status, Proof of Service, and Unload records.
+_Avoid_: Attribute (as a stored field), event, proof of service
 
 **Session**:
 A driver-app work session on an assigned route, tracking the driver's device state, connectivity, queued actions, and proof progress from assignment to completion.
@@ -155,6 +171,10 @@ _Avoid_: Save, publish draft
 **Proof of Service**:
 Evidence that work occurred, such as time, GPS, photo, weight, signature, or driver event.
 _Avoid_: Route status, customer note
+
+**Unload**:
+A recorded event on a dated Route at an Unloading Station in which the vehicle disposes of some or all of its collected load, with weight or disposal evidence. It is neither a Pickup nor a stop's Proof of Service; a planned unload visit belongs to a Plan.
+_Avoid_: Pickup, proof of service, tip, dump
 
 ## Resolution and finance
 
