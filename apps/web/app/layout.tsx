@@ -13,6 +13,11 @@ import { AssetManagementStoreProvider } from "@/components/settings/asset-manage
 import { CommercialRegistriesStoreProvider } from "@/components/settings/commercial-registries-store"
 import "./globals.css"
 
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
+
 const geist = Geist({
   subsets: ["latin"],
   variable: "--font-geist-sans",
