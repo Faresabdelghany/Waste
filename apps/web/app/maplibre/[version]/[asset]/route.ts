@@ -32,7 +32,9 @@ export async function GET(
     return new NextResponse("Not found", { status: 404 })
   }
   try {
-    const body = await readFile(path.join(distDir, asset))
+    // Read as text: a Buffer is no longer a valid Response body under
+    // TypeScript 5.9 typings, and the worker is a UTF-8 JavaScript file anyway.
+    const body = await readFile(path.join(distDir, asset), "utf8")
     return new NextResponse(body, {
       headers: {
         "Content-Type": "text/javascript; charset=utf-8",
