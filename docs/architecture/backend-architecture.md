@@ -82,7 +82,7 @@ These are architectural constraints, not implementation preferences. Each has an
 ## Build order
 
 1. **Now, in parallel with everything:** request the Adressevælger token from Klimadatastyrelsen and a Dataforsyningen token; snapshot municipality and postcode GeoJSON from DAWA before 2026-10-01.
-2. **Monorepo.** This app moves to `apps/web`. The pure logic in `lib/route-schemes` and `lib/map-planning` moves to `packages/domain` with its tests. Zod contracts generated from the form schemas into `packages/contracts`.
+2. **Monorepo.** Done 2026-09-17. This app is `apps/web`; the pure logic of `lib/route-schemes` and `lib/map-planning` is `packages/domain`, with its tests and a mechanical purity gate (`packages/tooling`, development-only) that allows it no dependency and no browser global; `packages/contracts` holds the shared wire primitives on zod 4 (ids, dates, GeoJSON, pagination, health); `apps/api` is a Hono scaffold serving `/healthz` and its OpenAPI 3.1 document. The module contracts derived from the form schemas were not built here: they come with step 3, as their tables are designed.
 3. **Organisation & Access and Registry schema.** Effective dating, geometry types, Supabase Auth with the access token hook, grant tables seeded from the demo accounts and role matrix.
 4. **Frontend adapter.** A server-backed implementation behind the record store's `getRecords` and `upsertRecord`, switched module by module. Fixtures become seed data.
 5. **Planning and the generation worker.** Nightly cron plus on-demand, Valhalla for legs.
