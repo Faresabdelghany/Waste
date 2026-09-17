@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { worldPoint, type LngLat } from "../geo"
+import { worldPoint, type LngLat } from "@waste/domain/map-planning/geo"
 import {
   ROAD_GEOMETRY_CACHE_MAX,
   chevronsAlong,

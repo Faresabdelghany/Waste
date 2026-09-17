@@ -1,23 +1,15 @@
-// What a map selection means (2026-09-16): its fraction summary, the rows
-// its Containers list shows, the containers a fraction row stands for, and
+// What a map selection means (2026-09-16): the rows its
+// Containers list shows, the containers a fraction row stands for, and
 // the Guided Setup draft it seeds — only what every selected container
 // agrees on, so the wizard never inherits a guess. The Selected area panel's
 // numbers live in statistics.ts. Pure data logic.
 
-import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
+import type { GuidedSchemeData } from "../route-schemes/quick-create"
 import type { LngLat } from "./geo"
 import type { MapPoint } from "./points"
-import { rankFractions } from "./points"
-
-export type SelectionSummary = {
-  containers: number
-  properties: number
-  /** [fraction, container count], most frequent first. */
-  byFraction: Array<[string, number]>
-}
 
 /** The selected points. */
-export function selectedPoints(
+function selectedPoints(
   points: readonly MapPoint[],
   selectedIds: ReadonlySet<string>,
 ): MapPoint[] {
@@ -37,27 +29,6 @@ export function selectedContainerRows(
 /** Every container at the given points that carries the fraction — what a fraction row highlights. */
 export function containerIdsWithFraction(points: readonly MapPoint[], fraction: string): string[] {
   return points.filter((point) => point.fractions.includes(fraction)).flatMap((point) => point.containerIds)
-}
-
-export function selectionSummary(
-  points: readonly MapPoint[],
-  selectedIds: ReadonlySet<string>,
-): SelectionSummary {
-  const selected = selectedPoints(points, selectedIds)
-  const counts = new Map<string, number>()
-  let containers = 0
-  for (const point of selected) {
-    containers += point.containerIds.length
-    for (const fraction of point.fractions) {
-      counts.set(fraction, (counts.get(fraction) ?? 0) + point.containerIds.length)
-    }
-  }
-  const ranked = rankFractions(selected.map((point) => point.fractions))
-  return {
-    containers,
-    properties: new Set(selected.map((point) => point.propertyKey)).size,
-    byFraction: ranked.map((fraction) => [fraction, counts.get(fraction) ?? 0]),
-  }
 }
 
 /** The one value everything agrees on, or undefined. */

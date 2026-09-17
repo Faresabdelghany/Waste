@@ -11,9 +11,9 @@
 // that address when its street is in the gazetteer. Cancelled routes are
 // never counted. Pure data logic.
 
-import type { BusinessRecord } from "../data/business-modules"
-import { isSoftDeleted } from "@waste/domain/record-visibility"
-import { isIsoDate } from "@waste/domain/route-schemes/recurrence"
+import type { BusinessRecord } from "../prototype-record"
+import { isSoftDeleted } from "../record-visibility"
+import { isIsoDate } from "../route-schemes/recurrence"
 import type { LngLat } from "./geo"
 import { containerLocation, knownAddressLocation } from "./positions"
 import { parseDisplayDate } from "./schedule"
@@ -58,7 +58,6 @@ export type AreaRoute = {
   /** The record's own stop count ("42 stops") first, its pickups second. */
   stopCount: number
   /** Where "Open route" goes. */
-  href: string
 }
 
 export type AreaRoutes = {
@@ -69,9 +68,6 @@ export type AreaRoutes = {
   /** Awaiting first, then in progress, then completed; by date within a bucket. */
   routes: AreaRoute[]
 }
-
-/** Where dated Routes live — the record link the map card opens. */
-export const ROUTES_MODULE = { workspaceId: "route-studio", moduleId: "routes" } as const
 
 /** Line colour per status bucket (amber, blue, emerald — the panel's dots). */
 export const ROUTE_BUCKET_COLORS: Readonly<Record<RouteBucket, string>> = {
@@ -99,9 +95,6 @@ export function routeBucket(status: string): RouteBucket | null {
   const key = lower(status)
   return BUCKETS.find(([, statuses]) => statuses.has(key))?.[0] ?? null
 }
-
-export const routeHref = (routeId: string) =>
-  `/${ROUTES_MODULE.workspaceId}?module=${ROUTES_MODULE.moduleId}&record=${encodeURIComponent(routeId)}`
 
 function routeDate(route: BusinessRecord): string | null {
   const typed = clean(route.submittedValues?.actualDate) ?? clean(route.submittedValues?.serviceDate)
@@ -245,7 +238,6 @@ function toAreaRoute({ route, bucket, pickups, stops: linkedStops }: LinkedRoute
     driver: clean(route.facts.Driver) ?? null,
     timeWindow: clean(route.facts["Time window"]) ?? null,
     stopCount: statedStopCount(route) ?? pickups.length,
-    href: routeHref(route.id),
   }
 }
 

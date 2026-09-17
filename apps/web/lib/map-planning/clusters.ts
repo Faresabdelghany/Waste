@@ -5,8 +5,8 @@
 // picture. Pure data logic — the map component only renders the result.
 
 import { avalancheHash } from "@waste/domain/route-schemes/hash"
-import { worldPoint, type LngLat, type WorldPoint } from "./geo"
-import { rankFractions, type MapPoint } from "./points"
+import { worldPoint, type LngLat, type WorldPoint } from "@waste/domain/map-planning/geo"
+import { rankFractions, type MapPoint } from "@waste/domain/map-planning/points"
 
 export type MapCluster = {
   /** The point's own id for a lone point; a stable hash of the member ids otherwise. */

@@ -9,8 +9,8 @@ import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { Cube, MagnifyingGlass, MapPin, MapTrifold } from "@phosphor-icons/react/dist/ssr"
 
 import { Input } from "@/components/ui/input"
-import type { PlanningAreaLayer } from "@/lib/map-planning/areas"
-import type { MapPoint } from "@/lib/map-planning/points"
+import type { PlanningAreaLayer } from "@waste/domain/map-planning/areas"
+import type { MapPoint } from "@waste/domain/map-planning/points"
 import { searchMap, type SearchHit, type SearchHitKind } from "@/lib/map-planning/search"
 import { cn } from "@/lib/utils"
 

@@ -2,8 +2,8 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { BusinessRecord } from "../../data/business-modules"
-import type { PlanningAreaLayer } from "../areas"
-import type { MapPoint } from "../points"
+import type { PlanningAreaLayer } from "@waste/domain/map-planning/areas"
+import type { MapPoint } from "@waste/domain/map-planning/points"
 import { searchMap } from "../search"
 
 function record(id: string): BusinessRecord {

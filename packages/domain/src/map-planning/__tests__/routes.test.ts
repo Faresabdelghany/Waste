@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import type { BusinessRecord } from "../../data/business-modules"
+import type { BusinessRecord } from "../../prototype-record"
 import { ROUTE_BUCKET_COLORS, routesInSelection, routesInWindow } from "../routes"
 
 function record(id: string, facts: Record<string, string> = {}, extra: Partial<BusinessRecord> = {}): BusinessRecord {
@@ -109,7 +109,6 @@ describe("route details", () => {
     assert.equal(fixture.driver, "Mads Jensen")
     assert.equal(fixture.timeWindow, "06:10–14:18")
     assert.equal(fixture.stopCount, 42, "the record's own stop count wins over the partial fixture pickups")
-    assert.equal(fixture.href, "/route-studio?module=routes&record=route-day-1044")
     const generated = summary.routes.find((route) => route.id === "route-gen-1")!
     assert.equal(generated.vehicle, null)
     assert.equal(generated.stopCount, 3, "a generated route counts its pickups")

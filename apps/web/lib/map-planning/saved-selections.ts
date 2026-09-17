@@ -10,9 +10,9 @@ import {
   emptyBusinessFilters,
   type BusinessFilters,
 } from "@waste/domain/business-filters"
-import type { LngLat } from "./geo"
-import { isCollectionWindow, type CollectionWindow } from "./schedule"
-import type { SelectionShape } from "./selection"
+import type { LngLat } from "@waste/domain/map-planning/geo"
+import { isCollectionWindow, type CollectionWindow } from "@waste/domain/map-planning/schedule"
+import type { SelectionShape } from "@waste/domain/map-planning/selection"
 
 export const SAVED_SELECTIONS_STORAGE_KEY = "wastehero-map-selections-v1"
 

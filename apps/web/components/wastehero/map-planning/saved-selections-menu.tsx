@@ -25,8 +25,8 @@ import {
   serializeSavedSelections,
   type SavedSelection,
 } from "@/lib/map-planning/saved-selections"
-import { COLLECTION_WINDOW_LABELS, type CollectionWindow } from "@/lib/map-planning/schedule"
-import type { SelectionShape } from "@/lib/map-planning/selection"
+import { COLLECTION_WINDOW_LABELS, type CollectionWindow } from "@waste/domain/map-planning/schedule"
+import type { SelectionShape } from "@waste/domain/map-planning/selection"
 import { cn } from "@/lib/utils"
 
 export type SavedSelectionsMenuProps = {

@@ -12,7 +12,7 @@ import { Pause, Play, X } from "@phosphor-icons/react/dist/ssr"
 import { Button } from "@/components/ui/button"
 import { formatShortDate } from "@/lib/map-planning/format"
 import { formatDelay, stopDelay } from "@/lib/map-planning/playback"
-import type { AreaRoute } from "@/lib/map-planning/routes"
+import type { AreaRoute } from "@waste/domain/map-planning/routes"
 import { cn } from "@/lib/utils"
 
 import { StatusBadge } from "./status-badge"

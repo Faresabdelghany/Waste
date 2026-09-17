@@ -8,7 +8,7 @@
 // switch that draws them on the map — and what can happen to it: edit the
 // shape, hand it to the Guided Setup wizard, or clear it. shadcn Accordion
 // sections so each block folds away; every number comes from
-// lib/map-planning/statistics.ts, coverage.ts, and routes.ts at render time.
+// @waste/domain/map-planning/{statistics,coverage,routes} at render time.
 
 import { CaretDown, Handshake, MapTrifold, PencilSimple, Plus, X, Play } from "@phosphor-icons/react/dist/ssr"
 
@@ -21,14 +21,14 @@ import {
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { NO_FRACTION_COLOR } from "@/lib/map-planning/colors"
-import type { ServiceAreaCoverage } from "@/lib/map-planning/coverage"
-import { UNCOVERED_COLOR, type CoverageCounts } from "@/lib/map-planning/coverage-gaps"
+import type { ServiceAreaCoverage } from "@waste/domain/map-planning/coverage"
+import { UNCOVERED_COLOR, type CoverageCounts } from "@waste/domain/map-planning/coverage-gaps"
 import { formatArea, formatShortDate, formatVolume, formatWeight } from "@/lib/map-planning/format"
-import { polygonAreaSquareMetres } from "@/lib/map-planning/geo"
-import type { MapPoint } from "@/lib/map-planning/points"
-import type { AreaRoute, AreaRoutes, RouteBucket } from "@/lib/map-planning/routes"
-import { containerIdsWithFraction, type SelectionShape } from "@/lib/map-planning/selection"
-import type { SelectionStatistics } from "@/lib/map-planning/statistics"
+import { polygonAreaSquareMetres } from "@waste/domain/map-planning/geo"
+import type { MapPoint } from "@waste/domain/map-planning/points"
+import type { AreaRoute, AreaRoutes, RouteBucket } from "@waste/domain/map-planning/routes"
+import { containerIdsWithFraction, type SelectionShape } from "@waste/domain/map-planning/selection"
+import type { SelectionStatistics } from "@waste/domain/map-planning/statistics"
 import { cn } from "@/lib/utils"
 
 import { StatusBadge } from "./status-badge"

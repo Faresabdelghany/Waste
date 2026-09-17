@@ -4,7 +4,7 @@
 // leg by distance; without one it moves straight between stops. Also the
 // clock arithmetic the caption shows (planned vs actual, "+9 min"). Pure.
 
-import type { LngLat } from "./geo"
+import type { LngLat } from "@waste/domain/map-planning/geo"
 import type { RoadGeometry } from "./road-geometry"
 
 /** How far a second of playback at 1× moves the vehicle, in stops. */

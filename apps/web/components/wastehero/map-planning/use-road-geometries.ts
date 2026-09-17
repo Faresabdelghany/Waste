@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 
-import type { LngLat } from "@/lib/map-planning/geo"
+import type { LngLat } from "@waste/domain/map-planning/geo"
 import {
   ROAD_GEOMETRY_STORAGE_KEY,
   fetchRoadGeometry,
@@ -20,7 +20,7 @@ import {
   serializeRoadGeometryCache,
   type RoadGeometry,
 } from "@/lib/map-planning/road-geometry"
-import type { AreaRoute } from "@/lib/map-planning/routes"
+import type { AreaRoute } from "@waste/domain/map-planning/routes"
 
 export type RoadGeometryState =
   | { status: "pending" }

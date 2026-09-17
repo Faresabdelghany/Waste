@@ -7,14 +7,14 @@
 // orphans: containers needing service that sit inside the hull of both
 // schemes' located stops yet belong to neither. Pure data logic.
 
-import type { BusinessRecord } from "../data/business-modules"
-import { effectiveStopPlans } from "@waste/domain/route-schemes/groups"
+import type { BusinessRecord } from "../prototype-record"
+import { effectiveStopPlans } from "../route-schemes/groups"
 import {
   effectiveSchemeStatus,
   schemesInPlanning,
   type SchemeLifecycleStatus,
-} from "@waste/domain/route-schemes/lifecycle"
-import { recurrenceFromValues } from "@waste/domain/route-schemes/recurrence"
+} from "../route-schemes/lifecycle"
+import { recurrenceFromValues } from "../route-schemes/recurrence"
 import { convexHull, pointInPolygon, type LngLat } from "./geo"
 import { containerLocation } from "./positions"
 

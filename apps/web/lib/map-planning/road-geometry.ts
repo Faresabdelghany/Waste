@@ -8,7 +8,7 @@
 // which takes its fetch — the tests hand it a fake, the hook the real one.
 
 import { avalancheHash } from "@waste/domain/route-schemes/hash"
-import { simplifyPath, worldPoint, type LngLat } from "./geo"
+import { simplifyPath, worldPoint, type LngLat } from "@waste/domain/map-planning/geo"
 
 export const OSRM_BASE_URL = "https://router.project-osrm.org"
 export const ROAD_GEOMETRY_STORAGE_KEY = "wastehero-map-road-geometry-v1"

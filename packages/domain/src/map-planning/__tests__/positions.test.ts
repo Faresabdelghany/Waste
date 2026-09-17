@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import type { BusinessRecord } from "../../data/business-modules"
+import type { BusinessRecord } from "../../prototype-record"
 import {
   COPENHAGEN_BOUNDS,
   COPENHAGEN_CENTER,
