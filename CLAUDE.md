@@ -10,7 +10,7 @@ The frontend of a new WasteHero operations platform (waste/recycling logistics),
 
 - `pnpm dev` — dev server at http://localhost:3000
 - `pnpm build` / `pnpm start` — production build / serve
-- `npx tsc --noEmit` — type check. `next.config.mjs` sets `typescript.ignoreBuildErrors: true`, so `pnpm build` does NOT catch type errors; run tsc explicitly.
+- `pnpm typecheck` — type check with TypeScript 7's native `tsc` (the `@typescript/native` alias). The `typescript` package itself is TypeScript 6 (`@typescript/typescript6`), kept because ESLint's TypeScript parser needs the JavaScript compiler API that 7 no longer ships; `tsc6` runs it for parity. Both aliases are declared at the root and in `apps/web`. `next.config.mjs` sets `typescript.ignoreBuildErrors: true`, so `pnpm build` does NOT catch type errors; run the type check explicitly.
 - `pnpm lint` — ESLint 9 with the Next rule set, one flat config at the repository root (`eslint.config.mjs`), run per package through turbo. Errors fail CI; warnings do not. Every rule that is switched off or downgraded there carries the reason in a comment.
 - `pnpm test` — unit tests on Node's built-in runner through tsx (`lib/**/__tests__/*.test.ts`, 33 files, 227 tests as of 2026-09-17).
 - `pnpm test:e2e` — Playwright against an already running dev server at http://localhost:3000 (no managed webServer; start `pnpm dev` yourself). `pnpm typecheck:e2e` type-checks the e2e folder, which the root tsconfig excludes.
@@ -54,6 +54,13 @@ The original portfolio dashboard still exists alongside the WasteHero prototype:
 ### Domain language
 
 `CONTEXT.md` is the canonical glossary. Every term lists _Avoid_ synonyms — use the exact terms in UI copy and identifiers (e.g. Agreement vs Subscription, Route Scheme vs Route, Warehouse vs Depot, Ticket vs Alert).
+
+### Next.js configuration (`apps/web/next.config.mjs`, 2026-09-17)
+
+- **React Compiler** is on through Turbopack's Rust port (`reactCompiler`, `experimental.turbopackRustReactCompiler`). Components that break the hooks rules are skipped by the compiler, so the `react-hooks/*` lint warnings mark code the compiler cannot optimise.
+- **Cache Components and Partial Prefetching** are on (`cacheComponents`, `partialPrefetching`). Every `page.tsx` and the root layout export `instant = false` (added by the `cache-components-instant-false` codemod), so routes may still block on request data; removing an opt-out means making that route's dynamic parts stream behind Suspense. Both workspace shells wrap `BusinessWorkspace` in `<Suspense>` because it reads `useSearchParams`, which is request data under this model. Routes stay mounted across client navigations (React `<Activity>`), so component state persists when the user navigates back.
+- **`experimental.useOffline`** keeps failed navigations and Server Actions pending until the connection returns instead of throwing.
+- `next dev` maintains `apps/web/AGENTS.md` and `apps/web/CLAUDE.md` (managed block pointing at the bundled Next docs); they are committed on purpose.
 
 ### Docs
 

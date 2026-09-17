@@ -7,6 +7,9 @@
     "isolatedModules": true,
     "resolveJsonModule": true,
     "module": "esnext",
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    // TypeScript 6+ defaults `types` to [] instead of every installed @types
+    // package; Node globals (process, Buffer) are wanted in every project.
+    "types": ["node"]
   }
 }

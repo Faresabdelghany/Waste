@@ -12,10 +12,11 @@
     "test:e2e": "turbo run test:e2e"
   },
   "devDependencies": {
+    "@typescript/native": "npm:typescript@^7.0.2",
     "eslint": "^9.39.5",
     "eslint-config-next": "16.3.5",
     "turbo": "^2.10.13",
-    "typescript": "^5.9.3",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-eslint": "^8.46.0"
   }
 }
