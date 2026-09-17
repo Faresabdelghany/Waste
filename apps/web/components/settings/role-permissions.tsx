@@ -308,6 +308,7 @@ export function RolePermissionsPanel({
   const goToSection = (sectionId: string) => {
     setOpenSections((current) => ({ ...current, [sectionId]: true }))
     setActiveSectionId(sectionId)
+    // eslint-disable-next-line react-hooks/purity -- goToSection only runs from the section buttons' onClick; the rule loses that through the sections.map closure
     spySuppressedUntil.current = Date.now() + 1000
     // Scroll only after the expanded section has painted — a layout shift
     // during a smooth scroll makes the browser abandon it midway.

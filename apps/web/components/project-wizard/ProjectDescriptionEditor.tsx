@@ -55,7 +55,7 @@ import { Plus, StarFour, ArrowsOutSimple } from "@phosphor-icons/react/dist/ssr"
     extensions: [
       StarterKit,
       Placeholder.configure({
-        placeholder: ({ node }: { node: any }) => {
+        placeholder: ({ node }) => {
           if (node.type.name === "heading") {
             return "Whats the title?";
           }
@@ -76,7 +76,7 @@ import { Plus, StarFour, ArrowsOutSimple } from "@phosphor-icons/react/dist/ssr"
     content: value,
     immediatelyRender: false,
     onFocus: () => setIsFocused(true),
-    onUpdate: ({ editor }: { editor: any }) => {
+    onUpdate: ({ editor }) => {
       const text = editor.getText();
       setExistingSections({
         goal: text.includes("Goal:"),

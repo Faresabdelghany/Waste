@@ -3,7 +3,7 @@ import { Lightning, Compass, Check, CaretRight, X } from '@phosphor-icons/react'
 import { Button } from "../../ui/button";
 import { ProjectMode } from "../types";
 
-function Wrapper({ children }: React.PropsWithChildren<{}>) {
+function Wrapper({ children }: React.PropsWithChildren) {
   return (
     <div className="relative shrink-0 size-[24px]">
       <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 24 24">
@@ -13,7 +13,7 @@ function Wrapper({ children }: React.PropsWithChildren<{}>) {
   );
 }
 
-interface ProjectCardProps extends React.PropsWithChildren<{}> {
+interface ProjectCardProps extends React.PropsWithChildren {
   onClick: () => void;
   isSelected: boolean;
 }

@@ -2973,6 +2973,10 @@ export function BusinessWorkspace({
   )
 
   const handleFormSubmit = (values: BusinessFormValues) => {
+    // One clock read per submission, shared by the audit event id and the
+    // generated record names below.
+    // eslint-disable-next-line react-hooks/purity -- submit handler, not render; the rule cannot tell through the dialogs' onSubmit prop
+    const now = Date.now()
     if (!formSchema?.execution) return
 
     if (formSchema.recordKind === "Service provider price indexation") {
@@ -3075,7 +3079,7 @@ export function BusinessWorkspace({
         ],
       }
       const assignmentEvent: AuditEvent = {
-        id: `audit-service-area-assignment-${Date.now()}`,
+        id: `audit-service-area-assignment-${now}`,
         action: "Assign service area",
         actor: actorName,
         at: "Now",
@@ -3271,7 +3275,6 @@ export function BusinessWorkspace({
       facts["Invited by"] = actorName
     }
 
-    const now = Date.now()
     const nameField = formSchema.nameField
       ? fieldById.get(formSchema.nameField)
       : undefined
@@ -3306,7 +3309,7 @@ export function BusinessWorkspace({
           `RC-${String(now).slice(-4)}`
         : formSchema.mode === "action"
         ? `${formSchema.recordKind} · ${nameValue || "submitted"}`
-        : nameValue || `${formSchema.recordKind} · ${Date.now()}`
+        : nameValue || `${formSchema.recordKind} · ${now}`
     const projectIds = selectedProjectIds(projectScope, values)
 
     // The generic path stores select-field facts as their display label

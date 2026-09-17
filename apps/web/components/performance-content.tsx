@@ -507,12 +507,14 @@ export function PerformanceContent() {
     const bucketCount = Math.min(6, totalDays)
     const baseBucketSize = Math.floor(totalDays / bucketCount)
     const remainder = totalDays % bucketCount
-    let bucketOffset = 0
     const throughputBuckets = Array.from({ length: bucketCount }, (_, index) => {
       const size = baseBucketSize + (index < remainder ? 1 : 0)
-      const start = addDays(rangeStart, bucketOffset)
-      const end = addDays(rangeStart, bucketOffset + size - 1)
-      bucketOffset += size
+      // The first `remainder` buckets are one day longer, so bucket `index`
+      // starts `index * baseBucketSize` days in plus one day per longer bucket
+      // before it.
+      const offset = index * baseBucketSize + Math.min(index, remainder)
+      const start = addDays(rangeStart, offset)
+      const end = addDays(rangeStart, offset + size - 1)
       return { start, end, count: 0 }
     })
     const bucketEnds = throughputBuckets.map((bucket) => diffInDays(rangeStart, bucket.end))

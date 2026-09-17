@@ -6,7 +6,7 @@ import type { BacklogSummary } from "@/lib/data/project-details"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { StatRow } from "@/components/projects/StatRow"
-import { PriorityGlyphIcon } from "@/components/priority-badge"
+import { PriorityGlyphIcon, type PriorityLevel } from "@/components/priority-badge"
 import { AvatarGroup } from "@/components/projects/AvatarGroup"
 
 type BacklogCardProps = {
@@ -37,7 +37,7 @@ export function BacklogCard({ backlog }: BacklogCardProps) {
           icon={<CircleDashed className="h-4 w-4" />}
         />
         <StatRow label="Group" value={<span className="px-2">{backlog.groupLabel}</span>} icon={<Cube className="h-4 w-4" />} />
-        <StatRow label="Priority" value={<span className="px-2">{backlog.priorityLabel}</span>} icon={<PriorityGlyphIcon level={backlog.priorityLabel.toLowerCase() as any} size="sm" />} />
+        <StatRow label="Priority" value={<span className="px-2">{backlog.priorityLabel}</span>} icon={<PriorityGlyphIcon level={backlog.priorityLabel.toLowerCase() as PriorityLevel} size="sm" />} />
         <StatRow label="Label" value={<Badge variant="secondary" className="border border-border">{backlog.labelBadge}</Badge>} icon={<Tag className="h-4 w-4" />} />
         <StatRow label="PIC" value={<div className="px-2"><AvatarGroup users={backlog.picUsers} /></div>} icon={<User className="h-4 w-4" />} />
         {backlog.supportUsers && backlog.supportUsers.length ? (
