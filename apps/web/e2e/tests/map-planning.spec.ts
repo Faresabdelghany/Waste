@@ -34,7 +34,7 @@ async function selectRectangle(page: Page): Promise<void> {
   await expect(overlay).toHaveCount(0)
 }
 
-/** The app's own local-date "today" (@waste/domain/route-schemes/recurrence.ts todayIso). */
+/** The app's own local-date "today" (@waste/domain/route-schemes/recurrence todayIso). */
 const localToday = () => {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`

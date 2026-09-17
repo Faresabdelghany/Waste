@@ -1,10 +1,23 @@
 import { serviceFrequencyFactValue } from "@waste/domain/service-frequencies"
-import type { BusinessRecord, WorkspaceId } from "@waste/domain/prototype-record"
+import type { BusinessRecord } from "@waste/domain/prototype-record"
 
 // The prototype record model lives in @waste/domain (src/prototype-record.ts)
 // so the domain package needs nothing from this registry. Re-exported here so
-// the web imports of these two names did not have to change.
-export type { BusinessRecord, WorkspaceId }
+// the web imports of the name did not have to change.
+export type { BusinessRecord }
+
+export type WorkspaceId =
+  | "operate"
+  | "plan"
+  | "route-studio"
+  | "fleet"
+  | "customers"
+  | "resources"
+  | "service-providers"
+  | "commercial"
+  | "improve"
+  | "configure"
+  | "control-center"
 
 export const FIXTURE_COMPANY_ID = "company-wastehero-dk"
 
@@ -2065,7 +2078,7 @@ const plan: WorkspaceDefinition = {
       description: "Effective-dated recurring templates for generating executable routes.",
       entityLabel: "Route scheme",
       // Rendered as the derived "area/project · service days" context (issue
-      // #30, D15) — see @waste/domain/route-schemes/scheme-list.ts.
+      // #30, D15) — see @waste/domain/route-schemes/scheme-list.
       contextLabel: "Project · service days",
       valueLabel: "Demand",
       primaryAction: "New route scheme",
@@ -2201,7 +2214,7 @@ const plan: WorkspaceDefinition = {
       primaryAction: "New calendar",
       // No KPI tiles above the calendars list; the table cells derive from
       // real calendar records at render time (issue #27) — see
-      // @waste/domain/route-schemes/calendar-list.ts.
+      // @waste/domain/route-schemes/calendar-list.
       metrics: [],
       lifecycle: ["Draft", "Active", "Superseded", "Archived"],
       rules: [

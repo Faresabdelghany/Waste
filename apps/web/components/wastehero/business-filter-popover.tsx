@@ -43,7 +43,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-// The filter shape lives in the pure lib (@waste/domain/business-filters.ts) so
+// The filter shape lives in the pure lib (@waste/domain/business-filters) so
 // non-workspace surfaces filter through the same model; re-exported for the
 // existing component importers.
 export type { BusinessFilters }

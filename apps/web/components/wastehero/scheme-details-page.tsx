@@ -54,12 +54,12 @@ import {
 import { schemeGroupPlans } from "@waste/domain/route-schemes/groups"
 import { schemeHolidayPolicy, schemeProjectId } from "@waste/domain/route-schemes/holidays"
 import {
-  HOLIDAY_SETTINGS_HREF,
   NO_HOLIDAY_LIST_LABEL,
   resolveProjectCalendar,
   weekendLabel,
   type ProjectCalendar,
 } from "@waste/domain/route-schemes/project-calendar"
+import { HOLIDAY_SETTINGS_HREF } from "@/lib/data/business-links"
 import { HOLIDAY_POLICY_LABELS, type HolidayPolicy } from "@waste/domain/route-schemes/occurrences"
 import { stopRuleSummary } from "@waste/domain/route-schemes/matching"
 import { isPlanAheadEnabled, setPlanAhead } from "@waste/domain/route-schemes/plan-ahead"

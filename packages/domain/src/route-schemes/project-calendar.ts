@@ -26,9 +26,6 @@ import { parseServiceDays, type ServiceDay } from "./recurrence"
 /** The weekend a project takes when it has none set. */
 export const DEFAULT_WEEKEND: readonly ServiceDay[] = ["saturday", "sunday"]
 
-/** Where the project calendar is managed: Settings › Operations setup. */
-export const HOLIDAY_SETTINGS_HREF = "/settings?pane=operations-setup"
-
 /** The list name shown when the project has no holiday list. */
 export const NO_HOLIDAY_LIST_LABEL = "None on this project"
 

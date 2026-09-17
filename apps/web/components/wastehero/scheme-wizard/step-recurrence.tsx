@@ -21,7 +21,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { HOLIDAY_SETTINGS_HREF, projectCalendarLabel } from "@waste/domain/route-schemes/project-calendar"
+import { HOLIDAY_SETTINGS_HREF } from "@/lib/data/business-links"
+import { projectCalendarLabel } from "@waste/domain/route-schemes/project-calendar"
 import {
   formatClockTime,
   formatOccurrenceDate,

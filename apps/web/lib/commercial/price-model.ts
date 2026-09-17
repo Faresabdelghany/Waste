@@ -101,7 +101,7 @@ export const RATE_FACTS = {
   validUntil: "Valid until", lastIndexed: "Last indexed", lastIndexNote: "Last index note",
 } as const
 // Soft delete marks the record instead of removing it (the shape lives in
-// @waste/domain/record-visibility.ts; commitRecordAction in business-workspace.tsx
+// @waste/domain/record-visibility; commitRecordAction in business-workspace.tsx
 // writes it), so every pricing read path must skip marked records or a
 // deleted row gets counted, adjusted and resurrected. Re-exported for the
 // pricing callers that import everything from this model.

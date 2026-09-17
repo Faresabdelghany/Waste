@@ -1,16 +1,24 @@
-// ADR-0002 made mechanical: everything under packages/domain/src must be
+// ADR-0002 made mechanical. Everything under packages/domain/src must be
 // pure, deterministic logic that bundles into the browser and runs on the
-// server alike. This test fails the build on imports of React, Next,
-// MapLibre, the web app (`@/`, `@waste/web`), the fixture registry
-// (`business-modules`), Node built-ins outside `__tests__/`, relative imports
-// that leave the package, and on browser globals in source text.
+// server alike. Two gates enforce it:
 //
-// The allowances below are the whole exception list. Add to them only with a
-// reason a reviewer can check.
+// 1. The compiler. tsconfig.json gives shipping code `lib: ["esnext"]` and
+//    `types: []`, so window, document, localStorage, fetch, process and
+//    Buffer are not even names there. The last tests below prove that holds.
+// 2. This scanner. The package depends on nothing, so every import in
+//    shipping code must be relative and stay inside src/; tests may add Node
+//    built-ins and the packages listed in purity-scan.ts. Specifiers come
+//    from the TypeScript AST, not from regexes, so comments and strings
+//    cannot fool it and computed `import(x)` is caught as such.
+//
+// ALLOWANCES is the whole exception list. Add to it only with a reason a
+// reviewer can check. It is empty on purpose.
 import assert from "node:assert/strict"
-import { describe, test } from "node:test"
+import { readdirSync, readFileSync, statSync } from "node:fs"
 import path from "node:path"
+import { describe, test } from "node:test"
 import { fileURLToPath } from "node:url"
+import ts from "typescript"
 
 import {
   findPurityViolations,
@@ -20,43 +28,43 @@ import {
 } from "./purity-scan"
 
 const SRC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+const PKG_DIR = path.resolve(SRC_DIR, "..")
 
-const ALLOWANCES: PurityAllowance[] = [
-  {
-    file: "__tests__/purity.test.ts",
-    reason: "holds the banned specimens the scanner is tested against",
-  },
-  {
-    file: "__tests__/purity-scan.ts",
-    reason: "defines the banned patterns as text",
-  },
-]
+const ALLOWANCES: PurityAllowance[] = []
 
 function scan(file: string, source: string, allowances: PurityAllowance[] = []) {
   const files: SourceFile[] = [{ file, source }]
   return findPurityViolations(files, allowances)
 }
 
-describe("findPurityViolations: imports", () => {
-  const forbidden: Array<[label: string, statement: string]> = [
+describe("findPurityViolations: bare imports", () => {
+  const bare: Array<[label: string, statement: string]> = [
     ["react", 'import { useMemo } from "react"'],
-    ["react-dom", 'import { createPortal } from "react-dom"'],
     ["next", 'import { redirect } from "next/navigation"'],
     ["maplibre-gl", 'import maplibregl from "maplibre-gl"'],
-    ["the @/ alias", 'import { x } from "@/lib/data/business-modules"'],
+    ["the @/ alias into apps/web", 'import { x } from "@/lib/data/business-modules"'],
     ["the web app package", 'import { x } from "@waste/web/lib/anything"'],
-    ["the fixture registry by relative path", 'import type { BusinessRecord } from "../data/business-modules"'],
+    ["any other package", 'import { z } from "zod"'],
+    ["a Node built-in", 'import { createHash } from "node:crypto"'],
+    ["a Node built-in without the prefix", 'import { readFileSync } from "fs"'],
+    ["a type-only import", 'import type { FC } from "react"'],
+    ["a re-export", 'export { useMemo } from "react"'],
   ]
-  for (const [label, statement] of forbidden) {
-    test(`flags an import of ${label}`, () => {
+  for (const [label, statement] of bare) {
+    test(`flags ${label} in shipping code`, () => {
       const violations = scan("route-schemes/x.ts", `${statement}\nexport const y = 1\n`)
       assert.equal(violations.length, 1, JSON.stringify(violations))
-      assert.equal(violations[0].rule, "forbidden-import")
+      assert.equal(violations[0].rule, "bare-import")
       assert.equal(violations[0].line, 1)
     })
   }
 
-  test("flags a dynamic import and a require of a forbidden module", () => {
+  test("flags a side-effect import", () => {
+    const violations = scan("x.ts", 'import "maplibre-gl/dist/maplibre-gl.css"\n')
+    assert.deepEqual(violations.map((v) => [v.rule, v.line]), [["bare-import", 1]])
+  })
+
+  test("flags a dynamic import and a require with literal specifiers", () => {
     const source = [
       "export async function load() {",
       '  const nav = await import("next/navigation")',
@@ -64,93 +72,96 @@ describe("findPurityViolations: imports", () => {
       "  return [nav, dom]",
       "}",
     ].join("\n")
-    const violations = scan("x.ts", source)
     assert.deepEqual(
-      violations.map((v) => [v.rule, v.line]),
+      scan("x.ts", source).map((v) => [v.rule, v.line]),
       [
-        ["forbidden-import", 2],
-        ["forbidden-import", 3],
+        ["bare-import", 2],
+        ["bare-import", 3],
       ],
     )
   })
 
-  test("flags a side-effect import of a forbidden module", () => {
-    const violations = scan("x.ts", 'import "maplibre-gl/dist/maplibre-gl.css"\n')
-    assert.equal(violations.length, 1)
-    assert.equal(violations[0].rule, "forbidden-import")
+  test("reports the line of the specifier in a wrapped import", () => {
+    const source = ["import {", "  useMemo,", "} from", '  "react"', "export const y = useMemo"].join("\n")
+    assert.deepEqual(scan("x.ts", source).map((v) => [v.rule, v.line]), [["bare-import", 4]])
   })
 
+  test("ignores import-shaped text in comments and strings", () => {
+    const source = [
+      '// copied from "react" in spirit; see import("next/x") for the idea',
+      "/* import { a } from \"maplibre-gl\" */",
+      'export const label = `from "@/lib"`',
+      'export const other = "require(\\"fs\\")"',
+    ].join("\n")
+    assert.deepEqual(scan("x.ts", source), [])
+  })
+
+  test("accepts Node built-ins and the listed test packages inside __tests__", () => {
+    const source = [
+      'import assert from "node:assert/strict"',
+      'import { test } from "node:test"',
+      'import { isBuiltin } from "module"',
+      'import ts from "typescript"',
+      'import { addDays } from "../recurrence"',
+      "test(\"x\", () => assert.ok([addDays, ts, isBuiltin]))",
+    ].join("\n")
+    assert.deepEqual(scan("route-schemes/__tests__/x.test.ts", source), [])
+  })
+
+  test("flags any other package inside __tests__", () => {
+    const violations = scan("route-schemes/__tests__/x.test.ts", 'import { z } from "zod"\n')
+    assert.deepEqual(violations.map((v) => v.rule), ["bare-import"])
+  })
+})
+
+describe("findPurityViolations: relative imports", () => {
   test("flags a relative import that leaves the package", () => {
     const violations = scan("route-schemes/x.ts", 'import { y } from "../../../apps/web/lib/y"\n')
-    assert.equal(violations.length, 1, JSON.stringify(violations))
-    assert.equal(violations[0].rule, "escapes-package")
+    assert.deepEqual(violations.map((v) => v.rule), ["escapes-package"])
   })
 
-  test("accepts a relative import that stays inside the package", () => {
+  test("flags a relative import that leaves the package from the top level", () => {
+    const violations = scan("x.ts", 'import type { R } from "../../apps/web/lib/data/business-modules"\n')
+    assert.deepEqual(violations.map((v) => v.rule), ["escapes-package"])
+  })
+
+  test("accepts relative imports that stay inside the package", () => {
     const source = [
       'import { isSoftDeleted } from "../record-visibility"',
       'import { addDays } from "./recurrence"',
+      'export type { X } from "./types"',
       "export const z = [isSoftDeleted, addDays]",
     ].join("\n")
     assert.deepEqual(scan("route-schemes/x.ts", source), [])
   })
-
-  test("flags a Node built-in outside __tests__", () => {
-    const violations = scan("hash.ts", 'import { createHash } from "node:crypto"\n')
-    assert.equal(violations.length, 1, JSON.stringify(violations))
-    assert.equal(violations[0].rule, "node-import")
-  })
-
-  test("accepts node:test and node:assert inside __tests__", () => {
-    const source = [
-      'import assert from "node:assert/strict"',
-      'import { test } from "node:test"',
-      'import { addDays } from "../recurrence"',
-      "test(\"x\", () => assert.ok(addDays))",
-    ].join("\n")
-    assert.deepEqual(scan("route-schemes/__tests__/x.test.ts", source), [])
-  })
 })
 
-describe("findPurityViolations: browser globals", () => {
-  const forbidden: Array<[label: string, statement: string]> = [
-    ["window.", "const w = window.innerWidth"],
-    ["document.", "const el = document.getElementById(\"x\")"],
-    ["navigator.", "const lang = navigator.language"],
-    ["localStorage", "const raw = localStorage.getItem(\"k\")"],
-    ["sessionStorage", "sessionStorage.clear()"],
-    ["fetch(", "const res = await fetch(url)"],
-  ]
-  for (const [label, statement] of forbidden) {
-    test(`flags ${label}`, () => {
-      const violations = scan("x.ts", `export const a = 1\n${statement}\n`)
-      assert.equal(violations.length, 1, JSON.stringify(violations))
-      assert.equal(violations[0].rule, "browser-global")
-      assert.equal(violations[0].line, 2)
-    })
-  }
-
-  test("does not flag prose that ends a sentence with the word window", () => {
-    const source = "// Schemes outside the run window. Auto-runs skip them.\nexport const a = 1\n"
-    assert.deepEqual(scan("x.ts", source), [])
+describe("findPurityViolations: computed specifiers", () => {
+  test("flags a dynamic import whose specifier is not a string literal", () => {
+    const source = ["export async function load(name: string) {", "  return import(`./${name}`)", "}"].join("\n")
+    assert.deepEqual(scan("x.ts", source).map((v) => [v.rule, v.line]), [["computed-import", 2]])
   })
 
-  test("does not flag an identifier that merely contains a banned word", () => {
-    const source = "const occurrenceWindow = { from: 1 }\nexport const b = occurrenceWindow.from\n"
+  test("flags a require whose specifier is not a string literal", () => {
+    const source = ["export function load(name: string) {", "  return require(name)", "}"].join("\n")
+    assert.deepEqual(scan("x.ts", source).map((v) => [v.rule, v.line]), [["computed-import", 2]])
+  })
+
+  test("accepts a template literal without substitutions as a plain specifier", () => {
+    const source = "export const p = import(`./recurrence`)\n"
     assert.deepEqual(scan("x.ts", source), [])
   })
 })
 
 describe("findPurityViolations: allowances", () => {
   test("an allowance for a rule suppresses only that rule in that file", () => {
-    const source = 'import { x } from "react"\nconst w = window.innerWidth\n'
-    const allowances: PurityAllowance[] = [{ file: "x.ts", rule: "browser-global", reason: "specimen" }]
-    const violations = scan("x.ts", source, allowances)
-    assert.deepEqual(violations.map((v) => v.rule), ["forbidden-import"])
+    const source = 'import { x } from "react"\nimport { y } from "../../apps/web/y"\n'
+    const allowances: PurityAllowance[] = [{ file: "x.ts", rule: "escapes-package", reason: "specimen" }]
+    assert.deepEqual(scan("x.ts", source, allowances).map((v) => v.rule), ["bare-import"])
   })
 
   test("an allowance without a rule suppresses every rule in that file only", () => {
-    const source = 'import { x } from "react"\nconst w = window.innerWidth\n'
+    const source = 'import { x } from "react"\nimport { y } from "../../apps/web/y"\n'
     const allowances: PurityAllowance[] = [{ file: "x.ts", reason: "specimen" }]
     assert.deepEqual(scan("x.ts", source, allowances), [])
     assert.equal(scan("y.ts", source, allowances).length, 2)
@@ -158,16 +169,110 @@ describe("findPurityViolations: allowances", () => {
 })
 
 describe("packages/domain/src", () => {
-  test("contains only .ts sources the scanner can read", () => {
+  test("holds only .ts files, so nothing escapes the compiler, the linter, or this scan", () => {
     const files = readSources(SRC_DIR)
     assert.ok(files.length > 20, `expected the moved modules, found ${files.length} files`)
-    assert.ok(files.every((f) => f.file.endsWith(".ts")))
     assert.ok(files.some((f) => f.file === "__tests__/purity.test.ts"))
+    const strays = files.filter((f) => !f.file.endsWith(".ts")).map((f) => f.file)
+    assert.deepEqual(strays, [], `only .ts files belong under src/: ${strays.join(", ")}`)
   })
 
-  test("imports nothing from the web app, React, Next, MapLibre, Node, or the browser", () => {
+  test("imports nothing but itself", () => {
     const violations = findPurityViolations(readSources(SRC_DIR), ALLOWANCES)
     const report = violations.map((v) => `${v.file}:${v.line} [${v.rule}] ${v.detail}`).join("\n")
     assert.deepEqual(violations, [], `\n${report}\n`)
+  })
+})
+
+describe("packages/domain/package.json", () => {
+  const manifest = JSON.parse(readFileSync(path.join(PKG_DIR, "package.json"), "utf8")) as {
+    exports: Record<string, string | null>
+    dependencies?: Record<string, string>
+  }
+
+  test("declares no runtime dependencies", () => {
+    assert.equal(manifest.dependencies, undefined)
+  })
+
+  test("exports source by subpath and its own manifest", () => {
+    assert.equal(manifest.exports["./*"], "./src/*.ts")
+    assert.equal(manifest.exports["./package.json"], "./package.json")
+  })
+
+  test("hides every __tests__ directory from consumers", () => {
+    const testDirs: string[] = []
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir)) {
+        const full = path.join(dir, entry)
+        if (!statSync(full).isDirectory()) continue
+        if (entry === "__tests__") testDirs.push(path.relative(SRC_DIR, full).split(path.sep).join("/"))
+        else walk(full)
+      }
+    }
+    walk(SRC_DIR)
+    assert.ok(testDirs.length >= 2)
+    for (const dir of testDirs) {
+      assert.equal(manifest.exports[`./${dir}/*`], null, `exports["./${dir}/*"] must be null`)
+    }
+  })
+})
+
+describe("packages/domain tsconfig", () => {
+  const shipping = ts.parseJsonConfigFileContent(
+    ts.readConfigFile(path.join(PKG_DIR, "tsconfig.json"), ts.sys.readFile).config,
+    ts.sys,
+    PKG_DIR,
+  )
+  const tests = ts.parseJsonConfigFileContent(
+    ts.readConfigFile(path.join(PKG_DIR, "tsconfig.test.json"), ts.sys.readFile).config,
+    ts.sys,
+    PKG_DIR,
+  )
+
+  test("the shipping config covers the modules and none of the tests", () => {
+    assert.ok(shipping.fileNames.some((f) => f.endsWith("/route-schemes/generation.ts")))
+    assert.deepEqual(shipping.fileNames.filter((f) => f.includes("__tests__")), [])
+  })
+
+  test("the test config covers the tests", () => {
+    assert.ok(tests.fileNames.some((f) => f.endsWith("/__tests__/purity.test.ts")))
+    assert.ok(tests.fileNames.some((f) => f.endsWith("/route-schemes/__tests__/generation.test.ts")))
+  })
+
+  test("the shipping config rejects browser and Node globals and accepts plain ECMAScript", () => {
+    const specimen = [
+      "export const a = window.innerWidth",
+      "export const b = document.title",
+      'export const c = localStorage.getItem("k")',
+      'export const d = fetch("u")',
+      "export const e = process.env.X",
+      'export const f = globalThis.fetch("u")',
+      'export const g = Buffer.from("x")',
+      "export const h = navigator.language",
+      "export const ok = [1, 2].at(-1) ?? new Map<string, number>().size",
+    ].join("\n")
+    const fileName = path.join(SRC_DIR, "__specimen__.ts")
+    const options: ts.CompilerOptions = { ...shipping.options, noEmit: true }
+    const host = ts.createCompilerHost(options)
+    const getSourceFile = host.getSourceFile
+    host.getSourceFile = (name, languageVersion, onError, shouldCreate) =>
+      name === fileName
+        ? ts.createSourceFile(name, specimen, languageVersion)
+        : getSourceFile.call(host, name, languageVersion, onError, shouldCreate)
+    const fileExists = host.fileExists
+    host.fileExists = (name) => name === fileName || fileExists.call(host, name)
+    const program = ts.createProgram([fileName], options, host)
+    const diagnostics = ts.getPreEmitDiagnostics(program).filter((d) => d.file?.fileName === fileName)
+    const linesWithErrors = new Set(
+      diagnostics.map((d) => d.file!.getLineAndCharacterOfPosition(d.start!).line + 1),
+    )
+    const bannedLines = [1, 2, 3, 4, 5, 6, 7, 8]
+    const messages = diagnostics.map(
+      (d) => `${d.file!.getLineAndCharacterOfPosition(d.start!).line + 1}: ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`,
+    )
+    for (const line of bannedLines) {
+      assert.ok(linesWithErrors.has(line), `line ${line} should not type-check:\n${messages.join("\n")}`)
+    }
+    assert.ok(!linesWithErrors.has(9), `plain ECMAScript must compile:\n${messages.join("\n")}`)
   })
 })

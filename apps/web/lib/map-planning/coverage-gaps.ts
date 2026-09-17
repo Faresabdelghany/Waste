@@ -4,7 +4,7 @@
 // fact does not say ended, paused, or future (no fact at all is not a reason
 // to skip it). A container is covered when a scheme that still takes part in
 // planning and is Validated, Scheduled, or Effective resolves it as a stop on
-// any service day — through @waste/domain/route-schemes/groups.ts, the one seam every
+// any service day — through @waste/domain/route-schemes/groups, the one seam every
 // consumer resolves a scheme's stops through. Drafts promise nothing and
 // expired schemes no longer do. Pure data logic.
 

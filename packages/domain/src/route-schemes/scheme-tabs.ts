@@ -1,6 +1,6 @@
 // Scheme detail Routes / Stops tabs (D9, D17): the derivations that let both
 // tabs render and filter through the shared filter model
-// (@waste/domain/business-filters.ts) exactly like the workspace record tables.
+// (@waste/domain/business-filters) exactly like the workspace record tables.
 //
 // A generated route carries no waste-fraction fact of its own — its fractions
 // are whatever the Stops still in its plan serve, read live so a Stop

@@ -64,9 +64,9 @@ import {
 } from "@waste/domain/route-schemes/creation"
 import { draftGroups } from "@waste/domain/route-schemes/draft"
 import {
-  driverFormOptions,
   driverIneligibilityReason,
 } from "@waste/domain/route-schemes/fleet-profiles"
+import { driverFormOptions } from "@/lib/data/driver-form-options"
 import { NO_HOLIDAY_LIST_LABEL, resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
 import { HOLIDAY_POLICY_LABELS } from "@waste/domain/route-schemes/occurrences"
 import { planSchemeDeletion } from "@waste/domain/route-schemes/deletion"

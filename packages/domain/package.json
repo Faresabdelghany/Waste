@@ -3,13 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Pure, deterministic planning logic (ADR-0002). No React, Next, MapLibre, browser APIs, network, or fixture registry; src/__tests__/purity.test.ts enforces it.",
+  "description": "Pure, deterministic planning logic (ADR-0002). Depends on nothing; no React, Next, MapLibre, browser or Node globals. Ships TypeScript source for bundler and tsx consumers (extensionless imports); src/__tests__/purity.test.ts enforces the boundary.",
   "exports": {
+    "./package.json": "./package.json",
+    "./__tests__/*": null,
+    "./route-schemes/__tests__/*": null,
     "./*": "./src/*.ts"
   },
   "scripts": {
     "lint": "eslint . --max-warnings 0",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
     "test": "node --import tsx --test \"src/**/*.test.ts\""
   },
   "devDependencies": {

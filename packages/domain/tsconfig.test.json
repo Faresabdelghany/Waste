@@ -1,0 +1,9 @@
+{
+  // The tests: same rules as shipping code plus Node's globals and built-ins.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src/**/__tests__/**/*.ts"],
+  "exclude": []
+}

@@ -102,7 +102,7 @@ export const serviceFrequencyById: ReadonlyMap<string, ServiceFrequencyDefinitio
 
 // The pre-#20 container form stored fraction-fused option ids under the
 // retained `pickupSetting` field id (issue #13). Read sides fold them onto
-// catalog definitions so records stored before it keep resolving.
+// catalog definitions so pre-existing localStorage records keep resolving.
 export const LEGACY_FREQUENCY_OPTION_IDS: Record<string, string> = {
   "organic-14": "freq-every-2-weeks",
   "mixed-weekly": "freq-weekly",
