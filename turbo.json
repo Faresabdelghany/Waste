@@ -22,7 +22,10 @@
     "@waste/api#dev": {
       "cache": false,
       "persistent": true,
-      "env": ["HOST", "PORT"]
+      "env": [
+        "HOST",
+        "PORT"
+      ]
     },
     "lint": {
       "dependsOn": [
@@ -41,6 +44,17 @@
     },
     "test:e2e": {
       "cache": false
+    },
+    "@waste/db#test": {
+      "dependsOn": [
+        "^test"
+      ],
+      "cache": false,
+      "env": [
+        "DATABASE_ADMIN_URL",
+        "DATABASE_URL",
+        "REQUIRE_DATABASE"
+      ]
     }
   }
 }

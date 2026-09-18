@@ -1,0 +1,14 @@
+{
+  // Server-only code (Node through tsx): Node's types from the base config,
+  // ECMAScript only, no DOM. Not purity-gated: this package exists to talk to
+  // Postgres. The structural conventions of the gated packages still hold
+  // (source by subpath, tests hidden, tests in their own program).
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["esnext"],
+    "target": "es2022",
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "drizzle.config.ts"],
+  "exclude": ["src/**/__tests__/**"]
+}
