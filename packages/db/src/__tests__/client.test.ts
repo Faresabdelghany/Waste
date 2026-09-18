@@ -21,6 +21,17 @@ describe("createDb", { skip: database.skip }, () => {
     assert.equal(result[0]?.answer, 2)
   })
 
+  test("the raw face shares Drizzle's codecs: temporal values arrive as Postgres text, not Date", async () => {
+    // Drizzle rewires the postgres.js instance it is given so that it can do
+    // the mapping itself; the raw face is the same instance, so a test or a
+    // script reading `now()` through it gets the server's text form and sends
+    // dates as strings. Pinned here so the header's promise stays true.
+    const [row] = await connection.sql<{ now: unknown; day: unknown }[]>`select now() as now, current_date as day`
+    assert.equal(typeof row.now, "string")
+    assert.equal(typeof row.day, "string")
+    assert.match(String(row.day), /^\d{4}-\d{2}-\d{2}$/)
+  })
+
   test("close() is idempotent", async () => {
     const connection = createDb(database.adminUrl)
     await connection.sql`select 1`

@@ -39,6 +39,27 @@ export default defineConfig([
     },
   },
 
+  // ADR-0001: the web app never talks to the database. @waste/db and the
+  // packages beneath it are server-only; the Hono API is the web's one way in,
+  // so a database client or a connection string can never reach the browser
+  // bundle by accident.
+  {
+    files: ["apps/web/**/*.{js,jsx,mjs,ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@waste/db", "@waste/db/*", "drizzle-orm", "drizzle-orm/*", "postgres", "postgres/*"],
+              message: "The web app never talks to the database (ADR-0001): go through the API in apps/api.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Playwright suite: `use` is Playwright's fixture function, not React's hook.
   {
     files: ["apps/web/e2e/**/*.ts", "apps/web/playwright.config.ts"],

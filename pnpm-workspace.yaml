@@ -8,5 +8,3 @@ allowBuilds:
   sharp: true
   # Ships prebuilt @unrs/resolver-binding-* optional dependencies; the postinstall is only a download fallback.
   unrs-resolver: false
-  # The Supabase CLI npm package downloads its Go binary in postinstall.
-  supabase: true
