@@ -13,6 +13,7 @@
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js"
 import postgres, { type Sql } from "postgres"
 
+import { CASING } from "./casing"
 import * as schema from "./schema"
 
 export type Db = PostgresJsDatabase<typeof schema>
@@ -29,14 +30,26 @@ export type ClientOptions = {
   max?: number
   /** Where Postgres NOTICE messages go; dropped by default so `CREATE ... IF NOT EXISTS` stays quiet. */
   onnotice?: (notice: postgres.Notice) => void
+  /**
+   * A `search_path` for every connection of the pool, sent as a startup
+   * parameter: it outranks the role's and the database's settings
+   * (`pg_settings.source = client`), and Supabase's poolers forward it in
+   * session mode. Unset, the connecting role's own setting applies.
+   */
+  searchPath?: string
 }
 
-export function createDb(url: string, { max = 10, onnotice = () => {} }: ClientOptions = {}): Database {
+export function createDb(url: string, { max = 10, onnotice = () => {}, searchPath }: ClientOptions = {}): Database {
   // prepare: false keeps the API's client valid behind Supabase's transaction
   // pooler, where named prepared statements are not supported. Migrations are
   // a different matter (see migrate.ts).
-  const sql = postgres(url, { max, prepare: false, onnotice })
-  const db = drizzle({ client: sql, schema, casing: "snake_case" })
+  const sql = postgres(url, {
+    max,
+    prepare: false,
+    onnotice,
+    ...(searchPath === undefined ? {} : { connection: { search_path: searchPath } }),
+  })
+  const db = drizzle({ client: sql, schema, casing: CASING })
   let closing: Promise<void> | undefined
   return {
     db,
