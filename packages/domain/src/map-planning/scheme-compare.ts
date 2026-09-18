@@ -16,7 +16,7 @@ import {
 } from "../route-schemes/lifecycle"
 import { recurrenceFromValues } from "../route-schemes/recurrence"
 import { convexHull, pointInPolygon, type LngLat } from "./geo"
-import { containerLocation } from "./positions"
+import { containerLocation, type Gazetteer } from "./positions"
 
 export type SchemeStopSet = {
   id: string
@@ -72,6 +72,7 @@ export function compareSchemes(
   b: SchemeStopSet,
   containers: readonly BusinessRecord[],
   needing: ReadonlySet<string>,
+  gazetteer: Gazetteer,
 ): SchemeComparison {
   const membership = new Map<string, CompareMembership>()
   for (const id of a.containerIds) membership.set(id, b.containerIds.has(id) ? "both" : "a")
@@ -85,7 +86,7 @@ export function compareSchemes(
   const byId = new Map(containers.map((container) => [container.id, container]))
   const stopLocations = [...membership.keys()]
     .map((id) => byId.get(id))
-    .map((container) => (container ? containerLocation(container) : null))
+    .map((container) => (container ? containerLocation(container, gazetteer) : null))
     .filter((point): point is LngLat => point !== null)
   const hull = stopLocations.length >= 3 ? convexHull(stopLocations) : []
 
@@ -93,7 +94,7 @@ export function compareSchemes(
   if (hull.length >= 3) {
     for (const container of containers) {
       if (!needing.has(container.id) || membership.has(container.id)) continue
-      const location = containerLocation(container)
+      const location = containerLocation(container, gazetteer)
       if (location && pointInPolygon(location, hull)) orphaned.add(container.id)
     }
   }

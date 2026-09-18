@@ -3,6 +3,7 @@ import { describe, test } from "node:test"
 
 import type { BusinessRecord } from "../../prototype-record"
 import { COMPARE_COLORS, clusterMembership, compareSchemes, schemeStopSets } from "../scheme-compare"
+import { TEST_GAZETTEER } from "./gazetteer-fixture"
 
 function record(id: string, extra: Partial<BusinessRecord> = {}): BusinessRecord {
   return {
@@ -82,7 +83,7 @@ describe("schemeStopSets", () => {
 
 describe("compareSchemes", () => {
   const [a, b] = schemeStopSets(schemes, containers, "2026-09-16")
-  const comparison = compareSchemes(a, b, containers, needing)
+  const comparison = compareSchemes(a, b, containers, needing, TEST_GAZETTEER)
 
   test("splits the stops into A only, B only, and both", () => {
     assert.deepEqual(sorted(comparison.aOnly), ["a1", "a2"])

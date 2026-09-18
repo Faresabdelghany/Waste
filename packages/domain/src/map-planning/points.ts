@@ -3,9 +3,10 @@
 // positions.ts, the rendering from the web app's map components.
 
 import type { BusinessRecord } from "../prototype-record"
+import { EMPTY_FACT } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
 import type { LngLat } from "./geo"
-import { containerLocation, containerPropertyKey } from "./positions"
+import { containerLocation, containerPropertyKey, type Gazetteer } from "./positions"
 
 export type MapPoint = {
   id: string
@@ -23,8 +24,6 @@ export type MapPoint = {
   /** The container record a click opens. */
   record: BusinessRecord
 }
-
-const EMPTY_FACT = "—"
 
 /** "Residual · Mixed" → ["Residual", "Mixed"]; the empty fact → []. */
 export function containerFractions(record: BusinessRecord): string[] {
@@ -51,11 +50,11 @@ export function rankFractions(lists: ReadonlyArray<readonly string[]>): string[]
 }
 
 /** One point per located, in-service, visible container. */
-export function containerPoints(containers: readonly BusinessRecord[]): MapPoint[] {
+export function containerPoints(containers: readonly BusinessRecord[], gazetteer: Gazetteer): MapPoint[] {
   const points: MapPoint[] = []
   for (const record of containers) {
     if (isSoftDeleted(record)) continue
-    const lngLat = containerLocation(record)
+    const lngLat = containerLocation(record, gazetteer)
     const propertyKey = containerPropertyKey(record)
     if (!lngLat || !propertyKey) continue
     points.push({

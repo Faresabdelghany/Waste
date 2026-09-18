@@ -29,6 +29,7 @@ import type { MapPoint } from "@waste/domain/map-planning/points"
 import type { AreaRoute, AreaRoutes, RouteBucket } from "@waste/domain/map-planning/routes"
 import { containerIdsWithFraction, type SelectionShape } from "@waste/domain/map-planning/selection"
 import type { SelectionStatistics } from "@waste/domain/map-planning/statistics"
+import { count } from "@waste/domain/text"
 import { cn } from "@/lib/utils"
 
 import { StatusBadge } from "./status-badge"
@@ -79,8 +80,6 @@ const SHAPE_LABELS: Readonly<Record<SelectionShape["kind"], string>> = {
 const SECTIONS = ["overview", "coverage", "quantities", "fractions", "service-areas", "routes", "containers"]
 /** Routes listed under the counts before the list folds into "+N more". */
 const MAX_LISTED_ROUTES = 4
-
-const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`
 
 export function SelectedAreaPanel({
   shape,
@@ -218,7 +217,7 @@ export function SelectedAreaPanel({
                 <Row label="Assumed weight" value={formatWeight(stats.assumedWeightKg)} />
                 <Row label="Collected weight" value={formatWeight(stats.collectedWeightKg)} />
                 <Row label="Assumed volume" value={formatVolume(stats.assumedVolumeLitres)} />
-                <Row label="Waste services" value={plural(stats.activeAgreements, "active agreement")} />
+                <Row label="Waste services" value={count(stats.activeAgreements, "active agreement")} />
               </dl>
             </AccordionContent>
           </AccordionItem>
@@ -281,7 +280,7 @@ export function SelectedAreaPanel({
                         </p>
                       </div>
                       <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                        {plural(area.containers, "container")}
+                        {count(area.containers, "container")}
                       </span>
                     </li>
                   ))}
@@ -299,7 +298,7 @@ export function SelectedAreaPanel({
                 <p className="text-xs text-muted-foreground">
                   {routes.total === 0
                     ? "No dated route touches these containers."
-                    : `${plural(routes.total, "route")} ${routes.total === 1 ? "touches" : "touch"} these containers.`}
+                    : `${count(routes.total, "route")} ${routes.total === 1 ? "touches" : "touch"} these containers.`}
                 </p>
                 <Button
                   variant={routesOnMap ? "default" : "outline"}
@@ -344,7 +343,7 @@ export function SelectedAreaPanel({
                         {route.date
                           ? formatShortDate(route.date)
                           : route.stops.length
-                            ? plural(route.stops.length, "stop")
+                            ? count(route.stops.length, "stop")
                             : "No stop data"}
                       </span>
                       <Button

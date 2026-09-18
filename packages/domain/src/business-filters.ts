@@ -7,6 +7,7 @@
  * with legacy-key fallbacks; both read this file for the shape and labels so
  * a new category is declared in exactly one place.
  */
+import { EMPTY_FACT } from "./record-values"
 import type { BusinessRecord } from "./prototype-record"
 
 export type BusinessFilters = {
@@ -78,12 +79,12 @@ export const emptyBusinessFilters: BusinessFilters = Object.fromEntries(
 
 /** A single-valued fact as filter values; the "—" placeholder is no value. */
 export function singleFilterValue(value: string | undefined): string[] {
-  return value && value !== "—" ? [value] : []
+  return value && value !== EMPTY_FACT ? [value] : []
 }
 
 /** A " · "-joined multi-valued fact (waste fractions, service scope) as values. */
 export function splitFilterValues(value: string | undefined): string[] {
-  if (!value || value === "—") return []
+  if (!value || value === EMPTY_FACT) return []
   return value
     .split(" · ")
     .map((part) => part.trim())

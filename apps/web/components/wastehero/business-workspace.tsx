@@ -273,7 +273,7 @@ import {
 import { ServiceProviderDetailsPage } from "@/components/wastehero/service-provider-details-page"
 import { ContainerDetailsSheet } from "@/components/wastehero/containers-assets-register"
 import { MapPlanningView } from "@/components/wastehero/map-planning/map-planning-view"
-import { SERVICE_AREAS_MODULE } from "@/lib/data/service-areas"
+import { SERVICE_AREAS_MODULE, serviceAreaFormValues } from "@/lib/data/service-areas"
 import { RouteDetailsPage } from "@/components/wastehero/route-details-page"
 import { TicketDetailsDialog } from "@/components/tickets/TicketDetailsDialog"
 import { useOrganizationStore } from "@/components/settings/organization-store"
@@ -4905,8 +4905,7 @@ export function BusinessWorkspace({
             setRelatedCreateTarget({
               workspaceId: SERVICE_AREAS_MODULE.workspaceId,
               moduleId: SERVICE_AREAS_MODULE.moduleId,
-              initialValues: seed.initialValues,
-              extraValues: seed.extraValues,
+              ...serviceAreaFormValues(seed),
             })
           }
           onCreateScheme={handleGuidedSchemeCreate}

@@ -6,6 +6,7 @@
 // from display facts, stored value strings, or the module's static metrics.
 
 import type { BusinessRecord } from "../prototype-record"
+import { EMPTY_FACT } from "../record-values"
 import { calendarFromRecord } from "./calendar"
 import {
   addDays,
@@ -13,8 +14,6 @@ import {
   SERVICE_DAY_SHORT_LABELS,
   type ServiceDay,
 } from "./recurrence"
-
-const EMPTY = "—"
 
 // Hand-rolled month labels (like SERVICE_DAY_SHORT_LABELS) rather than
 // Intl "en-GB", whose ICU-dependent "Sept" would disagree with the "Sep"
@@ -52,7 +51,7 @@ export function nextHolidaySpan(holidayDates: string[], today: string): string[]
 
 /** "25 Dec", "25–26 Dec", or "31 Dec – 1 Jan" for a consecutive span. */
 export function formatHolidaySpan(span: string[]): string {
-  if (span.length === 0) return EMPTY
+  if (span.length === 0) return EMPTY_FACT
   const first = span[0]
   const last = span[span.length - 1]
   if (first === last) return dayMonth(first)
@@ -64,7 +63,7 @@ export function formatHolidaySpan(span: string[]): string {
 
 /** "Mon–Fri" for a contiguous Monday-first run, "Tue/Fri" otherwise — any weekday set (service days, a weekend). */
 export function formatWorkingDays(days: ServiceDay[]): string {
-  if (days.length === 0) return EMPTY
+  if (days.length === 0) return EMPTY_FACT
   const ordered = [...days].sort(
     (a, b) => SERVICE_DAYS.indexOf(a) - SERVICE_DAYS.indexOf(b),
   )
@@ -82,7 +81,7 @@ export function formatWorkingDays(days: ServiceDay[]): string {
 
 /** "1 Jan – 31 Dec 2026", "From 1 Jan 2026", "Until 31 Dec 2026", or "—". */
 export function formatValidity(validFrom: string, validTo: string): string {
-  if (!validFrom && !validTo) return EMPTY
+  if (!validFrom && !validTo) return EMPTY_FACT
   if (!validTo) return `From ${dayMonthYear(validFrom)}`
   if (!validFrom) return `Until ${dayMonthYear(validTo)}`
   const start =
@@ -99,9 +98,9 @@ export type CalendarRowSummary = {
 }
 
 const EMPTY_ROW: CalendarRowSummary = {
-  holidays: EMPTY,
-  validity: EMPTY,
-  nextHoliday: EMPTY,
+  holidays: EMPTY_FACT,
+  validity: EMPTY_FACT,
+  nextHoliday: EMPTY_FACT,
 }
 
 /** The derived table cells for one calendar record (D28iii). */
@@ -136,7 +135,3 @@ export function withDerivedCalendarValue(
   return { ...record, value: derived }
 }
 
-/** "1 date", "11 dates" — the count phrasing shared by the list and the wizard's calendar context (issue #32). */
-export function plural(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`
-}

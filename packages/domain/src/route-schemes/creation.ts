@@ -32,7 +32,7 @@ import {
   type ServiceDay,
   type WeekRotation,
 } from "./recurrence"
-import { count } from "./text"
+import { count } from "../text"
 import { COLLECTION_GROUPS_KEY } from "./groups"
 import { schemeGenerationCalendar } from "./project-calendar"
 import type { HolidayPolicy, SchemeCalendar } from "./occurrences"

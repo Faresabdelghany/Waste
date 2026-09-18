@@ -5,6 +5,7 @@
 // fact second, when that date is not already in the past. Pure data logic.
 
 import type { BusinessRecord } from "../prototype-record"
+import { typedString } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
 import { addDays, isIsoDate } from "../route-schemes/recurrence"
 
@@ -47,11 +48,6 @@ export function collectionWindowRange(
   return { from: today, to: addDays(today, WINDOW_DAYS[window]) }
 }
 
-const stringOf = (record: BusinessRecord, key: string): string | undefined => {
-  const value = record.submittedValues?.[key]
-  return typeof value === "string" && value.trim() ? value.trim() : undefined
-}
-
 /** Route and pickup states that no longer promise a collection. */
 const DEAD_STATUSES: ReadonlySet<string> = new Set(["Cancelled", "Skipped", "Failed"])
 
@@ -67,14 +63,14 @@ export function routeStopIndex(
   const routeDates = new Map<string, string>()
   for (const route of routes) {
     if (isSoftDeleted(route) || DEAD_STATUSES.has(route.status)) continue
-    const date = stringOf(route, "actualDate") ?? stringOf(route, "serviceDate")
+    const date = typedString(route.submittedValues, "actualDate") ?? typedString(route.submittedValues, "serviceDate")
     if (date && isIsoDate(date)) routeDates.set(route.id, date)
   }
   const index = new Map<string, Set<string>>()
   for (const pickup of pickups) {
     if (isSoftDeleted(pickup) || DEAD_STATUSES.has(pickup.status)) continue
-    const containerId = stringOf(pickup, "containerId")
-    const routeId = stringOf(pickup, "routeId")
+    const containerId = typedString(pickup.submittedValues, "containerId")
+    const routeId = typedString(pickup.submittedValues, "routeId")
     if (!containerId || !routeId) continue
     const date = routeDates.get(routeId)
     if (!date) continue

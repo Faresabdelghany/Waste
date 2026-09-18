@@ -7,6 +7,7 @@ import {
   SERVICE_AREA_POLYGON_KEY,
   serviceAreaLayers,
   serviceAreaPolygon,
+  serviceAreaPolygonValue,
   serviceAreaSeedFromSelection,
 } from "../service-areas"
 
@@ -42,6 +43,11 @@ const planningAreas = [
 ]
 
 describe("serviceAreaPolygon", () => {
+  test("reads back exactly the polygon serviceAreaPolygonValue stored", () => {
+    const stored = record("sa-0", {}, { submittedValues: { [SERVICE_AREA_POLYGON_KEY]: serviceAreaPolygonValue(square) } })
+    assert.deepEqual(serviceAreaPolygon(stored), square)
+  })
+
   test("reads the stored polygon; anything missing, malformed, or too short is null", () => {
     const stored = record("sa-1", {}, { submittedValues: { [SERVICE_AREA_POLYGON_KEY]: JSON.stringify(square) } })
     assert.deepEqual(serviceAreaPolygon(stored), square)
@@ -61,25 +67,63 @@ describe("serviceAreaSeedFromSelection", () => {
     record("c", { "Planning area": "Østerbro Zone 2" }, { projectIds: ["project-copenhagen"] }),
   ]
 
-  test("prefills the project when uniform, the planning areas the containers name, and a boundary line", () => {
+  test("names the uniform project, the planning areas the containers name, a boundary line, and the drawn polygon", () => {
     const seed = serviceAreaSeedFromSelection({
       selected,
       shape: { kind: "rectangle", polygon: square },
       planningAreas,
       properties: 2,
     })
-    assert.equal(seed.initialValues.projectId, "project-copenhagen")
-    assert.equal(seed.initialValues.zoneIds, "area-osterbro,area-indreby", "typed id and named area, in planning-area order")
-    assert.equal(seed.initialValues.boundary, "Drawn on Map Planning · 3 containers across 2 properties")
-    assert.equal(seed.extraValues[SERVICE_AREA_POLYGON_KEY], JSON.stringify(square))
+    assert.deepEqual(seed, {
+      projectId: "project-copenhagen",
+      planningAreaIds: ["area-osterbro", "area-indreby"],
+      boundary: "Drawn on Map Planning · 3 containers across 2 properties",
+      polygon: square,
+    })
   })
 
-  test("a mixed project is left blank and a hand-picked selection stores no polygon", () => {
+  test("a mixed project is null and a hand-picked selection has no polygon", () => {
     const mixed = [...selected, record("d", {}, { projectIds: ["project-harbor"] })]
     const seed = serviceAreaSeedFromSelection({ selected: mixed, shape: null, planningAreas, properties: 3 })
-    assert.equal(seed.initialValues.projectId, undefined)
-    assert.deepEqual(seed.extraValues, {})
-    assert.equal(seed.initialValues.boundary, "Selected on Map Planning · 4 containers across 3 properties")
+    assert.equal(seed.projectId, null)
+    assert.equal(seed.polygon, null)
+    assert.equal(seed.boundary, "Selected on Map Planning · 4 containers across 3 properties")
+  })
+
+  test("one container at one property reads in the singular", () => {
+    const seed = serviceAreaSeedFromSelection({ selected: selected.slice(0, 1), shape: null, planningAreas, properties: 1 })
+    assert.equal(seed.boundary, "Selected on Map Planning · 1 container across 1 property")
+  })
+
+  test("a typed placeholder is not a project, and an empty record scope is null rather than blank", () => {
+    const placeholder = serviceAreaSeedFromSelection({
+      selected: [record("g", {}, { projectIds: ["project-copenhagen"], submittedValues: { projectId: "—" } })],
+      shape: null,
+      planningAreas,
+      properties: 1,
+    })
+    assert.equal(placeholder.projectId, "project-copenhagen", "the placeholder falls back to record scope")
+    const blank = serviceAreaSeedFromSelection({
+      selected: [record("h", {}, { projectIds: [""] }), record("i", {}, { projectIds: [""] })],
+      shape: null,
+      planningAreas,
+      properties: 2,
+    })
+    assert.equal(blank.projectId, null)
+  })
+
+  test("a typed project wins over record scope, and containers naming no known area contribute none", () => {
+    const seed = serviceAreaSeedFromSelection({
+      selected: [
+        record("e", { "Planning area": "Nowhere Zone" }, { projectIds: ["project-harbor"], submittedValues: { projectId: "project-copenhagen" } }),
+        record("f", {}, { projectIds: ["project-copenhagen"] }),
+      ],
+      shape: null,
+      planningAreas,
+      properties: 2,
+    })
+    assert.equal(seed.projectId, "project-copenhagen")
+    assert.deepEqual(seed.planningAreaIds, [])
   })
 })
 

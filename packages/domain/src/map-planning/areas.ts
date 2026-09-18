@@ -6,6 +6,7 @@
 // logic; the map draws the polygons, the panel lists the rows.
 
 import type { BusinessRecord } from "../prototype-record"
+import { cleanFact, typedString } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
 import {
   boundsFromPolygon,
@@ -16,7 +17,7 @@ import {
   type LngLat,
   type LngLatBounds,
 } from "./geo"
-import { containerLocation } from "./positions"
+import { containerLocation, type Gazetteer } from "./positions"
 
 export type PlanningAreaLayer = {
   id: string
@@ -43,13 +44,11 @@ const HULL_MARGIN_METRES = 80
 /** Half-width of the box drawn around one or two containers. */
 const POINT_BOX_METRES = 120
 
-const EMPTY_FACT = "—"
-
 function belongsTo(container: BusinessRecord, area: BusinessRecord): boolean {
-  const typed = container.submittedValues?.planningAreaId
-  if (typeof typed === "string" && typed.trim()) return typed.trim() === area.id
-  const fact = container.facts["Planning area"]?.trim()
-  return Boolean(fact && fact !== EMPTY_FACT && fact.toLowerCase() === area.name.trim().toLowerCase())
+  const typed = typedString(container.submittedValues, "planningAreaId")
+  if (typed) return typed === area.id
+  const fact = cleanFact(container.facts["Planning area"])
+  return Boolean(fact && fact.toLowerCase() === area.name.trim().toLowerCase())
 }
 
 function outline(spots: readonly LngLat[]): LngLat[] {
@@ -67,10 +66,11 @@ function outline(spots: readonly LngLat[]): LngLat[] {
 export function planningAreaLayers(
   areas: readonly BusinessRecord[],
   containers: readonly BusinessRecord[],
+  gazetteer: Gazetteer,
 ): PlanningAreaLayer[] {
   const located = containers
     .filter((container) => !isSoftDeleted(container))
-    .map((container) => ({ container, spot: containerLocation(container) }))
+    .map((container) => ({ container, spot: containerLocation(container, gazetteer) }))
     .filter((entry): entry is { container: BusinessRecord; spot: LngLat } => entry.spot !== null)
 
   return areas

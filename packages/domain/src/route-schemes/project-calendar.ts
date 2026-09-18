@@ -12,6 +12,7 @@
 // Pure data logic (type-only import of BusinessRecord).
 
 import type { BusinessRecord } from "../prototype-record"
+import { typedString } from "../record-values"
 import { formatWorkingDays } from "./calendar-list"
 import { holidayNamesFor } from "./holiday-names"
 import {
@@ -48,20 +49,15 @@ export type ProjectCalendarRecords = {
   calendars: readonly BusinessRecord[]
 }
 
-const stringOf = (record: BusinessRecord | undefined, key: string): string => {
-  const value = record?.submittedValues?.[key]
-  return typeof value === "string" ? value.trim() : ""
-}
-
 /** The project's weekend: its typed `weekend` days, else the default. */
 export function projectWeekend(project: BusinessRecord | undefined): ServiceDay[] {
-  const days = parseServiceDays(stringOf(project, "weekend"))
+  const days = parseServiceDays(typedString(project?.submittedValues, "weekend") ?? "")
   return days.length > 0 ? days : [...DEFAULT_WEEKEND]
 }
 
 /** The name of the project's holiday list, or null when it has none. */
 export function projectHolidayListName(project: BusinessRecord | undefined): string | null {
-  return stringOf(project, "holidayList") || null
+  return typedString(project?.submittedValues, "holidayList") ?? null
 }
 
 /** The calendar the wizard, generation, detail, and list all read for a project. */

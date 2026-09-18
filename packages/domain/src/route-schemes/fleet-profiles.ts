@@ -14,6 +14,7 @@
 // name — the one case that cannot be verified must never pass.
 
 import type { BusinessRecord } from "../prototype-record"
+import { typedString } from "../record-values"
 import { vehicleTypeOfRecord } from "./matching"
 
 type RecordLike = Pick<BusinessRecord, "id" | "name" | "context" | "facts" | "submittedValues">
@@ -29,11 +30,6 @@ export type VehicleProfile = {
   capacityT: number | null
   licenceClass: LicenceClass
   isTrailer: boolean
-}
-
-const stringOf = (record: RecordLike, key: string): string | undefined => {
-  const value = record.submittedValues?.[key]
-  return typeof value === "string" && value.trim() ? value.trim() : undefined
 }
 
 /** "18 t" / "18" / "Rear loader 18 t · Nordhavn" → 18; null when nothing numeric precedes a t. */
@@ -66,11 +62,11 @@ export function vehicleProfile(record: RecordLike): VehicleProfile {
   const facts = record.facts ?? {}
   const contextType = record.context.split(" · ")[0]?.trim() ?? ""
   const isTrailer =
-    stringOf(record, "resourceKind") === "trailer" ||
+    typedString(record.submittedValues, "resourceKind") === "trailer" ||
     /trailer/i.test(record.context) ||
     /trailer/i.test(facts.Type ?? "")
   const capacityT =
-    parseTonnes(facts.Capacity) ?? parseTonnes(stringOf(record, "capacity")) ?? parseTonnes(contextType)
+    parseTonnes(facts.Capacity) ?? parseTonnes(typedString(record.submittedValues, "capacity")) ?? parseTonnes(contextType)
   const type =
     vehicleTypeOfRecord(record) ??
     (contextType ? contextType.replace(/\s*\d+(?:[.,]\d+)?\s*t\b.*$/i, "").trim() || null : null)
@@ -128,7 +124,7 @@ export function driverProfile(record: RecordLike): DriverProfile {
     id: record.id,
     name: record.name,
     licences:
-      licences.length > 0 ? licences : parseDriverLicences(stringOf(record, "licenceClass")),
+      licences.length > 0 ? licences : parseDriverLicences(typedString(record.submittedValues, "licenceClass")),
   }
 }
 

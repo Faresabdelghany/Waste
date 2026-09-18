@@ -14,6 +14,7 @@
 // reproduce.
 
 import type { BusinessRecord } from "../prototype-record"
+import { EMPTY_FACT, cleanFact } from "../record-values"
 import { formatWorkingDays } from "./calendar-list"
 import { matchPlansFromValues } from "./matching"
 import {
@@ -23,13 +24,8 @@ import {
 } from "./recurrence"
 import { stringValue } from "./validation"
 
-const EMPTY = "—"
-
-/** A display fact, with blank/whitespace-only values treated as absent. */
-function factOf(record: BusinessRecord, label: string): string | undefined {
-  const value = record.facts?.[label]?.trim()
-  return value ? value : undefined
-}
+/** A display fact, with blank and placeholder values treated as absent. */
+const factOf = (record: BusinessRecord, label: string): string | undefined => cleanFact(record.facts?.[label])
 
 /**
  * The scheme's planning-area name: the live area record when the structured
@@ -60,7 +56,7 @@ export function schemeListContext(
 ): string {
   const scope = schemeAreaName(record, areas) ?? projectLabel
   const days = serviceDaysFromValues(record.submittedValues ?? {})
-  if (days.length === 0) return scope || EMPTY
+  if (days.length === 0) return scope || EMPTY_FACT
   const daysLabel = formatWorkingDays(days)
   return scope ? `${scope} · ${daysLabel}` : daysLabel
 }
@@ -89,7 +85,7 @@ export function withDerivedSchemeContext(
  */
 export function schemeRecurrenceSummary(record: BusinessRecord): string {
   const recurrence = recurrenceFromValues(record.submittedValues ?? {})
-  return recurrence ? recurrenceCadenceLabel(recurrence) : EMPTY
+  return recurrence ? recurrenceCadenceLabel(recurrence) : EMPTY_FACT
 }
 
 /**
@@ -108,7 +104,7 @@ export function schemeWasteFractionLabel(record: BusinessRecord): string {
   const fact = factOf(record, "Waste fraction")
   if (fact) return fact
   const rule = matchPlansFromValues(values).sharedRule.fractions
-  return rule.length > 0 ? rule.join(", ") : EMPTY
+  return rule.length > 0 ? rule.join(", ") : EMPTY_FACT
 }
 
 export type SchemeRowSummary = {

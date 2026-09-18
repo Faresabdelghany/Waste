@@ -4,6 +4,7 @@
 // agrees on, so the wizard never inherits a guess. The Selected area panel's
 // numbers live in statistics.ts. Pure data logic.
 
+import { typedString, uniform } from "../record-values"
 import type { GuidedSchemeData } from "../route-schemes/quick-create"
 import type { LngLat } from "./geo"
 import type { MapPoint } from "./points"
@@ -31,18 +32,6 @@ export function containerIdsWithFraction(points: readonly MapPoint[], fraction: 
   return points.filter((point) => point.fractions.includes(fraction)).flatMap((point) => point.containerIds)
 }
 
-/** The one value everything agrees on, or undefined. */
-function uniform(values: ReadonlyArray<string | undefined>): string | undefined {
-  const present = values.filter((value): value is string => Boolean(value))
-  if (present.length === 0 || present.length !== values.length) return undefined
-  return present.every((value) => value === present[0]) ? present[0] : undefined
-}
-
-const typedString = (point: MapPoint, key: string): string | undefined => {
-  const value = point.record.submittedValues?.[key]
-  return typeof value === "string" && value.trim() ? value.trim() : undefined
-}
-
 /**
  * Seeds the Guided Setup wizard from a selection: the waste fraction when
  * every selected container carries exactly one and the same fraction, the
@@ -62,13 +51,13 @@ export function schemeDraftFromSelection(
   )
   if (fraction) draft.wasteFraction = fraction
 
-  const area = uniform(selected.map((point) => typedString(point, "planningAreaId")))
+  const area = uniform(selected.map((point) => typedString(point.record.submittedValues, "planningAreaId")))
   if (area) draft.planningAreaId = area
 
   const project = uniform(
     selected.map(
       (point) =>
-        typedString(point, "projectId") ??
+        typedString(point.record.submittedValues, "projectId") ??
         (point.record.projectIds?.length === 1 ? point.record.projectIds[0] : undefined),
     ),
   )

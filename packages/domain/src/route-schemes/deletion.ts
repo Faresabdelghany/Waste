@@ -13,7 +13,7 @@ import { softDeletedRecord, type SoftDeletion } from "../record-visibility"
 import { cancelSchemeFutureRoutes, stringValueOf } from "./generation"
 import { setPlanAhead } from "./plan-ahead"
 import { addDays } from "./recurrence"
-import { count } from "./text"
+import { count } from "../text"
 
 export type SchemeDeletionInput = SoftDeletion & {
   /**

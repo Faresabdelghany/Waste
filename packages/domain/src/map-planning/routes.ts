@@ -12,10 +12,11 @@
 // never counted. Pure data logic.
 
 import type { BusinessRecord } from "../prototype-record"
+import { cleanFact, typedString } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
 import { isIsoDate } from "../route-schemes/recurrence"
 import type { LngLat } from "./geo"
-import { containerLocation, knownAddressLocation } from "./positions"
+import { containerLocation, knownAddressLocation, type Gazetteer } from "./positions"
 import { parseDisplayDate } from "./schedule"
 import type { QuantityRange } from "./statistics"
 
@@ -84,12 +85,7 @@ const BUCKETS: ReadonlyArray<[RouteBucket, ReadonlySet<string>]> = [
 
 const BUCKET_ORDER: Readonly<Record<RouteBucket, number>> = { awaiting: 0, "in-progress": 1, completed: 2 }
 
-const EMPTY_FACT = "—"
 const lower = (value: string) => value.trim().toLowerCase()
-const clean = (value: string | boolean | undefined): string | undefined => {
-  const trimmed = typeof value === "string" ? value.trim() : ""
-  return trimmed && trimmed !== EMPTY_FACT ? trimmed : undefined
-}
 
 export function routeBucket(status: string): RouteBucket | null {
   const key = lower(status)
@@ -97,7 +93,7 @@ export function routeBucket(status: string): RouteBucket | null {
 }
 
 function routeDate(route: BusinessRecord): string | null {
-  const typed = clean(route.submittedValues?.actualDate) ?? clean(route.submittedValues?.serviceDate)
+  const typed = typedString(route.submittedValues, "actualDate") ?? typedString(route.submittedValues, "serviceDate")
   if (typed && isIsoDate(typed)) return typed
   return parseDisplayDate(route.facts.Date)
 }
@@ -109,20 +105,20 @@ function statedStopCount(route: BusinessRecord): number | null {
 }
 
 const stopNumber = (pickup: BusinessRecord): number => {
-  const value = Number.parseInt(clean(pickup.facts.Stop) ?? "", 10)
+  const value = Number.parseInt(cleanFact(pickup.facts.Stop) ?? "", 10)
   return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER
 }
 
 /** Every key a pickup may use to name its container. */
 function pickupContainerKeys(pickup: BusinessRecord): string[] {
-  return [clean(pickup.submittedValues?.containerId), clean(pickup.facts["Container ID"])?.toLowerCase()].filter(
+  return [typedString(pickup.submittedValues, "containerId"), cleanFact(pickup.facts["Container ID"])?.toLowerCase()].filter(
     (key): key is string => Boolean(key),
   )
 }
 
 /** Every key a pickup may use to name its route. */
 function pickupRouteKeys(pickup: BusinessRecord): string[] {
-  return [clean(pickup.submittedValues?.routeId), clean(pickup.facts.Route)?.toLowerCase()].filter(
+  return [typedString(pickup.submittedValues, "routeId"), cleanFact(pickup.facts.Route)?.toLowerCase()].filter(
     (key): key is string => Boolean(key),
   )
 }
@@ -148,7 +144,7 @@ function linkRoutes(
   const containersByKey = new Map<string, BusinessRecord>()
   for (const container of allContainers) {
     containersByKey.set(container.id, container)
-    const label = clean(container.facts["Container ID"])
+    const label = cleanFact(container.facts["Container ID"])
     if (label) containersByKey.set(label.toLowerCase(), container)
   }
 
@@ -167,7 +163,7 @@ function linkRoutes(
     if (isSoftDeleted(route)) continue
     const bucket = routeBucket(route.status)
     if (!bucket) continue
-    const routeKeys = [route.id, lower(route.name), clean(route.facts["Route ID"])?.toLowerCase()].filter(Boolean) as string[]
+    const routeKeys = [route.id, lower(route.name), cleanFact(route.facts["Route ID"])?.toLowerCase()].filter(Boolean) as string[]
     const routePickups = Array.from(
       new Map(routeKeys.flatMap((key) => pickupsByRoute.get(key) ?? []).map((pickup) => [pickup.id, pickup])).values(),
     ).sort((a, b) => stopNumber(a) - stopNumber(b) || a.id.localeCompare(b.id))
@@ -191,19 +187,23 @@ function clockOf(value: string | undefined): string | null {
   return match ? match[1].padStart(5, "0") : null
 }
 
-const streetLine = (address: string | undefined) => clean(address)?.split(",")[0]?.trim()
+const streetLine = (address: string | undefined) => cleanFact(address)?.split(",")[0]?.trim()
 
 /** The located stop a pickup stands for, or null when nothing places it on the map. */
-function routeStop({ pickup, container }: LinkedStop, position: number): RouteStop | null {
-  const address = clean(pickup.facts.Address)
+function routeStop({ pickup, container }: LinkedStop, position: number, gazetteer: Gazetteer): RouteStop | null {
+  const address = cleanFact(pickup.facts.Address)
   // No container: the address places the stop, but only on a gazetteer street — never a hashed spot.
-  const lngLat = container ? containerLocation(container) : address ? knownAddressLocation(address) : null
+  const lngLat = container
+    ? containerLocation(container, gazetteer)
+    : address
+      ? knownAddressLocation(address, gazetteer)
+      : null
   if (!lngLat) return null
   const order = stopNumber(pickup)
   const nameTail = pickup.name.split("·")[1]?.trim()
   return {
     index: order === Number.MAX_SAFE_INTEGER ? position + 1 : order,
-    kind: container ? "container" : lower(clean(pickup.facts.Type) ?? "") === "depot" ? "depot" : "address",
+    kind: container ? "container" : lower(cleanFact(pickup.facts.Type) ?? "") === "depot" ? "depot" : "address",
     containerId: container?.id ?? null,
     label: nameTail || streetLine(address) || streetLine(container?.facts.Address) || container?.name || pickup.name,
     lngLat,
@@ -213,7 +213,7 @@ function routeStop({ pickup, container }: LinkedStop, position: number): RouteSt
   }
 }
 
-function toAreaRoute({ route, bucket, pickups, stops: linkedStops }: LinkedRoute): AreaRoute {
+function toAreaRoute({ route, bucket, pickups, stops: linkedStops }: LinkedRoute, gazetteer: Gazetteer): AreaRoute {
   const containerIds: string[] = []
   const stops: RouteStop[] = []
   for (const [position, linked] of linkedStops.entries()) {
@@ -222,7 +222,7 @@ function toAreaRoute({ route, bucket, pickups, stops: linkedStops }: LinkedRoute
       if (containerIds.includes(linked.container.id)) continue
       containerIds.push(linked.container.id)
     }
-    const stop = routeStop(linked, position)
+    const stop = routeStop(linked, position, gazetteer)
     if (stop) stops.push(stop)
   }
   return {
@@ -234,9 +234,9 @@ function toAreaRoute({ route, bucket, pickups, stops: linkedStops }: LinkedRoute
     color: ROUTE_BUCKET_COLORS[bucket],
     stops,
     containerIds,
-    vehicle: clean(route.facts.Vehicle) ?? null,
-    driver: clean(route.facts.Driver) ?? null,
-    timeWindow: clean(route.facts["Time window"]) ?? null,
+    vehicle: cleanFact(route.facts.Vehicle) ?? null,
+    driver: cleanFact(route.facts.Driver) ?? null,
+    timeWindow: cleanFact(route.facts["Time window"]) ?? null,
     stopCount: statedStopCount(route) ?? pickups.length,
   }
 }
@@ -251,13 +251,14 @@ export function routesInSelection(
   routes: readonly BusinessRecord[],
   pickups: readonly BusinessRecord[],
   allContainers: readonly BusinessRecord[],
+  gazetteer: Gazetteer,
 ): AreaRoutes {
   const empty: AreaRoutes = { total: 0, awaiting: 0, inProgress: 0, completed: 0, routes: [] }
   if (selected.length === 0) return empty
 
   const selectedIds = new Set(selected.map((container) => container.id))
   const selectedAreas = new Set(
-    selected.map((container) => clean(container.facts["Planning area"])?.toLowerCase()).filter(Boolean) as string[],
+    selected.map((container) => cleanFact(container.facts["Planning area"])?.toLowerCase()).filter(Boolean) as string[],
   )
 
   const rows = linkRoutes(routes, pickups, allContainers)
@@ -266,7 +267,7 @@ export function routesInSelection(
         linked.stopContainers.some((container) => selectedIds.has(container.id)) ||
         (linked.pickups.length === 0 && areaMatches(linked.route, selectedAreas)),
     )
-    .map(toAreaRoute)
+    .map((linked) => toAreaRoute(linked, gazetteer))
     .sort(byBucketDateName)
 
   return {
@@ -288,9 +289,10 @@ export function routesInWindow(
   pickups: readonly BusinessRecord[],
   allContainers: readonly BusinessRecord[],
   range: QuantityRange,
+  gazetteer: Gazetteer,
 ): AreaRoute[] {
   return linkRoutes(routes, pickups, allContainers)
-    .map(toAreaRoute)
+    .map((linked) => toAreaRoute(linked, gazetteer))
     .filter((route) => route.stops.length > 0)
     .filter((route) => (range ? route.date !== null && route.date >= range.from && route.date <= range.to : true))
     .sort(byBucketDateName)
@@ -298,7 +300,7 @@ export function routesInWindow(
 
 /** A fixture route day names its geography loosely ("Østerbro" for "Østerbro Zone 2"). */
 function areaMatches(route: BusinessRecord, selectedAreas: ReadonlySet<string>): boolean {
-  const area = clean(route.facts.Area)?.toLowerCase()
+  const area = cleanFact(route.facts.Area)?.toLowerCase()
   if (!area) return false
   for (const selectedArea of selectedAreas) {
     if (selectedArea.startsWith(area) || area.startsWith(selectedArea)) return true

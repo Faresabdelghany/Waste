@@ -24,6 +24,7 @@
 //   group and (schemeId, groupId, serviceDate) for explicit groups —
 //   deterministic ids, never Date.now().
 
+import { EMPTY_FACT } from "../record-values"
 import type { BusinessRecord } from "../prototype-record"
 import { schemeGroupPlans, type ResolvedCollectionGroup } from "./groups"
 import { avalancheHash } from "./hash"
@@ -166,7 +167,7 @@ export function schemePlannedStartTime(
   const raw =
     stringValueOf(scheme, "plannedStartTime")?.trim() ||
     scheme.facts?.["Planned start"]?.trim()
-  return raw && raw !== "—" ? raw : undefined
+  return raw && raw !== EMPTY_FACT ? raw : undefined
 }
 
 /**

@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { BusinessRecord } from "../../data/business-modules"
+import { FIXTURE_GAZETTEER } from "../../data/street-gazetteer"
 import { clusterPoints } from "../clusters"
 import { FALLBACK_FRACTION_PALETTE, fractionColor } from "../colors"
 import { offsetMetres } from "@waste/domain/map-planning/geo"
@@ -52,7 +53,7 @@ describe("containerPoints", () => {
       container("b", { ...ryesgade, "Waste fractions": "Residual · Mixed" }),
       container("stored", { Address: "Warehouse West", Property: "—" }, { status: "In storage" }),
       container("gone", ryesgade, { facts: { ...ryesgade, "Registry visibility": "Soft deleted" } }),
-    ])
+    ], FIXTURE_GAZETTEER)
     assert.deepEqual(points.map((p) => p.id), ["a", "b"])
     assert.deepEqual(points[1].fractions, ["Residual", "Mixed"])
     assert.equal(points[0].propertyKey, "Ryesgade 45")
