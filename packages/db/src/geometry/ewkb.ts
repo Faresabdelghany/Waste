@@ -9,7 +9,9 @@
 //
 // The decoder does not re-check ring closure or validity: the `validGeometry`
 // check beside the column (schema/geometry.ts) holds those at write time, and
-// a decoder that second-guessed the database would only hide a broken row.
+// a decoder that second-guessed the database would only hide a broken row. It
+// does refuse a ring of fewer than four positions, which no closed ring has
+// and the contracts' LinearRing could not hold.
 import type { Point, Polygon, Position } from "@waste/contracts/geojson"
 
 export type DecodedGeometry = {
@@ -36,23 +38,25 @@ const HAS_M = 0x4000_0000
 const HAS_SRID = 0x2000_0000
 const TYPE_MASK = 0x1fff_ffff
 
-const fail = (message: string): never => {
+// A declaration, not an arrow: TypeScript treats a call to a declared
+// never-returning function as the end of the path, so a check can `fail`.
+function fail(message: string): never {
   throw new Error(`decodeEwkbHex: ${message}`)
 }
 
 const typeName = (type: number): string => TYPE_NAMES[type] ?? `WKB type ${type}`
 
+/** Buffer's hex decoder stops silently at the first pair that is not hex, so its length says whether it read everything. */
 function bytesFromHex(hex: string): Uint8Array {
   if (hex.length === 0) fail("empty")
   if (hex.length % 2 !== 0) fail(`odd number of hex digits (${hex.length})`)
-  const bytes = new Uint8Array(hex.length / 2)
-  for (let index = 0; index < bytes.length; index += 1) {
-    const pair = hex.slice(index * 2, index * 2 + 2)
-    const byte = Number.parseInt(pair, 16)
-    if (Number.isNaN(byte) || !/^[0-9a-fA-F]{2}$/.test(pair)) fail(`"${pair}" at offset ${index * 2} is not hex`)
-    bytes[index] = byte
+  const bytes = Buffer.from(hex, "hex")
+  if (bytes.length * 2 !== hex.length) {
+    const at = bytes.length * 2
+    fail(`"${hex.slice(at, at + 2)}" at offset ${at} is not hex`)
   }
-  return bytes
+  // The same memory as a plain view (Buffer may sit inside Node's pool).
+  return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
 }
 
 /** A cursor over the bytes; the byte order marker decides how the numbers after it read. */
@@ -133,13 +137,14 @@ export function decodeEwkbHex(hex: string): DecodedGeometry {
     const coordinates: Position[][] = []
     for (let ring = 0; ring < ringCount; ring += 1) {
       const positionCount = reader.uint32()
+      if (positionCount < 4) fail(`ring ${ring + 1} has ${positionCount} position(s); a ring closes on its fourth or later`)
       const positions: Position[] = []
       for (let index = 0; index < positionCount; index += 1) positions.push(position(reader, hasZ))
       coordinates.push(positions)
     }
     geometry = { type: "Polygon", coordinates }
   } else {
-    return fail(`${typeName(type)} is not stored here: only Point and Polygon columns exist`)
+    fail(`${typeName(type)} is not stored here: only Point and Polygon columns exist`)
   }
 
   if (reader.remaining > 0) fail(`${reader.remaining} byte(s) left after the geometry`)

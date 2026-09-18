@@ -3,7 +3,7 @@ import { after, before, describe, test } from "node:test"
 
 import { grantLogin } from "../bootstrap"
 import { createDb, type Database } from "../client"
-import { migrateDatabase } from "../migrate"
+import { MIGRATION_SEARCH_PATH, migrateDatabase } from "../migrate"
 import { API_ROLE } from "../roles"
 import { databaseUnderTest } from "./database"
 
@@ -118,6 +118,7 @@ describe("the foundation migration", { skip: database.skip }, () => {
       const [row] = await app.sql<{ user: string; path: string }[]>`select current_user as user, current_setting('search_path') as path`
       assert.equal(row.user, API_ROLE)
       assert.equal(row.path, "wms, extensions")
+      assert.equal(MIGRATION_SEARCH_PATH, row.path, "migrations resolve unqualified names the way the API role will")
     } finally {
       await app.close()
     }

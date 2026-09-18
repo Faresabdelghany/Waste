@@ -8,10 +8,12 @@
 // has no builder for).
 import { defineConfig } from "drizzle-kit"
 
+import { CASING } from "./src/casing"
+
 export default defineConfig({
   dialect: "postgresql",
   schema: "./src/schema/index.ts",
   out: "./migrations",
   // Postgres identifiers are snake_case; TypeScript stays camelCase.
-  casing: "snake_case",
+  casing: CASING,
 })

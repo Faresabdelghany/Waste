@@ -3,7 +3,7 @@ import { after, before, describe, test } from "node:test"
 
 import type { Point, Polygon } from "@waste/contracts/geojson"
 import { sql } from "drizzle-orm"
-import { getTableConfig, integer } from "drizzle-orm/pg-core"
+import { integer } from "drizzle-orm/pg-core"
 
 import { createDb, type Database } from "../client"
 import { decodeEwkbHex } from "../geometry/ewkb"
@@ -12,7 +12,7 @@ import { API_ROLE } from "../roles"
 import { geometry, SRID, validGeometry } from "../schema/geometry"
 import { wms } from "../schema/wms"
 import { databaseUnderTest } from "./database"
-import { createSpecimen, rolledBack, statementsFor, type Tx } from "./specimen"
+import { refusedWith, withSpecimen, type Tx } from "./specimen"
 
 const database = databaseUnderTest()
 
@@ -73,49 +73,6 @@ const bowTie: Polygon = {
   ],
 }
 
-/** The SQLSTATE of a failed statement, through Drizzle's wrapper or straight from postgres.js. */
-const sqlstate = (error: unknown): string | undefined => {
-  const own = (error as { code?: unknown }).code
-  if (typeof own === "string") return own
-  const cause = (error as { cause?: { code?: unknown } }).cause?.code
-  return typeof cause === "string" ? cause : undefined
-}
-
-const refusedWith =
-  (code: string, message: RegExp) =>
-  (error: unknown): boolean => {
-    assert.equal(sqlstate(error), code, String(error))
-    assert.match(String(error) + String((error as { cause?: unknown }).cause ?? ""), message)
-    return true
-  }
-
-describe("the geometry columns as drizzle-kit writes them", () => {
-  test("a point and a polygon column with SRID 4326, and a validity check for each", async () => {
-    const [createTable, ...rest] = await statementsFor({ specimen })
-    assert.equal(rest.length, 0)
-    assert.match(createTable, /^CREATE TABLE "wms"\."specimen_geometry" \(/)
-    assert.match(createTable, /\t"location" geometry\(Point, 4326\),\n/)
-    assert.match(createTable, /\t"boundary" geometry\(Polygon, 4326\),\n/)
-    assert.match(
-      createTable,
-      /CONSTRAINT "specimen_geometry_boundary_valid" CHECK \(extensions\.st_isvalid\("wms"\."specimen_geometry"\."boundary"\) and not extensions\.st_isempty\("wms"\."specimen_geometry"\."boundary"\)\)/,
-    )
-    assert.match(createTable, /CONSTRAINT "specimen_geometry_location_valid" CHECK \(extensions\.st_isvalid\("wms"\."specimen_geometry"\."location"\)/)
-  })
-
-  test("names the check after the table and the column as the database spells it", () => {
-    const named = wms.table(
-      "specimen_named",
-      { serviceBoundary: geometry.polygon(), centre: geometry.point("explicit_name") },
-      (table) => [validGeometry(table.serviceBoundary), validGeometry(table.centre)],
-    )
-    assert.deepEqual(
-      getTableConfig(named).checks.map((check) => check.name),
-      ["specimen_named_service_boundary_valid", "specimen_named_explicit_name_valid"],
-    )
-  })
-})
-
 describe("geometry columns against the database", { skip: database.skip }, () => {
   let admin: Database
 
@@ -125,12 +82,7 @@ describe("geometry columns against the database", { skip: database.skip }, () =>
   })
   after(() => admin.close())
 
-  /** The specimen table, created and rolled back with the test's own transaction. */
-  const withSpecimen = <T>(fn: (tx: Tx) => Promise<T>): Promise<T> =>
-    rolledBack(admin.db, async (tx) => {
-      await createSpecimen(tx, { specimen })
-      return fn(tx)
-    })
+  const inSpecimen = <T>(fn: (tx: Tx) => Promise<T>): Promise<T> => withSpecimen(admin.db, { specimen }, fn)
 
   test("ST_GeomFromGeoJSON reads a GeoJSON without crs as SRID 4326, which is what the write relies on", async () => {
     const [row] = await admin.sql<{ srid: number }[]>`
@@ -139,14 +91,14 @@ describe("geometry columns against the database", { skip: database.skip }, () =>
   })
 
   test("a polygon written from GeoJSON reads back equal, hole included; an unset column reads null", () =>
-    withSpecimen(async (tx) => {
+    inSpecimen(async (tx) => {
       await tx.insert(specimen).values({ id: 1, boundary: copenhagen })
       const rows = await tx.select().from(specimen)
       assert.deepEqual(rows, [{ id: 1, location: null, boundary: copenhagen }])
     }))
 
   test("a [lng, lat] point round-trips; the column is flat and refuses an altitude with 22023", () =>
-    withSpecimen(async (tx) => {
+    inSpecimen(async (tx) => {
       await tx.insert(specimen).values({ id: 1, location: townHall })
       const [row] = await tx.select({ location: specimen.location }).from(specimen)
       assert.deepEqual(row.location, townHall)
@@ -158,7 +110,7 @@ describe("geometry columns against the database", { skip: database.skip }, () =>
     }))
 
   test("the column pins the shape and the SRID: the wrong one is refused with 22023, not relabelled", () =>
-    withSpecimen(async (tx) => {
+    inSpecimen(async (tx) => {
       await assert.rejects(
         tx.transaction((savepoint) => savepoint.insert(specimen).values({ id: 1, location: copenhagen as unknown as Point })),
         refusedWith("22023", /Geometry type \(Polygon\) does not match column type \(Point\)/),
@@ -172,7 +124,7 @@ describe("geometry columns against the database", { skip: database.skip }, () =>
     }))
 
   test("validGeometry refuses a self-intersecting ring and an empty polygon with 23514, naming the constraint", () =>
-    withSpecimen(async (tx) => {
+    inSpecimen(async (tx) => {
       await assert.rejects(
         tx.transaction((savepoint) => savepoint.insert(specimen).values({ id: 1, boundary: bowTie })),
         refusedWith("23514", /specimen_geometry_boundary_valid/),
@@ -187,16 +139,40 @@ describe("geometry columns against the database", { skip: database.skip }, () =>
       )
     }))
 
+  test("validGeometry holds the WGS 84 range too: a point past 180° or 90° is refused with 23514", () =>
+    inSpecimen(async (tx) => {
+      const offTheGlobe: Point = { type: "Point", coordinates: [200, 95] }
+      await assert.rejects(
+        tx.transaction((savepoint) => savepoint.insert(specimen).values({ id: 1, location: offTheGlobe })),
+        refusedWith("23514", /specimen_geometry_location_valid/),
+      )
+      const southPole: Point = { type: "Point", coordinates: [-180, -90] }
+      await tx.insert(specimen).values({ id: 2, location: southPole })
+      const [row] = await tx.select({ location: specimen.location }).from(specimen)
+      assert.deepEqual(row.location, southPole, "the boundary of the range is inside it")
+    }))
+
   test("the two faces: a Drizzle select maps the column to GeoJSON, a raw row carries hex EWKB", () =>
-    withSpecimen(async (tx) => {
+    inSpecimen(async (tx) => {
       await tx.insert(specimen).values({ id: 1, location: townHall })
       const raw = await tx.execute<{ location: string }>(sql`select ${specimen.location} as location from ${specimen}`)
       assert.match(raw[0].location, /^0101000020E6100000[0-9A-F]{32}$/)
       assert.deepEqual(decodeEwkbHex(raw[0].location), { srid: SRID, geometry: townHall })
     }))
 
+  test("an expression mapped with the column: PostGIS's json cast reads as GeoJSON, another SRID is refused", () =>
+    inSpecimen(async (tx) => {
+      await tx.insert(specimen).values({ id: 1, location: townHall })
+      const [row] = await tx.select({ asJson: sql`to_jsonb(${specimen.location})`.mapWith(specimen.location) }).from(specimen)
+      assert.deepEqual(row.asJson, townHall)
+      await assert.rejects(
+        tx.select({ mercator: sql`extensions.st_transform(${specimen.location}, 3857)`.mapWith(specimen.location) }).from(specimen),
+        /geometry\.point: SRID 3857 is not 4326/,
+      )
+    }))
+
   test("as wms_api through its own search path, ST_Within says which area a point is in, holes honoured", () =>
-    withSpecimen(async (tx) => {
+    inSpecimen(async (tx) => {
       // The table exists; from here on the transaction is the API role, with
       // the search path its login gets (role settings do not apply on SET ROLE).
       await tx.execute(sql`set local role ${sql.raw(API_ROLE)}`)

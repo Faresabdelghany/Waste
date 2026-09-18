@@ -5,11 +5,24 @@
 // the code `pnpm db:generate` runs, with the package's casing: what a specimen
 // test proves about a type string or a check is what a migration file will
 // say.
+//
+// Two rules the helpers cannot enforce. A specimen table's name belongs to one
+// file, and to one table object in it: node's test runner runs files in
+// parallel processes, and two transactions creating the same table wait on
+// each other or deadlock; and Drizzle's casing cache keys columns by schema
+// and table name, so a second table object of the same name on one client
+// fails with a TypeError after its CREATE TABLE succeeded. And a statement
+// expected to fail runs in its own savepoint, `tx.transaction((savepoint) =>
+// ...)`, because a failed statement aborts the transaction it ran in; `fn`
+// itself runs in a savepoint here, so a failure that `fn` swallowed still
+// rejects the run, as it would in a plain transaction.
+import assert from "node:assert/strict"
+
 import { sql } from "drizzle-orm"
 import type { PgTable } from "drizzle-orm/pg-core"
 import { generateDrizzleJson, generateMigration } from "drizzle-kit/api"
 
-import config from "../../drizzle.config"
+import { CASING } from "../casing"
 import type { Db } from "../client"
 import { wms } from "../schema/wms"
 
@@ -18,8 +31,8 @@ export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0]
 
 /** The statements `drizzle-kit generate` would write for these tables on a database where `wms` already exists. */
 export async function statementsFor(tables: Record<string, PgTable>): Promise<string[]> {
-  const before = generateDrizzleJson({ wms }, undefined, undefined, config.casing)
-  const after = generateDrizzleJson({ wms, ...tables }, before.id, undefined, config.casing)
+  const before = generateDrizzleJson({ wms }, undefined, undefined, CASING)
+  const after = generateDrizzleJson({ wms, ...tables }, before.id, undefined, CASING)
   return generateMigration(before, after)
 }
 
@@ -35,7 +48,7 @@ class Rollback<T> {
 export async function rolledBack<T>(db: Db, fn: (tx: Tx) => Promise<T>): Promise<T> {
   try {
     await db.transaction(async (tx) => {
-      throw new Rollback(await fn(tx))
+      throw new Rollback(await tx.transaction(fn))
     })
   } catch (error) {
     if (error instanceof Rollback) return error.result as T
@@ -43,3 +56,27 @@ export async function rolledBack<T>(db: Db, fn: (tx: Tx) => Promise<T>): Promise
   }
   throw new Error("rolledBack: the transaction returned instead of rolling back")
 }
+
+/** The specimen tables, created and rolled back with the test's own transaction. */
+export const withSpecimen = <T>(db: Db, tables: Record<string, PgTable>, fn: (tx: Tx) => Promise<T>): Promise<T> =>
+  rolledBack(db, async (tx) => {
+    await createSpecimen(tx, tables)
+    return fn(tx)
+  })
+
+/** The SQLSTATE of a failed statement, through Drizzle's wrapper or straight from postgres.js. */
+export const sqlstate = (error: unknown): string | undefined => {
+  const own = (error as { code?: unknown }).code
+  if (typeof own === "string") return own
+  const cause = (error as { cause?: { code?: unknown } }).cause?.code
+  return typeof cause === "string" ? cause : undefined
+}
+
+/** For `assert.rejects`: the statement failed with this SQLSTATE and a message matching. */
+export const refusedWith =
+  (code: string, message: RegExp) =>
+  (error: unknown): boolean => {
+    assert.equal(sqlstate(error), code, String(error))
+    assert.match(String(error) + String((error as { cause?: unknown }).cause ?? ""), message)
+    return true
+  }

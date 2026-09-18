@@ -90,6 +90,16 @@ describe("decodeEwkbHex", () => {
     assert.throws(() => decodeEwkbHex(EMPTY_POLYGON), /empty polygon/)
   })
 
+  test("refuses a ring of fewer than four positions, which no closed ring has", () => {
+    // One ring, zero positions: PostGIS 3.3 stores such a polygon if handed the raw EWKB.
+    assert.throws(() => decodeEwkbHex("0103000020E61000000100000000000000"), /ring 1 has 0 position\(s\); a ring closes on its fourth or later/)
+    // One ring, two positions (0 0) and (1 1).
+    assert.throws(
+      () => decodeEwkbHex("0103000020E6100000" + "01000000" + "02000000" + "0".repeat(32) + "000000000000F03F000000000000F03F"),
+      /ring 1 has 2 position\(s\)/,
+    )
+  })
+
   test("refuses bytes it cannot account for", () => {
     assert.throws(() => decodeEwkbHex(POINT + "00"), /1 byte\(s\) left after the geometry/)
     assert.throws(() => decodeEwkbHex(POINT.slice(0, -2)), /truncated/)

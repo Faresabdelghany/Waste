@@ -18,6 +18,16 @@
 // serialises them; the second finds nothing left to apply. That lock needs
 // one backend for the whole call, which a transaction pooler does not give,
 // so such URLs are refused up front rather than left to leak the lock.
+//
+// Every migration runs with `search_path = wms, extensions`, sent as a startup
+// parameter of the migrator's own connections. The hand-written files qualify
+// every name, but a generated one spells a column type the way drizzle-kit
+// renders it, and drizzle-kit quotes any type it does not recognise, so a
+// PostGIS column is `geometry(Point, 4326)` bare (schema/geometry.ts). That
+// name resolves here the same way on every server, and the same way it does
+// for the API role, whose login carries the same path; without this it would
+// depend on the owner role's setting, which on Supabase happens to include
+// `extensions` and elsewhere does not.
 import { migrate } from "drizzle-orm/postgres-js/migrator"
 import { fileURLToPath } from "node:url"
 import type { Notice } from "postgres"
@@ -34,6 +44,8 @@ const MIGRATION_LOCK = 0x77_6d_73
 const LOCK_TIMEOUT = "60s"
 /** Supabase's transaction pooler: one backend per statement, no session state. */
 const TRANSACTION_POOLER_PORT = "6543"
+/** What unqualified names in a migration resolve through: the API role's own path (see the foundation migration). */
+export const MIGRATION_SEARCH_PATH = "wms, extensions"
 
 export type MigrateOptions = {
   /** Where Postgres NOTICE messages from the migrations go; dropped by default. */
@@ -47,7 +59,7 @@ export async function migrateDatabase(url: string, { onnotice }: MigrateOptions 
     )
   }
   // One connection runs the migrations, one holds the lock.
-  const { db, sql, close } = createDb(url, { max: 2, onnotice })
+  const { db, sql, close } = createDb(url, { max: 2, onnotice, searchPath: MIGRATION_SEARCH_PATH })
   try {
     const lock = await sql.reserve()
     try {

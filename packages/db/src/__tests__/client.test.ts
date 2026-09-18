@@ -32,6 +32,17 @@ describe("createDb", { skip: database.skip }, () => {
     assert.match(String(row.day), /^\d{4}-\d{2}-\d{2}$/)
   })
 
+  test("searchPath goes out as a startup parameter and outranks the role's setting", async () => {
+    const pinned = createDb(database.adminUrl, { max: 1, searchPath: "wms, extensions" })
+    try {
+      const [row] = await pinned.sql<{ path: string; source: string }[]>`
+        select current_setting('search_path') as path, (select source from pg_settings where name = 'search_path') as source`
+      assert.deepEqual({ path: row.path, source: row.source }, { path: "wms, extensions", source: "client" })
+    } finally {
+      await pinned.close()
+    }
+  })
+
   test("close() is idempotent", async () => {
     const connection = createDb(database.adminUrl)
     await connection.sql`select 1`
