@@ -18,6 +18,7 @@
     "bootstrap": "node --env-file-if-exists=../../.env --import tsx scripts/bootstrap-local.ts"
   },
   "dependencies": {
+    "@waste/contracts": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.9",
     "tsx": "^4.23.12"
