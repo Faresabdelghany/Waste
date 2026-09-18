@@ -1,0 +1,24 @@
+# The local development database for `pnpm db:start` (Supabase CLI). Only the
+# keys that carry a decision are set; every other key is the CLI's default
+# (reference: https://supabase.com/docs/guides/local-development/cli/config).
+# Container names derive from project_id: supabase_db_waste.
+project_id = "waste"
+
+[api]
+# ADR-0001: the domain schema `wms` is never exposed. These are the defaults,
+# written out so the decision is visible.
+schemas = ["public", "graphql_public"]
+
+[db]
+port = 54322
+shadow_port = 54320
+# Must match the hosted project (waste-dev, Postgres 17).
+major_version = 17
+
+[db.migrations]
+# Migrations are Drizzle SQL files in packages/db/migrations (Issue #64); the CLI only runs the local stack.
+enabled = false
+
+[db.seed]
+# Seed data arrives with the frontend adapter (build-order step 4), through the API, not through seed.sql.
+enabled = false

@@ -12,6 +12,11 @@ concurrency:
 env:
   NEXT_TELEMETRY_DISABLED: 1
   TURBO_TELEMETRY_DISABLED: 1
+  # The local Supabase stack the database steps below start (see .env.example).
+  DATABASE_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+  DATABASE_URL: postgresql://wms_api:wms_api@127.0.0.1:54322/postgres
+  # A database test may not skip here.
+  REQUIRE_DATABASE: "1"
 
 jobs:
   verify:
@@ -32,5 +37,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+
+      # The database tests run against the same Postgres image as the hosted
+      # project: the Supabase CLI (a root devDependency, so pnpm install brought
+      # it) starts one container on the runner's Docker, migrations apply
+      # through packages/db, and the API role gets its local login.
+      - run: pnpm db:start
+      - run: pnpm db:migrate
+      - run: pnpm db:bootstrap
+
       - run: pnpm test
       - run: pnpm build

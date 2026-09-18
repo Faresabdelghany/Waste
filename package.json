@@ -9,14 +9,23 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "test:e2e": "turbo run test:e2e"
+    "test:e2e": "turbo run test:e2e",
+    "db:start": "supabase db start",
+    "db:stop": "supabase stop",
+    "db:generate": "pnpm --filter @waste/db generate",
+    "db:migrate": "pnpm --filter @waste/db migrate",
+    "db:bootstrap": "pnpm --filter @waste/db bootstrap"
   },
   "devDependencies": {
     "@typescript/native": "npm:typescript@^7.0.2",
     "eslint": "^9.39.5",
     "eslint-config-next": "16.3.5",
+    "supabase": "2.117.0",
     "turbo": "^2.10.13",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-eslint": "^8.46.0"
+  },
+  "engines": {
+    "node": ">=22.9.0"
   }
 }
