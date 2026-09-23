@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Development-only helpers shared by the workspace packages: the purity gate (import scan, manifest and tsconfig checks) that keeps domain and contracts free of the web app, browser and Node globals. Never a runtime dependency.",
+  "description": "Development-only helpers shared by the workspace packages: the purity gate (import scan, manifest and tsconfig checks) that keeps domain and contracts free of the web app, browser and Node globals; the one rule for finding the database under test or skipping without it; and the specimen proving the web app's ESLint fence against the database. Never a runtime dependency.",
   "exports": {
     "./package.json": "./package.json",
     "./__tests__/*": null,
@@ -20,6 +20,7 @@
   "devDependencies": {
     "@types/node": "^22",
     "@typescript/native": "npm:typescript@^7.0.2",
+    "eslint": "^9.39.5",
     "tsx": "^4.23.12"
   }
 }

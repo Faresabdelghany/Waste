@@ -24,7 +24,8 @@
       "persistent": true,
       "env": [
         "HOST",
-        "PORT"
+        "PORT",
+        "DATABASE_URL"
       ]
     },
     "lint": {
@@ -40,6 +41,16 @@
     "test": {
       "dependsOn": [
         "^test"
+      ]
+    },
+    "@waste/api#test": {
+      "dependsOn": [
+        "^test"
+      ],
+      "cache": false,
+      "env": [
+        "DATABASE_URL",
+        "REQUIRE_DATABASE"
       ]
     },
     "test:e2e": {

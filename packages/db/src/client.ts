@@ -40,9 +40,27 @@ export type ClientOptions = {
    * session mode. Unset, the connecting role's own setting applies.
    */
   searchPath?: string
+  /**
+   * How long one dial may take before it fails with `CONNECT_TIMEOUT`, in
+   * seconds (postgres.js `connect_timeout`; its default is 30). A probe pool
+   * sets it to the probe's bound, so a dial that hangs ends with the probe
+   * instead of holding the connection for half a minute.
+   */
+  connectTimeoutSeconds?: number
+  /**
+   * A fixed delay between a failed connection and the pool's next dial, in
+   * seconds (postgres.js `backoff`). Unset, postgres.js grows the delay with
+   * every failure, up to 20 s, counted across the pool's connections; a probe
+   * pool sets a small fixed one, so a database that comes back is seen within
+   * that delay and not a backoff later.
+   */
+  backoffSeconds?: number
 }
 
-export function createDb(url: string, { max = 10, onnotice = () => {}, searchPath }: ClientOptions = {}): Database {
+export function createDb(
+  url: string,
+  { max = 10, onnotice = () => {}, searchPath, connectTimeoutSeconds, backoffSeconds }: ClientOptions = {},
+): Database {
   // prepare: false keeps the API's client valid behind Supabase's transaction
   // pooler, where named prepared statements are not supported. Migrations are
   // a different matter (see migrate.ts).
@@ -51,6 +69,9 @@ export function createDb(url: string, { max = 10, onnotice = () => {}, searchPat
     prepare: false,
     onnotice,
     ...(searchPath === undefined ? {} : { connection: { search_path: searchPath } }),
+    ...(connectTimeoutSeconds === undefined ? {} : { connect_timeout: connectTimeoutSeconds }),
+    // postgres.js takes a number at run time but types only the function form.
+    ...(backoffSeconds === undefined ? {} : { backoff: () => backoffSeconds }),
   })
   const db = drizzle({ client: sql, schema, casing: CASING })
   let closing: Promise<void> | undefined
