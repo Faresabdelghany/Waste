@@ -6,18 +6,30 @@
 // defaults stand for anything else, including the text 404 for an unknown
 // path: the error shape on the wire is decided with the first real endpoint,
 // not by the scaffold, and not by the generator either.
-import { HealthResponse } from "@waste/contracts/health"
+//
+// Two probes: /healthz is liveness (the process answers, with its clock) and
+// /readyz is readiness (the database answers, within readiness.ts's bound).
+// The database pool comes in from the composition root; the app never
+// connects on its own, so building it costs nothing and a test hands it a
+// pool that goes nowhere when the route under test asks nothing of it.
+import { HealthResponse, ReadinessResponse, ReadyResponse, UnavailableResponse } from "@waste/contracts/health"
+import type { Database } from "@waste/db/client"
 import { Hono } from "hono"
 import { describeRoute, openAPIRouteHandler, resolver } from "hono-openapi"
 
 import manifest from "../package.json" with { type: "json" }
+import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS } from "./readiness"
 
 export type AppOptions = {
+  /** The database pool, as the API role. /readyz probes it; nothing else touches it yet. */
+  db: Database
   /** The server's clock; injected so a test can pin it. */
   now?: () => Date
+  /** How long /readyz waits for the database before answering 503. */
+  databaseTimeoutMs?: number
 }
 
-export function createApp({ now = () => new Date() }: AppOptions = {}) {
+export function createApp({ db, now = () => new Date(), databaseTimeoutMs = DATABASE_CHECK_TIMEOUT_MS }: AppOptions) {
   const app = new Hono()
 
   app.get(
@@ -25,6 +37,7 @@ export function createApp({ now = () => new Date() }: AppOptions = {}) {
     describeRoute({
       operationId: "getHealth",
       summary: "Is the API up?",
+      description: "Liveness: the process answers, and this is its clock. Says nothing about the database; that is GET /readyz.",
       responses: {
         200: {
           description: "The API is up, and this is its clock.",
@@ -35,6 +48,35 @@ export function createApp({ now = () => new Date() }: AppOptions = {}) {
     (c) => {
       const body: HealthResponse = { status: "ok", time: now().toISOString() }
       return c.json(body)
+    },
+  )
+
+  app.get(
+    "/readyz",
+    describeRoute({
+      operationId: "getReadiness",
+      summary: "Can the API serve a request right now?",
+      description:
+        "Readiness: the database answers a probe within two seconds. A balancer takes the instance out of rotation on 503 and back in on 200; the process itself stays up.",
+      responses: {
+        200: {
+          description: "Every check passed: the database answers.",
+          content: { "application/json": { schema: resolver(ReadyResponse) } },
+        },
+        503: {
+          description: "The database did not answer within the bound. Take this instance out of rotation and probe again.",
+          content: { "application/json": { schema: resolver(UnavailableResponse) } },
+        },
+      },
+    }),
+    async (c) => {
+      const database = await checkDatabase(db.sql, { timeoutMs: databaseTimeoutMs })
+      if (database === "ok") {
+        const body: ReadinessResponse = { status: "ok", checks: { database } }
+        return c.json(body, 200)
+      }
+      const body: ReadinessResponse = { status: "unavailable", checks: { database } }
+      return c.json(body, 503)
     },
   )
 
