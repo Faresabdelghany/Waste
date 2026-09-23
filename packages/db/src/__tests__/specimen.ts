@@ -23,11 +23,10 @@ import type { PgTable } from "drizzle-orm/pg-core"
 import { generateDrizzleJson, generateMigration } from "drizzle-kit/api"
 
 import { CASING } from "../casing"
-import type { Db } from "../client"
+import type { Db, Tx } from "../client"
 import { wms } from "../schema/wms"
 
-/** A Drizzle transaction on the package's client. Nested, it is a savepoint. */
-export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0]
+export type { Tx }
 
 /** The statements `drizzle-kit generate` would write for these tables on a database where `wms` already exists. */
 export async function statementsFor(tables: Record<string, PgTable>): Promise<string[]> {

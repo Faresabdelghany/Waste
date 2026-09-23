@@ -43,8 +43,8 @@
 // generator in __tests__/geometry-rendering.test.ts.
 //
 // `validGeometry(column)` is the check a table adds beside such a column,
-// named `<table>_<column>_valid`; a name Postgres would truncate is refused
-// here, because it truncates silently and two truncated names collide. The
+// named `<table>_<column>_valid` through names.ts, which refuses a name
+// Postgres would truncate (silently, and two truncated names collide). The
 // contracts hold the shape of a ring (closed, four positions, three distinct)
 // and leave the rest to the database: ST_IsValid refuses a self-intersecting
 // ring with SQLSTATE 23514; an empty geometry is refused too (PostGIS calls
@@ -53,19 +53,16 @@
 // modifier does not check it and a row outside it could never be read back
 // through a contracts-validated response.
 import type { Point, Polygon, Position } from "@waste/contracts/geojson"
-import { getTableName, sql } from "drizzle-orm"
-import { CasingCache } from "drizzle-orm/casing"
+import { sql } from "drizzle-orm"
 import { check, customType, type CheckBuilder, type PgColumn } from "drizzle-orm/pg-core"
 
-import { CASING } from "../casing"
 import { decodeEwkbHex } from "../geometry/ewkb"
+import { columnName, tableObjectName } from "../names"
 
 /** WGS 84: the coordinate reference system of GeoJSON and of every geometry column. */
 export const SRID = 4326
 /** How PostGIS's json cast names the SRID, in the `crs` member it adds. */
 const CRS_NAME = `EPSG:${SRID}`
-/** Postgres truncates a longer identifier to this, in a notice the client drops. */
-const MAX_IDENTIFIER_BYTES = 63
 
 type Shape = { Point: Point; Polygon: Polygon }
 type ShapeName = keyof Shape
@@ -130,17 +127,8 @@ export const geometry = {
 }
 
 export function validGeometry(column: PgColumn): CheckBuilder {
-  // A cache per call: it keys columns by schema and table name, and two
-  // specimen tables in one process may share one.
-  const name = `${getTableName(column.table)}_${new CasingCache(CASING).getColumnCasing(column)}_valid`
-  const bytes = Buffer.byteLength(name)
-  if (bytes > MAX_IDENTIFIER_BYTES) {
-    throw new Error(
-      `validGeometry: "${name}" is ${bytes} bytes; Postgres would truncate it to ${MAX_IDENTIFIER_BYTES} silently, and two truncated names collide. Shorten the table or column name.`,
-    )
-  }
   return check(
-    name,
+    tableObjectName(column.table, `${columnName(column)}_valid`, "validGeometry"),
     sql`extensions.st_isvalid(${column}) and not extensions.st_isempty(${column}) and extensions.st_xmin(${column}) >= -180 and extensions.st_xmax(${column}) <= 180 and extensions.st_ymin(${column}) >= -90 and extensions.st_ymax(${column}) <= 90`,
   )
 }
