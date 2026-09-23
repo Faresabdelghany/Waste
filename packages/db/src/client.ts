@@ -18,6 +18,9 @@ import * as schema from "./schema"
 
 export type Db = PostgresJsDatabase<typeof schema>
 
+/** A Drizzle transaction on the package's client, as `db.transaction` and `withCompany` (tenant.ts) hand it out. Nested, it is a savepoint. */
+export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0]
+
 export type Database = {
   db: Db
   sql: Sql
