@@ -12,7 +12,7 @@ import { wms } from "../schema/wms"
 import { tenantFence } from "../sql/tenant-fence"
 import { COMPANY_SETTING, withCompany } from "../tenant"
 import { databaseUnderTest } from "./database"
-import { createSpecimen, refusedWith, rolledBack } from "./specimen"
+import { createSpecimen, refusedWith, rolledBack, rolledBackIn } from "./specimen"
 
 const database = databaseUnderTest()
 
@@ -26,10 +26,6 @@ const seed = [
   { companyId: companyA, note: "a2" },
   { companyId: companyB, note: "b1" },
 ]
-
-class Done<T> {
-  constructor(readonly value: T) {}
-}
 
 describe("the tenant fence against the database", { skip: database.skip }, () => {
   let admin: Database
@@ -51,18 +47,14 @@ describe("the tenant fence against the database", { skip: database.skip }, () =>
   }
 
   /** `withCompany` on the pool, the specimen created inside its transaction, everything rolled back. */
-  const asCompany = async <T>(companyId: string, fn: (tx: Tx) => Promise<T>): Promise<T> => {
-    try {
-      await withCompany(admin.db, companyId, async (tx) => {
+  const asCompany = <T>(companyId: string, fn: (tx: Tx) => Promise<T>): Promise<T> =>
+    rolledBackIn(
+      (body) => withCompany(admin.db, companyId, body),
+      async (tx) => {
         await fenced(tx)
-        throw new Done(await fn(tx))
-      })
-    } catch (error) {
-      if (error instanceof Done) return error.value as T
-      throw error
-    }
-    throw new Error("the transaction returned instead of rolling back")
-  }
+        return fn(tx)
+      },
+    )
 
   const notes = async (tx: Tx): Promise<string[]> => (await tx.select({ note: specimen.note }).from(specimen).orderBy(specimen.note)).map((row) => row.note)
 
@@ -149,4 +141,17 @@ describe("the tenant fence against the database", { skip: database.skip }, () =>
     await assert.rejects(withCompany(admin.db, "", () => Promise.resolve()), /withCompany: "" is not a UUID/)
     assert.deepEqual(await asCompany(companyA.toUpperCase(), notes), ["a1", "a2"], "Postgres compares uuids without regard to case")
   })
+
+  test("withCompany refuses a transaction: nested, the company set in the savepoint would outlive it", () =>
+    asCompany(companyA, async (tx) => {
+      await assert.rejects(
+        withCompany(tx as unknown as typeof admin.db, companyB, () => Promise.resolve()),
+        /withCompany: given a transaction; it opens its own/,
+      )
+      // What the refusal prevents: a setting made in a savepoint survives its release.
+      await tx.transaction(async (savepoint) => {
+        await savepoint.execute(sql`select set_config(${COMPANY_SETTING}, ${companyB}, true)`)
+      })
+      assert.deepEqual(await notes(tx), ["b1"], "the outer transaction now runs as company B")
+    }))
 })

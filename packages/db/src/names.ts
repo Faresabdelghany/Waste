@@ -48,9 +48,19 @@ export function columnName(column: PgColumn): string {
   return new CasingCache(CASING).getColumnCasing(column)
 }
 
+/**
+ * The table's columns by their database names, in one pass over its config
+ * (reading the config runs the table's extra-config builder again, so a helper
+ * that needs several columns reads it once).
+ */
+export function columnsByName(table: PgTable): Map<string, PgColumn> {
+  const casing = new CasingCache(CASING)
+  return new Map(getTableConfig(table).columns.map((column) => [casing.getColumnCasing(column), column]))
+}
+
 /** The table's column with this database name, if it has one. */
 export function columnNamed(table: PgTable, name: string): PgColumn | undefined {
-  return getTableConfig(table).columns.find((column) => columnName(column) === name)
+  return columnsByName(table).get(name)
 }
 
 /** `<table>_<suffix>`, checked against the identifier limit. */

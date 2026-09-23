@@ -43,10 +43,14 @@ class Rollback<T> {
   constructor(readonly result: T) {}
 }
 
-/** Runs `fn` in a transaction that is always rolled back, and returns what it returned. */
-export async function rolledBack<T>(db: Db, fn: (tx: Tx) => Promise<T>): Promise<T> {
+/**
+ * Runs `fn` inside the transaction `open` starts (`db.transaction`, or
+ * `withCompany` on the pool), always rolls it back, and returns what `fn`
+ * returned.
+ */
+export async function rolledBackIn<T>(open: (body: (tx: Tx) => Promise<never>) => Promise<unknown>, fn: (tx: Tx) => Promise<T>): Promise<T> {
   try {
-    await db.transaction(async (tx) => {
+    await open(async (tx) => {
       throw new Rollback(await tx.transaction(fn))
     })
   } catch (error) {
@@ -55,6 +59,9 @@ export async function rolledBack<T>(db: Db, fn: (tx: Tx) => Promise<T>): Promise
   }
   throw new Error("rolledBack: the transaction returned instead of rolling back")
 }
+
+/** Runs `fn` in a transaction that is always rolled back, and returns what it returned. */
+export const rolledBack = <T>(db: Db, fn: (tx: Tx) => Promise<T>): Promise<T> => rolledBackIn((body) => db.transaction(body), fn)
 
 /** The specimen tables, created and rolled back with the test's own transaction. */
 export const withSpecimen = <T>(db: Db, tables: Record<string, PgTable>, fn: (tx: Tx) => Promise<T>): Promise<T> =>

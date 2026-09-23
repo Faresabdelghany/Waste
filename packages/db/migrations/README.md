@@ -12,7 +12,7 @@ Plain SQL files, applied in journal order by `src/migrate.ts` (`pnpm db:migrate`
 |---|---|---|
 | Row-level security enabled and forced, one policy over `company_id` for `wms_api` | `tenantFence(table)` | Every table (every table carries `company_id`) |
 | The `BEFORE UPDATE` trigger on `wms.touch_updated_at()` | `touchUpdatedAt(table)` | Every table that spread `timestamps` |
-| The `btree_gist` exclusion constraint over the business key and the validity range | `excludeOverlapping(table, [keyColumns])` | Every table that spread `validity` (which must also carry the `validPeriod` check) |
+| The `btree_gist` exclusion constraint over the business key and the validity range | `excludeOverlapping(table, [keyColumns])` | Every table that spread `validity` (which must also carry the `validPeriod` check); `company_id` leads the key, and every key column is `NOT NULL`, since a null never equals anything in an exclusion constraint |
 
 Drizzle can describe policies (`pgPolicy`) and RLS; they are not used, so each of these statements has one owner and one spelling.
 
@@ -25,7 +25,7 @@ The recipe for a new table:
 1. Define it in `src/schema/<context>.ts` from the column sets in `src/schema/columns.ts` (`id`, `tenant` or `projectScoped`, `timestamps`, `validity` with `validPeriod(columns)` in the extra config), export it from `src/schema/index.ts`.
 2. `pnpm db:generate` writes `NNNN_<name>.sql`.
 3. Append the hand-written statements to that file: `tenantFence`, `touchUpdatedAt` where there is `updated_at`, `excludeOverlapping` where there is validity. Copy the helper output verbatim.
-4. `pnpm --filter @waste/db test`. The gate in `src/__tests__/hand-written.test.ts` reads every migration, finds the file that created each table of the schema, and fails with the missing statements printed verbatim when the file lacks one; paste what it prints.
+4. `pnpm --filter @waste/db test`. The gate in `src/__tests__/hand-written.test.ts` reads every migration the way the migrator does (split at the breakpoints, comments dropped, whitespace collapsed), finds the file whose statements create each table of the schema, and fails with the missing statements printed verbatim when the file lacks one; paste what it prints. A statement wrapped over several lines counts; one commented out, or sharing a breakpoint piece with another, does not.
 5. `pnpm db:migrate` locally; CI applies the same to its stack.
 
 What the file looks like once complete (a specimen; the constraint's key is the table's own):

@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { eq, sql, and } from "drizzle-orm"
-import { text, uuid } from "drizzle-orm/pg-core"
+import { date, integer, text, uuid } from "drizzle-orm/pg-core"
 
 import { createDb, type Database } from "../client"
 import { migrateDatabase } from "../migrate"
@@ -22,6 +22,9 @@ const specimen = wms.table(
   (columns) => [validPeriod(columns)],
 )
 
+// Days to ask about, as another table would carry them (a Pickup's service date).
+const days = wms.table("specimen_validity_days", { id: integer().primaryKey(), day: date().notNull() })
+
 const companyA = "018f7c2e-0000-7000-8000-00000000000a"
 const companyB = "018f7c2e-0000-7000-8000-00000000000b"
 const bin = "018f7c2e-0000-7000-8000-0000000000c1"
@@ -38,7 +41,7 @@ describe("effective dating against the database", { skip: database.skip }, () =>
 
   /** The specimen table with its exclusion constraint, as a migration would create it. */
   const inSpecimen = <T>(fn: (tx: Tx) => Promise<T>): Promise<T> =>
-    withSpecimen(admin.db, { specimen }, async (tx) => {
+    withSpecimen(admin.db, { specimen, days }, async (tx) => {
       for (const statement of excludeOverlapping(specimen, [specimen.containerId])) await tx.execute(sql.raw(statement))
       return fn(tx)
     })
@@ -133,17 +136,39 @@ describe("effective dating against the database", { skip: database.skip }, () =>
       assert.deepEqual(await labelsOn("2099-12-31"), ["onwards"])
     }))
 
-  test("validOn takes a SQL date expression too, and refuses a day that is not YYYY-MM-DD before the database sees it", () =>
+  test("validOn takes a SQL date expression or another table's column as the day, in a join", () =>
     inSpecimen(async (tx) => {
-      await tx.insert(specimen).values(period("q1", "2026-01-01", "2026-04-01"))
+      await tx.insert(specimen).values([period("q1", "2026-01-01", "2026-04-01"), period("q2", "2026-04-01", "2026-07-01")])
       const rows = await tx
         .select({ label: specimen.label })
         .from(specimen)
         .where(validOn(specimen, sql`date '2026-02-01' + interval '1 month'`))
       assert.deepEqual(rows, [{ label: "q1" }])
-      assert.throws(() => validOn(specimen, "Jan 1 2026"), /validOn: "Jan 1 2026" is not a YYYY-MM-DD day/)
-      assert.throws(() => validOn(specimen, "2026-1-1"), /validOn: "2026-1-1" is not a YYYY-MM-DD day/)
+      await tx.insert(days).values([
+        { id: 1, day: "2026-03-31" },
+        { id: 2, day: "2026-04-01" },
+        { id: 3, day: "2026-12-24" },
+      ])
+      const joined = await tx
+        .select({ id: days.id, label: specimen.label })
+        .from(days)
+        .leftJoin(specimen, validOn(specimen, days.day))
+        .orderBy(days.id)
+      assert.deepEqual(joined, [
+        { id: 1, label: "q1" },
+        { id: 2, label: "q2" },
+        { id: 3, label: null },
+      ])
     }))
+
+  test("validOn refuses a day that is not YYYY-MM-DD, or not on the calendar, before the database sees it", () => {
+    assert.throws(() => validOn(specimen, "Jan 1 2026"), /validOn: "Jan 1 2026" is not a YYYY-MM-DD day/)
+    assert.throws(() => validOn(specimen, "2026-1-1"), /validOn: "2026-1-1" is not a YYYY-MM-DD day/)
+    assert.throws(() => validOn(specimen, "2026-02-30"), /validOn: "2026-02-30" is not a YYYY-MM-DD day/)
+    assert.throws(() => validOn(specimen, "2026-13-01"), /validOn: "2026-13-01" is not a YYYY-MM-DD day/)
+    assert.throws(() => validOn(specimen, "2026-00-10"), /validOn: "2026-00-10" is not a YYYY-MM-DD day/)
+    assert.ok(validOn(specimen, "2028-02-29"), "a leap day is a day")
+  })
 
   test("the validity columns travel as YYYY-MM-DD strings through the Drizzle face", () =>
     inSpecimen(async (tx) => {

@@ -74,9 +74,20 @@ describe("the column sets against the database", { skip: database.skip }, () => 
       const claimed = new Date("2019-06-01T00:00:00Z")
       const [overridden] = await tx.update(specimen).set({ updatedAt: claimed }).where(eq(specimen.id, inserted.id)).returning()
       assert.equal(overridden.updatedAt.getTime(), new Date(now).getTime())
-      // And an update that changes nothing still counts as an update.
+    }))
+
+  test("an update that changes nothing still moves updated_at", () =>
+    inSpecimen(async (tx) => {
+      const past = new Date("2020-01-01T00:00:00Z")
+      const [inserted] = await tx.insert(specimen).values({ companyId: companyA, note: "same" }).returning()
+      // Plant a past stamp with the trigger out of the way, since it would override it.
+      await tx.execute(sql`alter table ${specimen} disable trigger specimen_column_sets_touch_updated_at`)
       await tx.update(specimen).set({ updatedAt: past }).where(eq(specimen.id, inserted.id))
-      const [unchanged] = await tx.update(specimen).set({ note: "renamed" }).where(eq(specimen.id, inserted.id)).returning()
+      await tx.execute(sql`alter table ${specimen} enable trigger specimen_column_sets_touch_updated_at`)
+      const [planted] = await tx.select({ updatedAt: specimen.updatedAt }).from(specimen).where(eq(specimen.id, inserted.id))
+      assert.equal(planted.updatedAt.getTime(), past.getTime())
+      const [unchanged] = await tx.update(specimen).set({ note: "same" }).where(eq(specimen.id, inserted.id)).returning()
+      const [{ now }] = await tx.execute<{ now: string }>(sql`select now()::text as now`)
       assert.equal(unchanged.updatedAt.getTime(), new Date(now).getTime())
     }))
 })
