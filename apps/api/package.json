@@ -24,6 +24,7 @@
     "@seriousme/openapi-schema-validator": "^2.9.1",
     "@types/node": "^22",
     "@typescript/native": "npm:typescript@^7.0.2",
+    "@waste/tooling": "workspace:*",
     "typescript": "npm:@typescript/typescript6@^6.0.2"
   }
 }

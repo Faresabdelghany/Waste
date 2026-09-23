@@ -7,16 +7,17 @@ import { createDb } from "@waste/db/client"
 
 import manifest from "../../package.json" with { type: "json" }
 import { createApp } from "../app"
+import { probePoolOptions } from "../readiness"
 import { databaseUnderTest } from "./database"
-import { refusedUrl } from "./unreachable"
+import { REFUSED_URL } from "./unreachable"
 
 const at = new Date("2026-09-17T13:41:00Z")
 const database = databaseUnderTest()
 
 /** A pool nothing connects to: /healthz and /openapi.json ask nothing of the database. */
-const idle = createDb("postgresql://nobody:nobody@127.0.0.1:1/none", { max: 1 })
+const idle = createDb(REFUSED_URL, { max: 1 })
 after(() => idle.close())
-const app = createApp({ now: () => at, db: idle })
+const app = createApp({ now: () => at, probe: idle })
 
 /** The parts of the document these tests read; the validator checks the whole. */
 type JsonSchema = {
@@ -34,6 +35,7 @@ type Spec = {
     {
       get: {
         operationId: string
+        description?: string
         responses: Record<string, { content: Record<string, { schema: JsonSchema }> }>
       }
     }
@@ -42,6 +44,7 @@ type Spec = {
 
 const spec = async () => (await (await app.request("/openapi.json")).json()) as Spec
 const schemaOf = (spec: Spec, path: string, status: string) => spec.paths[path].get.responses[status].content["application/json"].schema
+const spec_ = (spec: Spec) => spec.paths["/readyz"].get.description ?? ""
 
 describe("GET /healthz", () => {
   test("answers ok with the server's clock, as JSON", async () => {
@@ -54,9 +57,9 @@ describe("GET /healthz", () => {
 
 describe("GET /readyz", () => {
   test("answers 200 ok when the database answers", { skip: database.skip }, async () => {
-    const connected = createDb(database.url, { max: 1 })
+    const connected = createDb(database.url, probePoolOptions())
     try {
-      const response = await createApp({ db: connected }).request("/readyz")
+      const response = await createApp({ probe: connected }).request("/readyz")
       assert.equal(response.status, 200)
       assert.match(response.headers.get("content-type") ?? "", /^application\/json/)
       assert.deepEqual(ReadinessResponse.parse(await response.json()), { status: "ok", checks: { database: "ok" } })
@@ -66,9 +69,9 @@ describe("GET /readyz", () => {
   })
 
   test("answers 503 unavailable when the database is unreachable", async () => {
-    const refused = createDb(await refusedUrl(), { max: 1 })
+    const refused = createDb(REFUSED_URL, probePoolOptions())
     try {
-      const response = await createApp({ db: refused }).request("/readyz")
+      const response = await createApp({ probe: refused }).request("/readyz")
       assert.equal(response.status, 503)
       assert.match(response.headers.get("content-type") ?? "", /^application\/json/)
       assert.deepEqual(ReadinessResponse.parse(await response.json()), { status: "unavailable", checks: { database: "unreachable" } })
@@ -78,9 +81,9 @@ describe("GET /readyz", () => {
   })
 
   test("leaves /healthz answering while the database is down: liveness is not readiness", async () => {
-    const refused = createDb(await refusedUrl(), { max: 1 })
+    const refused = createDb(REFUSED_URL, probePoolOptions())
     try {
-      const down = createApp({ db: refused })
+      const down = createApp({ probe: refused })
       assert.equal((await down.request("/readyz")).status, 503)
       assert.equal((await down.request("/healthz")).status, 200)
     } finally {
@@ -125,5 +128,12 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(unavailable.required, ["status", "checks"])
     assert.deepEqual(unavailable.properties?.status, { type: "string", const: "unavailable" })
     assert.deepEqual(unavailable.properties?.checks.properties?.database, { type: "string", const: "unreachable" })
+  })
+
+  test("states the bound in force in /readyz's description, whatever it was set to", async () => {
+    assert.match(spec_(await spec()), /within 2000 ms/)
+    const shorter = createApp({ probe: idle, databaseTimeoutMs: 500 })
+    const document = (await (await shorter.request("/openapi.json")).json()) as Spec
+    assert.match(spec_(document), /within 500 ms/)
   })
 })

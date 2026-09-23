@@ -7,7 +7,10 @@
 // the packages the web app does use pass under apps/web. The specimens are
 // text handed to ESLint with a path, never files on disk, so `eslint .`
 // cannot trip over them, and each ESLint instance runs from the package
-// directory its `pnpm lint` runs from.
+// directory its `pnpm lint` runs from. It lives here, with the purity gate,
+// because it drives a tool's API against the whole repository's configuration
+// and belongs to no one package it lints; eslint is this package's
+// devDependency for it.
 import assert from "node:assert/strict"
 import path from "node:path"
 import { describe, test } from "node:test"

@@ -9,9 +9,11 @@
 //
 // Two probes: /healthz is liveness (the process answers, with its clock) and
 // /readyz is readiness (the database answers, within readiness.ts's bound).
-// The database pool comes in from the composition root; the app never
-// connects on its own, so building it costs nothing and a test hands it a
-// pool that goes nowhere when the route under test asks nothing of it.
+// The pool the probe runs on comes in from the composition root (readiness.ts
+// says why it is the probe's own); the app never connects on its own, so
+// building it costs nothing and a test hands a route that asks nothing of the
+// database a pool that goes nowhere. A request pool joins when the first
+// domain route needs one.
 import { HealthResponse, ReadinessResponse, ReadyResponse, UnavailableResponse } from "@waste/contracts/health"
 import type { Database } from "@waste/db/client"
 import { Hono } from "hono"
@@ -21,15 +23,15 @@ import manifest from "../package.json" with { type: "json" }
 import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS } from "./readiness"
 
 export type AppOptions = {
-  /** The database pool, as the API role. /readyz probes it; nothing else touches it yet. */
-  db: Database
+  /** The pool /readyz probes, as the API role: server.ts builds it from probePoolOptions; a test hands whatever it wants probed. */
+  probe: Database
   /** The server's clock; injected so a test can pin it. */
   now?: () => Date
   /** How long /readyz waits for the database before answering 503. */
   databaseTimeoutMs?: number
 }
 
-export function createApp({ db, now = () => new Date(), databaseTimeoutMs = DATABASE_CHECK_TIMEOUT_MS }: AppOptions) {
+export function createApp({ probe, now = () => new Date(), databaseTimeoutMs = DATABASE_CHECK_TIMEOUT_MS }: AppOptions) {
   const app = new Hono()
 
   app.get(
@@ -56,8 +58,7 @@ export function createApp({ db, now = () => new Date(), databaseTimeoutMs = DATA
     describeRoute({
       operationId: "getReadiness",
       summary: "Can the API serve a request right now?",
-      description:
-        "Readiness: the database answers a probe within two seconds. A balancer takes the instance out of rotation on 503 and back in on 200; the process itself stays up.",
+      description: `Readiness: the database answers a probe within ${databaseTimeoutMs} ms. A balancer takes the instance out of rotation on 503 and back in on 200; the process itself stays up.`,
       responses: {
         200: {
           description: "Every check passed: the database answers.",
@@ -70,7 +71,7 @@ export function createApp({ db, now = () => new Date(), databaseTimeoutMs = DATA
       },
     }),
     async (c) => {
-      const database = await checkDatabase(db.sql, { timeoutMs: databaseTimeoutMs })
+      const database = await checkDatabase(probe.sql, { timeoutMs: databaseTimeoutMs })
       if (database === "ok") {
         const body: ReadinessResponse = { status: "ok", checks: { database } }
         return c.json(body, 200)

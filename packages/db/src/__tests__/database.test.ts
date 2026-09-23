@@ -9,15 +9,16 @@ const local = {
 }
 
 describe("databaseUnderTest", () => {
-  test("skips, naming both variables and the commands, when a URL is missing and nothing requires one", () => {
+  test("skips, naming the missing variables and the commands, when a URL is missing and nothing requires one", () => {
     const result = databaseUnderTest({})
-    assert.match(String(result.skip), /DATABASE_ADMIN_URL or DATABASE_URL/)
+    assert.match(String(result.skip), /DATABASE_ADMIN_URL and DATABASE_URL are not set/)
     assert.match(String(result.skip), /pnpm db:start/)
     assert.match(String(result.skip), /pnpm db:migrate/)
+    assert.match(String(databaseUnderTest({ DATABASE_ADMIN_URL: local.DATABASE_ADMIN_URL }).skip), /^DATABASE_URL is not set/)
   })
 
   test("fails instead of skipping when REQUIRE_DATABASE is set", () => {
-    assert.throws(() => databaseUnderTest({ REQUIRE_DATABASE: "1" }), /DATABASE_ADMIN_URL is not/)
+    assert.throws(() => databaseUnderTest({ REQUIRE_DATABASE: "1" }), /DATABASE_ADMIN_URL and DATABASE_URL are not/)
     assert.throws(
       () => databaseUnderTest({ REQUIRE_DATABASE: "1", DATABASE_ADMIN_URL: local.DATABASE_ADMIN_URL }),
       /DATABASE_URL is not/,

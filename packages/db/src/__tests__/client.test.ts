@@ -1,4 +1,6 @@
 import assert from "node:assert/strict"
+import { once } from "node:events"
+import net from "node:net"
 import { after, before, describe, test } from "node:test"
 
 import { createDb, type Database } from "../client"
@@ -48,5 +50,56 @@ describe("createDb", { skip: database.skip }, () => {
     await connection.sql`select 1`
     await connection.close()
     await connection.close()
+  })
+})
+
+/** A loopback server that accepts connections and never answers them. */
+async function silentServer() {
+  const sockets = new Set<net.Socket>()
+  const server = net.createServer((socket) => sockets.add(socket))
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  const { port } = server.address() as net.AddressInfo
+  return {
+    url: `postgresql://nobody:nobody@127.0.0.1:${port}/none`,
+    close: async () => {
+      for (const socket of sockets) socket.destroy()
+      server.close()
+      await once(server, "close")
+    },
+  }
+}
+
+const code = (error: unknown) => (error as { code?: string }).code
+
+describe("createDb's dial options, which need no database", () => {
+  test("connectTimeoutSeconds fails a dial that hangs, at the timeout, with CONNECT_TIMEOUT", async () => {
+    const server = await silentServer()
+    const hung = createDb(server.url, { max: 1, connectTimeoutSeconds: 0.2 })
+    try {
+      const started = Date.now()
+      await assert.rejects(hung.sql`select 1`, (error: unknown) => code(error) === "CONNECT_TIMEOUT")
+      const elapsed = Date.now() - started
+      assert.ok(elapsed >= 150 && elapsed < 2_000, `failed after ${elapsed} ms`)
+    } finally {
+      // Nothing to drain on a connection that never opened: end at once.
+      await hung.sql.end({ timeout: 0 })
+      await server.close()
+    }
+  })
+
+  test("backoffSeconds is the fixed wait before the dial after a failure", async () => {
+    // Port 1 (tcpmux) needs root to bind and nothing binds it: refused at once.
+    const refused = createDb("postgresql://nobody:nobody@127.0.0.1:1/none", { max: 1, backoffSeconds: 0.3 })
+    try {
+      await assert.rejects(refused.sql`select 1`, (error: unknown) => code(error) === "ECONNREFUSED")
+      const started = Date.now()
+      await assert.rejects(refused.sql`select 1`, (error: unknown) => code(error) === "ECONNREFUSED")
+      const elapsed = Date.now() - started
+      // postgres.js's own backoff would wait 15 to 30 ms after one failure.
+      assert.ok(elapsed >= 250 && elapsed < 2_000, `the second dial came after ${elapsed} ms`)
+    } finally {
+      await refused.close()
+    }
   })
 })
