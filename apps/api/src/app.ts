@@ -38,8 +38,11 @@ import { customerRoutes } from "./routes/customers"
 import { meRoutes } from "./routes/me"
 import { productRoutes } from "./routes/products"
 import { projectRoutes } from "./routes/projects"
+import { propertyRoutes } from "./routes/properties"
+import { propertyGroupRoutes } from "./routes/property-groups"
 import { roleRoutes } from "./routes/roles"
 import { serviceProviderRoutes } from "./routes/service-providers"
+import { sharedCollectionPointRoutes } from "./routes/shared-collection-points"
 import { userRoutes } from "./routes/users"
 
 export type AppOptions = {
@@ -120,6 +123,9 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   app.route("/", catalogueRoutes(guard))
   app.route("/", productRoutes(guard))
   app.route("/", customerRoutes(guard))
+  app.route("/", propertyRoutes(guard))
+  app.route("/", propertyGroupRoutes(guard))
+  app.route("/", sharedCollectionPointRoutes(guard))
 
   app.get(
     "/openapi.json",
