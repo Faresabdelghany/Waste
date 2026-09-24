@@ -31,6 +31,14 @@
 // to be ended first. An agreement's children are its subscriptions and a
 // subscription's are its placements, so a subscription's patch answers both.
 //
+// A status gates a new reference and never an existing one (routes/statuses.ts,
+// Issue #79): the customer and the payer an agreement names are active, the
+// product a subscription names is active and its place is served — a property
+// active, a point open or restricted — each refused otherwise with a 409
+// naming the state, while the agreements and subscriptions already made stand
+// whatever their rows do afterwards. A subscription's patch names neither its
+// product nor its place, so it has nothing to gate.
+//
 // The rest is the shape every project-scoped Registry family has: each
 // statement carries the tenant and `inProjects` (auth/projects.ts), a create
 // names a project the caller works in and a record never moves between
@@ -72,8 +80,8 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { notWithin, periodAfter, periodOf, requireOrdered, requireWithin, type Period } from "./periods"
-import { requireCustomer, requireProduct, requireProperty, requireSharedCollectionPoint } from "./references"
 import { describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
+import { requireActiveCustomer, requireActiveProduct, requireActiveProperty, requireServingPoint } from "./statuses"
 
 const MODULE = "customers.agreements"
 const AgreementPage = Page(Agreement)
@@ -299,7 +307,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createAgreement",
         summary: "Write an agreement",
         description:
-          "Writes an agreement in one project, which must be a project the caller works in. The customer and the payer are customers of this company — the same one in the common case, a housing administrator in the interesting one. The status defaults to `draft`, since an agreement is written before it is signed, and the period is half-open: `validFrom` is the first day in force and `validTo` the first day out of it, absent meaning the agreement is still running. The number is not unique: one agreement of a number may be valid at a time, so a number may name a later agreement once the earlier one has ended, and an overlapping one is refused. The server mints the id.",
+          "Writes an agreement in one project, which must be a project the caller works in. The customer and the payer are customers of this company — the same one in the common case, a housing administrator in the interesting one — and both must be active: an inactive one is refused (409) in a sentence saying which, while the agreements a customer already holds stand when it goes inactive, since a status gates a new reference and never an existing one. The status defaults to `draft`, since an agreement is written before it is signed, and the period is half-open: `validFrom` is the first day in force and `validTo` the first day out of it, absent meaning the agreement is still running. The number is not unique: one agreement of a number may be valid at a time, so a number may name a later agreement once the earlier one has ended, and an overlapping one is refused. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
           201: describeJson("The agreement as it was written.", Agreement),
@@ -308,7 +316,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `customers.agreements`."),
-          409: describeProblem("An agreement of that number is already valid over part of that period."),
+          409: describeProblem("An agreement of that number is already valid over part of that period, or the customer or the payer is inactive."),
         },
       }),
       guard,
@@ -319,8 +327,8 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         requireProject(principal, values.projectId)
-        await requireCustomer(tx, principal.companyId, values.customerId, "customerId")
-        await requireCustomer(tx, principal.companyId, values.payerCustomerId, "payerCustomerId")
+        await requireActiveCustomer(tx, principal.companyId, values.customerId, "customerId")
+        await requireActiveCustomer(tx, principal.companyId, values.payerCustomerId, "payerCustomerId")
         const [row] = await refuseOverlap({ [NUMBER_RUNNING]: numberRunning(values.number) }, () =>
           tx
             .insert(agreement)
@@ -362,7 +370,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchAgreement",
         summary: "Amend an agreement",
         description:
-          "Amends one agreement of a project the caller works in; every field is optional and at least one must be given. Amending changes the row and the audit log is the history. The project is not patchable, since a record does not move between projects. Moving the period is held to two rules: the end still comes after the start, which a body naming one bound cannot see by itself, and the new period still contains every subscription of the agreement — a shortening that would strand one is refused (409) and the subscriptions have to be ended first. A period that overlaps another agreement of the same number is refused too.",
+          "Amends one agreement of a project the caller works in; every field is optional and at least one must be given. Amending changes the row and the audit log is the history. The project is not patchable, since a record does not move between projects. A customer or payer the patch names must be active (409, saying which); a patch that names neither is not held to the agreement's own customer, whose reference already stands. Moving the period is held to two rules: the end still comes after the start, which a body naming one bound cannot see by itself, and the new period still contains every subscription of the agreement — a shortening that would strand one is refused (409) and the subscriptions have to be ended first. A period that overlaps another agreement of the same number is refused too.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The agreement as it now stands.", Agreement),
@@ -372,7 +380,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.agreements`."),
           404: describeProblem("No agreement with that id in the projects this account works in."),
-          409: describeProblem("Subscriptions of the agreement would fall outside the new period, or another agreement of that number is already valid over part of it."),
+          409: describeProblem("Subscriptions of the agreement would fall outside the new period, another agreement of that number is already valid over part of it, or the customer or payer the patch names is inactive."),
         },
       }),
       guard,
@@ -391,8 +399,8 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
         await lockRow(tx, agreement, { companyId: principal.companyId, id })
         const current = await findAgreement(tx, principal, id)
         if (current === undefined) throw noSuchAgreement(id)
-        await requireCustomer(tx, principal.companyId, patch.customerId, "customerId")
-        await requireCustomer(tx, principal.companyId, patch.payerCustomerId, "payerCustomerId")
+        await requireActiveCustomer(tx, principal.companyId, patch.customerId, "customerId")
+        await requireActiveCustomer(tx, principal.companyId, patch.payerCustomerId, "payerCustomerId")
 
         if (patch.validFrom !== undefined || patch.validTo !== undefined) {
           const period = periodAfter(current, patch)
@@ -460,7 +468,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createSubscription",
         summary: "Subscribe an agreement to a product at a place",
         description:
-          "Adds one product delivered at one place under the agreement the path names. The agreement says the project, so the body names neither: the product and the place must both be that project's. The place is exactly one of `propertyId` and `sharedCollectionPointId`; either may be sent as null, which is a place not given. The quantity defaults to one. The period lies inside the agreement's — a `validFrom` before it, or an end beyond it or absent where the agreement has one, is refused naming the bound — and the agreement may not already subscribe to that product at that place over part of it. The server mints the id.",
+          "Adds one product delivered at one place under the agreement the path names. The agreement says the project, so the body names neither: the product and the place must both be that project's. The place is exactly one of `propertyId` and `sharedCollectionPointId`; either may be sent as null, which is a place not given. The product must be active and the place served — a property active, a point open or restricted — each refused otherwise (409) in a sentence naming the status it has; the subscriptions already made stand when a product is withdrawn or a place closes, since a status gates a new reference and never an existing one. The quantity defaults to one. The period lies inside the agreement's — a `validFrom` before it, or an end beyond it or absent where the agreement has one, is refused naming the bound — and the agreement may not already subscribe to that product at that place over part of it. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
           201: describeJson("The subscription as it was written.", Subscription),
@@ -470,7 +478,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `customers.agreements`."),
           404: describeProblem("No agreement with that id in the projects this account works in."),
-          409: describeProblem("The agreement already subscribes to that product at that place over part of that period."),
+          409: describeProblem("The agreement already subscribes to that product at that place over part of that period, or the product is draft or inactive, or the place is not served: an inactive property, or a draft or closed point."),
         },
       }),
       guard,
@@ -489,9 +497,9 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const parent = await findAgreement(tx, principal, id)
         if (parent === undefined) throw noSuchAgreement(id)
         const within = { companyId: principal.companyId, projectId: parent.projectId }
-        await requireProduct(tx, within, values.productId)
-        await requireProperty(tx, within, values.propertyId)
-        await requireSharedCollectionPoint(tx, within, values.sharedCollectionPointId)
+        await requireActiveProduct(tx, within, values.productId)
+        await requireActiveProperty(tx, within, values.propertyId)
+        await requireServingPoint(tx, within, values.sharedCollectionPointId)
         requireWithin(parent, periodOf(values), OUTSIDE_AGREEMENT)
 
         const [row] = await refuseOverlap({ [PLACE_SUBSCRIBED]: PLACE_SUBSCRIBED_SENTENCE }, () =>

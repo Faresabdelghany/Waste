@@ -6,6 +6,7 @@ import { ContainerType, Product, WasteFraction } from "@waste/contracts/catalogu
 import { Container, ContainerServicePlacement } from "@waste/contracts/containers"
 import { Customer, Property, SharedCollectionPoint } from "@waste/contracts/customers"
 import { Id } from "@waste/contracts/ids"
+import { Project } from "@waste/contracts/organisation"
 import { Page } from "@waste/contracts/pagination"
 import { createDb, type Database } from "@waste/db/client"
 
@@ -49,11 +50,11 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
   /** Who the agreements of this company are with, and who pays for them. */
   let acme: Customer
   let boligforening: Customer
-  /** Where a subscription is delivered: a property and a point of Copenhagen Central, and a property of Harbor Commercial. */
+  /** Where a subscription is delivered: a property and an open point of Copenhagen Central, and a property of Harbor Commercial. */
   let parkvej: Property
   let harborProperty: Property
   let bank: SharedCollectionPoint
-  /** What a subscription subscribes to, in each project. */
+  /** What a subscription subscribes to, in each project: an active product, since a draft one cannot be subscribed to (Issue #79). */
   let residual: Product
   let harborResidual: Product
   /** What the one placement of this file needs: a container's type and the fraction it takes. */
@@ -103,19 +104,20 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
         operatingModel: "municipal",
         accessMode: "open",
         billingMode: "municipal",
+        status: "open",
       },
       SharedCollectionPoint,
     )
     residual = await create(
       olivia,
       "/products",
-      { projectId: a.projects.copenhagen.id, name: "Residual collection", kind: "container-collection", unit: "pickup" },
+      { projectId: a.projects.copenhagen.id, name: "Residual collection", kind: "container-collection", unit: "pickup", status: "active" },
       Product,
     )
     harborResidual = await create(
       olivia,
       "/products",
-      { projectId: a.projects.harbor.id, name: "Residual collection", kind: "container-collection", unit: "pickup" },
+      { projectId: a.projects.harbor.id, name: "Residual collection", kind: "container-collection", unit: "pickup", status: "active" },
       Product,
     )
     bin = await create(olivia, "/container-types", { name: "240 L bin", volumeLitres: 240 }, ContainerType)
@@ -193,6 +195,38 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
   /** One product at one place under an agreement; the place is Parkvej 18 unless a test names another. */
   const subscribe = (agreementId: string, values: Record<string, unknown> = {}) =>
     create(olivia, `/agreements/${agreementId}/subscriptions`, { productId: residual.id, propertyId: parkvej.id, validFrom: JANUARY, ...values }, Subscription)
+  /** Moves a record of another family to a status, the way its own PATCH does: how a customer goes inactive or a point closes. */
+  const setStatus = async (path: string, status: string): Promise<void> => {
+    const response = await olivia(path, { method: "PATCH", body: { status } })
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+  }
+  /** A customer of this company that is no longer served. */
+  const inactiveCustomer = async (name: string): Promise<Customer> => {
+    const created = await create(olivia, "/customers", { kind: "organisation", name }, Customer)
+    await setStatus(`/customers/${created.id}`, "inactive")
+    return created
+  }
+  /** A product of Copenhagen Central in the status a test names. */
+  const productIn = (status: string, name: string) =>
+    create(olivia, "/products", { projectId: a.projects.copenhagen.id, name, kind: "container-collection", unit: "pickup", status }, Product)
+  /** A point of Copenhagen Central in the status a test names. */
+  const pointIn = (status: string, name: string) =>
+    create(
+      olivia,
+      "/shared-collection-points",
+      {
+        projectId: a.projects.copenhagen.id,
+        name,
+        kind: "surface",
+        address: `${name}, 2100 København Ø`,
+        location: { type: "Point", coordinates: [12.5683, 55.6761] },
+        operatingModel: "municipal",
+        accessMode: "open",
+        billingMode: "municipal",
+        status,
+      },
+      SharedCollectionPoint,
+    )
 
   describe("POST /agreements", () => {
     test("mints the id, defaults the status to draft, and keeps the period it was given", async () => {
@@ -247,6 +281,26 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
     test("refuses a role that may view but not create", async () => {
       const problem = await refused(await lars("/agreements", { method: "POST", body: body("AGR-2411") }), 403)
       assert.match(problem.detail ?? "", /create on customers\.agreements/)
+    })
+
+    test("refuses an inactive customer and an inactive payer, each in a sentence naming which", async () => {
+      const dormant = await inactiveCustomer("Dormant Housing")
+      const asCustomer = await refused(await olivia("/agreements", { method: "POST", body: body("AGR-2412", { customerId: dormant.id }) }), 409)
+      assert.equal(asCustomer.detail, "The customer is inactive; an agreement needs an active customer")
+      const asPayer = await refused(await olivia("/agreements", { method: "POST", body: body("AGR-2413", { payerCustomerId: dormant.id }) }), 409)
+      assert.equal(asPayer.detail, "The payer is inactive; an agreement needs an active payer")
+      assert.deepEqual((await page(olivia, "?limit=200&number=AGR-2412")).items, [], "and nothing was written")
+
+      const both = await refused(await olivia("/agreements", { method: "POST", body: body("AGR-2414", { customerId: dormant.id, payerCustomerId: dormant.id }) }), 409)
+      assert.equal(both.detail, "The customer is inactive; an agreement needs an active customer", "the fields are read in the body's order, so the customer is told first")
+    })
+
+    test("accepts a project that is still onboarding: a project's status is informational here", async () => {
+      const response = await olivia(`/projects/${a.projects.harbor.id}`)
+      assert.equal(response.status, 200)
+      assert.equal(Project.parse(await response.json()).status, "onboarding", "Harbor Commercial is seeded onboarding")
+      const created = await agreement("AGR-2415", { projectId: a.projects.harbor.id })
+      assert.equal(created.projectId, a.projects.harbor.id, "setting a project up is writing its records")
     })
   })
 
@@ -390,6 +444,25 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
       )
       assert.match((await refused(await lars(`/agreements/${created.id}`, { method: "PATCH", body: { status: "active" } }), 403)).detail ?? "", /edit on customers\.agreements/)
     })
+
+    test("refuses a patch naming an inactive customer or payer, and takes one naming neither once the agreement's own customer has gone inactive", async () => {
+      const holder = await create(olivia, "/customers", { kind: "organisation", name: "Holder Housing" }, Customer)
+      const created = await agreement("AGR-2446", { customerId: holder.id, payerCustomerId: holder.id })
+      const dormant = await inactiveCustomer("Dormant Payer")
+
+      const asCustomer = await refused(await olivia(`/agreements/${created.id}`, { method: "PATCH", body: { customerId: dormant.id } }), 409)
+      assert.equal(asCustomer.detail, "The customer is inactive; an agreement needs an active customer")
+      const asPayer = await refused(await olivia(`/agreements/${created.id}`, { method: "PATCH", body: { payerCustomerId: dormant.id } }), 409)
+      assert.equal(asPayer.detail, "The payer is inactive; an agreement needs an active payer")
+      assert.deepEqual(await one(olivia, created.id), created, "a refused patch writes nothing")
+
+      await setStatus(`/customers/${holder.id}`, "inactive")
+      const signed = await patch(olivia, created.id, { status: "active", validTo: NEXT_YEAR })
+      assert.equal(signed.customerId, holder.id, "the reference already made stands: a status gates a new reference and never an existing one")
+      assert.equal(signed.status, "active")
+      const renamed = await patch(olivia, created.id, { payerCustomerId: acme.id })
+      assert.equal(renamed.payerCustomerId, acme.id, "an active payer may still be named beside an inactive holder")
+    })
   })
 
   describe("POST /agreements/:id/subscriptions", () => {
@@ -482,6 +555,61 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
       const elsewhere = await subscribe(created.id, { sharedCollectionPointId: bank.id, propertyId: null, validFrom: APRIL, validTo: OCTOBER })
       assert.equal(elsewhere.sharedCollectionPointId, bank.id, "the same product at another place is another subscription")
     })
+
+    test("holds the product to active, naming the status it has instead", async () => {
+      const created = await agreement("AGR-2455")
+      const draft = await productIn("draft", "Draft collection")
+      const drafted = await refused(
+        await olivia(`/agreements/${created.id}/subscriptions`, { method: "POST", body: { productId: draft.id, propertyId: parkvej.id, validFrom: JANUARY } }),
+        409,
+      )
+      assert.equal(drafted.detail, "The product is draft; only an active product can be subscribed to")
+      const inactive = await productIn("inactive", "Withdrawn collection")
+      const withdrawn = await refused(
+        await olivia(`/agreements/${created.id}/subscriptions`, { method: "POST", body: { productId: inactive.id, propertyId: parkvej.id, validFrom: JANUARY } }),
+        409,
+      )
+      assert.equal(withdrawn.detail, "The product is inactive; only an active product can be subscribed to")
+      assert.deepEqual((await subscriptions(olivia, created.id)).items, [], "and nothing was written")
+
+      await setStatus(`/products/${draft.id}`, "active")
+      assert.equal((await subscribe(created.id, { productId: draft.id })).productId, draft.id, "offered, it can be subscribed to")
+    })
+
+    test("holds the place to one that is served: an active property, an open or restricted point", async () => {
+      const created = await agreement("AGR-2456")
+      const demolished = await create(
+        olivia,
+        "/properties",
+        { projectId: a.projects.copenhagen.id, name: "Demolished 1", address: "Demolished 1, 2100 København Ø", kind: "residential", status: "inactive" },
+        Property,
+      )
+      const atTheProperty = await refused(
+        await olivia(`/agreements/${created.id}/subscriptions`, { method: "POST", body: { productId: residual.id, propertyId: demolished.id, validFrom: JANUARY } }),
+        409,
+      )
+      assert.equal(atTheProperty.detail, "The property is inactive; a subscription needs an active property")
+
+      const planned = await pointIn("draft", "Planned bank")
+      const atThePlanned = await refused(
+        await olivia(`/agreements/${created.id}/subscriptions`, { method: "POST", body: { productId: residual.id, sharedCollectionPointId: planned.id, validFrom: JANUARY } }),
+        409,
+      )
+      assert.equal(atThePlanned.detail, "The shared collection point is draft; a subscription needs an open or restricted point")
+      const closed = await pointIn("closed", "Closed bank")
+      const atTheClosed = await refused(
+        await olivia(`/agreements/${created.id}/subscriptions`, { method: "POST", body: { productId: residual.id, sharedCollectionPointId: closed.id, validFrom: JANUARY } }),
+        409,
+      )
+      assert.equal(atTheClosed.detail, "The shared collection point is closed; a subscription needs an open or restricted point")
+      assert.deepEqual((await subscriptions(olivia, created.id)).items, [], "and nothing was written")
+
+      const restricted = await pointIn("restricted", "Members' bank")
+      const atTheRestricted = await subscribe(created.id, { sharedCollectionPointId: restricted.id, propertyId: null })
+      assert.equal(atTheRestricted.sharedCollectionPointId, restricted.id, "a restricted point takes waste from its members, so it is served")
+      await setStatus(`/properties/${demolished.id}`, "active")
+      assert.equal((await subscribe(created.id, { propertyId: demolished.id })).propertyId, demolished.id, "served again, it can be subscribed to")
+    })
   })
 
   describe("GET /agreements/:id/subscriptions", () => {
@@ -509,7 +637,7 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
       const theirs = await create(
         other,
         `/agreements/${theirAgreement.id}/subscriptions`,
-        { productId: (await create(other, "/products", { projectId: b.projects.copenhagen.id, name: "Residual collection", kind: "container-collection", unit: "pickup" }, Product)).id,
+        { productId: (await create(other, "/products", { projectId: b.projects.copenhagen.id, name: "Residual collection", kind: "container-collection", unit: "pickup", status: "active" }, Product)).id,
           propertyId: (await create(other, "/properties", { projectId: b.projects.copenhagen.id, name: "Their Parkvej", address: "Parkvej 1", kind: "residential" }, Property)).id,
           validFrom: JANUARY },
         Subscription,

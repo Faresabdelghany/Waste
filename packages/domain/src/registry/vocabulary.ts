@@ -52,7 +52,7 @@ export const SHARED_COLLECTION_POINT_MEMBER_ROLES = ["service-member", "administ
 
 /** What the Product delivers: a collection at a container, a recurring service, or a one-off. */
 export const PRODUCT_KINDS = ["container-collection", "recurring-service", "additional-service"] as const
-/** Where the Product stands in the catalogue. Nothing gates a subscription on it today: whether a draft or an inactive Product may still be subscribed to is a decision of its own. */
+/** Where the Product stands in the catalogue. Only an active Product can be subscribed to, which the API holds (Issue #79); a subscription already made stands when its Product is withdrawn. */
 export const PRODUCT_STATUSES = ["draft", "active", "inactive"] as const
 /** What one of the Product is: prices are Finance & Contracting's, the unit they are quoted per is here. */
 export const PRODUCT_UNITS = ["pickup", "month", "job"] as const
