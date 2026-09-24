@@ -15,34 +15,13 @@ import {
   SubscriptionListQuery,
   SubscriptionPatch,
 } from "../agreements"
+import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
 const THIRD = "01a0d3a5-e5e0-7000-8000-000000000003"
 const STAMPS = { createdAt: "2026-09-24T13:41:00.000Z", updatedAt: "2026-09-24T13:41:00.000Z" }
 const BACKWARDS = "validTo is the first day out of force, so it comes after validFrom"
-
-/** Each issue a failed parse produced, as the API's 400 would spell it. */
-const refusal = (result: { success: boolean; error?: { issues: readonly { path: readonly PropertyKey[]; message: string }[] } }) => {
-  assert.equal(result.success, false)
-  return (result.error?.issues ?? []).map((issue) => ({ path: issue.path.join("."), message: issue.message }))
-}
-
-type Parseable = { safeParse: (value: unknown) => { success: boolean; error?: { issues: readonly { path: readonly PropertyKey[]; message: string }[] } } }
-
-/** A create body says nothing the server owns; the strict object refuses each one by name. */
-const refusesWhatTheServerOwns = (schema: Parseable, body: object) => {
-  for (const [key, value] of [["id", ID], ["createdAt", STAMPS.createdAt], ["updatedAt", STAMPS.updatedAt]] as const) {
-    const issues = refusal(schema.safeParse({ ...body, [key]: value }))
-    assert.deepEqual(issues.map((issue) => issue.path), [""], key)
-    assert.match(issues[0].message, new RegExp(key))
-  }
-}
-
-/** A patch with nothing in it is a client bug, not a no-op. */
-const refusesAnEmptyPatch = (schema: Parseable) => {
-  assert.deepEqual(refusal(schema.safeParse({})), [{ path: "", message: "Give at least one field to change" }])
-}
 
 const agreement = {
   id: ID,
@@ -170,14 +149,21 @@ describe("SubscriptionCreate", () => {
   })
 
   test("needs exactly one place: neither is not a subscription, and both is two", () => {
+    const onePlace = { path: "", message: "Give exactly one of propertyId and sharedCollectionPointId: a subscription is delivered at one place" }
     const neither = { productId: THIRD, validFrom: "2026-01-01" }
-    assert.deepEqual(refusal(SubscriptionCreate.safeParse(neither)), [
-      { path: "", message: "Give exactly one of propertyId and sharedCollectionPointId: a subscription is delivered at one place" },
-    ])
-    assert.deepEqual(refusal(SubscriptionCreate.safeParse({ ...body, sharedCollectionPointId: OTHER })), [
-      { path: "", message: "Give exactly one of propertyId and sharedCollectionPointId: a subscription is delivered at one place" },
-    ])
+    assert.deepEqual(refusal(SubscriptionCreate.safeParse(neither)), [onePlace])
+    assert.deepEqual(refusal(SubscriptionCreate.safeParse({ ...body, sharedCollectionPointId: OTHER })), [onePlace])
     assert.equal(SubscriptionCreate.safeParse({ productId: THIRD, sharedCollectionPointId: OTHER, validFrom: "2026-01-01" }).success, true)
+  })
+
+  test("takes the other place as null, which is what a form with both fields sends", () => {
+    const atAProperty = { productId: THIRD, propertyId: THIRD, sharedCollectionPointId: null, validFrom: "2026-01-01" }
+    assert.deepEqual(SubscriptionCreate.parse(atAProperty), { ...atAProperty, quantity: 1 })
+    const atAPoint = { productId: THIRD, propertyId: null, sharedCollectionPointId: OTHER, validFrom: "2026-01-01" }
+    assert.deepEqual(SubscriptionCreate.parse(atAPoint), { ...atAPoint, quantity: 1 })
+    const onePlace = { path: "", message: "Give exactly one of propertyId and sharedCollectionPointId: a subscription is delivered at one place" }
+    assert.deepEqual(refusal(SubscriptionCreate.safeParse({ ...atAProperty, propertyId: null })), [onePlace], "null and null is neither")
+    assert.deepEqual(refusal(SubscriptionCreate.safeParse({ ...atAProperty, sharedCollectionPointId: OTHER })), [onePlace], "an id and an id is two")
   })
 
   test("needs a product and a first day, refuses a backwards period, and mints nothing", () => {

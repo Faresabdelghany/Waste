@@ -21,30 +21,11 @@ import {
   WasteFractionCreate,
   WasteFractionPatch,
 } from "../catalogue"
+import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
 const STAMPS = { createdAt: "2026-09-24T13:41:00.000Z", updatedAt: "2026-09-24T13:41:00.000Z" }
-
-/** Each issue a failed parse produced, as the API's 400 would spell it. */
-const refusal = (result: { success: boolean; error?: { issues: readonly { path: readonly PropertyKey[]; message: string }[] } }) => {
-  assert.equal(result.success, false)
-  return (result.error?.issues ?? []).map((issue) => ({ path: issue.path.join("."), message: issue.message }))
-}
-
-/** A create body says nothing the server owns; the strict object refuses each one by name. */
-const refusesWhatTheServerOwns = (schema: { safeParse: (value: unknown) => { success: boolean; error?: { issues: readonly { path: readonly PropertyKey[]; message: string }[] } } }, body: object) => {
-  for (const [key, value] of [["id", ID], ["createdAt", STAMPS.createdAt], ["updatedAt", STAMPS.updatedAt]] as const) {
-    const issues = refusal(schema.safeParse({ ...body, [key]: value }))
-    assert.deepEqual(issues.map((issue) => issue.path), [""], key)
-    assert.match(issues[0].message, new RegExp(key))
-  }
-}
-
-/** A patch with nothing in it is a client bug, not a no-op. */
-const refusesAnEmptyPatch = (schema: { safeParse: (value: unknown) => { success: boolean; error?: { issues: readonly { path: readonly PropertyKey[]; message: string }[] } } }) => {
-  assert.deepEqual(refusal(schema.safeParse({})), [{ path: "", message: "Give at least one field to change" }])
-}
 
 const fraction = { id: ID, key: "hard-plastic", name: "Hard plastic", ...STAMPS }
 const containerType = { id: ID, name: "240 L two-wheeled", volumeLitres: 240, ...STAMPS }
@@ -107,11 +88,11 @@ describe("WasteFractionCreate and WasteFractionPatch", () => {
     }
   })
 
-  test("change one field or both, and refuse an empty patch", () => {
+  test("rename the fraction, and refuse an empty patch or a new key: the slug the system quotes is set once", () => {
     assert.deepEqual(WasteFractionPatch.parse({ name: "Food" }), { name: "Food" })
-    assert.deepEqual(WasteFractionPatch.parse({ key: "food", name: "Food" }), { key: "food", name: "Food" })
     refusesAnEmptyPatch(WasteFractionPatch)
-    assert.equal(WasteFractionPatch.safeParse({ key: "Food" }).success, false)
+    assert.match(refusal(WasteFractionPatch.safeParse({ name: "Food", key: "food-waste" }))[0].message, /key/)
+    assert.equal(WasteFractionPatch.safeParse({ name: "  " }).success, false)
   })
 })
 

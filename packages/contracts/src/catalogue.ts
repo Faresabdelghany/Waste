@@ -11,7 +11,10 @@
 // system quotes, and `name`, what a person reads and may rename without
 // breaking anything. The key is held to a lowercase slug here because the
 // database holds it lowercase and unique per company, and two keys that
-// differ by case or a space would be two rows nobody can tell apart.
+// differ by case or a space would be two rows nobody can tell apart. It is
+// set once: the patch takes the name alone, because a report, a fixture or an
+// import that quotes the old key would go on quoting it, and a fraction that
+// needs another key is another fraction.
 //
 // `ServiceFrequency` carries the rule its table carries
 // (`service_frequency_shape`): an interval needs a rate to belong to, and the
@@ -71,9 +74,9 @@ export const WasteFractionCreate = z.strictObject({
 })
 export type WasteFractionCreate = z.infer<typeof WasteFractionCreate>
 
+/** The name only: the key is the slug the rest of the system quotes, and a fraction that needs another one is another fraction. */
 export const WasteFractionPatch = z
   .strictObject({
-    key: FractionKey.optional(),
     name: Label.optional(),
   })
   .refine(changesSomething, somethingToChange)

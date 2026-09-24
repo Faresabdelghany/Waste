@@ -124,12 +124,18 @@ const onePlace = {
 const exactlyOnePlace = (body: { propertyId?: string | null; sharedCollectionPointId?: string | null }) =>
   [body.propertyId, body.sharedCollectionPointId].filter((place) => place != null).length === 1
 
-/** The agreement is the path's and the project is the agreement's, so neither is here. */
+/**
+ * The agreement is the path's and the project is the agreement's, so neither
+ * is here. Either place may be given as null: a form with both fields sends
+ * the one it has and null for the other, and the resource says null too, so
+ * refusing it would refuse the natural body for no reason the rule cares
+ * about — `exactlyOnePlace` counts a null as a place not given.
+ */
 export const SubscriptionCreate = z
   .strictObject({
     productId: Id,
-    propertyId: Id.optional(),
-    sharedCollectionPointId: Id.optional(),
+    propertyId: Id.nullable().optional(),
+    sharedCollectionPointId: Id.nullable().optional(),
     quantity: Quantity.default(1).describe("Defaults to one when absent: one of the product at the place."),
     ...ValidityCreate,
   })

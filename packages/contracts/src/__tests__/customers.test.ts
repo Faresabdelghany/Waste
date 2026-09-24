@@ -50,6 +50,7 @@ import {
   SharedCollectionPointPatch,
   SharedCollectionPointStatus,
 } from "../customers"
+import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
@@ -57,27 +58,8 @@ const THIRD = "01a0d3a5-e5e0-7000-8000-000000000003"
 const STAMPS = { createdAt: "2026-09-24T13:41:00.000Z", updatedAt: "2026-09-24T13:41:00.000Z" }
 const POINT = { type: "Point", coordinates: [12.5683, 55.6761] }
 
-/** Each issue a failed parse produced, as the API's 400 would spell it. */
-const refusal = (result: { success: boolean; error?: { issues: readonly { path: readonly PropertyKey[]; message: string }[] } }) => {
-  assert.equal(result.success, false)
-  return (result.error?.issues ?? []).map((issue) => ({ path: issue.path.join("."), message: issue.message }))
-}
-
-type Parseable = { safeParse: (value: unknown) => { success: boolean; error?: { issues: readonly { path: readonly PropertyKey[]; message: string }[] } } }
-
-/** A create body says nothing the server owns; the strict object refuses each one by name. */
-const refusesWhatTheServerOwns = (schema: Parseable, body: object) => {
-  for (const [key, value] of [["id", ID], ["createdAt", STAMPS.createdAt], ["updatedAt", STAMPS.updatedAt]] as const) {
-    const issues = refusal(schema.safeParse({ ...body, [key]: value }))
-    assert.deepEqual(issues.map((issue) => issue.path), [""], key)
-    assert.match(issues[0].message, new RegExp(key))
-  }
-}
-
-/** A patch with nothing in it is a client bug, not a no-op. */
-const refusesAnEmptyPatch = (schema: Parseable) => {
-  assert.deepEqual(refusal(schema.safeParse({})), [{ path: "", message: "Give at least one field to change" }])
-}
+/** More ids than a set body may carry, to tell the body's bound from the row's. */
+const tooManyIds = Array.from({ length: 201 }, (_unused, index) => `01a0d3a5-e5e0-7000-8000-${String(index).padStart(12, "0")}`)
 
 const customer = {
   id: ID,
@@ -226,6 +208,9 @@ describe("PropertyCreate and PropertyPatch", () => {
   test("take the parties the form collected, need the project, the name, the address and the kind, and mint nothing", () => {
     const parties = [{ customerId: THIRD, role: "owner" }]
     assert.deepEqual(PropertyCreate.parse({ ...body, parties }).parties, parties)
+    assert.deepEqual(refusal(PropertyCreate.safeParse({ ...body, parties: [parties[0], parties[0]] })), [
+      { path: "parties", message: "Name each customer once per role: a party is a customer and a role, and the list holds each pair once" },
+    ])
     for (const key of ["projectId", "name", "address", "kind"]) {
       const without: Record<string, unknown> = { ...body }
       delete without[key]
@@ -266,8 +251,9 @@ describe("PropertyPartiesSet", () => {
 
   test("is strict and bounded: no other member, and not a bulk import", () => {
     assert.match(refusal(PropertyPartiesSet.safeParse({ parties: [], propertyId: ID }))[0].message, /propertyId/)
-    const many = Array.from({ length: 201 }, (_unused, index) => ({ customerId: `01a0d3a5-e5e0-7000-8000-${String(index).padStart(12, "0")}`, role: "tenant" }))
+    const many = tooManyIds.map((customerId) => ({ customerId, role: "tenant" }))
     assert.equal(PropertyPartiesSet.safeParse({ parties: many }).success, false)
+    assert.equal(Property.parse({ ...property, parties: many }).parties.length, many.length, "the bound is a body's; a stored list has to parse however long it grew")
   })
 })
 
@@ -291,15 +277,30 @@ describe("PropertyGroup", () => {
 })
 
 describe("PropertyGroupMembersSet", () => {
+  const namedOnce = { path: "members", message: "Name each property once: a property is a member of the group or it is not, and the role says what kind" }
+
   test("replaces the whole membership and refuses a property named twice", () => {
     const members = [
       { propertyId: THIRD, role: "member" },
       { propertyId: OTHER, role: "administrator" },
     ]
     assert.deepEqual(PropertyGroupMembersSet.parse({ members }), { members })
-    assert.deepEqual(refusal(PropertyGroupMembersSet.safeParse({ members: [members[0], { propertyId: THIRD, role: "payer" }] })), [
-      { path: "members", message: "Name each property once: a property is a member of the group or it is not, and the role says what kind" },
-    ])
+    assert.deepEqual(PropertyGroupMembersSet.parse({ members: [] }), { members: [] })
+    assert.deepEqual(refusal(PropertyGroupMembersSet.safeParse({ members: [members[0], { propertyId: THIRD, role: "payer" }] })), [namedOnce])
+  })
+
+  test("is strict and bounded, while the group itself carries however many it gathered", () => {
+    assert.match(refusal(PropertyGroupMembersSet.safeParse({ members: [], propertyGroupId: ID }))[0].message, /propertyGroupId/)
+    const many = tooManyIds.map((propertyId) => ({ propertyId, role: "member" }))
+    assert.equal(PropertyGroupMembersSet.safeParse({ members: many }).success, false)
+    assert.equal(PropertyGroup.parse({ ...group, members: many }).members.length, many.length)
+  })
+
+  test("holds the create body to the same rule, since a group may be gathered with its members", () => {
+    const body = { projectId: OTHER, name: "Parkvej housing association", purpose: "administration" }
+    const member = { propertyId: THIRD, role: "member" }
+    assert.deepEqual(PropertyGroupCreate.parse({ ...body, members: [member] }).members, [member])
+    assert.deepEqual(refusal(PropertyGroupCreate.safeParse({ ...body, members: [member, member] })), [namedOnce])
   })
 })
 
@@ -344,13 +345,37 @@ describe("SharedCollectionPoint", () => {
 })
 
 describe("SharedCollectionPointMembersSet", () => {
-  test("replaces the whole membership and refuses a property named twice", () => {
+  const namedOnce = { path: "members", message: "Name each property once: a property is a member of the point or it is not, and the role says what kind" }
+
+  test("replaces the whole membership, refuses a property named twice and takes only the point's own roles", () => {
     const members = [{ propertyId: THIRD, role: "service-member" }]
     assert.deepEqual(SharedCollectionPointMembersSet.parse({ members }), { members })
-    assert.deepEqual(refusal(SharedCollectionPointMembersSet.safeParse({ members: [members[0], { propertyId: THIRD, role: "payer" }] })), [
-      { path: "members", message: "Name each property once: a property is a member of the point or it is not, and the role says what kind" },
-    ])
+    assert.deepEqual(SharedCollectionPointMembersSet.parse({ members: [] }), { members: [] })
+    assert.deepEqual(refusal(SharedCollectionPointMembersSet.safeParse({ members: [members[0], { propertyId: THIRD, role: "payer" }] })), [namedOnce])
     assert.equal(SharedCollectionPointMembersSet.safeParse({ members: [{ propertyId: THIRD, role: "member" }] }).success, false)
+  })
+
+  test("is strict and bounded, while the point itself carries however many joined it", () => {
+    assert.match(refusal(SharedCollectionPointMembersSet.safeParse({ members: [], sharedCollectionPointId: ID }))[0].message, /sharedCollectionPointId/)
+    const many = tooManyIds.map((propertyId) => ({ propertyId, role: "service-member" }))
+    assert.equal(SharedCollectionPointMembersSet.safeParse({ members: many }).success, false)
+    assert.equal(SharedCollectionPoint.parse({ ...point, members: many }).members.length, many.length)
+  })
+
+  test("holds the create body to the same rule, since a point may be opened with its members", () => {
+    const body = {
+      projectId: OTHER,
+      name: "Parkvej underground point",
+      kind: "underground",
+      address: "Parkvej 20, 2000 Frederiksberg",
+      location: POINT,
+      operatingModel: "municipal",
+      accessMode: "member",
+      billingMode: "member-share",
+    }
+    const member = { propertyId: THIRD, role: "service-member" }
+    assert.deepEqual(SharedCollectionPointCreate.parse({ ...body, members: [member] }).members, [member])
+    assert.deepEqual(refusal(SharedCollectionPointCreate.safeParse({ ...body, members: [member, member] })), [namedOnce])
   })
 })
 

@@ -3,16 +3,11 @@ import { describe, test } from "node:test"
 import * as z from "zod"
 
 import { Validity, ValidityCreate, validityOrdered } from "../validity"
+import { refusal } from "./expect"
 
 // The wording is pinned here and not read off the schema: zod moves a
 // refinement's `message` into its own `error` when it takes the parameters.
 const BACKWARDS = "validTo is the first day out of force, so it comes after validFrom"
-
-/** Each issue a failed parse produced, as the API's 400 would spell it. */
-const refusal = (result: { success: boolean; error?: { issues: readonly { path: readonly PropertyKey[]; message: string }[] } }) => {
-  assert.equal(result.success, false)
-  return (result.error?.issues ?? []).map((issue) => ({ path: issue.path.join("."), message: issue.message }))
-}
 
 describe("Validity", () => {
   test("is a period on the wire: a first day, and a first day out of force or null for open ended", () => {

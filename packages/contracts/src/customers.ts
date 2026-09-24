@@ -17,9 +17,10 @@
 // the client already holds is two requests that can disagree. Each set body
 // refuses the same pair twice, because the database's key refuses it as a
 // duplicate and a 400 naming the rule is a better answer than a 409 naming a
-// constraint. The bound is the same everywhere: a set body is a form's list,
-// and a group of more than two hundred properties arrives through an import,
-// not a PUT.
+// constraint. A body is bounded and a resource is not: a set body is a form's
+// list, and a group of more than two hundred properties arrives through an
+// import rather than a PUT, but a group that already has that many has to
+// read back whatever it grew to.
 //
 // A create body may carry the list it starts with, so the form that makes a
 // property with its owner is one request; a patch never does, because a patch
@@ -108,7 +109,11 @@ export type SharedCollectionPointStatus = z.infer<typeof SharedCollectionPointSt
 export const SharedCollectionPointMemberRole = z.enum(SHARED_COLLECTION_POINT_MEMBER_ROLES)
 export type SharedCollectionPointMemberRole = z.infer<typeof SharedCollectionPointMemberRole>
 
-/** The most a set body may carry: a form's list, not an import. */
+/**
+ * The most a set body may carry: a form's list, not an import. A resource
+ * carries the same entries unbounded, since a membership already stored is a
+ * membership that has to parse however long it grew.
+ */
 const SET_MAX = 200
 
 /** A distance in whole metres; zero is not a distance. */
@@ -171,7 +176,8 @@ export const PropertyParty = z.strictObject({
 })
 export type PropertyParty = z.infer<typeof PropertyParty>
 
-const Parties = z.array(PropertyParty).max(SET_MAX)
+const Parties = z.array(PropertyParty)
+const PartiesBody = Parties.max(SET_MAX)
 const partiesNamedOnce = {
   message: "Name each customer once per role: a party is a customer and a role, and the list holds each pair once",
   path: ["parties"],
@@ -207,7 +213,7 @@ export const PropertyCreate = z
     location: Point.nullable().optional(),
     notes: Paragraph.nullable().optional(),
     status: PropertyStatus.default("active").describe("Defaults to active when absent: a property is registered in order to be served."),
-    parties: Parties.default([]).describe("The parties the property starts with; none when absent."),
+    parties: PartiesBody.default([]).describe("The parties the property starts with; none when absent."),
   })
   .refine((body) => noRepeatedParty(body.parties), partiesNamedOnce)
 export type PropertyCreate = z.infer<typeof PropertyCreate>
@@ -227,7 +233,7 @@ export const PropertyPatch = z
 export type PropertyPatch = z.infer<typeof PropertyPatch>
 
 /** The whole list, replacing what the property had. An empty list is a property nobody is billed for. */
-export const PropertyPartiesSet = z.strictObject({ parties: Parties }).refine((body) => noRepeatedParty(body.parties), partiesNamedOnce)
+export const PropertyPartiesSet = z.strictObject({ parties: PartiesBody }).refine((body) => noRepeatedParty(body.parties), partiesNamedOnce)
 export type PropertyPartiesSet = z.infer<typeof PropertyPartiesSet>
 
 /** A page of properties, from one project and of one customer's. */
@@ -244,7 +250,8 @@ export const PropertyGroupMember = z.strictObject({
 })
 export type PropertyGroupMember = z.infer<typeof PropertyGroupMember>
 
-const GroupMembers = z.array(PropertyGroupMember).max(SET_MAX)
+const GroupMembers = z.array(PropertyGroupMember)
+const GroupMembersBody = GroupMembers.max(SET_MAX)
 const groupMembersNamedOnce = {
   message: "Name each property once: a property is a member of the group or it is not, and the role says what kind",
   path: ["members"],
@@ -270,7 +277,7 @@ export const PropertyGroupCreate = z
     purpose: PropertyGroupPurpose,
     responsibleCustomerId: Id.nullable().optional(),
     status: PropertyGroupStatus.default("draft").describe("Defaults to draft when absent: a group is gathered before it is used."),
-    members: GroupMembers.default([]).describe("The properties the group starts with; none when absent."),
+    members: GroupMembersBody.default([]).describe("The properties the group starts with; none when absent."),
   })
   .refine((body) => noRepeatedGroupMember(body.members), groupMembersNamedOnce)
 export type PropertyGroupCreate = z.infer<typeof PropertyGroupCreate>
@@ -287,7 +294,7 @@ export type PropertyGroupPatch = z.infer<typeof PropertyGroupPatch>
 
 /** The whole membership, replacing what the group had. */
 export const PropertyGroupMembersSet = z
-  .strictObject({ members: GroupMembers })
+  .strictObject({ members: GroupMembersBody })
   .refine((body) => noRepeatedGroupMember(body.members), groupMembersNamedOnce)
 export type PropertyGroupMembersSet = z.infer<typeof PropertyGroupMembersSet>
 
@@ -298,7 +305,8 @@ export const SharedCollectionPointMember = z.strictObject({
 })
 export type SharedCollectionPointMember = z.infer<typeof SharedCollectionPointMember>
 
-const PointMembers = z.array(SharedCollectionPointMember).max(SET_MAX)
+const PointMembers = z.array(SharedCollectionPointMember)
+const PointMembersBody = PointMembers.max(SET_MAX)
 const pointMembersNamedOnce = {
   message: "Name each property once: a property is a member of the point or it is not, and the role says what kind",
   path: ["members"],
@@ -343,7 +351,7 @@ export const SharedCollectionPointCreate = z
     billingMode: SharedCollectionPointBillingMode,
     responsibleCustomerId: Id.nullable().optional(),
     status: SharedCollectionPointStatus.default("draft").describe("Defaults to draft when absent: a point is planned before it takes waste."),
-    members: PointMembers.default([]).describe("The properties the point starts with; none when absent."),
+    members: PointMembersBody.default([]).describe("The properties the point starts with; none when absent."),
   })
   .refine((body) => noRepeatedPointMember(body.members), pointMembersNamedOnce)
 export type SharedCollectionPointCreate = z.infer<typeof SharedCollectionPointCreate>
@@ -368,6 +376,6 @@ export type SharedCollectionPointPatch = z.infer<typeof SharedCollectionPointPat
 
 /** The whole membership, replacing what the point had. */
 export const SharedCollectionPointMembersSet = z
-  .strictObject({ members: PointMembers })
+  .strictObject({ members: PointMembersBody })
   .refine((body) => noRepeatedPointMember(body.members), pointMembersNamedOnce)
 export type SharedCollectionPointMembersSet = z.infer<typeof SharedCollectionPointMembersSet>
