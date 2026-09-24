@@ -304,6 +304,7 @@ describe("the role endpoints", { skip: database.skip }, () => {
       ])
       assert.deepEqual(await one(olivia, created.id), replaced)
       assert.ok(!replaced.grants.some((grant) => grant.moduleKey === "fleet.vehicles"), "a grant the body left out is gone")
+      assert.ok(replaced.updatedAt > created.updatedAt, "the matrix is part of the role, so the role changed")
 
       const emptied = await setGrants(olivia, created.id, [])
       assert.deepEqual(emptied.grants, [], "a role that may do nothing")

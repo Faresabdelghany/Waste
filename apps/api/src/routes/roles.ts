@@ -33,7 +33,7 @@ import { Page, PageRequest } from "@waste/contracts/pagination"
 import type { Grant } from "@waste/contracts/permissions"
 import type { Tx } from "@waste/db/client"
 import { role, roleGrant } from "@waste/db/schema/access"
-import { and, asc, eq, gt, inArray } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -274,11 +274,15 @@ export function roleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const { grants: asked } = c.req.valid("json")
         const tx = c.get("tx")
         const { companyId } = c.get("principal")
+        // The matrix is part of the role on the wire, so replacing it changes
+        // the role: the update is what says so — and what answers 404 when
+        // there is no such role here. The trigger would stamp `updated_at`
+        // whatever this set said; naming it is naming what changed.
         const [row] = await tx
-          .select(columns)
-          .from(role)
+          .update(role)
+          .set({ updatedAt: sql`now()` })
           .where(and(eq(role.companyId, companyId), eq(role.id, id)))
-          .limit(1)
+          .returning(columns)
         if (row === undefined) throw noSuchRole(id)
 
         const grants = normalisedGrants(asked)
