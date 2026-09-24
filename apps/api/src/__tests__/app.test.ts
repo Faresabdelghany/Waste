@@ -34,6 +34,8 @@ type Operation = {
   operationId: string
   description?: string
   security?: unknown[]
+  parameters?: { name: string; in: string; required?: boolean; schema?: JsonSchema }[]
+  requestBody?: { content: Record<string, { schema: JsonSchema }> }
   responses: Record<string, { content: Record<string, { schema: JsonSchema }> }>
 }
 type Spec = {
@@ -106,9 +108,18 @@ describe("GET /openapi.json", () => {
     assert.equal(result.valid, true, JSON.stringify(result.errors))
   })
 
-  test("documents /healthz, /readyz and /me, and no other path", async () => {
+  test("documents the probes and every route of the organisation context, and no other path", async () => {
     const document = await spec()
-    assert.deepEqual(Object.keys(document.paths).sort(), ["/healthz", "/me", "/readyz"])
+    assert.deepEqual(Object.keys(document.paths).sort(), [
+      "/company",
+      "/healthz",
+      "/me",
+      "/projects",
+      "/projects/{id}",
+      "/readyz",
+      "/service-providers",
+      "/service-providers/{id}",
+    ])
     assert.equal(document.paths["/healthz"].get.operationId, "getHealth")
     const health = schemaOf(document, "/healthz", "200")
     assert.deepEqual(health.required, ["status", "time"])
@@ -157,7 +168,44 @@ describe("GET /openapi.json", () => {
         }
       }
     }
-    assert.ok(secured >= 1, "GET /me is in the document")
+    assert.equal(secured, 11, "/me and the ten organisation routes")
+  })
+
+  test("documents each organisation route with its verbs, its problems and its page of items", async () => {
+    const document = await spec()
+    const operations = (path: string) =>
+      Object.fromEntries(Object.entries(document.paths[path]).map(([method, operation]) => [method, operation.operationId]))
+
+    assert.deepEqual(operations("/company"), { get: "getCompany", patch: "patchCompany" })
+    assert.deepEqual(operations("/projects"), { get: "listProjects", post: "createProject" })
+    assert.deepEqual(operations("/projects/{id}"), { get: "getProject", patch: "patchProject" })
+    assert.deepEqual(operations("/service-providers"), { get: "listServiceProviders", post: "createServiceProvider" })
+    assert.deepEqual(operations("/service-providers/{id}"), { get: "getServiceProvider", patch: "patchServiceProvider" })
+
+    // What a caller can earn on each of them, and in what shape.
+    assert.deepEqual(Object.keys(document.paths["/company"].get.responses), ["200", "401", "403"])
+    assert.deepEqual(Object.keys(document.paths["/company"].patch.responses), ["200", "400", "401", "403", "409"])
+    assert.deepEqual(Object.keys(document.paths["/projects"].post.responses), ["201", "400", "401", "403", "409"])
+    assert.deepEqual(Object.keys(document.paths["/projects/{id}"].patch.responses), ["200", "400", "401", "403", "404", "409"])
+    for (const [path, method] of [["/projects/{id}", "patch"], ["/service-providers/{id}", "get"]] as const) {
+      for (const [status, operation] of Object.entries(document.paths[path][method].responses)) {
+        const media = Object.keys(operation.content)
+        assert.deepEqual(media, [status === "200" ? "application/json" : "application/problem+json"], `${method} ${path} ${status}`)
+      }
+    }
+
+    const page = document.paths["/projects"].get.responses["200"].content["application/json"].schema
+    assert.deepEqual(page.required, ["items", "nextCursor"])
+    assert.equal(page.properties?.items.type, "array")
+
+    // The path id and the page's query, as parameters a client can read.
+    const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
+    assert.deepEqual(byName(document.paths["/projects/{id}"].get), ["path:id"])
+    assert.deepEqual(byName(document.paths["/projects"].get).sort(), ["query:cursor", "query:limit"])
+
+    // A write takes a JSON body, and it is the strict one the contracts spell.
+    const body = document.paths["/projects"].post.requestBody?.content["application/json"].schema
+    assert.deepEqual(body?.required, ["name", "kind", "language", "currency", "timezone"])
   })
 
   test("documents /me with the problem responses a token can earn", async () => {

@@ -32,7 +32,10 @@ import { authenticate, BEARER_AUTH, BEARER_SECURITY_SCHEME } from "./auth/princi
 import type { Verifier } from "./auth/verify"
 import { errorHandler, notFound } from "./problem"
 import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS } from "./readiness"
+import { companyRoutes } from "./routes/company"
 import { meRoutes } from "./routes/me"
+import { projectRoutes } from "./routes/projects"
+import { serviceProviderRoutes } from "./routes/service-providers"
 
 export type AppOptions = {
   /** The pool /readyz probes, as the API role: server.ts builds it from probePoolOptions; a test hands whatever it wants probed. */
@@ -104,6 +107,9 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   // The authenticated routes, each module given the guard to put on its routes.
   const guard = authenticate({ pool, verifier })
   app.route("/", meRoutes(guard))
+  app.route("/", companyRoutes(guard))
+  app.route("/", projectRoutes(guard))
+  app.route("/", serviceProviderRoutes(guard))
 
   app.get(
     "/openapi.json",

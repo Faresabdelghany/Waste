@@ -112,6 +112,18 @@ function sqlstate(error: unknown): { code: string; constraint?: string } | undef
 }
 
 /**
+ * The constraint a unique violation names, when that is what the error is and
+ * Postgres named it. A route that can foresee a collision reads this and
+ * answers a sentence of its own (routes/shared.ts), which keeps constraint
+ * names off the wire; the mapping below stays the backstop for the ones
+ * nobody foresaw.
+ */
+export function uniqueConstraintOf(error: unknown): string | undefined {
+  const failed = sqlstate(error)
+  return failed?.code === UNIQUE_VIOLATION ? failed.constraint : undefined
+}
+
+/**
  * Hono's error handler: the mapping in the header. `log` receives what became
  * a 500, whole; console.error unless the composition root or a test says
  * otherwise.
