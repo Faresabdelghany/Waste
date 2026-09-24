@@ -438,6 +438,9 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
       const bySubscription = (await placements(olivia, `?limit=200&subscriptionId=${subscribed.id}`)).items
       assert.ok(bySubscription.some((row) => row.id === first.id))
       for (const row of bySubscription) assert.equal(row.subscriptionId, subscribed.id)
+      for (const row of bySubscription) {
+        assert.equal(row.effectiveServiceFrequencyId, row.serviceFrequencyId ?? weekly.id, "a page item carries the cadence in force too")
+      }
     })
 
     test("answers the containers standing at a place on a day, through the subscription, and asks for the day", async () => {
@@ -467,6 +470,12 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
       assert.ok(seen.some((row) => row.id === here.id))
       assert.ok(!seen.some((row) => row.id === elsewhere.id))
       for (const row of seen) assert.equal(row.projectId, a.projects.copenhagen.id)
+
+      const byProject = (await placements(olivia, `?limit=200&projectId=${a.projects.harbor.id}`)).items
+      assert.ok(byProject.some((row) => row.id === elsewhere.id))
+      for (const row of byProject) assert.equal(row.projectId, a.projects.harbor.id)
+      const refusedProject = await refused(await viewer(`/placements?projectId=${a.projects.harbor.id}`), 400)
+      assert.deepEqual(refusedProject.errors, [{ path: "projectId", message: "Not a project this account works in" }])
 
       assert.deepEqual((await placements(lars, "?limit=200")).items, [])
       assert.match((await refused(await ungranted("/placements"), 403)).detail ?? "", /view on resources\.containers/)
