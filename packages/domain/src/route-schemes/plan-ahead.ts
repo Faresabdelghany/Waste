@@ -13,17 +13,14 @@
 
 import type { BusinessRecord } from "../prototype-record"
 import { isSoftDeleted } from "../record-visibility"
+import { containerDriftWarning } from "./container-drift"
 import { schemeGenerationCalendar } from "./project-calendar"
 import {
   applySchemeGeneration,
   planSchemeGeneration,
   type GenerationWindow,
 } from "./generation"
-import {
-  effectiveSchemeStatus,
-  recordSchemeGeneration,
-  schemeGenerationRecorded,
-} from "./lifecycle"
+import { effectiveSchemeStatus, recordGenerationRun } from "./lifecycle"
 import { addDays, recurrenceFromValues } from "./recurrence"
 
 const PLAN_AHEAD_DAYS = 7
@@ -89,16 +86,23 @@ export type PlanAheadSummary = {
   /** Planned dates the schemes' holiday policies skipped. */
   holidaySkipped: number
   pickups: number
+  /**
+   * Schemes whose matched containers shifted past the threshold since their
+   * previous run (issue #41), each with its Attention sentence — the run
+   * summary's note, since an auto-run has no preview a planner could read.
+   */
+  containerDrift: Array<{ schemeId: string; schemeName: string; warning: string }>
 }
 
 export type PlanAheadRunResult = {
   routes: BusinessRecord[]
   pickups: BusinessRecord[]
   /**
-   * Scheme records to upsert: schemes whose FIRST successful generation this
-   * run performed, stamped by recordSchemeGeneration (Validated → Scheduled
-   * plus the persisted marker). Already-recorded schemes are never restamped,
-   * so applying these writes cannot retrigger a run loop.
+   * Scheme records to upsert: what each run left on the scheme through
+   * recordGenerationRun — the first-generation stamp (Validated → Scheduled
+   * plus the persisted marker) and, on every run, the matches stamp when it
+   * moved. A run that recorded nothing new returns no scheme, so a quiet
+   * load writes nothing and applying these writes cannot retrigger a run loop.
    */
   schemes: BusinessRecord[]
   summary: PlanAheadSummary
@@ -138,6 +142,7 @@ export function runPlanAhead(input: {
     skipped: 0,
     holidaySkipped: 0,
     pickups: 0,
+    containerDrift: [],
   }
 
   for (const scheme of input.schemes) {
@@ -162,16 +167,19 @@ export function runPlanAhead(input: {
       actorName: input.actorName,
       ...(input.generatedAt ? { generatedAt: input.generatedAt } : {}),
     })
-    // First successful generation → Scheduled (D25). A run that plans zero
-    // writes is still a successful generation; only the structural inability
-    // above (no plan) is not.
-    if (!schemeGenerationRecorded(scheme)) {
-      schemes.push(
-        recordSchemeGeneration(
-          scheme,
-          input.generatedAt ?? new Date().toISOString(),
-        ),
-      )
+    // First successful generation → Scheduled (D25), and on every run the
+    // matches stamp (issue #41). A run that plans zero writes is still a
+    // successful generation; only the structural inability above (no plan)
+    // is not. The stamp comes back unchanged when it did not move.
+    const stamped = recordGenerationRun(
+      scheme,
+      input.generatedAt ?? new Date().toISOString(),
+      plan.matches,
+    )
+    if (stamped !== scheme) schemes.push(stamped)
+    const drift = containerDriftWarning(plan.containerDrift)
+    if (drift) {
+      summary.containerDrift.push({ schemeId: scheme.id, schemeName: scheme.name, warning: drift })
     }
     summary.created += result.summary.created
     summary.refreshed += result.summary.refreshed

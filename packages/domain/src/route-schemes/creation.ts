@@ -236,6 +236,7 @@ export function planSchemeCreation(
     const scheduled = recordSchemeGeneration(
       armed,
       input.generatedAt ?? new Date().toISOString(),
+      plan.matches,
     )
     const routesWritten = result.summary.created + result.summary.refreshed
     return {

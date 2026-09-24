@@ -18,6 +18,15 @@ import type { BusinessRecord } from "../prototype-record"
 import { isSoftDeleted } from "../record-visibility"
 import { schemeFrequencyPromiseOfRecord } from "../service-frequencies"
 import {
+  containerDriftBetween,
+  containerDriftWarning,
+  generationMatchHistoryOf,
+  generationMatchValues,
+  sameGenerationMatches,
+  type CollectionGroupContainerDrift,
+  type GenerationMatches,
+} from "./container-drift"
+import {
   collectionGroupContainerIds,
   schemeAssignmentSources,
   schemeGroupPlans,
@@ -106,20 +115,66 @@ export function withEffectiveSchemeStatus(
 }
 
 /**
+ * The matches stamp a run leaves (issue #41), over the scheme's rule groups
+ * only. The history advances only when the run's matches differ from the
+ * last stamp: then the last stamp becomes the previous one and this run's
+ * matches the last. A run that matches what the last run matched returns
+ * the input unchanged — a manual scheme, or every Plan Ahead load while the
+ * container base holds still — so callers upsert only what changed
+ * (`next !== scheme`), and a drift stays on the badge until the set moves
+ * again rather than clearing on the next page load.
+ */
+export function recordGenerationMatches(
+  scheme: BusinessRecord,
+  matches: GenerationMatches,
+): BusinessRecord {
+  const history = generationMatchHistoryOf(scheme.submittedValues)
+  if (sameGenerationMatches(history.last, matches)) return scheme
+  return {
+    ...scheme,
+    submittedValues: {
+      ...scheme.submittedValues,
+      ...generationMatchValues(history, matches),
+    },
+  }
+}
+
+/**
  * The first-successful-generation event (D25): stamps the persisted marker
- * and promotes a Validated scheme to Scheduled. Later generations are
- * no-ops (schemeGenerationRecorded guards the callers), and a technical
- * generation failure must never reach this — failure is not scheduling.
+ * and promotes a Validated scheme to Scheduled — with the run's matches
+ * stamp when the caller has them (creation, edit reconciliation). Later
+ * generations move only the matches stamp (recordGenerationRun), and a
+ * technical generation failure must never reach this — failure is not
+ * scheduling.
  */
 export function recordSchemeGeneration(
   scheme: BusinessRecord,
   generatedAt: string,
+  matches?: GenerationMatches,
 ): BusinessRecord {
+  const stamped = matches ? recordGenerationMatches(scheme, matches) : scheme
   return {
-    ...scheme,
-    status: scheme.status === "Validated" ? "Scheduled" : scheme.status,
-    submittedValues: { ...scheme.submittedValues, lastGeneratedAt: generatedAt },
+    ...stamped,
+    status: stamped.status === "Validated" ? "Scheduled" : stamped.status,
+    submittedValues: { ...stamped.submittedValues, lastGeneratedAt: generatedAt },
   }
+}
+
+/**
+ * What a successful run leaves on the scheme, whichever run it is: the
+ * first-generation event with its marker and promotion, else the matches
+ * stamp alone. The one call the manual Generate routes confirm and Plan
+ * Ahead make after applying a plan; the input comes back unchanged when the
+ * run recorded nothing new, so a quiet run writes no scheme record.
+ */
+export function recordGenerationRun(
+  scheme: BusinessRecord,
+  generatedAt: string,
+  matches: GenerationMatches,
+): BusinessRecord {
+  return schemeGenerationRecorded(scheme)
+    ? recordGenerationMatches(scheme, matches)
+    : recordSchemeGeneration(scheme, generatedAt, matches)
 }
 
 /**
@@ -177,18 +232,30 @@ export type SchemeRelatedRecords = {
   vehicles?: readonly BusinessRecord[]
 }
 
+/** What the live look at a scheme yields: its validation and its last run's container drift. */
+export type SchemeLiveAssessment = {
+  validation: SchemeValidationResult
+  /**
+   * Rule groups whose matched containers drifted at the most recent change
+   * of the matched set (issue #41), read from the two stamps the runs left —
+   * never from the live container base, so the badge reports what a run
+   * found and persists across identical runs until the set moves again.
+   */
+  containerDrift: CollectionGroupContainerDrift[]
+}
+
 /**
  * Re-runs validateScheme against a stored record's canonical configuration
  * plus the current related records — the record-side counterpart of the
  * wizard's validateGuidedScheme, sharing every check (FR-5 blocking issues,
- * allocation/rule-overlap/frequency-reconciliation warnings).
- * Null for legacy records without structured recurrence: there is nothing
- * to evaluate live.
+ * allocation/rule-overlap/frequency-reconciliation warnings) — and reads the
+ * container drift the last run stamped. Null for legacy records without
+ * structured recurrence: there is nothing to evaluate live.
  */
-export function schemeLiveValidation(
+export function schemeLiveAssessment(
   record: BusinessRecord,
   related: SchemeRelatedRecords,
-): SchemeValidationResult | null {
+): SchemeLiveAssessment | null {
   const values = record.submittedValues
   if (!values) return null
   const recurrence = recurrenceFromValues(values)
@@ -209,7 +276,7 @@ export function schemeLiveValidation(
   const otherSchemes = schemesInPlanning(related.schemes).filter(
     (candidate) => candidate.id !== record.id,
   )
-  return validateScheme(
+  const validation = validateScheme(
     {
       serviceDays,
       effectiveFrom: recurrence.effectiveFrom,
@@ -231,6 +298,35 @@ export function schemeLiveValidation(
     allocationConflictSources(related.allocations ?? []),
     schemeStopRuleSources(otherSchemes),
   )
+  const history = generationMatchHistoryOf(values)
+  return {
+    validation,
+    containerDrift: containerDriftBetween(history.previous, history.last, groups),
+  }
+}
+
+/**
+ * The validation half of schemeLiveAssessment — what edit-save judges a save
+ * by and the Details tab reads its blocking issues from. Container drift is
+ * not validation: it never blocks and never enters the persisted
+ * "Validation warnings" fact.
+ */
+export function schemeLiveValidation(
+  record: BusinessRecord,
+  related: SchemeRelatedRecords,
+): SchemeValidationResult | null {
+  return schemeLiveAssessment(record, related)?.validation ?? null
+}
+
+/**
+ * The warnings an assessment shows as Attention: validation's, then the one
+ * container-drift sentence when the last run drifted (issue #41). Spelled
+ * once, so the list badge and the detail header cannot disagree.
+ */
+export function attentionWarnings(assessment: SchemeLiveAssessment | null): string[] {
+  if (!assessment) return []
+  const drift = containerDriftWarning(assessment.containerDrift)
+  return drift ? [...assessment.validation.warnings, drift] : assessment.validation.warnings
 }
 
 /**
@@ -242,5 +338,5 @@ export function schemeAttention(
   record: BusinessRecord,
   related: SchemeRelatedRecords,
 ): string[] {
-  return schemeLiveValidation(record, related)?.warnings ?? []
+  return attentionWarnings(schemeLiveAssessment(record, related))
 }

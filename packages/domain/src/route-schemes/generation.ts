@@ -23,9 +23,21 @@
 //   provider. Route identity is (schemeId, serviceDate) for the implicit legacy
 //   group and (schemeId, groupId, serviceDate) for explicit groups —
 //   deterministic ids, never Date.now().
+//   Container drift (issue #41): the plan carries what every rule group
+//   matched (`matches`, the stamp recordGenerationRun writes on the scheme)
+//   and how far that moved since the scheme's last stamp (`containerDrift`,
+//   container-drift.ts) — a rule re-resolves against the container base on
+//   every run, so a shift past the threshold is said out loud, never silent.
 
 import { EMPTY_FACT } from "../record-values"
 import type { BusinessRecord } from "../prototype-record"
+import {
+  containerDriftBetween,
+  generationMatchHistoryOf,
+  generationMatchesOf,
+  type CollectionGroupContainerDrift,
+  type GenerationMatches,
+} from "./container-drift"
 import { schemeGroupPlans, type ResolvedCollectionGroup } from "./groups"
 import { avalancheHash } from "./hash"
 import { schemeHolidayPolicy } from "./holidays"
@@ -84,6 +96,18 @@ export type SchemeGenerationPlan = {
   schemeVersion: string
   window: GenerationWindow
   routes: PlannedRoute[]
+  /**
+   * What every rule group matched in this plan, keyed by group id — the stamp
+   * the run leaves on the scheme (recordGenerationRun). Window-independent:
+   * a rule's matches do not depend on the day.
+   */
+  matches: GenerationMatches
+  /**
+   * Rule groups whose matched set shifted past the threshold since the
+   * scheme's last stamp, under an unchanged rule (issue #41). Empty on a
+   * first run, an unchanged set, or a rule that changed since.
+   */
+  containerDrift: CollectionGroupContainerDrift[]
 }
 
 export type GenerationSummary = {
@@ -94,6 +118,8 @@ export type GenerationSummary = {
   /** Planned dates the scheme's holiday policy skipped. */
   holidaySkipped: number
   pickups: number
+  /** The plan's container drift, carried so the run summary can say so (containerDriftWarning spells it). */
+  containerDrift: CollectionGroupContainerDrift[]
 }
 
 export type GenerationApplyResult = {
@@ -246,6 +272,19 @@ export function planSchemeGeneration(input: {
     scheme,
     recurrence.serviceDays,
     input.containers,
+  )
+  // What the rule groups match now, against what the last run stamped
+  // (issue #41): the plan says so before a route is written, and the run
+  // writes the new stamp beside the old one so the badge can say it after.
+  const matches = generationMatchesOf(
+    groups,
+    resolution,
+    stringValue(scheme.submittedValues ?? {}, "planningAreaId"),
+  )
+  const containerDrift = containerDriftBetween(
+    generationMatchHistoryOf(scheme.submittedValues).last,
+    matches,
+    groups,
   )
   const planFor = new Map(
     resolution.plans.map((plan) => [`${plan.groupId}|${plan.day}`, plan.containerIds]),
@@ -436,7 +475,14 @@ export function planSchemeGeneration(input: {
 
   routes.sort((a, b) => a.serviceDate.localeCompare(b.serviceDate))
 
-  return { scheme, schemeVersion: schemeVersionOf(scheme), window: generationWindow, routes }
+  return {
+    scheme,
+    schemeVersion: schemeVersionOf(scheme),
+    window: generationWindow,
+    routes,
+    matches,
+    containerDrift,
+  }
 }
 
 /* ------------------------ scheme route list (FR-13) ----------------------- */
@@ -689,6 +735,7 @@ export function applySchemeGeneration(input: {
     skipped: 0,
     holidaySkipped: 0,
     pickups: 0,
+    containerDrift: plan.containerDrift,
   }
 
   const pickupsByRoute = new Map<string, BusinessRecord[]>()
