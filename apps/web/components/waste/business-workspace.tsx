@@ -41,6 +41,7 @@ import {
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import {
+  clearedFactKeys,
   deriveFormRecord,
   displayFormValue as displayFormRecordValue,
   type FormRecordResolvers,
@@ -127,6 +128,7 @@ import type {
   BusinessFormValues,
 } from "@/lib/data/business-form-types"
 import { softDeletedRecord } from "@waste/domain/record-visibility"
+import { count } from "@waste/domain/text"
 import {
   applyIndexToRate,
   serviceProviderPriceToRecord,
@@ -134,14 +136,15 @@ import {
   encodeHistory,
   isSoftDeleted,
   money,
+  normalizePriceRowRecord,
   PRICING_REFERENCE_DATE,
-  priceRowToRecord,
   PRODUCT_FACTS,
+  productIdOfPriceRow,
   RATE_FACTS,
   recordToServiceProviderPrice,
   recordToPriceRow,
-  ROW_FACTS,
-  rowDisplayName,
+  signedPercent,
+  softDeletedPriceRowsOf,
   syncProductPricingFacts,
   unitSuffix,
   type PriceRowModel,
@@ -2143,6 +2146,27 @@ export function BusinessWorkspace({
         // already dropped it.
         syncProductForRow(record, { exclude: true })
       }
+      if (workspace.id === "commercial" && activeModule.id === "products") {
+        // A price row has no meaning without its product (recordToPriceRow
+        // reads it through the product link), so the delete takes the
+        // product's live rows with it under the same deletion log (issue
+        // #22) — otherwise the Price rows module goes on listing rows whose
+        // product is gone, still counted and adjusted as if it were not.
+        const rowsTarget = resolveFormModule("commercial", "price-rows")
+        if (rowsTarget) {
+          const cascaded = softDeletedPriceRowsOf(
+            getRecords(rowsTarget.workspaceId, rowsTarget.module.id, rowsTarget.module.records),
+            record.id,
+            deletion,
+          )
+          for (const row of cascaded) {
+            upsertRecord(rowsTarget.workspaceId, rowsTarget.module.id, row)
+          }
+          if (cascaded.length > 0) {
+            deletionMessage = `${deletionMessage} ${count(cascaded.length, "price row")} of the product ${cascaded.length === 1 ? "was" : "were"} soft-deleted with it.`
+          }
+        }
+      }
       setSelectedRecord(null)
       setPendingAction(null)
       router.replace(
@@ -2965,7 +2989,7 @@ export function BusinessWorkspace({
       setIsCreateOpen(false)
       setRelatedCreateTarget(null)
       toast.success("Index applied", {
-        description: `${indexed} service provider price${indexed === 1 ? "" : "s"} recomputed from ${base} (${label} +${percent}%). Bids untouched.`,
+        description: `${count(indexed, "service provider price")} recomputed from ${base} (${label} ${signedPercent(percent)}). Bids untouched.`,
       })
       return
     }
@@ -3275,18 +3299,11 @@ export function BusinessWorkspace({
     // The generic path stores select-field facts as their display label
     // (e.g. Unit → "€ per pickup"), but a price row's Unit fact must stay the
     // raw PriceUnit enum ("pickup") for recordToPriceRow/unitSuffix to read
-    // it back correctly — normalize it here, then derive the row's display
-    // name and headline value the same way both on create and on edit.
-    const normalizePriceRowRecord = (record: BusinessRecord): BusinessRecord => {
-      const submittedUnit = typeof values.unit === "string" ? values.unit : undefined
-      const withUnit = submittedUnit
-        ? { ...record, facts: { ...record.facts, [ROW_FACTS.unit]: submittedUnit } }
-        : record
-      const row = recordToPriceRow(withUnit)
-      return row
-        ? { ...withUnit, name: rowDisplayName(row), value: `${money(row.amount)}${unitSuffix(row.unit)}` }
-        : withUnit
-    }
+    // it back — normalizePriceRowRecord (lib/commercial/price-model) writes
+    // the submitted enum over it and derives the row's name, headline value,
+    // status and context the same way on create and on edit.
+    const submittedPriceUnit =
+      typeof values.unit === "string" && values.unit ? values.unit : undefined
 
     // Same class of bug on the products module's generic edit path (row
     // Actions → Edit): the Unit field's LABEL ("€ per pickup") lands in the
@@ -3605,6 +3622,17 @@ export function BusinessWorkspace({
     }
 
     if (editingRecord) {
+      // The derived facts skip empty values and are merged over the record's,
+      // so a field the person emptied would keep its old fact and a
+      // condition, an Effective to or a scheduled change could never be
+      // cancelled through Edit (issue #22). clearedFactKeys names the fields
+      // the form opened with a value and received back empty — a deliberate
+      // clearing — and nothing else, so a field that is not on this form, or
+      // one the seed could not prefill, keeps its fact.
+      const mergedFacts = { ...editingRecord.facts, ...facts }
+      for (const key of clearedFactKeys(formSchema, values, editInitialValues)) {
+        delete mergedFacts[key]
+      }
       let updatedRecord: BusinessRecord = {
         ...editingRecord,
         // Only user-named records can be renamed; system-issued and
@@ -3617,13 +3645,13 @@ export function BusinessWorkspace({
         context: contextValues.join(" · ") || editingRecord.context,
         updated: "Now",
         freshness: "Now",
-        facts: { ...editingRecord.facts, ...facts },
+        facts: mergedFacts,
         submittedValues: { ...editingRecord.submittedValues, ...values },
         relationRefs,
         projectIds,
       }
       if (resolvedTarget.module.id === "price-rows") {
-        updatedRecord = normalizePriceRowRecord(updatedRecord)
+        updatedRecord = normalizePriceRowRecord(updatedRecord, { unit: submittedPriceUnit })
       }
       if (resolvedTarget.module.id === "products") {
         updatedRecord = normalizeProductRecord(updatedRecord)
@@ -3701,6 +3729,13 @@ export function BusinessWorkspace({
         }
       }
       if (resolvedTarget.module.id === "price-rows") {
+        // A row moved to another product leaves the old product's derived
+        // facts behind unless that product is re-synced with the row
+        // excluded (issue #22); the new product then takes it up.
+        const previousProductId = productIdOfPriceRow(editingRecord)
+        if (previousProductId && previousProductId !== productIdOfPriceRow(updatedRecord)) {
+          syncProductForRow(editingRecord, { exclude: true })
+        }
         syncProductForRow(updatedRecord)
       }
       if (resolvedTarget.module.id === "containers") {
@@ -3779,7 +3814,7 @@ export function BusinessWorkspace({
       relationRefs,
     }
     if (resolvedTarget.module.id === "price-rows") {
-      newRecord = normalizePriceRowRecord(newRecord)
+      newRecord = normalizePriceRowRecord(newRecord, { unit: submittedPriceUnit })
     }
     if (resolvedTarget.module.id === "products") {
       newRecord = normalizeProductRecord(newRecord)
@@ -4908,7 +4943,17 @@ export function BusinessWorkspace({
                   </button>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-sm text-xs">
-                  {activeModule.description}
+                  <p>{activeModule.description}</p>
+                  {/* The module's rules (ModuleDefinition.rules) are the
+                      integrity statements its records follow; every module
+                      carries them and this is where they are read. */}
+                  {activeModule.rules.length > 0 && (
+                    <ul className="mt-2 list-disc space-y-1 pl-4">
+                      {activeModule.rules.map((rule) => (
+                        <li key={rule}>{rule}</li>
+                      ))}
+                    </ul>
+                  )}
                 </TooltipContent>
               </Tooltip>
             </div>
