@@ -20,6 +20,18 @@ import { randomBytes, randomInt, randomUUID } from "node:crypto"
 
 import type { Database, Tx } from "@waste/db/client"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "@waste/db/schema/access"
+import { agreement, subscription } from "@waste/db/schema/agreements"
+import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
+import { container, containerServicePlacement } from "@waste/db/schema/containers"
+import {
+  customer,
+  property,
+  propertyGroup,
+  propertyGroupMember,
+  propertyParty,
+  sharedCollectionPoint,
+  sharedCollectionPointMember,
+} from "@waste/db/schema/customers"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
 import { withCompany } from "@waste/db/tenant"
 import { normaliseGrants, type Grant } from "@waste/domain/access/grants"
@@ -162,9 +174,43 @@ export async function seedTenant(pool: Database): Promise<Tenant> {
   return tenant
 }
 
-/** Deletes everything of the company, as `wms_api` under the fence, children first. Nothing there is fine. */
+/**
+ * Grants a seeded role rows beyond its charter, the way a company does when
+ * it edits the permission matrix. A route test of a context the seeded
+ * charters say nothing about — the Registry's master data, its products, its
+ * customers — grants the role it calls as exactly the actions that test needs,
+ * so what a call may do is spelled in the file that makes the call and no
+ * charter here has to grow for a test's sake.
+ */
+export async function grantRole(pool: Database, companyId: string, roleId: string, grants: readonly Grant[]): Promise<void> {
+  await withCompany(pool.db, companyId, async (tx: Tx) => {
+    await tx.insert(roleGrant).values(grantRows(companyId, roleId, normaliseGrants(grants)))
+  })
+}
+
+/**
+ * Deletes everything of the company, as `wms_api` under the fence, children
+ * first. Nothing there is fine. The Registry's fifteen tables go before
+ * Organisation & Access's, since every one of them keys on the company and
+ * most on a project (Issue #78).
+ */
 export async function dropTenant(pool: Database, companyId: string): Promise<void> {
   await withCompany(pool.db, companyId, async (tx: Tx) => {
+    await tx.delete(containerServicePlacement).where(eq(containerServicePlacement.companyId, companyId))
+    await tx.delete(subscription).where(eq(subscription.companyId, companyId))
+    await tx.delete(agreement).where(eq(agreement.companyId, companyId))
+    await tx.delete(container).where(eq(container.companyId, companyId))
+    await tx.delete(product).where(eq(product.companyId, companyId))
+    await tx.delete(serviceFrequency).where(eq(serviceFrequency.companyId, companyId))
+    await tx.delete(sharedCollectionPointMember).where(eq(sharedCollectionPointMember.companyId, companyId))
+    await tx.delete(sharedCollectionPoint).where(eq(sharedCollectionPoint.companyId, companyId))
+    await tx.delete(propertyGroupMember).where(eq(propertyGroupMember.companyId, companyId))
+    await tx.delete(propertyGroup).where(eq(propertyGroup.companyId, companyId))
+    await tx.delete(propertyParty).where(eq(propertyParty.companyId, companyId))
+    await tx.delete(property).where(eq(property.companyId, companyId))
+    await tx.delete(customer).where(eq(customer.companyId, companyId))
+    await tx.delete(containerType).where(eq(containerType.companyId, companyId))
+    await tx.delete(wasteFraction).where(eq(wasteFraction.companyId, companyId))
     await tx.delete(serviceProviderAccess).where(eq(serviceProviderAccess.companyId, companyId))
     await tx.delete(projectAccess).where(eq(projectAccess.companyId, companyId))
     await tx.delete(roleGrant).where(eq(roleGrant.companyId, companyId))

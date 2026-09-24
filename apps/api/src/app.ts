@@ -32,8 +32,11 @@ import { authenticate, BEARER_AUTH, BEARER_SECURITY_SCHEME } from "./auth/princi
 import type { Verifier } from "./auth/verify"
 import { errorHandler, notFound } from "./problem"
 import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS } from "./readiness"
+import { catalogueRoutes } from "./routes/catalogue"
 import { companyRoutes } from "./routes/company"
+import { customerRoutes } from "./routes/customers"
 import { meRoutes } from "./routes/me"
+import { productRoutes } from "./routes/products"
 import { projectRoutes } from "./routes/projects"
 import { roleRoutes } from "./routes/roles"
 import { serviceProviderRoutes } from "./routes/service-providers"
@@ -114,6 +117,9 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   app.route("/", serviceProviderRoutes(guard))
   app.route("/", userRoutes(guard))
   app.route("/", roleRoutes(guard))
+  app.route("/", catalogueRoutes(guard))
+  app.route("/", productRoutes(guard))
+  app.route("/", customerRoutes(guard))
 
   app.get(
     "/openapi.json",

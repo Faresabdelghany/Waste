@@ -15,13 +15,21 @@
 //                      (problem.ts). A collision nobody foresaw still lands
 //                      there, as a 409 either way.
 //
-// Nothing here knows a table or a resource: what is not shared by all three
-// stays in the route module that owns it.
+// The Registry added the same thing one SQLSTATE along (Issue #78): an
+// effective-dated table refuses a row whose period overlaps one already there
+// with 23P01, which is the same kind of news and gets the same treatment,
+// `refuseOverlap` beside `refuseDuplicate`. Two doors and not one taking a
+// SQLSTATE, because a route foresees the two separately — the same table's
+// name key and its `no_overlap` constraint say different things to a person —
+// and a sentence written for one must not answer the other.
+//
+// Nothing here knows a table or a resource: what is not shared by every route
+// module stays in the one that owns it.
 import { Id } from "@waste/contracts/ids"
 import { resolver } from "hono-openapi"
 import * as z from "zod"
 
-import { problem, uniqueConstraintOf } from "../problem"
+import { exclusionConstraintOf, problem, uniqueConstraintOf } from "../problem"
 
 /** The path parameter of every `/<resource>/:id` route. */
 export const IdParam = z.object({ id: Id })
@@ -45,10 +53,28 @@ export function stampsOf(row: { createdAt: Date; updatedAt: Date }): { createdAt
  * signal that a sentence is missing here.
  */
 export async function refuseDuplicate<T>(sentences: Readonly<Record<string, string>>, write: () => Promise<T>): Promise<T> {
+  return await refused(uniqueConstraintOf, sentences, write)
+}
+
+/**
+ * The same for an exclusion constraint: a row whose period overlaps one
+ * already there (23P01, the Registry's effective-dated tables). A constraint
+ * the route did not name is left to the error handler, a 409 either way.
+ */
+export async function refuseOverlap<T>(sentences: Readonly<Record<string, string>>, write: () => Promise<T>): Promise<T> {
+  return await refused(exclusionConstraintOf, sentences, write)
+}
+
+/** What the two above share: run the write, and answer the sentence the route wrote for the constraint it hit. */
+async function refused<T>(
+  constraintOf: (error: unknown) => string | undefined,
+  sentences: Readonly<Record<string, string>>,
+  write: () => Promise<T>,
+): Promise<T> {
   try {
     return await write()
   } catch (error) {
-    const constraint = uniqueConstraintOf(error)
+    const constraint = constraintOf(error)
     const detail = constraint === undefined ? undefined : sentences[constraint]
     if (detail === undefined) throw error
     throw problem(409, { detail })

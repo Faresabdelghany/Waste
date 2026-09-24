@@ -6,7 +6,8 @@ import { Hono } from "hono"
 import { HTTPException } from "hono/http-exception"
 import * as z from "zod"
 
-import { errorHandler, notFound, problem, ProblemError, problemResponse, validate } from "../problem"
+import { errorHandler, exclusionConstraintOf, notFound, problem, ProblemError, problemResponse, uniqueConstraintOf, validate } from "../problem"
+import { refuseDuplicate, refuseOverlap } from "../routes/shared"
 import { readProblem } from "./read-problem"
 
 /** A log that remembers what it was given. */
@@ -76,6 +77,16 @@ describe("errorHandler", () => {
     hono.get("/duplicate-bare", () => {
       throw Object.assign(new Error("duplicate key value"), { code: "23505" })
     })
+    hono.get("/overlap", () => {
+      const cause = Object.assign(new Error('conflicting key value violates exclusion constraint "subscription_no_overlap"'), {
+        code: "23P01",
+        constraint_name: "subscription_no_overlap",
+      })
+      throw new Error("Failed query: insert into ...", { cause })
+    })
+    hono.get("/overlap-bare", () => {
+      throw Object.assign(new Error("conflicting key value"), { code: "23P01" })
+    })
     hono.get("/other-sqlstate", () => {
       throw new Error("Failed query", { cause: Object.assign(new Error("fk"), { code: "23503" }) })
     })
@@ -128,6 +139,20 @@ describe("errorHandler", () => {
     assert.deepEqual(entries, [], "a conflict is the client's news, not the operator's")
   })
 
+  test("maps an exclusion violation (SQLSTATE 23P01) to 409 too: a period that overlaps one already there", async () => {
+    const { entries, log } = recorder()
+    const wrapped = await app(log).request("/overlap")
+    assert.equal(wrapped.status, 409)
+    const body = await readProblem(wrapped)
+    assert.equal(body.title, "Conflict")
+    assert.match(body.detail ?? "", /overlap/i)
+    assert.match(body.detail ?? "", /subscription_no_overlap/)
+    const bare = await app(log).request("/overlap-bare")
+    assert.equal(bare.status, 409)
+    assert.equal((await readProblem(bare)).detail?.includes("subscription_no_overlap"), false)
+    assert.deepEqual(entries, [], "a conflict is the client's news, not the operator's")
+  })
+
   test("answers 500 with no detail for anything else, and logs the error once", async () => {
     const { entries, log } = recorder()
     const response = await app(log).request("/boom")
@@ -161,6 +186,79 @@ describe("errorHandler", () => {
     assert.equal(printed.includes("invitee@example.com"), false, "an invitee's address is not the operator's to keep")
     assert.equal(printed.includes("Invited Person"), false)
     assert.equal(printed.includes("values ($1"), false, "nor is the statement the route sent")
+  })
+})
+
+describe("the constraint a failed write names", () => {
+  const failure = (code: string, constraint?: string) =>
+    new Error("Failed query", { cause: Object.assign(new Error("refused"), { code, ...(constraint === undefined ? {} : { constraint_name: constraint }) }) })
+
+  test("is read from a unique violation and an exclusion violation, each by its own SQLSTATE", () => {
+    assert.equal(uniqueConstraintOf(failure("23505", "product_project_id_name_key")), "product_project_id_name_key")
+    assert.equal(exclusionConstraintOf(failure("23P01", "subscription_no_overlap")), "subscription_no_overlap")
+  })
+
+  test("is undefined for the other's SQLSTATE, for another error, and where Postgres named none", () => {
+    assert.equal(uniqueConstraintOf(failure("23P01", "subscription_no_overlap")), undefined)
+    assert.equal(exclusionConstraintOf(failure("23505", "product_project_id_name_key")), undefined)
+    assert.equal(exclusionConstraintOf(failure("23503", "product_company_id_fk")), undefined)
+    assert.equal(exclusionConstraintOf(failure("23P01")), undefined)
+    assert.equal(exclusionConstraintOf(new Error("nothing to do with the database")), undefined)
+  })
+})
+
+describe("refuseOverlap", () => {
+  const overlap = (constraint: string) =>
+    new Error("Failed query", { cause: Object.assign(new Error("conflicting key value"), { code: "23P01", constraint_name: constraint }) })
+  const sentences = { subscription_no_overlap: "This product is already subscribed to at that place over those dates" }
+
+  test("hands back what the write answered when it succeeded", async () => {
+    assert.equal(await refuseOverlap(sentences, async () => "written"), "written")
+  })
+
+  test("turns an overlap the route foresaw into a 409 with its sentence", async () => {
+    const raised = await refuseOverlap(sentences, async () => {
+      throw overlap("subscription_no_overlap")
+    }).then(
+      () => assert.fail("the write was expected to be refused"),
+      (error: unknown) => error,
+    )
+    assert.ok(raised instanceof ProblemError)
+    assert.equal(raised.status, 409)
+    assert.equal(raised.body.detail, sentences.subscription_no_overlap)
+  })
+
+  test("leaves an overlap it did not foresee, and a duplicate, to the error handler", async () => {
+    for (const error of [overlap("container_service_placement_no_overlap"), new Error("something else")]) {
+      const raised = await refuseOverlap(sentences, async () => {
+        throw error
+      }).then(
+        () => assert.fail("the write was expected to be refused"),
+        (thrown: unknown) => thrown,
+      )
+      assert.equal(raised, error)
+    }
+  })
+
+  test("is the exclusion violation's own door: refuseDuplicate does not answer one, and neither answers the other's", async () => {
+    const duplicate = new Error("Failed query", {
+      cause: Object.assign(new Error("duplicate key"), { code: "23505", constraint_name: "subscription_no_overlap" }),
+    })
+    const left = await refuseDuplicate(sentences, async () => {
+      throw overlap("subscription_no_overlap")
+    }).then(
+      () => assert.fail("the write was expected to be refused"),
+      (thrown: unknown) => thrown,
+    )
+    assert.ok(!(left instanceof ProblemError), "an exclusion violation is not refuseDuplicate's to answer")
+    const answered = await refuseDuplicate(sentences, async () => {
+      throw duplicate
+    }).then(
+      () => assert.fail("the write was expected to be refused"),
+      (thrown: unknown) => thrown,
+    )
+    assert.ok(answered instanceof ProblemError)
+    assert.equal(answered.status, 409)
   })
 })
 

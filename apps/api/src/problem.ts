@@ -7,9 +7,10 @@
 //
 //   a ProblemError          → its own body and headers (a 401 carries WWW-Authenticate)
 //   one of Hono's own       → a problem of its status, the message as detail
-//   SQLSTATE 23505          → 409, since a unique violation is the one database
-//                             error a client can do something about, and the
-//                             constraint it hit when Postgres names it
+//   SQLSTATE 23505 or 23P01 → 409, since a key already taken and a period
+//                             already covered are the database errors a client
+//                             can do something about, and the constraint each
+//                             hit when Postgres names it
 //   anything else           → 500 with no detail, a projection of the error
 //                             logged (`loggable`: never a statement or its
 //                             bound parameters); what the error said stays on
@@ -100,8 +101,21 @@ export function problem(status: ProblemStatus, options: ProblemOptions = {}): Pr
   return new ProblemError(status, options)
 }
 
-/** The one SQLSTATE with a meaning on the wire: a unique violation is a 409. */
+// The SQLSTATEs with a meaning on the wire. Both are the database saying "a
+// row already there says otherwise", which is a 409 and not a 500: the
+// request was well-formed and would be fine against another key or another
+// period. A unique violation is two rows with the same key (23505); an
+// exclusion violation is two rows whose periods overlap (23P01, the Registry's
+// effective-dated tables, Issue #78). Everything else the database refuses is
+// ours to have prevented, so it is a 500 with the error logged.
 const UNIQUE_VIOLATION = "23505"
+const EXCLUSION_VIOLATION = "23P01"
+
+/** What a conflict says when no route foresaw it; the constraint's name is appended where Postgres gave one. */
+const CONFLICTS: Readonly<Record<string, string>> = {
+  [UNIQUE_VIOLATION]: "A record with the same key already exists",
+  [EXCLUSION_VIOLATION]: "A record overlapping this one already exists",
+}
 
 /** The SQLSTATE of a failed statement, through Drizzle's wrapper (`cause`) or straight from postgres.js. */
 function sqlstate(error: unknown): { code: string; constraint?: string } | undefined {
@@ -113,6 +127,12 @@ function sqlstate(error: unknown): { code: string; constraint?: string } | undef
   return undefined
 }
 
+/** The constraint a failed statement names, when it failed this way and Postgres named one. */
+function constraintOf(error: unknown, code: string): string | undefined {
+  const failed = sqlstate(error)
+  return failed?.code === code ? failed.constraint : undefined
+}
+
 /**
  * The constraint a unique violation names, when that is what the error is and
  * Postgres named it. A route that can foresee a collision reads this and
@@ -121,8 +141,12 @@ function sqlstate(error: unknown): { code: string; constraint?: string } | undef
  * nobody foresaw.
  */
 export function uniqueConstraintOf(error: unknown): string | undefined {
-  const failed = sqlstate(error)
-  return failed?.code === UNIQUE_VIOLATION ? failed.constraint : undefined
+  return constraintOf(error, UNIQUE_VIOLATION)
+}
+
+/** The same for an exclusion violation: which `EXCLUDE USING gist` refused the period, for the route that foresaw it. */
+export function exclusionConstraintOf(error: unknown): string | undefined {
+  return constraintOf(error, EXCLUSION_VIOLATION)
 }
 
 /** How far down a `cause` chain the projection below goes; Drizzle wraps postgres.js, which wraps nothing. */
@@ -164,10 +188,11 @@ export function errorHandler(log: (error: unknown) => void = console.error): Err
       return problemResponse(isProblemStatus(error.status) ? error.status : 500, error.message === "" ? {} : { detail: error.message })
     }
     const failed = sqlstate(error)
-    if (failed?.code === UNIQUE_VIOLATION) {
-      return problemResponse(409, {
-        detail: `A record with the same key already exists${failed.constraint === undefined ? "" : ` (${failed.constraint})`}`,
-      })
+    if (failed !== undefined) {
+      const conflict = CONFLICTS[failed.code]
+      if (conflict !== undefined) {
+        return problemResponse(409, { detail: `${conflict}${failed.constraint === undefined ? "" : ` (${failed.constraint})`}` })
+      }
     }
     log(loggable(error))
     return problemResponse(500)

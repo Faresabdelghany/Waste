@@ -128,24 +128,34 @@ describe("GET /openapi.json", () => {
     assert.deepEqual([...documented].sort(), [...registered].sort())
   })
 
-  test("documents the probes and every route of the organisation and access context, and no other path", async () => {
+  test("documents the probes and every route of the organisation, access and registry contexts, and no other path", async () => {
     const document = await spec()
     assert.deepEqual(Object.keys(document.paths).sort(), [
       "/company",
+      "/container-types",
+      "/container-types/{id}",
+      "/customers",
+      "/customers/{id}",
       "/healthz",
       "/me",
+      "/products",
+      "/products/{id}",
       "/projects",
       "/projects/{id}",
       "/readyz",
       "/roles",
       "/roles/{id}",
       "/roles/{id}/grants",
+      "/service-frequencies",
+      "/service-frequencies/{id}",
       "/service-providers",
       "/service-providers/{id}",
       "/users",
       "/users/{id}",
       "/users/{id}/deactivate",
       "/users/{id}/reactivate",
+      "/waste-fractions",
+      "/waste-fractions/{id}",
     ])
     assert.equal(document.paths["/healthz"].get.operationId, "getHealth")
     const health = schemaOf(document, "/healthz", "200")
@@ -195,7 +205,11 @@ describe("GET /openapi.json", () => {
         }
       }
     }
-    assert.equal(secured, 22, "/me, the ten organisation routes and the eleven access routes")
+    assert.equal(
+      secured,
+      42,
+      "/me, the ten organisation routes, the eleven access routes and the twenty registry routes: waste fractions, container types, service frequencies, products and customers, four each",
+    )
   })
 
   test("documents each organisation route with its verbs, its problems and its page of items", async () => {
@@ -285,6 +299,67 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(document.paths["/roles"].post.requestBody?.content["application/json"].schema.required, ["name", "scope", "description"])
     assert.deepEqual(document.paths["/roles/{id}/grants"].put.requestBody?.content["application/json"].schema.required, ["grants"])
     assert.equal(document.paths["/users/{id}/deactivate"].post.requestBody, undefined, "a command takes no body")
+  })
+
+  test("documents each registry route with its verbs, its problems and the rules a client must know", async () => {
+    const document = await spec()
+    const operations = (path: string) =>
+      Object.fromEntries(Object.entries(document.paths[path]).map(([method, operation]) => [method, operation.operationId]))
+
+    assert.deepEqual(operations("/waste-fractions"), { get: "listWasteFractions", post: "createWasteFraction" })
+    assert.deepEqual(operations("/waste-fractions/{id}"), { get: "getWasteFraction", patch: "patchWasteFraction" })
+    assert.deepEqual(operations("/container-types"), { get: "listContainerTypes", post: "createContainerType" })
+    assert.deepEqual(operations("/container-types/{id}"), { get: "getContainerType", patch: "patchContainerType" })
+    assert.deepEqual(operations("/service-frequencies"), { get: "listServiceFrequencies", post: "createServiceFrequency" })
+    assert.deepEqual(operations("/service-frequencies/{id}"), { get: "getServiceFrequency", patch: "patchServiceFrequency" })
+    assert.deepEqual(operations("/products"), { get: "listProducts", post: "createProduct" })
+    assert.deepEqual(operations("/products/{id}"), { get: "getProduct", patch: "patchProduct" })
+    assert.deepEqual(operations("/customers"), { get: "listCustomers", post: "createCustomer" })
+    assert.deepEqual(operations("/customers/{id}"), { get: "getCustomer", patch: "patchCustomer" })
+
+    // What a caller can earn on each of them, and in what shape.
+    for (const path of ["/waste-fractions", "/container-types", "/service-frequencies", "/products", "/customers"]) {
+      assert.deepEqual(Object.keys(document.paths[path].get.responses), ["200", "400", "401", "403"], path)
+      assert.deepEqual(Object.keys(document.paths[path].post.responses), ["201", "400", "401", "403", "409"], path)
+      assert.deepEqual(Object.keys(document.paths[`${path}/{id}`].get.responses), ["200", "400", "401", "403", "404"], path)
+      assert.deepEqual(Object.keys(document.paths[`${path}/{id}`].patch.responses), ["200", "400", "401", "403", "404", "409"], path)
+    }
+    for (const [status, operation] of Object.entries(document.paths["/products/{id}"].patch.responses)) {
+      const media = Object.keys(operation.content)
+      assert.deepEqual(media, [status === "200" ? "application/json" : "application/problem+json"], status)
+    }
+
+    // A project-scoped list takes the project filter beside the page; a company-wide one does not.
+    const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
+    for (const path of ["/service-frequencies", "/products"]) {
+      assert.deepEqual(byName(document.paths[path].get).sort(), ["query:cursor", "query:limit", "query:projectId"], path)
+    }
+    for (const path of ["/waste-fractions", "/container-types", "/customers"]) {
+      assert.deepEqual(byName(document.paths[path].get).sort(), ["query:cursor", "query:limit"], path)
+    }
+    assert.deepEqual(byName(document.paths["/customers/{id}"].patch), ["path:id"])
+
+    // The rules a client must know are in the prose, not only in the code.
+    assert.match(document.paths["/waste-fractions/{id}"].patch.description ?? "", /key is not patchable/)
+    assert.match(document.paths["/service-frequencies"].post.description ?? "", /an interval needs a rate to belong to/)
+    assert.match(document.paths["/service-frequencies/{id}"].patch.description ?? "", /held against the stored row/)
+    assert.match(document.paths["/products"].post.description ?? "", /service frequency must be one of the named project's/)
+    assert.match(document.paths["/products"].get.description ?? "", /an account that works in none[^.]*reads an empty page/)
+    assert.match(document.paths["/customers"].post.description ?? "", /e-mail is stored lowercase/)
+
+    // A write takes a JSON body, and it is the strict one the contracts spell.
+    const required = (path: string) => document.paths[path].post.requestBody?.content["application/json"].schema.required
+    assert.deepEqual(required("/waste-fractions"), ["key", "name"])
+    assert.deepEqual(required("/container-types"), ["name"])
+    assert.deepEqual(required("/service-frequencies"), ["projectId", "name"])
+    assert.deepEqual(required("/products"), ["projectId", "name", "kind", "unit"])
+    assert.deepEqual(required("/customers"), ["kind", "name"])
+
+    for (const path of ["/waste-fractions", "/products", "/customers"]) {
+      const page = document.paths[path].get.responses["200"].content["application/json"].schema
+      assert.deepEqual(page.required, ["items", "nextCursor"], path)
+      assert.equal(page.properties?.items.type, "array", path)
+    }
   })
 
   test("documents /me with the problem responses a token can earn", async () => {
