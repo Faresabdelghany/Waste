@@ -1,4 +1,39 @@
-import type { BusinessFormSchema } from "@/lib/data/business-form-types"
+import { CONTAINER_TYPE_VOCABULARY } from "@waste/domain/route-schemes/matching"
+import { SCHEME_SERVICE_TYPES, allowedContainerTypes } from "@waste/domain/route-schemes/scope"
+
+import type { BusinessFormOption, BusinessFormSchema } from "@/lib/data/business-form-types"
+
+/** An option whose label is its value — the display vocabularies are stored as shown. */
+const labelOption = (value: string): BusinessFormOption => ({ value, label: value })
+
+/**
+ * The waste fractions the quick scheme form offers (issue #43) — the fixture
+ * master-data list; Guided Setup reads the same list from the Settings store.
+ */
+const QUICK_SCHEME_WASTE_FRACTIONS = [
+  "Residual",
+  "Organic",
+  "Paper",
+  "Cardboard",
+  "Glass",
+  "Plastic",
+  "Metal",
+  "Mixed",
+  "Wastewater",
+] as const
+
+/**
+ * The container types the quick scheme form offers under each service type:
+ * allowedContainerTypes, the restriction the Guided Setup group editor
+ * applies, spelled once in the domain and read here (issue #43).
+ */
+const CONTAINER_TYPES_BY_SERVICE_TYPE: Readonly<Record<string, readonly BusinessFormOption[]>> =
+  Object.fromEntries(
+    SCHEME_SERVICE_TYPES.map((serviceType) => [
+      serviceType,
+      (allowedContainerTypes(serviceType) ?? []).map(labelOption),
+    ]),
+  )
 
 /**
  * Operate, Plan, and Fleet form contracts.
@@ -1011,6 +1046,30 @@ export const operationsBusinessFormSchemas = [
             requiredWhen: { fieldId: "stopSelection", equals: "rule" },
             relation: { workspaceId: "configure", moduleId: "areas" },
           },
+          {
+            // Step 1's waste fraction (issue #43): a route scheme plans one,
+            // so the form picks it here — every collection group inherits it
+            // and the rule matches it — instead of a list on the stop rule.
+            // Required for a rule, which resolves by fraction; a manual
+            // scheme's stops are picked, so it may stay unset (issue #35).
+            id: "wasteFraction",
+            label: "Waste fraction",
+            type: "select",
+            requiredWhen: { fieldId: "stopSelection", equals: "rule" },
+            options: QUICK_SCHEME_WASTE_FRACTIONS.map(labelOption),
+          },
+          {
+            // Step 1's service type (issue #43): the container types a
+            // scheme may collect follow from it (@waste/domain/route-schemes/
+            // scope) — the group editor offers only those and
+            // checkCollectionGroups refuses a group outside them — so the
+            // form gates on it as Guided Setup does.
+            id: "serviceType",
+            label: "Service type",
+            type: "select",
+            required: true,
+            options: SCHEME_SERVICE_TYPES.map(labelOption),
+          },
           // No Collection calendar field: holidays follow the project (holiday
           // model 2026-09-16, @waste/domain/route-schemes/holidays).
           {
@@ -1125,7 +1184,7 @@ export const operationsBusinessFormSchemas = [
         id: "stop-matching",
         title: "Stop selection",
         description:
-          "Match stops by rule (recommended): the scheme stores which containers belong to it — waste fractions plus an optional vehicle type, resolved inside the planning area every time routes generate. Manual container lists are picked in Guided Setup.",
+          "Match stops by rule (recommended): the scheme stores which containers belong to it — the scheme's waste fraction, optionally narrowed to container types of its service type and to what one vehicle type can service, resolved inside the planning area every time routes generate. Manual container lists are picked in Guided Setup.",
         fields: [
           {
             id: "stopSelection",
@@ -1138,39 +1197,21 @@ export const operationsBusinessFormSchemas = [
               { value: "manual", label: "Pick containers manually" },
             ],
           },
+          // No "Waste fractions to match" list (issue #43): the rule matches
+          // the scheme's one waste fraction, picked above with the scope.
           {
-            id: "matchFractions",
-            label: "Waste fractions to match",
-            type: "multiselect",
-            visibleWhen: { fieldId: "stopSelection", equals: "rule" },
-            requiredWhen: { fieldId: "stopSelection", equals: "rule" },
-            options: [
-              { value: "Residual", label: "Residual" },
-              { value: "Organic", label: "Organic" },
-              { value: "Paper", label: "Paper" },
-              { value: "Cardboard", label: "Cardboard" },
-              { value: "Glass", label: "Glass" },
-              { value: "Plastic", label: "Plastic" },
-              { value: "Metal", label: "Metal" },
-              { value: "Mixed", label: "Mixed" },
-              { value: "Wastewater", label: "Wastewater" },
-            ],
-          },
-          {
+            // The container types offered follow the service type picked
+            // above — exactly allowedContainerTypes, the restriction the
+            // Guided Setup group editor applies — and the whole vocabulary
+            // while none is picked. A stored type outside the service type
+            // is refused on save the way any option no longer offered is.
             id: "matchContainerTypes",
             label: "Container types to match",
             type: "multiselect",
-            description: "Leave empty to match every container type.",
+            description: "Leave empty to match every container type of the service type.",
             visibleWhen: { fieldId: "stopSelection", equals: "rule" },
-            options: [
-              { value: "Two-wheel bin · 140 L", label: "Two-wheel bin · 140 L" },
-              { value: "Two-wheel bin · 240 L", label: "Two-wheel bin · 240 L" },
-              { value: "Four-wheel bin · 660 L", label: "Four-wheel bin · 660 L" },
-              { value: "Four-wheel bin · 1,100 L", label: "Four-wheel bin · 1,100 L" },
-              { value: "Igloo · 2,500 L", label: "Igloo · 2,500 L" },
-              { value: "Underground · 5,000 L", label: "Underground · 5,000 L" },
-              { value: "Wastewater tank · 3,000 L", label: "Wastewater tank · 3,000 L" },
-            ],
+            options: CONTAINER_TYPE_VOCABULARY.map(labelOption),
+            optionsBy: { fieldId: "serviceType", options: CONTAINER_TYPES_BY_SERVICE_TYPE },
           },
           {
             id: "matchVehicleType",

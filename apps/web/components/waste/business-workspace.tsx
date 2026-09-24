@@ -86,6 +86,7 @@ import {
 import {
   GROUP_OWNED_SCHEME_FIELD_IDS,
   QUICK_SCHEME_DRAFT_FIELD_IDS,
+  applySchemeWasteFraction,
   quickSchemeDraftFromValues,
   seedSchemeEditValues,
 } from "@waste/domain/route-schemes/quick-create"
@@ -3391,30 +3392,43 @@ export function BusinessWorkspace({
       // (issue #19): the quick edit form can flip the mode or change the
       // shared rule, and the facts must follow the stopSelection flag —
       // stale rule facts on a manual scheme (or vice versa) would misstate
-      // where its stops come from.
-      const mergedValues = { ...record.submittedValues }
+      // where its stops come from. The form's single Waste fraction is the
+      // scheme's (issue #43): the domain writes it onto the rule, or onto
+      // every explicit group, before anything reads the merged values.
+      const mergedValues = applySchemeWasteFraction({ ...record.submittedValues })
       // The quick form's label-keyed facts duplicate the canonical
       // "Container selection" / "Stop matching" / "Planned start" keys.
       delete nextFacts["Stop selection"]
       delete nextFacts["Waste fractions to match"]
+      delete nextFacts["Container types to match"]
       delete nextFacts["Vehicle type"]
       delete nextFacts["Planned start time"]
       // Facts of the fields retired in issue #35 — written by edit-saves
       // before the fields were removed, read by nothing.
       delete nextFacts["Route end behavior"]
       delete nextFacts["Scheme source"]
-      // Keep the canonical fact in step with the merged value: an edit that
+      // Keep the canonical facts in step with the merged values: an edit that
       // clears the planned start time really clears it (issue #32) — a stale
-      // fact would resurrect the old time in generation and the detail page.
+      // fact would resurrect the old time in generation and the detail page —
+      // and the scope facts follow the fraction and service type the same way.
       const plannedStartTime =
         typeof mergedValues.plannedStartTime === "string"
           ? mergedValues.plannedStartTime.trim()
           : ""
       if (plannedStartTime) nextFacts["Planned start"] = plannedStartTime
       else delete nextFacts["Planned start"]
+      for (const [key, label] of [
+        ["wasteFraction", "Waste fraction"],
+        ["serviceType", "Service type"],
+      ] as const) {
+        const stored = mergedValues[key]
+        const value = typeof stored === "string" ? stored.trim() : ""
+        if (value) nextFacts[label] = value
+        else delete nextFacts[label]
+      }
       nextFacts = withSchemeGroupFacts(nextFacts, mergedValues)
       const recurrence = recurrenceFromValues(values)
-      if (!recurrence) return { ...record, facts: nextFacts }
+      if (!recurrence) return { ...record, submittedValues: mergedValues, facts: nextFacts }
       // The retired free-text cadence field, and — when the frequency moved
       // away from every-2-weeks — the rotation fact the edit merge would
       // otherwise carry forward against the new Recurrence line.
@@ -3422,6 +3436,7 @@ export function BusinessWorkspace({
       if (recurrence.frequency !== "every-2-weeks") delete nextFacts["Week rotation"]
       return {
         ...record,
+        submittedValues: mergedValues,
         facts: { ...nextFacts, Recurrence: recurrenceSentence(recurrence) },
       }
     }

@@ -51,6 +51,17 @@ export type BusinessFormField = {
   placeholder?: string
   defaultValue?: string | boolean
   options?: readonly BusinessFormOption[]
+  /**
+   * Options that follow another field: the list under that field's current
+   * value, or `options` when its value has no entry (issue #43: the quick
+   * scheme form's container types follow its service type through
+   * allowedContainerTypes). A stored value outside the list is refused the
+   * way any option no longer offered is.
+   */
+  optionsBy?: {
+    fieldId: string
+    options: Readonly<Record<string, readonly BusinessFormOption[]>>
+  }
   relation?: BusinessRelationTarget
   visibleWhen?: BusinessFieldCondition
   requiredWhen?: BusinessFieldCondition

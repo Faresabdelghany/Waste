@@ -19,6 +19,7 @@ import type {
   BusinessFormValue,
   BusinessFormValues,
 } from "@/lib/data/business-form-types"
+import { splitList } from "@waste/domain/record-values"
 import {
   formatServiceDate,
   nextServiceDates,
@@ -108,12 +109,10 @@ function hasValue(value: BusinessFormValue | undefined) {
   return value === true || (typeof value === "string" && value.trim().length > 0)
 }
 
+// The domain's list reader: a comma inside a number ("Igloo · 2,500 L") is
+// not a separator (issue #43), and the picks are joined back with ", ".
 function splitMultiValue(value: BusinessFormValue | undefined): string[] {
-  if (typeof value !== "string") return []
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean)
+  return typeof value === "string" ? splitList(value) : []
 }
 
 function conditionMatches(
@@ -142,6 +141,27 @@ function isFieldRequired(field: BusinessFormField, values: BusinessFormValues) {
     Boolean(field.required) ||
     Boolean(field.requiredWhen && conditionMatches(field.requiredWhen, values))
   )
+}
+
+/**
+ * A field's options: its relation's records, else the list that follows
+ * another field's current value (optionsBy), else its own static list. A
+ * value outside the list is then refused by the "no longer permitted" check
+ * below, which is how a container type outside the picked service type is
+ * refused on the quick scheme form (issue #43).
+ */
+function fieldOptions(
+  field: BusinessFormField,
+  values: BusinessFormValues,
+  relationOptions: BusinessRecordFormDialogProps["relationOptions"],
+): readonly BusinessFormOption[] {
+  if (field.relation) return relationOptions(field, values)
+  const controlling = field.optionsBy ? values[field.optionsBy.fieldId] : undefined
+  if (typeof controlling === "string") {
+    const dependent = field.optionsBy?.options[controlling]
+    if (dependent) return dependent
+  }
+  return field.options ?? []
 }
 
 function displayValue(
@@ -434,9 +454,7 @@ export function BusinessRecordFormDialog({
 
     for (const field of visibleFields) {
       const value = values[field.id]
-      const options = field.relation
-        ? relationOptions(field, values)
-        : field.options ?? []
+      const options = fieldOptions(field, values, relationOptions)
 
       if (isFieldRequired(field, values) && !hasValue(value)) {
         errors[field.id] =
@@ -557,9 +575,7 @@ export function BusinessRecordFormDialog({
             value: displayValue(
               field,
               values[field.id],
-              field.relation
-                ? relationOptions(field, values)
-                : field.options ?? [],
+              fieldOptions(field, values, relationOptions),
             ),
           })),
       )
@@ -613,9 +629,7 @@ export function BusinessRecordFormDialog({
 
                   <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
                     {visibleSectionFields.map((field) => {
-                      const options = field.relation
-                        ? relationOptions(field, values)
-                        : field.options ?? []
+                      const options = fieldOptions(field, values, relationOptions)
                       const value = values[field.id]
                       const isWide =
                         field.type === "textarea" ||

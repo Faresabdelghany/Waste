@@ -9,8 +9,19 @@
 
 import { typedString } from "../record-values"
 import { isSchemeCreateAs, type SchemeCreateAs } from "./creation"
-import { IMPLICIT_GROUP_ID, type CollectionGroup } from "./groups"
-import { matchPlansFromValues, stopSelectionMode } from "./matching"
+import {
+  COLLECTION_GROUPS_KEY,
+  IMPLICIT_GROUP_ID,
+  hasExplicitCollectionGroups,
+  parseCollectionGroups,
+  type CollectionGroup,
+} from "./groups"
+import {
+  matchPlansFromValues,
+  matchPlansToValues,
+  stopSelectionMode,
+  type StopMatchRule,
+} from "./matching"
 import { isHolidayPolicy, type HolidayPolicy } from "./occurrences"
 import {
   SERVICE_DAYS,
@@ -20,6 +31,7 @@ import {
   type ServiceDay,
   type WeekRotation,
 } from "./recurrence"
+import { isSchemeServiceType } from "./scope"
 
 /**
  * The scheme draft both create paths hand to record creation: Guided Setup
@@ -34,10 +46,11 @@ export interface GuidedSchemeData {
   /**
    * The waste fraction this scheme plans for (display vocabulary, e.g.
    * "Residual") — scoped once here; every collection group inherits it
-   * (draft.ts draftGroups). Empty only for a quick-created multi-fraction rule.
+   * (draft.ts draftGroups). Both create paths pick it on their first step
+   * (issue #43); empty only while nothing has been picked.
    */
   wasteFraction: string
-  /** The service type this scheme plans for (scope.ts vocabulary); optional. */
+  /** The service type this scheme plans for (scope.ts vocabulary); both create paths gate on it. */
   serviceType: string
   frequency: RecurrenceFrequency
   weekRotation: WeekRotation
@@ -88,6 +101,8 @@ export const QUICK_SCHEME_DRAFT_FIELD_IDS: ReadonlySet<string> = new Set([
   "schemeName",
   "projectId",
   "planningAreaId",
+  "wasteFraction",
+  "serviceType",
   "frequency",
   "weekRotation",
   "serviceDays",
@@ -102,7 +117,6 @@ export const QUICK_SCHEME_DRAFT_FIELD_IDS: ReadonlySet<string> = new Set([
   "depotId",
   "unloadingStationId",
   "stopSelection",
-  "matchFractions",
   "matchVehicleType",
   "matchContainerTypes",
 ])
@@ -117,9 +131,12 @@ export const QUICK_SCHEME_DRAFT_FIELD_IDS: ReadonlySet<string> = new Set([
  * quick form offers no picker, so validation blocks it with the same
  * missing-containers issue the wizard would raise for an empty pick — never
  * silently converted to a rule). Unknown frequency/rotation values fall back
- * to the wizard's own defaults. The rule itself is read through
- * matchPlansFromValues — the same deserialization every record reader uses —
- * so the stop-rule storage convention stays defined in one place.
+ * to the wizard's own defaults. The rule's vehicle and container types are
+ * read through matchPlansFromValues — the same deserialization every record
+ * reader uses — so the stop-rule storage convention stays defined in one
+ * place; its fraction is the scheme's (issue #43): the form picks one Waste
+ * fraction on its first section, as Guided Setup does on step 1, so the rule
+ * cannot name a second and the retired `matchFractions` list is not read.
  */
 export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeData {
   const frequency = stringOf(values, "frequency")
@@ -128,13 +145,14 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
   const serviceDays =
     frequency === "daily" ? [...SERVICE_DAYS] : parseServiceDays(stringOf(values, "serviceDays"))
   const schemeName = stringOf(values, "schemeName")
+  const wasteFraction = stringOf(values, "wasteFraction").trim()
   const rule = matchPlansFromValues(values).sharedRule
   const stopSource = values.stopSelection === "manual" ? "manual" : "rule"
   const group: CollectionGroup = {
     id: IMPLICIT_GROUP_ID,
     name: schemeName || "Collection",
     days: serviceDays,
-    fractions: stopSource === "rule" ? [...rule.fractions] : [],
+    fractions: stopSource === "rule" && wasteFraction ? [wasteFraction] : [],
     ...(optionalId(values, "plannedVehicleId")
       ? { vehicleId: optionalId(values, "plannedVehicleId") }
       : {}),
@@ -157,11 +175,8 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
     schemeName,
     projectId: optionalId(values, "projectId"),
     planningAreaId: optionalId(values, "planningAreaId"),
-    // The quick form's rule may name several fractions; the scheme-level
-    // fraction is set only when it names exactly one, so the group keeps the
-    // rule it was given either way.
-    wasteFraction: stopSource === "rule" && rule.fractions.length === 1 ? rule.fractions[0] : "",
-    serviceType: "",
+    wasteFraction,
+    serviceType: stringOf(values, "serviceType"),
     frequency: isRecurrenceFrequency(frequency) ? frequency : "weekly",
     weekRotation: weekRotation === "even" ? "even" : "odd",
     serviceDays,
@@ -187,15 +202,16 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
  * schema dialog edits scheme-level fields only for such a scheme
  * (hasExplicitCollectionGroups) — its groups are edited on the scheme page —
  * so these fields are hidden there instead of showing values the groups
- * would ignore.
+ * would ignore. The waste fraction and the service type are the scheme's,
+ * not a group's (every group inherits the fraction), so they stay.
  */
 export const GROUP_OWNED_SCHEME_FIELD_IDS: ReadonlySet<string> = new Set([
   "serviceProviderId",
   "plannedVehicleId",
   "plannedDriverId",
   "stopSelection",
-  "matchFractions",
   "matchVehicleType",
+  "matchContainerTypes",
 ])
 
 /**
@@ -208,15 +224,20 @@ export const GROUP_OWNED_SCHEME_FIELD_IDS: ReadonlySet<string> = new Set([
  * Retired recurrence shapes (capitalized textarea day names; the biweekly /
  * four-week / calendar-rule frequencies) map onto today's options or blank
  * for a re-pick, and a missing planned start time stays missing (issue #32).
- * Undefined entries are dropped so they cannot shadow the schema defaults
- * the dialog merges underneath.
+ * The single Waste fraction select (issue #43) seeds from the stored
+ * scheme-level fraction, else from the one fraction the stored rule or every
+ * explicit group names (a record that predates the field), and blanks for a
+ * re-pick when they name several; a service type outside scope.ts's
+ * vocabulary (round 2's "Collection") reads as unset. Undefined entries are
+ * dropped so they cannot shadow the schema defaults the dialog merges
+ * underneath, and the retired `matchFractions` is not seeded at all.
  */
 export function seedSchemeEditValues(
   stored: StoredValues,
 ): Record<string, string | boolean> {
   const seeded: Record<string, string | boolean> = {}
   for (const [key, value] of Object.entries(stored)) {
-    if (value !== undefined) seeded[key] = value
+    if (value !== undefined && key !== "matchFractions") seeded[key] = value
   }
   seeded.stopSelection = stopSelectionMode(stored)
   if (typeof seeded.serviceDays === "string") {
@@ -229,5 +250,67 @@ export function seedSchemeEditValues(
     seeded.frequency = ""
   }
   if (typeof seeded.plannedStartTime !== "string") seeded.plannedStartTime = ""
+  seeded.wasteFraction = stringOf(stored, "wasteFraction").trim() || storedRuleFraction(stored)
+  seeded.serviceType = isSchemeServiceType(stored.serviceType) ? stored.serviceType : ""
   return seeded
+}
+
+/**
+ * The one fraction a stored scheme's stop selection names — its explicit
+ * groups between them, or its shared rule — and "" when it names none or
+ * several. The seed for a record written before the scheme-level fraction.
+ */
+function storedRuleFraction(stored: StoredValues): string {
+  const fractions = hasExplicitCollectionGroups(stored)
+    ? parseCollectionGroups(typedString(stored, COLLECTION_GROUPS_KEY)).flatMap(
+        (group) => group.fractions,
+      )
+    : stopSelectionMode(stored) === "rule"
+      ? matchPlansFromValues(stored).sharedRule.fractions
+      : []
+  const distinct = [...new Set(fractions)]
+  return distinct.length === 1 ? distinct[0] : ""
+}
+
+/**
+ * The stored values an edit-save leaves behind once the quick form's Waste
+ * fraction has been merged in (issue #43). The fraction is scoped once on the
+ * scheme and every group inherits it (draft.ts draftGroups) — but a saved
+ * record keeps the rule's fractions under `matchFractions` and the explicit
+ * groups' inside `collectionGroups`, the keys every reader consumes, so the
+ * save has to write them or stop matching would go on reading the fraction
+ * the form no longer shows. A rule scheme gets it on the shared rule and on
+ * every per-day rule; an explicit-groups scheme on every group; a manual
+ * scheme's stops are picked, so nothing else changes; and without a
+ * scheme-level fraction the values are returned as they are.
+ */
+export function applySchemeWasteFraction<T extends StoredValues>(values: T): T {
+  const fraction = stringOf(values, "wasteFraction").trim()
+  if (!fraction) return values
+  if (hasExplicitCollectionGroups(values)) {
+    const groups = parseCollectionGroups(typedString(values, COLLECTION_GROUPS_KEY))
+    return {
+      ...values,
+      [COLLECTION_GROUPS_KEY]: JSON.stringify(
+        groups.map((group) => ({ ...group, fractions: [fraction] })),
+      ),
+    }
+  }
+  if (stopSelectionMode(values) !== "rule") return values
+  const plans = matchPlansFromValues(values)
+  const withFraction = (rule: StopMatchRule): StopMatchRule => ({ ...rule, fractions: [fraction] })
+  const rulesByDay = Object.fromEntries(
+    Object.entries(plans.rulesByDay).map(([day, rule]) => [day, withFraction(rule)]),
+  ) as typeof plans.rulesByDay
+  const { matchRulesByDay, ...shared } = matchPlansToValues({
+    ...plans,
+    sharedRule: withFraction(plans.sharedRule),
+    rulesByDay,
+  })
+  return {
+    ...values,
+    ...shared,
+    // A record without per-day rules does not gain the key.
+    ...(Object.keys(rulesByDay).length > 0 ? { matchRulesByDay } : {}),
+  }
 }

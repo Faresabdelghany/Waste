@@ -12,6 +12,8 @@
  * live option labels, where a relation target actually lives.
  */
 
+import { splitList } from "@waste/domain/record-values"
+
 import type {
   BusinessFormField,
   BusinessFormSchema,
@@ -51,12 +53,13 @@ export type FormRecordDerivation = {
   nameValue: string
 }
 
-/** A multiselect stores its picks as one comma-separated string. */
+/**
+ * A multiselect stores its picks as one comma-separated string, read through
+ * the domain list reader so a comma inside a number ("Igloo · 2,500 L") is
+ * not a separator here either (issue #43).
+ */
 export function splitMultiValue(value: string): string[] {
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean)
+  return splitList(value)
 }
 
 /** What a submitted value reads as in facts and context. */
