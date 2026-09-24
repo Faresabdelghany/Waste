@@ -96,8 +96,9 @@ const fixture = (name: string, extra?: Partial<ServiceLevel>) => ({
 })
 
 // Seeds mirror the values the fixture price rows and products already
-// reference (lib/commercial/price-model.ts registries + product facts), so
-// usage counts line up from the first render.
+// reference (the rows' conditions and the products' facts in
+// lib/data/business-modules.ts), so usage counts line up from the first
+// render. This store is the only place these lists are spelled.
 const defaultState: CommercialRegistriesState = {
   zones: [
     { id: "zone-north", ...fixture("Zone North") },

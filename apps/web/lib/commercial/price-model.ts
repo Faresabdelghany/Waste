@@ -1,9 +1,16 @@
 import type { BusinessRecord } from "@/lib/data/business-modules"
+import {
+  isSoftDeleted,
+  REGISTRY_VISIBILITY_FACT,
+  SOFT_DELETED,
+  softDeletedRecord,
+  type SoftDeletion,
+} from "@waste/domain/record-visibility"
+import { count } from "@waste/domain/text"
 
 // Deterministic "today" for status derivation.
 export const PRICING_REFERENCE_DATE = "2026-08-20"
 
-export type ProductType = "Container collection" | "Recurring service" | "Additional service"
 export type PriceUnit = "pickup" | "month" | "job"
 export type PriceConditions = { zone?: string; customerType?: string; containerType?: string; wasteFraction?: string }
 export type ScheduledChange = { newAmount: number; from: string; revertOn?: string; note: string }
@@ -21,22 +28,7 @@ export type PriceRowModel = {
   tag?: string
 }
 
-export type ProductModel = {
-  id: string
-  name: string
-  type: ProductType
-  unit: PriceUnit
-  vatRate: number
-  invoiceName: string
-  invoiceCode: string
-  status: string
-  container?: string
-  containerType?: string
-  wasteFraction?: string
-  materials: string[]
-  services: string[]
-  serviceLevels: string[]
-}
+export type PriceRowStatus = "Scheduled" | "Active" | "Expired"
 
 export type ServiceProviderPriceModel = {
   id: string
@@ -57,16 +49,10 @@ export type ServiceProviderPriceModel = {
 
 export type HistoryEntry = { at: string; who: string; what: string }
 
-// Registries (spec §4.1 read-mostly; values from prototype-data.ts:99–128)
-export const ZONES = ["Zone North", "City Centre", "Amager", "Harbor"] as const
-export const CUSTOMER_TYPES = ["Household", "Commercial", "Municipal"] as const
-export const CONTAINER_TYPES = ["240L bin", "660L container", "Igloo 3m³"] as const
-export const WASTE_FRACTIONS = ["Residual", "Paper & cardboard", "Glass", "Organic"] as const
-// Price lists are managed entities in the commercial-registries store
-// (Settings → Commercial → Price lists); the row's "Price list" fact stores
-// the list's name as its tag.
-export const KNOWN_CUSTOMERS = ["Østerbro Housing Association", "Nørrebro CoWork ApS"] as const
-export const COMMERCIAL_DEFAULTS = { currency: "EUR", defaultVatRate: 0.25, invoiceCodePrefix: "WH-" }
+// The zones, customer types, container types, service levels and price
+// lists a row may name are managed entities in the commercial-registries
+// store (Settings → Commercial); the row's "Price list" fact stores the
+// list's name as its tag. Nothing here spells them a second time.
 export const SERVICE_PROVIDER_PERFORMANCE = {
   formula: "coefficient = 1 + a × (b − complaint share)",
   a: 0.5,
@@ -74,12 +60,17 @@ export const SERVICE_PROVIDER_PERFORMANCE = {
   reliabilityGate: "≥ 98% of pickups completed inside the service window",
   cap: 1.03,
 }
+// The one spelling of how a price is resolved (spec §4.4). The two pricing
+// modules state it in their rules and the Add price form in its description;
+// resolvePrice in ./price-resolution is the sentence run as code.
 export const RESOLUTION_RULE =
   "The row matching the most conditions wins. A negotiated row for the specific customer always wins. Remaining ties go to the row with the newest effective-from date."
 
 // Fact keys — the single source of truth for how models serialize into
-// BusinessRecord.facts. Fixtures (Task 2) and write paths (Task 3) use these
-// exact strings.
+// BusinessRecord.facts. Fixtures and write paths use these exact strings,
+// and the products and price-rows forms label their fields with them, since
+// the generic write path stores a field under its label
+// (lib/commercial/__tests__/price-model.test.ts holds the two in step).
 export const ROW_FACTS = {
   amount: "Amount", unit: "Unit", zone: "Zone", customerType: "Customer type",
   containerType: "Container type", wasteFraction: "Waste fraction",
@@ -105,11 +96,6 @@ export const RATE_FACTS = {
 // writes it), so every pricing read path must skip marked records or a
 // deleted row gets counted, adjusted and resurrected. Re-exported for the
 // pricing callers that import everything from this model.
-import {
-  isSoftDeleted,
-  REGISTRY_VISIBILITY_FACT,
-  SOFT_DELETED,
-} from "@waste/domain/record-visibility"
 export { isSoftDeleted, REGISTRY_VISIBILITY_FACT, SOFT_DELETED }
 export const COMPONENT_FACT_PREFIX = "Component · "
 export const HISTORY_PREFIX = "History · "
@@ -117,17 +103,9 @@ export const INDEXED_PREFIX = "Indexed · "
 
 export function money(amount: number) { return `€${amount.toFixed(2)}` }
 export function unitSuffix(unit: PriceUnit) { return unit === "pickup" ? "/pickup" : unit === "month" ? "/mo" : "/job" }
-export function computeAdjusted(amount: number, kind: "percent" | "fixed" | "multiply", value: number, round: boolean): number {
-  let next =
-    kind === "percent"
-      ? amount * (1 + value / 100)
-      : kind === "fixed"
-        ? amount + value
-        : amount * value
-  if (round) next = Math.round(next * 20) / 20
-  return Math.round(next * 100) / 100
-}
-export function conditionLabels(conditions: PriceConditions): string[] {
+/** "+5%" / "-2%" / "0%" — a percent with its sign written once, for a toast or an index note. */
+export function signedPercent(percent: number) { return `${percent > 0 ? "+" : ""}${percent}%` }
+function conditionLabels(conditions: PriceConditions): string[] {
   const labels: string[] = []
   if (conditions.zone) labels.push(conditions.zone)
   if (conditions.customerType) labels.push(conditions.customerType)
@@ -141,16 +119,13 @@ export function rowDisplayName(row: PriceRowModel): string {
   return labels.length ? labels.join(" · ") : "Everyone"
 }
 const isDefaultRow = (row: PriceRowModel) => !row.negotiatedCustomer && Object.keys(row.conditions).length === 0
-export function rowsOf(rows: readonly PriceRowModel[], productId: string): PriceRowModel[] {
+function rowsOf(rows: readonly PriceRowModel[], productId: string): PriceRowModel[] {
   return rows.filter((row) => row.productId === productId).sort((a, b) => Number(isDefaultRow(b)) - Number(isDefaultRow(a)))
 }
 export function defaultRowOf(rows: readonly PriceRowModel[], productId: string): PriceRowModel | undefined {
   return rows.find((row) => row.productId === productId && isDefaultRow(row))
 }
-export function variationsOf(rows: readonly PriceRowModel[], productId: string): PriceRowModel[] {
-  return rows.filter((row) => row.productId === productId && !isDefaultRow(row))
-}
-export function negotiatedCustomersOf(rows: readonly PriceRowModel[], productId: string): string[] {
+function negotiatedCustomersOf(rows: readonly PriceRowModel[], productId: string): string[] {
   return [
     ...new Set(
       rows
@@ -173,7 +148,10 @@ export function decodeHistory(related: readonly string[]): HistoryEntry[] {
       return { at: parts[0] ?? "", who: parts[1] ?? "", what: parts.slice(2).join(" · ") }
     })
 }
-// `Indexed · <at> · <note> · €<from> → €<to> · base: <bid|current fee>`
+// `Indexed · <at> · <note> · €<from> → €<to> · base: <bid|current fee>` —
+// the note may itself contain " · " (an index label such as "CPI · Denmark"),
+// so decode reads the date off the front, the amounts and the base off the
+// back, and joins whatever stands between as the note.
 export function encodeIndexation(entry: ServiceProviderPriceModel["indexation"][number]): string {
   return `${INDEXED_PREFIX}${entry.at} · ${entry.note} · ${money(entry.from)} → ${money(entry.to)} · base: ${entry.base}`
 }
@@ -182,20 +160,31 @@ export function decodeIndexation(related: readonly string[]): ServiceProviderPri
     .filter((item) => item.startsWith(INDEXED_PREFIX))
     .map((item) => {
       const parts = item.slice(INDEXED_PREFIX.length).split(" · ")
-      const amounts = /€([\d.]+) → €([\d.]+)/.exec(parts[2] ?? "")
-      const base = (parts[3] ?? "").replace("base: ", "") === "bid" ? ("bid" as const) : ("current fee" as const)
-      return { at: parts[0] ?? "", note: parts[1] ?? "", from: Number(amounts?.[1] ?? 0), to: Number(amounts?.[2] ?? 0), base }
+      const amounts = /€([\d.]+) → €([\d.]+)/.exec(parts[parts.length - 2] ?? "")
+      const base = (parts[parts.length - 1] ?? "").replace("base: ", "") === "bid" ? ("bid" as const) : ("current fee" as const)
+      return {
+        at: parts[0] ?? "",
+        note: parts.slice(1, -2).join(" · "),
+        from: Number(amounts?.[1] ?? 0),
+        to: Number(amounts?.[2] ?? 0),
+        base,
+      }
     })
 }
 
 // --- Record ⇄ model converters ---
+/** The product a price row belongs to — its one link, read by every row path. */
+export function productIdOfPriceRow(record: BusinessRecord): string | undefined {
+  return record.relationRefs?.find((ref) => ref.fieldId === "productId")?.recordId
+}
+
 // Returns null for a record that cannot be read as a live price row —
 // including a soft-deleted one. That single guard keeps every consumer
 // honest (the product-fact sync, the Settings reads) instead of
 // each of them having to remember the visibility marker.
 export function recordToPriceRow(record: BusinessRecord): PriceRowModel | null {
   if (isSoftDeleted(record)) return null
-  const productId = record.relationRefs?.find((ref) => ref.fieldId === "productId")?.recordId
+  const productId = productIdOfPriceRow(record)
   const amount = Number(record.facts[ROW_FACTS.amount])
   const effectiveFrom = record.facts[ROW_FACTS.effectiveFrom]
   if (!productId || !effectiveFrom || !Number.isFinite(amount)) return null
@@ -222,6 +211,19 @@ export function recordToPriceRow(record: BusinessRecord): PriceRowModel | null {
   }
 }
 
+// A row's lifecycle state is its effective period against the reference
+// date, never the form's first lifecycle state: Scheduled before it starts,
+// Expired once it has ended, Active in between (an end on the reference
+// date is still in force).
+export function priceRowStatus(
+  row: Pick<PriceRowModel, "effectiveFrom" | "effectiveTo">,
+  referenceDate: string = PRICING_REFERENCE_DATE,
+): PriceRowStatus {
+  if (row.effectiveFrom > referenceDate) return "Scheduled"
+  if (row.effectiveTo && row.effectiveTo < referenceDate) return "Expired"
+  return "Active"
+}
+
 export function priceRowToRecord(row: PriceRowModel, product: { id: string; name: string }): BusinessRecord {
   const facts: Record<string, string> = {
     [ROW_FACTS.amount]: row.amount.toFixed(2),
@@ -241,12 +243,11 @@ export function priceRowToRecord(row: PriceRowModel, product: { id: string; name
     if (row.scheduled.revertOn) facts[ROW_FACTS.scheduledRevertOn] = row.scheduled.revertOn
     if (row.scheduled.note) facts[ROW_FACTS.scheduledNote] = row.scheduled.note
   }
-  const status = row.effectiveFrom > PRICING_REFERENCE_DATE ? "Scheduled" : row.effectiveTo && row.effectiveTo < PRICING_REFERENCE_DATE ? "Expired" : "Active"
   return {
     id: row.id,
     name: rowDisplayName(row),
     context: product.name,
-    status,
+    status: priceRowStatus(row),
     owner: "Pricing",
     value: `${money(row.amount)}${unitSuffix(row.unit)}`,
     updated: "Now",
@@ -262,24 +263,47 @@ export function priceRowToRecord(row: PriceRowModel, product: { id: string; name
   }
 }
 
-export function recordToProduct(record: BusinessRecord): ProductModel {
-  const splitList = (value?: string) => (value ? value.split(",").map((item) => item.trim()).filter(Boolean) : [])
+// What the generic create and edit paths hand over is shaped by the form —
+// the module lifecycle's first state as status, the context fields joined
+// with " · ", a select fact as its option label — where a fixture row and a
+// Settings-written row carry the product's name as context, a status read
+// off the effective period and the raw PriceUnit under Unit. This derives
+// all four from the row so a row reads the same whichever door it came
+// through; `unit` is the raw submitted enum, written over the label the
+// generic path stored. A record that is not a live row is returned as it
+// came (with the unit applied), since there is nothing to derive from.
+export function normalizePriceRowRecord(
+  record: BusinessRecord,
+  options: { unit?: string; referenceDate?: string } = {},
+): BusinessRecord {
+  const withUnit = options.unit
+    ? { ...record, facts: { ...record.facts, [ROW_FACTS.unit]: options.unit } }
+    : record
+  const row = recordToPriceRow(withUnit)
+  if (!row) return withUnit
+  const productLabel = record.relationRefs?.find((ref) => ref.fieldId === "productId")?.label
   return {
-    id: record.id,
-    name: record.name,
-    type: (record.facts[PRODUCT_FACTS.type] as ProductType) || "Additional service",
-    unit: (record.facts[PRODUCT_FACTS.unit] as PriceUnit) || "pickup",
-    vatRate: Number.parseFloat(record.facts[PRODUCT_FACTS.vat] || "25") / 100,
-    invoiceName: record.facts[PRODUCT_FACTS.invoiceName] || record.name,
-    invoiceCode: record.facts[PRODUCT_FACTS.invoiceCode] || "",
-    status: record.status,
-    container: record.facts[PRODUCT_FACTS.container] || undefined,
-    containerType: record.facts[PRODUCT_FACTS.containerType] || undefined,
-    wasteFraction: record.facts[PRODUCT_FACTS.wasteFraction] || undefined,
-    materials: splitList(record.facts[PRODUCT_FACTS.materials]),
-    services: splitList(record.facts[PRODUCT_FACTS.services]),
-    serviceLevels: splitList(record.facts[PRODUCT_FACTS.serviceLevels]),
+    ...withUnit,
+    name: rowDisplayName(row),
+    context: productLabel || withUnit.context,
+    status: priceRowStatus(row, options.referenceDate),
+    value: `${money(row.amount)}${unitSuffix(row.unit)}`,
   }
+}
+
+// A price row has no meaning without its product — recordToPriceRow reads
+// it through the product link — so a product's soft delete takes its live
+// rows with it under the same deletion log: the marked copies of every row
+// naming the product that is not already marked. Rows of other products and
+// rows already deleted are left alone.
+export function softDeletedPriceRowsOf(
+  rowRecords: readonly BusinessRecord[],
+  productId: string,
+  deletion: SoftDeletion,
+): BusinessRecord[] {
+  return rowRecords
+    .filter((record) => !isSoftDeleted(record) && productIdOfPriceRow(record) === productId)
+    .map((record) => softDeletedRecord(record, deletion))
 }
 
 // Contract-bound validity → lifecycle status. "Expiring" mirrors the fixture
@@ -342,12 +366,57 @@ export function serviceProviderPriceToRecord(rate: ServiceProviderPriceModel, ex
   }
 }
 
+// --- The pricing sentence of a product's description ---
+// A product's description is its own prose plus one sentence about its
+// pricing, and that sentence is derived from the rows like the Variations,
+// Customer and Price list facts are — hand-written, it went stale the moment
+// a row was added or deleted. Every sentence that opens like a pricing
+// sentence is replaced, so a description never carries two.
+const PRICING_SENTENCE = /^(Default price\b|No default price\b|Unpriced\b)/
+const UNPRICED_SENTENCE = "Unpriced — add its price in Price Engine with Add price."
+
+/** The pricing sentence for one product's rows (the default row's standing, then the variations). */
+export function pricingSentence(
+  productRows: readonly PriceRowModel[],
+  referenceDate: string = PRICING_REFERENCE_DATE,
+): string {
+  const defaultRow = productRows.find(isDefaultRow)
+  const variations = productRows.filter((row) => !isDefaultRow(row))
+  if (!defaultRow && variations.length === 0) return UNPRICED_SENTENCE
+  const negotiated = variations.filter((row) => row.negotiatedCustomer).length
+  const tail =
+    variations.length === 0
+      ? "no variations"
+      : `${count(variations.length, "variation")}${negotiated > 0 ? ` including ${count(negotiated, "negotiated deal")}` : ""}`
+  if (!defaultRow) return `No default price; ${tail}.`
+  const status = priceRowStatus(defaultRow, referenceDate)
+  const head =
+    status === "Scheduled"
+      ? `Default price takes effect ${defaultRow.effectiveFrom}`
+      : status === "Expired"
+        ? `Default price expired ${defaultRow.effectiveTo}`
+        : "Default price applies to everyone"
+  return `${head}; ${tail}.`
+}
+
+function withPricingSentence(description: string, sentence: string): string {
+  // Sentences end in ". "; a decimal or an abbreviation has no space after
+  // its period, so it stays inside its sentence.
+  const parts = description.split(". ")
+  const sentences = parts
+    .map((part, index) => (index < parts.length - 1 ? `${part}.` : part))
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0 && !PRICING_SENTENCE.test(part))
+  return [...sentences, sentence].join(" ")
+}
+
 // Recomputes a product's derived pricing facts (Price list / Variations /
-// Customer) and its headline value string from the current price-row set.
-// Shared by every write path that touches price rows — the Add price /
-// row-edit branches in business-workspace.tsx and the Settings reads — so
-// they all keep the product's facts in sync the same way instead of
-// duplicating the derivation.
+// Customer), its headline value string and the pricing sentence of its
+// description from the current price-row set. Shared by every write path
+// that touches price rows — the Add price / row-edit / row-delete branches
+// in business-workspace.tsx and the Settings product editor — so they all
+// keep the product in sync the same way instead of duplicating the
+// derivation.
 export function syncProductPricingFacts(product: BusinessRecord, rows: readonly PriceRowModel[]): BusinessRecord {
   const productRows = rowsOf(rows, product.id)
   const defaultRow = defaultRowOf(rows, product.id)
@@ -366,6 +435,7 @@ export function syncProductPricingFacts(product: BusinessRecord, rows: readonly 
   return {
     ...product,
     value: defaultRow ? `${money(defaultRow.amount)}${unitSuffix(defaultRow.unit)}` : "Unpriced",
+    description: withPricingSentence(product.description, pricingSentence(productRows)),
     facts,
   }
 }
@@ -375,11 +445,12 @@ export function syncProductPricingFacts(product: BusinessRecord, rows: readonly 
 export function applyIndexToRate(rate: ServiceProviderPriceModel, opts: { label: string; percent: number; from: string; base: "bid" | "current fee" }): ServiceProviderPriceModel {
   const baseAmount = opts.base === "bid" ? rate.bid : rate.currentFee
   const to = Math.round(baseAmount * (1 + opts.percent / 100) * 100) / 100
+  const note = `${opts.label} ${signedPercent(opts.percent)}`
   return {
     ...rate,
     currentFee: to,
     lastIndexed: opts.from,
-    lastIndexNote: `${opts.label} +${opts.percent}%`,
-    indexation: [...rate.indexation, { at: opts.from, note: `${opts.label} +${opts.percent}%`, from: rate.currentFee, to, base: opts.base }],
+    lastIndexNote: note,
+    indexation: [...rate.indexation, { at: opts.from, note, from: rate.currentFee, to, base: opts.base }],
   }
 }

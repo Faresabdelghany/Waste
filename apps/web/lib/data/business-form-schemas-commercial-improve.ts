@@ -1,3 +1,4 @@
+import { RESOLUTION_RULE } from "@/lib/commercial/price-model"
 import type { BusinessFormSchema } from "@/lib/data/business-form-types"
 import { SERVICE_FREQUENCIES } from "@waste/domain/service-frequencies"
 
@@ -127,8 +128,7 @@ export const commercialImproveBusinessFormSchemas = [
     mode: "create",
     recordKind: "Price row",
     title: "Add price",
-    description:
-      "Price a product from the Settings catalogue. Leave every condition empty for the default price that applies to everyone. The row matching the most conditions wins; a negotiated row for the specific customer always wins; ties go to the newest effective-from date.",
+    description: `Price a product from the Settings catalogue. Leave every condition empty for the default price that applies to everyone. ${RESOLUTION_RULE}`,
     submitLabel: "Add price",
     contextFieldIds: ["productId", "amount", "effectiveFrom"],
     sections: [
