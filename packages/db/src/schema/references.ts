@@ -18,7 +18,8 @@
 //
 // The names. A foreign key is `<table>_<its columns>_fk`, a unique constraint
 // `<table>_<its columns>_key` (Postgres's own suffix for one), an index
-// `<table>_<its columns>_idx`, `company_id` and `project_id` left out of a
+// `<table>_<its columns>_idx` (with or without the tenant: `tenantIndex` and
+// `indexOn`), `company_id` and `project_id` left out of a
 // key's name since every key of a tenant's table begins with the one and every
 // project-scoped key with both, `unique (company_id, id)` is
 // `<table>_tenant_key` and `unique (company_id, project_id, id)`
@@ -133,4 +134,14 @@ export function uniqueOn(...own: [PgColumn, ...PgColumn[]]): UniqueConstraintBui
 /** `INDEX (company_id, ...own)`, named `<table>_<own>_idx`: for a referencing column set no unique constraint leads with. */
 export function tenantIndex(columns: TenantColumns, ...own: [PgColumn, ...PgColumn[]]): IndexBuilder {
   return index(tableObjectName(columns.companyId.table, `${named(own)}_idx`, "tenantIndex")).on(columns.companyId, ...own)
+}
+
+/**
+ * `INDEX (...own)` without the tenant, named `<table>_<own>_idx`: for a lookup
+ * that crosses companies, which only the access token hook makes (an account
+ * by its e-mail, on first sign-in). Every statement of the API's carries
+ * `company_id` and reads through `tenantIndex` or a key.
+ */
+export function indexOn(...own: [PgColumn, ...PgColumn[]]): IndexBuilder {
+  return index(tableObjectName(own[0].table, `${named(own)}_idx`, "indexOn")).on(...own)
 }

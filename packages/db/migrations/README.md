@@ -65,7 +65,7 @@ CREATE TRIGGER "agreement_touch_updated_at" BEFORE UPDATE ON "wms"."agreement" F
 
 A ledger (append-only) has no `updated_at` and no trigger; its `REVOKE UPDATE, DELETE ... FROM wms_api` is hand-written the same way when the first ledger arrives.
 
-Anything else the database needs that is not a table's goes below the tables' statements in the same file, as `0002_organisation_access.sql` carries the access token hook and its grants below the eight tables' fences and triggers. drizzle-kit itself writes `--> statement-breakpoint` at the end of an `ALTER TABLE` or `CREATE INDEX` line; the migrator, and the gate, split on the marker wherever it stands.
+Anything else the database needs that is not a table's goes below the tables' statements in the same file, as `0002_organisation_access.sql` carries the access token hook and its grants below the eight tables' fences and triggers. A function that changes is replaced whole, in a new file, with `CREATE OR REPLACE FUNCTION` and its definition restated in full (`SECURITY DEFINER` and `SET search_path` are part of it), as `0005_hook_email.sql` replaces the hook below the index drizzle-kit wrote; the owner and the privileges survive the replacement, so the grants and revokes of the earlier files stand and are not repeated. drizzle-kit itself writes `--> statement-breakpoint` at the end of an `ALTER TABLE` or `CREATE INDEX` line; the migrator, and the gate, split on the marker wherever it stands.
 
 ## Two rules the migrator cannot enforce
 

@@ -8,15 +8,18 @@
 // status is derived, never stored: `invited` while `auth_user_id` is null,
 // `deactivated` while `deactivated_at` is set, else `active`. `auth_user_id` is
 // a soft reference to `auth.users`, not a foreign key: the access token hook
-// (migration 0002) binds it on first sign-in, our own commands deactivate and
-// reactivate, and the auth user's lifecycle stays Supabase's; a foreign key
-// would couple `wms` to a schema another service migrates and make every API
-// test seed `auth.users` as the owner. `unique (auth_user_id)` is one company
-// per login for now, the one line to relax when a person has accounts in more
-// than one. The e-mail is stored lowercase (the hook binds by
-// `lower(claims.email)`) and is unique within the company. At most one account
-// per company is the primary administrator: a partial unique index over
-// `company_id where primary_administrator`. An account belongs to a Service
+// (migration 0002, replaced whole in 0005) binds it on first sign-in, our own
+// commands deactivate and reactivate, and the auth user's lifecycle stays
+// Supabase's; a foreign key would couple `wms` to a schema another service
+// migrates and make every API test seed `auth.users` as the owner. `unique
+// (auth_user_id)` is one company per login for now, the one line to relax when
+// a person has accounts in more than one; until then, an address two companies
+// have invited is bound to neither (#76, the hook of 0005). The e-mail is
+// stored lowercase (the hook binds by `lower(claims.email)`), is unique within
+// the company, and carries a plain index of its own for that lookup, which
+// crosses companies and so cannot use the tenant-led unique (#75). At most one
+// account per company is the primary administrator: a partial unique index
+// over `company_id where primary_administrator`. An account belongs to a Service
 // Provider or to none; `unique (company_id, id, service_provider_id)` is what
 // a Service Provider Access points at, so a grant can only name the provider
 // the account belongs to.
@@ -40,7 +43,7 @@ import { tableObjectName } from "../names"
 import { lowercase } from "./checks"
 import { id, tenant, timestamps } from "./columns"
 import { company, project, serviceProvider } from "./organisation"
-import { companyReference, tenantIndex, tenantKey, tenantReference, tenantUnique, uniqueOn } from "./references"
+import { companyReference, indexOn, tenantIndex, tenantKey, tenantReference, tenantUnique, uniqueOn } from "./references"
 import { wms } from "./wms"
 
 export const role = wms.table(
@@ -84,6 +87,9 @@ export const userAccount = wms.table(
     tenantKey(t),
     tenantUnique(t, t.id, t.serviceProviderId),
     lowercase(t.email),
+    // The hook's first-sign-in lookup, `email = lower(claims.email)` across the
+    // whole database, which `unique (company_id, email)` does not lead with (#75).
+    indexOn(t.email),
     uniqueIndex(tableObjectName(t.companyId.table, "primary_administrator_idx", "userAccount")).on(t.companyId).where(sql`${t.primaryAdministrator}`),
     tenantIndex(t, t.roleId),
     tenantIndex(t, t.serviceProviderId),

@@ -1,10 +1,12 @@
 // The Organisation & Access tables (Issue #70, slice 1) as drizzle-kit writes
 // them: the eight CREATE TABLE statements with their keys, uniques and checks,
-// the composite foreign keys, the partial index on the primary administrator;
-// then migration 0002, which has to begin with exactly those statements, so the
-// file and `pnpm db:generate` cannot drift apart, and to carry the token hook
-// with its grants below them. The key and check helpers by their text and
-// their refusals. No database.
+// the composite foreign keys, the partial index on the primary administrator
+// and, since migration 0005, the e-mail index the hook's first sign-in reads
+// (#75); then migration 0002, which has to begin with exactly the statements
+// generated as of 0002, so the file and `pnpm db:generate` cannot drift apart,
+// and to carry the token hook with its grants below them; then 0005, which
+// begins with the index and replaces the hook below it (#76). The key and
+// check helpers by their text and their refusals. No database.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -18,7 +20,7 @@ import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } fr
 import { lowercase, oneOf } from "../schema/checks"
 import { id, tenant, timestamps } from "../schema/columns"
 import { company, project, serviceProvider } from "../schema/organisation"
-import { companyReference, tenantIndex, tenantKey, tenantReference, tenantUnique, uniqueOn } from "../schema/references"
+import { companyReference, indexOn, tenantIndex, tenantKey, tenantReference, tenantUnique, uniqueOn } from "../schema/references"
 import { wms } from "../schema/wms"
 import { normalised, statementsOf } from "../sql/hand-written"
 import { statementsFor } from "./specimen"
@@ -27,6 +29,7 @@ import { statementsFor } from "./specimen"
 const tables = { company, project, serviceProvider, role, userAccount, roleGrant, projectAccess, serviceProviderAccess }
 
 const MIGRATION = "0002_organisation_access.sql"
+const LATER_MIGRATION = "0005_hook_email.sql"
 const HOOK = "public.custom_access_token_hook"
 
 /** The column sets every table begins with. */
@@ -42,6 +45,9 @@ const columns = (...names: string[]): string => names.map((name) => `"${name}"`)
 const foreignKey = (table: string, name: string, own: string[], target: string, foreign: string[]): string =>
   `ALTER TABLE "wms"."${table}" ADD CONSTRAINT "${name}" FOREIGN KEY (${columns(...own)}) REFERENCES "wms"."${target}"(${columns(...foreign)}) ON DELETE no action ON UPDATE no action;`
 const index = (table: string, name: string, ...own: string[]): string => `CREATE INDEX "${name}" ON "wms"."${table}" USING btree (${columns(...own)});`
+
+/** What 0005 added to the schema after 0002 had been applied: 0002 begins with the generated statements less these, 0005 with exactly these. */
+const ADDED_IN_0005 = [index("user_account", "user_account_email_idx", "email")]
 
 const STATUS = "in ('active', 'onboarding')"
 
@@ -132,6 +138,7 @@ const expected = [
     "user_account",
     ["company_id", "id", "service_provider_id"],
   ),
+  ...ADDED_IN_0005,
   `CREATE UNIQUE INDEX "user_account_primary_administrator_idx" ON "wms"."user_account" USING btree ("company_id") WHERE ${ref("user_account", "primary_administrator")};`,
   index("user_account", "user_account_role_id_idx", "company_id", "role_id"),
   index("user_account", "user_account_service_provider_id_idx", "company_id", "service_provider_id"),
@@ -143,16 +150,29 @@ describe("the Organisation & Access tables as drizzle-kit writes them", () => {
     assert.deepEqual(await statementsFor(tables), expected)
   })
 
-  test("migration 0002 begins with exactly what drizzle-kit generates for the schema, and carries the hook and its grants below", async () => {
+  test("migration 0002 begins with exactly what drizzle-kit generated for the schema as of 0002, and carries the hook and its grants below", async () => {
     const statements = statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
-    // The same statements, whatever order drizzle-kit's loader gave the tables (it sorts a module's exports).
-    const generated = (await statementsFor(tables)).map(normalised).sort()
+    // The same statements, whatever order drizzle-kit's loader gave the tables
+    // (it sorts a module's exports), less what a later file added: an applied
+    // file is never edited.
+    const generated = (await statementsFor(tables))
+      .filter((statement) => !ADDED_IN_0005.includes(statement))
+      .map(normalised)
+      .sort()
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
     const handWritten = statements.slice(generated.length)
     assert.ok(handWritten.length > 0, "the hand-written statements follow the generated ones")
     assert.equal(handWritten.filter((statement) => statement.startsWith(`CREATE OR REPLACE FUNCTION ${HOOK}(event jsonb) RETURNS jsonb`)).length, 1)
     assert.ok(handWritten.includes(`GRANT EXECUTE ON FUNCTION ${HOOK}(jsonb) TO supabase_auth_admin;`))
     assert.ok(handWritten.includes(`REVOKE EXECUTE ON FUNCTION ${HOOK}(jsonb) FROM PUBLIC, anon, authenticated;`))
+  })
+
+  test("migration 0005 begins with exactly the e-mail index and replaces the hook below it, nothing else: privileges survive CREATE OR REPLACE, so 0002's grant and 0003's revoke stand", async () => {
+    const statements = statementsOf(await readFile(join(MIGRATIONS_FOLDER, LATER_MIGRATION), "utf8"))
+    assert.deepEqual(statements.slice(0, ADDED_IN_0005.length), ADDED_IN_0005.map(normalised))
+    const handWritten = statements.slice(ADDED_IN_0005.length)
+    assert.equal(handWritten.length, 1, handWritten.join("\n"))
+    assert.ok(handWritten[0].startsWith(`CREATE OR REPLACE FUNCTION ${HOOK}(event jsonb) RETURNS jsonb`), handWritten[0])
   })
 })
 
@@ -199,6 +219,7 @@ describe("the key helpers", () => {
         tenantUnique(t, t.code),
         tenantKey(t),
         tenantIndex(t, t.otherId),
+        indexOn(t.extra),
       ],
     )
     const statements = await statementsFor({ target, specimen })
@@ -209,6 +230,7 @@ describe("the key helpers", () => {
       foreignKey("specimen_key", "specimen_key_target_id_fk", ["company_id", "target_id"], "specimen_key_target", ["company_id", "id"]),
       foreignKey("specimen_key", "specimen_key_other_id_code_fk", ["company_id", "other_id", "code"], "specimen_key_target", ["company_id", "id", "code"]),
       index("specimen_key", "specimen_key_other_id_idx", "company_id", "other_id"),
+      index("specimen_key", "specimen_key_extra_idx", "extra"),
     ])
   })
 
