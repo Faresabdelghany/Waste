@@ -81,16 +81,18 @@ describe("the Organisation & Access tables against a fresh database", { skip: da
     })
 
   test("0002 created the eight tables in wms, each fenced (row-level security enabled and forced, one policy for the API role) and with its updated_at trigger", async () => {
+    // These eight by name: the later contexts' tables are on this database too, and each is its own file's question.
+    const names = ["company", "project", "project_access", "role", "role_grant", "service_provider", "service_provider_access", "user_account"]
     const rows = await owner.sql<{ table: string; enabled: boolean; forced: boolean; policies: string[]; triggers: string[] }[]>`
       select c.relname as table, c.relrowsecurity as enabled, c.relforcerowsecurity as forced,
         (select array_agg(p.policyname order by p.policyname) from pg_policies p where p.schemaname = 'wms' and p.tablename = c.relname) as policies,
         (select array_agg(t.tgname order by t.tgname) from pg_trigger t where t.tgrelid = c.oid and not t.tgisinternal) as triggers
       from pg_class c join pg_namespace n on n.oid = c.relnamespace
-      where n.nspname = 'wms' and c.relkind = 'r'
+      where n.nspname = 'wms' and c.relkind = 'r' and c.relname = any (${names}::text[])
       order by c.relname`
     assert.deepEqual(
       rows.map(({ table, enabled, forced, policies, triggers }) => ({ table, enabled, forced, policies, triggers })),
-      ["company", "project", "project_access", "role", "role_grant", "service_provider", "service_provider_access", "user_account"].map((table) => ({
+      names.map((table) => ({
         table,
         enabled: true,
         forced: true,
