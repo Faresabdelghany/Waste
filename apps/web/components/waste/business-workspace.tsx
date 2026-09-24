@@ -274,6 +274,15 @@ import { ServiceProviderDetailsPage } from "@/components/waste/service-provider-
 import { ContainerDetailsSheet } from "@/components/waste/containers-assets-register"
 import { MapPlanningView } from "@/components/waste/map-planning/map-planning-view"
 import { SERVICE_AREAS_MODULE, serviceAreaFormValues } from "@/lib/data/service-areas"
+import {
+  isInProjectScope,
+  isProjectRecordId,
+  pinnedProjectId,
+  projectRecordsOf,
+  projectScopeLabel,
+  selectedProjectIds,
+  type ProjectScope,
+} from "@/lib/data/project-scope"
 import { RouteDetailsPage } from "@/components/waste/route-details-page"
 import { TicketDetailsDialog } from "@/components/tickets/TicketDetailsDialog"
 import { useOrganizationStore } from "@/components/settings/organization-store"
@@ -313,12 +322,12 @@ type BusinessWorkspaceProps = {
   actorName?: string
 }
 
-type ProjectScope = "copenhagen" | "harbor" | "all"
-
 // The header no longer offers a project switcher; generic workspaces run in the
 // default project (the sidebar identity "Copenhagen Central") unless a restricted
-// shell pins a scope via fixedProjectScope.
-const DEFAULT_PROJECT_SCOPE: ProjectScope = "copenhagen"
+// shell pins a scope via fixedProjectScope. The scope vocabulary is the
+// configure.organization project records (issue #44, lib/data/project-scope),
+// so the default is a project record's id, not a name of its own.
+const DEFAULT_PROJECT_SCOPE: ProjectScope = FIXTURE_PROJECT_IDS.copenhagen
 
 type AuditEvent = {
   id: string
@@ -361,12 +370,7 @@ function configuredAssetFormSchema(
   projectScope: ProjectScope,
 ) {
   if (schema?.key !== "resources.containers") return schema
-  const selectedProjectId =
-    projectScope === "all"
-      ? null
-      : projectScope === "harbor"
-        ? FIXTURE_PROJECT_IDS.harbor
-        : FIXTURE_PROJECT_IDS.copenhagen
+  const selectedProjectId = pinnedProjectId(projectScope)
   const availableInProject = (projectIds: readonly string[]) =>
     projectIds.length === 0 ||
     selectedProjectId === null ||
@@ -529,13 +533,6 @@ function WorkspaceQuerySync({
   ])
 
   return null
-}
-
-function recordProject(record: BusinessRecord): ProjectScope {
-  if (!record.projectIds || record.projectIds.length !== 1) return "all"
-  if (record.projectIds[0] === FIXTURE_PROJECT_IDS.harbor) return "harbor"
-  if (record.projectIds[0] === FIXTURE_PROJECT_IDS.copenhagen) return "copenhagen"
-  return "all"
 }
 
 function matchesFactFilter(
@@ -809,34 +806,6 @@ function resolveFormModule(workspaceId: WorkspaceId, moduleId: string) {
   }
 
   return null
-}
-
-function selectedProjectIds(
-  projectScope: ProjectScope,
-  values: BusinessFormValues,
-): string[] {
-  const selectedProjectId =
-    typeof values.projectId === "string" ? values.projectId : ""
-  // A chosen project scopes the record — any project record, not only the
-  // two the workspace scope switch knows (Cairo Operations, round 3).
-  if (selectedProjectId.startsWith("project-")) {
-    return [selectedProjectId]
-  }
-  if (projectScope === "all") {
-    return [FIXTURE_PROJECT_IDS.copenhagen, FIXTURE_PROJECT_IDS.harbor]
-  }
-  return [
-    projectScope === "harbor"
-      ? FIXTURE_PROJECT_IDS.harbor
-      : FIXTURE_PROJECT_IDS.copenhagen,
-  ]
-}
-
-function projectScopeLabel(projectIds: readonly string[]) {
-  if (projectIds.length > 1) return "All permitted projects"
-  if (projectIds[0] === FIXTURE_PROJECT_IDS.harbor) return "Harbor Commercial"
-  if (projectIds[0] === FIXTURE_PROJECT_IDS.cairo) return "Cairo Operations"
-  return "Copenhagen Central"
 }
 
 function normalizedLifecycleValue(value: string) {
@@ -1163,6 +1132,13 @@ export function BusinessWorkspace({
     defaultBusinessViewOptions,
   )
   const projectScope = fixedProjectScope ?? DEFAULT_PROJECT_SCOPE
+  // The scope vocabulary: the organisation module's project records, fixture
+  // and created alike (issue #44) — what a scope is compared against, what a
+  // created record is stamped with, and where a scope's label is read.
+  const projectRecords = useMemo(
+    () => projectRecordsOf(moduleRecords("configure", "organization")),
+    [moduleRecords],
+  )
   const [selectedRecord, setSelectedRecord] = useState<BusinessRecord | null>(null)
   const [editingRecord, setEditingRecord] = useState<BusinessRecord | null>(null)
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
@@ -1316,7 +1292,7 @@ export function BusinessWorkspace({
           areas,
           // No stored project scope → no invented one (D22-style honesty);
           // the context then falls back to the structured service days.
-          record.projectIds?.length ? projectScopeLabel(record.projectIds) : "",
+          record.projectIds?.length ? projectScopeLabel(record.projectIds, projectRecords) : "",
         ),
       )
     }
@@ -1332,7 +1308,7 @@ export function BusinessWorkspace({
     return serviceProviderScopeId
       ? records.filter((record) => record.serviceProviderId === serviceProviderScopeId)
       : records
-  }, [activeModule, serviceProviderScopeId, getRecords, moduleRecords, workspace.id])
+  }, [activeModule, serviceProviderScopeId, getRecords, moduleRecords, projectRecords, workspace.id])
   const formTargetRecords = useMemo(
     () =>
       relatedCreateModule
@@ -1466,14 +1442,11 @@ export function BusinessWorkspace({
         record.serviceProviderId === selectedServiceProviderId && !isSoftDeleted(record),
     )
   }, [getRecords, selectedServiceProviderId])
+  // Record scoping compares against the selected project record's id, so a
+  // project the fixture union never knew shows exactly its own records and
+  // leaks into no other scope (issue #44).
   const scopedRecords = useMemo(
-    () =>
-      projectScope === "all"
-        ? activeRecords
-        : activeRecords.filter((record) => {
-            const recordScope = recordProject(record)
-            return recordScope === "all" || recordScope === projectScope
-          }),
+    () => activeRecords.filter((record) => isInProjectScope(record, projectScope)),
     [activeRecords, projectScope],
   )
   const visibleScopedRecords = useMemo(
@@ -1973,7 +1946,7 @@ export function BusinessWorkspace({
         record = withDerivedSchemeContext(
           record,
           moduleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId),
-          record.projectIds?.length ? projectScopeLabel(record.projectIds) : "",
+          record.projectIds?.length ? projectScopeLabel(record.projectIds, projectRecords) : "",
         )
       }
       // Deep-linked calendars show the derived Next holiday too (issue #27).
@@ -1990,7 +1963,7 @@ export function BusinessWorkspace({
       }
       return record
     },
-    [serviceProviderScopeId, getRecords, moduleRecords, workspace],
+    [serviceProviderScopeId, getRecords, moduleRecords, projectRecords, workspace],
   )
 
   const openRecord = (record: BusinessRecord) => {
@@ -2213,7 +2186,7 @@ export function BusinessWorkspace({
         allowedTransitions: activeModule.lifecycle.slice(1, 3),
         companyId: record.companyId ?? FIXTURE_COMPANY_ID,
         projectIds:
-          record.projectIds ?? selectedProjectIds(projectScope, {}),
+          record.projectIds ?? selectedProjectIds(projectScope, {}, projectRecords),
         serviceProviderId: record.serviceProviderId ?? serviceProviderScopeId,
         recordKind: isCorrection ? "Correction" : "Controlled child record",
         relationRefs: [
@@ -2360,12 +2333,9 @@ export function BusinessWorkspace({
             if (!record.id.startsWith("template-")) return false
           }
           if (field.id === "projectId") {
-            if (!record.id.startsWith("project-")) return false
-            if (projectScope === "all") return true
-            return record.id ===
-              (projectScope === "harbor"
-                ? FIXTURE_PROJECT_IDS.harbor
-                : FIXTURE_PROJECT_IDS.copenhagen)
+            if (!isProjectRecordId(record.id)) return false
+            const pinned = pinnedProjectId(projectScope)
+            return pinned === null || record.id === pinned
           }
           if (/(company|tenant)Id$/i.test(field.id)) {
             if (
@@ -2421,12 +2391,9 @@ export function BusinessWorkspace({
             return false
           }
 
-          if (projectScope !== "all" && record.projectIds?.length) {
-            const requiredProjectId =
-              projectScope === "harbor"
-                ? FIXTURE_PROJECT_IDS.harbor
-                : FIXTURE_PROJECT_IDS.copenhagen
-            return record.projectIds.includes(requiredProjectId)
+          const pinnedProject = pinnedProjectId(projectScope)
+          if (pinnedProject !== null && record.projectIds?.length) {
+            return record.projectIds.includes(pinnedProject)
           }
           return true
         })
@@ -2454,24 +2421,17 @@ export function BusinessWorkspace({
     [serviceProviderScopeId, formSchema?.key, formSchema?.recordKind, getRecords, projectScope],
   )
 
-  const formInitialValues = useMemo<BusinessFormValues>(
-    () => ({
+  const formInitialValues = useMemo<BusinessFormValues>(() => {
+    const pinnedProject = pinnedProjectId(projectScope)
+    return {
       companyId: FIXTURE_COMPANY_ID,
-      ...(projectScope === "all"
-        ? {}
-        : {
-            projectId:
-              projectScope === "harbor"
-                ? FIXTURE_PROJECT_IDS.harbor
-                : FIXTURE_PROJECT_IDS.copenhagen,
-          }),
+      ...(pinnedProject === null ? {} : { projectId: pinnedProject }),
       ...(serviceProviderScopeId
         ? { serviceProviderId: serviceProviderScopeId, invitedBy: actorName }
         : {}),
       ...(relatedCreateTarget?.initialValues ?? {}),
-    }),
-    [actorName, serviceProviderScopeId, projectScope, relatedCreateTarget],
-  )
+    }
+  }, [actorName, serviceProviderScopeId, projectScope, relatedCreateTarget])
 
   const editInitialValues = useMemo<BusinessFormValues>(() => {
     if (!editingRecord || !activeModuleFormSchema) return formInitialValues
@@ -2770,13 +2730,11 @@ export function BusinessWorkspace({
       }
 
       const selectedProjectId = values.projectId
+      const pinnedProject = pinnedProjectId(projectScope)
       if (
         typeof selectedProjectId === "string" &&
-        projectScope !== "all" &&
-        selectedProjectId !==
-          (projectScope === "harbor"
-            ? FIXTURE_PROJECT_IDS.harbor
-            : FIXTURE_PROJECT_IDS.copenhagen)
+        pinnedProject !== null &&
+        selectedProjectId !== pinnedProject
       ) {
         errors.projectId = "The selected project is outside the current workspace scope."
       }
@@ -2918,7 +2876,7 @@ export function BusinessWorkspace({
   const getFormReviewSummary = useCallback(
     (values: BusinessFormValues) => {
       if (!formSchema?.execution) return []
-      const projectIds = selectedProjectIds(projectScope, values)
+      const projectIds = selectedProjectIds(projectScope, values, projectRecords)
 
       if (formSchema.key === "commercial.billing") {
         const eventsTarget = resolveFormModule("commercial", "events")
@@ -2963,14 +2921,14 @@ export function BusinessWorkspace({
 
       return [
         { label: "Linked records", value: String(linkedRecordCount) },
-        { label: "Project scope", value: projectScopeLabel(projectIds) },
+        { label: "Project scope", value: projectScopeLabel(projectIds, projectRecords) },
         {
           label: "Execution policy",
           value: formSchema.execution.kind.replaceAll("-", " "),
         },
       ]
     },
-    [formSchema, getRecords, projectScope],
+    [formSchema, getRecords, projectRecords, projectScope],
   )
 
   const handleFormSubmit = (values: BusinessFormValues) => {
@@ -3311,7 +3269,7 @@ export function BusinessWorkspace({
         : formSchema.mode === "action"
         ? `${formSchema.recordKind} · ${nameValue || "submitted"}`
         : nameValue || `${formSchema.recordKind} · ${now}`
-    const projectIds = selectedProjectIds(projectScope, values)
+    const projectIds = selectedProjectIds(projectScope, values, projectRecords)
 
     // The generic path stores select-field facts as their display label
     // (e.g. Unit → "€ per pickup"), but a price row's Unit fact must stay the
@@ -3710,6 +3668,7 @@ export function BusinessWorkspace({
         after: updatedRecord.status,
         evidence: `${relationRefs.length} linked records · ${projectScopeLabel(
           projectIds,
+          projectRecords,
         )} scope validated`,
       }
 
@@ -3767,14 +3726,14 @@ export function BusinessWorkspace({
     let newRecord: BusinessRecord = {
       id: `${resolvedTarget.module.id}-${slugify(formSchema.recordKind)}-${now}`,
       name: recordName,
-      context: contextValues.join(" · ") || projectScopeLabel(projectIds),
+      context: contextValues.join(" · ") || projectScopeLabel(projectIds, projectRecords),
       status: initialFormStatus(resolvedTarget.module, formSchema, values),
       owner: actorName,
       value: formSchema.execution.resultValue ?? formSchema.submitLabel,
       updated: "Now",
       description: formSchema.description,
       facts: {
-        Scope: projectScopeLabel(projectIds),
+        Scope: projectScopeLabel(projectIds, projectRecords),
         "Record kind": formSchema.recordKind,
         "Execution policy": formSchema.execution.kind.replaceAll("-", " "),
         "Submitted by": actorName,
@@ -3838,6 +3797,7 @@ export function BusinessWorkspace({
       after: newRecord.status,
       evidence: `${relationRefs.length} linked records · ${projectScopeLabel(
         projectIds,
+        projectRecords,
       )} scope validated`,
     }
 
@@ -3924,13 +3884,15 @@ export function BusinessWorkspace({
       )
       .filter((record): record is BusinessRecord => Boolean(record))
 
-    const projectIds = selectedProjectIds(projectScope, {
-      projectId: data.projectId ?? "",
-    })
+    const projectIds = selectedProjectIds(
+      projectScope,
+      { projectId: data.projectId ?? "" },
+      projectRecords,
+    )
     // Vehicle names carry the registration plate; facts show the callsign.
     const vehicleName = vehicle?.name.split(" · ")[0]
     const facts: Record<string, string> = {
-      Scope: projectScopeLabel(projectIds),
+      Scope: projectScopeLabel(projectIds, projectRecords),
       "Record kind": "Route",
       "Execution policy": "create record",
       "Submitted by": actorName,
@@ -3959,7 +3921,7 @@ export function BusinessWorkspace({
       name: `RC-${String(now).slice(-4)}`,
       context:
         [project?.name, data.date, serviceProvider?.name].filter(Boolean).join(" · ") ||
-        projectScopeLabel(projectIds),
+        projectScopeLabel(projectIds, projectRecords),
       status:
         activeModuleFormSchema?.execution?.initialStatus ??
         activeModule.lifecycle[0] ??
@@ -4007,6 +3969,7 @@ export function BusinessWorkspace({
       after: newRecord.status,
       evidence: `${relationRefs.length} linked records · ${projectScopeLabel(
         projectIds,
+        projectRecords,
       )} scope validated`,
     }
 
@@ -4199,9 +4162,11 @@ export function BusinessWorkspace({
     }
     const recurrence = recurrenceFromValues(submittedValues)
 
-    const projectIds = selectedProjectIds(projectScope, {
-      projectId: data.projectId ?? "",
-    })
+    const projectIds = selectedProjectIds(
+      projectScope,
+      { projectId: data.projectId ?? "" },
+      projectRecords,
+    )
     const totalStops = dayPlans.reduce(
       (sum, plan) => sum + plan.containerIds.length,
       0,
@@ -4209,7 +4174,7 @@ export function BusinessWorkspace({
     const sharedProviderId = sharedServiceProvider(groups).id
     const facts: Record<string, string> = withSchemeGroupFacts(
       {
-        Scope: projectScopeLabel(projectIds),
+        Scope: projectScopeLabel(projectIds, projectRecords),
         "Record kind": "Route Scheme",
         "Execution policy": "create record",
         "Submitted by": actorName,
@@ -4259,7 +4224,7 @@ export function BusinessWorkspace({
       name: data.schemeName.trim() || "Untitled scheme",
       context:
         [project?.name, area?.name].filter(Boolean).join(" · ") ||
-        projectScopeLabel(projectIds),
+        projectScopeLabel(projectIds, projectRecords),
       status: validation.status,
       owner: actorName,
       value: `${totalStops} planned stops`,
@@ -4328,6 +4293,7 @@ export function BusinessWorkspace({
       after: creation.scheme.status,
       evidence: `${relationRefs.length} linked records · ${projectScopeLabel(
         projectIds,
+        projectRecords,
       )} scope validated`,
     }
 
@@ -5384,7 +5350,7 @@ export function BusinessWorkspace({
                                   viewOptions.showContext && (
                                     <TableCell className="min-w-[160px] whitespace-nowrap text-sm text-muted-foreground">
                                       {record.projectIds?.length
-                                        ? projectScopeLabel(record.projectIds)
+                                        ? projectScopeLabel(record.projectIds, projectRecords)
                                         : "—"}
                                     </TableCell>
                                   )
