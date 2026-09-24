@@ -16,13 +16,19 @@ Plain SQL files, applied in journal order by `src/migrate.ts` (`pnpm db:migrate`
 
 Drizzle can describe policies (`pgPolicy`) and RLS; they are not used, so each of these statements has one owner and one spelling.
 
+## Keys: a reference carries the tenant
+
+An intra-tenant reference is a **composite foreign key that includes `company_id`**: `(company_id, project_id) → project (company_id, id)`, `(company_id, role_id) → role (company_id, id)`, and so on. A row therefore cannot reference another company's record, whatever the API does, and the database refuses the attempt with 23503. Every table referenced this way carries `unique (company_id, id)` for the key to point at. Only `company_id → company (id)` itself is a plain key, and `company` is its own tenant (`company_id = id`, the `company_self` check), so the fence applies to it like to every other table.
+
+drizzle-kit writes these (they are foreign keys and unique constraints), but its default names would not do: `<table>_<columns>_<foreign table>_<foreign columns>_fk` overruns 63 bytes on a composite key, and Postgres truncates an identifier silently. So every key is named explicitly through `src/names.ts` by the helpers in `src/schema/references.ts`: `companyReference(t, company)` for the plain key, `tenantReference(t, [t.roleId], role)` for a composite one (`<table>_<columns>_fk`), `tenantKey(t)` for the `unique (company_id, id)` a reference points at (`<table>_tenant_key`), `tenantUnique(t, ...columns)` and `uniqueOn(...columns)` for business keys (`<table>_<columns>_key`, Postgres's own suffix, the tenant column left out of the name), and `tenantIndex(t, ...columns)` for a referencing column set no unique constraint leads with (`<table>_<columns>_idx`; Postgres indexes only the referenced side of a foreign key). A check over a text column is `oneOf(column, values)` or `lowercase(column)` from `src/schema/checks.ts`, named `<table>_<column>_<rule>`. A name past 63 bytes is refused when the table is defined, with the fix in the message.
+
 ## Layout: the same file, below drizzle-kit's statements
 
 A table's hand-written statements go into **the migration file that creates the table**, after drizzle-kit's statements, each preceded by its own `--> statement-breakpoint` line (the migrator splits the file on that marker and runs each piece as its own statement, all in one transaction). Not into a paired `--custom` file: the table and its fence are one change and land in one journal entry, so no database is ever left with the table applied and the fence not, and a reader finds the whole table in one place.
 
 The recipe for a new table:
 
-1. Define it in `src/schema/<context>.ts` from the column sets in `src/schema/columns.ts` (`id`, `tenant` or `projectScoped`, `timestamps`, `validity` with `validPeriod(columns)` in the extra config), export it from `src/schema/index.ts`.
+1. Define it in `src/schema/<context>.ts` from the column sets in `src/schema/columns.ts` (`id`, `tenant` or `projectScoped`, `timestamps`, `validity` with `validPeriod(columns)` in the extra config) and the key helpers in `src/schema/references.ts` (every reference to another table of the tenant a `tenantReference`, `tenantKey` where a reference will point at it), export it from `src/schema/index.ts`.
 2. `pnpm db:generate` writes `NNNN_<name>.sql`.
 3. Append the hand-written statements to that file: `tenantFence`, `touchUpdatedAt` where there is `updated_at`, `excludeOverlapping` where there is validity. Copy the helper output verbatim.
 4. `pnpm --filter @waste/db test`. The gate in `src/__tests__/hand-written.test.ts` reads every migration the way the migrator does (split at the breakpoints, comments dropped, whitespace collapsed), finds the file whose statements create each table of the schema, and fails with the missing statements printed verbatim when the file lacks one; paste what it prints. A statement wrapped over several lines counts; one commented out, or sharing a breakpoint piece with another, does not.
@@ -52,6 +58,8 @@ CREATE TRIGGER "agreement_touch_updated_at" BEFORE UPDATE ON "wms"."agreement" F
 ```
 
 A ledger (append-only) has no `updated_at` and no trigger; its `REVOKE UPDATE, DELETE ... FROM wms_api` is hand-written the same way when the first ledger arrives.
+
+Anything else the database needs that is not a table's goes below the tables' statements in the same file, as `0002_organisation_access.sql` carries the access token hook and its grants below the eight tables' fences and triggers. drizzle-kit itself writes `--> statement-breakpoint` at the end of an `ALTER TABLE` or `CREATE INDEX` line; the migrator, and the gate, split on the marker wherever it stands.
 
 ## Two rules the migrator cannot enforce
 

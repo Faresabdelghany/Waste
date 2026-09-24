@@ -14,8 +14,10 @@
 // writes it.
 //
 // A file is read the way the migrator reads it: split at the breakpoints into
-// statements, comments dropped, whitespace collapsed. A statement commented
-// out is not there; a statement wrapped over several lines is.
+// statements, wherever the marker stands (drizzle-kit writes it at the end of
+// an ALTER TABLE or CREATE INDEX line, a hand-written file on a line of its
+// own), comments dropped, whitespace collapsed. A statement commented out is
+// not there; a statement wrapped over several lines is.
 import { getTableName } from "drizzle-orm"
 import type { PgTable } from "drizzle-orm/pg-core"
 
@@ -25,7 +27,8 @@ import { tenantFence } from "./tenant-fence"
 import { touchUpdatedAt } from "./touch-updated-at"
 
 const HELPER = "handWrittenStatements"
-const BREAKPOINT = /^--> statement-breakpoint\s*$/m
+/** drizzle-orm's migrator splits on this text wherever it stands, and so does this. */
+const BREAKPOINT = "--> statement-breakpoint"
 /** Where the constraint's key ends and its period begins, in the helper's spelling. */
 const PERIOD_STARTS = ", daterange("
 
