@@ -44,28 +44,56 @@ describe("scheme-level waste fraction", () => {
     assert.deepEqual(groups[0].fractions, ["Paper", "Cardboard"])
   })
 
-  test("quick create scopes the fraction only for a single-fraction rule", () => {
-    const single = quickSchemeDraftFromValues({
+  test("quick create scopes the fraction and the service type from step 1's fields (issue #43)", () => {
+    const quick = quickSchemeDraftFromValues({
       schemeName: "Quick",
       stopSelection: "rule",
-      matchFractions: "Organic",
+      wasteFraction: "Organic",
+      serviceType: "Kerbside collection",
+      matchContainerTypes: "Two-wheel bin · 240 L",
       frequency: "weekly",
       serviceDays: "monday",
       effectiveFrom: "2026-09-14",
     })
-    assert.equal(single.wasteFraction, "Organic")
-    assert.deepEqual(single.groups[0].fractions, ["Organic"])
-    const several = quickSchemeDraftFromValues({
+    assert.equal(quick.wasteFraction, "Organic")
+    assert.equal(quick.serviceType, "Kerbside collection")
+    // The rule's one fraction is the scheme's — the form has no list of its own.
+    assert.deepEqual(quick.groups[0].fractions, ["Organic"])
+    assert.deepEqual(quick.groups[0].containerTypes, ["Two-wheel bin · 240 L"])
+    // The retired multiselect is not read: a stray list cannot smuggle a second fraction in.
+    const stray = quickSchemeDraftFromValues({
       schemeName: "Quick",
       stopSelection: "rule",
+      wasteFraction: "Organic",
       matchFractions: "Paper, Cardboard",
       frequency: "weekly",
       serviceDays: "monday",
       effectiveFrom: "2026-09-14",
     })
-    assert.equal(several.wasteFraction, "")
-    assert.deepEqual(several.groups[0].fractions, ["Paper", "Cardboard"])
-    assert.equal(several.serviceType, "")
+    assert.deepEqual(stray.groups[0].fractions, ["Organic"])
+    // Nothing picked: no fraction on the scheme or the group, no service type.
+    const blank = quickSchemeDraftFromValues({
+      schemeName: "Quick",
+      stopSelection: "rule",
+      frequency: "weekly",
+      serviceDays: "monday",
+      effectiveFrom: "2026-09-14",
+    })
+    assert.equal(blank.wasteFraction, "")
+    assert.equal(blank.serviceType, "")
+    assert.deepEqual(blank.groups[0].fractions, [])
+    // A manual pick carries the scheme's fraction; the group's own list stays empty.
+    const manual = quickSchemeDraftFromValues({
+      schemeName: "Quick",
+      stopSelection: "manual",
+      wasteFraction: "Glass",
+      frequency: "weekly",
+      serviceDays: "monday",
+      effectiveFrom: "2026-09-14",
+    })
+    assert.equal(manual.wasteFraction, "Glass")
+    assert.deepEqual(manual.groups[0].fractions, [])
+    assert.deepEqual(draftGroups(manual)[0].fractions, ["Glass"])
   })
 })
 

@@ -33,3 +33,23 @@ export function uniform<T>(values: ReadonlyArray<T | undefined>): T | undefined 
   const [first] = values
   return first !== undefined && values.every((value) => value === first) ? first : undefined
 }
+
+/**
+ * A comma between two digit groups is a thousands separator, not a list
+ * separator: "Igloo · 2,500 L" is one item and "Residual, Organic" is two.
+ */
+const LIST_SEPARATOR = /,(?!\d{3}(?!\d))/
+
+/**
+ * The items of a stored list — a multiselect's picks, a rule's fractions or
+ * container types — stored as one comma-separated string. Every item is
+ * trimmed and a blank one dropped; a comma inside a number stays (issue #43:
+ * "Four-wheel bin · 1,100 L", "Igloo · 2,500 L", "Underground · 5,000 L" and
+ * "Wastewater tank · 3,000 L" are container types and used to split in two).
+ */
+export function splitList(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(LIST_SEPARATOR)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}

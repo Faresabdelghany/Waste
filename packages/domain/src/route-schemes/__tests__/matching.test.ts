@@ -109,3 +109,35 @@ describe("container-type rule filter", () => {
     assert.equal(containerTypeShortLabel("Skip"), "Skip")
   })
 })
+
+describe("container types with a thousands separator round-trip (issue #43)", () => {
+  test("the stored comma list keeps 1,100 L and 2,500 L whole", () => {
+    const plans = matchPlansToValues({
+      sameAllDays: true,
+      sharedRule: {
+        fractions: ["Glass"],
+        containerTypes: ["Igloo · 2,500 L", "Four-wheel bin · 1,100 L", "Two-wheel bin · 240 L"],
+      },
+      rulesByDay: {},
+    })
+    assert.equal(
+      plans.matchContainerTypes,
+      "Igloo · 2,500 L, Four-wheel bin · 1,100 L, Two-wheel bin · 240 L",
+    )
+    assert.deepEqual(matchPlansFromValues(plans).sharedRule.containerTypes, [
+      "Igloo · 2,500 L",
+      "Four-wheel bin · 1,100 L",
+      "Two-wheel bin · 240 L",
+    ])
+    // A list written without the space after the comma splits the same way.
+    assert.deepEqual(
+      matchPlansFromValues({ matchContainerTypes: "Underground · 5,000 L,Wastewater tank · 3,000 L" })
+        .sharedRule.containerTypes,
+      ["Underground · 5,000 L", "Wastewater tank · 3,000 L"],
+    )
+    assert.deepEqual(
+      matchPlansFromValues({ matchFractions: "Paper,Cardboard, Glass" }).sharedRule.fractions,
+      ["Paper", "Cardboard", "Glass"],
+    )
+  })
+})

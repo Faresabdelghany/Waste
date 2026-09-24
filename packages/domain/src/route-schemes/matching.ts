@@ -11,6 +11,7 @@
 // exercised without a browser.
 
 import type { BusinessRecord } from "../prototype-record"
+import { splitList } from "../record-values"
 import { SERVICE_DAYS, sortServiceDays, type ServiceDay } from "./recurrence"
 import { stringValue } from "./validation"
 
@@ -135,11 +136,8 @@ export const EMPTY_MATCH_PLANS: SchemeMatchPlans = {
 }
 
 /** Comma-separated stored list → trimmed non-empty items (e.g. containerIds). */
-export const splitList = (value: string | undefined): string[] =>
-  (value ?? "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean)
+// The one list reader (record-values.ts): a comma inside a number is not a separator.
+export { splitList }
 
 /**
  * The submittedValues shape carrying a scheme's stop-matching rules: the
