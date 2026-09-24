@@ -1,11 +1,12 @@
 // The demo company, as `pnpm db:seed` writes it (Issue #70, slice 2): the
 // tenant the prototype has always shown — Kystbyen Renovation, its three
-// projects, the two service providers it works with, the eleven seeded roles
-// with their grants, and the two accounts the login picker offers — and,
-// since 2026-09-25, its Registry: the catalogue, the customers with their
-// properties, groups and shared points, the agreements with their
-// subscriptions, and the containers with their placements, derived from the
-// web prototype's fixtures in registry.ts and written in the same transaction.
+// projects with their working weeks (Issue #97), the two service providers it
+// works with, the eleven seeded roles with their grants, and the two accounts
+// the login picker offers — and, since 2026-09-25, its Registry: the
+// catalogue, the customers with their properties, groups and shared points,
+// the agreements with their subscriptions, and the containers with their
+// placements, derived from the web prototype's fixtures in registry.ts and
+// written in the same transaction.
 //
 // Three properties make this a seed and not a fixture script:
 //
@@ -116,6 +117,11 @@ const COMPANY: typeof company.$inferInsert = {
   status: "active",
 }
 
+// Each project carries its working week (Issue #97): the days it rests on,
+// spelled even where they are the column's default, so that what the seed
+// proposes is the whole row and a changed default cannot move a demo project;
+// and the name of the holiday list its holidays are looked up under, null for
+// a project that rests on its weekend only.
 const PROJECTS: (typeof project.$inferInsert)[] = [
   {
     id: DEMO_IDS.projects.copenhagen,
@@ -126,6 +132,8 @@ const PROJECTS: (typeof project.$inferInsert)[] = [
     currency: "DKK",
     timezone: "Europe/Copenhagen",
     status: "active",
+    weekend: ["saturday", "sunday"],
+    holidayList: "Danish public holidays",
   },
   {
     id: DEMO_IDS.projects.harbor,
@@ -136,6 +144,8 @@ const PROJECTS: (typeof project.$inferInsert)[] = [
     currency: "DKK",
     timezone: "Europe/Copenhagen",
     status: "onboarding",
+    weekend: ["saturday", "sunday"],
+    holidayList: null,
   },
   {
     // The Friday–Saturday weekend the working-week model is proven against.
@@ -147,6 +157,8 @@ const PROJECTS: (typeof project.$inferInsert)[] = [
     currency: "EGP",
     timezone: "Africa/Cairo",
     status: "active",
+    weekend: ["friday", "saturday"],
+    holidayList: "Egyptian public holidays",
   },
 ]
 
@@ -257,7 +269,7 @@ const COUNTS: DemoSeedCounts = {
 }
 
 const COMPANY_COLUMNS = [company.name, company.legalName, company.registrationNumber, company.country, company.status]
-const PROJECT_COLUMNS = [project.name, project.kind, project.language, project.currency, project.timezone, project.status]
+const PROJECT_COLUMNS = [project.name, project.kind, project.language, project.currency, project.timezone, project.status, project.weekend, project.holidayList]
 const SERVICE_PROVIDER_COLUMNS = [
   serviceProvider.legalName,
   serviceProvider.registrationNumber,

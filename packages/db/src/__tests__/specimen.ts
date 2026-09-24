@@ -28,12 +28,20 @@ import { wms } from "../schema/wms"
 
 export type { Tx }
 
-/** The statements `drizzle-kit generate` would write for these tables on a database where `wms` already exists. */
-export async function statementsFor(tables: Record<string, PgTable>): Promise<string[]> {
-  const before = generateDrizzleJson({ wms }, undefined, undefined, CASING)
-  const after = generateDrizzleJson({ wms, ...tables }, before.id, undefined, CASING)
-  return generateMigration(before, after)
+/**
+ * The statements `drizzle-kit generate` would write to take these tables from
+ * `before` to `after`, on a database where `wms` already exists: `CREATE
+ * TABLE` for a table only in `after`, `ALTER TABLE` for one in both that
+ * changed (a column added to a table an earlier migration created).
+ */
+export async function statementsBetween(before: Record<string, PgTable>, after: Record<string, PgTable>): Promise<string[]> {
+  const from = generateDrizzleJson({ wms, ...before }, undefined, undefined, CASING)
+  const to = generateDrizzleJson({ wms, ...after }, from.id, undefined, CASING)
+  return generateMigration(from, to)
 }
+
+/** The statements `drizzle-kit generate` would write for these tables on a database where `wms` already exists. */
+export const statementsFor = (tables: Record<string, PgTable>): Promise<string[]> => statementsBetween({}, tables)
 
 export async function createSpecimen(tx: Tx, tables: Record<string, PgTable>): Promise<void> {
   for (const statement of await statementsFor(tables)) await tx.execute(sql.raw(statement))

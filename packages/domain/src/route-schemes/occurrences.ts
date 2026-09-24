@@ -18,6 +18,7 @@
 // knows which weekdays a weekend holds. Weekend days only matter as shift
 // targets: a scheme whose service days include Saturday collects on Saturdays.
 
+import { HOLIDAY_POLICIES } from "../planning/vocabulary"
 import {
   addDays,
   isIsoDate,
@@ -29,7 +30,9 @@ import {
   type ServiceDay,
 } from "./recurrence"
 
-export const HOLIDAY_POLICIES = ["shift-next", "shift-prev", "skip", "collect"] as const
+// The list lives in ../planning/vocabulary since Issue #97, where the database
+// and the contracts read it too; re-exported so its importers did not move.
+export { HOLIDAY_POLICIES }
 export type HolidayPolicy = (typeof HOLIDAY_POLICIES)[number]
 
 export const HOLIDAY_POLICY_LABELS: Record<HolidayPolicy, string> = {

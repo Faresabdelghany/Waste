@@ -25,6 +25,16 @@
 // does not grow quadratically with a third column. The label names what the
 // columns are two ways of saying, so the refusal reads as the rule
 // (`subscription_location_exactly_one`) and not as a list of columns.
+//
+// `subsetOf(column, values)` and `nonEmpty(column)` are `oneOf` for a set
+// (Issue #97): a closed vocabulary that a row holds several of — the days a
+// scheme serves, the days a project rests on — is a `text[]` and not a child
+// table, since a weekday is not a row anyone references, and Postgres has no
+// `in` for an array. `<@` holds every element to the list (`'{}' <@ anything`
+// is true, so an empty array passes it), and `cardinality(...) > 0` is the
+// separate rule that the set has something in it, for the column where an
+// empty set would be a scheme that never runs. A null array passes both, like
+// a null count passes `positive`, and the column says whether it may be null.
 import { getTableName, sql } from "drizzle-orm"
 import { check, type CheckBuilder, type PgColumn } from "drizzle-orm/pg-core"
 
@@ -52,6 +62,23 @@ export function lowercase(column: PgColumn): CheckBuilder {
 /** `CHECK (<column> > 0)`, named `<table>_<column>_positive`. A null passes: nothing recorded is not zero. */
 export function positive(column: PgColumn): CheckBuilder {
   return check(tableObjectName(column.table, `${columnName(column)}_positive`, "positive"), sql`${column} > 0`)
+}
+
+/** `CHECK (<column> <@ ARRAY['a', 'b', ...]::text[])`, named `<table>_<column>_subset_of`: every element is one of the values. An empty array passes; `nonEmpty` is the other rule. */
+export function subsetOf(column: PgColumn, values: readonly string[]): CheckBuilder {
+  const helper = "subsetOf"
+  if (values.length === 0) {
+    throw new Error(`${helper}: ${quoted(getTableName(column.table))}.${quoted(columnName(column))} has no values to be a subset of`)
+  }
+  return check(
+    tableObjectName(column.table, `${columnName(column)}_subset_of`, helper),
+    sql`${column} <@ ARRAY[${sql.raw(values.map(literal).join(", "))}]::text[]`,
+  )
+}
+
+/** `CHECK (cardinality(<column>) > 0)`, named `<table>_<column>_non_empty`: the set has something in it. A null passes, like a null count. */
+export function nonEmpty(column: PgColumn): CheckBuilder {
+  return check(tableObjectName(column.table, `${columnName(column)}_non_empty`, "nonEmpty"), sql`cardinality(${column}) > 0`)
 }
 
 /** `CHECK ((a is not null)::int + (b is not null)::int ... = 1)`, named `<table>_<label>_exactly_one`. */

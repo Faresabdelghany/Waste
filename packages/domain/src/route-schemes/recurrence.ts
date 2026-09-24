@@ -12,16 +12,14 @@
 //                    selected weekday in the month)
 //   Route identity = (schemeId, serviceDate) — deterministic, so
 //   regeneration can upsert instead of duplicating.
+//
+// The closed lists live in ../planning/vocabulary since Issue #97, where the
+// database and the contracts read them too; `SERVICE_DAYS` is re-exported
+// here so its importers did not move.
 
-export const SERVICE_DAYS = [
-  "monday",
-  "tuesday",
-  "wednesday",
-  "thursday",
-  "friday",
-  "saturday",
-  "sunday",
-] as const
+import { RECURRENCE_FREQUENCIES, SERVICE_DAYS, type WEEK_ROTATIONS } from "../planning/vocabulary"
+
+export { SERVICE_DAYS }
 
 export type ServiceDay = (typeof SERVICE_DAYS)[number]
 
@@ -53,15 +51,9 @@ export const SERVICE_DAY_LABELS: Record<ServiceDay, string> = {
  * it serve. Unlike the fortnight rotations they are true 21- / 28-day
  * cadences, so they do not follow the 53-week ISO-year boundary behaviour
  * below. every-4-weeks is kept for stored records; the forms offer the
- * other five.
+ * other five. The tuple is the vocabulary's `RECURRENCE_FREQUENCIES`.
  */
-export type RecurrenceFrequency =
-  | "daily"
-  | "weekly"
-  | "every-2-weeks"
-  | "every-3-weeks"
-  | "every-4-weeks"
-  | "monthly"
+export type RecurrenceFrequency = (typeof RECURRENCE_FREQUENCIES)[number]
 
 export const RECURRENCE_FREQUENCY_LABELS: Record<RecurrenceFrequency, string> = {
   daily: "Daily",
@@ -101,7 +93,7 @@ export const RECURRENCE_WEEKLY_RATES: Record<RecurrenceFrequency, number> = {
   monthly: 12 / 52,
 }
 
-export type WeekRotation = "odd" | "even"
+export type WeekRotation = (typeof WEEK_ROTATIONS)[number]
 
 export type SchemeRecurrence = {
   frequency: RecurrenceFrequency
@@ -315,7 +307,7 @@ export function serviceDaysFromValues(
 export const isRecurrenceFrequency = (
   value: unknown,
 ): value is RecurrenceFrequency =>
-  typeof value === "string" && Object.hasOwn(RECURRENCE_FREQUENCY_LABELS, value)
+  typeof value === "string" && (RECURRENCE_FREQUENCIES as readonly string[]).includes(value)
 
 // Shape alone is not enough: "9999-99-99" matches the pattern but parses to
 // an Invalid Date, and "2026-02-30" silently rolls over to March — the

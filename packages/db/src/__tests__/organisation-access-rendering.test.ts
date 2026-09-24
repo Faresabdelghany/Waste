@@ -50,6 +50,33 @@ const index = (table: string, name: string, ...own: string[]): string => `CREATE
 const ADDED_IN_0005 = [index("user_account", "user_account_email_idx", "email")]
 
 const STATUS = "in ('active', 'onboarding')"
+/** The days a project may rest on, as 0006's check spells them (Issue #97). */
+const WEEKEND = "<@ ARRAY['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']::text[]"
+
+/** The project table as drizzle-kit writes it today, and as it wrote it as of 0002, before 0006 gave it the working week. */
+const projectTable = (planning: boolean): string =>
+  createTable("project", [
+    '\t"name" text NOT NULL,',
+    '\t"kind" text NOT NULL,',
+    '\t"language" text NOT NULL,',
+    '\t"currency" text NOT NULL,',
+    '\t"timezone" text NOT NULL,',
+    '\t"status" text NOT NULL,',
+    ...(planning ? ['\t"weekend" text[] DEFAULT \'{saturday,sunday}\' NOT NULL,', '\t"holiday_list" text,'] : []),
+    '\tCONSTRAINT "project_name_key" UNIQUE("company_id","name"),',
+    '\tCONSTRAINT "project_tenant_key" UNIQUE("company_id","id"),',
+    `\tCONSTRAINT "project_status_one_of" CHECK (${ref("project", "status")} ${STATUS})${planning ? "," : ""}`,
+    ...(planning ? [`\tCONSTRAINT "project_weekend_subset_of" CHECK (${ref("project", "weekend")} ${WEEKEND})`] : []),
+  ])
+
+/**
+ * What 0006 changed on a table 0002 created (Issue #97: `project` gained
+ * `weekend` and `holiday_list` through an `ALTER TABLE`, which
+ * planning-rendering.test.ts pins): the statement as drizzle-kit generates it
+ * now, and as it generated it as of 0002. An applied file is never edited, so
+ * 0002 is held to the earlier spelling.
+ */
+const CHANGED_IN_0006 = new Map([[projectTable(true), projectTable(false)]])
 
 const expected = [
   createTable("company", [
@@ -62,17 +89,7 @@ const expected = [
     `\tCONSTRAINT "company_self" CHECK (${ref("company", "company_id")} = ${ref("company", "id")}),`,
     `\tCONSTRAINT "company_status_one_of" CHECK (${ref("company", "status")} ${STATUS})`,
   ]),
-  createTable("project", [
-    '\t"name" text NOT NULL,',
-    '\t"kind" text NOT NULL,',
-    '\t"language" text NOT NULL,',
-    '\t"currency" text NOT NULL,',
-    '\t"timezone" text NOT NULL,',
-    '\t"status" text NOT NULL,',
-    '\tCONSTRAINT "project_name_key" UNIQUE("company_id","name"),',
-    '\tCONSTRAINT "project_tenant_key" UNIQUE("company_id","id"),',
-    `\tCONSTRAINT "project_status_one_of" CHECK (${ref("project", "status")} ${STATUS})`,
-  ]),
+  projectTable(true),
   createTable("service_provider", [
     '\t"legal_name" text NOT NULL,',
     '\t"registration_number" text NOT NULL,',
@@ -153,10 +170,12 @@ describe("the Organisation & Access tables as drizzle-kit writes them", () => {
   test("migration 0002 begins with exactly what drizzle-kit generated for the schema as of 0002, and carries the hook and its grants below", async () => {
     const statements = statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
     // The same statements, whatever order drizzle-kit's loader gave the tables
-    // (it sorts a module's exports), less what a later file added: an applied
-    // file is never edited.
+    // (it sorts a module's exports), less what a later file added and with a
+    // table a later file altered spelled as it was then: an applied file is
+    // never edited.
     const generated = (await statementsFor(tables))
       .filter((statement) => !ADDED_IN_0005.includes(statement))
+      .map((statement) => CHANGED_IN_0006.get(statement) ?? statement)
       .map(normalised)
       .sort()
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)

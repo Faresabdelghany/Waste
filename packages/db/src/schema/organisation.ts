@@ -15,11 +15,20 @@
 // registration, country, contact), placed beside Company because a Service
 // Provider Access grants for it; what it is assigned to is Finance &
 // Contracting's.
+//
+// A Project carries its working week (Issue #97): `weekend` is the set of
+// days it rests on, held to the seven by `subsetOf` and never derived from a
+// weekday number, since Cairo rests Friday–Saturday; `holiday_list` is the
+// name of the list its holidays are looked up under, and null is "no list" —
+// a project without one rests on its weekend only, whatever calendars it has
+// (CONTEXT.md). Both arrived with migration 0006, the first `ALTER TABLE` to a
+// table already applied.
+import { SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, text } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
-import { oneOf } from "./checks"
+import { oneOf, subsetOf } from "./checks"
 import { id, tenant, timestamps } from "./columns"
 import { companyReference, tenantKey, tenantUnique, uniqueOn } from "./references"
 import { wms } from "./wms"
@@ -70,8 +79,12 @@ export const project = wms.table(
     /** IANA (`Europe/Copenhagen`). */
     timezone: text().notNull(),
     status: text().notNull(),
+    /** The days the project rests on; Saturday and Sunday unless it says otherwise. */
+    weekend: text().array().notNull().default(sql`'{saturday,sunday}'`),
+    /** The name of the holiday list its holidays are looked up under (`Danish public holidays`); null is no list, and then the project rests on its weekend only. */
+    holidayList: text(),
   },
-  (t) => [companyReference(t, company), tenantUnique(t, t.name), tenantKey(t), oneOf(t.status, PROJECT_STATUSES)],
+  (t) => [companyReference(t, company), tenantUnique(t, t.name), tenantKey(t), oneOf(t.status, PROJECT_STATUSES), subsetOf(t.weekend, SERVICE_DAYS)],
 )
 
 export const serviceProvider = wms.table(
