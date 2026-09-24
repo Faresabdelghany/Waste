@@ -85,21 +85,30 @@ jobs:
       # 1 is refused at once inside the container), so liveness must answer
       # 200 and readiness 503: the two answers apps/api/src/readiness.ts
       # promises. SUPABASE_URL is the workflow's placeholder; no token is
-      # verified here.
+      # verified here. The step runs under bash -e, so a refused connection
+      # is read as status 000 rather than aborting before the lines that say
+      # what happened, and a process that died is failed at once, not after
+      # thirty seconds of waiting for it.
       - name: Smoke test the image
         run: |
           docker run --detach --name api --publish 3001:3001 \
             --env DATABASE_URL=postgresql://wms_api:x@127.0.0.1:1/postgres \
             --env SUPABASE_URL="$SUPABASE_URL" \
             waste-api:ci
+          status() { curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:3001$1" || echo 000; }
+          body() { curl --silent "http://127.0.0.1:3001$1" || true; }
           for attempt in $(seq 1 30); do
-            if curl --silent --fail --output /dev/null http://127.0.0.1:3001/healthz; then break; fi
+            if [ "$(docker inspect --format '{{.State.Running}}' api)" != true ]; then
+              echo "the container stopped before it answered (attempt $attempt)"
+              exit 1
+            fi
+            [ "$(status /healthz)" = 200 ] && break
             sleep 1
           done
-          healthz=$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3001/healthz)
-          readyz=$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3001/readyz)
-          echo "GET /healthz -> $healthz $(curl --silent http://127.0.0.1:3001/healthz)"
-          echo "GET /readyz -> $readyz $(curl --silent http://127.0.0.1:3001/readyz)"
+          healthz=$(status /healthz)
+          readyz=$(status /readyz)
+          echo "GET /healthz -> $healthz $(body /healthz)"
+          echo "GET /readyz -> $readyz $(body /readyz)"
           test "$healthz" = 200 && test "$readyz" = 503
       - name: Container logs
         if: always()

@@ -23,7 +23,6 @@ playwright-report
 .playwright-mcp
 .superpowers
 .windsurf
-*.md
 **/*.md
 apps/web/**
 !apps/web/package.json
@@ -33,5 +32,5 @@ packages/db/reference
 **/__tests__
 **/*.test.ts
 # The recipe itself: BuildKit reads it beside the context, not from it.
-**/Dockerfile
+apps/api/Dockerfile
 .dockerignore
