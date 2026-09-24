@@ -30,9 +30,19 @@ export function validityOrdered(value: { validFrom?: string | null; validTo?: st
   return validTo > validFrom
 }
 
+/**
+ * What a backwards period is told, wherever it is caught. The schemas here
+ * refuse a body that holds both bounds; a patch holds one and the stored row
+ * the other, so the route that has the row refuses in these same words
+ * (apps/api/src/routes/periods.ts). One rule, one sentence — and a constant
+ * of its own, because zod normalises the params object a `.refine` is handed
+ * and `message` is not there to read back afterwards.
+ */
+export const ENDS_AFTER_IT_STARTS = "validTo is the first day out of force, so it comes after validFrom"
+
 /** What a backwards period is refused with, and where: the end is the field a caller can move. */
 export const endsAfterItStarts = {
-  message: "validTo is the first day out of force, so it comes after validFrom",
+  message: ENDS_AFTER_IT_STARTS,
   path: ["validTo"],
 }
 

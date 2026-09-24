@@ -31,20 +31,22 @@
 // their key to the parent carries `project_id`, so a set can never reach out
 // of the project its record is in.
 //
-// Two checks live here beside the mechanics, because each is one rule that
-// more than one module makes: an entry of a Group or a Point is a Property of
-// that record's project, and a Customer a body names — a party, or the
-// customer a Group or a Point answers to — is a Customer of this company.
-// What stays with a route is what only it knows: which column is the parent's
-// and which the entry's, and what a row of its table is called. Those come in
-// as one descriptor per family.
+// Two checks live here beside the mechanics, because each is one rule a whole
+// set has to pass at once: every party of a Property is a Customer of this
+// company, and every member of a Group or a Point is a Property of that
+// record's project. The sentence each refuses with is routes/references.ts's,
+// where the singular of the same check lives, so a body naming one bad id and
+// a body naming one among two hundred are told the same thing. What stays
+// with a route is what only it knows: which column is the parent's and which
+// the entry's, and what a row of its table is called. Those come in as one
+// descriptor per family.
 import type { Tx } from "@waste/db/client"
 import { customer, property } from "@waste/db/schema/customers"
 import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 
 import { invalidRequest } from "../problem"
-import { requireRow } from "./shared"
+import { NOT_A_CUSTOMER, NOT_A_PROPERTY } from "./references"
 
 /**
  * One entry, as the mechanics see it: the row it names and what it is to the
@@ -77,30 +79,8 @@ export type MemberSet<Table extends MemberTable> = SetColumns & {
   require: (tx: Tx, parent: Parent, entries: readonly Entry[]) => Promise<void>
 }
 
-/** What a body is told when it names a customer this company does not have; one sentence, wherever the id sat. */
-const NOT_A_CUSTOMER = "Not a customer of this company"
-
-/** What a body is told when it gathers a property of another project; the fence the composite key already holds it to. */
-const NOT_A_PROPERTY = "Not a property of this project"
-
 /** What a set's PUT writes on the record itself: nothing but the stamp, since the set is what changed. */
 const stamp = (): { updatedAt: SQL } => ({ updatedAt: sql`now()` })
-
-/**
- * Holds one Customer a body named to this company: the Customer a Property
- * Group or a Shared Collection Point answers to, and whatever names one next.
- * A Customer is company-wide — the same housing administrator is a customer
- * of every project — so the project does not come into it, and since the
- * fence hides another company's row, "it is not yours" and "it does not
- * exist" are the same answer.
- *
- * The id is nullable because every field that carries one is optional: a
- * null or an absent field points at nobody, which is nothing to check.
- */
-export async function requireCustomer(tx: Tx, companyId: string, id: string | null | undefined, path: string): Promise<void> {
-  if (id == null) return
-  await requireRow(tx, customer, { companyId, id }, { path, message: NOT_A_CUSTOMER })
-}
 
 /** Every entry's id, each once: what the one lookup asks for, however often the body named it. */
 const namedIds = (entries: readonly Entry[]): string[] => [...new Set(entries.map((entry) => entry.id))]

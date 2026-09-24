@@ -32,7 +32,9 @@ import { authenticate, BEARER_AUTH, BEARER_SECURITY_SCHEME } from "./auth/princi
 import type { Verifier } from "./auth/verify"
 import { errorHandler, notFound } from "./problem"
 import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS } from "./readiness"
+import { agreementRoutes } from "./routes/agreements"
 import { catalogueRoutes } from "./routes/catalogue"
+import { containerRoutes } from "./routes/containers"
 import { companyRoutes } from "./routes/company"
 import { customerRoutes } from "./routes/customers"
 import { meRoutes } from "./routes/me"
@@ -126,6 +128,8 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   app.route("/", propertyRoutes(guard))
   app.route("/", propertyGroupRoutes(guard))
   app.route("/", sharedCollectionPointRoutes(guard))
+  app.route("/", agreementRoutes(guard))
+  app.route("/", containerRoutes(guard))
 
   app.get(
     "/openapi.json",

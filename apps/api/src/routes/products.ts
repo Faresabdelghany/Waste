@@ -16,15 +16,12 @@
 // between projects.
 //
 // What a product points at is checked before the insert, each against the
-// scope the key allows: a container type and a waste fraction are the
-// company's, and a service frequency is the *project's*, since a cadence
-// belongs to one project (`project_id` leads its key). All three are
-// optional — only a container collection has a container and a fraction, and
-// the frequency is a default a placement may override — so a null or an
-// absent field is nothing to check. The foreign keys are the backstop; they
-// would answer 23503, which is a 500 saying nothing, where a 400 naming the
-// field says which id to fix. And since the fence hides another company's
-// row, "it is not yours" and "it does not exist" are the same sentence here.
+// scope the key allows (routes/references.ts): a container type and a waste
+// fraction are the company's, and a service frequency is the *project's*,
+// since a cadence belongs to one project (`project_id` leads its key). All
+// three are optional — only a container collection has a container and a
+// fraction, and the frequency is a default a placement may override — so a
+// null or an absent field is nothing to check.
 //
 // The grant is the Price Engine's own, `commercial.products`: the master data
 // a product points at is `configure.master`'s, written through the catalogue
@@ -33,7 +30,7 @@ import { Product, ProductCreate, ProductPatch, type ProductKind, type ProductSta
 import { Page } from "@waste/contracts/pagination"
 import { ProjectScopedListQuery } from "@waste/contracts/queries"
 import type { Tx } from "@waste/db/client"
-import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
+import { product } from "@waste/db/schema/catalogue"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -44,7 +41,8 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { describeJson, IdParam, refuseDuplicate, requireRow, stampsOf } from "./shared"
+import { requireContainerType, requireServiceFrequency, requireWasteFraction } from "./references"
+import { describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "commercial.products"
 const ProductPage = Page(Product)
@@ -93,34 +91,11 @@ const scope = (principal: Principal) => and(eq(product.companyId, principal.comp
 /** What the body points at, held to this company and this project. A null or an absent field points at nothing. */
 type References = { containerTypeId?: string | null; wasteFractionId?: string | null; serviceFrequencyId?: string | null }
 
-/**
- * The three ids a product may name, each held to the scope its key allows:
- * the container type and the waste fraction to the company, the cadence to
- * the project as well, since a service frequency belongs to one project. The
- * sentences are here because they name the thing; the lookup is
- * `requireRow`'s (routes/shared.ts).
- */
-async function requireReferences(tx: Tx, companyId: string, projectId: string, values: References): Promise<void> {
-  if (values.containerTypeId != null) {
-    await requireRow(tx, containerType, { companyId, id: values.containerTypeId }, {
-      path: "containerTypeId",
-      message: "Not a container type of this company",
-    })
-  }
-  if (values.wasteFractionId != null) {
-    await requireRow(tx, wasteFraction, { companyId, id: values.wasteFractionId }, {
-      path: "wasteFractionId",
-      message: "Not a waste fraction of this company",
-    })
-  }
-  if (values.serviceFrequencyId != null) {
-    await requireRow(
-      tx,
-      serviceFrequency,
-      { companyId, id: values.serviceFrequencyId, also: eq(serviceFrequency.projectId, projectId) },
-      { path: "serviceFrequencyId", message: "Not a service frequency of this project" },
-    )
-  }
+/** The three ids a product may name, each held to the scope its key allows (routes/references.ts). */
+async function requireReferences(tx: Tx, within: { companyId: string; projectId: string }, values: References): Promise<void> {
+  await requireContainerType(tx, within.companyId, values.containerTypeId)
+  await requireWasteFraction(tx, within.companyId, values.wasteFractionId)
+  await requireServiceFrequency(tx, within, values.serviceFrequencyId)
 }
 
 /** One product of this company by id, inside the caller's projects; undefined when it is neither. */
@@ -200,7 +175,7 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         requireProject(principal, values.projectId)
-        await requireReferences(tx, principal.companyId, values.projectId, values)
+        await requireReferences(tx, { companyId: principal.companyId, projectId: values.projectId }, values)
         const [row] = await refuseDuplicate({ [NAME_TAKEN]: nameTaken(values.name) }, () =>
           tx
             .insert(product)
@@ -267,7 +242,7 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
 
         const current = await findProduct(tx, principal, id)
         if (current === undefined) throw noSuchProduct(id)
-        await requireReferences(tx, principal.companyId, current.projectId, patch)
+        await requireReferences(tx, { companyId: principal.companyId, projectId: current.projectId }, patch)
 
         const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
         const [row] = await refuseDuplicate(sentences, () =>

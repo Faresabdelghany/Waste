@@ -64,13 +64,13 @@ import {
   entriesFor,
   entriesOf,
   replaceSet,
-  requireCustomer,
   requireMemberProperties,
   writeEntries,
   type Entry,
   type MemberSet,
   type Parent,
 } from "./members"
+import { requireCustomer } from "./references"
 import { describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "customers.shared"
