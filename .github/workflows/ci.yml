@@ -17,6 +17,9 @@ env:
   DATABASE_URL: postgresql://wms_api:wms_api@127.0.0.1:54322/postgres
   # A database test may not skip here.
   REQUIRE_DATABASE: "1"
+  # The API refuses to start without the project whose tokens it verifies; its
+  # tests sign tokens with a key set they generate and never fetch this one.
+  SUPABASE_URL: https://example.supabase.co
 
 jobs:
   verify:

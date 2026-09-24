@@ -1,37 +1,50 @@
-// The process entry: read the environment, open the database pool, bind the
-// app, stop on the signals a host sends. Everything with behaviour lives in
-// the modules this file composes, and is tested there.
+// The process entry: read the environment, open the database pools, build the
+// verifier, bind the app, stop on the signals a host sends. Everything with
+// behaviour lives in the modules this file composes, and is tested there.
 //
-// One pool so far, the one /readyz probes (probePoolOptions in readiness.ts
-// says why a probe gets its own; the request pool joins with the first domain
-// route). Opening it connects to nothing: postgres.js dials on the first
-// query, so the process starts whether or not the database is up, and /readyz
-// says which (a database that is down at boot is the same as one that goes
-// down later, and both are the balancer's to route around).
+// Two pools on the one connection string, both as the API role: the probe
+// pool /readyz uses (probePoolOptions in readiness.ts says why a probe gets
+// its own) and the request pool every authenticated request runs a
+// transaction on (auth/principal.ts). Opening them connects to nothing:
+// postgres.js dials on the first query, so the process starts whether or not
+// the database is up, and /readyz says which (a database that is down at boot
+// is the same as one that goes down later, and both are the balancer's to
+// route around). The verifier holds the project's remote key set: jose
+// fetches it on the first token, caches it, and refetches when a token names
+// a key it has not seen, so key rotation needs no restart.
 import { createDb } from "@waste/db/client"
+import { createRemoteJWKSet } from "jose"
 
 import { createApp } from "./app"
+import { createVerifier, supabaseAuth } from "./auth/verify"
 import { parseEnv } from "./env"
 import { listen } from "./listen"
 import { DATABASE_CHECK_TIMEOUT_MS, probePoolOptions } from "./readiness"
 
 const env = parseEnv(process.env)
 const probe = createDb(env.DATABASE_URL, probePoolOptions(DATABASE_CHECK_TIMEOUT_MS))
-const listening = await listen(createApp({ probe, databaseTimeoutMs: DATABASE_CHECK_TIMEOUT_MS }), { host: env.HOST, port: env.PORT })
-console.log(`@waste/api listening on ${listening.url}`)
+const pool = createDb(env.DATABASE_URL)
+const auth = supabaseAuth(env.SUPABASE_URL)
+const verifier = createVerifier({ keySet: createRemoteJWKSet(auth.jwks), issuer: auth.issuer })
+const listening = await listen(createApp({ probe, pool, verifier, databaseTimeoutMs: DATABASE_CHECK_TIMEOUT_MS }), {
+  host: env.HOST,
+  port: env.PORT,
+})
+console.log(`@waste/api listening on ${listening.url}, verifying tokens from ${auth.issuer}`)
 
 // Shutdown: the listener drains and the probe pool closes together, since a
 // probe is not a request and 503 is the right answer to one that arrives
 // mid-shutdown; so the two ceilings (the listener's grace, the pool's end
-// timeout) overlap instead of adding up. A request pool, when there is one,
-// closes after the listener, so a request in flight keeps the connection its
-// queries run on. Every close is idempotent, so a signal delivered twice (a
-// terminal Ctrl-C plus tsx's relay of it, or SIGINT followed by SIGTERM)
-// joins the one shutdown instead of killing the process mid-drain; hence
-// `on`, not `once`. Every failure is printed, not only the last, and any
-// failure exits 1.
+// timeout) overlap instead of adding up. The request pool closes after the
+// listener, so a request in flight keeps the connection its transaction runs
+// on until it has answered. Every close is idempotent, so a signal delivered
+// twice (a terminal Ctrl-C plus tsx's relay of it, or SIGINT followed by
+// SIGTERM) joins the one shutdown instead of killing the process mid-drain;
+// hence `on`, not `once`. Every failure is printed, not only the last, and
+// any failure exits 1.
 const shutdown = async () => {
   const outcomes = await Promise.allSettled([listening.close(), probe.close()])
+  outcomes.push(...(await Promise.allSettled([pool.close()])))
   const failures = outcomes.filter((outcome): outcome is PromiseRejectedResult => outcome.status === "rejected")
   for (const { reason } of failures) console.error(reason)
   process.exit(failures.length === 0 ? 0 : 1)

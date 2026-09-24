@@ -25,7 +25,8 @@
       "env": [
         "HOST",
         "PORT",
-        "DATABASE_URL"
+        "DATABASE_URL",
+        "SUPABASE_URL"
       ]
     },
     "lint": {
@@ -50,6 +51,7 @@
       "cache": false,
       "env": [
         "DATABASE_URL",
+        "SUPABASE_URL",
         "REQUIRE_DATABASE"
       ]
     },

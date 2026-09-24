@@ -1,9 +1,10 @@
-// The process environment, read once at startup and never again. Three
-// variables: where to listen, and the database. Every value arrives as a
-// string, so the schemas do the reading. An empty variable counts as not set,
-// applied once in parseEnv for every variable, so a new field is a plain
-// schema with a default, or without one when the process cannot run without
-// it. Anything else in the environment is dropped, not carried around.
+// The process environment, read once at startup and never again. Four
+// variables: where to listen, the database, and the Supabase project whose
+// Auth signs the tokens. Every value arrives as a string, so the schemas do
+// the reading. An empty variable counts as not set, applied once in parseEnv
+// for every variable, so a new field is a plain schema with a default, or
+// without one when the process cannot run without it. Anything else in the
+// environment is dropped, not carried around.
 import * as z from "zod"
 
 /** The address to bind. Loopback by default; a container sets `0.0.0.0`. */
@@ -44,10 +45,35 @@ function isPostgresUrl(value: string): boolean {
   }
 }
 
+/**
+ * The Supabase project whose Auth issues the tokens this API accepts. The
+ * issuer a token must carry is `${SUPABASE_URL}/auth/v1` and the keys it is
+ * verified against are published at `${SUPABASE_URL}/auth/v1/.well-known/jwks.json`
+ * (auth/verify.ts spells both from this value). An origin and nothing more:
+ * http or https, a host, and no path, query, fragment or credentials. A
+ * trailing slash is refused, not stripped, so the one spelling in .env is the
+ * one the issuer is compared against. No default: without it no token can be
+ * verified, and an API that cannot verify a token has no authenticated route.
+ */
+const SupabaseUrl = z.string().refine(isOrigin, {
+  error: "must be the project's origin, https://<project-ref>.supabase.co, without a trailing slash, path, query or credentials",
+})
+
+function isOrigin(value: string): boolean {
+  if (!/^https?:\/\//.test(value) || value.endsWith("/")) return false
+  try {
+    const url = new URL(value)
+    return url.hostname !== "" && url.pathname === "/" && url.search === "" && url.hash === "" && url.username === "" && url.password === ""
+  } catch {
+    return false
+  }
+}
+
 export const Env = z.object({
   HOST: Host,
   PORT: Port,
   DATABASE_URL: DatabaseUrl,
+  SUPABASE_URL: SupabaseUrl,
 })
 export type Env = z.infer<typeof Env>
 
