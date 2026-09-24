@@ -90,7 +90,7 @@ export const DEMO_IDS = {
     "integration-writer": "01a0d2a4-a280-7004-8000-00000000000b",
   } satisfies Record<SystemRoleKey, string>,
   users: {
-    olivia: "01a0d2a4-a280-7005-8000-000000000001",
+    fares: "01a0d2a4-a280-7005-8000-000000000001",
     lars: "01a0d2a4-a280-7005-8000-000000000002",
   },
   serviceProviderAccess: {
@@ -194,12 +194,12 @@ const GRANTS: (typeof roleGrant.$inferInsert)[] = SYSTEM_ROLES.flatMap((systemRo
 // them on first sign-in: `auth_user_id` is null here and stays the hook's.
 const USERS: (typeof userAccount.$inferInsert)[] = [
   {
-    id: DEMO_IDS.users.olivia,
+    id: DEMO_IDS.users.fares,
     companyId: COMPANY_ID,
     // For now both invitations go to one real inbox (see the header); the
     // prototype keeps its fixture address in lib/data/demo-accounts.ts until Issue 5.
     email: "fares4389@gmail.com",
-    fullName: "Olivia Larsen",
+    fullName: "Fares Abdelghany",
     roleId: DEMO_IDS.roles["company-administrator"],
     allProjects: true,
     primaryAdministrator: true,
