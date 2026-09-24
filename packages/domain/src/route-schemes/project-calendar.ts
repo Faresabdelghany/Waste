@@ -14,11 +14,12 @@
 import type { BusinessRecord } from "../prototype-record"
 import { typedString } from "../record-values"
 import { formatWorkingDays } from "./calendar-list"
-import { holidayNamesFor } from "./holiday-names"
+import { holidayNamesFor, withCarriedNames } from "./holiday-names"
 import {
   holidayListFromDates,
   projectHolidayCalendars,
   projectHolidayDates,
+  projectHolidayNames,
   schemeProjectId,
 } from "./holidays"
 import { NO_HOLIDAYS, type HolidayList, type SchemeCalendar } from "./occurrences"
@@ -73,9 +74,11 @@ export function resolveProjectCalendar(
     list: name
       ? {
           name,
+          // A name a per-year record carries wins; the list's lookup names
+          // the dates of a record that carries none.
           dates: holidayListFromDates(
             projectHolidayDates(projectId, records.calendars),
-            holidayNamesFor(name),
+            withCarriedNames(projectHolidayNames(projectId, records.calendars), holidayNamesFor(name)),
           ),
           records: projectHolidayCalendars(projectId, records.calendars),
         }

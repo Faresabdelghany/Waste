@@ -36,8 +36,25 @@ const workspacePaths: Record<Exclude<WorkspaceId, "configure">, string> = {
   "control-center": "/control-center",
 }
 
-/** Where the project calendar (weekend, holidays) is managed: Settings › Operations setup. */
-export const HOLIDAY_SETTINGS_HREF = "/settings?pane=operations-setup"
+/** The SettingsDialog pane that maintains each project's holiday list (issue #36). */
+export const HOLIDAY_LISTS_SETTINGS_PANE_ID = "holiday-lists"
+
+/** The search param that opens that pane on one project. */
+export const HOLIDAY_LISTS_PROJECT_PARAM = "project"
+
+/**
+ * Where the project calendar (weekend, holiday list) is managed: Settings ›
+ * Operations › Holiday lists, on the given project when the caller knows it
+ * — the wizard's source line and the scheme detail's Holidays card do.
+ */
+export function holidaySettingsHref(projectId?: string): string {
+  const params = new URLSearchParams({ pane: HOLIDAY_LISTS_SETTINGS_PANE_ID })
+  if (projectId) params.set(HOLIDAY_LISTS_PROJECT_PARAM, projectId)
+  return `/settings?${params.toString()}`
+}
+
+/** The pane itself, for a caller with no project in hand. */
+export const HOLIDAY_SETTINGS_HREF = holidaySettingsHref()
 
 const settingsPaneByModule: Record<string, string> = {
   ...Object.fromEntries(

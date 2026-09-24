@@ -1,12 +1,14 @@
-// Public-holiday names by date, per holiday list. Collection Calendar records
-// store holiday DATES only (submittedValues.holidayDates), so the guided
-// setup's next-dates preview needs a name lookup to read "Shifted from Thu 24
-// Dec · Christmas Eve". The lookup follows the project's holiday list name
+// Public-holiday names by date, per holiday list. A Collection Calendar
+// record edited in the Holiday lists pane carries its own names
+// (`holidayNames`, holidays.ts, since 2026-09-24); this lookup names the
+// dates of a record that carries none, so the guided setup's next-dates
+// preview still reads "Shifted from Thu 24 Dec · Christmas Eve" for the
+// seeded years, and it is what "Create next year" places a moveable feast
+// by (holiday-lists.ts). The lookup follows the project's holiday list name
 // (holidayNamesFor): Danish names for "Danish public holidays", Egyptian
 // fixed-date names for "Egyptian public holidays", nothing for a list this
-// module does not know — such dates read "Holiday". Gap adapter: replace with
-// calendar-carried names once the calendar model has them. Pure date math
-// over ISO `yyyy-mm-dd` strings.
+// module does not know — such dates read "Holiday". Pure date math over ISO
+// `yyyy-mm-dd` strings.
 
 import { addDays } from "./recurrence"
 
@@ -95,11 +97,22 @@ const HOLIDAY_NAME_LOOKUPS: Readonly<Record<string, HolidayNameLookup>> = {
   "Egyptian public holidays": egyptianHolidayName,
 }
 
+/** The list names this module can name dates for — what the Holiday lists pane offers first. */
+export const KNOWN_HOLIDAY_LIST_NAMES: readonly string[] = Object.keys(HOLIDAY_NAME_LOOKUPS)
+
 const noNames: HolidayNameLookup = () => undefined
 
 /** The name lookup for a project's holiday list; an unknown list names nothing. */
 export function holidayNamesFor(listName: string | undefined): HolidayNameLookup {
   return (listName && HOLIDAY_NAME_LOOKUPS[listName]) || noNames
+}
+
+/** A lookup that answers the carried names first and falls back to another. */
+export function withCarriedNames(
+  carried: ReadonlyMap<string, string>,
+  fallback: HolidayNameLookup,
+): HolidayNameLookup {
+  return (iso) => carried.get(iso) ?? fallback(iso)
 }
 
 /** The label a calendar holiday shows: its name on the list, else the generic word. */

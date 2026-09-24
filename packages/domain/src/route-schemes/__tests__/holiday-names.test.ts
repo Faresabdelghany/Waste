@@ -1,7 +1,30 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { danishHolidayName, easterSunday, holidayLabel } from "../holiday-names"
+import {
+  KNOWN_HOLIDAY_LIST_NAMES,
+  danishHolidayName,
+  easterSunday,
+  holidayLabel,
+  holidayNamesFor,
+  withCarriedNames,
+} from "../holiday-names"
+
+describe("the lists this module knows, and carried names in front of them", () => {
+  test("the known list names are the ones holidayNamesFor answers for", () => {
+    assert.deepEqual(KNOWN_HOLIDAY_LIST_NAMES, ["Danish public holidays", "Egyptian public holidays"])
+    for (const name of KNOWN_HOLIDAY_LIST_NAMES) {
+      assert.notEqual(holidayNamesFor(name), holidayNamesFor("Somewhere else"))
+    }
+  })
+
+  test("withCarriedNames answers the carried name first, the fallback otherwise", () => {
+    const names = withCarriedNames(new Map([["2026-12-24", "Juleaften"]]), danishHolidayName)
+    assert.equal(names("2026-12-24"), "Juleaften")
+    assert.equal(names("2026-12-25"), "Christmas Day")
+    assert.equal(names("2026-12-27"), undefined)
+  })
+})
 
 describe("Danish holiday names", () => {
   test("Easter Sunday", () => {
