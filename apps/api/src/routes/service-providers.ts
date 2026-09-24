@@ -58,8 +58,10 @@ function serviceProviderOf(row: Row): ServiceProvider {
 
 /** `unique (company_id, country, registration_number)`: two companies may work with the same hauler, and each registers it once. */
 const REGISTRATION_TAKEN = "service_provider_country_registration_number_key"
-const registrationTaken = (registrationNumber: string, country: string | undefined) =>
-  `This company already has a service provider with the registration number ${registrationNumber}${country === undefined ? "" : ` in ${country}`}`
+const registrationTaken = (registrationNumber: string | undefined, country: string | undefined) =>
+  registrationNumber === undefined
+    ? "This company already has a service provider with that registration number in that country"
+    : `This company already has a service provider with the registration number ${registrationNumber}${country === undefined ? "" : ` in ${country}`}`
 
 const noSuchProvider = (id: string) => problem(404, { detail: `No service provider ${id} in this company` })
 
@@ -182,9 +184,11 @@ export function serviceProviderRoutes(guard: MiddlewareHandler<AuthEnv>) {
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
-        const sentences: Record<string, string> =
-          patch.registrationNumber === undefined ? {} : { [REGISTRATION_TAKEN]: registrationTaken(patch.registrationNumber, patch.country) }
-        const [row] = await refuseDuplicate(sentences, () =>
+        // The unique is (company, country, registration number), so a patch
+        // that names only the country collides just as one that names only
+        // the number; the constraint is mapped whichever it names, and the
+        // sentence leaves out what the patch did not say.
+        const [row] = await refuseDuplicate({ [REGISTRATION_TAKEN]: registrationTaken(patch.registrationNumber, patch.country) }, () =>
           c
             .get("tx")
             .update(serviceProvider)

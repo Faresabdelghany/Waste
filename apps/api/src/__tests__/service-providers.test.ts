@@ -241,6 +241,21 @@ describe("the service provider endpoints", { skip: database.skip }, () => {
       assert.equal((await one(other, b.serviceProviders.cityhaul.id)).contactName, "Mikkel Andersen")
     })
 
+    test("refuses a country that moves a registration number onto one the company already has there, and changes nothing", async () => {
+      // The unique is (company, country, registration number), so a patch that
+      // names only the country can collide just as one that names only the
+      // number: the same number is free in Sweden until the provider moves there.
+      const shared = String((registrations += 1))
+      await create(olivia, { ...body("Nord Grænse", shared), country: "SE" })
+      const moving = await create(olivia, { ...body("Syd Grænse", shared), country: "DK" })
+      const response = await olivia(`/service-providers/${moving.id}`, { method: "PATCH", body: { country: "SE" } })
+      assert.equal(response.status, 409)
+      const problem = await readProblem(response)
+      assert.match(problem.detail ?? "", /registration number/i)
+      assert.doesNotMatch(problem.detail ?? "", /_key/, "a constraint name is not a sentence for a client")
+      assert.equal((await one(olivia, moving.id)).country, "DK", "the whole request was rolled back")
+    })
+
     test("refuses a registration number the company already has, and changes nothing", async () => {
       const first = await create(olivia, body("Nummer Et"))
       const second = await create(olivia, body("Nummer To"))
