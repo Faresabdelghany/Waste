@@ -8,6 +8,7 @@ import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
+import { created } from "./created"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
@@ -55,11 +56,8 @@ describe("the customer endpoints", { skip: database.skip }, () => {
     await pool?.close()
   })
 
-  const create = async (call: Call, values: unknown): Promise<Customer> => {
-    const response = await call("/customers", { method: "POST", body: values })
-    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
-    return Customer.parse(await response.json())
-  }
+  const create = async (call: Call, values: unknown): Promise<Customer> =>
+    created(call, "/customers", await call("/customers", { method: "POST", body: values }), Customer)
   const one = async (call: Call, id: string): Promise<Customer> => {
     const response = await call(`/customers/${id}`)
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))

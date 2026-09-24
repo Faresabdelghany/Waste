@@ -42,7 +42,7 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { requireContainerType, requireServiceFrequency, requireWasteFraction } from "./references"
-import { describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "commercial.products"
 const ProductPage = Page(Product)
@@ -158,7 +158,7 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Adds a product to one project, which must be a project the caller works in. The name is unique inside the project and the status defaults to `draft`. The container type and the waste fraction, where given, must be this company's, and the service frequency must be one of the named project's; all three are optional, since only a container collection has a container and a fraction and the cadence is a default a placement may override. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The product as it was written.", Product),
+          201: describeCreated("The product as it was written.", Product),
           400: describeProblem(
             "The body is missing a field, names a member the server owns, names a project this account does not work in, or points at a container type, waste fraction or service frequency that is not this company's or this project's.",
           ),
@@ -182,7 +182,7 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .values({ ...values, id: newId(), companyId: principal.companyId })
             .returning(columns),
         )
-        return c.json(productOf(row), 201)
+        return created(c, "/products", productOf(row))
       },
     )
     .get(

@@ -84,7 +84,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { notWithin, periodAfter, periodOf, requireOrdered, requireWithin, type Period } from "./periods"
 import { requireCustomer, requireProduct, requireProperty, requireSharedCollectionPoint } from "./references"
-import { describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
 import { placeOf, refuseInactiveCustomer, refuseUnofferedProduct, refuseUnservedPlace, type Party } from "./statuses"
 
 const MODULE = "customers.agreements"
@@ -344,7 +344,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Writes an agreement in one project, which must be a project the caller works in. The customer and the payer are customers of this company — the same one in the common case, a housing administrator in the interesting one — and must be active in both fields: an inactive one is refused (409) in a sentence saying whether as holder or as payer, while the agreements a customer already holds stand when it goes inactive, since a status gates a new reference and never an existing one. The status defaults to `draft`, since an agreement is written before it is signed, and the period is half-open: `validFrom` is the first day in force and `validTo` the first day out of it, absent meaning the agreement is still running. The number is not unique: one agreement of a number may be valid at a time, so a number may name a later agreement once the earlier one has ended, and an overlapping one is refused. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The agreement as it was written.", Agreement),
+          201: describeCreated("The agreement as it was written.", Agreement),
           400: describeProblem(
             "The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, or names a customer or payer that is not this company's.",
           ),
@@ -369,7 +369,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .values({ ...values, id: newId(), companyId: principal.companyId })
             .returning(columns),
         )
-        return c.json(agreementOf(row), 201)
+        return created(c, "/agreements", agreementOf(row))
       },
     )
     .get(
@@ -511,7 +511,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Adds one product delivered at one place under the agreement the path names. The agreement says the project, so the body names neither: the product and the place must both be that project's. The place is exactly one of `propertyId` and `sharedCollectionPointId`; either may be sent as null, which is a place not given. The product must be active and the place served — a property active, a point open or restricted — each refused otherwise (409) in a sentence naming the status it has; the subscriptions already made stand when a product is withdrawn or a place closes, since a status gates a new reference and never an existing one. The quantity defaults to one. The period lies inside the agreement's — a `validFrom` before it, or an end beyond it or absent where the agreement has one, is refused naming the bound — and the agreement may not already subscribe to that product at that place over part of it. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The subscription as it was written.", Subscription),
+          201: describeCreated("The subscription as it was written.", Subscription),
           400: describeProblem(
             "The path does not hold an id, or the body is missing a field, names a member the server owns, names other than one place, ends on or before the day it starts, falls outside the agreement's period, or names a product or a place that is not this agreement's project's.",
           ),
@@ -560,7 +560,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
             })
             .returning(subscriptionColumns),
         )
-        return c.json(subscriptionOf(row), 201)
+        return created(c, "/subscriptions", subscriptionOf(row))
       },
     )
     .get(

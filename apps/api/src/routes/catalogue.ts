@@ -64,7 +64,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "configure.master"
 
@@ -205,7 +205,7 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Adds a fraction to the company's own vocabulary. `key` is the stable slug the rest of the system quotes and is set once; `name` is what a person reads. Both are unique inside the company. The server mints the id; a body that carries one is refused.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The waste fraction as it was written.", WasteFraction),
+          201: describeCreated("The waste fraction as it was written.", WasteFraction),
           400: describeProblem("The body is missing a field, holds a value of the wrong shape, or names one the server owns."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.master`."),
@@ -225,7 +225,7 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .values({ ...values, id: newId(), companyId: c.get("principal").companyId })
             .returning(fractionColumns),
         )
-        return c.json(fractionOf(row), 201)
+        return created(c, "/waste-fractions", fractionOf(row))
       },
     )
     .get(
@@ -335,7 +335,7 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Adds a container type to the company's own vocabulary. The name is unique inside the company; `volumeLitres` is optional, and null means nobody recorded one — zero is not a volume. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The container type as it was written.", ContainerType),
+          201: describeCreated("The container type as it was written.", ContainerType),
           400: describeProblem("The body is missing a field, holds a value of the wrong shape, or names one the server owns."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.master`."),
@@ -354,7 +354,7 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .values({ ...values, id: newId(), companyId: c.get("principal").companyId })
             .returning(typeColumns),
         )
-        return c.json(typeOf(row), 201)
+        return created(c, "/container-types", typeOf(row))
       },
     )
     .get(
@@ -472,7 +472,7 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Adds a cadence to one project, which must be a project the caller works in. The name is unique inside the project. A rate nobody gives is on demand; `collectionsPerWeek: 1` with neither interval is monthly, since a month is not a number of weeks; and an interval needs a rate to belong to, `weeksBetween` and `daysBetween` being two ways of saying the same thing. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The service frequency as it was written.", ServiceFrequency),
+          201: describeCreated("The service frequency as it was written.", ServiceFrequency),
           400: describeProblem(
             "The body is missing a field, names a member the server owns, gives an interval with no rate or both intervals at once, or names a project this account does not work in.",
           ),
@@ -495,7 +495,7 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .values({ ...values, id: newId(), companyId: principal.companyId })
             .returning(frequencyColumns),
         )
-        return c.json(frequencyOf(row), 201)
+        return created(c, "/service-frequencies", frequencyOf(row))
       },
     )
     .get(

@@ -14,6 +14,7 @@ import { and, eq } from "drizzle-orm"
 import { createApp } from "../app"
 import { encodeCursor } from "../pagination"
 import { callingAs, type Call } from "./calls"
+import { created } from "./created"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { dropTenant, seedTenant, testId, type Tenant } from "./tenant"
@@ -76,11 +77,8 @@ describe("the user endpoints", { skip: database.skip }, () => {
     assert.equal(response.status, 200)
     return User.parse(await response.json())
   }
-  const invite = async (call: Call, values: Record<string, unknown>) => {
-    const response = await call("/users", { method: "POST", body: values })
-    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
-    return User.parse(await response.json())
-  }
+  const invite = async (call: Call, values: Record<string, unknown>) =>
+    created(call, "/users", await call("/users", { method: "POST", body: values }), User)
   const patch = async (call: Call, id: string, body: Record<string, unknown>) => {
     const response = await call(`/users/${id}`, { method: "PATCH", body })
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))

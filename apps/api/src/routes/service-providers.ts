@@ -26,7 +26,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "service-providers.service-providers"
 const ServiceProviderPage = Page(ServiceProvider)
@@ -109,7 +109,7 @@ export function serviceProviderRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Registers a service provider for the caller's company. The contact is required: a provider nobody can call is a provider nobody can dispatch. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The service provider as it was written.", ServiceProvider),
+          201: describeCreated("The service provider as it was written.", ServiceProvider),
           400: describeProblem("The body is missing a field, holds a value of the wrong shape, or names one the server owns."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `service-providers.service-providers`."),
@@ -131,7 +131,7 @@ export function serviceProviderRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .values({ ...values, id: newId(), companyId: c.get("principal").companyId })
             .returning(columns),
         )
-        return c.json(serviceProviderOf(row), 201)
+        return created(c, "/service-providers", serviceProviderOf(row))
       },
     )
     .get(

@@ -79,7 +79,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { periodAfter, periodOf, requireWithin, type Period } from "./periods"
 import { requireContainerType, requireServiceFrequency, requireWasteFraction, type Scope } from "./references"
-import { describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stampsOf } from "./shared"
 import { refuseUnservedPlace, type Place } from "./statuses"
 
 const MODULE = "resources.containers"
@@ -326,7 +326,7 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Registers a container in one project, which must be a project the caller works in. The label is the visible Container ID a person reads off the bin and is unique across the company, not inside a project. The container type is this company's. The ownership defaults to `company`. There is no status and no location: whether a container is in stock, issued or broken is Resources' ledger, and where it is, is `POST /containers/{id}/placements`. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The container as it was written.", Container),
+          201: describeCreated("The container as it was written.", Container),
           400: describeProblem(
             "The body is missing a field, names a member the server owns, names a project this account does not work in, or names a container type that is not this company's.",
           ),
@@ -350,7 +350,7 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .values({ ...values, id: newId(), companyId: principal.companyId })
             .returning(columns),
         )
-        return c.json(containerOf(row), 201)
+        return created(c, "/containers", containerOf(row))
       },
     )
     .get(
@@ -435,7 +435,7 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Puts the container the path names into service under a subscription, which says the agreement, the product and the place it serves. The container says the project, so the body names neither it nor the project, and the subscription must be that project's. The place, read through the subscription, must still serve: a property no longer active, or a point no longer open or restricted, is refused (409) naming the status it has, while the placements already there are ended by their period, since a status gates a new reference and never an existing one. The waste fraction is this company's; the service frequency, where given, is the project's and overrides the product's — leave it out and the cadence in force is the product's, answered as `effectiveServiceFrequencyId`. The period lies inside the subscription's, naming the bound that does not, and the container may not already be placed over part of it: one container serves in one place at a time. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The placement as it was written, with the cadence in force.", ContainerServicePlacement),
+          201: describeCreated("The placement as it was written, with the cadence in force.", ContainerServicePlacement),
           400: describeProblem(
             "The path does not hold an id, or the body is missing a field, names a member the server owns, ends on or before the day it starts, falls outside the subscription's period, or names a subscription, waste fraction or service frequency outside the scope its key allows.",
           ),
@@ -486,7 +486,7 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
         // since the cadence in force is a join and not a column.
         const row = await findPlacement(tx, principal, written.id)
         if (row === undefined) throw noSuchPlacement(written.id)
-        return c.json(placementOf(row), 201)
+        return created(c, "/placements", placementOf(row))
       },
     )
     .get(
