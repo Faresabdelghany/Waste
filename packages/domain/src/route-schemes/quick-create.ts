@@ -10,6 +10,14 @@
 import { typedString } from "../record-values"
 import { isSchemeCreateAs, type SchemeCreateAs } from "./creation"
 import {
+  driverIneligibilityReason,
+  driverOptions,
+  driverProfile,
+  vehicleProfile,
+  type DriverEligibility,
+  type FleetRecord,
+} from "./fleet-profiles"
+import {
   COLLECTION_GROUPS_KEY,
   IMPLICIT_GROUP_ID,
   hasExplicitCollectionGroups,
@@ -195,6 +203,48 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
     unloadingStationId: optionalId(values, "unloadingStationId"),
     groups: [group],
   }
+}
+
+/** The fleet record the quick form's `plannedVehicleId` names; undefined when it names none, or none that exists. */
+export function quickPlannedVehicle<T extends FleetRecord>(
+  values: StoredValues,
+  vehicles: readonly T[],
+): T | undefined {
+  const plannedVehicleId = optionalId(values, "plannedVehicleId")
+  return plannedVehicleId ? vehicles.find((vehicle) => vehicle.id === plannedVehicleId) : undefined
+}
+
+/**
+ * The quick form's driver select, judged by the same licence rule as Guided
+ * Setup step 3 (issue #37): every driver listed, an ineligible one disabled
+ * with the reason beside the name, judged against the vehicle the form's
+ * `plannedVehicleId` names. Without a planned vehicle nothing can be judged,
+ * so every driver is offered; a vehicle without a class on record can judge
+ * nobody, so every driver says so.
+ */
+export function quickDriverOptions(
+  values: StoredValues,
+  drivers: readonly FleetRecord[],
+  vehicles: readonly FleetRecord[],
+): DriverEligibility[] {
+  const vehicle = quickPlannedVehicle(values, vehicles)
+  return driverOptions(drivers.map(driverProfile), vehicle ? vehicleProfile(vehicle) : null)
+}
+
+/**
+ * The quick form's submit check: why the driver its `plannedDriverId` names
+ * may not take the vehicle its `plannedVehicleId` names, undefined when the
+ * pair may go out — or when there is no pair to judge, which the required
+ * fields refuse in their own words.
+ */
+export function quickDriverIssue(
+  values: StoredValues,
+  drivers: readonly FleetRecord[],
+  vehicles: readonly FleetRecord[],
+): string | undefined {
+  const plannedDriverId = optionalId(values, "plannedDriverId")
+  const driver = plannedDriverId ? drivers.find((candidate) => candidate.id === plannedDriverId) : undefined
+  return driverIneligibilityReason(driver, quickPlannedVehicle(values, vehicles))
 }
 
 /**

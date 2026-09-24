@@ -33,7 +33,7 @@ test("quick create applies the same driver licence rule as the wizard", async ({
   const unlicensed = page.getByRole("option", { name: "Jonas Lind · No licence on record" })
   await expect(unlicensed).toBeVisible()
   await expect(unlicensed).toHaveAttribute("aria-disabled", "true")
-  const eligible = page.getByRole("option", { name: "Freja Nielsen · C, CE" })
+  const eligible = page.getByRole("option", { name: "Freja Nielsen · CE" })
   await expect(eligible).not.toHaveAttribute("aria-disabled", "true")
   await eligible.click()
   await expect(dialog.getByLabel("Planned driver", { exact: true })).toContainText("Freja Nielsen")

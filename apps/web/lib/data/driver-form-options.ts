@@ -1,26 +1,20 @@
-// The quick form's driver choices, built on the domain's eligibility rule
-// (@waste/domain/route-schemes/fleet-profiles): every driver is listed, and
-// an ineligible one is disabled with the reason beside the name.
-import type { BusinessFormOption } from "@/lib/data/business-form-types"
-import type { BusinessRecord } from "@/lib/data/business-modules"
-import {
-  driverOptionLabel,
-  driverOptions,
-  driverProfile,
-  vehicleProfile,
-} from "@waste/domain/route-schemes/fleet-profiles"
-
-type RecordLike = Pick<BusinessRecord, "id" | "name" | "context" | "facts" | "submittedValues">
+// The quick form's driver choices: the domain's quickDriverOptions
+// (@waste/domain/route-schemes/quick-create, issue #37) turned into form
+// options — every driver listed, an ineligible one disabled with the reason
+// beside the name, judged against the vehicle the form's plannedVehicleId
+// names. The rule is the domain's; this file only spells the option shape.
+import type { BusinessFormOption, BusinessFormValues } from "@/lib/data/business-form-types"
+import { driverOptionLabel, type FleetRecord } from "@waste/domain/route-schemes/fleet-profiles"
+import { quickDriverOptions } from "@waste/domain/route-schemes/quick-create"
 
 export function driverFormOptions(
-  drivers: readonly RecordLike[],
-  vehicle: RecordLike | undefined,
+  values: Readonly<Partial<BusinessFormValues>>,
+  drivers: readonly FleetRecord[],
+  vehicles: readonly FleetRecord[],
 ): BusinessFormOption[] {
-  return driverOptions(drivers.map(driverProfile), vehicle ? vehicleProfile(vehicle) : null).map(
-    ({ driver, eligible, reason }) => ({
-      value: driver.id,
-      label: reason ? `${driverOptionLabel(driver)} · ${reason}` : driverOptionLabel(driver),
-      ...(eligible ? {} : { disabled: true }),
-    }),
-  )
+  return quickDriverOptions(values, drivers, vehicles).map(({ driver, eligible, reason }) => ({
+    value: driver.id,
+    label: reason ? `${driverOptionLabel(driver)} · ${reason}` : driverOptionLabel(driver),
+    ...(eligible ? {} : { disabled: true }),
+  }))
 }
