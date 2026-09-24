@@ -36,11 +36,13 @@ test("step 1 gates on name, project, planning area, waste fraction, and service 
   await expect(nextButton(page)).toBeEnabled()
 })
 
-test("the service type offers the three collection types, nothing else", async ({ page }) => {
+test("the service type offers the five kinds of collection work, nothing else", async ({ page }) => {
   await startGuided(page)
   expect(await optionTexts(page, wizard(page), "Service type")).toEqual([
     "Container collection",
     "Underground collection",
     "Kerbside collection",
+    "Crane collection",
+    "Tank emptying",
   ])
 })

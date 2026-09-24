@@ -162,3 +162,65 @@ describe("withoutDuplicatedEngineIssues", () => {
     ])
   })
 })
+
+describe("crane-emptied and tank containers have a service type (issue #42)", () => {
+  const igloos = [
+    group({
+      id: "g",
+      name: "Glass igloos",
+      days: ["monday"],
+      vehicleId: "v1",
+      driverId: "d1",
+      containerTypes: ["Igloo · 2,500 L", "Underground · 5,000 L"],
+    }),
+  ]
+  const tanks = [
+    group({
+      id: "t",
+      name: "Harbor tanks",
+      days: ["monday"],
+      vehicleId: "v2",
+      driverId: "d2",
+      containerTypes: ["Wastewater tank · 3,000 L"],
+    }),
+  ]
+
+  test("an igloo group is in scope under Crane collection and named under the bin types", () => {
+    assert.deepEqual(
+      checkCollectionGroups({ groups: igloos, serviceDays: ["monday"], serviceType: "Crane collection" }),
+      [],
+    )
+    assert.deepEqual(
+      checkCollectionGroups({
+        groups: igloos,
+        serviceDays: ["monday"],
+        serviceType: "Container collection",
+      }).map((issue) => issue.text),
+      ["Glass igloos has container types outside Container collection: Igloo, Underground"],
+    )
+    // Underground collection keeps its own, narrower scope.
+    assert.deepEqual(
+      checkCollectionGroups({
+        groups: igloos,
+        serviceDays: ["monday"],
+        serviceType: "Underground collection",
+      }).map((issue) => issue.text),
+      ["Glass igloos has container types outside Underground collection: Igloo"],
+    )
+  })
+
+  test("a wastewater tank group is in scope under Tank emptying only", () => {
+    assert.deepEqual(
+      checkCollectionGroups({ groups: tanks, serviceDays: ["monday"], serviceType: "Tank emptying" }),
+      [],
+    )
+    assert.deepEqual(
+      checkCollectionGroups({
+        groups: tanks,
+        serviceDays: ["monday"],
+        serviceType: "Crane collection",
+      }).map((issue) => issue.text),
+      ["Harbor tanks has container types outside Crane collection: Wastewater tank"],
+    )
+  })
+})
