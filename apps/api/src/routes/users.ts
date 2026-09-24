@@ -24,9 +24,8 @@
 //
 // The primary administrator is the tenant's last way in: it cannot be
 // deactivated, moved to another role, or narrowed to some projects or to a
-// provider. Each is a 409 with a sentence saying what to do instead (make
-// another account the primary administrator first), because the request is
-// well-formed and would be fine against another account.
+// provider. Each is a 409 with a sentence stating the rule, because the
+// request is well-formed and would be fine against another account.
 //
 // A body naming a role, a project or a provider that is not this company's is
 // a 400 on that field, not a 500 from a foreign key: the fence hides the
@@ -124,9 +123,22 @@ const emailTaken = (email: string) => `This company already has a user with the 
 
 const noSuchUser = (id: string) => problem(404, { detail: `No user ${id} in this company` })
 
-const PRIMARY_DEACTIVATE =
-  "The primary administrator cannot be deactivated: make another account the primary administrator first"
-const PRIMARY_ROLE = "The primary administrator cannot be moved to another role: make another account the primary administrator first"
+/** One account of this company by id, or undefined; the read every route here starts with. */
+async function findUser(tx: Tx, companyId: string, id: string): Promise<Row | undefined> {
+  const [row] = await tx
+    .select(columns)
+    .from(userAccount)
+    .where(and(eq(userAccount.companyId, companyId), eq(userAccount.id, id)))
+    .limit(1)
+  return row
+}
+
+// The three refusals state the rule and stop there. Telling a caller to make
+// another account the primary administrator first would be advice no route
+// can take: which account it is, is the seed's, and nothing here moves it
+// (Issue #70 left that to the slice that needs it).
+const PRIMARY_DEACTIVATE = "The primary administrator cannot be deactivated: it is the company's last way in"
+const PRIMARY_ROLE = "The primary administrator cannot be moved to another role"
 const PRIMARY_ACCESS =
   "The primary administrator reaches every project: it cannot be narrowed to some projects or to a service provider"
 
@@ -309,11 +321,7 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const { companyId } = c.get("principal")
-        const [row] = await tx
-          .select(columns)
-          .from(userAccount)
-          .where(and(eq(userAccount.companyId, companyId), eq(userAccount.id, id)))
-          .limit(1)
+        const row = await findUser(tx, companyId, id)
         if (row === undefined) throw noSuchUser(id)
         return c.json(await userWithAccess(tx, companyId, row))
       },
@@ -347,11 +355,7 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const { companyId } = c.get("principal")
 
-        const [current] = await tx
-          .select(columns)
-          .from(userAccount)
-          .where(and(eq(userAccount.companyId, companyId), eq(userAccount.id, id)))
-          .limit(1)
+        const current = await findUser(tx, companyId, id)
         if (current === undefined) throw noSuchUser(id)
 
         const shape = accessOf(patch)
@@ -403,11 +407,7 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const { companyId } = c.get("principal")
-        const [current] = await tx
-          .select(columns)
-          .from(userAccount)
-          .where(and(eq(userAccount.companyId, companyId), eq(userAccount.id, id)))
-          .limit(1)
+        const current = await findUser(tx, companyId, id)
         if (current === undefined) throw noSuchUser(id)
         if (current.primaryAdministrator) throw problem(409, { detail: PRIMARY_DEACTIVATE })
         if (current.deactivatedAt !== null) return c.json(await userWithAccess(tx, companyId, current))
@@ -444,11 +444,7 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const { companyId } = c.get("principal")
-        const [current] = await tx
-          .select(columns)
-          .from(userAccount)
-          .where(and(eq(userAccount.companyId, companyId), eq(userAccount.id, id)))
-          .limit(1)
+        const current = await findUser(tx, companyId, id)
         if (current === undefined) throw noSuchUser(id)
         if (current.deactivatedAt === null) return c.json(await userWithAccess(tx, companyId, current))
 

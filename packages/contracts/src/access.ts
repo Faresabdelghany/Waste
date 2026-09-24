@@ -31,9 +31,7 @@ import * as z from "zod"
 import { IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { Grant } from "./permissions"
-
-/** A name or a label a person typed: present, and not the empty string. */
-const Label = z.string().min(1)
+import { Label } from "./text"
 
 /** What the server owns on every resource here. */
 const stamped = {

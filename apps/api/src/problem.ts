@@ -10,8 +10,10 @@
 //   SQLSTATE 23505          → 409, since a unique violation is the one database
 //                             error a client can do something about, and the
 //                             constraint it hit when Postgres names it
-//   anything else           → 500 with no detail, the error logged whole; what
-//                             the error said stays on the server
+//   anything else           → 500 with no detail, a projection of the error
+//                             logged (`loggable`: never a statement or its
+//                             bound parameters); what the error said stays on
+//                             the server
 //
 // Throwing rather than returning is what lets the request's transaction roll
 // back (auth/principal.ts reads the context's error after the handler), and
@@ -123,10 +125,37 @@ export function uniqueConstraintOf(error: unknown): string | undefined {
   return failed?.code === UNIQUE_VIOLATION ? failed.constraint : undefined
 }
 
+/** How far down a `cause` chain the projection below goes; Drizzle wraps postgres.js, which wraps nothing. */
+const LOG_CAUSE_DEPTH = 3
+
+/**
+ * What goes in the log when a request became a 500: a projection of the
+ * error, never the error itself. A postgres.js error carries the statement it
+ * sent and the `parameters` it bound, so logging one whole would print an
+ * invitee's e-mail address and name (a failed `POST /users`), a company's
+ * registration number, or whatever else the body held, into the operator's
+ * log — data the request never asked to have kept. What is left is what an
+ * operator debugs with: who threw, what it said, the SQLSTATE and the
+ * constraint when Postgres named one, the stack, and the same projection of
+ * the cause, which is where Drizzle keeps the database's own error.
+ */
+export function loggable(error: unknown, depth: number = LOG_CAUSE_DEPTH): unknown {
+  if (typeof error !== "object" || error === null) return error
+  const { name, message, code, constraint_name: constraint, stack, cause } = error as Record<string, unknown>
+  return {
+    ...(typeof name === "string" ? { name } : {}),
+    ...(typeof message === "string" ? { message } : {}),
+    ...(typeof code === "string" ? { code } : {}),
+    ...(typeof constraint === "string" ? { constraint_name: constraint } : {}),
+    ...(typeof stack === "string" ? { stack } : {}),
+    ...(cause === undefined || depth <= 0 ? {} : { cause: loggable(cause, depth - 1) }),
+  }
+}
+
 /**
  * Hono's error handler: the mapping in the header. `log` receives what became
- * a 500, whole; console.error unless the composition root or a test says
- * otherwise.
+ * a 500, as the projection above; console.error unless the composition root
+ * or a test says otherwise.
  */
 export function errorHandler(log: (error: unknown) => void = console.error): ErrorHandler {
   return (error) => {
@@ -140,7 +169,7 @@ export function errorHandler(log: (error: unknown) => void = console.error): Err
         detail: `A record with the same key already exists${failed.constraint === undefined ? "" : ` (${failed.constraint})`}`,
       })
     }
-    log(error)
+    log(loggable(error))
     return problemResponse(500)
   }
 }

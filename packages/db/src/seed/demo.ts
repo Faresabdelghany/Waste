@@ -27,6 +27,26 @@
 // @waste/domain/access/system-roles, the same data the web's permission matrix
 // draws, written through `normaliseGrants` so the rows are what the API would
 // compute for the same grant set.
+//
+// What this seed reserves on a database it shares with the test suites, and
+// what a per-tenant test file must therefore not use:
+//
+//   DK / 38144209 — `unique (country, registration_number)` on `company` is
+//   global, so no other company on the database may carry that pair. A test
+//   company takes a registration number of its own.
+//
+//   olivia.larsen@wastehero.io and lars.mikkelsen@nordren.dk — the access
+//   token hook binds a first sign-in by e-mail across the whole database, so
+//   an account elsewhere with one of these addresses would be bound by it and
+//   then refused by `unique (auth_user_id)`. A test account takes an address
+//   on a random `.example` domain.
+//
+//   The `01a0d2a4-a280-7…` id bucket — every id below is spelled by hand in
+//   it. A test row minted from the clock lands far from it, but a hand-written
+//   test id must not.
+//
+// The reverse holds too: the seed must not write over what a test owns, which
+// `seed.test.ts` checks for the one company a test file commits rows under.
 import { normaliseGrants } from "@waste/domain/access/grants"
 import { SYSTEM_ROLES, type SystemRoleKey } from "@waste/domain/access/system-roles"
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm"
@@ -361,9 +381,12 @@ async function applyDemo(tx: Tx): Promise<number> {
       .returning({ id: roleGrant.id }),
   )
 
-  // The access row carries nothing but the pair it joins, and the composite
-  // key ties that pair to the account's own service provider, so there is
-  // nothing to put back: the row is there, or it is written.
+  // The access row carries nothing beyond the pair it joins, and the
+  // composite key `(company_id, user_account_id, service_provider_id) →
+  // user_account` pins that pair to the account's own provider: an edit that
+  // moved it to another provider would be refused by the key, not silently
+  // kept. So the row is there or it is written, and there is no third state
+  // to reconcile.
   written(
     await tx.insert(serviceProviderAccess).values(PROVIDER_ACCESS).onConflictDoNothing({ target: serviceProviderAccess.id }).returning({
       id: serviceProviderAccess.id,

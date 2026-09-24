@@ -27,29 +27,41 @@ const address = () => `invitee.${randomBytes(4).toString("hex")}@invite.example`
 describe("the user endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** Tenant A is written to; tenant B is only ever read, so its five seeded users are a stable page. */
+  /**
+   * Three companies. Tenant A is the one under test and is written to;
+   * tenant C is the second company, for the rules that need a write from
+   * somewhere else; tenant B is never written to by any test in this file,
+   * so its five seeded users are a page whose size holds however the tests are
+   * ordered.
+   */
   let a: Tenant
   let b: Tenant
+  let c: Tenant
   let app: ReturnType<typeof createApp>
   let olivia: Call
   let viewer: Call
   let lars: Call
   let other: Call
+  /** The second company: what it writes is its own, and tenant B's page stays as it was seeded. */
+  let third: Call
 
   before(async () => {
     pool = createDb(database.url, { max: 4 })
     keys = await signingKeys()
     a = await seedTenant(pool)
     b = await seedTenant(pool)
+    c = await seedTenant(pool)
     app = createApp({ probe: pool, pool, verifier: keys.verifier })
     olivia = callingAs(app, keys, a.users.olivia, a.companyId)
     viewer = callingAs(app, keys, a.users.viewer, a.companyId)
     lars = callingAs(app, keys, a.users.lars, a.companyId)
     other = callingAs(app, keys, b.users.olivia, b.companyId)
+    third = callingAs(app, keys, c.users.olivia, c.companyId)
   })
   after(async () => {
     if (a) await dropTenant(pool, a.companyId)
     if (b) await dropTenant(pool, b.companyId)
+    if (c) await dropTenant(pool, c.companyId)
     await pool?.close()
   })
 
@@ -300,7 +312,7 @@ describe("the user endpoints", { skip: database.skip }, () => {
     test("lets another company use the same address: it is unique inside a company", async () => {
       const email = address()
       await invite(olivia, { email, fullName: "Shared address", roleId: a.roles.viewer.id, allProjects: true })
-      assert.equal((await invite(other, { email, fullName: "Shared address", roleId: b.roles.viewer.id, allProjects: true })).email, email)
+      assert.equal((await invite(third, { email, fullName: "Shared address", roleId: c.roles.viewer.id, allProjects: true })).email, email)
     })
 
     test("refuses a role that may view but not create", async () => {
@@ -412,7 +424,7 @@ describe("the user endpoints", { skip: database.skip }, () => {
       await patch(olivia, a.users.olivia.id, { fullName: "Olivia Larsen" })
     })
 
-    test("refuses a role that is not this company's, an empty patch, and two ways of reaching something", async () => {
+    test("refuses a role, a project or a provider that is not this company's, an empty patch, and two ways of reaching something", async () => {
       const created = await invite(olivia, { email: address(), fullName: "Patch me", roleId: a.roles.viewer.id, allProjects: true })
       const unknown = await olivia(`/users/${created.id}`, { method: "PATCH", body: { roleId: b.roles.viewer.id } })
       assert.equal(unknown.status, 400)
@@ -432,7 +444,25 @@ describe("the user endpoints", { skip: database.skip }, () => {
       const derived = await olivia(`/users/${created.id}`, { method: "PATCH", body: { status: "active" } })
       assert.equal(derived.status, 400)
       assert.ok((await readProblem(derived)).errors?.some((error) => /status/.test(error.message)))
-      assert.deepEqual(await one(olivia, created.id), created, "four refusals and nothing changed")
+
+      // The access half is checked before a row is touched, so an unknown
+      // member of it is named by its place and the old access still stands.
+      const unknownProject = await olivia(`/users/${created.id}`, {
+        method: "PATCH",
+        body: { projectIds: [a.projects.cairo.id, testId()] },
+      })
+      assert.equal(unknownProject.status, 400)
+      assert.deepEqual((await readProblem(unknownProject)).errors?.map((error) => error.path), ["projectIds.1"])
+
+      const foreignProvider = await olivia(`/users/${created.id}`, {
+        method: "PATCH",
+        body: { serviceProviderId: b.serviceProviders.nordren.id },
+      })
+      assert.equal(foreignProvider.status, 400)
+      assert.deepEqual((await readProblem(foreignProvider)).errors?.map((error) => error.path), ["serviceProviderId"])
+
+      assert.deepEqual(await one(olivia, created.id), created, "six refusals and nothing changed")
+      assert.deepEqual(await accessRows(created.id), { projects: [], providers: [] }, "the account still reaches every project")
     })
 
     test("answers 404 for another company's account and leaves it alone, and 403 for a role that may only view", async () => {

@@ -127,7 +127,10 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
           c
             .get("tx")
             .insert(project)
-            .values({ id: newId(), companyId: c.get("principal").companyId, ...values })
+            // The body first, the server's own last: a member the strict
+            // schema would have refused still could not take the id or the
+            // tenant from the two that decide them.
+            .values({ ...values, id: newId(), companyId: c.get("principal").companyId })
             .returning(columns),
         )
         return c.json(projectOf(row), 201)

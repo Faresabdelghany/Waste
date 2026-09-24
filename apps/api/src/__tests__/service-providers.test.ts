@@ -29,30 +29,42 @@ const body = (legalName: string, registrationNumber = String((registrations += 1
 describe("the service provider endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** Tenant A is written to; tenant B is only ever read, so its two seeded providers are a stable page. */
+  /**
+   * Three companies. Tenant A is the one under test and is written to;
+   * tenant C is the second company, for the rules that need a write from
+   * somewhere else; tenant B is never written to by any test in this file,
+   * so its two seeded providers are a page whose size holds however the tests are
+   * ordered.
+   */
   let a: Tenant
   let b: Tenant
+  let c: Tenant
   let app: ReturnType<typeof createApp>
   let olivia: Call
   /** Lars: Service Provider Manager — view and edit on the module, but no create. */
   let lars: Call
   let viewer: Call
   let other: Call
+  /** The second company: what it writes is its own, and tenant B's page stays as it was seeded. */
+  let third: Call
 
   before(async () => {
     pool = createDb(database.url, { max: 4 })
     keys = await signingKeys()
     a = await seedTenant(pool)
     b = await seedTenant(pool)
+    c = await seedTenant(pool)
     app = createApp({ probe: pool, pool, verifier: keys.verifier })
     olivia = callingAs(app, keys, a.users.olivia, a.companyId)
     lars = callingAs(app, keys, a.users.lars, a.companyId)
     viewer = callingAs(app, keys, a.users.viewer, a.companyId)
     other = callingAs(app, keys, b.users.olivia, b.companyId)
+    third = callingAs(app, keys, c.users.olivia, c.companyId)
   })
   after(async () => {
     if (a) await dropTenant(pool, a.companyId)
     if (b) await dropTenant(pool, b.companyId)
+    if (c) await dropTenant(pool, c.companyId)
     await pool?.close()
   })
 
@@ -172,7 +184,7 @@ describe("the service provider endpoints", { skip: database.skip }, () => {
 
     test("lets another company register the same provider: the number is unique inside a company", async () => {
       const mine = await create(olivia, body("Fælles Vognmand"))
-      const theirs = await create(other, { ...body("Fælles Vognmand", mine.registrationNumber), country: mine.country })
+      const theirs = await create(third, { ...body("Fælles Vognmand", mine.registrationNumber), country: mine.country })
       assert.equal(theirs.registrationNumber, mine.registrationNumber)
       assert.notEqual(theirs.id, mine.id)
     })
@@ -194,6 +206,13 @@ describe("the service provider endpoints", { skip: database.skip }, () => {
       const bad = await olivia("/service-providers/not-a-uuid")
       assert.equal(bad.status, 400)
       assert.deepEqual((await readProblem(bad)).errors?.map((error) => error.path), ["id"])
+    })
+
+    test("refuses a role without the module, and a caller with no token", async () => {
+      const refused = await viewer(`/service-providers/${a.serviceProviders.cityhaul.id}`)
+      assert.equal(refused.status, 403)
+      assert.match((await readProblem(refused)).detail ?? "", /view on service-providers\.service-providers/)
+      assert.equal((await app.request(`/service-providers/${a.serviceProviders.cityhaul.id}`)).status, 401)
     })
   })
 

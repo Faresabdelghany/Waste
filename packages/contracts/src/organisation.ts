@@ -29,6 +29,7 @@ import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
 import { Id } from "./ids"
+import { Label } from "./text"
 
 /** A company's status: onboarding until its first project runs. */
 export const CompanyStatus = z.enum(["active", "onboarding"])
@@ -37,9 +38,6 @@ export type CompanyStatus = z.infer<typeof CompanyStatus>
 /** A project's status: onboarding until it runs. */
 export const ProjectStatus = z.enum(["active", "onboarding"])
 export type ProjectStatus = z.infer<typeof ProjectStatus>
-
-/** A name a person typed: present, and not the empty string. */
-const Label = z.string().min(1)
 
 /** ISO 3166-1 alpha-2, uppercase (`DK`). */
 const Country = z.string().regex(/^[A-Z]{2}$/, "a two-letter uppercase ISO 3166-1 alpha-2 country code, such as DK")

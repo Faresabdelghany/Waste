@@ -23,27 +23,39 @@ const body = (name: string) => ({ name, kind: "Contract", language: "da", curren
 describe("the project endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** Tenant A is written to; tenant B is only ever read, so its three seeded projects are a stable page. */
+  /**
+   * Three companies. Tenant A is the one under test and is written to;
+   * tenant C is the second company, for the rules that need a write from
+   * somewhere else; tenant B is never written to by any test in this file,
+   * so its three seeded projects are a page whose size holds however the tests are
+   * ordered.
+   */
   let a: Tenant
   let b: Tenant
+  let c: Tenant
   let app: ReturnType<typeof createApp>
   let olivia: Call
   let viewer: Call
   let other: Call
+  /** The second company: what it writes is its own, and tenant B's page stays as it was seeded. */
+  let third: Call
 
   before(async () => {
     pool = createDb(database.url, { max: 4 })
     keys = await signingKeys()
     a = await seedTenant(pool)
     b = await seedTenant(pool)
+    c = await seedTenant(pool)
     app = createApp({ probe: pool, pool, verifier: keys.verifier })
     olivia = callingAs(app, keys, a.users.olivia, a.companyId)
     viewer = callingAs(app, keys, a.users.viewer, a.companyId)
     other = callingAs(app, keys, b.users.olivia, b.companyId)
+    third = callingAs(app, keys, c.users.olivia, c.companyId)
   })
   after(async () => {
     if (a) await dropTenant(pool, a.companyId)
     if (b) await dropTenant(pool, b.companyId)
+    if (c) await dropTenant(pool, c.companyId)
     await pool?.close()
   })
 
@@ -208,7 +220,7 @@ describe("the project endpoints", { skip: database.skip }, () => {
     })
 
     test("lets another company use the same name: a project name is unique inside a company", async () => {
-      const created = await create(other, body("Copenhagen Central II"))
+      const created = await create(third, body("Copenhagen Central II"))
       assert.equal((await create(olivia, body("Copenhagen Central II"))).name, created.name)
     })
   })
@@ -230,6 +242,13 @@ describe("the project endpoints", { skip: database.skip }, () => {
 
     test("answers 404 for an id nobody minted", async () => {
       assert.equal((await olivia(`/projects/${testId()}`)).status, 404)
+    })
+
+    test("refuses a role without configure.organization view, and a caller with no token", async () => {
+      const refused = await viewer(`/projects/${a.projects.harbor.id}`)
+      assert.equal(refused.status, 403)
+      assert.match((await readProblem(refused)).detail ?? "", /view on configure\.organization/)
+      assert.equal((await app.request(`/projects/${a.projects.harbor.id}`)).status, 401)
     })
 
     test("answers 400 for a path that is not an id, naming it", async () => {

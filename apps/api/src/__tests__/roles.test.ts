@@ -23,29 +23,41 @@ const roleName = (prefix: string) => `${prefix} ${randomBytes(3).toString("hex")
 describe("the role endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** Tenant A is written to; tenant B is only ever read, so its three seeded roles are a stable page. */
+  /**
+   * Three companies. Tenant A is the one under test and is written to;
+   * tenant C is the second company, for the rules that need a write from
+   * somewhere else; tenant B is never written to by any test in this file,
+   * so its three seeded roles are a page whose size holds however the tests are
+   * ordered.
+   */
   let a: Tenant
   let b: Tenant
+  let c: Tenant
   let app: ReturnType<typeof createApp>
   let olivia: Call
   let viewer: Call
   let lars: Call
   let other: Call
+  /** The second company: what it writes is its own, and tenant B's page stays as it was seeded. */
+  let third: Call
 
   before(async () => {
     pool = createDb(database.url, { max: 4 })
     keys = await signingKeys()
     a = await seedTenant(pool)
     b = await seedTenant(pool)
+    c = await seedTenant(pool)
     app = createApp({ probe: pool, pool, verifier: keys.verifier })
     olivia = callingAs(app, keys, a.users.olivia, a.companyId)
     viewer = callingAs(app, keys, a.users.viewer, a.companyId)
     lars = callingAs(app, keys, a.users.lars, a.companyId)
     other = callingAs(app, keys, b.users.olivia, b.companyId)
+    third = callingAs(app, keys, c.users.olivia, c.companyId)
   })
   after(async () => {
     if (a) await dropTenant(pool, a.companyId)
     if (b) await dropTenant(pool, b.companyId)
+    if (c) await dropTenant(pool, c.companyId)
     await pool?.close()
   })
 
@@ -171,7 +183,7 @@ describe("the role endpoints", { skip: database.skip }, () => {
     test("lets another company use the same name: a role name is unique inside a company", async () => {
       const name = roleName("Shared Name")
       await create(olivia, { name, scope: "Company", description: "d" })
-      assert.equal((await create(other, { name, scope: "Company", description: "d" })).name, name)
+      assert.equal((await create(third, { name, scope: "Company", description: "d" })).name, name)
     })
 
     test("refuses a missing field, a member the server owns, and a grant outside the vocabulary", async () => {

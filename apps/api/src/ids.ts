@@ -7,12 +7,17 @@
 // The layout and the ordering rule are pure and live in @waste/domain/ids;
 // this is the impure half, and the only one in the API: the clock is
 // `Date.now` and the randomness is `crypto.getRandomValues`, Node's Web
-// Crypto, which is a CSPRNG (an id lands in URLs, so it may not be
-// guessable). The last id minted is held so a burst inside one millisecond
-// counts up from it instead of scattering; that is per process, which is all
-// the ordering a cursor over `id` needs (two processes' ids interleave within
-// a millisecond and no page repeats or skips a row for it, since the cursor
-// is an id and not a count).
+// Crypto, which is a CSPRNG. The last id minted is held so a burst inside one
+// millisecond counts up from it instead of scattering; that is per process,
+// which is all the ordering a cursor over `id` needs (two processes' ids
+// interleave within a millisecond and no page repeats or skips a row for it,
+// since the cursor is an id and not a count).
+//
+// So the first id of a millisecond is random and the rest of that
+// millisecond's are its successors: an id is not a secret, and nothing here
+// pretends otherwise. Ids are not capabilities — every read carries the
+// caller's `company_id` and its role's grant (auth/principal.ts,
+// auth/require.ts), so holding one buys nothing.
 import { ID_RANDOM_BYTES, mintId, nextId } from "@waste/domain/ids"
 
 /** Mints the next id of a sequence. */

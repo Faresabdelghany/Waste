@@ -82,6 +82,19 @@ describe("errorHandler", () => {
     hono.get("/boom", () => {
       throw new Error("the database ate my query: postgresql://wms_api:secret@host/db")
     })
+    // What a failed `POST /users` looks like when the database refuses it for
+    // a reason that is nobody's business on the wire: Drizzle's wrapper over
+    // a postgres.js error, which carries the statement and everything the
+    // route bound into it.
+    hono.get("/with-parameters", () => {
+      const cause = Object.assign(new Error("insert or update on table violates foreign key constraint"), {
+        code: "23503",
+        constraint_name: "user_account_role_id_fk",
+        query: "insert into wms.user_account (id, company_id, email, full_name) values ($1, $2, $3, $4)",
+        parameters: ["01a0d3a5-e5e0-7000-8000-000000000001", "01a0d3a5-e5e0-7000-8000-000000000002", "invitee@example.com", "Invited Person"],
+      })
+      throw new Error("Failed query: insert into wms.user_account ...", { cause })
+    })
     return hono
   }
 
@@ -115,7 +128,7 @@ describe("errorHandler", () => {
     assert.deepEqual(entries, [], "a conflict is the client's news, not the operator's")
   })
 
-  test("answers 500 with no detail for anything else, and logs the error once, whole", async () => {
+  test("answers 500 with no detail for anything else, and logs the error once", async () => {
     const { entries, log } = recorder()
     const response = await app(log).request("/boom")
     assert.equal(response.status, 500)
@@ -123,11 +136,31 @@ describe("errorHandler", () => {
     assert.deepEqual(body, { type: "about:blank", title: "Internal Server Error", status: 500 })
     assert.equal(JSON.stringify(body).includes("secret"), false, "what the error said stays in the log")
     assert.equal(entries.length, 1)
-    assert.ok(entries[0] instanceof Error)
-    assert.match((entries[0] as Error).message, /ate my query/)
+    const logged = entries[0] as Record<string, unknown>
+    assert.equal(logged.name, "Error")
+    assert.match(String(logged.message), /ate my query/)
+    assert.match(String(logged.stack), /ate my query/)
     const other = await app(log).request("/other-sqlstate")
     assert.equal(other.status, 500, "only 23505 has a meaning on the wire so far")
     assert.equal(entries.length, 2)
+  })
+
+  test("logs a projection of a database error: its name, message, SQLSTATE, constraint and stack, never the statement or its parameters", async () => {
+    const { entries, log } = recorder()
+    const response = await app(log).request("/with-parameters")
+    assert.equal(response.status, 500)
+    assert.deepEqual(await readProblem(response), { type: "about:blank", title: "Internal Server Error", status: 500 })
+    assert.equal(entries.length, 1)
+    const logged = entries[0] as Record<string, unknown>
+    assert.deepEqual(Object.keys(logged).sort(), ["cause", "message", "name", "stack"])
+    const cause = logged.cause as Record<string, unknown>
+    assert.deepEqual(Object.keys(cause).sort(), ["code", "constraint_name", "message", "name", "stack"])
+    assert.equal(cause.code, "23503")
+    assert.equal(cause.constraint_name, "user_account_role_id_fk")
+    const printed = JSON.stringify(entries)
+    assert.equal(printed.includes("invitee@example.com"), false, "an invitee's address is not the operator's to keep")
+    assert.equal(printed.includes("Invited Person"), false)
+    assert.equal(printed.includes("values ($1"), false, "nor is the statement the route sent")
   })
 })
 

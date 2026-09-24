@@ -17,11 +17,11 @@
 // one (ADR-0001: the API is the authority, RLS the backstop), so a pool that
 // ever ran as a role with BYPASSRLS, or a table that lost its fence, would
 // still refuse company A's account for a company-B claim. Either way a login
-// with an account in another company, an unknown `sub`, a deactivated account
-// and a company that does not exist are all the same "no active account
-// here", a 403 with the problem body (a 401 would say "get a better token",
-// and no token would help). A token with no company claim is the hook's "no
-// account at all", also 403.
+// with an account in another company, an unknown `sub`, a `sub` that is not
+// even a UUID, a deactivated account and a company that does not exist are
+// all the same "no active account here", a 403 with the problem body (a 401
+// would say "get a better token", and no token would help). A token with no
+// company claim is the hook's "no account at all", also 403.
 //
 // The handler runs inside that same transaction and receives it as `tx`:
 // no handler opens a transaction of its own, so a request's reads and writes
@@ -36,11 +36,11 @@ import type { Database, Tx } from "@waste/db/client"
 import { projectAccess, role, roleGrant, userAccount } from "@waste/db/schema/access"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
 import { withCompany } from "@waste/db/tenant"
-import { normaliseGrants, type Grant } from "@waste/domain/access/grants"
-import { ACTIONS, MODULE_KEYS } from "@waste/domain/access/modules"
+import type { Grant } from "@waste/domain/access/grants"
 import { and, asc, eq, isNull } from "drizzle-orm"
 import type { MiddlewareHandler } from "hono"
 
+import { grantsOfRows } from "../access-shape"
 import { problem } from "../problem"
 import { bearerToken, type VerifiedClaims, type Verifier } from "./verify"
 
@@ -77,24 +77,6 @@ export function companyIdOf(claims: VerifiedClaims): string | undefined {
   return typeof value === "string" && UUID.test(value) ? value.toLowerCase() : undefined
 }
 
-const MODULE_KEY_SET: ReadonlySet<string> = new Set(MODULE_KEYS)
-const ACTION_SET: ReadonlySet<string> = new Set(ACTIONS)
-
-/**
- * The role's grant rows as a normalised grant set. A row naming a module or
- * an action the vocabulary no longer has grants nothing: there is no surface
- * with that key to reach.
- */
-function grantsOf(rows: readonly { moduleKey: string; action: string }[]): Grant[] {
-  return normaliseGrants(
-    rows.flatMap((row) =>
-      MODULE_KEY_SET.has(row.moduleKey) && ACTION_SET.has(row.action)
-        ? [{ moduleKey: row.moduleKey as Grant["moduleKey"], actions: [row.action as Grant["actions"][number]] }]
-        : [],
-    ),
-  )
-}
-
 export type Login = {
   /** The token's `sub`. */
   userId: string
@@ -107,6 +89,12 @@ export type Login = {
  * to the login.
  */
 export async function resolvePrincipal(tx: Tx, { userId, companyId }: Login): Promise<Principal | null> {
+  // `user_account.auth_user_id` is a uuid column. A validly signed token whose
+  // `sub` is not a UUID is bound to no account here, and it is answered as
+  // such: handing it to Postgres would be a 22P02 and a logged 500 for a
+  // request that was only ever going to be refused.
+  if (!UUID.test(userId)) return null
+
   const [found] = await tx
     .select({
       id: userAccount.id,
@@ -168,7 +156,9 @@ export async function resolvePrincipal(tx: Tx, { userId, companyId }: Login): Pr
     },
     company: { id: found.companyId, name: found.companyName },
     role: { id: found.roleId, key: found.roleKey, name: found.roleName, scope: found.roleScope, system: found.roleSystem },
-    grants: grantsOf(grantRows),
+    // One spelling of "these rows, as the set they grant", shared with the
+    // role routes: a row outside the vocabulary grants nothing (access-shape.ts).
+    grants: grantsOfRows(grantRows),
     projects,
     serviceProvider: provider ?? null,
   }

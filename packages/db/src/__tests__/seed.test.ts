@@ -195,6 +195,14 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
   test("what someone edited by hand goes back to what the seed says, and a grant the charter does not name is removed", async () => {
     const settled = await snapshot()
     await owner.db.update(company).set({ name: "WasteHero Sverige" }).where(eq(company.id, DEMO_IDS.company))
+    // A camelCase column too: `set` is keyed by the property name and the
+    // column is `contact_email` in the database, which is what `propertyOf`
+    // is for — an edit here that did not come back would mean the seed had
+    // been setting a column nobody reads.
+    await owner.db
+      .update(serviceProvider)
+      .set({ contactEmail: "nobody@example.invalid" })
+      .where(eq(serviceProvider.id, DEMO_IDS.serviceProviders.nordren))
     await owner.db.delete(roleGrant).where(eq(roleGrant.roleId, DEMO_IDS.roles.driver))
     await owner.db.insert(roleGrant).values({
       companyId: DEMO_IDS.company,
@@ -208,6 +216,8 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     assert.ok(report.changed > 0)
     const [restored] = await owner.db.select().from(company)
     assert.equal(restored.name, "WasteHero Denmark")
+    const [nordren] = await owner.db.select().from(serviceProvider).where(eq(serviceProvider.id, DEMO_IDS.serviceProviders.nordren))
+    assert.equal(nordren.contactEmail, "lars.mikkelsen@nordren.dk")
     const driverGrants = await owner.db.select().from(roleGrant).where(eq(roleGrant.roleId, DEMO_IDS.roles.driver))
     assert.deepEqual(
       driverGrants.map((row) => `${row.moduleKey}:${row.action}`).sort(),

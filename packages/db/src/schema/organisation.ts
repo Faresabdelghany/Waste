@@ -46,8 +46,10 @@ export const company = wms.table(
   (t) => [
     // The registration is the one identity a registry gives a company: once per country.
     uniqueOn(t.country, t.registrationNumber),
-    // The company is its own tenant.
-    check(tableObjectName(t.id.table, "self", "company"), sql`${t.companyId} = ${t.id}`),
+    // The company is its own tenant. There is no helper for a check this
+    // table alone needs, so the label the refusal would print names the check
+    // itself, the way every other call here names the helper that built it.
+    check(tableObjectName(t.id.table, "self", "companySelf"), sql`${t.companyId} = ${t.id}`),
     oneOf(t.status, COMPANY_STATUSES),
   ],
 )

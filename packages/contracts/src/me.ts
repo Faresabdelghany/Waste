@@ -16,12 +16,13 @@ import * as z from "zod"
 
 import { Id } from "./ids"
 import { Grant } from "./permissions"
+import { Label } from "./text"
 
 /** The caller's account. Always `active`: an invited account has no token yet and a deactivated one is refused with 403 before this body. */
 const MeUser = z.object({
   id: Id,
   email: z.email(),
-  fullName: z.string(),
+  fullName: Label,
   status: z.literal("active"),
   /** Works in every project of the company; `projects` then lists them all. */
   allProjects: z.boolean(),
@@ -31,7 +32,7 @@ const MeUser = z.object({
 
 const MeCompany = z.object({
   id: Id,
-  name: z.string(),
+  name: Label,
 })
 
 /** The caller's role, with the grants the API applies to this request. */
@@ -39,8 +40,8 @@ const MeRole = z.object({
   id: Id,
   /** The stable key of a seeded role; null for a custom one. */
   key: z.string().nullable(),
-  name: z.string(),
-  scope: z.string(),
+  name: Label,
+  scope: Label,
   system: z.boolean(),
   /** Normalised: one entry per module, sorted by key, `view` wherever anything else is granted. */
   grants: z.array(Grant),
@@ -48,12 +49,12 @@ const MeRole = z.object({
 
 const MeProject = z.object({
   id: Id,
-  name: z.string(),
+  name: Label,
 })
 
 const MeServiceProvider = z.object({
   id: Id,
-  legalName: z.string(),
+  legalName: Label,
 })
 
 export const Me = z.object({

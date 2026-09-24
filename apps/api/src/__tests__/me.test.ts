@@ -147,6 +147,14 @@ describe("the request path against the database", { skip: database.skip }, () =>
       await forbidden(await signToken(keys, { sub: randomUUID(), companyId: a.companyId }), "unknown sub")
     })
 
+    // A `sub` of "" is a token that names no subject at all, and verify.ts
+    // refuses that as a 401 before any of this; these are tokens that name one.
+    test("for a `sub` that is not a UUID at all: the same refusal, never a 500 from the uuid column", async () => {
+      for (const sub of ["not-a-uuid", "01a0d3a5", "'; drop table wms.user_account; --"]) {
+        await forbidden(await signToken(keys, { sub, companyId: a.companyId }), JSON.stringify(sub))
+      }
+    })
+
     test("for a deactivated account", async () => {
       await forbidden(await tokenFor(a.users.deactivated, a.companyId), "deactivated")
     })

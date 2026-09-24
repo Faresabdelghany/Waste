@@ -108,6 +108,26 @@ describe("GET /openapi.json", () => {
     assert.equal(result.valid, true, JSON.stringify(result.errors))
   })
 
+  test("documents every route the app answers: a route added without describeRoute fails here", async () => {
+    // Hono's own route table is the truth about what the app answers. Each
+    // route registers one entry per handler on it (describeRoute is a
+    // middleware, so a described route appears twice), hence the set; a
+    // wildcard or an `ALL` entry would be middleware and is not an operation.
+    const registered = new Set<string>()
+    for (const route of app.routes) {
+      if (route.method === "ALL" || route.path.includes("*")) continue
+      // The document is not an operation of its own document.
+      if (route.path === "/openapi.json") continue
+      registered.add(`${route.method.toLowerCase()} ${route.path.replace(/:([^/]+)/g, "{$1}")}`)
+    }
+    const document = await spec()
+    const documented = new Set<string>()
+    for (const [path, operations] of Object.entries(document.paths)) {
+      for (const method of Object.keys(operations)) documented.add(`${method} ${path}`)
+    }
+    assert.deepEqual([...documented].sort(), [...registered].sort())
+  })
+
   test("documents the probes and every route of the organisation and access context, and no other path", async () => {
     const document = await spec()
     assert.deepEqual(Object.keys(document.paths).sort(), [
@@ -190,8 +210,10 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(operations("/service-providers/{id}"), { get: "getServiceProvider", patch: "patchServiceProvider" })
 
     // What a caller can earn on each of them, and in what shape.
-    assert.deepEqual(Object.keys(document.paths["/company"].get.responses), ["200", "401", "403"])
-    assert.deepEqual(Object.keys(document.paths["/company"].patch.responses), ["200", "400", "401", "403", "409"])
+    // Both company handlers can answer 404 (the row the token was resolved
+    // against, gone between that join and the statement), so both describe it.
+    assert.deepEqual(Object.keys(document.paths["/company"].get.responses), ["200", "401", "403", "404"])
+    assert.deepEqual(Object.keys(document.paths["/company"].patch.responses), ["200", "400", "401", "403", "404", "409"])
     assert.deepEqual(Object.keys(document.paths["/projects"].post.responses), ["201", "400", "401", "403", "409"])
     assert.deepEqual(Object.keys(document.paths["/projects/{id}"].patch.responses), ["200", "400", "401", "403", "404", "409"])
     for (const [path, method] of [["/projects/{id}", "patch"], ["/service-providers/{id}", "get"]] as const) {
