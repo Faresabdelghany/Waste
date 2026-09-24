@@ -1,26 +1,85 @@
-// The demo seed (Issue #70, slice 2) against a fresh database of its own, so
-// that "a clean database becomes the demo company" is what is proved and
-// nothing depends on what the shared local database holds. The properties that
-// matter: it writes what the spec lists, a second run writes nothing at all,
-// and a row someone edited by hand goes back to what the seed says. The ids
-// are fixed constants, so a hosted token opens the same company locally; their
-// shape is checked without a database.
+// The demo seed (Issue #70, slice 2; the Registry since 2026-09-25) against a
+// fresh database of its own, so that "a clean database becomes the demo
+// company" is what is proved and nothing depends on what the shared local
+// database holds. The properties that matter: it writes what the spec lists,
+// a second run writes nothing at all, and a row someone edited by hand goes
+// back to what the seed says. The ids are fixed constants, so a hosted token
+// opens the same company locally; their shape is checked without a database.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { SYSTEM_ROLES, SYSTEM_ROLE_KEYS } from "@waste/domain/access/system-roles"
-import { eq, sql } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 
 import { createDb, type Database } from "../client"
 import { migrateDatabase } from "../migrate"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "../schema/access"
+import { agreement, subscription } from "../schema/agreements"
+import { containerType, product, serviceFrequency, wasteFraction } from "../schema/catalogue"
+import { container, containerServicePlacement } from "../schema/containers"
+import {
+  customer,
+  property,
+  propertyGroup,
+  propertyGroupMember,
+  propertyParty,
+  sharedCollectionPoint,
+  sharedCollectionPointMember,
+} from "../schema/customers"
 import { company, project, serviceProvider } from "../schema/organisation"
 import { DEMO_IDS, seedDemo } from "../seed/demo"
+import { DEMO_KINDS, demoId } from "../seed/ids"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 
 const database = databaseUnderTest()
 
 const UUIDV7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
+/** The twenty-three tables the seed writes, in the order it writes them. */
+const SEEDED_TABLES = [
+  company,
+  project,
+  serviceProvider,
+  role,
+  userAccount,
+  roleGrant,
+  projectAccess,
+  serviceProviderAccess,
+  wasteFraction,
+  containerType,
+  serviceFrequency,
+  product,
+  customer,
+  property,
+  propertyParty,
+  propertyGroup,
+  propertyGroupMember,
+  sharedCollectionPoint,
+  sharedCollectionPointMember,
+  agreement,
+  subscription,
+  container,
+  containerServicePlacement,
+]
+
+/** What the Registry seed holds per table, pinned so a fixture that grows or shrinks is noticed. */
+const REGISTRY_COUNTS = {
+  wasteFractions: 9,
+  containerTypes: 7,
+  serviceFrequencies: 8,
+  products: 14,
+  customers: 19,
+  properties: 53,
+  propertyParties: 113,
+  propertyGroups: 2,
+  propertyGroupMembers: 9,
+  sharedCollectionPoints: 2,
+  sharedCollectionPointMembers: 6,
+  agreements: 53,
+  subscriptions: 38,
+  containers: 107,
+  containerServicePlacements: 56,
+}
 
 /** Every id the seed spells, wherever it sits in DEMO_IDS. */
 function allIds(value: unknown): string[] {
@@ -47,6 +106,44 @@ describe("the demo seed's fixed ids", () => {
     // them up; the seed must never write over its fixture.
     assert.ok(!allIds(DEMO_IDS).includes("018f7c2e-c000-7000-8000-000000000001"))
   })
+
+  test("demoId spells the hand-written Organisation & Access ids, so the Registry's counted ids share their scheme", () => {
+    assert.equal(demoId("company", 1), DEMO_IDS.company)
+    assert.equal(demoId("project", 3), DEMO_IDS.projects.cairo)
+    assert.equal(demoId("role", 11), DEMO_IDS.roles["integration-writer"])
+    assert.equal(demoId("serviceProviderAccess", 1), DEMO_IDS.serviceProviderAccess.lars)
+    assert.equal(demoId("container", 0x6b), "01a0d2a4-a280-7014-8000-00000000006b")
+    assert.throws(() => demoId("container", 0), /whole number from 1/)
+    // The kinds are distinct, and every Registry kind sits above the six Organisation & Access ones.
+    const kinds = Object.values(DEMO_KINDS)
+    assert.equal(new Set(kinds).size, kinds.length)
+    const registryKind = (id: string) => Number.parseInt(id.slice(15, 18), 16)
+    for (const id of allIds(DEMO_IDS.registry)) assert.ok(registryKind(id) >= DEMO_KINDS.wasteFraction, `${id} is not in a Registry kind`)
+  })
+
+  test("the Registry ids are keyed by the prototype's record ids, its agreement numbers and its memberships", () => {
+    const { registry } = DEMO_IDS
+    assert.deepEqual(Object.keys(registry.wasteFractions), ["residual", "organic", "paper", "cardboard", "glass", "plastic", "metal", "mixed", "wastewater"])
+    assert.deepEqual(Object.keys(registry.products.copenhagen), Object.keys(registry.products.harbor))
+    assert.ok(registry.products.copenhagen["product-res-240"] !== registry.products.harbor["product-res-240"])
+    assert.deepEqual(Object.keys(registry.serviceFrequencies.harbor), ["freq-weekly", "freq-every-2-weeks", "freq-monthly", "freq-on-demand"])
+    assert.ok(registry.customers["company-osterbro-housing"])
+    assert.ok(registry.properties["property-parkvej-18"] && registry.properties["property-seed-101"] && registry.properties["property-seed-150"])
+    assert.ok(registry.propertyGroups["group-osterbro-east"] && registry.sharedCollectionPoints["shared-point-17"])
+    assert.ok(registry.propertyGroupMembers["group-osterbro-east:property-parkvej-18"])
+    assert.ok(registry.propertyParties["property-parkvej-18:contact-mikkel:service-contact"])
+    assert.ok(registry.agreements["AGR-2408"] && registry.agreements["AGR-2600"] && registry.agreements["AGR-2649"])
+    assert.ok(registry.subscriptions["AGR-2512:product-card-660:property-dock-4"])
+    assert.ok(registry.containers["asset-82014"] && registry.containers["asset-seed-91001"] && registry.containers["asset-seed-91100"])
+    // A placement is keyed by the container placed, and BIN-82014 has none: no fixture product collects organic.
+    assert.ok(registry.containerServicePlacements["asset-77104"])
+    assert.equal(registry.containerServicePlacements["asset-82014"], undefined)
+    for (const [table, expected] of Object.entries(REGISTRY_COUNTS)) {
+      const ids = registry[table as keyof typeof registry]
+      const spelled = "copenhagen" in ids ? Object.values(ids).flatMap((byProject) => Object.values(byProject)) : Object.values(ids)
+      assert.equal(spelled.length, expected, `${table} spells ${spelled.length} ids`)
+    }
+  })
 })
 
 describe("the demo seed against a fresh database", { skip: database.skip }, () => {
@@ -63,10 +160,10 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     await fresh?.drop()
   })
 
-  /** Every seeded row, ordered, with the timestamps: two snapshots are equal only if nothing was written. */
+  /** Every seeded row of every seeded table, ordered, with the timestamps: two snapshots are equal only if nothing was written. */
   const snapshot = async () => {
     const rows = await Promise.all(
-      [company, project, serviceProvider, role, userAccount, roleGrant, projectAccess, serviceProviderAccess].map((table) =>
+      SEEDED_TABLES.map((table) =>
         owner.db
           .select()
           .from(table)
@@ -97,6 +194,7 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
       roleGrants: expectedGrants,
       users: 2,
       serviceProviderAccess: 1,
+      ...REGISTRY_COUNTS,
     })
 
     const [seeded] = await owner.db.select().from(company)
@@ -183,6 +281,169 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     )
   })
 
+  test("the Registry: the catalogue, the customers with their properties, groups and points, the agreements with their subscriptions, and the containers with their placements", async () => {
+    const { registry } = DEMO_IDS
+    const [own] = await owner.sql<{ count: number }[]>`select count(*)::int as count from wms.customer where company_id <> ${DEMO_IDS.company}`
+    assert.equal(own.count, 0, "a fresh database holds no other company's rows")
+
+    // Every table holds exactly what the report counts, and every row is the demo company's.
+    const tables = {
+      wasteFractions: wasteFraction,
+      containerTypes: containerType,
+      serviceFrequencies: serviceFrequency,
+      products: product,
+      customers: customer,
+      properties: property,
+      propertyParties: propertyParty,
+      propertyGroups: propertyGroup,
+      propertyGroupMembers: propertyGroupMember,
+      sharedCollectionPoints: sharedCollectionPoint,
+      sharedCollectionPointMembers: sharedCollectionPointMember,
+      agreements: agreement,
+      subscriptions: subscription,
+      containers: container,
+      containerServicePlacements: containerServicePlacement,
+    }
+    for (const [name, table] of Object.entries(tables)) {
+      const [row] = await owner.db
+        .select({ count: sql<number>`count(*)::int`, companies: sql<number>`count(distinct company_id)::int` })
+        .from(table)
+      assert.equal(row.count, REGISTRY_COUNTS[name as keyof typeof REGISTRY_COUNTS], `${name} holds ${row.count} rows`)
+      assert.equal(row.companies, 1, `${name} holds another company's rows`)
+    }
+
+    // The catalogue: the fraction keys are slugs, the types carry their volume, a cadence has the domain's shape, a product names all three.
+    const fractions = await owner.db.select().from(wasteFraction).orderBy(wasteFraction.id)
+    assert.deepEqual(
+      fractions.map((row) => [row.key, row.name]),
+      [
+        ["residual", "Residual"],
+        ["organic", "Organic"],
+        ["paper", "Paper"],
+        ["cardboard", "Cardboard"],
+        ["glass", "Glass"],
+        ["plastic", "Plastic"],
+        ["metal", "Metal"],
+        ["mixed", "Mixed"],
+        ["wastewater", "Wastewater"],
+      ],
+    )
+    const [underground] = await owner.db.select().from(containerType).where(eq(containerType.id, registry.containerTypes["underground-5000"]))
+    assert.deepEqual([underground.name, underground.volumeLitres], ["Underground · 5,000 L", 5000])
+    const [fortnightly] = await owner.db.select().from(serviceFrequency).where(eq(serviceFrequency.id, registry.serviceFrequencies.copenhagen["freq-every-2-weeks"]))
+    assert.deepEqual(
+      [fortnightly.projectId, fortnightly.name, fortnightly.collectionsPerWeek, fortnightly.weeksBetween, fortnightly.daysBetween],
+      [DEMO_IDS.projects.copenhagen, "Every 2 weeks", 1, 2, null],
+    )
+    const [residual240] = await owner.db.select().from(product).where(eq(product.id, registry.products.copenhagen["product-res-240"]))
+    assert.deepEqual(
+      [residual240.projectId, residual240.name, residual240.kind, residual240.status, residual240.unit, residual240.containerTypeId, residual240.wasteFractionId, residual240.serviceFrequencyId],
+      [
+        DEMO_IDS.projects.copenhagen,
+        "Residual waste · 240L bin",
+        "container-collection",
+        "active",
+        "pickup",
+        registry.containerTypes["two-wheel-240"],
+        registry.wasteFractions.residual,
+        registry.serviceFrequencies.copenhagen["freq-every-2-weeks"],
+      ],
+    )
+
+    // Customers and properties: a CVR stored as the number, a property located where the map places it, a private owner as a person of its own.
+    const [osterbro] = await owner.db.select().from(customer).where(eq(customer.id, registry.customers["company-osterbro-housing"]))
+    assert.deepEqual([osterbro.kind, osterbro.name, osterbro.registrationNumber, osterbro.email, osterbro.status], ["organisation", "Østerbro Housing", "38112009", "service@osterbro-housing.example", "active"])
+    const [parkvej] = await owner.db.select().from(property).where(eq(property.id, registry.properties["property-parkvej-18"]))
+    assert.deepEqual(
+      [parkvej.projectId, parkvej.name, parkvej.address, parkvej.registryId, parkvej.kind, parkvej.status, parkvej.location],
+      [DEMO_IDS.projects.copenhagen, "Parkvej 18", "Parkvej 18, 2100 København Ø", "CPH-001882", "residential", "active", { type: "Point", coordinates: [12.576848, 55.703119] }],
+    )
+    const [ryesgade] = await owner.db.select().from(property).where(eq(property.id, registry.properties["property-seed-101"]))
+    assert.deepEqual([ryesgade.name, ryesgade.address, ryesgade.registryId, ryesgade.location], ["Ryesgade 3", "Ryesgade 3, 2200 København N", "CPH-91000", { type: "Point", coordinates: [12.560646, 55.69076] }])
+    const [dock] = await owner.db.select().from(property).where(eq(property.id, registry.properties["property-dock-4"]))
+    assert.deepEqual([dock.projectId, dock.status, dock.location], [DEMO_IDS.projects.harbor, "inactive", { type: "Point", coordinates: [12.598507, 55.708973] }])
+    const [{ located }] = await owner.sql<{ located: number }[]>`select count(location)::int as located from wms.property`
+    assert.equal(located, REGISTRY_COUNTS.properties, "every fixture street is in the gazetteer, so every property is located")
+    const parties = await owner.db.select().from(propertyParty).where(eq(propertyParty.propertyId, registry.properties["property-sundbyvej-91"]))
+    assert.deepEqual(
+      parties.map((row) => [row.customerId, row.role]).sort(),
+      [
+        [registry.customers["customer-amager-district"], "payer"],
+        [registry.customers["owner-property-sundbyvej-91"], "owner"],
+      ].sort(),
+    )
+    const [privateOwner] = await owner.db.select().from(customer).where(eq(customer.id, registry.customers["owner-property-sundbyvej-91"]))
+    assert.deepEqual([privateOwner.kind, privateOwner.name], ["person", "Private owner · Sundbyvej 91"])
+
+    // Groups and points: the Østerbro East members are the Copenhagen properties Østerbro Housing owns; Kongens Nytorv is a located point with no member.
+    const east = await owner.db.select().from(propertyGroupMember).where(eq(propertyGroupMember.propertyGroupId, registry.propertyGroups["group-osterbro-east"]))
+    assert.equal(east.length, 7)
+    assert.ok(east.some((row) => row.propertyId === registry.properties["property-parkvej-18"]))
+    const [nytorv] = await owner.db.select().from(sharedCollectionPoint).where(eq(sharedCollectionPoint.id, registry.sharedCollectionPoints["shared-point-17"]))
+    assert.deepEqual(
+      [nytorv.kind, nytorv.operatingModel, nytorv.accessMode, nytorv.billingMode, nytorv.status, nytorv.eligibilityDistanceM, nytorv.location],
+      ["underground", "municipal", "open", "municipal", "open", 350, { type: "Point", coordinates: [12.5855, 55.6805] }],
+    )
+    const dockMembers = await owner.db
+      .select()
+      .from(sharedCollectionPointMember)
+      .where(eq(sharedCollectionPointMember.sharedCollectionPointId, registry.sharedCollectionPoints["shared-point-23"]))
+    assert.equal(dockMembers.length, 6)
+
+    // Agreements: the fixture's "1 Jan–31 Dec 2026" as a half-open period, a draft from the month its container's collection starts.
+    const [agr2408] = await owner.db.select().from(agreement).where(eq(agreement.id, registry.agreements["AGR-2408"]))
+    assert.deepEqual(
+      [agr2408.number, agr2408.customerId, agr2408.payerCustomerId, agr2408.status, agr2408.billingCadence, agr2408.currency, agr2408.validFrom, agr2408.validTo],
+      ["AGR-2408", registry.customers["company-osterbro-housing"], registry.customers["company-osterbro-housing"], "active", "monthly", "DKK", "2026-01-01", "2027-01-01"],
+    )
+    const [agr2512] = await owner.db.select().from(agreement).where(eq(agreement.id, registry.agreements["AGR-2512"]))
+    assert.deepEqual([agr2512.status, agr2512.validFrom, agr2512.validTo], ["draft", "2026-09-01", null])
+
+    // Containers and placements: BIN-77104 stands at Dock 4 under AGR-2512 with its own weekly cadence, where the product has none; BIN-82014 stands nowhere.
+    const [bin77104] = await owner.db.select().from(container).where(eq(container.id, registry.containers["asset-77104"]))
+    assert.deepEqual([bin77104.projectId, bin77104.label, bin77104.containerTypeId, bin77104.barcode, bin77104.rfid, bin77104.serialNumber, bin77104.ownership], [
+      DEMO_IDS.projects.harbor,
+      "BIN-77104",
+      registry.containerTypes["four-wheel-1100"],
+      "WH77104",
+      "E20077104",
+      "SULO-26-77104",
+      "company",
+    ])
+    const [placed] = await owner.db
+      .select({
+        validFrom: containerServicePlacement.validFrom,
+        validTo: containerServicePlacement.validTo,
+        fraction: containerServicePlacement.wasteFractionId,
+        effective: sql<string>`coalesce(${containerServicePlacement.serviceFrequencyId}, ${product.serviceFrequencyId})`,
+        agreementId: subscription.agreementId,
+        propertyId: subscription.propertyId,
+        quantity: subscription.quantity,
+      })
+      .from(containerServicePlacement)
+      .innerJoin(subscription, and(eq(subscription.id, containerServicePlacement.subscriptionId), eq(subscription.companyId, containerServicePlacement.companyId)))
+      .innerJoin(product, and(eq(product.id, subscription.productId), eq(product.companyId, subscription.companyId)))
+      .where(eq(containerServicePlacement.containerId, registry.containers["asset-77104"]))
+    assert.deepEqual(placed, {
+      validFrom: "2026-09-01",
+      validTo: null,
+      fraction: registry.wasteFractions.cardboard,
+      effective: registry.serviceFrequencies.harbor["freq-weekly"],
+      agreementId: registry.agreements["AGR-2512"],
+      propertyId: registry.properties["property-dock-4"],
+      quantity: 1,
+    })
+    const unplaced = await owner.db.select().from(containerServicePlacement).where(eq(containerServicePlacement.containerId, registry.containers["asset-82014"]))
+    assert.deepEqual(unplaced, [])
+    // A residual container whose cadence is the product's carries no override; a Future one starts later; two of one product at one property are one subscription of two.
+    const [inherits] = await owner.db.select().from(containerServicePlacement).where(eq(containerServicePlacement.containerId, registry.containers["asset-seed-91001"]))
+    assert.deepEqual([inherits.validFrom, inherits.serviceFrequencyId, inherits.wasteFractionId], ["2026-01-01", null, registry.wasteFractions.residual])
+    const [future] = await owner.db.select().from(containerServicePlacement).where(eq(containerServicePlacement.containerId, registry.containers["asset-seed-91029"]))
+    assert.equal(future.validFrom, "2026-10-01")
+    const [pair] = await owner.db.select().from(subscription).where(eq(subscription.id, registry.subscriptions["AGR-2600:product-res-240:property-seed-101"]))
+    assert.deepEqual([pair.quantity, pair.propertyId, pair.sharedCollectionPointId, pair.locationId], [2, registry.properties["property-seed-101"], null, registry.properties["property-seed-101"]])
+  })
+
   test("a second run writes nothing: not a row, not an updated_at", async () => {
     const before = await snapshot()
     const checksum = await grantChecksum()
@@ -211,6 +472,16 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
       action: "delete",
     })
     await owner.db.delete(serviceProviderAccess).where(eq(serviceProviderAccess.id, DEMO_IDS.serviceProviderAccess.lars))
+    // Registry rows too, a geometry among them: the point takes part in the
+    // row comparison through PostGIS's `=`, so a moved point is put back and
+    // an unmoved one is not rewritten.
+    const parkvejId = DEMO_IDS.registry.properties["property-parkvej-18"]
+    await owner.db
+      .update(property)
+      .set({ name: "Parkvej 18A", location: { type: "Point", coordinates: [12.5, 55.7] } })
+      .where(eq(property.id, parkvejId))
+    await owner.db.update(container).set({ label: "BIN-00000", ownership: "unrecorded" }).where(eq(container.id, DEMO_IDS.registry.containers["asset-82014"]))
+    await owner.db.update(agreement).set({ validTo: "2026-06-01" }).where(eq(agreement.id, DEMO_IDS.registry.agreements["AGR-2408"]))
 
     const report = await seedDemo(fresh.url)
     assert.ok(report.changed > 0)
@@ -218,6 +489,12 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     assert.equal(restored.name, "Kystbyen Renovation")
     const [nordren] = await owner.db.select().from(serviceProvider).where(eq(serviceProvider.id, DEMO_IDS.serviceProviders.nordren))
     assert.equal(nordren.contactEmail, "lars.mikkelsen@nordren.dk")
+    const [parkvej] = await owner.db.select().from(property).where(eq(property.id, parkvejId))
+    assert.deepEqual([parkvej.name, parkvej.location], ["Parkvej 18", { type: "Point", coordinates: [12.576848, 55.703119] }])
+    const [bin82014] = await owner.db.select().from(container).where(eq(container.id, DEMO_IDS.registry.containers["asset-82014"]))
+    assert.deepEqual([bin82014.label, bin82014.ownership], ["BIN-82014", "company"])
+    const [agr2408] = await owner.db.select().from(agreement).where(eq(agreement.id, DEMO_IDS.registry.agreements["AGR-2408"]))
+    assert.equal(agr2408.validTo, "2027-01-01")
     const driverGrants = await owner.db.select().from(roleGrant).where(eq(roleGrant.roleId, DEMO_IDS.roles.driver))
     assert.deepEqual(
       driverGrants.map((row) => `${row.moduleKey}:${row.action}`).sort(),
