@@ -3,7 +3,8 @@
 // supabase_auth_admin with the event Auth sends. On the shared local database,
 // not a fresh one: `auth.users` exists only where the Supabase image created
 // it, and the test inserts the auth users its events name, as the owner, the
-// way Auth would have. The rows it commits belong to one company of its own
+// way Auth would have. The rows it commits belong to two companies of its own
+// (the second is there to invite an address the first has invited too, #76)
 // and are removed in dependency order before and after.
 //
 // The owner cannot SET ROLE to supabase_auth_admin (its memberships are
@@ -29,20 +30,28 @@ const HOOK = "public.custom_access_token_hook"
 
 const companyId = "018f7c2e-c000-7000-8000-000000000001"
 const roleId = "018f7c2e-c000-7000-8000-000000000002"
+/** A second company, there to invite an address the first has invited too (#76). */
+const otherCompanyId = "018f7c2e-c000-7000-8000-000000000003"
+const otherRoleId = "018f7c2e-c000-7000-8000-000000000004"
 // Addresses of this file's own: the hook binds by e-mail across the whole
 // database, so an address the demo seed also invited (fares4389@gmail.com,
-// src/seed/demo.ts) would be bound twice and refused by `unique (auth_user_id)`.
+// src/seed/demo.ts) would be two open invitations, which the hook binds
+// neither of.
 const accounts = {
   invited: { id: "018f7c2e-c000-7000-8000-000000000011", email: "invited.colleague@hook-test.example" },
   deactivated: { id: "018f7c2e-c000-7000-8000-000000000012", email: "former.colleague@hook-test.example" },
   neverBound: { id: "018f7c2e-c000-7000-8000-000000000013", email: "left.before.signing.in@hook-test.example" },
+  invitedTwice: { id: "018f7c2e-c000-7000-8000-000000000014", email: "invited.by.both@hook-test.example" },
+  /** The other company's invitation of the same address. */
+  invitedTwiceElsewhere: { id: "018f7c2e-c000-7000-8000-000000000015", email: "invited.by.both@hook-test.example" },
 }
-/** The auth users, one per account and one nobody invited into the company. */
+/** The auth users, one per person and one nobody invited into a company. */
 const authUsers = {
   invited: "018f7c2e-c000-7000-8000-0000000000a1",
   deactivated: "018f7c2e-c000-7000-8000-0000000000a2",
   neverBound: "018f7c2e-c000-7000-8000-0000000000a3",
   unknown: "018f7c2e-c000-7000-8000-0000000000a4",
+  invitedTwice: "018f7c2e-c000-7000-8000-0000000000a5",
 }
 
 type Event = { user_id: string; claims: Record<string, unknown>; authentication_method: string }
@@ -82,7 +91,7 @@ describe("the access token hook against the database", { skip: database.skip }, 
   const cleanUp = async (): Promise<void> => {
     await owner.sql.begin(async (tx) => {
       for (const table of ["service_provider_access", "project_access", "role_grant", "user_account", "role", "service_provider", "project", "company"]) {
-        await tx.unsafe(`delete from wms.${table} where company_id = $1`, [companyId])
+        await tx.unsafe(`delete from wms.${table} where company_id in ($1, $2)`, [companyId, otherCompanyId])
       }
       await tx`delete from auth.users where id in ${tx(Object.values(authUsers))}`
     })
@@ -96,12 +105,20 @@ describe("the access token hook against the database", { skip: database.skip }, 
     // This file's own company, not the demo seed's: `unique (country,
     // registration_number)` is global, and `pnpm db:seed` owns DK 12345678 on
     // this shared database (src/seed/demo.ts).
-    await owner.db.insert(company).values({ id: companyId, companyId, name: "Hook Test A/S", legalName: "Hook Test ApS", registrationNumber: "99000001", country: "DK", status: "active" })
-    await owner.db.insert(role).values({ id: roleId, companyId, key: "company-administrator", name: "Company Administrator", scope: "Company", description: "Everything in the company", system: true })
+    await owner.db.insert(company).values([
+      { id: companyId, companyId, name: "Hook Test A/S", legalName: "Hook Test ApS", registrationNumber: "99000001", country: "DK", status: "active" },
+      { id: otherCompanyId, companyId: otherCompanyId, name: "Other Hook Test A/S", legalName: "Other Hook Test ApS", registrationNumber: "99000002", country: "DK", status: "active" },
+    ])
+    await owner.db.insert(role).values([
+      { id: roleId, companyId, key: "company-administrator", name: "Company Administrator", scope: "Company", description: "Everything in the company", system: true },
+      { id: otherRoleId, companyId: otherCompanyId, key: "company-administrator", name: "Company Administrator", scope: "Company", description: "Everything in the company", system: true },
+    ])
     await owner.db.insert(userAccount).values([
       { id: accounts.invited.id, companyId, email: accounts.invited.email, fullName: "Invited Colleague", roleId, allProjects: true, primaryAdministrator: true },
       { id: accounts.deactivated.id, companyId, email: accounts.deactivated.email, fullName: "Former Colleague", roleId, authUserId: authUsers.deactivated, deactivatedAt: new Date("2026-09-01T09:00:00Z") },
       { id: accounts.neverBound.id, companyId, email: accounts.neverBound.email, fullName: "Left Before Signing In", roleId, deactivatedAt: new Date("2026-09-02T09:00:00Z") },
+      { id: accounts.invitedTwice.id, companyId, email: accounts.invitedTwice.email, fullName: "Invited By Both", roleId },
+      { id: accounts.invitedTwiceElsewhere.id, companyId: otherCompanyId, email: accounts.invitedTwiceElsewhere.email, fullName: "Invited By Both", roleId: otherRoleId },
     ])
     // The auth users, as Auth's invitation would have created them: the columns a row needs and nothing Auth fills in later.
     for (const [name, id] of Object.entries(authUsers)) {
@@ -172,6 +189,43 @@ describe("the access token hook against the database", { skip: database.skip }, 
   test("a user no company invited: the event comes back unchanged", async () => {
     const input = event(authUsers.unknown, "nobody.invited@example.com", { provider: "email" })
     assert.deepEqual(await hook(input), input)
+  })
+
+  // `unique (auth_user_id)` is one company per login, so binding both would
+  // violate it and Auth would refuse the token on SQLSTATE 23505 with nothing
+  // to tell the person. Binding neither leaves the token without a company,
+  // which the API answers with its 403 (#76). Which company such a login belongs
+  // to is decided with multi-company accounts.
+  test("two companies inviting one address: the first sign-in binds neither and the event comes back unchanged; once one invitation is withdrawn, the other is bound", async () => {
+    const input = event(authUsers.invitedTwice, accounts.invitedTwice.email, { provider: "email" })
+    assert.deepEqual(await hook(input), input)
+    assert.equal(await boundTo(accounts.invitedTwice.id), null)
+    assert.equal(await boundTo(accounts.invitedTwiceElsewhere.id), null)
+    // The other company deactivates its invitation: the address names one open account again.
+    await owner.db.update(userAccount).set({ deactivatedAt: new Date("2026-09-03T09:00:00Z") }).where(eq(userAccount.id, accounts.invitedTwiceElsewhere.id))
+    assert.deepEqual(await hook(input), { ...input, claims: { ...input.claims, app_metadata: { provider: "email", company_id: companyId } } })
+    assert.equal(await boundTo(accounts.invitedTwice.id), authUsers.invitedTwice)
+    assert.equal(await boundTo(accounts.invitedTwiceElsewhere.id), null)
+  })
+
+  test("the first-sign-in lookup by e-mail runs on user_account_email_idx, a plain index over the address across the whole database (#75)", async () => {
+    const [index] = await owner.sql<{ definition: string }[]>`
+      select indexdef as definition from pg_indexes where schemaname = 'wms' and tablename = 'user_account' and indexname = 'user_account_email_idx'`
+    assert.equal(index?.definition, "CREATE INDEX user_account_email_idx ON wms.user_account USING btree (email)")
+    // A handful of rows: the planner would scan the table whatever indexes it
+    // had, so the plan is read with the sequential scan switched off. What it
+    // shows then is whether the index serves the hook's predicate at all — a
+    // plain equality on the column, which `unique (company_id, email)` does not
+    // lead with.
+    const plan = await rolledBack(owner.db, async (tx) => {
+      await tx.execute(sql`set local enable_seqscan = off`)
+      const rows = await tx.execute<{ "QUERY PLAN": string }>(
+        sql`explain (costs off) select count(*) from wms.user_account where email = ${accounts.invited.email} and auth_user_id is null and deactivated_at is null`,
+      )
+      return [...rows].map((row) => row["QUERY PLAN"]).join("\n")
+    })
+    assert.match(plan, /user_account_email_idx/)
+    assert.doesNotMatch(plan, /Seq Scan/)
   })
 
   test("anon, authenticated and service_role cannot execute it (42501)", () =>

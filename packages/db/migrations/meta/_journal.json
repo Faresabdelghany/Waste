@@ -36,6 +36,13 @@
       "when": 1790253827871,
       "tag": "0004_registry",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790273880241,
+      "tag": "0005_hook_email",
+      "breakpoints": true
     }
   ]
 }

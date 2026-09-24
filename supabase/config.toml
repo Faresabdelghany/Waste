@@ -38,9 +38,10 @@ enable_signup = false
 
 [auth.hook.custom_access_token]
 # `public.custom_access_token_hook`, created by migration
-# 0002_organisation_access (Issue #70): it binds the account on first sign-in
-# and puts that account's home company into the token as
-# `app_metadata.company_id`, the one custom claim the API reads. It runs on
-# every token issue, refresh included.
+# 0002_organisation_access (Issue #70) and replaced whole in 0005_hook_email
+# (Issues #75, #76): it binds the account on first sign-in, when exactly one
+# open invitation carries the address, and puts that account's home company
+# into the token as `app_metadata.company_id`, the one custom claim the API
+# reads. It runs on every token issue, refresh included.
 enabled = true
 uri = "pg-functions://postgres/public/custom_access_token_hook"
