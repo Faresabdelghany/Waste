@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Shared wire primitives on zod 4: ids (UUIDv7), ISO dates, GeoJSON Position, Point and Polygon, cursor pagination, the health response, the permission vocabulary (from @waste/domain), the RFC 9457 problem body, GET /me, and the Organisation & Access resources (company, project, service provider) with their write bodies. Consumed by apps/web and apps/api, and by packages/db for its types only. A context's module schemas land with its tables (build-order step 3 on). Ships TypeScript source for bundler and tsx consumers.",
+  "description": "Shared wire primitives on zod 4: ids (UUIDv7), ISO dates, GeoJSON Position, Point and Polygon, cursor pagination, the health response, the permission vocabulary (from @waste/domain), the RFC 9457 problem body, GET /me, and the Organisation & Access resources (company, project, service provider, user with its derived status, role with its grants) with their write bodies. Consumed by apps/web and apps/api, and by packages/db for its types only. A context's module schemas land with its tables (build-order step 3 on). Ships TypeScript source for bundler and tsx consumers.",
   "exports": {
     "./package.json": "./package.json",
     "./__tests__/*": null,

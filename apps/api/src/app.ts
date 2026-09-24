@@ -35,7 +35,9 @@ import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS } from "./readiness"
 import { companyRoutes } from "./routes/company"
 import { meRoutes } from "./routes/me"
 import { projectRoutes } from "./routes/projects"
+import { roleRoutes } from "./routes/roles"
 import { serviceProviderRoutes } from "./routes/service-providers"
+import { userRoutes } from "./routes/users"
 
 export type AppOptions = {
   /** The pool /readyz probes, as the API role: server.ts builds it from probePoolOptions; a test hands whatever it wants probed. */
@@ -110,6 +112,8 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   app.route("/", companyRoutes(guard))
   app.route("/", projectRoutes(guard))
   app.route("/", serviceProviderRoutes(guard))
+  app.route("/", userRoutes(guard))
+  app.route("/", roleRoutes(guard))
 
   app.get(
     "/openapi.json",

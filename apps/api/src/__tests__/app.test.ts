@@ -108,7 +108,7 @@ describe("GET /openapi.json", () => {
     assert.equal(result.valid, true, JSON.stringify(result.errors))
   })
 
-  test("documents the probes and every route of the organisation context, and no other path", async () => {
+  test("documents the probes and every route of the organisation and access context, and no other path", async () => {
     const document = await spec()
     assert.deepEqual(Object.keys(document.paths).sort(), [
       "/company",
@@ -117,8 +117,15 @@ describe("GET /openapi.json", () => {
       "/projects",
       "/projects/{id}",
       "/readyz",
+      "/roles",
+      "/roles/{id}",
+      "/roles/{id}/grants",
       "/service-providers",
       "/service-providers/{id}",
+      "/users",
+      "/users/{id}",
+      "/users/{id}/deactivate",
+      "/users/{id}/reactivate",
     ])
     assert.equal(document.paths["/healthz"].get.operationId, "getHealth")
     const health = schemaOf(document, "/healthz", "200")
@@ -168,7 +175,7 @@ describe("GET /openapi.json", () => {
         }
       }
     }
-    assert.equal(secured, 11, "/me and the ten organisation routes")
+    assert.equal(secured, 22, "/me, the ten organisation routes and the eleven access routes")
   })
 
   test("documents each organisation route with its verbs, its problems and its page of items", async () => {
@@ -206,6 +213,56 @@ describe("GET /openapi.json", () => {
     // A write takes a JSON body, and it is the strict one the contracts spell.
     const body = document.paths["/projects"].post.requestBody?.content["application/json"].schema
     assert.deepEqual(body?.required, ["name", "kind", "language", "currency", "timezone"])
+  })
+
+  test("documents each access route with its verbs, its problems and its page of items", async () => {
+    const document = await spec()
+    const operations = (path: string) =>
+      Object.fromEntries(Object.entries(document.paths[path]).map(([method, operation]) => [method, operation.operationId]))
+
+    assert.deepEqual(operations("/users"), { get: "listUsers", post: "inviteUser" })
+    assert.deepEqual(operations("/users/{id}"), { get: "getUser", patch: "patchUser" })
+    assert.deepEqual(operations("/users/{id}/deactivate"), { post: "deactivateUser" })
+    assert.deepEqual(operations("/users/{id}/reactivate"), { post: "reactivateUser" })
+    assert.deepEqual(operations("/roles"), { get: "listRoles", post: "createRole" })
+    assert.deepEqual(operations("/roles/{id}"), { get: "getRole", patch: "patchRole" })
+    assert.deepEqual(operations("/roles/{id}/grants"), { put: "putRoleGrants" })
+
+    // What a caller can earn on each of them, and in what shape.
+    assert.deepEqual(Object.keys(document.paths["/users"].get.responses), ["200", "400", "401", "403"])
+    assert.deepEqual(Object.keys(document.paths["/users"].post.responses), ["201", "400", "401", "403", "409"])
+    assert.deepEqual(Object.keys(document.paths["/users/{id}"].patch.responses), ["200", "400", "401", "403", "404", "409"])
+    assert.deepEqual(Object.keys(document.paths["/users/{id}/deactivate"].post.responses), ["200", "400", "401", "403", "404", "409"])
+    assert.deepEqual(Object.keys(document.paths["/users/{id}/reactivate"].post.responses), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(Object.keys(document.paths["/roles/{id}/grants"].put.responses), ["200", "400", "401", "403", "404"])
+    for (const [path, method] of [["/users/{id}", "patch"], ["/roles/{id}/grants", "put"]] as const) {
+      for (const [status, operation] of Object.entries(document.paths[path][method].responses)) {
+        const media = Object.keys(operation.content)
+        assert.deepEqual(media, [status === "200" ? "application/json" : "application/problem+json"], `${method} ${path} ${status}`)
+      }
+    }
+
+    // The rules a client must know are in the prose, not only in the code.
+    assert.match(document.paths["/users"].post.description ?? "", /exactly one of `allProjects: true`, `projectIds` or `serviceProviderId`/)
+    assert.match(document.paths["/users/{id}"].patch.description ?? "", /primary administrator cannot be moved to another role or narrowed \(409\)/)
+    assert.match(document.paths["/users/{id}/deactivate"].post.description ?? "", /primary administrator cannot be deactivated \(409\)/)
+    assert.match(document.paths["/roles/{id}/grants"].put.description ?? "", /imply `view`/)
+
+    for (const path of ["/users", "/roles"]) {
+      const page = document.paths[path].get.responses["200"].content["application/json"].schema
+      assert.deepEqual(page.required, ["items", "nextCursor"], path)
+      assert.equal(page.properties?.items.type, "array", path)
+    }
+
+    const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
+    assert.deepEqual(byName(document.paths["/users/{id}/deactivate"].post), ["path:id"])
+    assert.deepEqual(byName(document.paths["/roles"].get).sort(), ["query:cursor", "query:limit"])
+
+    // A write takes a JSON body, and it is the strict one the contracts spell.
+    assert.deepEqual(document.paths["/users"].post.requestBody?.content["application/json"].schema.required, ["email", "fullName", "roleId"])
+    assert.deepEqual(document.paths["/roles"].post.requestBody?.content["application/json"].schema.required, ["name", "scope", "description"])
+    assert.deepEqual(document.paths["/roles/{id}/grants"].put.requestBody?.content["application/json"].schema.required, ["grants"])
+    assert.equal(document.paths["/users/{id}/deactivate"].post.requestBody, undefined, "a command takes no body")
   })
 
   test("documents /me with the problem responses a token can earn", async () => {
