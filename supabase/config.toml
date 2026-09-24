@@ -20,5 +20,27 @@ major_version = 17
 enabled = false
 
 [db.seed]
-# Seed data arrives with the frontend adapter (build-order step 4), through the API, not through seed.sql.
+# The CLI's seed.sql is unused: the demo company is `pnpm db:seed`, Drizzle statements
+# from packages/db/src/seed/demo.ts run as the owner after the migrations (Issue #70).
 enabled = false
+
+# Neither of the two Auth decisions below has any effect on `pnpm db:start`,
+# which is `supabase db start`: the local stack is the database container
+# alone and runs no Auth server. They are here so the decisions live in the
+# repository and `supabase config push` can apply them to the hosted project.
+[auth]
+# Sign-up is invitation-only: an account is created by an administrator (the
+# demo seed, or POST /users) and Supabase Auth only ever confirms an address
+# somebody was invited to. The access token hook below binds an invited
+# `wms.user_account` row by e-mail, which is safe only under this rule — with
+# open sign-up anyone could claim an invited address, and with it a company.
+enable_signup = false
+
+[auth.hook.custom_access_token]
+# `public.custom_access_token_hook`, created by migration
+# 0002_organisation_access (Issue #70): it binds the account on first sign-in
+# and puts that account's home company into the token as
+# `app_metadata.company_id`, the one custom claim the API reads. It runs on
+# every token issue, refresh included.
+enabled = true
+uri = "pg-functions://postgres/public/custom_access_token_hook"
