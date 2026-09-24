@@ -64,9 +64,6 @@ import {
   planSchemeCreation,
 } from "@waste/domain/route-schemes/creation"
 import { draftGroups } from "@waste/domain/route-schemes/draft"
-import {
-  driverIneligibilityReason,
-} from "@waste/domain/route-schemes/fleet-profiles"
 import { driverFormOptions } from "@/lib/data/driver-form-options"
 import { NO_HOLIDAY_LIST_LABEL, resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
 import { HOLIDAY_POLICY_LABELS } from "@waste/domain/route-schemes/occurrences"
@@ -88,6 +85,7 @@ import {
   GROUP_OWNED_SCHEME_FIELD_IDS,
   QUICK_SCHEME_DRAFT_FIELD_IDS,
   applySchemeWasteFraction,
+  quickDriverIssue,
   quickSchemeDraftFromValues,
   seedSchemeEditValues,
 } from "@waste/domain/route-schemes/quick-create"
@@ -2423,20 +2421,18 @@ export function BusinessWorkspace({
           return true
         })
       // The route scheme quick form's driver select goes through the same
-      // licence rule as the wizard's group editor (driverOptions): every
-      // driver listed, an ineligible one disabled with the reason, an
-      // unknown licence never eligible.
+      // licence rule as the wizard's group editor (quickDriverOptions, issue
+      // #37): every driver listed, an ineligible one disabled with the
+      // reason, an unknown licence never eligible.
       if (formSchema?.key === "route-studio.schemes" && field.id === "plannedDriverId") {
         const vehicles = resolveFormModule("fleet", "vehicles")
-        const plannedVehicleId =
-          typeof values.plannedVehicleId === "string" ? values.plannedVehicleId : ""
-        const vehicle =
-          vehicles && plannedVehicleId
-            ? getRecords(vehicles.workspaceId, vehicles.module.id, vehicles.module.records).find(
-                (record) => record.id === plannedVehicleId,
-              )
-            : undefined
-        return driverFormOptions(permittedRecords, vehicle)
+        return driverFormOptions(
+          values,
+          permittedRecords,
+          vehicles
+            ? getRecords(vehicles.workspaceId, vehicles.module.id, vehicles.module.records)
+            : [],
+        )
       }
       return permittedRecords.map((record) => ({
         value: record.id,
@@ -2549,6 +2545,23 @@ export function BusinessWorkspace({
               : undefined),
         )
         if (driverId) seeded.driverId = driverId
+      }
+      // A fixture that carries typed values beside its display facts (a
+      // driver's licence class, a vehicle's required class, a project's
+      // weekend) has no name field among them, so seed it from the record
+      // name as the fixture path below does — the dialog must not open
+      // nameless. A created record always carries its name field, so this
+      // changes nothing for it.
+      const seededNameField = activeModuleFormSchema.nameField
+        ? activeModuleFormSchema.sections
+            .flatMap((section) => section.fields)
+            .find((field) => field.id === activeModuleFormSchema.nameField)
+        : undefined
+      if (
+        seededNameField?.type === "text" &&
+        !(typeof seeded[seededNameField.id] === "string" && seeded[seededNameField.id])
+      ) {
+        seeded[seededNameField.id] = editingRecord.name
       }
       return seeded
     }
@@ -2731,27 +2744,18 @@ export function BusinessWorkspace({
       }
 
       if (formSchema.key === "route-studio.schemes") {
-        const plannedVehicleId =
-          typeof values.plannedVehicleId === "string" ? values.plannedVehicleId : ""
-        const plannedDriverId =
-          typeof values.plannedDriverId === "string" ? values.plannedDriverId : ""
-        if (plannedVehicleId && plannedDriverId) {
-          const vehicles = resolveFormModule("fleet", "vehicles")
-          const drivers = resolveFormModule("fleet", "drivers")
-          const reason = driverIneligibilityReason(
-            drivers
-              ? getRecords(drivers.workspaceId, drivers.module.id, drivers.module.records).find(
-                  (record) => record.id === plannedDriverId,
-                )
-              : undefined,
-            vehicles
-              ? getRecords(vehicles.workspaceId, vehicles.module.id, vehicles.module.records).find(
-                  (record) => record.id === plannedVehicleId,
-                )
-              : undefined,
-          )
-          if (reason) errors.plannedDriverId = reason
-        }
+        // The same licence rule the select applies, at submit (issue #37):
+        // a driver picked before the vehicle changed is refused with the reason.
+        const vehicles = resolveFormModule("fleet", "vehicles")
+        const drivers = resolveFormModule("fleet", "drivers")
+        const reason = quickDriverIssue(
+          values,
+          drivers ? getRecords(drivers.workspaceId, drivers.module.id, drivers.module.records) : [],
+          vehicles
+            ? getRecords(vehicles.workspaceId, vehicles.module.id, vehicles.module.records)
+            : [],
+        )
+        if (reason) errors.plannedDriverId = reason
       }
 
       const selectedProjectId = values.projectId

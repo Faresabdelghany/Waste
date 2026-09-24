@@ -1,7 +1,19 @@
+import { LICENCE_CLASSES } from "@waste/domain/route-schemes/fleet-profiles"
 import { CONTAINER_TYPE_VOCABULARY } from "@waste/domain/route-schemes/matching"
 import { SCHEME_SERVICE_TYPES, allowedContainerTypes } from "@waste/domain/route-schemes/scope"
 
 import type { BusinessFormOption, BusinessFormSchema } from "@/lib/data/business-form-types"
+
+/**
+ * The licence classes the fleet forms offer (issue #37): the driver form's
+ * `licenceClass` (the highest class held) and the vehicle form's
+ * `requiredLicenceClass`, both the domain's LICENCE_CLASSES, the vocabulary
+ * Guided Setup step 3 and Quick Create judge drivers by.
+ */
+const LICENCE_CLASS_OPTIONS: readonly BusinessFormOption[] = LICENCE_CLASSES.map((licenceClass) => ({
+  value: licenceClass,
+  label: licenceClass,
+}))
 
 /** An option whose label is its value — the display vocabularies are stored as shown. */
 const labelOption = (value: string): BusinessFormOption => ({ value, label: value })
@@ -1558,6 +1570,15 @@ export const operationsBusinessFormSchemas = [
             unit: "kg",
           },
           {
+            id: "requiredLicenceClass",
+            label: "Required licence class",
+            type: "select",
+            required: true,
+            options: LICENCE_CLASS_OPTIONS,
+            description:
+              "The class a driver needs to take it out — B up to 3.5 t, C above, CE with a trailer in the combination. Guided Setup and Quick Create judge drivers by it.",
+          },
+          {
             id: "volumeCapacity",
             label: "Volume capacity",
             type: "number",
@@ -1721,13 +1742,14 @@ export const operationsBusinessFormSchemas = [
             label: "Licence class",
             type: "select",
             required: true,
-            relation: { workspaceId: "configure", moduleId: "master" },
+            options: LICENCE_CLASS_OPTIONS,
+            description:
+              "The highest class held: CE covers C and B, C covers B. Guided Setup and Quick Create offer the driver only vehicles this class allows.",
           },
           {
             id: "licenceExpiry",
             label: "Licence expiry",
             type: "date",
-            required: true,
           },
           {
             id: "driverAppAccess",

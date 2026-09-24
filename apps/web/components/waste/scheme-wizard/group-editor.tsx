@@ -248,7 +248,11 @@ export function GroupEditor({
                 <SelectTrigger id="group-driver" className="h-10 w-full rounded-xl">
                   <SelectValue
                     placeholder={
-                      vehicle ? `Select driver (${vehicle.licenceClass} licence)` : "Select vehicle first"
+                      !vehicle
+                        ? "Select vehicle first"
+                        : vehicle.licenceClass
+                          ? `Select driver (${vehicle.licenceClass} licence)`
+                          : "Select driver"
                     }
                   />
                 </SelectTrigger>
