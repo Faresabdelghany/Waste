@@ -122,11 +122,14 @@ describe("the access token hook against the database", { skip: database.skip }, 
       select p.prosecdef as definer, p.proconfig as config, p.proowner::regrole::text as owner, l.lanname as language,
         has_function_privilege(${AUTH_ADMIN}, ${`${HOOK}(jsonb)`}, 'execute') as auth_admin,
         has_function_privilege('anon', ${`${HOOK}(jsonb)`}, 'execute') as anon,
-        has_function_privilege('authenticated', ${`${HOOK}(jsonb)`}, 'execute') as authenticated
+        has_function_privilege('authenticated', ${`${HOOK}(jsonb)`}, 'execute') as authenticated,
+        has_function_privilege('service_role', ${`${HOOK}(jsonb)`}, 'execute') as service_role
       from pg_proc p join pg_language l on l.oid = p.prolang
       where p.oid = ${`${HOOK}(jsonb)`}::regprocedure`
-    // An empty search path is stored as `search_path=""`.
-    assert.deepEqual(row, { definer: true, config: ['search_path=""'], owner: new URL(database.adminUrl).username, language: "plpgsql", auth_admin: true, anon: false, authenticated: false })
+    // An empty search path is stored as `search_path=""`. service_role is the
+    // Data API's own caller and holds the service key: 0003 revokes what the
+    // owner's default privileges in `public` granted it.
+    assert.deepEqual(row, { definer: true, config: ['search_path=""'], owner: new URL(database.adminUrl).username, language: "plpgsql", auth_admin: true, anon: false, authenticated: false, service_role: false })
     const [session] = await auth.sql<{ user: string; path: string }[]>`select current_user as user, current_setting('search_path') as path`
     assert.deepEqual(session, { user: AUTH_ADMIN, path: "auth" }, "the caller's own search path does not reach wms: the hook qualifies every name")
   })
@@ -142,6 +145,10 @@ describe("the access token hook against the database", { skip: database.skip }, 
     assert.equal(await boundTo(accounts.invited.id), authUsers.invited)
   })
 
+  // Runs after the test above and depends on it: node:test runs a file's tests
+  // in order, and the account resolves by id here only because that test bound
+  // it. Both are one story — the first sign-in and every token after it — told
+  // in two tests so a failure names which half broke.
   test("a later token resolves by id, whatever the e-mail claim says, and creates app_metadata when the claims carry none", async () => {
     const input = event(authUsers.invited, "another.address@example.com")
     assert.deepEqual(await hook(input), { ...input, claims: { ...input.claims, app_metadata: { company_id: companyId } } })
@@ -167,9 +174,9 @@ describe("the access token hook against the database", { skip: database.skip }, 
     assert.deepEqual(await hook(input), input)
   })
 
-  test("anon and authenticated cannot execute it (42501)", () =>
+  test("anon, authenticated and service_role cannot execute it (42501)", () =>
     rolledBack(owner.db, async (tx) => {
-      for (const caller of ["anon", "authenticated"]) {
+      for (const caller of ["anon", "authenticated", "service_role"]) {
         await assert.rejects(
           tx.transaction(async (savepoint) => {
             await savepoint.execute(sql`set local role ${sql.raw(caller)}`)
