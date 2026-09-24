@@ -1,3 +1,4 @@
+import { RESOLUTION_RULE } from "@/lib/commercial/price-model"
 import { serviceFrequencyFactValue } from "@waste/domain/service-frequencies"
 import type { BusinessRecord } from "@waste/domain/prototype-record"
 
@@ -3668,7 +3669,7 @@ const commercial: WorkspaceDefinition = {
       ],
       lifecycle: ["Draft", "Active", "Inactive"],
       rules: [
-        "The row matching the most conditions wins. A negotiated row for the specific customer always wins. Remaining ties go to the row with the newest effective-from date.",
+        RESOLUTION_RULE,
         "The default price is the price row with no conditions — Add price creates it for a product from Settings.",
         "Prices are effective-dated and selection is explainable.",
       ],
@@ -3682,7 +3683,7 @@ const commercial: WorkspaceDefinition = {
             "Pricing",
             "€18.50/pickup",
             "2 weeks ago",
-            "Residual collection with a rented 240L bin. Default price applies to everyone; 5 variations including one negotiated deal.",
+            "Residual collection with a rented 240L bin. Default price applies to everyone; 5 variations including 1 negotiated deal.",
             {
               Type: "Container collection",
               Container: "240L bin (rental)",
@@ -3723,7 +3724,7 @@ const commercial: WorkspaceDefinition = {
             "Pricing",
             "€24.00/pickup",
             "9 months ago",
-            "Cardboard collection with a rented 660L container. Default price applies to everyone; 2 variations by zone and customer type.",
+            "Cardboard collection with a rented 660L container. Default price applies to everyone; 2 variations.",
             {
               Type: "Container collection",
               Container: "660L container (rental)",
@@ -3755,7 +3756,7 @@ const commercial: WorkspaceDefinition = {
             "Pricing",
             "€41.00/pickup",
             "8 months ago",
-            "Municipal-owned igloos — emptying is sold without a container rental. Default price applies to everyone; 2 variations: a Harbor zone rate on its own price list, and an Igloo 3m³ container-type rate.",
+            "Municipal-owned igloos — emptying is sold without a container rental. Default price applies to everyone; 2 variations.",
             {
               Type: "Container collection",
               "Container type": "Igloo 3m³",
@@ -3785,7 +3786,7 @@ const commercial: WorkspaceDefinition = {
             "Pricing",
             "€12.00/mo",
             "7 months ago",
-            "Recurring monthly bin-cleaning subscription. Default price applies to everyone; 1 variation for commercial customers.",
+            "Recurring monthly bin-cleaning subscription. Default price applies to everyone; 1 variation.",
             {
               Type: "Recurring service",
               VAT: "25%",
@@ -3812,7 +3813,7 @@ const commercial: WorkspaceDefinition = {
             "Pricing",
             "€45.00/job",
             "4 months ago",
-            "On-demand bulky waste pickup. Default price applies to everyone; 3 variations including a City Centre zone rate, an organic waste-fraction rate, and a negotiated deal for Nørrebro CoWork ApS.",
+            "On-demand bulky waste pickup. Default price applies to everyone; 3 variations including 1 negotiated deal.",
             {
               Type: "Additional service",
               Customer: "Nørrebro CoWork ApS",
@@ -3842,7 +3843,7 @@ const commercial: WorkspaceDefinition = {
             "Pricing",
             "€3.50/job",
             "5 months ago",
-            "Extra bag tag for occasional overflow. Priced with a single default row — no variations yet.",
+            "Extra bag tag for occasional overflow. Default price applies to everyone; no variations.",
             {
               Type: "Additional service",
               "Waste fraction": "Residual",
@@ -3869,7 +3870,7 @@ const commercial: WorkspaceDefinition = {
             "Pricing",
             "€15.00/job",
             "3 weeks ago",
-            "Seasonal Christmas tree collection, in draft ahead of the 2027 season. Its default row is scheduled to become effective 2 Jan 2027 — not yet sellable today.",
+            "Seasonal Christmas tree collection, in draft ahead of the 2027 season. Default price takes effect 2027-01-02; no variations.",
             {
               Type: "Additional service",
               "Waste fraction": "Organic",
@@ -3906,7 +3907,7 @@ const commercial: WorkspaceDefinition = {
       ],
       lifecycle: ["Scheduled", "Active", "Expired"],
       rules: [
-        "The row matching the most conditions wins. A negotiated row for the specific customer always wins. Remaining ties go to the row with the newest effective-from date.",
+        RESOLUTION_RULE,
         "One price model: the Products table's default price reads the no-conditions row.",
         "Schedule a change by editing a row's scheduled fields; the amount switches on the scheduled date.",
       ],

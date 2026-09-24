@@ -79,6 +79,37 @@ export function displayFormValue(
     : label(value)
 }
 
+const shownValue = (value: BusinessFormValue | undefined) =>
+  typeof value === "string" && value.trim().length > 0
+
+/**
+ * The facts a deliberate clearing removes on edit (issue #22). deriveFormRecord
+ * writes no fact for an empty value and the edit path merges the derived facts
+ * over the record's, so a field a person emptied would otherwise keep its old
+ * fact — a condition, an Effective to or a scheduled change could never be
+ * cancelled through Edit. A fact is cleared only when the form opened the
+ * field with a value (`initial`, the seed the dialog showed) and received it
+ * back empty; a field that is not on this form, one hidden by a condition
+ * (the dialog submits visible fields only, so it is absent from `values`) and
+ * one the seed could not prefill are not clearings, so "not on this form"
+ * never becomes a delete. A checkbox is never cleared: false is a value.
+ */
+export function clearedFactKeys(
+  schema: BusinessFormSchema,
+  values: BusinessFormValues,
+  initial: BusinessFormValues,
+): string[] {
+  return schema.sections
+    .flatMap((section) => section.fields)
+    .filter(
+      (field) =>
+        field.id in values &&
+        shownValue(initial[field.id]) &&
+        !shownValue(values[field.id]),
+    )
+    .map((field) => field.label)
+}
+
 export function deriveFormRecord(
   schema: BusinessFormSchema,
   values: BusinessFormValues,
