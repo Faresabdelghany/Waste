@@ -57,11 +57,21 @@ export function SchemePlanAheadRunner({ actorName }: { actorName: string }) {
     })
     for (const route of routes) upsertRecord("route-studio", "routes", route)
     for (const pickup of pickups) upsertRecord("route-studio", "pickups", pickup)
-    // First-generation lifecycle stamps (issue #25): Validated → Scheduled
-    // plus the persisted marker. Only unrecorded schemes come back, so this
-    // cannot re-write (and re-loop) on later visits.
+    // What each run left on its scheme (issue #25, issue #41): the
+    // first-generation marker and promotion, and the matched-container stamp
+    // when it moved. Only schemes with something new come back, so a quiet
+    // load writes (and re-loops) nothing.
     for (const scheme of schemeStamps) {
       upsertRecord("route-studio", "schemes", scheme)
+    }
+    // A rule that resolved a different container set than its previous run
+    // reshaped that scheme's routes without anyone at the dialog — say so.
+    if (summary.containerDrift.length > 0) {
+      toast.warning("Plan Ahead: matched containers shifted", {
+        description: summary.containerDrift
+          .map((entry) => `${entry.schemeName} — ${entry.warning}`)
+          .join(" · "),
+      })
     }
     // Quiet refreshes stay quiet — a toast on every visit would be noise.
     if (summary.created > 0 || summary.cancelled > 0) {

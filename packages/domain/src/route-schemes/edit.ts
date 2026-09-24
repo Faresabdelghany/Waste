@@ -266,6 +266,7 @@ export function planSchemeEditReconciliation(
     const scheme = recordSchemeGeneration(
       validated,
       input.generatedAt ?? new Date().toISOString(),
+      plan.matches,
     )
     const written = result.summary.created + result.summary.refreshed
     const parts = [

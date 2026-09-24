@@ -46,9 +46,14 @@ import {
   stringValueOf,
 } from "@waste/domain/route-schemes/generation"
 import {
+  containerDriftMovement,
+  type CollectionGroupContainerDrift,
+} from "@waste/domain/route-schemes/container-drift"
+import {
+  attentionWarnings,
   schemeCanGenerateRoutes,
   schemeFuturePlanningStopped,
-  schemeLiveValidation,
+  schemeLiveAssessment,
   type SchemeRelatedRecords,
 } from "@waste/domain/route-schemes/lifecycle"
 import { schemeGroupPlans } from "@waste/domain/route-schemes/groups"
@@ -219,17 +224,21 @@ export function SchemeDetailsPage({
   const values = record.submittedValues ?? {}
   const isDraft = record.status === "Draft"
 
-  // Live validation (D20/D26): blocking issues drive the Draft callout and
-  // the disabled Generate routes action; warnings drive the Attention badge.
-  const validation = useMemo(() => {
+  // Live assessment (D20/D26): blocking issues drive the Draft callout and
+  // the disabled Generate routes action; warnings drive the Attention badge,
+  // with the last run's container drift (issue #41) as its final sentence
+  // and as the Routes tab's callout.
+  const assessment = useMemo(() => {
     const related: SchemeRelatedRecords = {
       schemes,
       allocations,
       containers,
       vehicles,
     }
-    return schemeLiveValidation(record, related)
+    return schemeLiveAssessment(record, related)
   }, [allocations, containers, record, schemes, vehicles])
+  const validation = assessment?.validation ?? null
+  const containerDrift = assessment?.containerDrift ?? []
   // Blocking issues gate on LIVE validation (D26), not only the persisted
   // Draft status: a validated scheme whose environment drifted into blocking
   // issues must show them and lose Generate routes too. A Draft with no
@@ -247,7 +256,7 @@ export function SchemeDetailsPage({
   // generate (D25: statuses are event-driven at save) — the Details tab
   // explains that a re-save via Edit validates it.
   const draftPendingResave = isDraft && Boolean(validation) && liveIssues.length === 0
-  const attention = validation?.warnings ?? []
+  const attention = attentionWarnings(assessment)
 
   const canGenerate =
     schemeCanGenerateRoutes(record, today) && blockingIssues.length === 0
@@ -462,6 +471,7 @@ export function SchemeDetailsPage({
             routes={schemeRoutes}
             pickups={schemePickups}
             generationBlocked={!canGenerate}
+            containerDrift={containerDrift}
           />
         </TabsContent>
         <TabsContent value="stops" className="mt-0 min-h-0 flex-1 overflow-y-auto">
@@ -853,12 +863,15 @@ function SchemeRoutesTab({
   routes,
   pickups,
   generationBlocked,
+  containerDrift,
 }: {
   routes: readonly BusinessRecord[]
   /** The scheme's generated Stops — a route's waste fractions derive from them. */
   pickups: readonly BusinessRecord[]
   /** Generation cannot run right now — blocking issues or unsaved Draft. */
   generationBlocked: boolean
+  /** Rule groups whose matched containers shifted at the last run (issue #41) — derived, never persisted. */
+  containerDrift: readonly CollectionGroupContainerDrift[]
 }) {
   const router = useRouter()
   const [query, setQuery] = useState("")
@@ -881,6 +894,32 @@ function SchemeRoutesTab({
 
   return (
     <div className="space-y-4 p-4">
+      {containerDrift.length > 0 && (
+        <section className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <Warning className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                Matched containers shifted at the last generation run
+              </p>
+              <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-300/90">
+                The stop rule resolved a different container set than the run
+                before, so the routes below changed shape. Review them, or
+                adjust the rule via Edit collection groups.
+              </p>
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-amber-800/90 dark:text-amber-300/90">
+                {containerDrift.map((drift) => (
+                  <li key={drift.groupId}>
+                    {drift.groupName ? `${drift.groupName}: ` : ""}
+                    {containerDriftMovement(drift)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
+      )}
+
       <SchemeTabToolbar
         query={query}
         onQueryChange={(next) => {

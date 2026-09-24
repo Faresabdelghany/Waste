@@ -125,7 +125,7 @@ One unit of planning inside a Route Scheme: the service days it runs on (a subse
 _Avoid_: Route, run, leg, assignment (unqualified), route scheme
 
 **Stop Matching Rule**:
-The declarative stop selection a Route Scheme stores — waste fractions plus an optional vehicle type, resolved against the containers inside the scheme's Planning Area (and project scope) each time routes are generated. The scheme stores the rule, never the resolved result, so newly eligible containers join future generations without editing the scheme.
+The declarative stop selection a Route Scheme stores — waste fractions plus an optional vehicle type, resolved against the containers inside the scheme's Planning Area (and project scope) each time routes are generated. The scheme stores the rule, never the resolved result as a stop source, so newly eligible containers join future generations without editing the scheme; each generation stamps the container ids the rule matched beside the run before, as evidence of the run only, and a set that shifts by more than 10 % between two runs raises Attention on the scheme.
 _Avoid_: Container list, picked containers, stop list
 
 **Planning Area**:

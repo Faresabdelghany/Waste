@@ -27,16 +27,14 @@ import { useBusinessRecordStore } from "@/components/waste/business-record-store
 import { useModuleRecords } from "@/components/waste/scheme-route-map"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
+import { containerDriftWarning } from "@waste/domain/route-schemes/container-drift"
 import {
   applySchemeGeneration,
   planSchemeGeneration,
   type PlannedRouteAction,
 } from "@waste/domain/route-schemes/generation"
 import { schemeGenerationCalendar } from "@waste/domain/route-schemes/project-calendar"
-import {
-  recordSchemeGeneration,
-  schemeGenerationRecorded,
-} from "@waste/domain/route-schemes/lifecycle"
+import { recordGenerationRun } from "@waste/domain/route-schemes/lifecycle"
 import {
   SERVICE_DAY_SHORT_LABELS,
   addDays,
@@ -154,19 +152,17 @@ export function SchemeGenerateRoutesDialog({
     for (const pickup of stamped.pickups) {
       upsertRecord("route-studio", "pickups", pickup)
     }
-    // First successful generation → Scheduled (D25/issue #25): the persisted
-    // marker the derived lifecycle status reads. Later runs never restamp.
-    // Stamp the stored record, not the derived display row callers pass in —
-    // the status/context seams (issues #25/#30) are render-time and must
-    // never be frozen into the store.
-    if (!schemeGenerationRecorded(scheme)) {
-      const stored =
-        schemeRecords.find((candidate) => candidate.id === scheme.id) ?? scheme
-      upsertRecord(
-        "route-studio",
-        "schemes",
-        recordSchemeGeneration(stored, generatedAt),
-      )
+    // What the run leaves on the scheme: the first successful generation's
+    // marker and promotion (D25/issue #25), and on every run the matched
+    // containers beside the run before (issue #41), written only when they
+    // moved. Stamp the stored record, not the derived display row callers
+    // pass in — the status/context seams (issues #25/#30) are render-time
+    // and must never be frozen into the store.
+    const stored =
+      schemeRecords.find((candidate) => candidate.id === scheme.id) ?? scheme
+    const stampedScheme = recordGenerationRun(stored, generatedAt, generation.plan.matches)
+    if (stampedScheme !== stored) {
+      upsertRecord("route-studio", "schemes", stampedScheme)
     }
     const { summary } = stamped
     toast.success(
@@ -186,6 +182,14 @@ export function SchemeGenerateRoutesDialog({
         ].join(" · "),
       },
     )
+    // The run summary's note (issue #41): a rule that resolved a different
+    // container set than the previous run reshaped the routes it wrote.
+    const drift = containerDriftWarning(summary.containerDrift)
+    if (drift) {
+      toast.warning("Matched containers shifted", {
+        description: `${drift}. The generated routes follow the new set — review them on the scheme's Routes tab.`,
+      })
+    }
     onClose()
   }
 
@@ -311,6 +315,13 @@ export function SchemeGenerateRoutesDialog({
                 </div>
               )}
             </div>
+
+            {generation && generation.plan.containerDrift.length > 0 && (
+              <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                {containerDriftWarning(generation.plan.containerDrift)} — the
+                routes above follow the new set.
+              </p>
+            )}
 
             {generation && (
               <p className="text-xs text-muted-foreground">
