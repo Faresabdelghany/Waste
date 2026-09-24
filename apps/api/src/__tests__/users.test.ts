@@ -7,6 +7,7 @@ import { Id } from "@waste/contracts/ids"
 import { Page } from "@waste/contracts/pagination"
 import { createDb, type Database } from "@waste/db/client"
 import { projectAccess, serviceProviderAccess, userAccount } from "@waste/db/schema/access"
+import { company } from "@waste/db/schema/organisation"
 import { withCompany } from "@waste/db/tenant"
 import { and, eq } from "drizzle-orm"
 
@@ -544,6 +545,164 @@ describe("the user endpoints", { skip: database.skip }, () => {
       assert.match((await readProblem(refused)).detail ?? "", /edit on configure\.access/)
       assert.equal((await app.request(`/users/${a.users.invited.id}/deactivate`, { method: "POST" })).status, 401)
       assert.equal((await one(olivia, a.users.invited.id)).status, "invited")
+    })
+  })
+
+  describe("POST /users/:id/make-primary-administrator", () => {
+    const transfer = (call: Call, id: string) => call(`/users/${id}/make-primary-administrator`, { method: "POST" })
+
+    /** The accounts of the company that carry the flag, read as the API role would; the index allows one. */
+    const holders = (companyId = a.companyId) =>
+      withCompany(pool.db, companyId, async (tx) =>
+        (
+          await tx
+            .select({ id: userAccount.id })
+            .from(userAccount)
+            .where(and(eq(userAccount.companyId, companyId), eq(userAccount.primaryAdministrator, true)))
+        ).map((row) => row.id),
+      )
+
+    /** An active company account that reaches every project: what the flag may move to. */
+    const successor = async (fullName: string) => {
+      const created = await invite(olivia, { email: address(), fullName, roleId: a.roles.administrator.id, allProjects: true })
+      await bindLogin(created.id)
+      return created
+    }
+
+    test("moves the flag to an active company account and takes it off the one that held it", async () => {
+      const next = await successor("Successor")
+      const response = await transfer(olivia, next.id)
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+      const moved = User.parse(await response.json())
+      assert.equal(moved.id, next.id)
+      assert.equal(moved.primaryAdministrator, true)
+      assert.ok(moved.updatedAt > next.updatedAt, "the write moved the stamp")
+      assert.deepEqual(await one(olivia, next.id), moved, "and it is so on the next read")
+      assert.equal((await one(olivia, a.users.olivia.id)).primaryAdministrator, false, "the flag left the account that held it")
+      assert.deepEqual(await holders(), [next.id], "exactly one account carries it")
+
+      // Back again, so the rest of the file finds the tenant as it was seeded.
+      const back = await transfer(olivia, a.users.olivia.id)
+      assert.equal(back.status, 200)
+      assert.equal(User.parse(await back.json()).primaryAdministrator, true)
+      assert.equal((await one(olivia, next.id)).primaryAdministrator, false)
+      assert.deepEqual(await holders(), [a.users.olivia.id])
+    })
+
+    test("answers the account as it stands when it already is the primary administrator: the command is idempotent", async () => {
+      const before_ = await one(olivia, a.users.olivia.id)
+      const again = await transfer(olivia, a.users.olivia.id)
+      assert.equal(again.status, 200)
+      assert.deepEqual(User.parse(await again.json()), before_, "nothing moved, the stamp included")
+    })
+
+    test("frees the account that held it: a former primary administrator can be deactivated", async () => {
+      const next = await successor("Departing")
+      assert.equal((await transfer(olivia, next.id)).status, 200)
+      const refused = await olivia(`/users/${next.id}/deactivate`, { method: "POST" })
+      assert.equal(refused.status, 409, "the flag protects whoever carries it now")
+      assert.equal((await transfer(olivia, a.users.olivia.id)).status, 200)
+      const off = await olivia(`/users/${next.id}/deactivate`, { method: "POST" })
+      assert.equal(off.status, 200)
+      assert.equal(User.parse(await off.json()).status, "deactivated")
+    })
+
+    test("serialises two transfers at once, so the index that allows one never fires and one account holds the flag", async () => {
+      const [x, y] = await Promise.all([successor("First at once"), successor("Second at once")])
+      const responses = await Promise.all([transfer(olivia, x.id), transfer(olivia, y.id)])
+      assert.deepEqual(
+        responses.map((response) => response.status),
+        [200, 200],
+        JSON.stringify(await Promise.all(responses.map((response) => response.clone().json()))),
+      )
+      const left = await holders()
+      assert.equal(left.length, 1, "one account carries the flag")
+      assert.ok([x.id, y.id].includes(left[0]), "and it is one of the two")
+      assert.equal((await transfer(olivia, a.users.olivia.id)).status, 200)
+      assert.deepEqual(await holders(), [a.users.olivia.id])
+    })
+
+    /**
+     * A transfer held still in the middle: the two locks the route takes, the
+     * flag moved, the transaction kept open while `request` is sent in — so a
+     * second request meets a transfer it cannot yet see, which is what two
+     * requests a moment apart look like from inside. The transfer commits a
+     * moment after the request has been sent, and the request's answer is
+     * what it made of that.
+     */
+    const duringTransferTo = async (id: string, request: () => Promise<Response>): Promise<Response> => {
+      let written!: () => void
+      let release!: () => void
+      const hasWritten = new Promise<void>((resolve) => (written = resolve))
+      const held = new Promise<void>((resolve) => (release = resolve))
+      const inFlight = withCompany(pool.db, a.companyId, async (tx) => {
+        await tx.select({ id: company.id }).from(company).where(and(eq(company.companyId, a.companyId), eq(company.id, a.companyId))).for("update")
+        await tx.select({ id: userAccount.id }).from(userAccount).where(and(eq(userAccount.companyId, a.companyId), eq(userAccount.id, id))).for("update")
+        await tx
+          .update(userAccount)
+          .set({ primaryAdministrator: false })
+          .where(and(eq(userAccount.companyId, a.companyId), eq(userAccount.primaryAdministrator, true)))
+        await tx.update(userAccount).set({ primaryAdministrator: true }).where(and(eq(userAccount.companyId, a.companyId), eq(userAccount.id, id)))
+        written()
+        await held
+      })
+      await hasWritten
+      const pending = request()
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      release()
+      await inFlight
+      return await pending
+    }
+
+    test("makes a deactivation or a narrowing of the account a transfer is moving the flag to wait for the transfer, and then refuses it", async () => {
+      const next = await successor("Contended")
+
+      const off = await duringTransferTo(next.id, () => olivia(`/users/${next.id}/deactivate`, { method: "POST" }))
+      assert.equal(off.status, 409, "read before the transfer's lock, the account was nobody special; read after it, it is the primary administrator")
+      assert.match((await readProblem(off)).detail ?? "", /primary administrator/i)
+      assert.equal((await one(olivia, next.id)).status, "active")
+      assert.equal((await transfer(olivia, a.users.olivia.id)).status, 200)
+
+      const narrowed = await duringTransferTo(next.id, () => olivia(`/users/${next.id}`, { method: "PATCH", body: { projectIds: [a.projects.cairo.id] } }))
+      assert.equal(narrowed.status, 409)
+      assert.match((await readProblem(narrowed)).detail ?? "", /every project/i)
+      const still = await one(olivia, next.id)
+      assert.equal(still.allProjects, true, "the primary administrator still reaches every project")
+      assert.equal(still.primaryAdministrator, true)
+      assert.equal((await transfer(olivia, a.users.olivia.id)).status, 200)
+      assert.deepEqual(await holders(), [a.users.olivia.id])
+    })
+
+    test("refuses a deactivated account, an invited one nobody has signed in as, a service provider's, and one reaching some projects only, each with its own sentence, and moves nothing", async () => {
+      const cases: [string, RegExp][] = [
+        [a.users.deactivated.id, /deactivated/i],
+        [a.users.invited.id, /signed in/i],
+        [a.users.lars.id, /service provider/i],
+        [a.users.viewer.id, /every project/i],
+      ]
+      for (const [id, sentence] of cases) {
+        const response = await transfer(olivia, id)
+        assert.equal(response.status, 409, id)
+        const problem = await readProblem(response)
+        assert.match(problem.detail ?? "", /primary administrator/i, id)
+        assert.match(problem.detail ?? "", sentence, id)
+        assert.doesNotMatch(problem.detail ?? "", /_idx|_key/)
+        assert.equal((await one(olivia, id)).primaryAdministrator, false, id)
+      }
+      assert.deepEqual(await holders(), [a.users.olivia.id])
+    })
+
+    test("answers 404 for another company's account and leaves it alone, 403 for a role that may only view, and 401 without a token", async () => {
+      assert.equal((await transfer(olivia, b.users.olivia.id)).status, 404)
+      assert.equal((await transfer(olivia, b.users.viewer.id)).status, 404)
+      assert.deepEqual(await holders(b.companyId), [b.users.olivia.id], "the other company's flag did not move")
+      assert.equal((await transfer(olivia, testId())).status, 404)
+
+      const refused = await transfer(viewer, a.users.viewer.id)
+      assert.equal(refused.status, 403)
+      assert.match((await readProblem(refused)).detail ?? "", /edit on configure\.access/)
+      assert.equal((await app.request(`/users/${a.users.viewer.id}/make-primary-administrator`, { method: "POST" })).status, 401)
+      assert.deepEqual(await holders(), [a.users.olivia.id])
     })
   })
 })
