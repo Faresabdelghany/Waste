@@ -7,31 +7,37 @@
 // new agreement and a closed point a new subscription. The rule is one
 // sentence. A body that names a customer, a product or a place is making a
 // new reference, and the row it names has to be in the state that reference
-// needs: a Customer active to hold or pay for an agreement, a Product active
-// to be subscribed to, a Property active or a Point open or restricted to be
-// delivered at, and a place not gone inactive or closed to have a container
-// put into service at it. A reference already made stands whatever the row
-// does afterwards — an agreement of a customer that goes inactive runs on, a
+// needs: a Customer active to hold or to be billed for an agreement, a
+// Product active to be subscribed to, a place served — a Property active, a
+// Point open or restricted — to be delivered at or to have a container put
+// into service at. A reference already made stands whatever the row does
+// afterwards — an agreement of a customer that goes inactive runs on, a
 // placement at a point that closes is ended by its period and not by the
 // status — and a row's own status never blocks a write to the row itself: a
 // draft product is patched, a customer is set inactive with agreements
-// standing.
+// standing. A patch that re-states the id a record already carries names
+// nothing new, so it is not held here either: a client that sends the record
+// whole is not refused for the customer it already has.
 //
 // The refusal is a 409, not a 400 and not a 404: the id is right and the row
 // is there, and what refuses is the state it is in. A 400 says "fix the id"
 // and a 404 says "there is no such row", and neither is what happened. It is
 // a sentence naming the status the row has and the state the reference needs,
-// so a person reads what to change, and each is spelled here once per family.
-// The existence check underneath is routes/references.ts's, which answers the
-// status with the proof the row is there, so the gate is no second statement
-// and a row that is not there is still the 400 naming the field, before any
-// of this.
+// so a person reads what to change, and each is spelled here once per family;
+// "served" is defined once for the two references that ask it, so a
+// subscription and a placement cannot disagree about which places take waste.
 //
-// No row lock is taken here, unlike for containment (routes/periods.ts),
-// because this rule has one side and not two: a status change never looks at
-// what references the row, so there is no pair of reads to serialise. A
-// reference made the instant before the state changed is exactly an existing
-// reference, and stands.
+// These are gates over a status already read, not lookups. routes/references.ts
+// answers the status with the proof the row is there, and a route runs every
+// 400 it has first — the ids that are not there, the period outside its
+// parent's — and these after, so a body that is wrong is told so before a
+// state it did not choose: 400 before any 409, as in every route here.
+//
+// No row lock is taken for this rule, unlike for containment
+// (routes/periods.ts), because it has one side and not two: a status change
+// never looks at what references the row, so there is no pair of reads to
+// serialise. A reference made the instant before the state changed is exactly
+// an existing reference, and stands.
 //
 // What stays informational, by decision and not by omission: `project.status`,
 // since an onboarding project is one being set up and setting one up is
@@ -42,72 +48,62 @@
 // and the customer a Group or a Point answers to are not gated in this issue
 // either.
 import type { ProductStatus } from "@waste/contracts/catalogue"
-import type { PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
-import type { Tx } from "@waste/db/client"
+import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
 
 import { problem } from "../problem"
-import { requireCustomer, requireProduct, requireProperty, requireSharedCollectionPoint } from "./references"
 
-/** What a project-scoped lookup is bounded by: the caller's company, and the project the parent record is in. */
-type Scope = { companyId: string; projectId: string }
+/** The two fields an agreement names a customer in: as its holder, and as the customer it is billed to. */
+export type Party = "customerId" | "payerCustomerId"
 
-/** The two fields an agreement names a customer in, each with its own sentence, since the refusal says which. */
-type Party = "customerId" | "payerCustomerId"
+/** What an inactive customer is told in each field; the sentence says which, and a payer is a Customer in the glossary's terms. */
 const INACTIVE_PARTY: Readonly<Record<Party, string>> = {
   customerId: "The customer is inactive; an agreement needs an active customer",
-  payerCustomerId: "The payer is inactive; an agreement needs an active payer",
+  payerCustomerId: "The customer named as payer is inactive; an agreement needs an active one",
 }
 
-/** The states a Point takes waste in: from anybody when open, from its members when restricted. */
+/** The states a Point takes waste in: from anybody when open, from its members when restricted. The one definition, for every reference that asks. */
 const SERVING_POINT: readonly SharedCollectionPointStatus[] = ["open", "restricted"]
 
-const productNotOffered = (status: ProductStatus) => `The product is ${status}; only an active product can be subscribed to`
-const propertyNotServed = (status: PropertyStatus) => `The property is ${status}; a subscription needs an active property`
-const pointNotServing = (status: SharedCollectionPointStatus) =>
-  `The shared collection point is ${status}; a subscription needs an open or restricted point`
+/** The place a subscription is delivered at, as the statuses of its two possible rows: one is null, since a subscription has one place. */
+export type Place = { propertyStatus: PropertyStatus | null; sharedCollectionPointStatus: SharedCollectionPointStatus | null }
 
-/** What a placement is told about the place it reaches through its subscription; the place is the subscription's, so the sentence says so. */
-const PLACED_AT_INACTIVE_PROPERTY = "The subscription's property is inactive; a container cannot be placed at an inactive property"
-const PLACED_AT_CLOSED_POINT = "The subscription's shared collection point is closed; a container cannot be placed at a closed point"
+/** A place as two lookups answer it, an id not named being a row not there. */
+export const placeOf = (propertyStatus: PropertyStatus | undefined, sharedCollectionPointStatus: SharedCollectionPointStatus | undefined): Place => ({
+  propertyStatus: propertyStatus ?? null,
+  sharedCollectionPointStatus: sharedCollectionPointStatus ?? null,
+})
 
-/** A Customer an agreement names, as its holder or its payer: there, and active. */
-export async function requireActiveCustomer(tx: Tx, companyId: string, id: string | null | undefined, path: Party): Promise<void> {
-  const status = await requireCustomer(tx, companyId, id, path)
+/** What names the place, and how its sentence begins: a subscription names it itself, a placement reaches it through its subscription. */
+type PlaceReference = "subscription" | "placement"
+const PLACE_OF: Readonly<Record<PlaceReference, string>> = { subscription: "The", placement: "The subscription's" }
+
+/** A Customer an agreement names, in either field: active, or the sentence for that field. Nothing named is nothing to gate. */
+export function refuseInactiveCustomer(status: CustomerStatus | undefined, path: Party): void {
   if (status === undefined || status === "active") return
   throw problem(409, { detail: INACTIVE_PARTY[path] })
 }
 
-/** A Product a subscription names: there, in the agreement's project, and offered. */
-export async function requireActiveProduct(tx: Tx, scope: Scope, id: string | null | undefined): Promise<void> {
-  const status = await requireProduct(tx, scope, id)
+/** A Product a subscription names: offered, or the sentence naming the status it has instead. */
+export function refuseUnofferedProduct(status: ProductStatus | undefined): void {
   if (status === undefined || status === "active") return
-  throw problem(409, { detail: productNotOffered(status) })
-}
-
-/** A Property a subscription is delivered at: there, in the agreement's project, and served. */
-export async function requireActiveProperty(tx: Tx, scope: Scope, id: string | null | undefined): Promise<void> {
-  const status = await requireProperty(tx, scope, id)
-  if (status === undefined || status === "active") return
-  throw problem(409, { detail: propertyNotServed(status) })
-}
-
-/** A Shared Collection Point a subscription is delivered at: there, in the agreement's project, and taking waste. */
-export async function requireServingPoint(tx: Tx, scope: Scope, id: string | null | undefined): Promise<void> {
-  const status = await requireSharedCollectionPoint(tx, scope, id)
-  if (status === undefined || SERVING_POINT.includes(status)) return
-  throw problem(409, { detail: pointNotServing(status) })
+  throw problem(409, { detail: `The product is ${status}; only an active product can be subscribed to` })
 }
 
 /**
- * The place a placement reaches through its subscription, as the statement
- * that proved the subscription is there reads it: one of the two is null,
- * since a subscription is delivered at one place. A property that has gone
- * inactive and a point that has closed refuse a new container. A point that
- * is draft is not refused here: the subscription's own gate already holds a
- * new subscription to an open or restricted point, and this is the decision
- * for a place that stopped serving after the subscription was made.
+ * The place a subscription is delivered at, or a placement reaches through
+ * its subscription: served, or the sentence naming the status it has and
+ * what the reference needs. One definition for both, so a point a
+ * subscription may not be made at is a point a container may not be placed
+ * at either, drafted again or closed alike.
  */
-export function refuseUnservedPlace(place: { propertyStatus: string | null; sharedCollectionPointStatus: string | null }): void {
-  if (place.propertyStatus === "inactive") throw problem(409, { detail: PLACED_AT_INACTIVE_PROPERTY })
-  if (place.sharedCollectionPointStatus === "closed") throw problem(409, { detail: PLACED_AT_CLOSED_POINT })
+export function refuseUnservedPlace(place: Place, reference: PlaceReference): void {
+  const { propertyStatus, sharedCollectionPointStatus } = place
+  if (propertyStatus !== null && propertyStatus !== "active") {
+    throw problem(409, { detail: `${PLACE_OF[reference]} property is ${propertyStatus}; a ${reference} needs an active property` })
+  }
+  if (sharedCollectionPointStatus !== null && !SERVING_POINT.includes(sharedCollectionPointStatus)) {
+    throw problem(409, {
+      detail: `${PLACE_OF[reference]} shared collection point is ${sharedCollectionPointStatus}; a ${reference} needs an open or restricted point`,
+    })
+  }
 }

@@ -41,10 +41,11 @@
 // `refuseOverlap`.
 //
 // A status gates a new reference and never an existing one (routes/statuses.ts,
-// Issue #79): a container is not put into service at a property that has gone
-// inactive or a point that has closed, which the statement proving the
-// subscription is there reads through it, while the placements already there
-// are ended by their period and not by the status.
+// Issue #79): a container is not put into service at a place that no longer
+// serves — a property not active, a point not open or restricted — which the
+// statement proving the subscription is there reads through it and the route
+// judges after every 400 it has, while the placements already there are ended
+// by their period and not by the status.
 //
 // The grant is `resources.containers` throughout, placements included: a
 // placement is where a container stands and not a surface of its own.
@@ -77,9 +78,9 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { periodAfter, periodOf, requireWithin, type Period } from "./periods"
-import { requireContainerType, requireServiceFrequency, requireWasteFraction } from "./references"
+import { requireContainerType, requireServiceFrequency, requireWasteFraction, type Scope } from "./references"
 import { describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stampsOf } from "./shared"
-import { refuseUnservedPlace } from "./statuses"
+import { refuseUnservedPlace, type Place } from "./statuses"
 
 const MODULE = "resources.containers"
 const ContainerPage = Page(Container)
@@ -243,9 +244,6 @@ async function findPlacement(tx: Tx, principal: Principal, id: string) {
   return row
 }
 
-/** The state of the place a subscription is delivered at, one of the two null since a subscription has one place. */
-type Place = { propertyStatus: string | null; sharedCollectionPointStatus: string | null }
-
 /**
  * The subscription a placement names, held to the container's project and
  * answered with its period and the state of its place: the containment check
@@ -253,9 +251,11 @@ type Place = { propertyStatus: string | null; sharedCollectionPointStatus: strin
  * so the lookup that proves the subscription is there is the one that fetches
  * both, rather than `requireRow` and then two more statements. The place is
  * reached through the subscription, as ADR-0003 has it, so its two tables are
- * joined here and not named by the body; each join carries `company_id`.
+ * joined here and not named by the body; each join carries `company_id`. The
+ * two statuses are text the columns' checks hold to the vocabulary, read as
+ * the statuses they are.
  */
-async function findServedSubscription(tx: Tx, within: { companyId: string; projectId: string }, id: string): Promise<Period & Place> {
+async function findServedSubscription(tx: Tx, within: Scope, id: string): Promise<Period & Place> {
   const [row] = await tx
     .select({
       validFrom: subscription.validFrom,
@@ -272,7 +272,7 @@ async function findServedSubscription(tx: Tx, within: { companyId: string; proje
     .where(and(eq(subscription.companyId, within.companyId), eq(subscription.projectId, within.projectId), eq(subscription.id, id)))
     .limit(1)
   if (row === undefined) throw invalidRequest("body", [{ path: "subscriptionId", message: NOT_A_SUBSCRIPTION }])
-  return row
+  return row as Period & Place
 }
 
 export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
@@ -432,7 +432,7 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createPlacement",
         summary: "Put a container into service",
         description:
-          "Puts the container the path names into service under a subscription, which says the agreement, the product and the place it serves. The container says the project, so the body names neither it nor the project, and the subscription must be that project's. The place, read through the subscription, must still take a container: a property that has gone inactive or a point that has closed is refused (409), while the placements already there are ended by their period, since a status gates a new reference and never an existing one. The waste fraction is this company's; the service frequency, where given, is the project's and overrides the product's — leave it out and the cadence in force is the product's, answered as `effectiveServiceFrequencyId`. The period lies inside the subscription's, naming the bound that does not, and the container may not already be placed over part of it: one container serves in one place at a time. The server mints the id.",
+          "Puts the container the path names into service under a subscription, which says the agreement, the product and the place it serves. The container says the project, so the body names neither it nor the project, and the subscription must be that project's. The place, read through the subscription, must still serve: a property no longer active, or a point no longer open or restricted, is refused (409) naming the status it has, while the placements already there are ended by their period, since a status gates a new reference and never an existing one. The waste fraction is this company's; the service frequency, where given, is the project's and overrides the product's — leave it out and the cadence in force is the product's, answered as `effectiveServiceFrequencyId`. The period lies inside the subscription's, naming the bound that does not, and the container may not already be placed over part of it: one container serves in one place at a time. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
           201: describeJson("The placement as it was written, with the cadence in force.", ContainerServicePlacement),
@@ -442,7 +442,7 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `resources.containers`."),
           404: describeProblem("No container with that id in the projects this account works in."),
-          409: describeProblem("The container is already placed over part of that period, or the subscription's place is an inactive property or a closed point."),
+          409: describeProblem("The container is already placed over part of that period, or the subscription's place no longer serves: a property not active, or a point not open or restricted."),
         },
       }),
       guard,
@@ -463,10 +463,12 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
         // two (routes/shared.ts).
         await lockRow(tx, subscription, { companyId: principal.companyId, id: values.subscriptionId })
         const served = await findServedSubscription(tx, within, values.subscriptionId)
-        refuseUnservedPlace(served)
         await requireWasteFraction(tx, principal.companyId, values.wasteFractionId)
         await requireServiceFrequency(tx, within, values.serviceFrequencyId)
         requireWithin(served, periodOf(values), OUTSIDE_SUBSCRIPTION)
+
+        // Every 400 above, every 409 below (routes/statuses.ts).
+        refuseUnservedPlace(served, "placement")
 
         const [written] = await refuseOverlap({ [ALREADY_PLACED]: alreadyPlaced(into.label) }, () =>
           tx

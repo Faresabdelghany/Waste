@@ -39,7 +39,7 @@ import { customer, property, sharedCollectionPoint } from "@waste/db/schema/cust
 import { eq } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 
-import { requireRow, requireStatus, type StatusTable, type TenantTable } from "./shared"
+import { requireRow, requireStatus, type NamedRow, type TenantTable } from "./shared"
 
 /** What a body is told when it names a customer this company does not have; one sentence, wherever the id sat. */
 export const NOT_A_CUSTOMER = "Not a customer of this company"
@@ -51,51 +51,17 @@ export const NOT_A_PROPERTY = "Not a property of this project"
 type ProjectTable = TenantTable & { projectId: PgColumn }
 
 /** What a project-scoped lookup is bounded by: the caller's company, and the project the parent record is in. */
-type Scope = { companyId: string; projectId: string }
+export type Scope = { companyId: string; projectId: string }
 
-/** A row of this company, whatever project it is in: the scope a company-wide key allows. */
-async function ofCompany(tx: Tx, table: TenantTable, companyId: string, id: string | null | undefined, path: string, message: string): Promise<void> {
-  if (id == null) return
-  await requireRow(tx, table, { companyId, id }, { path, message })
-}
+/** The scope a company-wide key allows: this company, whatever project the row is in. */
+const inCompany = (companyId: string, id: string): NamedRow => ({ companyId, id })
 
-/** A row of this company and this project: the scope a key carrying `project_id` allows. */
-async function ofProject(
-  tx: Tx,
-  table: ProjectTable,
-  scope: Scope,
-  id: string | null | undefined,
-  path: string,
-  message: string,
-): Promise<void> {
-  if (id == null) return
-  await requireRow(tx, table, { companyId: scope.companyId, id, also: eq(table.projectId, scope.projectId) }, { path, message })
-}
-
-/** The same two for a table whose rows carry a status, answering it; nothing named is nothing to answer. */
-async function stateOfCompany(
-  tx: Tx,
-  table: StatusTable,
-  companyId: string,
-  id: string | null | undefined,
-  path: string,
-  message: string,
-): Promise<string | undefined> {
-  if (id == null) return undefined
-  return await requireStatus(tx, table, { companyId, id }, { path, message })
-}
-
-async function stateOfProject(
-  tx: Tx,
-  table: StatusTable & ProjectTable,
-  scope: Scope,
-  id: string | null | undefined,
-  path: string,
-  message: string,
-): Promise<string | undefined> {
-  if (id == null) return undefined
-  return await requireStatus(tx, table, { companyId: scope.companyId, id, also: eq(table.projectId, scope.projectId) }, { path, message })
-}
+/** The scope a key carrying `project_id` allows: this company and this project. */
+const inProject = (table: ProjectTable, scope: Scope, id: string): NamedRow => ({
+  companyId: scope.companyId,
+  id,
+  also: eq(table.projectId, scope.projectId),
+})
 
 /**
  * A Customer a body names: the party to an Agreement, the customer it is
@@ -103,8 +69,7 @@ async function stateOfProject(
  * to. A Customer is company-wide — the same housing administrator is a
  * customer of every project — so the project does not come into it, and
  * since the fence hides another company's row, "it is not yours" and "it
- * does not exist" are the same answer. Answers the status, which the column's
- * check holds to the vocabulary.
+ * does not exist" are the same answer. Answers the status.
  */
 export async function requireCustomer(
   tx: Tx,
@@ -112,17 +77,20 @@ export async function requireCustomer(
   id: string | null | undefined,
   path = "customerId",
 ): Promise<CustomerStatus | undefined> {
-  return (await stateOfCompany(tx, customer, companyId, id, path, NOT_A_CUSTOMER)) as CustomerStatus | undefined
+  if (id == null) return undefined
+  return await requireStatus<CustomerStatus>(tx, customer, inCompany(companyId, id), { path, message: NOT_A_CUSTOMER })
 }
 
 /** A container type a body names: the company's, since a label is read off a bin anywhere in the company. */
 export async function requireContainerType(tx: Tx, companyId: string, id: string | null | undefined, path = "containerTypeId"): Promise<void> {
-  await ofCompany(tx, containerType, companyId, id, path, "Not a container type of this company")
+  if (id == null) return
+  await requireRow(tx, containerType, inCompany(companyId, id), { path, message: "Not a container type of this company" })
 }
 
 /** A waste fraction a body names: the company's, since a fraction is what the country sorts, not what a project does. */
 export async function requireWasteFraction(tx: Tx, companyId: string, id: string | null | undefined, path = "wasteFractionId"): Promise<void> {
-  await ofCompany(tx, wasteFraction, companyId, id, path, "Not a waste fraction of this company")
+  if (id == null) return
+  await requireRow(tx, wasteFraction, inCompany(companyId, id), { path, message: "Not a waste fraction of this company" })
 }
 
 /** A service frequency a body names: the project's, since a cadence belongs to one project (`project_id` leads its key). */
@@ -132,7 +100,8 @@ export async function requireServiceFrequency(
   id: string | null | undefined,
   path = "serviceFrequencyId",
 ): Promise<void> {
-  await ofProject(tx, serviceFrequency, scope, id, path, "Not a service frequency of this project")
+  if (id == null) return
+  await requireRow(tx, serviceFrequency, inProject(serviceFrequency, scope, id), { path, message: "Not a service frequency of this project" })
 }
 
 /** A Product a body names: the project's, since a catalogue is a project's offer. Answers the status. */
@@ -142,7 +111,8 @@ export async function requireProduct(
   id: string | null | undefined,
   path = "productId",
 ): Promise<ProductStatus | undefined> {
-  return (await stateOfProject(tx, product, scope, id, path, "Not a product of this project")) as ProductStatus | undefined
+  if (id == null) return undefined
+  return await requireStatus<ProductStatus>(tx, product, inProject(product, scope, id), { path, message: "Not a product of this project" })
 }
 
 /** A Property a body names: the project's, since a service address is served under one project. Answers the status. */
@@ -152,7 +122,8 @@ export async function requireProperty(
   id: string | null | undefined,
   path = "propertyId",
 ): Promise<PropertyStatus | undefined> {
-  return (await stateOfProject(tx, property, scope, id, path, NOT_A_PROPERTY)) as PropertyStatus | undefined
+  if (id == null) return undefined
+  return await requireStatus<PropertyStatus>(tx, property, inProject(property, scope, id), { path, message: NOT_A_PROPERTY })
 }
 
 /** A Shared Collection Point a body names: the project's, like the properties it serves. Answers the status. */
@@ -162,7 +133,9 @@ export async function requireSharedCollectionPoint(
   id: string | null | undefined,
   path = "sharedCollectionPointId",
 ): Promise<SharedCollectionPointStatus | undefined> {
-  return (await stateOfProject(tx, sharedCollectionPoint, scope, id, path, "Not a shared collection point of this project")) as
-    | SharedCollectionPointStatus
-    | undefined
+  if (id == null) return undefined
+  return await requireStatus<SharedCollectionPointStatus>(tx, sharedCollectionPoint, inProject(sharedCollectionPoint, scope, id), {
+    path,
+    message: "Not a shared collection point of this project",
+  })
 }

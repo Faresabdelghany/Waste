@@ -91,10 +91,10 @@ export type TenantTable = PgTable & { id: PgColumn; companyId: PgColumn }
 export type StatusTable = TenantTable & { status: PgColumn }
 
 /** The row a body named: this company's, and under whatever else its key demands. */
-type NamedRow = { companyId: string; id: string; also?: SQL }
+export type NamedRow = { companyId: string; id: string; also?: SQL }
 
 /** What a row that is not there is told: a 400 at the field that named it. */
-type Refusal = { path: string; message: string }
+export type Refusal = { path: string; message: string }
 
 /**
  * Holds an id a body named to a row that is really there — in this company,
@@ -121,10 +121,11 @@ export async function requireRow(tx: Tx, table: TenantTable, row: NamedRow, refu
  * The same lookup for a table whose rows carry a status, answering it: one
  * statement proves the row is there and says what state it is in, so a route
  * that gates a new reference on that state (routes/statuses.ts) asks once,
- * and a row that is not there is still the 400 above, before any 409.
+ * and a row that is not there is still the 400 above, before any 409. The
+ * caller names the vocabulary the column's check holds the value to.
  */
-export async function requireStatus(tx: Tx, table: StatusTable, row: NamedRow, refusal: Refusal): Promise<string> {
-  return (await answering(tx, table, table.status, row, refusal)) as string
+export async function requireStatus<Status extends string>(tx: Tx, table: StatusTable, row: NamedRow, refusal: Refusal): Promise<Status> {
+  return (await answering(tx, table, table.status, row, refusal)) as Status
 }
 
 /** One column of the row a body named, or the refusal when there is no such row. */

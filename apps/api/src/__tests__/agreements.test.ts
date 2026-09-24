@@ -14,6 +14,7 @@ import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
+import { pointBody, setStatus } from "./registry"
 import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
 import { signingKeys, type SigningKeys } from "./tokens"
 
@@ -92,22 +93,7 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
       { projectId: a.projects.harbor.id, name: "Havnegade 4", address: "Havnegade 4, 1058 København K", kind: "commercial" },
       Property,
     )
-    bank = await create(
-      olivia,
-      "/shared-collection-points",
-      {
-        projectId: a.projects.copenhagen.id,
-        name: "Parkvej bank",
-        kind: "underground",
-        address: "Parkvej 20, 2100 København Ø",
-        location: { type: "Point", coordinates: [12.5683, 55.6761] },
-        operatingModel: "municipal",
-        accessMode: "open",
-        billingMode: "municipal",
-        status: "open",
-      },
-      SharedCollectionPoint,
-    )
+    bank = await pointIn("open", "Parkvej bank")
     residual = await create(
       olivia,
       "/products",
@@ -195,38 +181,17 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
   /** One product at one place under an agreement; the place is Parkvej 18 unless a test names another. */
   const subscribe = (agreementId: string, values: Record<string, unknown> = {}) =>
     create(olivia, `/agreements/${agreementId}/subscriptions`, { productId: residual.id, propertyId: parkvej.id, validFrom: JANUARY, ...values }, Subscription)
-  /** Moves a record of another family to a status, the way its own PATCH does: how a customer goes inactive or a point closes. */
-  const setStatus = async (path: string, status: string): Promise<void> => {
-    const response = await olivia(path, { method: "PATCH", body: { status } })
-    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
-  }
   /** A customer of this company that is no longer served. */
   const inactiveCustomer = async (name: string): Promise<Customer> => {
     const created = await create(olivia, "/customers", { kind: "organisation", name }, Customer)
-    await setStatus(`/customers/${created.id}`, "inactive")
+    await setStatus(olivia, `/customers/${created.id}`, "inactive")
     return created
   }
   /** A product of Copenhagen Central in the status a test names. */
   const productIn = (status: string, name: string) =>
     create(olivia, "/products", { projectId: a.projects.copenhagen.id, name, kind: "container-collection", unit: "pickup", status }, Product)
   /** A point of Copenhagen Central in the status a test names. */
-  const pointIn = (status: string, name: string) =>
-    create(
-      olivia,
-      "/shared-collection-points",
-      {
-        projectId: a.projects.copenhagen.id,
-        name,
-        kind: "surface",
-        address: `${name}, 2100 København Ø`,
-        location: { type: "Point", coordinates: [12.5683, 55.6761] },
-        operatingModel: "municipal",
-        accessMode: "open",
-        billingMode: "municipal",
-        status,
-      },
-      SharedCollectionPoint,
-    )
+  const pointIn = (status: string, name: string) => create(olivia, "/shared-collection-points", pointBody(a.projects.copenhagen.id, name, status), SharedCollectionPoint)
 
   describe("POST /agreements", () => {
     test("mints the id, defaults the status to draft, and keeps the period it was given", async () => {
@@ -283,16 +248,18 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
       assert.match(problem.detail ?? "", /create on customers\.agreements/)
     })
 
-    test("refuses an inactive customer and an inactive payer, each in a sentence naming which", async () => {
+    test("refuses an inactive customer as holder and as payer, each in a sentence saying which", async () => {
       const dormant = await inactiveCustomer("Dormant Housing")
-      const asCustomer = await refused(await olivia("/agreements", { method: "POST", body: body("AGR-2412", { customerId: dormant.id }) }), 409)
-      assert.equal(asCustomer.detail, "The customer is inactive; an agreement needs an active customer")
+      const asHolder = await refused(await olivia("/agreements", { method: "POST", body: body("AGR-2412", { customerId: dormant.id }) }), 409)
+      assert.equal(asHolder.detail, "The customer is inactive; an agreement needs an active customer")
       const asPayer = await refused(await olivia("/agreements", { method: "POST", body: body("AGR-2413", { payerCustomerId: dormant.id }) }), 409)
-      assert.equal(asPayer.detail, "The payer is inactive; an agreement needs an active payer")
+      assert.equal(asPayer.detail, "The customer named as payer is inactive; an agreement needs an active one")
       assert.deepEqual((await page(olivia, "?limit=200&number=AGR-2412")).items, [], "and nothing was written")
 
       const both = await refused(await olivia("/agreements", { method: "POST", body: body("AGR-2414", { customerId: dormant.id, payerCustomerId: dormant.id }) }), 409)
-      assert.equal(both.detail, "The customer is inactive; an agreement needs an active customer", "the fields are read in the body's order, so the customer is told first")
+      assert.equal(both.detail, "The customer is inactive; an agreement needs an active customer", "the same customer in both fields is one lookup, told as the holder first")
+      const missing = await refused(await olivia("/agreements", { method: "POST", body: body("AGR-2414", { customerId: dormant.id, payerCustomerId: testId() }) }), 400)
+      assert.deepEqual(missing.errors, [{ path: "payerCustomerId", message: "Not a customer of this company" }], "an id that is not there is a 400 before any state is a 409")
     })
 
     test("accepts a project that is still onboarding: a project's status is informational here", async () => {
@@ -445,23 +412,27 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
       assert.match((await refused(await lars(`/agreements/${created.id}`, { method: "PATCH", body: { status: "active" } }), 403)).detail ?? "", /edit on customers\.agreements/)
     })
 
-    test("refuses a patch naming an inactive customer or payer, and takes one naming neither once the agreement's own customer has gone inactive", async () => {
+    test("refuses a patch newly naming an inactive customer, and takes one re-stating the agreement's own customer after it has gone inactive", async () => {
       const holder = await create(olivia, "/customers", { kind: "organisation", name: "Holder Housing" }, Customer)
       const created = await agreement("AGR-2446", { customerId: holder.id, payerCustomerId: holder.id })
       const dormant = await inactiveCustomer("Dormant Payer")
 
-      const asCustomer = await refused(await olivia(`/agreements/${created.id}`, { method: "PATCH", body: { customerId: dormant.id } }), 409)
-      assert.equal(asCustomer.detail, "The customer is inactive; an agreement needs an active customer")
+      const asHolder = await refused(await olivia(`/agreements/${created.id}`, { method: "PATCH", body: { customerId: dormant.id } }), 409)
+      assert.equal(asHolder.detail, "The customer is inactive; an agreement needs an active customer")
       const asPayer = await refused(await olivia(`/agreements/${created.id}`, { method: "PATCH", body: { payerCustomerId: dormant.id } }), 409)
-      assert.equal(asPayer.detail, "The payer is inactive; an agreement needs an active payer")
+      assert.equal(asPayer.detail, "The customer named as payer is inactive; an agreement needs an active one")
       assert.deepEqual(await one(olivia, created.id), created, "a refused patch writes nothing")
 
-      await setStatus(`/customers/${holder.id}`, "inactive")
-      const signed = await patch(olivia, created.id, { status: "active", validTo: NEXT_YEAR })
-      assert.equal(signed.customerId, holder.id, "the reference already made stands: a status gates a new reference and never an existing one")
-      assert.equal(signed.status, "active")
+      await setStatus(olivia, `/customers/${holder.id}`, "inactive")
+      const whole = await patch(olivia, created.id, { customerId: holder.id, payerCustomerId: holder.id, status: "active" })
+      assert.equal(whole.status, "active", "the record sent whole re-states its customer, which names nothing new")
+      assert.equal(whole.customerId, holder.id)
+      const ended = await patch(olivia, created.id, { validTo: NEXT_YEAR })
+      assert.equal(ended.validTo, NEXT_YEAR, "and a patch naming no customer is not held to the one it has")
+      const another = await refused(await olivia(`/agreements/${created.id}`, { method: "PATCH", body: { customerId: dormant.id } }), 409)
+      assert.equal(another.detail, "The customer is inactive; an agreement needs an active customer", "a different inactive customer is still a new reference")
       const renamed = await patch(olivia, created.id, { payerCustomerId: acme.id })
-      assert.equal(renamed.payerCustomerId, acme.id, "an active payer may still be named beside an inactive holder")
+      assert.equal(renamed.payerCustomerId, acme.id, "an active customer may still be named as payer beside an inactive holder")
     })
   })
 
@@ -572,7 +543,18 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
       assert.equal(withdrawn.detail, "The product is inactive; only an active product can be subscribed to")
       assert.deepEqual((await subscriptions(olivia, created.id)).items, [], "and nothing was written")
 
-      await setStatus(`/products/${draft.id}`, "active")
+      const nowhere = await refused(
+        await olivia(`/agreements/${created.id}/subscriptions`, { method: "POST", body: { productId: draft.id, propertyId: testId(), validFrom: JANUARY } }),
+        400,
+      )
+      assert.deepEqual(nowhere.errors, [{ path: "propertyId", message: "Not a property of this project" }], "a body that is wrong is told so before a state it did not choose: 400 before any 409")
+      const outside = await refused(
+        await olivia(`/agreements/${created.id}/subscriptions`, { method: "POST", body: { productId: draft.id, propertyId: parkvej.id, validFrom: JANUARY, validTo: JANUARY } }),
+        400,
+      )
+      assert.deepEqual(outside.errors?.map((error) => error.path), ["validTo"], "the period too")
+
+      await setStatus(olivia, `/products/${draft.id}`, "active")
       assert.equal((await subscribe(created.id, { productId: draft.id })).productId, draft.id, "offered, it can be subscribed to")
     })
 
@@ -607,7 +589,7 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
       const restricted = await pointIn("restricted", "Members' bank")
       const atTheRestricted = await subscribe(created.id, { sharedCollectionPointId: restricted.id, propertyId: null })
       assert.equal(atTheRestricted.sharedCollectionPointId, restricted.id, "a restricted point takes waste from its members, so it is served")
-      await setStatus(`/properties/${demolished.id}`, "active")
+      await setStatus(olivia, `/properties/${demolished.id}`, "active")
       assert.equal((await subscribe(created.id, { propertyId: demolished.id })).propertyId, demolished.id, "served again, it can be subscribed to")
     })
   })

@@ -13,6 +13,7 @@ import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
+import { pointBody, setStatus } from "./registry"
 import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
 import { signingKeys, type SigningKeys } from "./tokens"
 
@@ -144,22 +145,7 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
     create(olivia, "/properties", { projectId, name, address, kind: "residential" }, Property)
   /** A point in the status a test names, since a subscription needs one that is open or restricted (Issue #79). */
   const point = (projectId: string, name: string, status: string) =>
-    create(
-      olivia,
-      "/shared-collection-points",
-      {
-        projectId,
-        name,
-        kind: "surface",
-        address: `${name}, 2100 København Ø`,
-        location: { type: "Point", coordinates: [12.5683, 55.6761] },
-        operatingModel: "municipal",
-        accessMode: "open",
-        billingMode: "municipal",
-        status,
-      },
-      SharedCollectionPoint,
-    )
+    create(olivia, "/shared-collection-points", pointBody(projectId, name, status), SharedCollectionPoint)
   /** An active product: a draft one cannot be subscribed to (Issue #79). */
   const product = (projectId: string, name: string, serviceFrequencyId: string) =>
     create(olivia, "/products", { projectId, name, kind: "container-collection", unit: "pickup", serviceFrequencyId, status: "active" }, Product)
@@ -175,11 +161,6 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
   /** The same, delivered at a point: the other kind of place. */
   const subscribeAtPoint = (held: Agreement, productId: string, sharedCollectionPointId: string) =>
     create(olivia, `/agreements/${held.id}/subscriptions`, { productId, sharedCollectionPointId, validFrom: JANUARY }, Subscription)
-  /** Moves a place to a status the way its own PATCH does: how a property goes inactive or a point closes. */
-  const setStatus = async (path: string, status: string): Promise<void> => {
-    const response = await olivia(path, { method: "PATCH", body: { status } })
-    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
-  }
   /** Gives a subscription an end, so a placement of it has a bound to fall outside of. */
   const endSubscription = async (held: Subscription, validTo: string): Promise<Subscription> => {
     const response = await olivia(`/subscriptions/${held.id}`, { method: "PATCH", body: { validTo } })
@@ -458,33 +439,48 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
       const demolished = await property(a.projects.copenhagen.id, "Demolished 1", "Demolished 1, 2100 København Ø")
       const served = await subscribeTo(held, (await product(a.projects.copenhagen.id, "Demolished collection", weekly.id)).id, demolished.id)
       const standing = await place(await container("BIN-3446"), { subscriptionId: served.id })
-      await setStatus(`/properties/${demolished.id}`, "inactive")
+      await setStatus(olivia, `/properties/${demolished.id}`, "inactive")
 
-      const problem = await refused(
-        await olivia(`/containers/${(await container("BIN-3447")).id}/placements`, { method: "POST", body: { subscriptionId: served.id, wasteFractionId: residual.id, validFrom: JANUARY } }),
-        409,
-      )
-      assert.equal(problem.detail, "The subscription's property is inactive; a container cannot be placed at an inactive property")
-      assert.equal((await patchPlacement(standing.id, { validTo: APRIL })).validTo, APRIL, "the placement already there is ended by its period; the status never reaches back to it")
-    })
-
-    test("refuses a new placement at a point that has closed, and lets the placement already there be ended", async () => {
-      const held = await agreement("AGR-3448", a.projects.copenhagen.id, (await create(olivia, "/customers", { kind: "organisation", name: "Bank Housing" }, Customer)).id)
-      const bank = await point(a.projects.copenhagen.id, "Closing bank", "open")
-      const served = await subscribeAtPoint(held, (await product(a.projects.copenhagen.id, "Bank collection", weekly.id)).id, bank.id)
-      const standing = await place(await container("BIN-3448"), { subscriptionId: served.id })
-      await setStatus(`/shared-collection-points/${bank.id}`, "closed")
-
-      const later = await container("BIN-3449")
+      const later = await container("BIN-3447")
       const problem = await refused(
         await olivia(`/containers/${later.id}/placements`, { method: "POST", body: { subscriptionId: served.id, wasteFractionId: residual.id, validFrom: JANUARY } }),
         409,
       )
-      assert.equal(problem.detail, "The subscription's shared collection point is closed; a container cannot be placed at a closed point")
+      assert.equal(problem.detail, "The subscription's property is inactive; a placement needs an active property")
       assert.equal((await patchPlacement(standing.id, { validTo: APRIL })).validTo, APRIL, "the placement already there is ended by its period; the status never reaches back to it")
 
-      await setStatus(`/shared-collection-points/${bank.id}`, "restricted")
-      const again = await place(later, { subscriptionId: served.id, validFrom: APRIL })
+      const wrong = await refused(
+        await olivia(`/containers/${later.id}/placements`, { method: "POST", body: { subscriptionId: served.id, wasteFractionId: testId(), validFrom: JANUARY } }),
+        400,
+      )
+      assert.deepEqual(wrong.errors, [{ path: "wasteFractionId", message: "Not a waste fraction of this company" }], "a body that is wrong is told so before a place that does not serve: 400 before any 409")
+    })
+
+    test("refuses a new placement at a point that has closed or been drafted again, and lets the placement already there be ended", async () => {
+      const held = await agreement("AGR-3448", a.projects.copenhagen.id, (await create(olivia, "/customers", { kind: "organisation", name: "Bank Housing" }, Customer)).id)
+      const bank = await point(a.projects.copenhagen.id, "Closing bank", "open")
+      const served = await subscribeAtPoint(held, (await product(a.projects.copenhagen.id, "Bank collection", weekly.id)).id, bank.id)
+      const standing = await place(await container("BIN-3448"), { subscriptionId: served.id })
+      await setStatus(olivia, `/shared-collection-points/${bank.id}`, "closed")
+
+      const later = await container("BIN-3449")
+      const closed = await refused(
+        await olivia(`/containers/${later.id}/placements`, { method: "POST", body: { subscriptionId: served.id, wasteFractionId: residual.id, validFrom: JANUARY } }),
+        409,
+      )
+      assert.equal(closed.detail, "The subscription's shared collection point is closed; a placement needs an open or restricted point")
+      assert.equal((await patchPlacement(standing.id, { validTo: APRIL })).validTo, APRIL, "the placement already there is ended by its period; the status never reaches back to it")
+
+      await setStatus(olivia, `/shared-collection-points/${bank.id}`, "draft")
+      const drafted = await refused(
+        await olivia(`/containers/${later.id}/placements`, { method: "POST", body: { subscriptionId: served.id, wasteFractionId: residual.id, validFrom: JANUARY } }),
+        409,
+      )
+      assert.equal(drafted.detail, "The subscription's shared collection point is draft; a placement needs an open or restricted point", "a place a subscription may not be made at is a place a container may not be placed at: one definition of served")
+      assert.equal((await patchPlacement(standing.id, { validTo: JULY })).validTo, JULY, "and the placement already there is still ended freely")
+
+      await setStatus(olivia, `/shared-collection-points/${bank.id}`, "restricted")
+      const again = await place(later, { subscriptionId: served.id, validFrom: JULY })
       assert.equal(again.subscriptionId, served.id, "a point that takes waste from its members again takes containers again")
     })
   })
