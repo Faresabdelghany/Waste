@@ -1,8 +1,10 @@
 /**
- * Every browser-storage key the web app writes, and the keys it wrote before
- * the working name changed (2026-09-24: the `wastehero…` prefix became
- * `waste…`, the name the `@waste/*` namespace and the repository already
- * carry).
+ * The browser-storage keys the working-name rename touched (2026-09-24: the
+ * `wastehero…` prefix became `waste…`, the name the `@waste/*` namespace and
+ * the repository already carry), each beside the key or keys it replaced.
+ * Keys that never carried the old name are not listed and do not need this
+ * module: next-themes writes its own `theme`, and the sign-in dialog writes
+ * `auth-last-provider`.
  *
  * The rename lives in this module alone. A store imports its key constant and
  * reads through `readPersisted`, which returns the value under the current
@@ -14,7 +16,8 @@
  *
  * The retired key strings are spelled in `LEGACY_STORAGE_KEYS` and nowhere
  * else: the one reader that cannot import this module at run time, the inline
- * theme bootstrap script, interpolates `persistedKeys()` into its source.
+ * theme bootstrap script, interpolates `persistedKeys()` and
+ * `READ_PERSISTED_SOURCE` into its source.
  */
 
 /** Records created and edited in the workspace shell, merged over fixtures. */
@@ -62,9 +65,10 @@ export const LEGACY_STORAGE_KEYS: Readonly<
   Record<string, readonly string[]>
 > = {
   [BUSINESS_RECORDS_STORAGE_KEY]: ["wastehero-business-records-v1"],
-  // The service provider's pins shipped first under their own key, holding a
-  // bare route-id list; the operator scope then moved both scopes into one
-  // object under the second key.
+  // Newest state first, as everywhere in this map. The service provider's
+  // pins shipped first, as a bare route-id list under a key of their own —
+  // the last entry here; the operator scope then moved both scopes into one
+  // object, under the key listed before it.
   [ACTIVE_ROUTES_STORAGE_KEY]: [
     "wastehero-active-routes-v1",
     "wastehero-contractor-active-routes-v1",
@@ -135,3 +139,32 @@ export function readPersisted(
   }
   return null
 }
+
+/**
+ * `readPersisted` as source text, for the inline theme bootstrap script: it
+ * runs before any module has loaded and so cannot call the function above,
+ * and it must not read a legacy key without moving it, or the provider that
+ * hydrates after it would find nothing and flash the default theme.
+ *
+ * The semantics are the function's: the current key (`keys[0]`) wins, the
+ * legacy keys are tried in order, and the first value found is moved across
+ * and returned — with the move in its own `try`, so a storage that refuses
+ * writes still hands the value back instead of throwing out of the script's
+ * one outer `try` and leaving the page unthemed.
+ * `lib/__tests__/storage-keys.test.ts` evaluates this string against the same
+ * stub the function is tested with.
+ */
+export const READ_PERSISTED_SOURCE = `(keys) => {
+  for (const key of keys) {
+    const value = localStorage.getItem(key);
+    if (value === null) continue;
+    if (key !== keys[0]) {
+      try {
+        localStorage.setItem(keys[0], value);
+        localStorage.removeItem(key);
+      } catch {}
+    }
+    return value;
+  }
+  return null;
+}`

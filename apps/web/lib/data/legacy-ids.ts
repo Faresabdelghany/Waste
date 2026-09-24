@@ -71,6 +71,13 @@ export const LEGACY_MODULE_KEYS: Readonly<Record<string, string>> = {
  * alone too. New ids never contain a legacy token, which is what makes the
  * rewrite idempotent.
  */
+export const LEGACY_ID_TOKENS: ReadonlyArray<readonly [string, string]> = [
+  ["contract-areas", "service-areas"],
+  ["contract-area", "service-area"],
+  ["contractors", "service-providers"],
+  ["contractor", "service-provider"],
+]
+
 /**
  * Whole record ids that were renamed rather than re-tokenised. The demo
  * tenant's company record is the only one: the fixture company took the
@@ -83,13 +90,6 @@ export const LEGACY_MODULE_KEYS: Readonly<Record<string, string>> = {
 export const LEGACY_RECORD_IDS: Readonly<Record<string, string>> = {
   "company-wastehero-dk": "company-kystbyen-dk",
 }
-
-export const LEGACY_ID_TOKENS: ReadonlyArray<readonly [string, string]> = [
-  ["contract-areas", "service-areas"],
-  ["contract-area", "service-area"],
-  ["contractors", "service-providers"],
-  ["contractor", "service-provider"],
-]
 
 /**
  * Enum-like values: ownership, employment type, audience, scope, persona,

@@ -28,7 +28,11 @@ import { ACTIVE_ROUTES_STORAGE_KEY, readPersisted } from "@/lib/storage-keys"
 // lib/storage-keys.ts): the pins the service provider saved before the
 // operator scope existed, a bare route-id list, and the two-scope object that
 // replaced it. `readPersisted` hands over whichever the browser holds and
-// `loadStoredState` recognises both shapes.
+// `loadStoredState` recognises both shapes. The chain stops at the first key
+// that holds anything, so a newer key with an unreadable value is not backed
+// out of into an older one: no writer ever produced such a value, and the
+// fixture pins are the better answer to a corrupt newer store than pins the
+// user last saw generations ago.
 //
 // State persisted before the Contractor → Service provider rename keyed the
 // second scope by the old persona name. lib/data/legacy-ids.ts leaves this

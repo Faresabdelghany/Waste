@@ -1,10 +1,13 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import * as storageKeys from "../storage-keys"
 import {
   ACTIVE_ROUTES_STORAGE_KEY,
+  APP_THEME_SELECTION_STORAGE_KEY,
   BUSINESS_RECORDS_STORAGE_KEY,
   LEGACY_STORAGE_KEYS,
+  READ_PERSISTED_SOURCE,
   persistedKeys,
   readPersisted,
 } from "../storage-keys"
@@ -134,6 +137,22 @@ describe("the key map", () => {
     }
   })
 
+  test("every exported key constant has an entry", () => {
+    const exported = Object.entries(storageKeys).filter(([name]) =>
+      name.endsWith("_STORAGE_KEY"),
+    )
+    // A twelfth key added without a legacy entry fails here rather than
+    // silently reading nothing on a browser that holds the old one.
+    assert.equal(exported.length, Object.keys(LEGACY_STORAGE_KEYS).length)
+    for (const [name, key] of exported) {
+      assert.equal(typeof key, "string", `${name} is not a key string`)
+      assert.ok(
+        Object.prototype.hasOwnProperty.call(LEGACY_STORAGE_KEYS, key as string),
+        `${name} (${String(key)}) has no LEGACY_STORAGE_KEYS entry`,
+      )
+    }
+  })
+
   test("no legacy key equals a current key, and none repeats", () => {
     const current = new Set(Object.keys(LEGACY_STORAGE_KEYS))
     const seen = new Set<string>()
@@ -146,5 +165,58 @@ describe("the key map", () => {
         seen.add(legacyKey)
       }
     }
+  })
+})
+
+/**
+ * The inline theme bootstrap script cannot import `readPersisted`, so it
+ * interpolates `READ_PERSISTED_SOURCE`. Evaluate that source against the same
+ * stub the function is tested with, so the two never drift.
+ */
+function inlineReadPersisted(storage: Storage): (keys: readonly string[]) => string | null {
+  return new Function("localStorage", `return ${READ_PERSISTED_SOURCE}`)(
+    storage,
+  ) as (keys: readonly string[]) => string | null
+}
+
+describe("READ_PERSISTED_SOURCE (the theme bootstrap's copy of the read)", () => {
+  const keys = persistedKeys(APP_THEME_SELECTION_STORAGE_KEY)
+  const [currentKey, legacyKey] = keys
+
+  test("the current key wins", () => {
+    const storage = memoryStorage({
+      [currentKey]: "midnight",
+      [legacyKey]: "ash",
+    })
+
+    assert.equal(inlineReadPersisted(storage)(keys), "midnight")
+    assert.equal(storage.getItem(legacyKey), "ash")
+  })
+
+  test("a legacy selection is applied and moved to the current key", () => {
+    const storage = memoryStorage({ [legacyKey]: "midnight" })
+
+    assert.equal(inlineReadPersisted(storage)(keys), "midnight")
+    assert.equal(storage.getItem(currentKey), "midnight")
+    assert.equal(storage.getItem(legacyKey), null)
+  })
+
+  test("a storage that refuses writes still applies the selection", () => {
+    const storage = memoryStorage({ [legacyKey]: "midnight" })
+    storage.setItem = () => {
+      throw new Error("quota exceeded")
+    }
+
+    // Unguarded, this throw would escape the script's one outer try and leave
+    // the page unthemed until the provider hydrates.
+    assert.equal(inlineReadPersisted(storage)(keys), "midnight")
+    assert.equal(storage.getItem(legacyKey), "midnight")
+  })
+
+  test("an empty store reads null, as the function does", () => {
+    const storage = memoryStorage()
+
+    assert.equal(inlineReadPersisted(storage)(keys), null)
+    assert.equal(readPersisted(storage, APP_THEME_SELECTION_STORAGE_KEY), null)
   })
 })

@@ -5,6 +5,7 @@ import {
 import {
   APP_THEME_SELECTION_STORAGE_KEY,
   CUSTOM_THEME_STORAGE_KEY,
+  READ_PERSISTED_SOURCE,
   persistedKeys,
 } from "@/lib/storage-keys"
 
@@ -13,9 +14,10 @@ const presetPalettes = Object.fromEntries(
 )
 
 // This script is inline source, running before any module loads, so it cannot
-// call readPersisted; it walks the same key list instead (lib/storage-keys.ts)
-// and moves a value written under the previous working name to the current
-// key, which is what the provider then finds.
+// call readPersisted; it interpolates the same read (READ_PERSISTED_SOURCE)
+// and the same key lists from lib/storage-keys.ts, so a value written under
+// the previous working name is moved to the current key here, which is what
+// the provider then finds.
 const selectionKeys = persistedKeys(APP_THEME_SELECTION_STORAGE_KEY)
 const customThemeKeys = persistedKeys(CUSTOM_THEME_STORAGE_KEY)
 
@@ -26,18 +28,7 @@ const bootstrapTheme = `
     const presets = ${JSON.stringify(presetPalettes)};
     const fallbackCustom = ${JSON.stringify(defaultCustomTheme)};
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const readPersisted = (keys) => {
-      for (const key of keys) {
-        const value = localStorage.getItem(key);
-        if (value === null) continue;
-        if (key !== keys[0]) {
-          localStorage.setItem(keys[0], value);
-          localStorage.removeItem(key);
-        }
-        return value;
-      }
-      return null;
-    };
+    const readPersisted = ${READ_PERSISTED_SOURCE};
     let selection = readPersisted(${JSON.stringify(selectionKeys)});
     if (!presets[selection] && selection !== "custom") {
       if (selection === "light") selection = "ash";
