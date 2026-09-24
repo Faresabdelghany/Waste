@@ -48,8 +48,8 @@ import {
 } from "@waste/contracts/customers"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
-import { customer, property, propertyParty } from "@waste/db/schema/customers"
-import { and, asc, eq, exists, gt, sql } from "drizzle-orm"
+import { property, propertyParty } from "@waste/db/schema/customers"
+import { and, asc, eq, exists, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -59,8 +59,17 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { entriesFor, entriesOf, replaceEntries, requireEntries, writeEntries, type Entry, type MemberSet, type Parent } from "./members"
-import { describeJson, IdParam, refuseDuplicate, requireRow, stampsOf } from "./shared"
+import {
+  entriesFor,
+  entriesOf,
+  replaceSet,
+  requirePartyCustomers,
+  writeEntries,
+  type Entry,
+  type MemberSet,
+  type Parent,
+} from "./members"
+import { describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "customers.properties"
 const PropertyPage = Page(Property)
@@ -94,13 +103,7 @@ const parties: MemberSet<typeof propertyParty> = {
     customerId: entry.id,
     role: entry.role,
   }),
-  require: (tx, parent, entry, index) =>
-    requireRow(
-      tx,
-      customer,
-      { companyId: parent.companyId, id: entry.id },
-      { path: `parties.${index}.customerId`, message: "Not a customer of this company" },
-    ),
+  require: requirePartyCustomers,
 }
 
 /** The two spellings of one party: the wire's, and the set mechanics' (routes/members.ts). */
@@ -247,7 +250,7 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>) {
         requireProject(principal, values.projectId)
         const parent: Parent = { companyId: principal.companyId, projectId: values.projectId, id: newId() }
         const entries = asked.map(entryOf)
-        await requireEntries(tx, parties, parent, entries)
+        await parties.require(tx, parent, entries)
         const [row] = await refuseDuplicate(collisions(values), () =>
           tx
             .insert(property)
@@ -352,22 +355,15 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const { parties: asked } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        // The parties are part of the property on the wire, so replacing them
-        // changes the property: the update is what says so — and what answers
-        // 404 when there is no such property here. The trigger would stamp
-        // `updated_at` whatever this set said; naming it is naming what changed.
-        const [row] = await tx
-          .update(property)
-          .set({ updatedAt: sql`now()` })
-          .where(and(scope(principal), eq(property.id, id)))
-          .returning(columns)
+        const row = await replaceSet(tx, parties, principal.companyId, asked.map(entryOf), (stamped) =>
+          tx
+            .update(property)
+            .set(stamped)
+            .where(and(scope(principal), eq(property.id, id)))
+            .returning(columns),
+        )
         if (row === undefined) throw noSuchProperty(id)
-
-        const parent: Parent = { companyId: principal.companyId, projectId: row.projectId, id: row.id }
-        const entries = asked.map(entryOf)
-        await requireEntries(tx, parties, parent, entries)
-        await replaceEntries(tx, parties, parent, entries)
-        return c.json(await propertyWithParties(tx, parent.companyId, row))
+        return c.json(await propertyWithParties(tx, principal.companyId, row))
       },
     )
 }

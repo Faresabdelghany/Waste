@@ -12,11 +12,18 @@
 // this is two and none: the rows carry nothing a delete would lose — no id a
 // client was given, no stamp anyone reads.
 //
-// A page loads every parent's entries in one query and groups them by parent,
-// the way users.ts loads Project Access, ordered by the row an entry names
-// and then its role. That order is the same for a page, for a single read and
-// for the answer to a write, so what a write answers is what the next read
-// says.
+// Nothing here is per entry. A page loads every parent's entries in one query
+// and groups them by parent, the way users.ts loads Project Access, and a
+// body's entries are held to what their key allows in one query too: a set
+// body may carry two hundred, and two hundred round trips inside the request's
+// transaction, behind the lock the record's own stamp has just taken, is not a
+// check but a queue. A page and a body each cost one statement and the
+// refusal is the same — the lowest entry that is wrong, by the path the body
+// spelled it at.
+//
+// The read order is the row an entry names and then its role, and it is the
+// same for a page, for a single read and for the answer to a write, so what a
+// write answers is what the next read says.
 //
 // Every statement carries `company_id = the caller's` beside the fence
 // (ADR-0001: the API is the authority, RLS the backstop), and the parent's
@@ -24,14 +31,19 @@
 // their key to the parent carries `project_id`, so a set can never reach out
 // of the project its record is in.
 //
-// What is not here is what only a route knows: which column is the parent's
-// and which the entry's, what a row of the table is called, and the sentence
-// a bad entry earns. Those come in as one descriptor per family.
+// Two checks live here beside the mechanics, because each is one rule that
+// more than one module makes: an entry of a Group or a Point is a Property of
+// that record's project, and a Customer a body names — a party, or the
+// customer a Group or a Point answers to — is a Customer of this company.
+// What stays with a route is what only it knows: which column is the parent's
+// and which the entry's, and what a row of its table is called. Those come in
+// as one descriptor per family.
 import type { Tx } from "@waste/db/client"
-import { property } from "@waste/db/schema/customers"
-import { and, asc, eq, inArray } from "drizzle-orm"
+import { customer, property } from "@waste/db/schema/customers"
+import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 
+import { invalidRequest } from "../problem"
 import { requireRow } from "./shared"
 
 /**
@@ -56,28 +68,79 @@ export type SetColumns = {
   entryId: PgColumn
 }
 
-/** One family's set: the columns above, how a row of it is written, and what a bad entry is told. */
+/** One family's set: the columns above, how a row of it is written, and what holds its entries to what their key allows. */
 export type MemberSet<Table extends MemberTable> = SetColumns & {
   table: Table
   /** One entry as a row of the table; the module spells it, since only it knows what its two id columns are called. */
   rowOf: (entry: Entry, parent: Parent) => Table["$inferInsert"]
-  /** Holds the id entry number `index` names to what its key allows, or refuses the request; the path and the sentence are the module's. */
-  require: (tx: Tx, parent: Parent, entry: Entry, index: number) => Promise<void>
+  /** Holds the whole list to what its key allows, in one statement, or refuses the request at the entry that is wrong. */
+  require: (tx: Tx, parent: Parent, entries: readonly Entry[]) => Promise<void>
+}
+
+/** What a body is told when it names a customer this company does not have; one sentence, wherever the id sat. */
+const NOT_A_CUSTOMER = "Not a customer of this company"
+
+/** What a body is told when it gathers a property of another project; the fence the composite key already holds it to. */
+const NOT_A_PROPERTY = "Not a property of this project"
+
+/** What a set's PUT writes on the record itself: nothing but the stamp, since the set is what changed. */
+const stamp = (): { updatedAt: SQL } => ({ updatedAt: sql`now()` })
+
+/**
+ * Holds one Customer a body named to this company: the Customer a Property
+ * Group or a Shared Collection Point answers to, and whatever names one next.
+ * A Customer is company-wide — the same housing administrator is a customer
+ * of every project — so the project does not come into it, and since the
+ * fence hides another company's row, "it is not yours" and "it does not
+ * exist" are the same answer.
+ *
+ * The id is nullable because every field that carries one is optional: a
+ * null or an absent field points at nobody, which is nothing to check.
+ */
+export async function requireCustomer(tx: Tx, companyId: string, id: string | null | undefined, path: string): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, customer, { companyId, id }, { path, message: NOT_A_CUSTOMER })
+}
+
+/** Every entry's id, each once: what the one lookup asks for, however often the body named it. */
+const namedIds = (entries: readonly Entry[]): string[] => [...new Set(entries.map((entry) => entry.id))]
+
+/**
+ * The lowest entry whose id did not come back. A caller fixes one field at a
+ * time and the list is ordered, so the first wrong entry is the one to name;
+ * the path is the body's own spelling of it.
+ */
+function refuseMissing(entries: readonly Entry[], found: ReadonlySet<string>, path: (index: number) => string, message: string): void {
+  const index = entries.findIndex((entry) => !found.has(entry.id))
+  if (index === -1) return
+  throw invalidRequest("body", [{ path: path(index), message }])
+}
+
+/** A Property's parties: every entry names a Customer of this company, checked in one statement. */
+export async function requirePartyCustomers(tx: Tx, parent: Parent, entries: readonly Entry[]): Promise<void> {
+  const ids = namedIds(entries)
+  if (ids.length === 0) return
+  const rows = await tx
+    .select({ id: customer.id })
+    .from(customer)
+    .where(and(eq(customer.companyId, parent.companyId), inArray(customer.id, ids)))
+  refuseMissing(entries, new Set(rows.map((row) => row.id)), (index) => `parties.${index}.customerId`, NOT_A_CUSTOMER)
 }
 
 /**
- * A member of a Group or of a Point is a Property of that record's own
- * project: the composite key says so, and this says it before the insert, as
- * a 400 naming the entry that is wrong rather than a 23503 a client cannot
- * read. One rule, so one spelling, though two modules make the check.
+ * A Group's or a Point's members: every entry names a Property of that
+ * record's own project, checked in one statement. The composite key says the
+ * same thing and would answer 23503, which is a 500 saying nothing, where
+ * this is a 400 naming the entry to fix.
  */
-export async function requireMemberProperty(tx: Tx, parent: Parent, entry: Entry, index: number): Promise<void> {
-  await requireRow(
-    tx,
-    property,
-    { companyId: parent.companyId, id: entry.id, also: eq(property.projectId, parent.projectId) },
-    { path: `members.${index}.propertyId`, message: "Not a property of this project" },
-  )
+export async function requireMemberProperties(tx: Tx, parent: Parent, entries: readonly Entry[]): Promise<void> {
+  const ids = namedIds(entries)
+  if (ids.length === 0) return
+  const rows = await tx
+    .select({ id: property.id })
+    .from(property)
+    .where(and(eq(property.companyId, parent.companyId), eq(property.projectId, parent.projectId), inArray(property.id, ids)))
+  refuseMissing(entries, new Set(rows.map((row) => row.id)), (index) => `members.${index}.propertyId`, NOT_A_PROPERTY)
 }
 
 /**
@@ -109,16 +172,6 @@ export async function entriesFor(tx: Tx, set: SetColumns, companyId: string, par
   return (await entriesOf(tx, set, companyId, [parentId])).get(parentId) ?? []
 }
 
-/** Holds every entry to what its key allows, in the order the body gave them, so the refusal names the entry the caller has to fix. */
-export async function requireEntries<Table extends MemberTable>(
-  tx: Tx,
-  set: MemberSet<Table>,
-  parent: Parent,
-  entries: readonly Entry[],
-): Promise<void> {
-  for (const [index, entry] of entries.entries()) await set.require(tx, parent, entry, index)
-}
-
 /** Writes the set a record starts with. Nothing to write is no statement. */
 export async function writeEntries<Table extends MemberTable>(
   tx: Tx,
@@ -130,13 +183,33 @@ export async function writeEntries<Table extends MemberTable>(
   await tx.insert(set.table).values(entries.map((entry) => set.rowOf(entry, parent)))
 }
 
-/** Replaces the whole set: what the record had goes, what the body holds arrives, both in the request's one transaction. */
-export async function replaceEntries<Table extends MemberTable>(
+/**
+ * `PUT …/parties` and `PUT …/members`, once.
+ *
+ * The record's own row is stamped first. The set is part of the record on the
+ * wire, so replacing the set changes the record; the update is what says so,
+ * and it is also what answers "there is no such record here" — `touch` runs
+ * the caller's own scope, so a record of another company or of a project the
+ * account does not work in comes back as nothing and the route raises its own
+ * 404. The trigger would stamp `updated_at` whatever the set said; naming it
+ * is naming what changed.
+ *
+ * Then the entries are held to what their key allows and the whole set is
+ * replaced, all in the request's one transaction — so a body with one bad
+ * entry leaves the record exactly as it was, stamp included.
+ */
+export async function replaceSet<Table extends MemberTable, Row extends { id: string; projectId: string }>(
   tx: Tx,
   set: MemberSet<Table>,
-  parent: Parent,
+  companyId: string,
   entries: readonly Entry[],
-): Promise<void> {
-  await tx.delete(set.table).where(and(eq(set.table.companyId, parent.companyId), eq(set.parentId, parent.id)))
+  touch: (stamped: { updatedAt: SQL }) => Promise<Row[]>,
+): Promise<Row | undefined> {
+  const [row] = await touch(stamp())
+  if (row === undefined) return undefined
+  const parent: Parent = { companyId, projectId: row.projectId, id: row.id }
+  await set.require(tx, parent, entries)
+  await tx.delete(set.table).where(and(eq(set.table.companyId, companyId), eq(set.parentId, parent.id)))
   await writeEntries(tx, set, parent, entries)
+  return row
 }

@@ -267,6 +267,18 @@ describe("the property endpoints", { skip: database.skip }, () => {
       assert.deepEqual(found?.parties, [{ customerId: housing.id, role: "administrator" }])
     })
 
+    test("walks the pages with the cursor, each item carrying its own parties and none of the next record's", async () => {
+      const all = (await page(olivia, "?limit=200")).items
+      assert.ok(all.length >= 2)
+      assert.ok(all.some((held) => held.parties.length > 0), "and at least one of them has parties to carry")
+      const first = await page(olivia, "?limit=1")
+      assert.deepEqual(first.items, all.slice(0, 1), "one item, with its own parties: the surplus row that proved there is a next page is not one of them")
+      assert.ok(first.nextCursor !== null)
+      const rest = await page(olivia, `?limit=200&cursor=${first.nextCursor}`)
+      assert.deepEqual(rest.items, all.slice(1))
+      assert.equal(rest.nextCursor, null)
+    })
+
     test("shows an account only the projects it works in, and answers an empty page to one that works in none", async () => {
       const here = await create(olivia, "/properties", body(a.projects.copenhagen.id, "Istedgade 11"), Property)
       const elsewhere = await create(olivia, "/properties", body(a.projects.harbor.id, "Kajgade 5"), Property)
@@ -437,7 +449,9 @@ describe("the property endpoints", { skip: database.skip }, () => {
         400,
       )
       assert.deepEqual(problem.errors, [{ path: "parties.1.customerId", message: "Not a customer of this company" }])
-      assert.deepEqual((await one(olivia, created.id)).parties, [{ customerId: housing.id, role: "owner" }], "the set it had is the set it has")
+      const unchanged = await one(olivia, created.id)
+      assert.deepEqual(unchanged.parties, [{ customerId: housing.id, role: "owner" }], "the set it had is the set it has")
+      assert.equal(unchanged.updatedAt, created.updatedAt, "and the stamp the replacement took rolled back with the rest of it")
     })
 
     test("refuses the same pair twice, a body that names no list, and a role outside the vocabulary", async () => {

@@ -293,6 +293,18 @@ describe("the shared collection point endpoints", { skip: database.skip }, () =>
       assert.deepEqual((await page(other, "?limit=200")).items.map((point) => point.name), ["Their yard"])
     })
 
+    test("walks the pages with the cursor, each item carrying its own members and none of the next record's", async () => {
+      const all = (await page(olivia, "?limit=200")).items
+      assert.ok(all.length >= 2)
+      assert.ok(all.some((held) => held.members.length > 0), "and at least one of them has members to carry")
+      const first = await page(olivia, "?limit=1")
+      assert.deepEqual(first.items, all.slice(0, 1), "one item, with its own members: the surplus row that proved there is a next page is not one of them")
+      assert.ok(first.nextCursor !== null)
+      const rest = await page(olivia, `?limit=200&cursor=${first.nextCursor}`)
+      assert.deepEqual(rest.items, all.slice(1))
+      assert.equal(rest.nextCursor, null)
+    })
+
     test("shows an account only the projects it works in, and answers an empty page to one that works in none", async () => {
       const here = await create(olivia, "/shared-collection-points", body(a.projects.copenhagen.id, "Istedgade yard"), SharedCollectionPoint)
       const elsewhere = await create(olivia, "/shared-collection-points", body(a.projects.harbor.id, "Kajgade yard"), SharedCollectionPoint)
@@ -448,11 +460,9 @@ describe("the shared collection point endpoints", { skip: database.skip }, () =>
         400,
       )
       assert.deepEqual(problem.errors, [{ path: "members.1.propertyId", message: "Not a property of this project" }])
-      assert.deepEqual(
-        (await one(olivia, created.id)).members,
-        [{ propertyId: parkvej.id, role: "service-member" }],
-        "the set it had is the set it has",
-      )
+      const unchanged = await one(olivia, created.id)
+      assert.deepEqual(unchanged.members, [{ propertyId: parkvej.id, role: "service-member" }], "the set it had is the set it has")
+      assert.equal(unchanged.updatedAt, created.updatedAt, "and the stamp the replacement took rolled back with the rest of it")
     })
 
     test("refuses the same property twice, a body that names no list, and a role outside the vocabulary", async () => {

@@ -38,8 +38,8 @@ import {
 import { Page } from "@waste/contracts/pagination"
 import { ProjectScopedListQuery } from "@waste/contracts/queries"
 import type { Tx } from "@waste/db/client"
-import { customer, propertyGroup, propertyGroupMember } from "@waste/db/schema/customers"
-import { and, asc, eq, gt, sql } from "drizzle-orm"
+import { propertyGroup, propertyGroupMember } from "@waste/db/schema/customers"
+import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -52,15 +52,15 @@ import { describeProblem, problem, validate } from "../problem"
 import {
   entriesFor,
   entriesOf,
-  replaceEntries,
-  requireEntries,
-  requireMemberProperty,
+  replaceSet,
+  requireCustomer,
+  requireMemberProperties,
   writeEntries,
   type Entry,
   type MemberSet,
   type Parent,
 } from "./members"
-import { describeJson, IdParam, refuseDuplicate, requireRow, stampsOf } from "./shared"
+import { describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "customers.groups"
 const PropertyGroupPage = Page(PropertyGroup)
@@ -91,7 +91,7 @@ const members: MemberSet<typeof propertyGroupMember> = {
     propertyId: entry.id,
     role: entry.role,
   }),
-  require: requireMemberProperty,
+  require: requireMemberProperties,
 }
 
 /** The two spellings of one member: the wire's, and the set mechanics' (routes/members.ts). */
@@ -126,21 +126,6 @@ const noSuchGroup = (id: string) => problem(404, { detail: `No property group ${
 /** The rows of this company, in the projects the caller works in: what every group statement is bounded by. */
 const scope = (principal: Principal) =>
   and(eq(propertyGroup.companyId, principal.companyId), inProjects(propertyGroup.projectId, principal))
-
-/**
- * The Customer a group answers to, held to this company. It is optional, so a
- * null or an absent field points at nothing and is nothing to check; and
- * since a Customer is company-wide, the project does not come into it.
- */
-async function requireResponsible(tx: Tx, companyId: string, values: { responsibleCustomerId?: string | null }): Promise<void> {
-  if (values.responsibleCustomerId == null) return
-  await requireRow(
-    tx,
-    customer,
-    { companyId, id: values.responsibleCustomerId },
-    { path: "responsibleCustomerId", message: "Not a customer of this company" },
-  )
-}
 
 /** One group of this company by id, inside the caller's projects; undefined when it is neither. */
 async function findGroup(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
@@ -225,8 +210,8 @@ export function propertyGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
         requireProject(principal, values.projectId)
         const parent: Parent = { companyId: principal.companyId, projectId: values.projectId, id: newId() }
         const entries = asked.map(entryOf)
-        await requireResponsible(tx, parent.companyId, values)
-        await requireEntries(tx, members, parent, entries)
+        await requireCustomer(tx, parent.companyId, values.responsibleCustomerId, "responsibleCustomerId")
+        await members.require(tx, parent, entries)
         const [row] = await refuseDuplicate({ [NAME_TAKEN]: nameTaken(values.name) }, () =>
           tx
             .insert(propertyGroup)
@@ -293,7 +278,7 @@ export function propertyGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const patch = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        await requireResponsible(tx, principal.companyId, patch)
+        await requireCustomer(tx, principal.companyId, patch.responsibleCustomerId, "responsibleCustomerId")
         const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
         const [row] = await refuseDuplicate(sentences, () =>
           tx
@@ -333,22 +318,15 @@ export function propertyGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const { members: asked } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        // The members are part of the group on the wire, so replacing them
-        // changes the group: the update is what says so — and what answers
-        // 404 when there is no such group here. The trigger would stamp
-        // `updated_at` whatever this set said; naming it is naming what changed.
-        const [row] = await tx
-          .update(propertyGroup)
-          .set({ updatedAt: sql`now()` })
-          .where(and(scope(principal), eq(propertyGroup.id, id)))
-          .returning(columns)
+        const row = await replaceSet(tx, members, principal.companyId, asked.map(entryOf), (stamped) =>
+          tx
+            .update(propertyGroup)
+            .set(stamped)
+            .where(and(scope(principal), eq(propertyGroup.id, id)))
+            .returning(columns),
+        )
         if (row === undefined) throw noSuchGroup(id)
-
-        const parent: Parent = { companyId: principal.companyId, projectId: row.projectId, id: row.id }
-        const entries = asked.map(entryOf)
-        await requireEntries(tx, members, parent, entries)
-        await replaceEntries(tx, members, parent, entries)
-        return c.json(await groupWithMembers(tx, parent.companyId, row))
+        return c.json(await groupWithMembers(tx, principal.companyId, row))
       },
     )
 }
