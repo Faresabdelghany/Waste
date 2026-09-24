@@ -1,9 +1,44 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { Latitude, LinearRing, Longitude, Point, Polygon, Position } from "../geojson"
+import { FlatLinearRing, FlatPolygon, Latitude, LinearRing, Longitude, Point, Polygon, Position, Position2D } from "../geojson"
 
 const cph: [number, number] = [12.5683, 55.6761]
+
+describe("Position2D, FlatLinearRing and FlatPolygon (#97)", () => {
+  const square = [
+    [12.5, 55.65],
+    [12.65, 55.65],
+    [12.65, 55.75],
+    [12.5, 55.75],
+    [12.5, 55.65],
+  ]
+
+  test("a flat position is longitude and latitude and nothing else", () => {
+    assert.deepEqual(Position2D.parse(cph), cph)
+    assert.equal(Position2D.safeParse([...cph, 12]).success, false, "a third ordinate")
+    assert.equal(Position2D.safeParse([12.5683]).success, false)
+    assert.equal(Position2D.safeParse([200, 55]).success, false)
+  })
+
+  test("a flat ring keeps the ring rules: four positions, closed, three distinct", () => {
+    assert.deepEqual(FlatLinearRing.parse(square), square)
+    assert.equal(FlatLinearRing.safeParse(square.slice(0, 4)).success, false, "unclosed")
+    assert.equal(FlatLinearRing.safeParse(square.slice(0, 3)).success, false, "too few")
+    assert.equal(FlatLinearRing.safeParse([cph, cph, cph, cph]).success, false, "no area")
+  })
+
+  test("a flat polygon takes what Polygon takes, less the altitude, and refuses a third ordinate at the position", () => {
+    const polygon = { type: "Polygon", coordinates: [square] }
+    assert.deepEqual(FlatPolygon.parse(polygon), polygon)
+    assert.deepEqual(Polygon.parse(polygon), polygon, "every flat polygon is a polygon")
+    const lifted = { type: "Polygon", coordinates: [square.map((position, index) => (index === 2 ? [...position, 30] : position))] }
+    assert.equal(Polygon.safeParse(lifted).success, true, "Polygon allows an altitude")
+    const result = FlatPolygon.safeParse(lifted)
+    assert.equal(result.success, false)
+    assert.deepEqual(result.error?.issues.map((issue) => issue.path.join(".")), ["coordinates.0.2"], "the position with the third ordinate, by name")
+  })
+})
 
 describe("Longitude and Latitude", () => {
   test("stay inside the WGS 84 ranges", () => {

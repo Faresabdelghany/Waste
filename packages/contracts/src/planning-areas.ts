@@ -8,10 +8,12 @@
 // the wire.
 //
 // The ring rule is decided here, with the first stored polygon. A boundary is
-// the contracts' `Polygon` and nothing else: an outer ring of four or more
+// the contracts' `FlatPolygon` and nothing else: an outer ring of four or more
 // `[lng, lat]` positions closing on the first with three distinct, holes
 // allowed, no winding rule (RFC 7946's right-hand rule is a SHOULD and PostGIS
-// does not care), no altitude. The prototype's unclosed `{ lng, lat }[]` is
+// does not care), and no altitude — the column is flat, and a third ordinate
+// PostGIS would refuse with 22023 after the write is refused here as a 400
+// naming the position. The prototype's unclosed `{ lng, lat }[]` is
 // closed in the web adapter, not repaired here — these schemas refuse rather
 // than repair everywhere else, and the shape exists only in apps/web. What
 // the shape rule cannot see, a ring that crosses itself, the database refuses
@@ -26,7 +28,7 @@
 import * as z from "zod"
 
 import { IsoDate } from "./dates"
-import { Polygon } from "./geojson"
+import { FlatPolygon } from "./geojson"
 import { Id } from "./ids"
 import { PlanningAreaPurpose } from "./planning"
 import { ProjectScopedListQuery } from "./queries"
@@ -51,7 +53,7 @@ export const PlanningAreaBoundary = z
     projectId: Id,
     planningAreaId: Id,
     /** The outline in force over the period: a closed ring of four or more positions, holes allowed. */
-    boundary: Polygon,
+    boundary: FlatPolygon,
     ...Validity.shape,
   })
   .refine(validityOrdered, endsAfterItStarts)
@@ -60,7 +62,7 @@ export type PlanningAreaBoundary = z.infer<typeof PlanningAreaBoundary>
 /** A new version: the area is the path's, the project the area's. A period overlapping another version is the route's 409. */
 export const PlanningAreaBoundaryCreate = z
   .strictObject({
-    boundary: Polygon,
+    boundary: FlatPolygon,
     ...ValidityCreate,
   })
   .refine(validityOrdered, endsAfterItStarts)
@@ -71,7 +73,7 @@ export const PlanningAreaBoundaryPatch = z
   .strictObject({
     /** Null reopens the version; a day ends it. */
     validTo: IsoDate.nullable().optional(),
-    boundary: Polygon.optional(),
+    boundary: FlatPolygon.optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type PlanningAreaBoundaryPatch = z.infer<typeof PlanningAreaBoundaryPatch>

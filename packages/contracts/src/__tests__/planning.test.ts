@@ -16,6 +16,7 @@ import {
 
 import {
   EACH_DAY_ONCE,
+  eachOnce,
   HolidayPolicy,
   PlanningAreaPurpose,
   RecurrenceFrequency,
@@ -49,6 +50,16 @@ describe("the planning enums", () => {
     assert.equal(StopMatchVehicleType.safeParse("Rear loader").success, false)
     assert.equal(ServiceDay.safeParse("Monday").success, false)
     for (const reading of ["scheduled", "effective", "expired"]) assert.equal(RouteSchemeStatus.safeParse(reading).success, false, reading)
+  })
+})
+
+describe("eachOnce", () => {
+  test("is the one distinct-entries rule of Planning's modules: by the entry itself, or by a key", () => {
+    assert.equal(eachOnce(["monday", "tuesday"]), true)
+    assert.equal(eachOnce(["monday", "monday"]), false)
+    assert.equal(eachOnce([]), true)
+    assert.equal(eachOnce([{ day: "2026-06-05" }, { day: "2026-06-05" }], (holiday) => holiday.day), false)
+    assert.equal(eachOnce([{ day: "2026-06-05" }, { day: "2026-12-24" }], (holiday) => holiday.day), true)
   })
 })
 

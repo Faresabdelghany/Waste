@@ -10,6 +10,8 @@ import {
   CollectionCalendarPatch,
   HOLIDAYS_MAX,
   ONE_HOLIDAY_PER_DAY,
+  OUTSIDE_CALENDAR_PERIOD,
+  withinPeriod,
 } from "../collection-calendars"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
@@ -71,13 +73,25 @@ describe("CollectionCalendarCreate and CollectionCalendarPatch", () => {
     }
   })
 
+  test("hold each holiday inside the period the same body gives, refused at that entry's day; the set body has no period and leaves it to the route", () => {
+    const outside = (n: number) => ({ path: `holidays.${n}.day`, message: OUTSIDE_CALENDAR_PERIOD })
+    const stray = [holidays[0], { day: "2025-12-31", name: "The day before" }, { day: "2027-01-01", name: "The first day out" }]
+    assert.deepEqual(refusal(CollectionCalendarCreate.safeParse({ ...body, holidays: stray })), [outside(1), outside(2)])
+    assert.equal(CollectionCalendarCreate.safeParse({ ...body, holidays: [{ day: "2026-12-31", name: null }] }).success, true, "the last day inside the half-open period")
+    assert.equal(CollectionCalendarCreate.safeParse({ ...body, validTo: null, holidays: [{ day: "2031-06-05", name: null }] }).success, true, "an open end covers every later day")
+    assert.equal(CollectionCalendarHolidaysSet.safeParse({ holidays: stray }).success, true)
+    assert.equal(withinPeriod({ validFrom: "2026-01-01", validTo: "2027-01-01" }, "2027-01-01"), false)
+    assert.equal(withinPeriod({ validFrom: "2026-01-01", validTo: null }, "2099-12-31"), true)
+  })
+
   test("refuse a backwards period, two holidays on one day, and more than 400 of them", () => {
     assert.deepEqual(refusal(CollectionCalendarCreate.safeParse({ ...body, validTo: "2026-01-01" })), [{ path: "validTo", message: BACKWARDS }])
     assert.deepEqual(refusal(CollectionCalendarCreate.safeParse({ ...body, holidays: [holidays[0], { day: "2026-01-01", name: "Twice" }] })), [
       { path: "holidays", message: ONE_HOLIDAY_PER_DAY },
     ])
-    assert.equal(CollectionCalendarCreate.safeParse({ ...body, holidays: manyHolidays(HOLIDAYS_MAX) }).success, true)
-    assert.deepEqual(refusal(CollectionCalendarCreate.safeParse({ ...body, holidays: manyHolidays(HOLIDAYS_MAX + 1) })).map((issue) => issue.path), ["holidays"])
+    // Four hundred days from New Year run past the year, so the bound is proved on an open-ended period, where every later day is inside.
+    assert.equal(CollectionCalendarCreate.safeParse({ ...body, validTo: null, holidays: manyHolidays(HOLIDAYS_MAX) }).success, true)
+    assert.deepEqual(refusal(CollectionCalendarCreate.safeParse({ ...body, validTo: null, holidays: manyHolidays(HOLIDAYS_MAX + 1) })).map((issue) => issue.path), ["holidays"])
   })
 
   test("change the name and the period, never the holidays or the project; a patch with both days holds them against each other", () => {

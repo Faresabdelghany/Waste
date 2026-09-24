@@ -15,9 +15,11 @@
 // better answer than a 409 naming a constraint; a body is bounded at 400
 // entries — a year has a few dozen holidays, and more than that is an import —
 // and the resource is not, since a calendar already stored has to read back
-// whatever it holds. Whether each day lies inside the calendar's period is the
-// route's question (a patch may move the period under the days), answered as
-// a 400 on `holidays.N.day`.
+// whatever it holds. Each day lies inside the calendar's period: the create
+// body carries both and holds it here (`withinPeriod`, refused at
+// `holidays.N.day` with `OUTSIDE_CALENDAR_PERIOD`); the set body carries only
+// the days and a patch only the period, so the route holds the rule for those
+// against the stored row, in the same words.
 //
 // The prototype's `weekStart` and `timezone` are not here: the working week is
 // the Project's (`weekend`) and so is the timezone. Whether the holidays are
@@ -27,6 +29,7 @@ import * as z from "zod"
 
 import { IsoDate } from "./dates"
 import { Id } from "./ids"
+import { eachOnce } from "./planning"
 import { ProjectScopedListQuery } from "./queries"
 import { changesSomething, somethingToChange, stamped } from "./resource"
 import { Label } from "./text"
@@ -34,6 +37,13 @@ import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./
 
 /** The most holidays a body may carry: a year's list, not an import. */
 export const HOLIDAYS_MAX = 400
+
+/** What a holiday on a day the calendar does not cover is told, at that entry's day. */
+export const OUTSIDE_CALENDAR_PERIOD = "Outside the calendar's period"
+
+/** Whether a day lies inside the half-open period: on or after the start, before the end; an open end covers every later day. */
+export const withinPeriod = (period: { validFrom: string; validTo?: string | null }, day: string): boolean =>
+  day >= period.validFrom && (period.validTo == null || day < period.validTo)
 
 /** One holiday: the day, and what it is called where somebody said. */
 export const CollectionCalendarHoliday = z.strictObject({
@@ -49,7 +59,25 @@ const HolidaysBody = Holidays.max(HOLIDAYS_MAX)
 /** What a list with one day twice is told, and where. */
 export const ONE_HOLIDAY_PER_DAY = "Name each day once: a calendar holds one holiday per day"
 const oneHolidayPerDay = { message: ONE_HOLIDAY_PER_DAY, path: ["holidays"] }
-const noRepeatedDay = (holidays: readonly { day: string }[]): boolean => new Set(holidays.map((holiday) => holiday.day)).size === holidays.length
+const noRepeatedDay = (holidays: readonly { day: string }[]): boolean => eachOnce(holidays, (holiday) => holiday.day)
+
+type Dated = { validFrom?: unknown; validTo?: unknown; holidays?: unknown }
+
+/**
+ * Every holiday of a create body lies inside the period the same body gives.
+ * zod 4 runs a check on a body whose fields failed, so a half-seen body — no
+ * start, no list, an entry without a day — is not judged here.
+ */
+const holidaysWithinPeriod = (body: Dated, ctx: z.RefinementCtx) => {
+  const { validFrom, validTo, holidays } = body
+  if (typeof validFrom !== "string" || !Array.isArray(holidays) || (validTo != null && typeof validTo !== "string")) return
+  const period = { validFrom, validTo: validTo as string | null | undefined }
+  holidays.forEach((holiday: { day?: unknown }, n) => {
+    if (typeof holiday?.day === "string" && !withinPeriod(period, holiday.day)) {
+      ctx.addIssue({ code: "custom", message: OUTSIDE_CALENDAR_PERIOD, path: ["holidays", n, "day"] })
+    }
+  })
+}
 
 export const CollectionCalendar = z
   .object({
@@ -73,6 +101,7 @@ export const CollectionCalendarCreate = z
   })
   .refine(validityOrdered, endsAfterItStarts)
   .refine((body) => noRepeatedDay(body.holidays), oneHolidayPerDay)
+  .superRefine(holidaysWithinPeriod)
 export type CollectionCalendarCreate = z.infer<typeof CollectionCalendarCreate>
 
 /** The name and the period; the holidays are a set and are replaced whole. Whether the new period still holds every holiday is the route's question. */

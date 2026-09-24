@@ -1,55 +1,48 @@
-// The Planning vocabulary is read by the database check (`oneOf`, `subsetOf`)
-// and by the contracts enum (`z.enum`), so there is no second spelling to hold
-// in lockstep and nothing here compares two lists. What is held is the shape
-// every list has to keep: a value is a kebab-case token, because it is written
-// into a migration as a SQL literal and onto the wire as a zod enum member, and
-// a list with a duplicate or a gap would put one of the two somewhere it does
-// not belong. The module's lists are found by their shape rather than by name,
-// so a list exported and left out of `PLANNING_VOCABULARIES` — which is what
-// lets the API, a form or another test walk them all — fails here. The three
-// lists that moved here from the route-scheme modules are held to still be
-// what those modules export, so the move changed no value a stored record
-// carries.
+// The Planning vocabulary, held to the shape every vocabulary module keeps
+// (src/__tests__/vocabulary.ts), and to three things of its own: the days are
+// Monday first, since recurrence.ts indexes them against getUTCDay; the lists
+// that moved here from the route-scheme modules are still what those modules
+// export, so the move changed no value a stored record carries; and the two
+// lists that are the tokens of a display tuple the prototype still reads by
+// name (`SCHEME_SERVICE_TYPES` in route-schemes/scope.ts, the vehicle types in
+// route-schemes/matching.ts) are held to them position by position, so a
+// service type added to one fails until it is added to the other.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import { SCHEME_EDIT_POLICIES } from "../../route-schemes/creation"
-import { HOLIDAY_POLICIES } from "../../route-schemes/occurrences"
+import { STOP_MATCH_VEHICLE_TYPES as DISPLAY_VEHICLE_TYPES } from "../../route-schemes/matching"
+import { HOLIDAY_POLICIES, OCCURRENCE_STATUSES } from "../../route-schemes/occurrences"
 import { SERVICE_DAYS } from "../../route-schemes/recurrence"
+import { SCHEME_SERVICE_TYPES } from "../../route-schemes/scope"
 import * as vocabulary from "../vocabulary"
 
-/** A value of any list: lowercase words joined by single hyphens, nothing else. */
-const TOKEN = /^[a-z0-9]+(-[a-z0-9]+)*$/
+defineVocabularyTests("Planning", vocabulary, vocabulary.PLANNING_VOCABULARIES, 13, ["DEFAULT_WEEKEND"])
 
-/** Every list the module exports, by shape: the tuples, and not the object that names them. */
-const exported = Object.entries<unknown>(vocabulary).filter((entry): entry is [string, readonly string[]] => Array.isArray(entry[1]))
-const named: Record<string, readonly string[]> = vocabulary.PLANNING_VOCABULARIES
+/** The kebab token of a display string: `Container collection` is `container-collection`. */
+const tokenOf = (display: string): string => display.toLowerCase().replaceAll(" ", "-")
 
-describe("the Planning vocabulary", () => {
-  test("every list has values, each a kebab-case token, and names none of them twice", () => {
-    for (const [name, values] of exported) {
-      assert.ok(values.length > 0, `${name} is empty`)
-      for (const value of values) assert.match(value, TOKEN, `${name} has "${value}"`)
-      assert.equal(new Set(values).size, values.length, `${name} spells a value twice`)
-    }
-  })
-
-  test("PLANNING_VOCABULARIES names exactly the twelve lists the module exports, each the list itself", () => {
-    assert.deepEqual(
-      Object.keys(named).sort(),
-      exported.map(([name]) => name).sort(),
-    )
-    for (const [name, values] of exported) assert.equal(named[name], values, `${name} is not the list the module exports`)
-    assert.equal(exported.length, 12)
-  })
-
+describe("the Planning vocabulary's own rules", () => {
   test("the seven days are Monday first, since recurrence.ts indexes them against getUTCDay", () => {
     assert.deepEqual([...vocabulary.SERVICE_DAYS], ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"])
   })
 
-  test("the three lists that moved here are still what the route-scheme modules export, the same tuple and not a copy", () => {
+  test("the lists that moved here are still what the route-scheme modules export, the same tuple and not a copy", () => {
     assert.equal(SERVICE_DAYS, vocabulary.SERVICE_DAYS)
     assert.equal(HOLIDAY_POLICIES, vocabulary.HOLIDAY_POLICIES)
     assert.equal(SCHEME_EDIT_POLICIES, vocabulary.SCHEME_EDIT_POLICIES)
+    assert.equal(OCCURRENCE_STATUSES, vocabulary.OCCURRENCE_STATUSES)
+  })
+
+  test("the default weekend is Saturday and Sunday: days of the seven, and fewer than all of them, so a project has a working day", () => {
+    assert.deepEqual([...vocabulary.DEFAULT_WEEKEND], ["saturday", "sunday"])
+    for (const day of vocabulary.DEFAULT_WEEKEND) assert.ok((vocabulary.SERVICE_DAYS as readonly string[]).includes(day), day)
+    assert.ok(vocabulary.DEFAULT_WEEKEND.length < vocabulary.SERVICE_DAYS.length)
+  })
+
+  test("the service types and the vehicle types are the kebab tokens of the prototype's display tuples, same length, same order", () => {
+    assert.deepEqual([...vocabulary.SERVICE_TYPES], SCHEME_SERVICE_TYPES.map(tokenOf))
+    assert.deepEqual([...vocabulary.STOP_MATCH_VEHICLE_TYPES], DISPLAY_VEHICLE_TYPES.map(tokenOf))
   })
 })

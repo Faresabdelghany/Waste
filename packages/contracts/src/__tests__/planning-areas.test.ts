@@ -85,11 +85,18 @@ describe("PlanningAreaBoundary", () => {
     assert.deepEqual(refusal(PlanningAreaBoundary.safeParse({ ...boundary, validTo: "2026-01-01" })), [{ path: "validTo", message: BACKWARDS }])
   })
 
-  test("takes the contracts' Polygon and nothing else: an unclosed ring, a point, or the prototype's {lng, lat} objects are refused", () => {
+  test("takes the contracts' FlatPolygon and nothing else: an unclosed ring, a point, or the prototype's {lng, lat} objects are refused", () => {
     const unclosed = { type: "Polygon", coordinates: [SQUARE.coordinates[0].slice(0, 4)] }
     assert.equal(PlanningAreaBoundary.safeParse({ ...boundary, boundary: unclosed }).success, false)
     assert.equal(PlanningAreaBoundary.safeParse({ ...boundary, boundary: { type: "Point", coordinates: [12.5, 55.65] } }).success, false)
     assert.equal(PlanningAreaBoundary.safeParse({ ...boundary, boundary: [{ lng: 12.5, lat: 55.65 }] }).success, false)
+  })
+
+  test("refuses a third ordinate by name: the column is flat, and PostGIS would refuse it with 22023 after the write", () => {
+    const lifted = { type: "Polygon", coordinates: [SQUARE.coordinates[0].map((position, index) => (index === 1 ? [...position, 30] : position))] }
+    assert.deepEqual(refusal(PlanningAreaBoundary.safeParse({ ...boundary, boundary: lifted })).map((issue) => issue.path), ["boundary.coordinates.0.1"])
+    assert.deepEqual(refusal(PlanningAreaBoundaryCreate.safeParse({ boundary: lifted, validFrom: "2026-01-01" })).map((issue) => issue.path), ["boundary.coordinates.0.1"])
+    assert.deepEqual(refusal(PlanningAreaBoundaryPatch.safeParse({ boundary: lifted })).map((issue) => issue.path), ["boundary.coordinates.0.1"])
   })
 })
 

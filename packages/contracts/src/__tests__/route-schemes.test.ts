@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { OCCURRENCE_STATUSES } from "@waste/domain/planning/vocabulary"
+
 import {
   CollectionGroup,
   CollectionGroupContainersSet,
@@ -10,8 +12,10 @@ import {
   DAILY_SERVES_EVERY_DAY,
   EACH_CONTAINER_ONCE,
   EACH_FRACTION_ONCE,
+  EACH_GROUP_NAME_ONCE,
   Occurrence,
   OccurrenceQuery,
+  OccurrenceStatus,
   ONE_WAY_TO_FIND_STOPS,
   OUTSIDE_SERVICE_DAYS,
   RouteScheme,
@@ -70,10 +74,13 @@ describe("StopMatchingRule", () => {
     assert.equal(StopMatchingRuleSet, StopMatchingRule, "the PUT body is the rule itself")
   })
 
-  test("refuses no fraction, a fraction twice, a type twice, and a member it does not carry", () => {
+  test("refuses no fraction, a fraction twice, a type twice, more than 200 of either, and a member it does not carry", () => {
     assert.deepEqual(refusal(StopMatchingRule.safeParse({ ...rule, wasteFractionIds: [] })).map((issue) => issue.path), ["wasteFractionIds"])
     assert.deepEqual(refusal(StopMatchingRule.safeParse({ ...rule, wasteFractionIds: [THIRD, THIRD] })), [{ path: "wasteFractionIds", message: EACH_FRACTION_ONCE }])
     assert.deepEqual(refusal(StopMatchingRule.safeParse({ ...rule, containerTypeIds: [FOURTH, FOURTH] })).map((issue) => issue.path), ["containerTypeIds"])
+    assert.equal(StopMatchingRule.safeParse({ ...rule, wasteFractionIds: manyIds(CONTAINERS_MAX) }).success, true)
+    assert.deepEqual(refusal(StopMatchingRule.safeParse({ ...rule, wasteFractionIds: manyIds(CONTAINERS_MAX + 1) })).map((issue) => issue.path), ["wasteFractionIds"])
+    assert.deepEqual(refusal(StopMatchingRule.safeParse({ ...rule, containerTypeIds: manyIds(CONTAINERS_MAX + 1) })).map((issue) => issue.path), ["containerTypeIds"])
     assert.match(refusal(StopMatchingRule.safeParse({ ...rule, planningAreaId: FOURTH }))[0].message, /planningAreaId/)
     assert.equal(StopMatchingRule.safeParse({ ...rule, vehicleType: "Rear loader" }).success, false)
   })
@@ -226,6 +233,11 @@ describe("RouteSchemeCreate", () => {
     assert.deepEqual(refusal(RouteSchemeCreate.safeParse({ ...body, collectionGroups: [{ ...group, rule: null }] })), [{ path: "collectionGroups.0.stopSource", message: ONE_WAY_TO_FIND_STOPS }])
     assert.deepEqual(refusal(RouteSchemeCreate.safeParse({ ...body, validTo: "2026-01-01" })), [{ path: "validTo", message: BACKWARDS }])
   })
+
+  test("names each group once: the database's key would say the same as a 23505", () => {
+    assert.deepEqual(refusal(RouteSchemeCreate.safeParse({ ...body, collectionGroups: [group, { ...group, days: ["monday"] }] })), [{ path: "collectionGroups", message: EACH_GROUP_NAME_ONCE }])
+    assert.equal(RouteSchemeCreate.safeParse({ ...body, collectionGroups: [group, { ...group, name: "Rear loaders, Thursdays", days: ["thursday"] }] }).success, true)
+  })
 })
 
 describe("RouteSchemePatch", () => {
@@ -263,17 +275,22 @@ describe("RouteSchemeListQuery", () => {
     })
     assert.equal(RouteSchemeListQuery.parse({ planAhead: "false" }).planAhead, false)
     assert.equal(RouteSchemeListQuery.safeParse({ planAhead: "yes" }).success, false)
+    assert.equal(RouteSchemeListQuery.safeParse({ planAhead: "True" }).success, false, "exactly true or false: a query string is spelled, not interpreted")
     assert.equal(RouteSchemeListQuery.safeParse({ status: "effective" }).success, false, "a reading is asked for with validOn")
   })
 })
 
 describe("OccurrenceQuery and Occurrence", () => {
-  test("the window has both ends, to on or after from, at most 366 days apart", () => {
-    assert.deepEqual(OccurrenceQuery.parse({ from: "2026-01-01", to: "2026-01-01" }), { from: "2026-01-01", to: "2026-01-01" })
-    assert.deepEqual(OccurrenceQuery.parse({ from: "2026-01-01", to: "2027-01-02" }), { from: "2026-01-01", to: "2027-01-02" }, "366 days")
+  test("the window has both ends inclusive, to on or after from, spanning at most 366 days", () => {
+    assert.deepEqual(OccurrenceQuery.parse({ from: "2026-01-01", to: "2026-01-01" }), { from: "2026-01-01", to: "2026-01-01" }, "a window of one day")
+    assert.deepEqual(OccurrenceQuery.parse({ from: "2026-01-01", to: "2027-01-01" }), { from: "2026-01-01", to: "2027-01-01" }, "366 days: the first day of the next year is the 366th")
+    assert.deepEqual(refusal(OccurrenceQuery.safeParse({ from: "2026-01-01", to: "2027-01-02" })), [{ path: "to", message: WINDOW_AT_MOST_A_YEAR }], "367 days")
     assert.deepEqual(refusal(OccurrenceQuery.safeParse({ from: "2026-01-02", to: "2026-01-01" })), [{ path: "to", message: WINDOW_ORDERED }])
-    assert.deepEqual(refusal(OccurrenceQuery.safeParse({ from: "2026-01-01", to: "2027-01-03" })), [{ path: "to", message: WINDOW_AT_MOST_A_YEAR }])
     assert.deepEqual(refusal(OccurrenceQuery.safeParse({ from: "2026-01-01" })).map((issue) => issue.path), ["to"])
+  })
+
+  test("the occurrence status is the vocabulary's tuple, value for value", () => {
+    assert.deepEqual(OccurrenceStatus.options, [...OCCURRENCE_STATUSES])
   })
 
   test("an occurrence is the domain's shape: n null on a skipped row, the note the holiday's name", () => {

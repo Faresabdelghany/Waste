@@ -34,6 +34,8 @@ export const RECURRENCE_FREQUENCIES = ["daily", "weekly", "every-2-weeks", "ever
 export const WEEK_ROTATIONS = ["odd", "even"] as const
 /** What a scheme does with a collection that falls on a holiday. */
 export const HOLIDAY_POLICIES = ["shift-next", "shift-prev", "skip", "collect"] as const
+/** What a recurrence date became under the holiday policy: a reading `generateOccurrences` answers, never stored. */
+export const OCCURRENCE_STATUSES = ["planned", "shifted", "skipped", "holiday"] as const
 /** How a later edit of a scheme with generated routes applies; stored, consumed by nothing yet (#38). */
 export const SCHEME_EDIT_POLICIES = ["ask", "future", "single"] as const
 /** What kind of work a Route Scheme plans. */
@@ -55,6 +57,7 @@ export type ServiceDay = (typeof SERVICE_DAYS)[number]
 export type RecurrenceFrequency = (typeof RECURRENCE_FREQUENCIES)[number]
 export type WeekRotation = (typeof WEEK_ROTATIONS)[number]
 export type HolidayPolicy = (typeof HOLIDAY_POLICIES)[number]
+export type OccurrenceStatus = (typeof OCCURRENCE_STATUSES)[number]
 export type SchemeEditPolicy = (typeof SCHEME_EDIT_POLICIES)[number]
 export type ServiceType = (typeof SERVICE_TYPES)[number]
 export type StopSource = (typeof STOP_SOURCES)[number]
@@ -64,12 +67,22 @@ export type PlanningAreaPurpose = (typeof PLANNING_AREA_PURPOSES)[number]
 export type GenerationTrigger = (typeof GENERATION_TRIGGERS)[number]
 export type GenerationRunStatus = (typeof GENERATION_RUN_STATUSES)[number]
 
+/**
+ * The working week a Project has until it says otherwise: Saturday and
+ * Sunday. Not a vocabulary but a value of one — the one spelling the database
+ * column's default (`packages/db/src/schema/organisation.ts`) and the
+ * contracts' `ProjectCreate` default are both built from, so the two cannot
+ * drift. A weekend never holds all seven days: a project has a working day.
+ */
+export const DEFAULT_WEEKEND = ["saturday", "sunday"] as const satisfies readonly ServiceDay[]
+
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
 export const PLANNING_VOCABULARIES = {
   SERVICE_DAYS,
   RECURRENCE_FREQUENCIES,
   WEEK_ROTATIONS,
   HOLIDAY_POLICIES,
+  OCCURRENCE_STATUSES,
   SCHEME_EDIT_POLICIES,
   SERVICE_TYPES,
   STOP_SOURCES,

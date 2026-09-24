@@ -19,9 +19,8 @@ import { join } from "node:path"
 import { describe, test } from "node:test"
 
 import { sql } from "drizzle-orm"
-import { check, getTableConfig, PgDialect, text } from "drizzle-orm/pg-core"
+import { check, getTableConfig, text } from "drizzle-orm/pg-core"
 
-import { CASING } from "../casing"
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { nonEmpty, oneOf, subsetOf } from "../schema/checks"
 import { collectionCalendar, collectionCalendarHoliday } from "../schema/collection-calendars"
@@ -36,6 +35,25 @@ import { excludeOverlapping } from "../sql/exclude-overlapping"
 import { normalised, statementsOf } from "../sql/hand-written"
 import { tenantFence } from "../sql/tenant-fence"
 import { touchUpdatedAt } from "../sql/touch-updated-at"
+import {
+  checksOf,
+  companyFk,
+  createTable,
+  geometryCheck,
+  gistIndex,
+  index,
+  list,
+  nonEmptyCheck,
+  oneOfCheck,
+  positiveCheck,
+  projectFk,
+  projectFkTo,
+  ref,
+  subsetCheck,
+  tenantFk,
+  uniqueKey,
+  validityCheck,
+} from "./rendering"
 import { statementsBetween, statementsFor } from "./specimen"
 
 /** The nine tables in the order src/schema/index.ts exports them; drizzle-kit's own loader sorts a module's exports, which the migration test allows for. */
@@ -75,56 +93,14 @@ const projectAsOf0005 = wms.table(
   (t) => [companyReference(t, company), tenantUnique(t, t.name), tenantKey(t), oneOf(t.status, PROJECT_STATUSES)],
 )
 
-const ID = '"id" uuid PRIMARY KEY DEFAULT wms.uuidv7() NOT NULL'
-const COMPANY = '"company_id" uuid NOT NULL'
-const PROJECT = '"project_id" uuid NOT NULL'
-const STAMPS = ['"created_at" timestamp with time zone DEFAULT now() NOT NULL', '"updated_at" timestamp with time zone DEFAULT now() NOT NULL']
-const VALIDITY = ['"valid_from" date NOT NULL', '"valid_to" date']
-/** The column sets a table of this context begins with: every Planning row belongs to a Project. */
-const SETS = {
-  project: [ID, COMPANY, PROJECT, ...STAMPS],
-  dated: [ID, COMPANY, PROJECT, ...STAMPS, ...VALIDITY],
-}
-
-/** One CREATE TABLE as drizzle-kit writes it: the sets, then the table's own lines, one per tab-indented line and the last without a comma. */
-const createTable = (name: string, sets: keyof typeof SETS, lines: string[]): string =>
-  [`CREATE TABLE "wms"."${name}" (`, [...SETS[sets], ...lines].map((line) => `\t${line}`).join(",\n"), ");", ""].join("\n")
-
-const ref = (table: string, column: string): string => `"wms"."${table}"."${column}"`
-const columns = (...names: string[]): string => names.map((name) => `"${name}"`).join(",")
-const foreignKey = (table: string, name: string, own: string[], target: string, foreign: string[]): string =>
-  `ALTER TABLE "wms"."${table}" ADD CONSTRAINT "${name}" FOREIGN KEY (${columns(...own)}) REFERENCES "wms"."${target}"(${columns(...foreign)}) ON DELETE no action ON UPDATE no action;`
-const index = (table: string, name: string, ...own: string[]): string => `CREATE INDEX "${name}" ON "wms"."${table}" USING btree (${columns(...own)});`
-const gistIndex = (table: string, name: string, column: string): string => `CREATE INDEX "${name}" ON "wms"."${table}" USING gist (${columns(column)});`
-const companyFk = (table: string): string => foreignKey(table, `${table}_company_id_fk`, ["company_id"], "company", ["id"])
-const projectFk = (table: string): string => foreignKey(table, `${table}_project_id_fk`, ["company_id", "project_id"], "project", ["company_id", "id"])
-const tenantFk = (table: string, column: string, target: string): string =>
-  foreignKey(table, `${table}_${column}_fk`, ["company_id", column], target, ["company_id", "id"])
-const projectFkTo = (table: string, column: string, target: string): string =>
-  foreignKey(table, `${table}_${column}_fk`, ["company_id", "project_id", column], target, ["company_id", "project_id", "id"])
-
-const uniqueKey = (name: string, ...own: string[]): string => `CONSTRAINT "${name}" UNIQUE(${columns(...own)})`
-const list = (...values: string[]): string => values.map((value) => `'${value}'`).join(", ")
-const oneOfCheck = (table: string, column: string, ...values: string[]): string =>
-  `CONSTRAINT "${table}_${column}_one_of" CHECK (${ref(table, column)} in (${list(...values)}))`
-const subsetCheck = (table: string, column: string, ...values: string[]): string =>
-  `CONSTRAINT "${table}_${column}_subset_of" CHECK (${ref(table, column)} <@ ARRAY[${list(...values)}]::text[])`
-const nonEmptyCheck = (table: string, column: string): string => `CONSTRAINT "${table}_${column}_non_empty" CHECK (cardinality(${ref(table, column)}) > 0)`
-const positiveCheck = (table: string, column: string): string => `CONSTRAINT "${table}_${column}_positive" CHECK (${ref(table, column)} > 0)`
-const validityCheck = (table: string): string =>
-  `CONSTRAINT "${table}_validity" CHECK (${ref(table, "valid_to")} is null or ${ref(table, "valid_to")} > ${ref(table, "valid_from")})`
-const geometryCheck = (table: string, column: string): string => {
-  const it = ref(table, column)
-  return `CONSTRAINT "${table}_${column}_valid" CHECK (extensions.st_isvalid(${it}) and not extensions.st_isempty(${it}) and extensions.st_xmin(${it}) >= -180 and extensions.st_xmax(${it}) <= 180 and extensions.st_ymin(${it}) >= -90 and extensions.st_ymax(${it}) <= 90)`
-}
-
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
-/** What 0006 does to `project`: the two columns and the check, as `ALTER TABLE` statements. */
+/** What 0006 does to `project`: the two columns and the two checks, as `ALTER TABLE` statements. The default is the domain's `DEFAULT_WEEKEND` spelled as an array literal. */
 const projectAltered = [
   `ALTER TABLE "wms"."project" ADD COLUMN "weekend" text[] DEFAULT '{saturday,sunday}' NOT NULL;`,
   `ALTER TABLE "wms"."project" ADD COLUMN "holiday_list" text;`,
   `ALTER TABLE "wms"."project" ADD CONSTRAINT "project_weekend_subset_of" CHECK (${ref("project", "weekend")} <@ ARRAY[${list(...DAYS)}]::text[]);`,
+  `ALTER TABLE "wms"."project" ADD CONSTRAINT "project_weekend_not_every_day" CHECK (cardinality(${ref("project", "weekend")}) < 7);`,
 ]
 
 const expected = [
@@ -277,11 +253,11 @@ describe("the Planning tables as drizzle-kit writes them", () => {
     assert.deepEqual(await statementsBetween({ project: projectAsOf0005 }, { project }), projectAltered)
   })
 
-  test("migration 0006 begins with exactly what drizzle-kit generates for the schema: 53 statements", async () => {
+  test("migration 0006 begins with exactly what drizzle-kit generates for the schema: 54 statements", async () => {
     const statements = statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
     // The same statements, whatever order drizzle-kit's loader gave the tables (it sorts a module's exports).
     const generated = (await generatedHead()).map(normalised).sort()
-    assert.equal(generated.length, 53, "nine CREATE TABLE, two ADD COLUMN, twenty-nine foreign keys, twelve indexes, one check")
+    assert.equal(generated.length, 54, "nine CREATE TABLE, two ADD COLUMN, twenty-nine foreign keys, twelve indexes, two checks on project")
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
   })
 
@@ -293,17 +269,6 @@ describe("the Planning tables as drizzle-kit writes them", () => {
     assert.deepEqual(tail, handWritten.map(normalised))
   })
 })
-
-const dialect = new PgDialect({ casing: CASING })
-/** The SQL of a table's checks by name, as drizzle-kit renders it into the migration: no parameters, or the file would say `$1`. */
-const checksOf = (table: Parameters<typeof getTableConfig>[0]): Map<string, string> =>
-  new Map(
-    getTableConfig(table).checks.map((check) => {
-      const query = dialect.sqlToQuery(check.value)
-      assert.deepEqual(query.params, [], `${check.name} carries a parameter, which the migration file cannot`)
-      return [check.name, query.sql]
-    }),
-  )
 
 describe("the check helpers of this context", () => {
   test("subsetOf holds every element of an array to the list, as literals, named <table>_<column>_subset_of", () => {

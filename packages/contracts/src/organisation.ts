@@ -32,7 +32,13 @@
 // Friday–Saturday; and `holidayList`, the name its holidays are looked up
 // under, null for a project that rests on its weekend only, whatever calendars
 // it has. A create body may leave both out and gets the database's defaults,
-// Saturday–Sunday and no list, which the schema says so the document does too.
+// Saturday–Sunday and no list, which the schema says so the document does too;
+// the default is the domain's `DEFAULT_WEEKEND`, the same constant the column
+// default is built from. A weekend never holds all seven days: the holiday
+// policy shifts a collection to the next working day, and a project with none
+// would send it two months out (`shiftToWorkingDay` walks sixty steps and then
+// gives up); the contract bounds it at six, the database at fewer than seven.
+import { DEFAULT_WEEKEND } from "@waste/domain/planning/vocabulary"
 import * as z from "zod"
 
 import { ServiceDays } from "./planning"
@@ -83,8 +89,14 @@ export const CompanyPatch = z
   .refine(changesSomething, somethingToChange)
 export type CompanyPatch = z.infer<typeof CompanyPatch>
 
-/** The working week the database gives a project that says nothing: Saturday and Sunday. */
-const DEFAULT_WEEKEND: ServiceDays = ["saturday", "sunday"]
+/** The most days a project may rest on: one short of the week, so it has a working day for a shifted collection to land on. */
+export const WEEKEND_MAX = 6
+
+/** What a weekend of all seven days is told. The database holds the same rule as `project_weekend_not_every_day`. */
+export const A_WORKING_DAY = "A project rests on at most six days: it has to have a working day"
+
+/** The days a project rests on: distinct weekdays, at most six. */
+const Weekend = ServiceDays.max(WEEKEND_MAX, { error: A_WORKING_DAY })
 
 export const Project = z.object({
   ...stamped,
@@ -95,8 +107,8 @@ export const Project = z.object({
   currency: Currency,
   timezone: Timezone,
   status: ProjectStatus,
-  /** The days the project rests on; a holiday policy shifts a collection past them. */
-  weekend: ServiceDays,
+  /** The days the project rests on, at most six; a holiday policy shifts a collection past them. */
+  weekend: Weekend,
   /** The name its holidays are looked up under (`Danish public holidays`); null is no list, and then the project rests on its weekend only. */
   holidayList: Label.nullable(),
 })
@@ -109,7 +121,7 @@ export const ProjectCreate = z.strictObject({
   currency: Currency,
   timezone: Timezone,
   status: ProjectStatus.default("onboarding").describe("Defaults to onboarding when absent: a project is onboarding until it runs."),
-  weekend: ServiceDays.default(DEFAULT_WEEKEND).describe("Defaults to Saturday and Sunday when absent: the days the project rests on, each named once."),
+  weekend: Weekend.default([...DEFAULT_WEEKEND]).describe("Defaults to Saturday and Sunday when absent: the days the project rests on, each named once, at most six."),
   holidayList: Label.nullable().optional().describe("Null or absent is no holiday list: the project then rests on its weekend only, whatever calendars it has."),
 })
 export type ProjectCreate = z.infer<typeof ProjectCreate>
@@ -122,7 +134,7 @@ export const ProjectPatch = z
     currency: Currency.optional(),
     timezone: Timezone.optional(),
     status: ProjectStatus.optional(),
-    weekend: ServiceDays.optional(),
+    weekend: Weekend.optional(),
     /** Null drops the list; a name sets it. */
     holidayList: Label.nullable().optional(),
   })

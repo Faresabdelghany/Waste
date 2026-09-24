@@ -18,7 +18,7 @@
 // knows which weekdays a weekend holds. Weekend days only matter as shift
 // targets: a scheme whose service days include Saturday collects on Saturdays.
 
-import { HOLIDAY_POLICIES } from "../planning/vocabulary"
+import { HOLIDAY_POLICIES, OCCURRENCE_STATUSES } from "../planning/vocabulary"
 import {
   addDays,
   isIsoDate,
@@ -61,7 +61,9 @@ export type SchemeCalendar = {
   weekend: readonly ServiceDay[]
 }
 
-export type OccurrenceStatus = "planned" | "shifted" | "skipped" | "holiday"
+// The list lives in ../planning/vocabulary since the #97 review round, where the contracts read it too.
+export { OCCURRENCE_STATUSES }
+export type OccurrenceStatus = (typeof OCCURRENCE_STATUSES)[number]
 
 export type Occurrence = {
   /** Running collection number; null for a skipped row. */

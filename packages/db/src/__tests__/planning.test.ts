@@ -231,6 +231,13 @@ describe("the Planning tables against a fresh database", { skip: database.skip }
         tx.transaction((savepoint) => savepoint.update(project).set({ weekend: ["saturday", "funday"] }).where(eq(project.id, a.spare))),
         refusedWith("23514", /project_weekend_subset_of/),
       )
+      // But a project that always rests has no working day for a shifted collection to land on: six is the most (23514 project_weekend_not_every_day).
+      const week = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+      await tx.update(project).set({ weekend: week.slice(0, 6) }).where(eq(project.id, a.spare))
+      await assert.rejects(
+        tx.transaction((savepoint) => savepoint.update(project).set({ weekend: week }).where(eq(project.id, a.spare))),
+        refusedWith("23514", /project_weekend_not_every_day/),
+      )
     }))
 
   /** Row counts per table as the transaction currently sees them. */

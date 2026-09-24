@@ -35,29 +35,36 @@
 // unloading station (Resources, with step 6), a scheme's own service demand
 // (a Subscription is the Registry's), and `lastGeneratedAt` and the drift
 // stamps (part B adds them to the resource).
-import { SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
+import { OCCURRENCE_STATUSES, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 import * as z from "zod"
 
 import { IsoDate, IsoTime } from "./dates"
 import { Id } from "./ids"
-import { HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, ServiceDays, ServiceType, StopMatchVehicleType, StopSource, WeekRotation } from "./planning"
+import { eachOnce, HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, ServiceDays, ServiceType, StopMatchVehicleType, StopSource, WeekRotation } from "./planning"
 import { ProjectScopedListQuery } from "./queries"
 import { changesSomething, somethingToChange, stamped } from "./resource"
 import { Label } from "./text"
 import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
 
-/** The most containers a set body may carry: a form's list, not an import. The resource is unbounded. */
+/**
+ * The most a set of this module may carry — a group's containers, a rule's
+ * fractions and container types: a form's list, not an import. A group's
+ * container list is unbounded on the resource, since a set already stored has
+ * to read back however long it grew; a rule's two sets are bounded on the
+ * resource too, because the rule is one schema for the row and the body, and
+ * two hundred fractions is more than any company's catalogue holds.
+ */
 export const CONTAINERS_MAX = 200
 
 /** An order among siblings: whole and positive, since the first is number one. */
 const Ordinal = z.int().positive()
 
-/** Each entry names its row once, as the database's key insists. */
-const eachNamedOnce = (ids: readonly string[]): boolean => new Set(ids).size === ids.length
-
 export const EACH_FRACTION_ONCE = "Name each waste fraction once: a rule matches a fraction or it does not"
 export const EACH_CONTAINER_TYPE_ONCE = "Name each container type once: a rule is restricted to a type or it is not"
 export const EACH_CONTAINER_ONCE = "Name each container once: a container has one place in the group's stop order"
+
+/** A distinct set of ids, bounded. */
+const idSet = (message: string) => z.array(Id).max(CONTAINERS_MAX).refine((ids) => eachOnce(ids), { message })
 
 /**
  * How a rule group finds its stops: the fractions it matches (one or more),
@@ -66,8 +73,8 @@ export const EACH_CONTAINER_ONCE = "Name each container once: a container has on
  * `PUT /collection-groups/:id/stop-matching-rule`.
  */
 export const StopMatchingRule = z.strictObject({
-  wasteFractionIds: z.array(Id).min(1).refine(eachNamedOnce, { message: EACH_FRACTION_ONCE }),
-  containerTypeIds: z.array(Id).refine(eachNamedOnce, { message: EACH_CONTAINER_TYPE_ONCE }),
+  wasteFractionIds: idSet(EACH_FRACTION_ONCE).min(1),
+  containerTypeIds: idSet(EACH_CONTAINER_TYPE_ONCE),
   vehicleType: StopMatchVehicleType.nullable(),
 })
 export type StopMatchingRule = z.infer<typeof StopMatchingRule>
@@ -76,7 +83,7 @@ export type StopMatchingRule = z.infer<typeof StopMatchingRule>
 export const StopMatchingRuleSet = StopMatchingRule
 export type StopMatchingRuleSet = z.infer<typeof StopMatchingRuleSet>
 
-const ContainerIds = z.array(Id).max(CONTAINERS_MAX).refine(eachNamedOnce, { message: EACH_CONTAINER_ONCE })
+const ContainerIds = idSet(EACH_CONTAINER_ONCE)
 
 /** The whole list in stop order, replacing what the group had; a manual group picks at least one. */
 export const CollectionGroupContainersSet = z.strictObject({
@@ -178,6 +185,14 @@ export const OUTSIDE_SERVICE_DAYS = "Outside the scheme's service days"
 /** Every day a group runs on is a day the scheme serves. */
 export const withinServiceDays = (serviceDays: readonly string[], days: readonly string[]): boolean => days.every((day) => serviceDays.includes(day))
 
+/** What a create body naming two groups alike is told, at the list: the database's key (`collection_group_route_scheme_id_name_key`) would say the same as a 23505. */
+export const EACH_GROUP_NAME_ONCE = "A collection group name is used once in a scheme"
+const eachGroupNameOnce = { message: EACH_GROUP_NAME_ONCE, path: ["collectionGroups"] }
+
+/** No two groups of a body share a name; a half-seen list is not judged. */
+const groupNamesOnce = (body: { collectionGroups?: unknown }): boolean =>
+  !Array.isArray(body.collectionGroups) || eachOnce(body.collectionGroups, (group: { name?: unknown }) => group?.name)
+
 const RouteSchemeFields = {
   ...stamped,
   projectId: Id,
@@ -228,6 +243,7 @@ export const RouteSchemeCreate = z
   .refine(validityOrdered, endsAfterItStarts)
   .refine((body) => weekRotationShape({ ...body, weekRotation: body.weekRotation ?? null }), weekRotationWithFortnightly)
   .refine(dailyServesEveryDay, dailyServesEveryDayIssue)
+  .refine(groupNamesOnce, eachGroupNameOnce)
   .superRefine((body, ctx) => {
     // zod 4 runs a check on a body whose fields failed, so a half-seen pair is not judged here either.
     if (!Array.isArray(body.serviceDays) || !Array.isArray(body.collectionGroups)) return
@@ -272,8 +288,8 @@ export type RouteSchemePatch = z.infer<typeof RouteSchemePatch>
 export const RouteSchemeListQuery = ProjectScopedListQuery.extend({
   planningAreaId: Id.optional(),
   status: RouteSchemeStatus.optional(),
-  /** A query string spells a boolean as `true` or `false`. */
-  planAhead: z.stringbool({ truthy: ["true"], falsy: ["false"] }).optional(),
+  /** A query string spells a boolean as `true` or `false`, exactly. */
+  planAhead: z.stringbool({ truthy: ["true"], falsy: ["false"], case: "sensitive" }).optional(),
   /** The day the period is read against; absent asks for every scheme, whenever it ran. */
   validOn: IsoDate.optional(),
 })
@@ -289,18 +305,23 @@ const DAY_MS = 86_400_000
 /** The days from one calendar day to another; both are `YYYY-MM-DD`, so the UTC midnight of each is exact. */
 const daysBetween = (from: string, to: string): number => (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS
 
-/** The window of `GET /route-schemes/:id/occurrences`: both ends inclusive, `to` on or after `from`, at most a year apart. */
+/**
+ * The window of `GET /route-schemes/:id/occurrences`: both ends inclusive,
+ * `to` on or after `from`, spanning at most 366 days — so the two days are
+ * fewer than 366 apart, since a window of one day is `from` and `to` on the
+ * same day and zero apart.
+ */
 export const OccurrenceQuery = z
   .object({
     from: IsoDate,
     to: IsoDate,
   })
   .refine((window) => window.to >= window.from, { message: WINDOW_ORDERED, path: ["to"] })
-  .refine((window) => daysBetween(window.from, window.to) <= OCCURRENCE_WINDOW_MAX_DAYS, { message: WINDOW_AT_MOST_A_YEAR, path: ["to"] })
+  .refine((window) => daysBetween(window.from, window.to) < OCCURRENCE_WINDOW_MAX_DAYS, { message: WINDOW_AT_MOST_A_YEAR, path: ["to"] })
 export type OccurrenceQuery = z.infer<typeof OccurrenceQuery>
 
-/** What a recurrence date became under the holiday policy; the domain's `OccurrenceStatus`, a reading and never stored, so it is spelled here. */
-export const OccurrenceStatus = z.enum(["planned", "shifted", "skipped", "holiday"])
+/** What a recurrence date became under the holiday policy: the domain's `OccurrenceStatus`, a reading and never stored, read from its tuple like every other Planning enum. */
+export const OccurrenceStatus = z.enum(OCCURRENCE_STATUSES)
 export type OccurrenceStatus = z.infer<typeof OccurrenceStatus>
 
 /** One row of the preview: the domain's `Occurrence` as `generateOccurrences` answers it. */

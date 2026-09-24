@@ -23,6 +23,7 @@ import { company, project, serviceProvider } from "../schema/organisation"
 import { companyReference, indexOn, tenantIndex, tenantKey, tenantReference, tenantUnique, uniqueOn } from "../schema/references"
 import { wms } from "../schema/wms"
 import { normalised, statementsOf } from "../sql/hand-written"
+import { foreignKey, index, ref } from "./rendering"
 import { statementsFor } from "./specimen"
 
 /** The eight tables in the order the Domain model lists them; drizzle-kit's own loader sorts a module's exports, which the migration test allows for. */
@@ -39,12 +40,8 @@ const SETS = [
   '\t"created_at" timestamp with time zone DEFAULT now() NOT NULL,',
   '\t"updated_at" timestamp with time zone DEFAULT now() NOT NULL,',
 ]
+/** This context's own spelling of a CREATE TABLE, lines carrying their own tabs and commas; the shared helpers (./rendering) spell the rest. */
 const createTable = (name: string, lines: string[]): string => [`CREATE TABLE "wms"."${name}" (`, ...SETS, ...lines, ");", ""].join("\n")
-const ref = (table: string, column: string): string => `"wms"."${table}"."${column}"`
-const columns = (...names: string[]): string => names.map((name) => `"${name}"`).join(",")
-const foreignKey = (table: string, name: string, own: string[], target: string, foreign: string[]): string =>
-  `ALTER TABLE "wms"."${table}" ADD CONSTRAINT "${name}" FOREIGN KEY (${columns(...own)}) REFERENCES "wms"."${target}"(${columns(...foreign)}) ON DELETE no action ON UPDATE no action;`
-const index = (table: string, name: string, ...own: string[]): string => `CREATE INDEX "${name}" ON "wms"."${table}" USING btree (${columns(...own)});`
 
 /** What 0005 added to the schema after 0002 had been applied: 0002 begins with the generated statements less these, 0005 with exactly these. */
 const ADDED_IN_0005 = [index("user_account", "user_account_email_idx", "email")]
@@ -66,7 +63,12 @@ const projectTable = (planning: boolean): string =>
     '\tCONSTRAINT "project_name_key" UNIQUE("company_id","name"),',
     '\tCONSTRAINT "project_tenant_key" UNIQUE("company_id","id"),',
     `\tCONSTRAINT "project_status_one_of" CHECK (${ref("project", "status")} ${STATUS})${planning ? "," : ""}`,
-    ...(planning ? [`\tCONSTRAINT "project_weekend_subset_of" CHECK (${ref("project", "weekend")} ${WEEKEND})`] : []),
+    ...(planning
+      ? [
+          `\tCONSTRAINT "project_weekend_subset_of" CHECK (${ref("project", "weekend")} ${WEEKEND}),`,
+          `\tCONSTRAINT "project_weekend_not_every_day" CHECK (cardinality(${ref("project", "weekend")}) < 7)`,
+        ]
+      : []),
   ])
 
 /**

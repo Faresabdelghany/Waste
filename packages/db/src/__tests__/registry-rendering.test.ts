@@ -16,9 +16,8 @@ import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
-import { getTableConfig, integer, PgDialect, text, uuid } from "drizzle-orm/pg-core"
+import { getTableConfig, integer, text, uuid } from "drizzle-orm/pg-core"
 
-import { CASING } from "../casing"
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { agreement, subscription } from "../schema/agreements"
 import { containerType, product, serviceFrequency, wasteFraction } from "../schema/catalogue"
@@ -32,6 +31,24 @@ import { excludeOverlapping } from "../sql/exclude-overlapping"
 import { normalised, statementsOf } from "../sql/hand-written"
 import { tenantFence } from "../sql/tenant-fence"
 import { touchUpdatedAt } from "../sql/touch-updated-at"
+import {
+  checksOf,
+  companyFk,
+  createTable,
+  foreignKey,
+  geometryCheck,
+  index,
+  lowercaseCheck,
+  oneOfCheck,
+  partialUniqueIndex,
+  positiveCheck,
+  projectFk,
+  projectFkTo,
+  ref,
+  tenantFk,
+  uniqueKey,
+  validityCheck,
+} from "./rendering"
 import { statementsFor } from "./specimen"
 
 /** The fifteen tables in the order src/schema/index.ts exports them; drizzle-kit's own loader sorts a module's exports, which the migration test allows for. */
@@ -54,50 +71,6 @@ const tables = {
 }
 
 const MIGRATION = "0004_registry.sql"
-
-const ID = '"id" uuid PRIMARY KEY DEFAULT wms.uuidv7() NOT NULL'
-const COMPANY = '"company_id" uuid NOT NULL'
-const PROJECT = '"project_id" uuid NOT NULL'
-const STAMPS = ['"created_at" timestamp with time zone DEFAULT now() NOT NULL', '"updated_at" timestamp with time zone DEFAULT now() NOT NULL']
-const VALIDITY = ['"valid_from" date NOT NULL', '"valid_to" date']
-/** The column sets a table of this context begins with, by the sets it spreads. */
-const SETS = {
-  tenant: [ID, COMPANY, ...STAMPS],
-  project: [ID, COMPANY, PROJECT, ...STAMPS],
-  dated: [ID, COMPANY, PROJECT, ...STAMPS, ...VALIDITY],
-}
-
-/** One CREATE TABLE as drizzle-kit writes it: the sets, then the table's own lines, one per tab-indented line and the last without a comma. */
-const createTable = (name: string, sets: keyof typeof SETS, lines: string[]): string =>
-  [`CREATE TABLE "wms"."${name}" (`, [...SETS[sets], ...lines].map((line) => `\t${line}`).join(",\n"), ");", ""].join("\n")
-
-const ref = (table: string, column: string): string => `"wms"."${table}"."${column}"`
-const columns = (...names: string[]): string => names.map((name) => `"${name}"`).join(",")
-const foreignKey = (table: string, name: string, own: string[], target: string, foreign: string[]): string =>
-  `ALTER TABLE "wms"."${table}" ADD CONSTRAINT "${name}" FOREIGN KEY (${columns(...own)}) REFERENCES "wms"."${target}"(${columns(...foreign)}) ON DELETE no action ON UPDATE no action;`
-const index = (table: string, name: string, ...own: string[]): string => `CREATE INDEX "${name}" ON "wms"."${table}" USING btree (${columns(...own)});`
-/** The tenant's plain key and the project-scoped one, which every project-scoped table here carries. */
-const companyFk = (table: string): string => foreignKey(table, `${table}_company_id_fk`, ["company_id"], "company", ["id"])
-const projectFk = (table: string): string => foreignKey(table, `${table}_project_id_fk`, ["company_id", "project_id"], "project", ["company_id", "id"])
-const tenantFk = (table: string, column: string, target: string): string =>
-  foreignKey(table, `${table}_${column}_fk`, ["company_id", column], target, ["company_id", "id"])
-const projectFkTo = (table: string, column: string, target: string): string =>
-  foreignKey(table, `${table}_${column}_fk`, ["company_id", "project_id", column], target, ["company_id", "project_id", "id"])
-
-const uniqueKey = (name: string, ...own: string[]): string => `CONSTRAINT "${name}" UNIQUE(${columns(...own)})`
-const oneOfCheck = (table: string, column: string, ...values: string[]): string =>
-  `CONSTRAINT "${table}_${column}_one_of" CHECK (${ref(table, column)} in (${values.map((value) => `'${value}'`).join(", ")}))`
-const positiveCheck = (table: string, column: string): string => `CONSTRAINT "${table}_${column}_positive" CHECK (${ref(table, column)} > 0)`
-const lowercaseCheck = (table: string, column: string): string =>
-  `CONSTRAINT "${table}_${column}_lowercase" CHECK (${ref(table, column)} = lower(${ref(table, column)}))`
-const validityCheck = (table: string): string =>
-  `CONSTRAINT "${table}_validity" CHECK (${ref(table, "valid_to")} is null or ${ref(table, "valid_to")} > ${ref(table, "valid_from")})`
-const geometryCheck = (table: string, column: string): string => {
-  const it = ref(table, column)
-  return `CONSTRAINT "${table}_${column}_valid" CHECK (extensions.st_isvalid(${it}) and not extensions.st_isempty(${it}) and extensions.st_xmin(${it}) >= -180 and extensions.st_xmax(${it}) <= 180 and extensions.st_ymin(${it}) >= -90 and extensions.st_ymax(${it}) <= 90)`
-}
-const partialUniqueIndex = (table: string, name: string, own: string[], where: string): string =>
-  `CREATE UNIQUE INDEX "${name}" ON "wms"."${table}" USING btree (${columns(...own)}) WHERE ${where};`
 
 const expected = [
   createTable("waste_fraction", "tenant", [
@@ -371,17 +344,6 @@ describe("the Registry tables as drizzle-kit writes them", () => {
     assert.deepEqual(tail, handWritten.map(normalised))
   })
 })
-
-const dialect = new PgDialect({ casing: CASING })
-/** The SQL of a table's checks by name, as drizzle-kit renders it into the migration: no parameters, or the file would say `$1`. */
-const checksOf = (table: Parameters<typeof getTableConfig>[0]): Map<string, string> =>
-  new Map(
-    getTableConfig(table).checks.map((check) => {
-      const query = dialect.sqlToQuery(check.value)
-      assert.deepEqual(query.params, [], `${check.name} carries a parameter, which the migration file cannot`)
-      return [check.name, query.sql]
-    }),
-  )
 
 describe("the check helpers of this context", () => {
   test("positive holds a count above zero, named <table>_<column>_positive", () => {

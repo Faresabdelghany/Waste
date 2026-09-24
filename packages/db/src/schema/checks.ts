@@ -35,6 +35,12 @@
 // separate rule that the set has something in it, for the column where an
 // empty set would be a scheme that never runs. A null array passes both, like
 // a null count passes `positive`, and the column says whether it may be null.
+// Neither refuses an element twice (`'{monday,monday}'` is a subset of the
+// seven) or bounds the set's size: the database holds subset-ness and
+// non-emptiness, and distinctness and size are the contracts' rule
+// (`ServiceDays` in @waste/contracts/planning, `WEEKEND_MAX` in
+// @waste/contracts/organisation), since the API is the only writer — a SQL
+// function for the two would be a second spelling of a rule already held.
 import { getTableName, sql } from "drizzle-orm"
 import { check, type CheckBuilder, type PgColumn } from "drizzle-orm/pg-core"
 

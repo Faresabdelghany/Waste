@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { DEFAULT_WEEKEND, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
+
 import {
+  A_WORKING_DAY,
   Company,
   CompanyPatch,
   CompanyStatus,
@@ -12,6 +15,7 @@ import {
   ServiceProvider,
   ServiceProviderCreate,
   ServiceProviderPatch,
+  WEEKEND_MAX,
 } from "../organisation"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -155,6 +159,17 @@ describe("Project", () => {
     assert.equal(Project.safeParse(withoutWeekend).success, false, "the resource always says which days it rests on")
   })
 
+  test("rests on at most six days: a project has a working day for a shifted collection to land on", () => {
+    assert.equal(WEEKEND_MAX, SERVICE_DAYS.length - 1)
+    const sixDays = SERVICE_DAYS.slice(0, WEEKEND_MAX)
+    assert.deepEqual(Project.parse({ ...project, weekend: sixDays }).weekend, sixDays)
+    const everyDay = { path: "weekend", message: A_WORKING_DAY }
+    assert.deepEqual(refusal(Project.safeParse({ ...project, weekend: [...SERVICE_DAYS] })), [everyDay])
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...body } = project
+    assert.deepEqual(refusal(ProjectCreate.safeParse({ ...body, weekend: [...SERVICE_DAYS] })), [everyDay])
+    assert.deepEqual(refusal(ProjectPatch.safeParse({ weekend: [...SERVICE_DAYS] })), [everyDay])
+  })
+
   test("takes an IANA timezone by shape: Area/Location, or UTC", () => {
     for (const timezone of ["Europe/Copenhagen", "Africa/Cairo", "America/Argentina/Buenos_Aires", "America/Port-au-Prince", "Etc/GMT+2", "UTC"]) {
       assert.equal(Project.parse({ ...project, timezone }).timezone, timezone, timezone)
@@ -184,6 +199,7 @@ describe("ProjectCreate", () => {
     const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, weekend: _weekend, holidayList: _holidayList, ...body } = project
     const parsed = ProjectCreate.parse(body)
     assert.deepEqual(parsed.weekend, ["saturday", "sunday"])
+    assert.deepEqual(parsed.weekend, [...DEFAULT_WEEKEND], "the domain's constant, the same one the column default is built from")
     assert.equal(parsed.holidayList, undefined, "absent stays absent: the column's null is the database's")
     assert.deepEqual(ProjectCreate.parse({ ...body, weekend: ["friday", "saturday"], holidayList: null }).weekend, ["friday", "saturday"])
     assert.match(ProjectCreate.shape.weekend.description ?? "", /Saturday and Sunday/)

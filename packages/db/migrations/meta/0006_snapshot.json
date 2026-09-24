@@ -1,5 +1,5 @@
 {
-  "id": "c6cd1638-2cfc-43b4-a16f-d1fb72b16378",
+  "id": "526ba860-2b47-40e1-9b59-40b0ec29c560",
   "prevId": "56ea3551-a073-410b-b1c6-860271a8afee",
   "version": "7",
   "dialect": "postgresql",
@@ -218,6 +218,10 @@
         "project_weekend_subset_of": {
           "name": "project_weekend_subset_of",
           "value": "\"wms\".\"project\".\"weekend\" <@ ARRAY['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']::text[]"
+        },
+        "project_weekend_not_every_day": {
+          "name": "project_weekend_not_every_day",
+          "value": "cardinality(\"wms\".\"project\".\"weekend\") < 7"
         }
       },
       "isRLSEnabled": false

@@ -186,7 +186,8 @@ CREATE INDEX "collection_group_container_type_container_type_id_idx" ON "wms"."c
 CREATE INDEX "collection_group_fraction_project_id_idx" ON "wms"."collection_group_fraction" USING btree ("company_id","project_id");--> statement-breakpoint
 CREATE INDEX "collection_group_fraction_waste_fraction_id_idx" ON "wms"."collection_group_fraction" USING btree ("company_id","waste_fraction_id");--> statement-breakpoint
 CREATE INDEX "route_scheme_planning_area_id_idx" ON "wms"."route_scheme" USING btree ("company_id","planning_area_id");--> statement-breakpoint
-ALTER TABLE "wms"."project" ADD CONSTRAINT "project_weekend_subset_of" CHECK ("wms"."project"."weekend" <@ ARRAY['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']::text[]);
+ALTER TABLE "wms"."project" ADD CONSTRAINT "project_weekend_subset_of" CHECK ("wms"."project"."weekend" <@ ARRAY['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']::text[]);--> statement-breakpoint
+ALTER TABLE "wms"."project" ADD CONSTRAINT "project_weekend_not_every_day" CHECK (cardinality("wms"."project"."weekend") < 7);
 --> statement-breakpoint
 -- Hand-written from here on (migrations/README.md): the fence and the
 -- updated_at trigger of each of the nine tables, table by table, then the
