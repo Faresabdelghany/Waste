@@ -51,6 +51,13 @@ const ids = (n: "a" | "b") => ({
   spare: `018f7c2e-${n}000-7000-8000-0000000000e1`,
   other: `018f7c2e-${n}000-7000-8000-0000000000e2`,
   third: `018f7c2e-${n}000-7000-8000-0000000000e3`,
+  /** A second project of the same company, and the rows of its own that a record of the first may not name: every one of those keys carries `project_id`. */
+  harbor: `018f7c2e-${n}000-7000-8000-0000000000f1`,
+  harborProduct: `018f7c2e-${n}000-7000-8000-0000000000f2`,
+  harborProperty: `018f7c2e-${n}000-7000-8000-0000000000f3`,
+  harborAgreement: `018f7c2e-${n}000-7000-8000-0000000000f4`,
+  harborSubscription: `018f7c2e-${n}000-7000-8000-0000000000f5`,
+  harborContainer: `018f7c2e-${n}000-7000-8000-0000000000f6`,
 })
 const a = ids("a")
 const b = ids("b")
@@ -262,16 +269,93 @@ describe("the Registry tables against a fresh database", { skip: database.skip }
       await tx.insert(propertyParty).values({ id: a.other, companyId: a.company, projectId: a.project, propertyId: a.property, customerId: a.customer, role: "payer" })
     }))
 
-  test("a subscription cannot name a property of another project of its own company (23503 subscription_property_id_fk)", () =>
+  test("a subscription cannot name the property or the product of another project of its own company, and a placement cannot name its container or its subscription (23503)", () =>
     seeded(async (tx) => {
-      await tx.insert(project).values({ id: a.spare, companyId: a.company, name: "Harbor", kind: "Contract", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active" })
-      await tx.insert(property).values({ id: a.other, companyId: a.company, projectId: a.spare, name: "Havnegade 2", address: "Havnegade 2", kind: "commercial", status: "active" })
+      // A second project of company a, holding one of each thing a record of
+      // the first project reaches for. The tenant is the same, so only the
+      // project_id in the key stands between them.
+      await tx.insert(project).values({ id: a.harbor, companyId: a.company, name: "Harbor", kind: "Contract", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active" })
+      await tx.insert(property).values({ id: a.harborProperty, companyId: a.company, projectId: a.harbor, name: "Havnegade 2", address: "Havnegade 2", kind: "commercial", status: "active" })
+      await tx.insert(product).values({
+        id: a.harborProduct,
+        companyId: a.company,
+        projectId: a.harbor,
+        name: "Residual 660 L weekly",
+        kind: "container-collection",
+        status: "active",
+        unit: "pickup",
+        containerTypeId: a.containerType,
+      })
+      await tx.insert(agreement).values({
+        id: a.harborAgreement,
+        companyId: a.company,
+        projectId: a.harbor,
+        validFrom: OPENED,
+        number: "AGR-2501",
+        customerId: a.customer,
+        payerCustomerId: a.customer,
+        status: "active",
+        billingCadence: "monthly",
+        currency: "DKK",
+      })
+      await tx.insert(subscription).values({
+        id: a.harborSubscription,
+        companyId: a.company,
+        projectId: a.harbor,
+        validFrom: OPENED,
+        agreementId: a.harborAgreement,
+        productId: a.harborProduct,
+        propertyId: a.harborProperty,
+      })
+      await tx.insert(container).values({ id: a.harborContainer, companyId: a.company, projectId: a.harbor, label: "BIN-82015", containerTypeId: a.containerType, ownership: "company" })
+
+      // A subscription of the first project, sound but for the one id each of these reaches across with.
+      const subscribed = (borrowed: { productId?: string; propertyId?: string }) => ({
+        id: a.third,
+        companyId: a.company,
+        projectId: a.project,
+        validFrom: OPENED,
+        agreementId: a.agreement,
+        productId: a.product,
+        propertyId: a.property,
+        ...borrowed,
+      })
       await assert.rejects(
-        tx.transaction((savepoint) =>
-          savepoint.insert(subscription).values({ id: a.third, companyId: a.company, projectId: a.project, validFrom: OPENED, agreementId: a.agreement, productId: a.product, propertyId: a.other }),
-        ),
+        tx.transaction((savepoint) => savepoint.insert(subscription).values(subscribed({ propertyId: a.harborProperty }))),
         refusedWith("23503", /subscription_property_id_fk/),
       )
+      await assert.rejects(
+        tx.transaction((savepoint) => savepoint.insert(subscription).values(subscribed({ productId: a.harborProduct }))),
+        refusedWith("23503", /subscription_product_id_fk/),
+      )
+
+      // The same for a placement, over a period before the seeded one's, so
+      // the exclusion constraint has nothing to say and the key is what refuses.
+      const placed = (borrowed: { containerId?: string; subscriptionId?: string }) => ({
+        id: a.third,
+        companyId: a.company,
+        projectId: a.project,
+        validFrom: "2025-01-01",
+        validTo: OPENED,
+        containerId: a.container,
+        subscriptionId: a.subscription,
+        wasteFractionId: a.wasteFraction,
+        ...borrowed,
+      })
+      await assert.rejects(
+        tx.transaction((savepoint) => savepoint.insert(containerServicePlacement).values(placed({ containerId: a.harborContainer }))),
+        refusedWith("23503", /container_service_placement_container_id_fk/),
+      )
+      await assert.rejects(
+        tx.transaction((savepoint) => savepoint.insert(containerServicePlacement).values(placed({ subscriptionId: a.harborSubscription }))),
+        refusedWith("23503", /container_service_placement_subscription_id_fk/),
+      )
+
+      // Both land when every id they name is their own project's; the
+      // subscription over the placement's earlier period, since the seeded one
+      // already holds that agreement, product and place from OPENED on.
+      await tx.insert(subscription).values({ ...subscribed({}), validFrom: "2025-01-01", validTo: OPENED })
+      await tx.insert(containerServicePlacement).values({ ...placed({}), id: a.spare })
     }))
 
   test("location_id follows whichever place the subscription names; both places are refused by the check (23514), neither by the generated column itself (23502)", () =>
