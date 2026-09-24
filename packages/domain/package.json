@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Pure, deterministic planning logic (ADR-0002). Depends on nothing; no React, Next, MapLibre, browser or Node globals. Ships TypeScript source for bundler and tsx consumers (extensionless imports); src/__tests__/purity.test.ts enforces the boundary.",
+  "description": "Pure, deterministic planning logic (ADR-0002): the route schemes, the map-planning questions, UUIDv7 in ids, the permission vocabulary and the system roles in access/, and the Registry's closed lists in registry/vocabulary, which the database reads into its CHECK constraints and the contracts into their z.enum, so the two cannot drift. Depends on nothing; no React, Next, MapLibre, browser or Node globals. Ships TypeScript source for bundler and tsx consumers (extensionless imports); src/__tests__/purity.test.ts enforces the boundary.",
   "exports": {
     "./package.json": "./package.json",
     "./__tests__/*": null,

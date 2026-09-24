@@ -382,6 +382,15 @@ describe("the shared collection point endpoints", { skip: database.skip }, () =>
         400,
       )
       assert.deepEqual(foreign.errors, [{ path: "responsibleCustomerId", message: "Not a customer of this company" }])
+      const unminted = await refused(
+        await olivia(`/shared-collection-points/${testId()}`, { method: "PATCH", body: { responsibleCustomerId: theirCustomer.id } }),
+        404,
+      )
+      assert.match(
+        unminted.detail ?? "",
+        /shared collection point/i,
+        "the row is read before the patch's references, so an id nobody minted is the 404 it is everywhere else",
+      )
       assert.deepEqual(
         (await refused(await olivia(`/shared-collection-points/${created.id}`, { method: "PATCH", body: {} }), 400)).errors?.map((error) => error.path),
         [""],

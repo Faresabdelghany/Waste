@@ -42,7 +42,7 @@ import { Label, Paragraph } from "./text"
 export const ProductKind = z.enum(PRODUCT_KINDS)
 export type ProductKind = z.infer<typeof ProductKind>
 
-/** Whether a Product may be subscribed to. */
+/** Where a Product stands in the catalogue; nothing gates a subscription on it today. */
 export const ProductStatus = z.enum(PRODUCT_STATUSES)
 export type ProductStatus = z.infer<typeof ProductStatus>
 
@@ -207,7 +207,7 @@ export const ProductCreate = z.strictObject({
   projectId: Id,
   name: Label,
   kind: ProductKind,
-  status: ProductStatus.default("draft").describe("Defaults to draft when absent: a Product is not subscribed to until someone says it may be."),
+  status: ProductStatus.default("draft").describe("Defaults to draft when absent: a Product is written before it is offered. The status is a catalogue state and does not gate a subscription."),
   unit: ProductUnit,
   containerTypeId: Id.nullable().optional(),
   wasteFractionId: Id.nullable().optional(),

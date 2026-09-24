@@ -347,7 +347,7 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
       const running = await subscribe(created.id, { validFrom: JULY })
 
       const anyEnd = await refused(await olivia(`/agreements/${created.id}`, { method: "PATCH", body: { validTo: NEXT_YEAR } }), 409)
-      assert.equal(anyEnd.detail, "1 subscription would fall outside the agreement's period; end them first")
+      assert.equal(anyEnd.detail, "1 subscription would fall outside the agreement's period; end it first")
       assert.equal((await one(olivia, created.id)).updatedAt, created.updatedAt, "a refused patch does not move the stamp")
 
       await patchSubscription(running.id, { validTo: OCTOBER })
@@ -355,13 +355,21 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
       assert.equal(ended.validTo, NEXT_YEAR, "an end the subscription now fits inside is taken")
 
       const shortened = await refused(await olivia(`/agreements/${created.id}`, { method: "PATCH", body: { validTo: APRIL } }), 409)
-      assert.equal(shortened.detail, "1 subscription would fall outside the agreement's period; end them first")
+      assert.equal(shortened.detail, "1 subscription would fall outside the agreement's period; end it first")
       const moved = await refused(await olivia(`/agreements/${created.id}`, { method: "PATCH", body: { validFrom: OCTOBER } }), 409)
-      assert.equal(moved.detail, "1 subscription would fall outside the agreement's period; end them first")
+      assert.equal(moved.detail, "1 subscription would fall outside the agreement's period; end it first")
 
       const stored = await one(olivia, created.id)
       assert.deepEqual([stored.validFrom, stored.validTo], [JANUARY, NEXT_YEAR])
       assert.equal(stored.updatedAt, ended.updatedAt)
+    })
+
+    test("counts the subscriptions in the way, and the sentence reads as a plural once there is more than one", async () => {
+      const created = await agreement("AGR-2445")
+      await subscribe(created.id, { validFrom: JULY })
+      await subscribe(created.id, { sharedCollectionPointId: bank.id, propertyId: null, validFrom: JULY })
+      const problem = await refused(await olivia(`/agreements/${created.id}`, { method: "PATCH", body: { validTo: NEXT_YEAR } }), 409)
+      assert.equal(problem.detail, "2 subscriptions would fall outside the agreement's period; end them first")
     })
 
     test("refuses a period that overlaps another agreement of the same number", async () => {
@@ -546,7 +554,7 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
       )
 
       const problem = await refused(await olivia(`/subscriptions/${written.id}`, { method: "PATCH", body: { validTo: APRIL } }), 409)
-      assert.equal(problem.detail, "1 placement would fall outside the subscription's period; end the placements first")
+      assert.equal(problem.detail, "1 placement would fall outside the subscription's period; end it first")
       const stored = await oneSubscription(olivia, written.id)
       assert.deepEqual([stored.validFrom, stored.validTo], [JANUARY, null])
       assert.equal(stored.updatedAt, written.updatedAt, "a refused patch does not move the stamp")

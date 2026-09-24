@@ -278,7 +278,13 @@ export function propertyGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const patch = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
+
+        // The row first, then what the patch points at: an id nobody minted
+        // is a 404 here as in every other family, and not a 400 about a
+        // customer that was never going to be written.
+        if ((await findGroup(tx, principal, id)) === undefined) throw noSuchGroup(id)
         await requireCustomer(tx, principal.companyId, patch.responsibleCustomerId, "responsibleCustomerId")
+
         const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
         const [row] = await refuseDuplicate(sentences, () =>
           tx

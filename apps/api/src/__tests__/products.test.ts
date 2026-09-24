@@ -115,7 +115,7 @@ describe("the product endpoints", { skip: database.skip }, () => {
       const created = await create(olivia, "/products", body(a.projects.copenhagen.id, "Residual collection"), Product)
       assert.equal(Id.parse(created.id), created.id, "a version 7 id the server minted")
       assert.equal(created.projectId, a.projects.copenhagen.id)
-      assert.equal(created.status, "draft", "a product is not subscribed to until someone says it may be")
+      assert.equal(created.status, "draft", "a product is written before it is offered")
       assert.deepEqual(
         [created.containerTypeId, created.wasteFractionId, created.serviceFrequencyId],
         [null, null, null],

@@ -158,9 +158,12 @@ const PLACE_SUBSCRIBED_SENTENCE = "The agreement already subscribes to that prod
 /** What a bound outside the parent's period is told, on the create and on the patch alike. */
 const OUTSIDE_AGREEMENT = "Outside the agreement's period"
 
+/** "it" or "them": the sentence has just counted the rows, so the pronoun follows the count. */
+const them = (rows: number) => (rows === 1 ? "it" : "them")
+
 /** What a period a child does not fit inside is refused with; the rows in the way are not in the body, so the caller ends them first. */
-const strandedSubscriptions = (rows: number) => `${count(rows, "subscription")} would fall outside the agreement's period; end them first`
-const strandedPlacements = (rows: number) => `${count(rows, "placement")} would fall outside the subscription's period; end the placements first`
+const strandedSubscriptions = (rows: number) => `${count(rows, "subscription")} would fall outside the agreement's period; end ${them(rows)} first`
+const strandedPlacements = (rows: number) => `${count(rows, "placement")} would fall outside the subscription's period; end ${them(rows)} first`
 
 const noSuchAgreement = (id: string) => problem(404, { detail: `No agreement ${id} in the projects this account works in` })
 const noSuchSubscription = (id: string) => problem(404, { detail: `No subscription ${id} in the projects this account works in` })

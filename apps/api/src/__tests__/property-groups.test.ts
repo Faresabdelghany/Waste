@@ -342,6 +342,11 @@ describe("the property group endpoints", { skip: database.skip }, () => {
         400,
       )
       assert.deepEqual(foreign.errors, [{ path: "responsibleCustomerId", message: "Not a customer of this company" }])
+      const unminted = await refused(
+        await olivia(`/property-groups/${testId()}`, { method: "PATCH", body: { responsibleCustomerId: theirCustomer.id } }),
+        404,
+      )
+      assert.match(unminted.detail ?? "", /property group/i, "the row is read before the patch's references, so an id nobody minted is the 404 it is everywhere else")
       assert.deepEqual(
         (await refused(await olivia(`/property-groups/${created.id}`, { method: "PATCH", body: {} }), 400)).errors?.map((error) => error.path),
         [""],
