@@ -28,6 +28,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr"
 
 import { cn } from "@/lib/utils"
+import { readPersisted, SETTINGS_STORAGE_KEY } from "@/lib/storage-keys"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -182,7 +183,7 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
             description: "Used for authentication and configured notification delivery.",
             scope: "Personal",
             type: "input",
-            value: "olivia.larsen@wastehero.example",
+            value: "olivia.larsen@kystbyen.example",
           },
           {
             id: "account-role",
@@ -1427,8 +1428,6 @@ type SettingsWorkspaceProps = {
 
 type SettingValue = string | boolean
 
-const SETTINGS_STORAGE_KEY = "wastehero.settings.v1"
-
 function initialSettingValues(): Record<string, SettingValue> {
   return Object.fromEntries(
     Object.values(visiblePaneDefinitions).flatMap((pane) =>
@@ -1505,7 +1504,10 @@ export function SettingsWorkspace({
   useEffect(() => {
     const defaults = initialSettingValues()
     try {
-      const storedValue = window.localStorage.getItem(SETTINGS_STORAGE_KEY)
+      const storedValue = readPersisted(
+        window.localStorage,
+        SETTINGS_STORAGE_KEY,
+      )
       if (storedValue) {
         setValues(mergeStoredSettingValues(defaults, storedValue))
       }

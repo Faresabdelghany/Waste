@@ -503,7 +503,7 @@ export function PerformanceControlRoom({
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }))
     const link = document.createElement("a")
     link.href = url
-    link.download = `wastehero-route-performance-${format(PERFORMANCE_REFERENCE_DATE, "yyyy-MM-dd")}.csv`
+    link.download = `waste-route-performance-${format(PERFORMANCE_REFERENCE_DATE, "yyyy-MM-dd")}.csv`
     link.click()
     URL.revokeObjectURL(url)
   }

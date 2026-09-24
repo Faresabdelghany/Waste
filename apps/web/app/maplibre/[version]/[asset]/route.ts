@@ -5,7 +5,7 @@
 // This handler serves the worker and its shared chunk verbatim from the
 // installed package, same-origin, under a version-stamped path so the
 // immutable cache header can never pin a stale copy across an upgrade.
-// components/wastehero/map-planning/planning-map.tsx points setWorkerUrl here.
+// components/waste/map-planning/planning-map.tsx points setWorkerUrl here.
 
 import { readFile } from "node:fs/promises"
 import path from "node:path"

@@ -1,11 +1,11 @@
-# WasteHero Operations
+# Waste Operations
 
-WasteHero coordinates the planning, delivery, resolution, and billing of waste and recycling services across tenant organizations and their operating scopes.
+Waste coordinates the planning, delivery, resolution, and billing of waste and recycling services across tenant organizations and their operating scopes.
 
 ## Organization and service context
 
 **Company**:
-The tenant organization that purchases and operates WasteHero.
+The tenant organization that purchases and operates Waste.
 _Avoid_: Account, workspace, customer
 
 **Project**:

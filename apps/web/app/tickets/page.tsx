@@ -1,4 +1,4 @@
-import { WorkspacePageShell } from "@/components/wastehero/workspace-page-shell"
+import { WorkspacePageShell } from "@/components/waste/workspace-page-shell"
 
 // @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
 // Remove this opt-out after verifying the segment passes validation without it.

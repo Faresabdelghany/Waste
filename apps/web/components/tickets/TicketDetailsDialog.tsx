@@ -346,7 +346,7 @@ export function TicketDetailsDialog({
         id: `${record.id}-assigned`,
         title: `Assigned to ${information.assignee}`,
         detail: `${information.team} owns the next response and resolution step.`,
-        actor: "WasteHero",
+        actor: "Kystbyen",
         at: record.updated,
       },
       {

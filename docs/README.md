@@ -1,6 +1,6 @@
 # Docs
 
-Documentation for the WasteHero prototype and the backend being designed around it. This folder stays small and current. Other than this index, if a file here is not one of the kinds listed below, it does not belong.
+Documentation for the Waste prototype and the backend being designed around it. This folder stays small and current. Other than this index, if a file here is not one of the kinds listed below, it does not belong.
 
 ## What lives here
 

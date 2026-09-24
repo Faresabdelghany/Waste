@@ -13,6 +13,10 @@ import {
 import { createExternalStore, type ExternalStore } from "@/lib/external-store"
 
 import { FIXTURE_PROJECT_IDS } from "@/lib/data/business-modules"
+import {
+  ASSET_MANAGEMENT_STORAGE_KEY,
+  readPersisted,
+} from "@/lib/storage-keys"
 
 export type LifecycleStatus = "Active" | "Inactive"
 export type ContainerKind = "waste-collection" | "wastewater"
@@ -181,7 +185,6 @@ type AssetManagementStoreValue = AssetManagementState & {
   setLocksmithEmail: (value: string) => void
 }
 
-const STORAGE_KEY = "wastehero.asset-management.v1"
 const fixtureCreatedAt = "2026-01-01T00:00:00.000Z"
 
 const partTypeNames = [
@@ -474,7 +477,7 @@ const defaultState: AssetManagementState = {
     },
   ],
   importJobs: [],
-  locksmithEmail: "keys@wastehero.example",
+  locksmithEmail: "keys@kystbyen.example",
   features: {
     inventoryEnabled: true,
     wastewaterTreatmentEnabled: true,
@@ -621,7 +624,10 @@ export function AssetManagementStoreProvider({ children }: { children: ReactNode
   useEffect(() => {
     let parsed: unknown = null
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY)
+      const raw = readPersisted(
+        window.localStorage,
+        ASSET_MANAGEMENT_STORAGE_KEY,
+      )
       parsed = raw ? JSON.parse(raw) : null
     } catch {
       // Safe fixture configuration remains available when storage is unavailable.
@@ -634,7 +640,10 @@ export function AssetManagementStoreProvider({ children }: { children: ReactNode
     const persist = () => {
       const { hydrated: _hydrated, ...persistable } = store.getSnapshot()
       try {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persistable))
+        window.localStorage.setItem(
+          ASSET_MANAGEMENT_STORAGE_KEY,
+          JSON.stringify(persistable),
+        )
       } catch {
         // Keep the in-memory configuration usable when persistence is blocked.
       }

@@ -15,6 +15,20 @@
       "when": 1789703374553,
       "tag": "0001_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790208926290,
+      "tag": "0002_organisation_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790223952398,
+      "tag": "0003_revoke_hook_from_service_role",
+      "breakpoints": true
     }
   ]
 }

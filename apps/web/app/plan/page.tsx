@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 
-import { WorkspacePageShell } from "@/components/wastehero/workspace-page-shell"
+import { WorkspacePageShell } from "@/components/waste/workspace-page-shell"
 import { migrateLegacyHref } from "@/lib/data/legacy-ids"
 
 // @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.

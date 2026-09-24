@@ -9,6 +9,7 @@
     "./__tests__/*": null,
     "./route-schemes/__tests__/*": null,
     "./map-planning/__tests__/*": null,
+    "./access/__tests__/*": null,
     "./*": "./src/*.ts"
   },
   "scripts": {

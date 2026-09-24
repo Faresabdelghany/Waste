@@ -51,25 +51,62 @@ export function withDatabaseName(url: string, name: string): string {
 }
 
 /**
- * Creates a database with a unique name, runs `fn` against its URL, and drops
- * it afterwards whatever happened; the admin pool closes whatever happened
- * too, so a failing drop cannot keep the test process alive.
+ * The same server, database and password, another role. The Supabase CLI
+ * gives every role of the local stack the one `[db] password`, so a test can
+ * connect as the role a Supabase service uses (`supabase_auth_admin`, which
+ * calls the access token hook) the way that service does, where the owner
+ * cannot SET ROLE to it: its memberships are reserved to superusers.
  */
+export function withUser(url: string, user: string): string {
+  const parsed = new URL(url)
+  parsed.username = user
+  return parsed.toString()
+}
+
+export type FreshDatabase = {
+  url: string
+  name: string
+  /** Drops the database, whatever is connected to it, and closes the pool that created it. */
+  drop(): Promise<void>
+}
+
+/**
+ * Creates a database with a unique name, for a test file that wants one of its
+ * own: `drop` it in `after`. The admin pool closes with the drop whatever
+ * happened, so a failing drop cannot keep the test process alive.
+ */
+export async function freshDatabase(adminUrl: string, prefix: string): Promise<FreshDatabase> {
+  const name = `${prefix}_${randomUUID().replaceAll("-", "")}`
+  const admin = createDb(adminUrl, { max: 1 })
+  try {
+    await admin.sql.unsafe(`create database "${name}"`)
+  } catch (error) {
+    await admin.close()
+    throw error
+  }
+  return {
+    url: withDatabaseName(adminUrl, name),
+    name,
+    drop: async () => {
+      try {
+        await admin.sql.unsafe(`drop database if exists "${name}" with (force)`)
+      } finally {
+        await admin.close()
+      }
+    },
+  }
+}
+
+/** Creates a database with a unique name, runs `fn` against its URL, and drops it afterwards whatever happened. */
 export async function withFreshDatabase<T>(
   adminUrl: string,
   prefix: string,
   fn: (freshUrl: string, name: string) => Promise<T>,
 ): Promise<T> {
-  const name = `${prefix}_${randomUUID().replaceAll("-", "")}`
-  const admin = createDb(adminUrl, { max: 1 })
+  const fresh = await freshDatabase(adminUrl, prefix)
   try {
-    await admin.sql.unsafe(`create database "${name}"`)
-    try {
-      return await fn(withDatabaseName(adminUrl, name), name)
-    } finally {
-      await admin.sql.unsafe(`drop database if exists "${name}" with (force)`)
-    }
+    return await fn(fresh.url, fresh.name)
   } finally {
-    await admin.close()
+    await fresh.drop()
   }
 }

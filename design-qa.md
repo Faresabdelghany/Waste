@@ -3,11 +3,11 @@
 ## Evidence
 
 - Source visual truth: `/Users/fares/.codex/generated_images/019ff5d8-ac4e-7952-b77c-7c6c6d56d037/exec-00afd8d1-3bf7-45cf-844c-e96a2c2c8240.png`
-- Browser-rendered desktop implementation: `/tmp/wastehero-performance-option1-exact-final.png`
-- Browser-rendered mobile implementation: `/tmp/wastehero-performance-option1-mobile-390x844.png`
-- Combined full-view comparison: `/tmp/wastehero-performance-option1-qa-comparison.png`
-- Focused header evidence: `/tmp/wastehero-performance-option1-focused-header.png`
-- Focused chart/table evidence: `/tmp/wastehero-performance-option1-focused-data.png`
+- Browser-rendered desktop implementation: `/tmp/waste-performance-option1-exact-final.png`
+- Browser-rendered mobile implementation: `/tmp/waste-performance-option1-mobile-390x844.png`
+- Combined full-view comparison: `/tmp/waste-performance-option1-qa-comparison.png`
+- Focused header evidence: `/tmp/waste-performance-option1-focused-header.png`
+- Focused chart/table evidence: `/tmp/waste-performance-option1-focused-data.png`
 - Implementation URL: `http://localhost:3000/performance`
 - Desktop CSS viewport: `1536 × 1024`, device scale factor `1`.
 - Mobile CSS viewport: `390 × 844`, device scale factor `1`.
@@ -17,9 +17,9 @@
 
 ## Full-view comparison
 
-The implementation reproduces the selected direction's essential composition and hierarchy: the WasteHero sidebar and dark theme, compact route-performance toolbar, horizontal four-metric strip, dominant throughput chart, actionable route-attention list, and dense sortable route-health table. The final desktop layout fits inside the `1536 × 1024` viewport without document scrolling or horizontal overflow.
+The implementation reproduces the selected direction's essential composition and hierarchy: the Waste sidebar and dark theme, compact route-performance toolbar, horizontal four-metric strip, dominant throughput chart, actionable route-attention list, and dense sortable route-health table. The final desktop layout fits inside the `1536 × 1024` viewport without document scrolling or horizontal overflow.
 
-Intentional product constraints are preserved: the existing WasteHero shell, Olivia Larsen profile, Settings and Ticket templates links, theme tokens, Phosphor icons, and project naming conventions remain in place instead of copying the generated mock's fictional user details.
+Intentional product constraints are preserved: the existing Waste shell, Olivia Larsen profile, Settings and Ticket templates links, theme tokens, Phosphor icons, and project naming conventions remain in place instead of copying the generated mock's fictional user details.
 
 ## Focused comparison
 
@@ -29,18 +29,18 @@ Required fidelity surfaces:
 
 - Fonts and typography: existing Geist/system product typography is preserved. Heading, body, metric, table, and metadata weights closely match the mock; no clipping or unwanted wrapping remains.
 - Spacing and layout rhythm: the implementation matches the mock's compact frame, toolbar, KPI strip, chart/list split, and table density. Dividers and shared surfaces provide most of the structure, with restrained borders and no nested card mosaic.
-- Colors and visual tokens: the active WasteHero dark-theme tokens are used throughout. Blue-violet primary, teal success, amber monitor, rose risk, and neutral graphite surfaces match the selected direction.
-- Image quality and asset fidelity: this analytical screen contains no raster content beyond the existing WasteHero logo and avatar. All UI marks use the project's existing Phosphor icon library and Recharts; no emoji, handcrafted SVG, CSS art, or placeholder imagery was introduced.
-- Copy and content: project-management concepts were replaced with the requested WasteHero route data: routes, stops, exceptions, proof completion, SLA performance, operating areas, and service types.
+- Colors and visual tokens: the active Waste dark-theme tokens are used throughout. Blue-violet primary, teal success, amber monitor, rose risk, and neutral graphite surfaces match the selected direction.
+- Image quality and asset fidelity: this analytical screen contains no raster content beyond the existing Waste logo and avatar. All UI marks use the project's existing Phosphor icon library and Recharts; no emoji, handcrafted SVG, CSS art, or placeholder imagery was introduced.
+- Copy and content: project-management concepts were replaced with the requested Waste route data: routes, stops, exceptions, proof completion, SLA performance, operating areas, and service types.
 
 ## Comparison history
 
 1. Earlier finding — [P2] the mobile document width expanded to `1066px` because the dense health table propagated through the sidebar inset.
    - Fix: constrained the sidebar inset and kept horizontal scrolling inside the table wrapper.
-   - Post-fix evidence: `/tmp/wastehero-performance-option1-mobile-390x844.png`; `documentElement.scrollWidth === 390` at a `390px` viewport.
+   - Post-fix evidence: `/tmp/waste-performance-option1-mobile-390x844.png`; `documentElement.scrollWidth === 390` at a `390px` viewport.
 2. Earlier finding — [P2] the desktop health table extended below the selected mock's single-screen composition.
    - Fix: tightened attention-list and table-row density while preserving readable `12px` table text and `14px` section headings.
-   - Post-fix evidence: `/tmp/wastehero-performance-option1-exact-final.png`; `documentElement.scrollHeight === 1024` at a `1024px` viewport.
+   - Post-fix evidence: `/tmp/waste-performance-option1-exact-final.png`; `documentElement.scrollHeight === 1024` at a `1024px` viewport.
 3. Earlier finding — [P2] fresh browser verification exposed Radix ID hydration warnings in the existing client-side shell.
    - Fix: isolated the performance route behind a client-only dynamic entry, eliminating SSR/client ID divergence on this route.
    - Post-fix evidence: fresh-browser console check returned no warnings or errors.
@@ -78,9 +78,9 @@ Required fidelity surfaces:
 
 ## Implementation checklist
 
-- [x] Preserve the WasteHero shell and theme system.
+- [x] Preserve the Waste shell and theme system.
 - [x] Implement option 1's compact KPI, chart, attention list, and health table hierarchy.
-- [x] Replace demo project data with WasteHero operational route data.
+- [x] Replace demo project data with Waste operational route data.
 - [x] Keep filters, route drill-down, sorting, pagination, chart cadence, and Export functional.
 - [x] Verify desktop and mobile layout, browser console, TypeScript, production build, and visual fidelity.
 

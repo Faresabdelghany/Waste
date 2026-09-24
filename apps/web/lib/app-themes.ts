@@ -1,7 +1,3 @@
-export const APP_THEME_SELECTION_STORAGE_KEY =
-  "wastehero.theme.selection.v1"
-export const CUSTOM_THEME_STORAGE_KEY = "wastehero.theme.custom.v1"
-
 export type LinearThemeId = "ash" | "midnight" | "dawn" | "pale"
 
 export type AppThemeSelection = LinearThemeId | "custom"

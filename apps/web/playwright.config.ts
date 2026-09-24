@@ -1,6 +1,6 @@
 import { defineConfig } from "@playwright/test"
 
-// E2E suite for the WasteHero prototype. The app is UI-only (fixture data +
+// E2E suite for the Waste prototype. The app is UI-only (fixture data +
 // localStorage), so every test gets a fresh browser context and therefore
 // pristine fixture state — no reset step is needed between tests.
 //

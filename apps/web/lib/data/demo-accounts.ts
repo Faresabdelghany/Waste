@@ -15,7 +15,7 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
     id: "olivia-larsen",
     name: "Olivia Larsen",
     detail: "Operations manager",
-    email: "olivia.larsen@wastehero.io",
+    email: "olivia.larsen@kystbyen.example",
     initials: "OL",
     avatarSrc: "/avatar-profile.jpg",
     homePath: "/performance",

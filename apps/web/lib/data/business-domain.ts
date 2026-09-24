@@ -154,7 +154,7 @@ export const blueprintModuleCatalog: Record<
   },
   M24: {
     id: "M24",
-    name: "WasteHero control center, sales, subscriptions, and marketplace",
+    name: "Waste control center, sales, subscriptions, and marketplace",
     primaryHref: "/control-center",
   },
 }
@@ -338,13 +338,13 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
   {
     workspaceId: "control-center",
     canonicalPurpose:
-      "Support WasteHero sales, onboarding, entitlement administration, and fulfillment.",
+      "Support Waste sales, onboarding, entitlement administration, and fulfillment.",
     blueprintModules: ["M24"],
     personas: [
-      "WasteHero sales",
-      "WasteHero onboarding",
-      "WasteHero support",
-      "WasteHero fulfillment",
+      "Waste sales",
+      "Waste onboarding",
+      "Waste support",
+      "Waste fulfillment",
     ],
     moduleIds: ["control-center"],
     boundaryNote:
@@ -904,12 +904,12 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     moduleId: "control-center",
     primaryBlueprintModule: "M24",
     supportingBlueprintModules: ["M01", "M07", "M16", "M23"],
-    canonicalOwner: "WasteHero internal Control Center",
+    canonicalOwner: "Waste internal Control Center",
     personas: [
-      "WasteHero sales",
-      "WasteHero onboarding",
-      "WasteHero support",
-      "WasteHero fulfillment",
+      "Waste sales",
+      "Waste onboarding",
+      "Waste support",
+      "Waste fulfillment",
       "Authorized tenant administrator",
     ],
     upstream: ["M01", "M02", "M05", "M07", "M16", "M20", "M23"],

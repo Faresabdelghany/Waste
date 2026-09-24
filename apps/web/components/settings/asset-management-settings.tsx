@@ -63,7 +63,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
+import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import { useOrganizationStore } from "@/components/settings/organization-store"
 import {
   assetEntityId,

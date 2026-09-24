@@ -1,13 +1,25 @@
 import {
-  APP_THEME_SELECTION_STORAGE_KEY,
-  CUSTOM_THEME_STORAGE_KEY,
   customThemePresets,
   defaultCustomTheme,
 } from "@/lib/app-themes"
+import {
+  APP_THEME_SELECTION_STORAGE_KEY,
+  CUSTOM_THEME_STORAGE_KEY,
+  READ_PERSISTED_SOURCE,
+  persistedKeys,
+} from "@/lib/storage-keys"
 
 const presetPalettes = Object.fromEntries(
   customThemePresets.map((preset) => [preset.id, preset.palette]),
 )
+
+// This script is inline source, running before any module loads, so it cannot
+// call readPersisted; it interpolates the same read (READ_PERSISTED_SOURCE)
+// and the same key lists from lib/storage-keys.ts, so a value written under
+// the previous working name is moved to the current key here, which is what
+// the provider then finds.
+const selectionKeys = persistedKeys(APP_THEME_SELECTION_STORAGE_KEY)
+const customThemeKeys = persistedKeys(CUSTOM_THEME_STORAGE_KEY)
 
 const bootstrapTheme = `
 (() => {
@@ -16,9 +28,8 @@ const bootstrapTheme = `
     const presets = ${JSON.stringify(presetPalettes)};
     const fallbackCustom = ${JSON.stringify(defaultCustomTheme)};
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    let selection = localStorage.getItem(${JSON.stringify(
-      APP_THEME_SELECTION_STORAGE_KEY,
-    )});
+    const readPersisted = ${READ_PERSISTED_SOURCE};
+    let selection = readPersisted(${JSON.stringify(selectionKeys)});
     if (!presets[selection] && selection !== "custom") {
       if (selection === "light") selection = "ash";
       else if (selection === "dark" || selection === "linear") selection = "midnight";
@@ -37,9 +48,7 @@ const bootstrapTheme = `
       palette = fallbackCustom;
       try {
         const storedCustom = JSON.parse(
-          localStorage.getItem(${JSON.stringify(
-            CUSTOM_THEME_STORAGE_KEY,
-          )}) || "null"
+          readPersisted(${JSON.stringify(customThemeKeys)}) || "null"
         );
         if (storedCustom) palette = storedCustom;
       } catch {}

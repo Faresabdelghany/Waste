@@ -17,6 +17,9 @@ env:
   DATABASE_URL: postgresql://wms_api:wms_api@127.0.0.1:54322/postgres
   # A database test may not skip here.
   REQUIRE_DATABASE: "1"
+  # The API refuses to start without the project whose tokens it verifies; its
+  # tests sign tokens with a key set they generate and never fetch this one.
+  SUPABASE_URL: https://example.supabase.co
 
 jobs:
   verify:
@@ -45,6 +48,11 @@ jobs:
       - run: pnpm db:start
       - run: pnpm db:migrate
       - run: pnpm db:bootstrap
+      # The demo company, as a fresh clone gets it: this step proves the seed
+      # runs on a fresh stack, and it puts the company on the database the
+      # suites below share. It runs once, so it says nothing about
+      # idempotency; seed.test.ts proves that, on a database of its own.
+      - run: pnpm db:seed
 
       - run: pnpm test
       - run: pnpm build

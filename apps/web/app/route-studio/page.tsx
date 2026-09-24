@@ -1,9 +1,9 @@
 import { Suspense } from "react"
 import { redirect } from "next/navigation"
 
-import { WorkspacePageShell } from "@/components/wastehero/workspace-page-shell"
-// PROTOTYPE — scheme-wizard variants, remove after evaluation (see components/wastehero/prototypes/).
-import { SchemeWizardPrototype } from "@/components/wastehero/prototypes/scheme-wizard-prototype"
+import { WorkspacePageShell } from "@/components/waste/workspace-page-shell"
+// PROTOTYPE — scheme-wizard variants, remove after evaluation (see components/waste/prototypes/).
+import { SchemeWizardPrototype } from "@/components/waste/prototypes/scheme-wizard-prototype"
 
 // @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
 // Remove this opt-out after verifying the segment passes validation without it.

@@ -2,37 +2,62 @@
 // it is defined (hono-openapi), and GET /openapi.json is generated from those
 // descriptions at request time, so a described route is always in the
 // published contract (the generator's static-file heuristic is switched off
-// below; a described OPTIONS handler is the one thing it leaves out). Hono's
-// defaults stand for anything else, including the text 404 for an unknown
-// path: the error shape on the wire is decided with the first real endpoint,
-// not by the scaffold, and not by the generator either.
+// below; a described OPTIONS handler is the one thing it leaves out). Every
+// error on the wire is a Problem Details document (problem.ts): the error
+// handler and the not-found hook are installed here, so a thrown problem, a
+// unique violation, an unknown path and an unexpected error all answer in the
+// one shape.
 //
 // Two probes: /healthz is liveness (the process answers, with its clock) and
 // /readyz is readiness (the database answers, within readiness.ts's bound).
-// The pool the probe runs on comes in from the composition root (readiness.ts
-// says why it is the probe's own); the app never connects on its own, so
-// building it costs nothing and a test hands a route that asks nothing of the
-// database a pool that goes nowhere. A request pool joins when the first
-// domain route needs one.
+// Two pools come in from the composition root and the app connects on
+// neither by itself: the probe pool, the probe's own (readiness.ts says why),
+// and the request pool, on which every authenticated request runs as one
+// fenced transaction (auth/principal.ts). A test hands a route that asks
+// nothing of the database pools that go nowhere.
+//
+// Authentication is per route, never a wildcard: each authenticated route
+// module takes the guard and puts it on its routes (routes/me.ts shows the
+// shape), so the probes and the document need no token and an unknown path
+// is a 404, not a 401. The verifier is injected: server.ts builds it over the
+// project's remote key set, a test over a local one, and the app never reads
+// SUPABASE_URL itself.
 import { HealthResponse, ReadinessResponse, ReadyResponse, UnavailableResponse } from "@waste/contracts/health"
 import type { Database } from "@waste/db/client"
 import { Hono } from "hono"
 import { describeRoute, openAPIRouteHandler, resolver } from "hono-openapi"
 
 import manifest from "../package.json" with { type: "json" }
+import { authenticate, BEARER_AUTH, BEARER_SECURITY_SCHEME } from "./auth/principal"
+import type { Verifier } from "./auth/verify"
+import { errorHandler, notFound } from "./problem"
 import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS } from "./readiness"
+import { companyRoutes } from "./routes/company"
+import { meRoutes } from "./routes/me"
+import { projectRoutes } from "./routes/projects"
+import { roleRoutes } from "./routes/roles"
+import { serviceProviderRoutes } from "./routes/service-providers"
+import { userRoutes } from "./routes/users"
 
 export type AppOptions = {
   /** The pool /readyz probes, as the API role: server.ts builds it from probePoolOptions; a test hands whatever it wants probed. */
   probe: Database
+  /** The request pool, as the API role: every authenticated request is one of its transactions. */
+  pool: Database
+  /** Verifies a bearer token against the project's keys; a test hands one over a local key set. */
+  verifier: Verifier
   /** The server's clock; injected so a test can pin it. */
   now?: () => Date
   /** How long /readyz waits for the database before answering 503. */
   databaseTimeoutMs?: number
+  /** Where the cause of a 500 goes; console.error unless a test wants to look. */
+  log?: (error: unknown) => void
 }
 
-export function createApp({ probe, now = () => new Date(), databaseTimeoutMs = DATABASE_CHECK_TIMEOUT_MS }: AppOptions) {
+export function createApp({ probe, pool, verifier, now = () => new Date(), databaseTimeoutMs = DATABASE_CHECK_TIMEOUT_MS, log }: AppOptions) {
   const app = new Hono()
+  app.onError(errorHandler(log))
+  app.notFound(notFound)
 
   app.get(
     "/healthz",
@@ -81,14 +106,26 @@ export function createApp({ probe, now = () => new Date(), databaseTimeoutMs = D
     },
   )
 
+  // The authenticated routes, each module given the guard to put on its routes.
+  const guard = authenticate({ pool, verifier })
+  app.route("/", meRoutes(guard))
+  app.route("/", companyRoutes(guard))
+  app.route("/", projectRoutes(guard))
+  app.route("/", serviceProviderRoutes(guard))
+  app.route("/", userRoutes(guard))
+  app.route("/", roleRoutes(guard))
+
   app.get(
     "/openapi.json",
     openAPIRouteHandler(app, {
       documentation: {
         info: {
-          title: "WasteHero API",
+          title: "Waste API",
           version: manifest.version,
-          description: "The only web boundary to domain data (ADR-0001).",
+          description: "The only web boundary to domain data (ADR-0001). Every route but the probes and this document takes a Supabase access token as a bearer token; every error is an RFC 9457 problem.",
+        },
+        components: {
+          securitySchemes: { [BEARER_AUTH]: BEARER_SECURITY_SCHEME },
         },
       },
       // The API serves no static files: a path whose last segment has a dot
@@ -96,8 +133,8 @@ export function createApp({ probe, now = () => new Date(), databaseTimeoutMs = D
       // document.
       excludeStaticFile: false,
       // The generator would otherwise publish its own 400 envelope for every
-      // route with a validator(). The 400 shape is ours to decide, together
-      // with the validator hook, when the first validated route lands.
+      // route with a validator(). The 400 is a problem (problem.ts), described
+      // by the route that validates.
       defaultValidationErrorResponse: false,
     }),
   )

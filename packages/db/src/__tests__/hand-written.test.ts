@@ -126,7 +126,8 @@ describe("what a table's migration file must carry", () => {
     }
   })
 
-  test("statementsOf reads a file as the migrator runs it: split at breakpoints, comments dropped, whitespace collapsed", () => {
+  test("statementsOf reads a file as the migrator runs it: split at breakpoints, on their own line or at the end of a statement's, comments dropped, whitespace collapsed", () => {
+    const [enable, policy] = tenantFence(specimen)
     const file = [
       "-- The table.",
       `CREATE TABLE ${TABLE} (`,
@@ -137,6 +138,9 @@ describe("what a table's migration file must carry", () => {
       '  EXCLUDE USING gist ("company_id" WITH =, "container_id" WITH =,',
       `                      daterange("valid_from", "valid_to", '[)') WITH &&);`,
       "--> statement-breakpoint",
+      // drizzle-kit writes the marker at the end of an ALTER TABLE or CREATE INDEX line.
+      `${enable}--> statement-breakpoint`,
+      `${policy}--> statement-breakpoint`,
       "",
       "--> statement-breakpoint   ",
       "-- ALTER TABLE disabled while debugging;",
@@ -144,6 +148,8 @@ describe("what a table's migration file must carry", () => {
     assert.deepEqual(statementsOf(file), [
       `CREATE TABLE ${TABLE} ( "id" uuid PRIMARY KEY DEFAULT wms.uuidv7() NOT NULL );`,
       CONSTRAINT,
+      enable,
+      policy,
     ])
   })
 

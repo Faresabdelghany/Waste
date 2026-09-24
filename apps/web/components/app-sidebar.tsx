@@ -41,12 +41,12 @@ import {
   SignOut,
   CaretRight,
 } from "@phosphor-icons/react/dist/ssr"
-import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
+import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import {
   resolveActiveRouteSummaries,
   routeDayFixtures,
   useActiveRoutes,
-} from "@/components/wastehero/active-routes-store"
+} from "@/components/waste/active-routes-store"
 import { footerItems, navItems, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
 
 const navItemIcons: Record<NavItemId, React.ComponentType<{ className?: string }>> = {
@@ -118,10 +118,10 @@ export function AppSidebar() {
         <div className="flex items-center">
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-              <img src="/logo-wrapper.png" alt="WasteHero" className="h-4 w-4" />
+              <img src="/logo-wrapper.png" alt="Waste" className="h-4 w-4" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-semibold">WasteHero</span>
+              <span className="text-sm font-semibold">Waste</span>
               <span className="text-xs text-sidebar-foreground/60">Copenhagen Central</span>
             </div>
           </div>
