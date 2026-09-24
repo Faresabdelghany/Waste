@@ -82,7 +82,11 @@ export function describeCreated(description: string, schema: Schema) {
  * The 201 a create answers (Issue #74): the body, and `Location` naming the
  * row's own single-row GET — `collection` under the id the server minted,
  * relative to the API's origin and never with a host, since the API does not
- * know the name it is reached by. `collection` is where the row is read, not
+ * know the name it is reached by. The path is root-relative because the API
+ * is served at its origin's root and mounts under no prefix — its own host,
+ * as docs/architecture/backend-architecture.md deploys it — so `/projects/<id>`
+ * resolves against any origin it is reached by; a base path would be a
+ * change here, not in every route. `collection` is where the row is read, not
  * where it was posted: a subscription made under `/agreements/:id/subscriptions`
  * is at `/subscriptions/<id>`. A command (`deactivate`, `reactivate`,
  * `make-primary-administrator`) and a set replacement answer 200 and carry

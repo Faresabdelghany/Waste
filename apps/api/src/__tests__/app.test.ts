@@ -231,7 +231,7 @@ describe("GET /openapi.json", () => {
     )
   })
 
-  test("declares the Location header on every 201 and on nothing else: a create says where the row is now read, a command or a set replacement does not", async () => {
+  test("declares the Location header on every 201 and Location on nothing else: a create says where the row is now read, a command or a set replacement does not", async () => {
     const document = await spec()
     let creates = 0
     for (const [path, operations] of Object.entries(document.paths)) {
@@ -245,7 +245,9 @@ describe("GET /openapi.json", () => {
             assert.equal(location?.schema?.type, "string", `${where} must declare Location`)
             assert.match(location?.description ?? "", /\S/, `${where}: Location says what it names`)
           } else {
-            assert.equal(response.headers, undefined, `${where} declares no header`)
+            // Only Location is this test's: a 401 will one day declare
+            // WWW-Authenticate, which the API already sends (RFC 6750).
+            assert.equal(location, undefined, `${where} declares no Location`)
           }
         }
       }

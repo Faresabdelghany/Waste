@@ -234,24 +234,30 @@ const isUnrecognizedKeys = (issue: Issue): issue is UnrecognizedKeys => {
   return code === "unrecognized_keys" && Array.isArray(keys) && keys.every((key) => typeof key === "string")
 }
 
-// A zod 4 schema, by the little of its internals this reads: every schema
-// carries `_zod.def` with a `type`, and the kinds that hold another schema
-// name it under a field of their own. Spelled structurally so the walk is
-// typed against what it touches and nothing else.
-type Node = { readonly _zod: { readonly def: Def } }
+// A zod 4 schema, by the little of it this reads: every schema exposes its
+// definition as `def` (the public face of the same object its `_zod`
+// internals hold, so a zod minor that moves the internals cannot quietly
+// turn every one of these 400s into the bare sentence), `def.type` says the
+// kind, and the kinds that hold another schema name it under a field of
+// their own. Spelled structurally so the walk is typed against what it
+// touches and nothing else.
+type Node = { readonly def: Def }
 type Def = {
   readonly type: string
   readonly shape?: Readonly<Record<string, Node>>
   readonly innerType?: Node
   readonly element?: Node
   readonly items?: readonly Node[]
+  readonly keyType?: Node
   readonly valueType?: Node
   readonly in?: Node
   readonly getter?: () => Node
+  readonly entries?: Readonly<Record<string, string | number>>
+  readonly values?: readonly unknown[]
 }
 
 const isNode = (value: unknown): value is Node =>
-  typeof value === "object" && value !== null && typeof (value as { _zod?: { def?: { type?: unknown } } })._zod?.def?.type === "string"
+  typeof value === "object" && value !== null && typeof (value as { def?: { type?: unknown } }).def?.type === "string"
 
 /** The kinds that wrap one schema and validate what it validates: an optional strict object is still that object. */
 const WRAPPERS: ReadonlySet<string> = new Set(["optional", "nullable", "default", "prefault", "nonoptional", "catch", "readonly"])
@@ -260,7 +266,7 @@ const WRAPPERS: ReadonlySet<string> = new Set(["optional", "nullable", "default"
 function unwrap(node: Node | undefined): Node | undefined {
   let current = node
   for (let depth = 0; current !== undefined && depth < 32; depth += 1) {
-    const { def } = current._zod
+    const { def } = current
     if (WRAPPERS.has(def.type)) current = def.innerType
     else if (def.type === "pipe") current = def.in
     else if (def.type === "lazy") current = def.getter?.()
@@ -272,18 +278,40 @@ function unwrap(node: Node | undefined): Node | undefined {
 const keyOf = (segment: PathSegment): PropertyKey => (typeof segment === "object" ? segment.key : segment)
 
 /**
+ * The keys a record's key schema names, where it names a finite set: an
+ * enum's values (its `entries` less a numeric enum's reverse mapping, the
+ * way zod reads them) or a literal's `values`. zod refuses a key outside
+ * such a set as unrecognized, exactly as an object refuses a member it does
+ * not know, so the same sentence lists these. A key schema that is a
+ * constraint rather than a set — `z.string()`, a regex — names no members.
+ */
+function recordKeys(keyType: Node | undefined): string[] | undefined {
+  const def = unwrap(keyType)?.def
+  if (def?.type === "enum" && def.entries !== undefined) {
+    const numeric = new Set(Object.values(def.entries).filter((value) => typeof value === "number"))
+    return Object.entries(def.entries)
+      .filter(([key]) => !numeric.has(Number(key)))
+      .map(([, value]) => String(value))
+  }
+  if (def?.type === "literal" && def.values !== undefined) return def.values.map(String)
+  return undefined
+}
+
+/**
  * The members the object at `path` inside `schema` accepts, in the order the
- * schema spells them; undefined where the path leads to no object — a scalar,
- * a member that is not there, a union, or something that is not a zod schema
- * at all — so the caller falls back to saying less rather than throwing. Walks
+ * schema spells them — or the keys a record there names, where its key schema
+ * is a finite set; undefined where the path leads to neither — a scalar, a
+ * member that is not there, a union, or something that is not a zod schema at
+ * all — so the caller falls back to saying less rather than throwing. Walks
  * an object by member, an array by element, a tuple by index, a record by
- * value, and through the wrappers above at every step.
+ * value, and through the wrappers above at every step. An object with no
+ * members answers an empty list, which is an answer: it accepts nothing.
  */
 export function membersAt(schema: unknown, path: ReadonlyArray<PathSegment>): string[] | undefined {
   let node = isNode(schema) ? unwrap(schema) : undefined
   for (const segment of path) {
     if (node === undefined) return undefined
-    const { def } = node._zod
+    const { def } = node
     const key = keyOf(segment)
     let next: Node | undefined
     if (def.type === "object") next = typeof key === "string" ? def.shape?.[key] : undefined
@@ -292,7 +320,9 @@ export function membersAt(schema: unknown, path: ReadonlyArray<PathSegment>): st
     else if (def.type === "record") next = def.valueType
     node = unwrap(next)
   }
-  return node?._zod.def.type === "object" && node._zod.def.shape !== undefined ? Object.keys(node._zod.def.shape) : undefined
+  if (node?.def.type === "object" && node.def.shape !== undefined) return Object.keys(node.def.shape)
+  if (node?.def.type === "record") return recordKeys(node.def.keyType)
+  return undefined
 }
 
 /** What the problem calls each target hono can validate; anything else is the part of the request it already names. */
@@ -327,17 +357,21 @@ const dotted = (path: ReadonlyArray<PathSegment>): string => path.map((segment) 
  * off the schema at the issue's path, since every write body is a strict
  * object and a client fixing a typo is helped most by the list. Whose members
  * they are is said by the path, or by the target where the path is empty
- * ("the body's members are …", "the query's members are …"). Where the path
- * leads to no object, which it always should, the sentence stops at the key.
+ * ("the body's members are …", "the query's members are …"); an object with
+ * no members "accepts no members", since a list with nothing after it says
+ * less than that. Where the path leads to no object, which it always should,
+ * the sentence stops at the key.
  */
 function unrecognizedKeyErrors(issue: UnrecognizedKeys, target: string, schema: unknown): ProblemFieldError[] {
   const path = issue.path ?? []
   const members = membersAt(schema, path)
-  const whose = path.length === 0 ? `the ${TARGET_LABELS[target] ?? target}'s members are` : `the members of ${dotted(path)} are`
-  return issue.keys.map((key) => ({
-    path: dotted([...path, key]),
-    message: `Unrecognized key ${JSON.stringify(key)}${members === undefined ? "" : `; ${whose} ${members.join(", ")}`}`,
-  }))
+  const subject = path.length === 0 ? `the ${TARGET_LABELS[target] ?? target}` : dotted(path)
+  const accepts =
+    members === undefined ? ""
+    : members.length === 0 ? `; ${subject} accepts no members`
+    : path.length === 0 ? `; ${subject}'s members are ${members.join(", ")}`
+    : `; the members of ${subject} are ${members.join(", ")}`
+  return issue.keys.map((key) => ({ path: dotted([...path, key]), message: `Unrecognized key ${JSON.stringify(key)}${accepts}` }))
 }
 
 /**
