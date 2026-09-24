@@ -16,7 +16,7 @@
 // should move), the stamps (the trigger's), and never a column another actor
 // writes — an account's `auth_user_id` and `deactivated_at` are the hook's and
 // the API's, which is why demo.ts leaves them out of USER_COLUMNS.
-import { sql, type SQL } from "drizzle-orm"
+import { getTableName, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgInsertValue, PgTable, PgUpdateSetSource } from "drizzle-orm/pg-core"
 
 import type { Tx } from "../client"
@@ -73,6 +73,14 @@ export async function upsertOwned<T extends SeededTable>(tx: Tx, table: T, rows:
   if (rows.length === 0) return 0
   if (owned.length === 0) {
     throw new Error(`upsertOwned: a table with no owned columns has nothing to restore; use onConflictDoNothing instead`)
+  }
+  // A column of another table would render as that table's name inside this
+  // table's DO UPDATE and fail as 42P01 at run time, or worse, resolve to a
+  // same-named column here; refused by name, as excludeOverlapping refuses one.
+  for (const column of owned) {
+    if (column.table !== table) {
+      throw new Error(`upsertOwned: column "${columnName(column)}" is not a column of "${getTableName(table)}"`)
+    }
   }
   const written = await tx
     .insert(table)

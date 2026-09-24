@@ -20,7 +20,9 @@ const BUCKET = "01a0d2a4-a280-7"
 /**
  * Which kind of record an id names: the twelve bits after the version nibble.
  * Organisation & Access took 1 to 6; the Registry's fifteen tables follow in
- * the order their migration creates them.
+ * the order the schema files read them (`src/schema/index.ts`: catalogue,
+ * customers, agreements, containers), which is not the order drizzle-kit
+ * wrote their CREATE TABLE statements into migration 0004.
  */
 export const DEMO_KINDS = {
   company: 0x001,

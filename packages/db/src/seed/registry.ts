@@ -11,11 +11,15 @@
 // rebuilt from the same literal tables and the same arithmetic as the web's
 // `buildSeededPropertyRecords` and `buildSeededContainerRecords`, index by
 // index, so `property-seed-101` here is the Ryesgade 3 the prototype shows and
-// `asset-seed-91001` is BIN-91001 standing at it. A change to the web's
-// generator does not reach here by itself; the header of that file and this
-// one say so, and REGISTRY_IDS keys every row by the prototype's record id
-// (`asset-82014`, `property-seed-101`, `AGR-2408`) so the adapter can map one
-// onto the other without a lookup table of its own.
+// `asset-seed-91001` is BIN-91001 standing at it. The copy is deliberate and
+// temporary: the generator's tables and arithmetic and the gazetteer are now
+// spelled twice, here and in the web, with nothing holding them together, and
+// their one home is `@waste/domain` (pure, imported by both), which a
+// follow-up issue moves them to; until then a change to the web's generator
+// does not reach here by itself, and the header of that file says so too.
+// REGISTRY_IDS keys every row by the prototype's record id (`asset-82014`,
+// `property-seed-101`, `AGR-2408`) so the adapter can map one onto the other
+// without a lookup table of its own.
 //
 // Where a fixture value is read into a column it does not spell exactly, the
 // rule is written beside the table it applies to, and every such rule is
@@ -27,11 +31,14 @@
 //   row per product and per cadence; Cairo Operations has no Registry
 //   fixture and gets nothing here.
 //
-//   Statuses. A closed list here is `@waste/domain/registry/vocabulary`. A
-//   property the prototype calls Active or Data issue is `active`; Prospect
-//   and On hold are `inactive` (not served today). A shared point with a
-//   Billing issue is `open` — the issue is Finance's flag, the point takes
-//   waste. Every other status maps by name.
+//   Statuses and kinds. A closed list here is
+//   `@waste/domain/registry/vocabulary`. A property the prototype calls Active
+//   or Data issue is `active`; Prospect and On hold are `inactive` (not served
+//   today). A shared point with a Billing issue is `open` — the issue is
+//   Finance's flag, the point takes waste. A property's kind is the fixture's
+//   Property type; Sundbyvej 91's own record carries none, and the one fixture
+//   fact that names it is its container BIN-44831's "Property type:
+//   Commercial", so it is `commercial`. Every other status maps by name.
 //
 //   Parties. A property's Owner and Payer facts become `property_party` rows
 //   on a Customer of that name; an Owner of `Private` is a person Customer of
@@ -49,8 +56,11 @@
 //   property, active from 2026-01-01 except a Prospect's, which is a draft
 //   from 2026-10-01. AGR-2512 has no start date in the fixture ("Start date
 //   pending"); its container's agreement "starts next month" with a first
-//   collection on 3 Sep 2026, so it runs from 2026-09-01, still a draft.
-//   Every agreement is billed monthly in DKK. AGR-2331 (Nørrebrogade 144) and
+//   collection on 3 Sep 2026, so it runs from 2026-09-01, still a draft. Its
+//   payer is unconfirmed in the fixture, and `payer_customer_id` is NOT NULL,
+//   so the payer is the customer until one is confirmed — the rule every
+//   agreement here follows unless the fixture names another payer. Every
+//   agreement is billed monthly in DKK. AGR-2331 (Nørrebrogade 144) and
 //   AGR-1844 (Vesterbrogade 72) are not here: their properties are not
 //   fixture properties.
 //
@@ -69,29 +79,33 @@
 //   (BIN-66420). The subscription's quantity is the number of containers
 //   placed under it, at least one; AGR-2408 also carries the residual and the
 //   paper subscription its description names, with nothing placed under them.
-//   A placement runs from its agreement's start, or from 2026-10-01 for a
-//   container the prototype marks Future; a placement whose cadence equals
-//   the product's default carries null, since the effective cadence is read
-//   through `coalesce`, and one whose cadence differs carries its own.
+//   A subscription runs for its agreement's period, and a placement inside its
+//   subscription's: from the subscription's start, or from 2026-10-01 for a
+//   container the prototype marks Future, to the subscription's end — the
+//   containment the API refuses to break (routes/periods.ts), held here when
+//   the rows are built. A placement whose cadence equals the product's default
+//   carries null, since the effective cadence is read through `coalesce`, and
+//   one whose cadence differs carries its own.
 //
 //   Points. A property on a gazetteer street is located where the map places
 //   it: `knownAddressLocation` from @waste/domain over a literal copy of the
 //   web's FIXTURE_GAZETTEER, rounded to six decimals (about a decimetre), so
 //   the stored point is the derived one. Dock 4's own service address is not
-//   on a gazetteer street; it is placed as its container is, by "Harbor
-//   Offices, Dock 4" with the property's name as the seed. The two shared
-//   points have no fixture coordinates and need one: Kongens Nytorv is at the
-//   square itself (12.5855, 55.6805), the Nordhavn dock point at the
-//   gazetteer's Sandkaj anchor (12.5965, 55.7085), and both take the street
-//   as their address.
+//   on a gazetteer street; it is placed as its container BIN-77104 is, by the
+//   container's Address fact "Harbor Offices, Dock 4" with the container's
+//   Property fact, "Harbor Offices", as the seed — not the property's name.
+//   The two shared points have no fixture coordinates and need one: Kongens
+//   Nytorv is at the square itself (12.5855, 55.6805), the Nordhavn dock point
+//   at the gazetteer's Sandkaj anchor (12.5965, 55.7085), and both take the
+//   street as their address.
 //
 //   Members. The fixtures name member counts, not members, so a membership
-//   follows a rule the fixture states: Østerbro East Portfolio gathers the
-//   Copenhagen properties Østerbro Housing owns; Valby Organic Service Group
-//   the Copenhagen properties in 2500 Valby; Nordhavn Dock Shared Cardboard
-//   the Harbor properties of kind commercial, as service members; Kongens
-//   Nytorv serves properties within 350 m, and no fixture property is, so it
-//   has none.
+//   follows a rule the fixture states, over the properties of the group's or
+//   point's own project: Østerbro East Portfolio gathers the properties
+//   Østerbro Housing owns; Valby Organic Service Group the properties in 2500
+//   Valby; Nordhavn Dock Shared Cardboard the properties of kind commercial,
+//   as service members; Kongens Nytorv serves properties within 350 m, and no
+//   fixture property is, so it has none.
 //
 //   Left out, having no column: a property's PropertyID (P-88014) — its
 //   Property number (CPH-001882) is the `registry_id` — an agreement's
@@ -99,6 +113,10 @@
 //   (Finance & Contracting's), a container's sensor, fill level, planning
 //   area, calendar and route scheme (Planning's and Resources'), and every
 //   metric and free-text count ("24 records", "118 properties").
+//
+// Every reference from one row to another goes through `required` or
+// `requiredSpec`, so a key misspelled here is this file's own sentence and
+// not a 23502 from the database or a TypeError from a Map.
 import type { Point } from "@waste/contracts/geojson"
 import { knownAddressLocation, type Gazetteer } from "@waste/domain/map-planning/positions"
 import type {
@@ -247,7 +265,11 @@ const PRODUCTS: readonly ProductSpec[] = [
   { key: "product-xmas", name: "Christmas tree collection", kind: "additional-service", status: "draft", unit: "job", containerType: null, wasteFraction: "organic", serviceFrequency: null },
 ]
 
-/** The product a container of a fraction is placed under; a fraction absent here has no product and its containers stand unplaced. */
+/**
+ * The product a container of a fraction is placed under. A fraction absent
+ * here has no product, and its containers stand unplaced by design — the one
+ * lookup in this file whose miss is a meaning and not a mistake.
+ */
 const PRODUCT_BY_FRACTION: Partial<Record<WasteFractionKey, string>> = {
   residual: "product-res-240",
   paper: "product-card-660",
@@ -355,49 +377,53 @@ type PropertySpec = {
   tenant?: string
 }
 
-const EXPLICIT_PROPERTIES: readonly PropertySpec[] = [
-  {
-    key: "property-parkvej-18",
-    project: "copenhagen",
-    name: "Parkvej 18",
-    address: "Parkvej 18, 2100 København Ø",
-    registryId: "CPH-001882",
-    kind: "residential",
-    status: "active",
-    notes: "Multi-unit residential property with locked-yard access and organic, paper, and residual services.",
-    owner: "Østerbro Housing",
-    payer: "Østerbro Housing",
-  },
-  {
-    // A Prospect: not served yet, so `inactive`, its payer unconfirmed.
-    key: "property-dock-4",
-    project: "harbor",
-    name: "Dock 4 · Harbor Offices",
-    address: "Dock 4, Nordhavn",
-    placedAs: { address: "Harbor Offices, Dock 4", seed: "Harbor Offices" },
-    registryId: "CPH-004201",
-    kind: "commercial",
-    status: "inactive",
-    notes: "Commercial property awaiting payer confirmation and container capacity review.",
-    owner: "Harbor Properties",
-    payer: null,
-    tenant: "company-harbor",
-  },
-  {
-    // A Data issue in the prototype: still served, so `active`; the portal
-    // knows an "authorized resident" here, so residential.
-    key: "property-sundbyvej-91",
-    project: "copenhagen",
-    name: "Sundbyvej 91",
-    address: "Sundbyvej 91, 2300 København S",
-    registryId: "CPH-009114",
-    kind: "residential",
-    status: "active",
-    notes: "Registry synchronization found a duplicate service address and conflicting building identifier.",
-    owner: PRIVATE,
-    payer: "Amager District",
-  },
-]
+const PARKVEJ_18: PropertySpec = {
+  key: "property-parkvej-18",
+  project: "copenhagen",
+  name: "Parkvej 18",
+  address: "Parkvej 18, 2100 København Ø",
+  registryId: "CPH-001882",
+  kind: "residential",
+  status: "active",
+  notes: "Multi-unit residential property with locked-yard access and organic, paper, and residual services.",
+  owner: "Østerbro Housing",
+  payer: "Østerbro Housing",
+}
+
+// A Prospect: not served yet, so `inactive`, its payer unconfirmed. Placed by
+// BIN-77104's Address and Property facts, since "Dock 4, Nordhavn" is on no
+// gazetteer street.
+const DOCK_4: PropertySpec = {
+  key: "property-dock-4",
+  project: "harbor",
+  name: "Dock 4 · Harbor Offices",
+  address: "Dock 4, Nordhavn",
+  placedAs: { address: "Harbor Offices, Dock 4", seed: "Harbor Offices" },
+  registryId: "CPH-004201",
+  kind: "commercial",
+  status: "inactive",
+  notes: "Commercial property awaiting payer confirmation and container capacity review.",
+  owner: "Harbor Properties",
+  payer: null,
+  tenant: "company-harbor",
+}
+
+// A Data issue in the prototype: still served, so `active`. Its record names
+// no type; its container BIN-44831 says "Property type: Commercial".
+const SUNDBYVEJ_91: PropertySpec = {
+  key: "property-sundbyvej-91",
+  project: "copenhagen",
+  name: "Sundbyvej 91",
+  address: "Sundbyvej 91, 2300 København S",
+  registryId: "CPH-009114",
+  kind: "commercial",
+  status: "active",
+  notes: "Registry synchronization found a duplicate service address and conflicting building identifier.",
+  owner: PRIVATE,
+  payer: "Amager District",
+}
+
+const EXPLICIT_PROPERTIES: readonly PropertySpec[] = [PARKVEJ_18, DOCK_4, SUNDBYVEJ_91]
 
 // The web's seeded-property generator (business-modules.ts,
 // seededPropertyProfile and buildSeededPropertyRecords), index for index.
@@ -454,7 +480,9 @@ function seededProperty(index: number): PropertySpec {
   }
 }
 
+/** The explicit properties, then the fifty seeded ones: `PROPERTIES[EXPLICIT_PROPERTIES.length + index]` is `seededProperty(index)`. */
 const PROPERTIES: readonly PropertySpec[] = [...EXPLICIT_PROPERTIES, ...Array.from({ length: SEEDED_PROPERTY_COUNT }, (_, index) => seededProperty(index))]
+const SEEDED_PROPERTIES: readonly PropertySpec[] = PROPERTIES.slice(EXPLICIT_PROPERTIES.length)
 
 /** The person a `Private` owner is: one Customer per privately owned property. */
 const privateOwnerKey = (propertySpec: PropertySpec): string => `owner-${propertySpec.key}`
@@ -476,40 +504,41 @@ const CUSTOMERS: readonly CustomerSpec[] = [
 
 /* ------------------------ groups and shared points ------------------------ */
 
-type GroupSpec = {
+/** A group or point: its rule for the properties of its own project. */
+type Gathering = { project: RegistryProject; members: (spec: PropertySpec) => boolean }
+
+/** Whether a property is a member: in the gathering's project and named by its rule. */
+const memberOf = (gathering: Gathering, spec: PropertySpec): boolean => spec.project === gathering.project && gathering.members(spec)
+
+type GroupSpec = Gathering & {
   key: string
-  project: RegistryProject
   name: string
   purpose: (typeof propertyGroup.$inferInsert)["purpose"]
   responsibleCustomer: string | null
   status: (typeof propertyGroup.$inferInsert)["status"]
-  /** The rule the fixture states for its members. */
-  members: (spec: PropertySpec) => boolean
 }
-const GROUPS: readonly GroupSpec[] = [
-  {
-    key: "group-osterbro-east",
-    project: "copenhagen",
-    name: "Østerbro East Portfolio",
-    purpose: "administration",
-    responsibleCustomer: "company-osterbro-housing",
-    status: "active",
-    members: (spec) => spec.project === "copenhagen" && spec.owner === "Østerbro Housing",
-  },
-  {
-    key: "group-valby-organic",
-    project: "copenhagen",
-    name: "Valby Organic Service Group",
-    purpose: "service",
-    responsibleCustomer: null,
-    status: "active",
-    members: (spec) => spec.project === "copenhagen" && spec.address.endsWith("2500 Valby"),
-  },
-]
+const OSTERBRO_EAST: GroupSpec = {
+  key: "group-osterbro-east",
+  project: "copenhagen",
+  name: "Østerbro East Portfolio",
+  purpose: "administration",
+  responsibleCustomer: "company-osterbro-housing",
+  status: "active",
+  members: (spec) => spec.owner === "Østerbro Housing",
+}
+const VALBY_ORGANIC: GroupSpec = {
+  key: "group-valby-organic",
+  project: "copenhagen",
+  name: "Valby Organic Service Group",
+  purpose: "service",
+  responsibleCustomer: null,
+  status: "active",
+  members: (spec) => spec.address.endsWith("2500 Valby"),
+}
+const GROUPS: readonly GroupSpec[] = [OSTERBRO_EAST, VALBY_ORGANIC]
 
-type PointSpec = {
+type PointSpec = Gathering & {
   key: string
-  project: RegistryProject
   name: string
   kind: (typeof sharedCollectionPoint.$inferInsert)["kind"]
   address: string
@@ -521,7 +550,6 @@ type PointSpec = {
   availability: string | null
   billingMode: (typeof sharedCollectionPoint.$inferInsert)["billingMode"]
   status: (typeof sharedCollectionPoint.$inferInsert)["status"]
-  members: (spec: PropertySpec) => boolean
 }
 const POINTS: readonly PointSpec[] = [
   {
@@ -559,7 +587,7 @@ const POINTS: readonly PointSpec[] = [
     availability: "Business hours",
     billingMode: "member-share",
     status: "open",
-    members: (spec) => spec.project === "harbor" && spec.kind === "commercial",
+    members: (spec) => spec.kind === "commercial",
   },
 ]
 
@@ -577,11 +605,14 @@ type AgreementSpec = {
 const AGREEMENTS: readonly AgreementSpec[] = [
   // "1 Jan–31 Dec 2026": the end is the first day out of force.
   { number: "AGR-2408", project: "copenhagen", customer: "company-osterbro-housing", payer: "company-osterbro-housing", status: "active", validFrom: "2026-01-01", validTo: "2027-01-01" },
+  // "Payer unconfirmed" in the fixture: `payer_customer_id` is NOT NULL, so
+  // the payer is the customer until one is confirmed.
   { number: "AGR-2512", project: "harbor", customer: "company-harbor", payer: "company-harbor", status: "draft", validFrom: "2026-09-01", validTo: null },
-  { number: "AGR-2188", project: "copenhagen", customer: privateOwnerKey(EXPLICIT_PROPERTIES[2]), payer: "customer-amager-district", status: "active", validFrom: "2026-01-01", validTo: null },
-  ...Array.from({ length: SEEDED_PROPERTY_COUNT }, (_, index): AgreementSpec => {
-    const spec = seededProperty(index)
-    return {
+  { number: "AGR-2188", project: "copenhagen", customer: privateOwnerKey(SUNDBYVEJ_91), payer: "customer-amager-district", status: "active", validFrom: "2026-01-01", validTo: null },
+  // One per seeded property, from its "Agreement AGR-n" fact; the property's
+  // owner is the customer and its payer the payer.
+  ...SEEDED_PROPERTIES.map(
+    (spec, index): AgreementSpec => ({
       number: seededAgreementNumber(index),
       project: spec.project,
       customer: customerKeyOf(spec.owner, spec),
@@ -589,14 +620,14 @@ const AGREEMENTS: readonly AgreementSpec[] = [
       status: isProspect(index) ? "draft" : "active",
       validFrom: isProspect(index) ? "2026-10-01" : "2026-01-01",
       validTo: null,
-    }
-  }),
+    }),
+  ),
 ]
 
 /** The subscriptions a fixture agreement names without a container under them. */
 const EXPLICIT_SUBSCRIPTIONS: readonly { agreement: string; product: string; property: string }[] = [
-  { agreement: "AGR-2408", product: "product-res-240", property: "property-parkvej-18" },
-  { agreement: "AGR-2408", product: "product-card-660", property: "property-parkvej-18" },
+  { agreement: "AGR-2408", product: "product-res-240", property: PARKVEJ_18.key },
+  { agreement: "AGR-2408", product: "product-card-660", property: PARKVEJ_18.key },
 ]
 
 /* ------------------------------- containers ------------------------------- */
@@ -634,7 +665,7 @@ const EXPLICIT_CONTAINERS: readonly ContainerSpec[] = [
     rfid: "E2003412",
     serialNumber: "OTTO-24-82014",
     ownership: "company",
-    stands: { property: "property-parkvej-18", agreement: "AGR-2408", fraction: "organic", frequency: "freq-every-2-weeks" },
+    stands: { property: PARKVEJ_18.key, agreement: "AGR-2408", fraction: "organic", frequency: "freq-every-2-weeks" },
   },
   {
     key: "asset-44831",
@@ -645,7 +676,7 @@ const EXPLICIT_CONTAINERS: readonly ContainerSpec[] = [
     rfid: null,
     serialNumber: "SULO-22-44831",
     ownership: "customer",
-    stands: { property: "property-sundbyvej-91", agreement: "AGR-2188", fraction: "glass", frequency: "freq-monthly" },
+    stands: { property: SUNDBYVEJ_91.key, agreement: "AGR-2188", fraction: "glass", frequency: "freq-monthly" },
   },
   { key: "asset-99017", project: "copenhagen", label: "BIN-99017", containerType: "four-wheel-660", barcode: "WH99017", rfid: "E2008890", serialNumber: "SSI-26-99017", ownership: "company", stands: null },
   {
@@ -657,7 +688,7 @@ const EXPLICIT_CONTAINERS: readonly ContainerSpec[] = [
     rfid: "E20077104",
     serialNumber: "SULO-26-77104",
     ownership: "company",
-    stands: { property: "property-dock-4", agreement: "AGR-2512", fraction: "cardboard", frequency: "freq-weekly" },
+    stands: { property: DOCK_4.key, agreement: "AGR-2512", fraction: "cardboard", frequency: "freq-weekly" },
   },
   // Nørrebrogade 144 is not a fixture property, so the container stands unplaced.
   { key: "asset-66420", project: "copenhagen", label: "BIN-66420", containerType: "four-wheel-660", barcode: "WH66420", rfid: null, serialNumber: "SSI-23-66420", ownership: "unrecorded", stands: null },
@@ -761,10 +792,18 @@ function keyed<T>(items: readonly T[], keyOf: (item: T) => string, kind: DemoKin
   return ids
 }
 
+/** The id keyed `key`, or this file's own sentence: a misspelled reference is never a 23502 from the database. */
 function required(ids: Readonly<Record<string, string>>, key: string, what: string): string {
   const id = ids[key]
   if (!id) throw new Error(`registry seed: no ${what} is keyed ${key}`)
   return id
+}
+
+/** The spec keyed `key`, the same way: never a TypeError from a Map. */
+function requiredSpec<T>(specs: ReadonlyMap<string, T>, key: string, what: string): T {
+  const spec = specs.get(key)
+  if (spec === undefined) throw new Error(`registry seed: no ${what} is keyed ${key}`)
+  return spec
 }
 
 function build(): { ids: RegistryIds; rows: RegistryRows } {
@@ -795,12 +834,22 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
   const containerIds = keyed(CONTAINERS, (spec) => spec.key, "container")
   const productByKey = new Map(PRODUCTS.map((spec) => [spec.key, spec]))
 
+  const wasteFractionId = (key: string) => required(wasteFractionIds, key, "waste fraction")
+  const containerTypeId = (key: string) => required(containerTypeIds, key, "container type")
+  const serviceFrequencyId = (project: RegistryProject, key: string) => required(serviceFrequencyIds[project], key, `${project} service frequency`)
+  const productId = (project: RegistryProject, key: string) => required(productIds[project], key, `${project} product`)
+  const customerId = (key: string) => required(customerIds, key, "customer")
+  const propertyId = (key: string) => required(propertyIds, key, "property")
+  const propertyOf = (key: string) => requiredSpec(propertyByKey, key, "property")
+  const agreementOf = (number: string) => requiredSpec(agreementByNumber, number, "agreement")
+  const productOf = (key: string) => requiredSpec(productByKey, key, "product")
+
   const rows: RegistryRows = {
-    wasteFractions: WASTE_FRACTIONS.map(([key, name]) => ({ id: wasteFractionIds[key], companyId: COMPANY_ID, key, name })),
-    containerTypes: CONTAINER_TYPES.map(([key, name, volumeLitres]) => ({ id: containerTypeIds[key], companyId: COMPANY_ID, name, volumeLitres })),
+    wasteFractions: WASTE_FRACTIONS.map(([key, name]) => ({ id: wasteFractionId(key), companyId: COMPANY_ID, key, name })),
+    containerTypes: CONTAINER_TYPES.map(([key, name, volumeLitres]) => ({ id: containerTypeId(key), companyId: COMPANY_ID, name, volumeLitres })),
     serviceFrequencies: REGISTRY_PROJECTS.flatMap((project) =>
       SERVICE_FREQUENCIES.map(([key, name, description, collectionsPerWeek, weeksBetween, daysBetween]) => ({
-        id: serviceFrequencyIds[project][key],
+        id: serviceFrequencyId(project, key),
         companyId: COMPANY_ID,
         projectId: projectIdOf(project),
         name,
@@ -812,20 +861,20 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
     ),
     products: REGISTRY_PROJECTS.flatMap((project) =>
       PRODUCTS.map((spec) => ({
-        id: productIds[project][spec.key],
+        id: productId(project, spec.key),
         companyId: COMPANY_ID,
         projectId: projectIdOf(project),
         name: spec.name,
         kind: spec.kind,
         status: spec.status,
         unit: spec.unit,
-        containerTypeId: spec.containerType ? containerTypeIds[spec.containerType] : null,
-        wasteFractionId: spec.wasteFraction ? wasteFractionIds[spec.wasteFraction] : null,
-        serviceFrequencyId: spec.serviceFrequency ? serviceFrequencyIds[project][spec.serviceFrequency] : null,
+        containerTypeId: spec.containerType ? containerTypeId(spec.containerType) : null,
+        wasteFractionId: spec.wasteFraction ? wasteFractionId(spec.wasteFraction) : null,
+        serviceFrequencyId: spec.serviceFrequency ? serviceFrequencyId(project, spec.serviceFrequency) : null,
       })),
     ),
     customers: CUSTOMERS.map((spec) => ({
-      id: customerIds[spec.key],
+      id: customerId(spec.key),
       companyId: COMPANY_ID,
       kind: spec.kind,
       name: spec.name,
@@ -837,7 +886,7 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
       status: "active",
     })),
     properties: PROPERTIES.map((spec) => ({
-      id: propertyIds[spec.key],
+      id: propertyId(spec.key),
       companyId: COMPANY_ID,
       projectId: projectIdOf(spec.project),
       name: spec.name,
@@ -850,17 +899,17 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
     })),
     propertyParties: [],
     propertyGroups: GROUPS.map((spec) => ({
-      id: groupIds[spec.key],
+      id: required(groupIds, spec.key, "property group"),
       companyId: COMPANY_ID,
       projectId: projectIdOf(spec.project),
       name: spec.name,
       purpose: spec.purpose,
-      responsibleCustomerId: spec.responsibleCustomer ? required(customerIds, spec.responsibleCustomer, "customer") : null,
+      responsibleCustomerId: spec.responsibleCustomer ? customerId(spec.responsibleCustomer) : null,
       status: spec.status,
     })),
     propertyGroupMembers: [],
     sharedCollectionPoints: POINTS.map((spec) => ({
-      id: pointIds[spec.key],
+      id: required(pointIds, spec.key, "shared collection point"),
       companyId: COMPANY_ID,
       projectId: projectIdOf(spec.project),
       name: spec.name,
@@ -878,14 +927,14 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
     })),
     sharedCollectionPointMembers: [],
     agreements: AGREEMENTS.map((spec) => ({
-      id: agreementIds[spec.number],
+      id: required(agreementIds, spec.number, "agreement"),
       companyId: COMPANY_ID,
       projectId: projectIdOf(spec.project),
       validFrom: spec.validFrom,
       validTo: spec.validTo,
       number: spec.number,
-      customerId: required(customerIds, spec.customer, "customer"),
-      payerCustomerId: required(customerIds, spec.payer, "customer"),
+      customerId: customerId(spec.customer),
+      payerCustomerId: customerId(spec.payer),
       status: spec.status,
       billingCadence: "monthly",
       currency: "DKK",
@@ -893,11 +942,11 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
     })),
     subscriptions: [],
     containers: CONTAINERS.map((spec) => ({
-      id: containerIds[spec.key],
+      id: required(containerIds, spec.key, "container"),
       companyId: COMPANY_ID,
       projectId: projectIdOf(spec.project),
       label: spec.label,
-      containerTypeId: containerTypeIds[spec.containerType],
+      containerTypeId: containerTypeId(spec.containerType),
       barcode: spec.barcode,
       rfid: spec.rfid,
       serialNumber: spec.serialNumber,
@@ -911,63 +960,66 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
   // is one, and the service contact of the Østerbro East portfolio.
   type Party = { property: string; customer: string; role: PropertyPartyRole }
   const parties: Party[] = []
-  const osterbroEast = GROUPS[0]
   for (const spec of PROPERTIES) {
     parties.push({ property: spec.key, customer: customerKeyOf(spec.owner, spec), role: "owner" })
     if (spec.payer) parties.push({ property: spec.key, customer: customerKeyOf(spec.payer, spec), role: "payer" })
     if (spec.tenant) parties.push({ property: spec.key, customer: spec.tenant, role: "tenant" })
-    if (osterbroEast.members(spec)) parties.push({ property: spec.key, customer: "contact-mikkel", role: "service-contact" })
+    if (memberOf(OSTERBRO_EAST, spec)) parties.push({ property: spec.key, customer: "contact-mikkel", role: "service-contact" })
   }
   const partyKey = (party: Party): string => `${party.property}:${party.customer}:${party.role}`
   const partyIds = keyed(parties, partyKey, "propertyParty")
   rows.propertyParties = parties.map((party) => ({
-    id: partyIds[partyKey(party)],
+    id: required(partyIds, partyKey(party), "party"),
     companyId: COMPANY_ID,
-    projectId: projectIdOf(propertyByKey.get(party.property)!.project),
-    propertyId: required(propertyIds, party.property, "property"),
-    customerId: required(customerIds, party.customer, "customer"),
+    projectId: projectIdOf(propertyOf(party.property).project),
+    propertyId: propertyId(party.property),
+    customerId: customerId(party.customer),
     role: party.role,
   }))
 
   // Members, by each group's and point's rule over the properties of its project.
   type Membership = { of: string; property: string }
   const memberKey = (membership: Membership): string => `${membership.of}:${membership.property}`
-  const groupMembers: Membership[] = GROUPS.flatMap((group) =>
-    PROPERTIES.filter((spec) => spec.project === group.project && group.members(spec)).map((spec) => ({ of: group.key, property: spec.key })),
-  )
+  const gathered = (gatherings: readonly (Gathering & { key: string })[]): Membership[] =>
+    gatherings.flatMap((gathering) => PROPERTIES.filter((spec) => memberOf(gathering, spec)).map((spec) => ({ of: gathering.key, property: spec.key })))
+  const groupMembers = gathered(GROUPS)
   const groupMemberIds = keyed(groupMembers, memberKey, "propertyGroupMember")
   rows.propertyGroupMembers = groupMembers.map((membership) => ({
-    id: groupMemberIds[memberKey(membership)],
+    id: required(groupMemberIds, memberKey(membership), "group membership"),
     companyId: COMPANY_ID,
-    projectId: projectIdOf(propertyByKey.get(membership.property)!.project),
-    propertyGroupId: groupIds[membership.of],
-    propertyId: propertyIds[membership.property],
+    projectId: projectIdOf(propertyOf(membership.property).project),
+    propertyGroupId: required(groupIds, membership.of, "property group"),
+    propertyId: propertyId(membership.property),
     role: "member",
   }))
-  const pointMembers: Membership[] = POINTS.flatMap((point) =>
-    PROPERTIES.filter((spec) => spec.project === point.project && point.members(spec)).map((spec) => ({ of: point.key, property: spec.key })),
-  )
+  const pointMembers = gathered(POINTS)
   const pointMemberIds = keyed(pointMembers, memberKey, "sharedCollectionPointMember")
   rows.sharedCollectionPointMembers = pointMembers.map((membership) => ({
-    id: pointMemberIds[memberKey(membership)],
+    id: required(pointMemberIds, memberKey(membership), "point membership"),
     companyId: COMPANY_ID,
-    projectId: projectIdOf(propertyByKey.get(membership.property)!.project),
-    sharedCollectionPointId: pointIds[membership.of],
-    propertyId: propertyIds[membership.property],
+    projectId: projectIdOf(propertyOf(membership.property).project),
+    sharedCollectionPointId: required(pointIds, membership.of, "shared collection point"),
+    propertyId: propertyId(membership.property),
     role: "service-member",
   }))
 
   // Subscriptions and placements. A subscription is one product at one
-  // property under one agreement; a container in service whose fraction a
-  // product collects is placed under it, and the subscription's quantity
-  // counts the containers so placed, at least one.
+  // property under one agreement, for the agreement's period; a container in
+  // service whose fraction a product collects is placed under it, inside that
+  // period, and the subscription's quantity counts the containers so placed,
+  // at least one.
   type SubscriptionKey = { agreement: string; product: string; property: string }
+  type Subscribed = { key: SubscriptionKey; placed: number }
   const subscriptionKey = (key: SubscriptionKey): string => `${key.agreement}:${key.product}:${key.property}`
-  const quantities = new Map<string, { key: SubscriptionKey; placed: number }>()
-  const subscribe = (key: SubscriptionKey): string => {
+  const subscribed = new Map<string, Subscribed>()
+  const subscribe = (key: SubscriptionKey): { spelled: string; entry: Subscribed } => {
     const spelled = subscriptionKey(key)
-    if (!quantities.has(spelled)) quantities.set(spelled, { key, placed: 0 })
-    return spelled
+    let entry = subscribed.get(spelled)
+    if (!entry) {
+      entry = { key, placed: 0 }
+      subscribed.set(spelled, entry)
+    }
+    return { spelled, entry }
   }
   for (const explicit of EXPLICIT_SUBSCRIPTIONS) subscribe(explicit)
 
@@ -976,28 +1028,33 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
   for (const spec of CONTAINERS) {
     if (!spec.stands) continue
     const productKey = PRODUCT_BY_FRACTION[spec.stands.fraction]
-    if (!productKey) continue
-    if (!agreementByNumber.has(spec.stands.agreement)) throw new Error(`registry seed: ${spec.key} stands under ${spec.stands.agreement}, which is not seeded`)
-    const spelled = subscribe({ agreement: spec.stands.agreement, product: productKey, property: spec.stands.property })
-    quantities.get(spelled)!.placed += 1
-    placements.push({ container: spec, stands: spec.stands, subscription: spelled, product: productByKey.get(productKey)! })
+    if (!productKey) continue // no fixture product collects this fraction: unplaced by design
+    agreementOf(spec.stands.agreement)
+    propertyOf(spec.stands.property)
+    const { spelled, entry } = subscribe({ agreement: spec.stands.agreement, product: productKey, property: spec.stands.property })
+    entry.placed += 1
+    placements.push({ container: spec, stands: spec.stands, subscription: spelled, product: productOf(productKey) })
   }
 
-  const subscriptions = [...quantities.values()]
+  type Period = { validFrom: string; validTo: string | null }
+  const subscriptions = [...subscribed.values()]
   const subscriptionIds = keyed(subscriptions, ({ key }) => subscriptionKey(key), "subscription")
+  const subscriptionPeriods = new Map<string, Period>()
   rows.subscriptions = subscriptions.map(({ key, placed }) => {
-    const under = agreementByNumber.get(key.agreement)!
-    const at = propertyByKey.get(key.property)!
+    const under = agreementOf(key.agreement)
+    const at = propertyOf(key.property)
     if (at.project !== under.project) throw new Error(`registry seed: ${key.property} is not in ${key.agreement}'s project`)
+    const spelled = subscriptionKey(key)
+    subscriptionPeriods.set(spelled, { validFrom: under.validFrom, validTo: under.validTo })
     return {
-      id: subscriptionIds[subscriptionKey(key)],
+      id: required(subscriptionIds, spelled, "subscription"),
       companyId: COMPANY_ID,
       projectId: projectIdOf(under.project),
       validFrom: under.validFrom,
       validTo: under.validTo,
-      agreementId: agreementIds[key.agreement],
-      productId: productIds[under.project][key.product],
-      propertyId: propertyIds[key.property],
+      agreementId: required(agreementIds, key.agreement, "agreement"),
+      productId: productId(under.project, key.product),
+      propertyId: propertyId(key.property),
       sharedCollectionPointId: null,
       quantity: Math.max(1, placed),
     }
@@ -1005,18 +1062,24 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
 
   const placementIds = keyed(placements, ({ container: spec }) => spec.key, "containerServicePlacement")
   rows.containerServicePlacements = placements.map(({ container: spec, stands, subscription: spelled, product: under }) => {
-    const validFrom = stands.future ? FUTURE_PLACEMENT_FROM : agreementByNumber.get(stands.agreement)!.validFrom
-    const overrides = stands.frequency !== null && stands.frequency !== under.serviceFrequency
+    // Inside its subscription's period: the same start, or the Future start,
+    // and the same end. Two `YYYY-MM-DD` strings compare as days.
+    const period = requiredSpec(subscriptionPeriods, spelled, "subscription")
+    const validFrom = stands.future ? FUTURE_PLACEMENT_FROM : period.validFrom
+    if (validFrom < period.validFrom || (period.validTo !== null && validFrom >= period.validTo)) {
+      throw new Error(`registry seed: ${spec.key} would be placed from ${validFrom}, outside its subscription ${spelled} (${period.validFrom} to ${period.validTo})`)
+    }
+    const overrides = stands.frequency !== null && stands.frequency !== under.serviceFrequency ? stands.frequency : null
     return {
-      id: placementIds[spec.key],
+      id: required(placementIds, spec.key, "placement"),
       companyId: COMPANY_ID,
       projectId: projectIdOf(spec.project),
       validFrom,
-      validTo: null,
-      containerId: containerIds[spec.key],
-      subscriptionId: subscriptionIds[spelled],
-      wasteFractionId: wasteFractionIds[stands.fraction],
-      serviceFrequencyId: overrides ? serviceFrequencyIds[spec.project][stands.frequency!] : null,
+      validTo: period.validTo,
+      containerId: required(containerIds, spec.key, "container"),
+      subscriptionId: required(subscriptionIds, spelled, "subscription"),
+      wasteFractionId: wasteFractionId(stands.fraction),
+      serviceFrequencyId: overrides ? serviceFrequencyId(spec.project, overrides) : null,
     }
   })
 

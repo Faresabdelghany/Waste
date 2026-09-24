@@ -374,6 +374,20 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     )
     const [privateOwner] = await owner.db.select().from(customer).where(eq(customer.id, registry.customers["owner-property-sundbyvej-91"]))
     assert.deepEqual([privateOwner.kind, privateOwner.name], ["person", "Private owner · Sundbyvej 91"])
+    // Its record names no type; the one fixture fact that does is BIN-44831's "Property type: Commercial".
+    const [sundbyvej] = await owner.db.select().from(property).where(eq(property.id, registry.properties["property-sundbyvej-91"]))
+    assert.deepEqual([sundbyvej.kind, sundbyvej.status, sundbyvej.registryId], ["commercial", "active", "CPH-009114"])
+
+    // Containment (routes/periods.ts's rule, held here by construction): no subscription runs outside its agreement, no placement outside its subscription.
+    const [strays] = await owner.sql<{ subscriptions: number; placements: number; ends: number }[]>`
+      select
+        (select count(*)::int from wms.subscription s join wms.agreement a on a.id = s.agreement_id and a.company_id = s.company_id
+          where s.valid_from < a.valid_from or (a.valid_to is not null and (s.valid_to is null or s.valid_to > a.valid_to))) as subscriptions,
+        (select count(*)::int from wms.container_service_placement p join wms.subscription s on s.id = p.subscription_id and s.company_id = p.company_id
+          where p.valid_from < s.valid_from or (s.valid_to is not null and (p.valid_to is null or p.valid_to > s.valid_to))) as placements,
+        (select count(*)::int from wms.container_service_placement p join wms.subscription s on s.id = p.subscription_id and s.company_id = p.company_id
+          where p.valid_to is distinct from s.valid_to) as ends`
+    assert.deepEqual(strays, { subscriptions: 0, placements: 0, ends: 0 })
 
     // Groups and points: the Østerbro East members are the Copenhagen properties Østerbro Housing owns; Kongens Nytorv is a located point with no member.
     const east = await owner.db.select().from(propertyGroupMember).where(eq(propertyGroupMember.propertyGroupId, registry.propertyGroups["group-osterbro-east"]))
