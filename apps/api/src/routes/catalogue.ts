@@ -33,12 +33,15 @@
 // `serviceFrequencyShape` and the table's `service_frequency_shape` check. A
 // create body carries the whole picture, so the schema settles it; a patch
 // carries a part of it, so only this route can, holding the patch against the
-// row it is patching before the update goes out. Without that the check
-// constraint would answer, and a rule a client can fix would arrive as a 500.
+// row it is patching before the update goes out, and refusing in the
+// contracts' own words (`ONE_CADENCE`), so one rule has one sentence. Without
+// that the check constraint would answer, and a rule a client can fix would
+// arrive as a 500.
 import {
   ContainerType,
   ContainerTypeCreate,
   ContainerTypePatch,
+  ONE_CADENCE,
   ServiceFrequency,
   ServiceFrequencyCreate,
   ServiceFrequencyPatch,
@@ -60,7 +63,7 @@ import { inProjects, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "configure.master"
@@ -143,9 +146,6 @@ const FREQUENCY_NAME_TAKEN = "service_frequency_project_id_name_key"
 const frequencyNameTaken = (name: string) => `This project already has a service frequency called ${JSON.stringify(name)}`
 
 const noSuchFrequency = (id: string) => problem(404, { detail: `No service frequency ${id} in the projects this account works in` })
-
-/** The contracts' own words for the cadence rule, said again where only the stored row can prove it broken. */
-const ONE_CADENCE = "Give collectionsPerWeek with at most one of weeksBetween and daysBetween, or none of the three (on demand)"
 
 /** The rows of this company, in the projects the caller works in: what every service frequency statement is bounded by. */
 const frequencyScope = (principal: Principal) =>
@@ -560,7 +560,8 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
           weeksBetween: patch.weeksBetween === undefined ? current.weeksBetween : patch.weeksBetween,
           daysBetween: patch.daysBetween === undefined ? current.daysBetween : patch.daysBetween,
         }
-        if (!serviceFrequencyShape(merged)) throw problem(400, { detail: "The request body is invalid", errors: [{ path: "", message: ONE_CADENCE }] })
+        // The path is the body as a whole, where the schemas' own refine puts it.
+        if (!serviceFrequencyShape(merged)) throw invalidRequest("body", [{ path: "", message: ONE_CADENCE }])
 
         const sentences: Record<string, string> = patch.name === undefined ? {} : { [FREQUENCY_NAME_TAKEN]: frequencyNameTaken(patch.name) }
         const [row] = await refuseDuplicate(sentences, () =>

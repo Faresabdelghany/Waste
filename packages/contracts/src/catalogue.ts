@@ -21,7 +21,10 @@
 // two intervals are two ways of saying the same thing. It is spelled once as
 // `serviceFrequencyShape` and applied three times, because a body refused at
 // the boundary is a 400 naming the rule where the same body refused by the
-// check constraint is a 500 naming nothing.
+// check constraint is a 500 naming nothing. The sentence it is refused with
+// is exported too (`ONE_CADENCE`): a patch carries only a part of the
+// picture, so the route holds it against the stored row, and one rule that
+// two places can refuse should not have two ways of saying so.
 //
 // A Product's container type, waste fraction and frequency are all optional:
 // only a container collection has a container and a fraction, and the
@@ -112,6 +115,15 @@ export type ServiceFrequencyShape = {
 }
 
 /**
+ * What a body that breaks the rule below is told, wherever it is caught. The
+ * schemas here refuse a create body, which carries the whole picture; a patch
+ * carries a part of it, so the route that has the stored row holds the two
+ * together and refuses in these same words (apps/api/src/routes/catalogue.ts).
+ * One rule, one sentence.
+ */
+export const ONE_CADENCE = "Give collectionsPerWeek with at most one of weeksBetween and daysBetween, or none of the three (on demand)"
+
+/**
  * The definition's own rule, the one the database's `service_frequency_shape`
  * check holds: an interval needs a rate to belong to, and `weeksBetween` and
  * `daysBetween` are two ways of saying the same thing. A rate that was not
@@ -132,9 +144,7 @@ const asStored = (body: ServiceFrequencyShape): ServiceFrequencyShape => ({
   daysBetween: body.daysBetween ?? null,
 })
 
-const oneCadence = {
-  message: "Give collectionsPerWeek with at most one of weeksBetween and daysBetween, or none of the three (on demand)",
-}
+const oneCadence = { message: ONE_CADENCE }
 
 /** The cadence a project offers, the domain's `ServiceFrequencyDefinition` as a row. */
 export const ServiceFrequency = z

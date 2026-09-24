@@ -254,8 +254,9 @@ describe("the product endpoints", { skip: database.skip }, () => {
     })
 
     test("filters the page by project, and refuses a project the caller does not work in", async () => {
+      const harbor = await create(olivia, "/products", body(a.projects.harbor.id, "Harbour paper"), Product)
       const filtered = await page(olivia, `?limit=200&projectId=${a.projects.harbor.id}`)
-      assert.ok(filtered.items.length > 0)
+      assert.ok(filtered.items.some((product) => product.id === harbor.id))
       for (const product of filtered.items) assert.equal(product.projectId, a.projects.harbor.id)
       const problem = await refused(await viewer(`/products?projectId=${a.projects.harbor.id}`), 400)
       assert.equal(problem.detail, "The request query is invalid")

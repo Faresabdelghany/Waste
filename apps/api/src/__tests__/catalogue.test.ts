@@ -242,6 +242,15 @@ describe("the master data endpoints", { skip: database.skip }, () => {
       assert.equal((await one(olivia, `/container-types/${created.id}`, ContainerType)).name, "Roll-on container")
     })
 
+    test("refuses a rename onto a name the company already uses, and changes nothing", async () => {
+      await create(olivia, "/container-types", { name: "770 L container", volumeLitres: 770 }, ContainerType)
+      const created = await create(olivia, "/container-types", { name: "Free to rename", volumeLitres: 400 }, ContainerType)
+      const problem = await refused(await olivia(`/container-types/${created.id}`, { method: "PATCH", body: { name: "770 L container" } }), 409)
+      assert.match(problem.detail ?? "", /"770 L container"/)
+      assert.doesNotMatch(problem.detail ?? "", /_key/)
+      assert.equal((await one(olivia, `/container-types/${created.id}`, ContainerType)).name, "Free to rename")
+    })
+
     test("answers 404 for another company's type and refuses a role without the grant", async () => {
       await refused(await olivia(`/container-types/${theirType.id}`), 404)
       await refused(await olivia(`/container-types/${theirType.id}`, { method: "PATCH", body: { name: "Mine now" } }), 404)
@@ -381,6 +390,18 @@ describe("the master data endpoints", { skip: database.skip }, () => {
         (await create(olivia, "/service-frequencies", body(a.projects.harbor.id, "Every other day"), ServiceFrequency)).projectId,
         a.projects.harbor.id,
       )
+    })
+
+    test("refuses a rename onto a name the project already uses, and changes nothing", async () => {
+      await create(olivia, "/service-frequencies", body(a.projects.copenhagen.id, "Three times a week"), ServiceFrequency)
+      const created = await create(olivia, "/service-frequencies", body(a.projects.copenhagen.id, "Free to rename"), ServiceFrequency)
+      const problem = await refused(
+        await olivia(`/service-frequencies/${created.id}`, { method: "PATCH", body: { name: "Three times a week" } }),
+        409,
+      )
+      assert.match(problem.detail ?? "", /"Three times a week"/)
+      assert.doesNotMatch(problem.detail ?? "", /_key/)
+      assert.equal((await one(olivia, `/service-frequencies/${created.id}`, ServiceFrequency)).name, "Free to rename")
     })
 
     test("answers 404 for another company's frequency and refuses a role without the grant", async () => {

@@ -14,6 +14,10 @@
 //                      name the generic 23505 mapping would print
 //                      (problem.ts). A collision nobody foresaw still lands
 //                      there, as a 409 either way.
+//   a reference      — an id a body names must be a row of this company
+//                      (`requireRow`), checked before the write, or the
+//                      foreign key answers 23503 and the client gets a 500
+//                      naming nothing.
 //
 // The Registry added the same thing one SQLSTATE along (Issue #78): an
 // effective-dated table refuses a row whose period overlaps one already there
@@ -26,10 +30,13 @@
 // Nothing here knows a table or a resource: what is not shared by every route
 // module stays in the one that owns it.
 import { Id } from "@waste/contracts/ids"
+import type { Tx } from "@waste/db/client"
+import { and, eq, type SQL } from "drizzle-orm"
+import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import { resolver } from "hono-openapi"
 import * as z from "zod"
 
-import { exclusionConstraintOf, problem, uniqueConstraintOf } from "../problem"
+import { exclusionConstraintOf, invalidRequest, problem, uniqueConstraintOf } from "../problem"
 
 /** The path parameter of every `/<resource>/:id` route. */
 export const IdParam = z.object({ id: Id })
@@ -63,6 +70,40 @@ export async function refuseDuplicate<T>(sentences: Readonly<Record<string, stri
  */
 export async function refuseOverlap<T>(sentences: Readonly<Record<string, string>>, write: () => Promise<T>): Promise<T> {
   return await refused(exclusionConstraintOf, sentences, write)
+}
+
+/** A table a row can be looked up in the way every table of this system can be: by its own id, inside a company. */
+export type TenantTable = PgTable & { id: PgColumn; companyId: PgColumn }
+
+/**
+ * Holds an id a body named to a row that is really there — in this company,
+ * and under whatever else its key demands, which `also` carries: the project
+ * a project-scoped row belongs to, the agreement a subscription hangs on, the
+ * property a party is a party to.
+ *
+ * A row that is not there is a 400 naming the field. The foreign key is the
+ * backstop and would answer 23503, a 500 saying nothing, where this says
+ * which id to fix; and since the fence hides another company's row, "it is
+ * not yours" and "it does not exist" are the same answer on the wire.
+ *
+ * The sentence stays with the route, which knows what the field is called and
+ * what the thing is ("Not a container type of this company"). This runs the
+ * lookup, always with `company_id`, and shapes the refusal — so the check a
+ * product makes of its container type is the check a subscription will make
+ * of its product and an agreement of its customer.
+ */
+export async function requireRow(
+  tx: Tx,
+  table: TenantTable,
+  row: { companyId: string; id: string; also?: SQL },
+  refusal: { path: string; message: string },
+): Promise<void> {
+  const [found] = await tx
+    .select({ id: table.id })
+    .from(table)
+    .where(and(eq(table.companyId, row.companyId), eq(table.id, row.id), row.also))
+    .limit(1)
+  if (found === undefined) throw invalidRequest("body", [refusal])
 }
 
 /** What the two above share: run the write, and answer the sentence the route wrote for the constraint it hit. */

@@ -36,7 +36,7 @@
 import { inArray, sql, type SQL } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 
-import { problem } from "../problem"
+import { invalidRequest } from "../problem"
 import type { Principal } from "./principal"
 
 /** The ids of the projects the caller works in; empty for an account that works in none. */
@@ -68,5 +68,5 @@ const NOT_A_PROJECT = "Not a project this account works in"
  */
 export function requireProject(principal: Principal, projectId: string, path = "projectId", target: "body" | "query" = "body"): void {
   if (projectIdsOf(principal).includes(projectId)) return
-  throw problem(400, { detail: `The request ${target} is invalid`, errors: [{ path, message: NOT_A_PROJECT }] })
+  throw invalidRequest(target, [{ path, message: NOT_A_PROJECT }])
 }

@@ -23,7 +23,7 @@
 // the cursor.
 import { Id } from "@waste/contracts/ids"
 
-import { problem } from "./problem"
+import { invalidRequest } from "./problem"
 
 const BASE64URL = /^[A-Za-z0-9_-]+$/
 
@@ -54,10 +54,7 @@ export function afterCursor(cursor: string | undefined): string | undefined {
   if (cursor === undefined) return undefined
   const id = decodeCursor(cursor)
   if (id === undefined) {
-    throw problem(400, {
-      detail: "The request query is invalid",
-      errors: [{ path: "cursor", message: "Hand back the `nextCursor` of the page before this one, unread" }],
-    })
+    throw invalidRequest("query", [{ path: "cursor", message: "Hand back the `nextCursor` of the page before this one, unread" }])
   }
   return id
 }

@@ -44,7 +44,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { describeJson, IdParam, refuseDuplicate, requireRow, stampsOf } from "./shared"
 
 const MODULE = "commercial.products"
 const ProductPage = Page(Product)
@@ -87,46 +87,40 @@ const nameTaken = (name: string) => `This project already has a product called $
 
 const noSuchProduct = (id: string) => problem(404, { detail: `No product ${id} in the projects this account works in` })
 
-/** A 400 in the shape the validator's would have, for what only the database could tell us. */
-const unknownReference = (path: string, message: string) => problem(400, { detail: "The request body is invalid", errors: [{ path, message }] })
-
 /** The rows of this company, in the projects the caller works in: what every product statement is bounded by. */
 const scope = (principal: Principal) => and(eq(product.companyId, principal.companyId), inProjects(product.projectId, principal))
-
-async function requireContainerType(tx: Tx, companyId: string, id: string): Promise<void> {
-  const [found] = await tx
-    .select({ id: containerType.id })
-    .from(containerType)
-    .where(and(eq(containerType.companyId, companyId), eq(containerType.id, id)))
-    .limit(1)
-  if (found === undefined) throw unknownReference("containerTypeId", "Not a container type of this company")
-}
-
-async function requireWasteFraction(tx: Tx, companyId: string, id: string): Promise<void> {
-  const [found] = await tx
-    .select({ id: wasteFraction.id })
-    .from(wasteFraction)
-    .where(and(eq(wasteFraction.companyId, companyId), eq(wasteFraction.id, id)))
-    .limit(1)
-  if (found === undefined) throw unknownReference("wasteFractionId", "Not a waste fraction of this company")
-}
-
-async function requireServiceFrequency(tx: Tx, companyId: string, projectId: string, id: string): Promise<void> {
-  const [found] = await tx
-    .select({ id: serviceFrequency.id })
-    .from(serviceFrequency)
-    .where(and(eq(serviceFrequency.companyId, companyId), eq(serviceFrequency.projectId, projectId), eq(serviceFrequency.id, id)))
-    .limit(1)
-  if (found === undefined) throw unknownReference("serviceFrequencyId", "Not a service frequency of this project")
-}
 
 /** What the body points at, held to this company and this project. A null or an absent field points at nothing. */
 type References = { containerTypeId?: string | null; wasteFractionId?: string | null; serviceFrequencyId?: string | null }
 
+/**
+ * The three ids a product may name, each held to the scope its key allows:
+ * the container type and the waste fraction to the company, the cadence to
+ * the project as well, since a service frequency belongs to one project. The
+ * sentences are here because they name the thing; the lookup is
+ * `requireRow`'s (routes/shared.ts).
+ */
 async function requireReferences(tx: Tx, companyId: string, projectId: string, values: References): Promise<void> {
-  if (values.containerTypeId != null) await requireContainerType(tx, companyId, values.containerTypeId)
-  if (values.wasteFractionId != null) await requireWasteFraction(tx, companyId, values.wasteFractionId)
-  if (values.serviceFrequencyId != null) await requireServiceFrequency(tx, companyId, projectId, values.serviceFrequencyId)
+  if (values.containerTypeId != null) {
+    await requireRow(tx, containerType, { companyId, id: values.containerTypeId }, {
+      path: "containerTypeId",
+      message: "Not a container type of this company",
+    })
+  }
+  if (values.wasteFractionId != null) {
+    await requireRow(tx, wasteFraction, { companyId, id: values.wasteFractionId }, {
+      path: "wasteFractionId",
+      message: "Not a waste fraction of this company",
+    })
+  }
+  if (values.serviceFrequencyId != null) {
+    await requireRow(
+      tx,
+      serviceFrequency,
+      { companyId, id: values.serviceFrequencyId, also: eq(serviceFrequency.projectId, projectId) },
+      { path: "serviceFrequencyId", message: "Not a service frequency of this project" },
+    )
+  }
 }
 
 /** One product of this company by id, inside the caller's projects; undefined when it is neither. */

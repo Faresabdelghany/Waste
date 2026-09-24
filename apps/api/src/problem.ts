@@ -27,7 +27,11 @@
 // listing `errors: [{ path, message }]`, the path dotted into the target and
 // empty for the target as a whole. A route validates through `validate`, never
 // through the bare validator, so the 400 shape is in force wherever there is
-// one.
+// one. That 400 is `invalidRequest(target, errors)` and it is exported,
+// because a schema is not the only thing that can refuse a field: a cursor
+// this API did not write, a project the account does not work in, an id
+// naming nobody's row. They are all the same answer, so they are all built
+// here.
 import { STATUS_CODES } from "node:http"
 
 import { BLANK_PROBLEM_TYPE, PROBLEM_MEDIA_TYPE, Problem, type ProblemFieldError } from "@waste/contracts/problem"
@@ -212,7 +216,7 @@ export function describeProblem(description: string) {
 type Issue = { readonly message: string; readonly path?: ReadonlyArray<PropertyKey | { readonly key: PropertyKey }> | undefined }
 type Validation = ({ readonly success: true } | { readonly success: false; readonly error: readonly Issue[] }) & { readonly target: string }
 
-/** What the problem calls each target hono can validate. */
+/** What the problem calls each target hono can validate; anything else is the part of the request it already names. */
 const TARGET_LABELS: Readonly<Record<string, string>> = {
   json: "body",
   form: "form",
@@ -222,16 +226,29 @@ const TARGET_LABELS: Readonly<Record<string, string>> = {
   cookie: "cookies",
 }
 
+/**
+ * The 400 a refused part of a request answers: "The request <part> is
+ * invalid", and one error per field. Exported because a schema is not the
+ * only thing that can refuse a field — a cursor this API did not write
+ * (pagination.ts), a project the account does not work in (auth/projects.ts)
+ * and an id naming nobody's row (routes/shared.ts) all end here, so a client
+ * reads one shape whatever noticed. `target` is hono's name for the part
+ * (`json`, `param`) or the part itself (`body`, `query`).
+ */
+export function invalidRequest(target: string, errors: ProblemFieldError[]): ProblemError {
+  return problem(400, { detail: `The request ${TARGET_LABELS[target] ?? target} is invalid`, errors })
+}
+
 const pathOf = (issue: Issue): string =>
   (issue.path ?? []).map((segment) => String(typeof segment === "object" ? segment.key : segment)).join(".")
 
 /** Turns a failed validation into a 400 problem listing every issue by path; lets a passed one through. */
 export function validationHook(result: Validation): void {
   if (result.success) return
-  throw problem(400, {
-    detail: `The request ${TARGET_LABELS[result.target] ?? result.target} is invalid`,
-    errors: result.error.map((issue) => ({ path: pathOf(issue), message: issue.message })),
-  })
+  throw invalidRequest(
+    result.target,
+    result.error.map((issue) => ({ path: pathOf(issue), message: issue.message })),
+  )
 }
 
 type ValidationTarget = Parameters<typeof validator>[0]
