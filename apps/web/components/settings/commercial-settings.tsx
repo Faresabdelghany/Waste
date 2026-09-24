@@ -62,9 +62,9 @@ import {
   useTablePagination,
 } from "@/components/ui/table-pagination"
 import { Textarea } from "@/components/ui/textarea"
-import { statusClasses } from "@/components/wastehero/business-record-views"
-import { BusinessRecordFormDialog } from "@/components/wastehero/business-record-form-dialog"
-import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
+import { statusClasses } from "@/components/waste/business-record-views"
+import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
+import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import {
   AssetPanelShell,
   AssetToolbar,

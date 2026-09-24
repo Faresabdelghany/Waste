@@ -24,8 +24,8 @@ import { Button } from "@/components/ui/button"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { ContainerDetailsSheet } from "@/components/wastehero/containers-assets-register"
-import { SchemeWizard } from "@/components/wastehero/scheme-wizard/scheme-wizard"
+import { ContainerDetailsSheet } from "@/components/waste/containers-assets-register"
+import { SchemeWizard } from "@/components/waste/scheme-wizard/scheme-wizard"
 import {
   applyBusinessFilters,
   businessFilterChips,
@@ -38,11 +38,11 @@ import { FIXTURE_GAZETTEER } from "@/lib/data/street-gazetteer"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 import { planningAreaLayers, type PlanningAreaLayer } from "@waste/domain/map-planning/areas"
 import {
-  BASE_MAP_STORAGE_KEY,
   defaultBaseMapForTheme,
   isBaseMapId,
   type BaseMapId,
 } from "@/lib/map-planning/base-maps"
+import { BASE_MAP_STORAGE_KEY, readPersisted } from "@/lib/storage-keys"
 import type { MapCluster } from "@/lib/map-planning/clusters"
 import { fractionColor } from "@/lib/map-planning/colors"
 import { serviceAreasForSelection } from "@waste/domain/map-planning/coverage"
@@ -178,7 +178,7 @@ export function MapPlanningView({
   // SSR and the first client render agree.
   useEffect(() => {
     try {
-      const stored = globalThis.localStorage?.getItem(BASE_MAP_STORAGE_KEY)
+      const stored = readPersisted(globalThis.localStorage, BASE_MAP_STORAGE_KEY)
       if (isBaseMapId(stored)) setBaseMapChoice(stored)
     } catch {
       // Storage may be unavailable; the theme default stands.

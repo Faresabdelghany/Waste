@@ -12,7 +12,6 @@ import { useEffect, useMemo, useRef, useState } from "react"
 
 import type { LngLat } from "@waste/domain/map-planning/geo"
 import {
-  ROAD_GEOMETRY_STORAGE_KEY,
   fetchRoadGeometry,
   parseRoadGeometryCache,
   rememberRoadGeometry,
@@ -20,6 +19,7 @@ import {
   serializeRoadGeometryCache,
   type RoadGeometry,
 } from "@/lib/map-planning/road-geometry"
+import { readPersisted, ROAD_GEOMETRY_STORAGE_KEY } from "@/lib/storage-keys"
 import type { AreaRoute } from "@waste/domain/map-planning/routes"
 
 export type RoadGeometryState =
@@ -38,7 +38,10 @@ function hydrate() {
   if (hydrated) return
   hydrated = true
   try {
-    for (const [key, geometry] of parseRoadGeometryCache(globalThis.localStorage?.getItem(ROAD_GEOMETRY_STORAGE_KEY) ?? null)) {
+    const cached = parseRoadGeometryCache(
+      readPersisted(globalThis.localStorage, ROAD_GEOMETRY_STORAGE_KEY),
+    )
+    for (const [key, geometry] of cached) {
       memory.set(key, geometry)
     }
   } catch {

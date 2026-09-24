@@ -23,8 +23,8 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
-import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
+import { useBusinessRecordStore } from "@/components/waste/business-record-store"
+import { useModuleRecords } from "@/components/waste/scheme-route-map"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import {

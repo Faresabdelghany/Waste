@@ -120,7 +120,7 @@ async function seedDrawableRoute(
     })),
   }
   await page.addInitScript((payload) => {
-    window.localStorage.setItem("wastehero-business-records-v1", JSON.stringify(payload))
+    window.localStorage.setItem("waste-business-records-v1", JSON.stringify(payload))
   }, seeded)
   await page.reload()
   await expect(page.locator(MARKERS)).toBeVisible()

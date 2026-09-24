@@ -3,11 +3,11 @@
 ## Evidence
 
 - Source visual truth: `/Users/fares/.codex/generated_images/019ff5d8-ac4e-7952-b77c-7c6c6d56d037/exec-00afd8d1-3bf7-45cf-844c-e96a2c2c8240.png`
-- Browser-rendered desktop implementation: `/tmp/wastehero-performance-option1-exact-final.png`
-- Browser-rendered mobile implementation: `/tmp/wastehero-performance-option1-mobile-390x844.png`
-- Combined full-view comparison: `/tmp/wastehero-performance-option1-qa-comparison.png`
-- Focused header evidence: `/tmp/wastehero-performance-option1-focused-header.png`
-- Focused chart/table evidence: `/tmp/wastehero-performance-option1-focused-data.png`
+- Browser-rendered desktop implementation: `/tmp/waste-performance-option1-exact-final.png`
+- Browser-rendered mobile implementation: `/tmp/waste-performance-option1-mobile-390x844.png`
+- Combined full-view comparison: `/tmp/waste-performance-option1-qa-comparison.png`
+- Focused header evidence: `/tmp/waste-performance-option1-focused-header.png`
+- Focused chart/table evidence: `/tmp/waste-performance-option1-focused-data.png`
 - Implementation URL: `http://localhost:3000/performance`
 - Desktop CSS viewport: `1536 × 1024`, device scale factor `1`.
 - Mobile CSS viewport: `390 × 844`, device scale factor `1`.
@@ -37,10 +37,10 @@ Required fidelity surfaces:
 
 1. Earlier finding — [P2] the mobile document width expanded to `1066px` because the dense health table propagated through the sidebar inset.
    - Fix: constrained the sidebar inset and kept horizontal scrolling inside the table wrapper.
-   - Post-fix evidence: `/tmp/wastehero-performance-option1-mobile-390x844.png`; `documentElement.scrollWidth === 390` at a `390px` viewport.
+   - Post-fix evidence: `/tmp/waste-performance-option1-mobile-390x844.png`; `documentElement.scrollWidth === 390` at a `390px` viewport.
 2. Earlier finding — [P2] the desktop health table extended below the selected mock's single-screen composition.
    - Fix: tightened attention-list and table-row density while preserving readable `12px` table text and `14px` section headings.
-   - Post-fix evidence: `/tmp/wastehero-performance-option1-exact-final.png`; `documentElement.scrollHeight === 1024` at a `1024px` viewport.
+   - Post-fix evidence: `/tmp/waste-performance-option1-exact-final.png`; `documentElement.scrollHeight === 1024` at a `1024px` viewport.
 3. Earlier finding — [P2] fresh browser verification exposed Radix ID hydration warnings in the existing client-side shell.
    - Fix: isolated the performance route behind a client-only dynamic entry, eliminating SSR/client ID divergence on this route.
    - Post-fix evidence: fresh-browser console check returned no warnings or errors.

@@ -29,7 +29,7 @@ import {
 import { Stepper } from "@/components/project-wizard/Stepper"
 import { StepMode } from "@/components/project-wizard/steps/StepMode"
 import type { ProjectMode } from "@/components/project-wizard/types"
-import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
+import { useModuleRecords } from "@/components/waste/scheme-route-map"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { cn } from "@/lib/utils"
 

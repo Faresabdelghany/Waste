@@ -22,16 +22,18 @@ import {
   serviceProviderActiveRoutes,
   type ActiveRouteSummary,
 } from "@/lib/data/sidebar"
+import { ACTIVE_ROUTES_STORAGE_KEY, readPersisted } from "@/lib/storage-keys"
 
-const STORAGE_KEY = "wastehero-active-routes-v1"
-// The service provider pins shipped first under their own key; keep reading it
-// so stars saved before the operator scope existed survive the upgrade. The
-// key literal predates the Contractor → Service provider rename and stays as
-// written — it names what browsers already hold.
-const LEGACY_SERVICE_PROVIDER_STORAGE_KEY = "wastehero-contractor-active-routes-v1"
-// State persisted before that rename keyed the second scope by the old
-// persona name. lib/data/legacy-ids.ts leaves this bare key to each store
-// (it means a scope here and a field elsewhere), so the mapping lives here.
+// Two generations of this store live behind the current key (see
+// lib/storage-keys.ts): the pins the service provider saved before the
+// operator scope existed, a bare route-id list, and the two-scope object that
+// replaced it. `readPersisted` hands over whichever the browser holds and
+// `loadStoredState` recognises both shapes.
+//
+// State persisted before the Contractor → Service provider rename keyed the
+// second scope by the old persona name. lib/data/legacy-ids.ts leaves this
+// bare key to each store (it means a scope here and a field elsewhere), so
+// the mapping lives here.
 const LEGACY_SCOPE_KEYS: Readonly<Record<string, string>> = {
   contractor: "service-provider",
 }
@@ -73,16 +75,15 @@ function isStarredRoutesState(value: unknown): value is StarredRoutesState {
 }
 
 function loadStoredState(): StarredRoutesState | null {
-  const raw = window.localStorage.getItem(STORAGE_KEY)
+  const raw = readPersisted(window.localStorage, ACTIVE_ROUTES_STORAGE_KEY)
   const parsed: unknown = raw ? JSON.parse(raw) : null
   // Idempotent: state already in the current shape passes through unchanged,
   // so this runs on every load rather than behind a version flag.
   const migrated = migrateLegacyState(parsed, LEGACY_SCOPE_KEYS)
   if (isStarredRoutesState(migrated)) return migrated
-  const legacyRaw = window.localStorage.getItem(LEGACY_SERVICE_PROVIDER_STORAGE_KEY)
-  const legacyParsed: unknown = legacyRaw ? JSON.parse(legacyRaw) : null
-  if (isRouteIdList(legacyParsed)) {
-    return { ...DEFAULT_STARRED_ROUTES, "service-provider": legacyParsed }
+  // The oldest generation held the service provider's pins alone.
+  if (isRouteIdList(migrated)) {
+    return { ...DEFAULT_STARRED_ROUTES, "service-provider": migrated }
   }
   return null
 }
@@ -106,7 +107,7 @@ export function ActiveRoutesStoreProvider({
     const persist = () => {
       try {
         window.localStorage.setItem(
-          STORAGE_KEY,
+          ACTIVE_ROUTES_STORAGE_KEY,
           JSON.stringify(store.getSnapshot()),
         )
       } catch {

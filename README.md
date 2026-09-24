@@ -45,7 +45,7 @@ Restricted persona surfaces sit alongside the internal workspaces:
 ## Architecture
 
 - `app/` — thin server-component routes; most render `WorkspacePageShell` with a `workspaceId`. In-workspace navigation is driven by `?module=` and `?record=` search params.
-- `components/wastehero/` — the workspace shell machinery:
+- `components/waste/` — the workspace shell machinery:
   - `business-workspace.tsx` — generic module list/table/detail rendering used by every workspace
   - `business-record-form-dialog.tsx` — create/edit dialogs generated from form schemas
   - `restricted-workspace-shell.tsx` — shells for the driver, portal, service provider, and control-center personas
@@ -54,6 +54,7 @@ Restricted persona surfaces sit alongside the internal workspaces:
   - `business-domain.ts` — machine-readable map of every UI surface to canonical business modules M01–M24 (owners, personas, dependencies, boundaries)
   - `business-form-types.ts` + `business-form-schemas*.ts` — per-module form field schemas
   - `legacy-ids.ts` — old → new id maps and `migrateLegacy*` helpers that keep browser state and bookmarks from before the 2026-09-02 terminology rename working (see `CLAUDE.md`)
+- `lib/storage-keys.ts` — every browser-storage key, the keys each one replaced, and the read that moves a value from an old key to the current one
 - `components/ui/` — shadcn/ui primitives (new-york style); theme tokens live in `app/globals.css` (Tailwind v4, no config file).
 
 ### Domain language

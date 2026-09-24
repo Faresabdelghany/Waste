@@ -1,4 +1,4 @@
-import { RestrictedWorkspaceShell } from "@/components/wastehero/restricted-workspace-shell"
+import { RestrictedWorkspaceShell } from "@/components/waste/restricted-workspace-shell"
 
 // @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
 // Remove this opt-out after verifying the segment passes validation without it.

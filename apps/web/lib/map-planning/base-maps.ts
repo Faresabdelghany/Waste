@@ -2,7 +2,7 @@
 // OpenFreeMap vector styles and Esri's World Imagery raster for satellite.
 // The swatch colours draw the thumbnails in CSS so the picker needs no
 // network. The light and dark app themes pick the default until the user
-// chooses. Pure data; components/wastehero/map-planning/planning-map.tsx
+// chooses. Pure data; components/waste/map-planning/planning-map.tsx
 // hands the style to MapLibre.
 
 export type BaseMapId = "streets" | "light" | "dark" | "satellite"
@@ -69,8 +69,6 @@ export const BASE_MAPS: readonly BaseMap[] = [
     swatch: { land: "#3f5a34", water: "#1f3a5f", road: "#8d907c", text: "#f4f4f5" },
   },
 ]
-
-export const BASE_MAP_STORAGE_KEY = "wastehero-map-planning-base-map-v1"
 
 export const isBaseMapId = (value: unknown): value is BaseMapId =>
   typeof value === "string" && BASE_MAPS.some((map) => map.id === value)

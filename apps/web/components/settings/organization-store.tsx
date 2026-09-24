@@ -21,6 +21,7 @@ import {
   isRoleAccessMap,
   type RoleAccessMap,
 } from "@/lib/data/role-permissions"
+import { ORGANIZATION_STORAGE_KEY, readPersisted } from "@/lib/storage-keys"
 
 export type CompanyStatus = "Active" | "Onboarding"
 export type ProjectStatus = "Active" | "Onboarding"
@@ -165,8 +166,6 @@ type OrganizationStoreValue = OrganizationState & {
     companyId: string,
   ) => OrganizationUser | undefined
 }
-
-const ORGANIZATION_STORAGE_KEY = "wastehero.organization.v1"
 
 const fixtureCreatedAt = "2026-01-01T00:00:00.000Z"
 
@@ -356,6 +355,17 @@ export function migrateLegacyOrganizationState(value: unknown): unknown {
   // happened, so a user is never moved onto a custom role that already holds
   // the new fixture name.
   let roleRenames: Readonly<Record<string, string>> = LEGACY_ROLE_NAMES
+
+  // Companies and projects hold the tenant's record id and references to it.
+  // The shared rewrite moves the demo tenant's renamed id (2026-09-24,
+  // LEGACY_RECORD_IDS) wherever it sits, so the users and roles below — which
+  // go through the same rewrite — still join onto their company.
+  if (Array.isArray(value.companies)) {
+    next.companies = migrateLegacyState<unknown[]>(value.companies)
+  }
+  if (Array.isArray(value.projects)) {
+    next.projects = migrateLegacyState<unknown[]>(value.projects)
+  }
 
   if (Array.isArray(value.roles)) {
     // Role ids, access-map keys, and id-shaped values go through the shared
@@ -960,7 +970,10 @@ export function OrganizationStoreProvider({
   useEffect(() => {
     let parsed: unknown = null
     try {
-      const rawValue = window.localStorage.getItem(ORGANIZATION_STORAGE_KEY)
+      const rawValue = readPersisted(
+        window.localStorage,
+        ORGANIZATION_STORAGE_KEY,
+      )
       parsed = rawValue
         ? migrateLegacyOrganizationState(JSON.parse(rawValue))
         : null

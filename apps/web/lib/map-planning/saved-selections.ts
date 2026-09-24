@@ -1,6 +1,7 @@
 // Saved selections (2026-09-16): the bookmark menu's named shapes, each kept
 // with the filters and collection window it was drawn under so loading one
-// restores the exact view. Stored in the browser under one key; parsing is
+// restores the exact view. Stored in the browser under one key (spelled in
+// lib/storage-keys.ts); parsing is
 // tolerant — a malformed entry is dropped, an unknown window falls back to
 // "any", an unknown shape kind to "polygon" — so a stale store never blanks
 // the menu. Pure data logic; the menu owns the storage calls.
@@ -13,8 +14,6 @@ import {
 import type { LngLat } from "@waste/domain/map-planning/geo"
 import { isCollectionWindow, type CollectionWindow } from "@waste/domain/map-planning/schedule"
 import type { SelectionShape } from "@waste/domain/map-planning/selection"
-
-export const SAVED_SELECTIONS_STORAGE_KEY = "wastehero-map-selections-v1"
 
 export type SavedSelection = {
   id: string

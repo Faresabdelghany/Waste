@@ -8,7 +8,7 @@
 import { useMemo } from "react"
 
 import { useAssetManagementStore } from "@/components/settings/asset-management-store"
-import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
+import { useModuleRecords } from "@/components/waste/scheme-route-map"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"

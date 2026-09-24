@@ -2,7 +2,7 @@ import { Suspense } from "react"
 
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
-import { BusinessWorkspace } from "@/components/wastehero/business-workspace"
+import { BusinessWorkspace } from "@/components/waste/business-workspace"
 import type { WorkspaceId } from "@/lib/data/business-modules"
 
 const publicModuleIdsByWorkspace: Partial<

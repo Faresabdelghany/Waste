@@ -10,7 +10,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
-import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
+import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import { useOrganizationStore } from "@/components/settings/organization-store"
 import { RolePermissionsPanel } from "@/components/settings/role-permissions"
 import { Badge } from "@/components/ui/badge"

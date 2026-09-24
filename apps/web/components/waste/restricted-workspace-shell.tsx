@@ -1,12 +1,12 @@
 import { Suspense } from "react"
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
-import { BusinessWorkspace } from "@/components/wastehero/business-workspace"
-import { ServiceProviderDashboard } from "@/components/wastehero/service-provider-dashboard"
+import { BusinessWorkspace } from "@/components/waste/business-workspace"
+import { ServiceProviderDashboard } from "@/components/waste/service-provider-dashboard"
 import {
   RestrictedPersonaSidebar,
   type RestrictedPersona,
-} from "@/components/wastehero/restricted-persona-sidebar"
+} from "@/components/waste/restricted-persona-sidebar"
 import {
   FIXTURE_SERVICE_PROVIDER_IDS,
   type WorkspaceId,

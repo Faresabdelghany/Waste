@@ -41,12 +41,12 @@ import {
   SignOut,
   CaretRight,
 } from "@phosphor-icons/react/dist/ssr"
-import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
+import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import {
   resolveActiveRouteSummaries,
   routeDayFixtures,
   useActiveRoutes,
-} from "@/components/wastehero/active-routes-store"
+} from "@/components/waste/active-routes-store"
 import { footerItems, navItems, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
 
 const navItemIcons: Record<NavItemId, React.ComponentType<{ className?: string }>> = {

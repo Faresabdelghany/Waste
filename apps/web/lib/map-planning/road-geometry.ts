@@ -4,7 +4,7 @@
 // chunks overlapping by a stop so their legs join. The answer is split into
 // one leg per pair of stops at the snapped waypoints, simplified to a metre
 // or two, and cached: in memory for the session and in the browser under one
-// key, oldest first, capped. Everything here is pure except fetchRoadGeometry,
+// key (spelled in lib/storage-keys.ts), oldest first, capped. Everything here is pure except fetchRoadGeometry,
 // which takes its fetch — the tests hand it a fake, the hook the real one.
 
 import { avalancheHash } from "@waste/domain/route-schemes/hash"
@@ -12,7 +12,6 @@ import { simplifyPath, worldPoint, type LngLat } from "@waste/domain/map-plannin
 import type { Position } from "@waste/contracts/geojson"
 
 export const OSRM_BASE_URL = "https://router.project-osrm.org"
-export const ROAD_GEOMETRY_STORAGE_KEY = "wastehero-map-road-geometry-v1"
 /** Stops per request — the demo server declines very long coordinate lists. */
 export const ROAD_GEOMETRY_CHUNK_SIZE = 50
 /** Routes remembered in the browser before the oldest is forgotten. */

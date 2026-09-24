@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
+import { useModuleRecords } from "@/components/waste/scheme-route-map"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import {

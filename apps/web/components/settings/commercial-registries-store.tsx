@@ -18,6 +18,10 @@ import {
 } from "react"
 
 import { createExternalStore, type ExternalStore } from "@/lib/external-store"
+import {
+  COMMERCIAL_REGISTRIES_STORAGE_KEY,
+  readPersisted,
+} from "@/lib/storage-keys"
 
 export type RegistryStatus = "Active" | "Inactive"
 
@@ -80,7 +84,6 @@ type CommercialRegistriesStoreValue = CommercialRegistriesState & {
   deletePriceList: (id: string) => void
 }
 
-const STORAGE_KEY = "wastehero.commercial-registries.v1"
 const fixtureCreatedAt = "2026-01-01T00:00:00.000Z"
 
 const fixture = (name: string, extra?: Partial<ServiceLevel>) => ({
@@ -332,7 +335,10 @@ export function CommercialRegistriesStoreProvider({
   useEffect(() => {
     let parsed: unknown = null
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY)
+      const raw = readPersisted(
+        window.localStorage,
+        COMMERCIAL_REGISTRIES_STORAGE_KEY,
+      )
       parsed = raw ? JSON.parse(raw) : null
     } catch {
       // Safe fixture registries remain available when storage is unavailable.
@@ -354,7 +360,10 @@ export function CommercialRegistriesStoreProvider({
     const persist = () => {
       const { hydrated: _hydrated, ...persistable } = store.getSnapshot()
       try {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persistable))
+        window.localStorage.setItem(
+          COMMERCIAL_REGISTRIES_STORAGE_KEY,
+          JSON.stringify(persistable),
+        )
       } catch {
         // Keep the in-memory registries usable when persistence is blocked.
       }

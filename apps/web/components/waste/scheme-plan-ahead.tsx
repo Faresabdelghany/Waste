@@ -12,8 +12,8 @@ import { toast } from "sonner"
 import {
   useBusinessRecordStore,
   useBusinessRecordsHydrated,
-} from "@/components/wastehero/business-record-store"
-import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
+} from "@/components/waste/business-record-store"
+import { useModuleRecords } from "@/components/waste/scheme-route-map"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { runPlanAhead } from "@waste/domain/route-schemes/plan-ahead"
 import { todayIso } from "@waste/domain/route-schemes/recurrence"

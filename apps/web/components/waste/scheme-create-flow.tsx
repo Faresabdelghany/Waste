@@ -4,7 +4,7 @@
 // FR-14/FR-15, tickets #5/#6; collection groups: SPEC area L, D33–D36). "New
 // route scheme" opens a chooser between Quick create (the schema-driven
 // dialog, opened via onQuickCreate) and Guided Setup — the five-step wizard
-// in components/wastehero/scheme-wizard (2026-09-16 redesign): scheme &
+// in components/waste/scheme-wizard (2026-09-16 redesign): scheme &
 // scope, recurrence, collection groups, route map, review & create. Guided
 // completion hands the collected draft to onGuidedCreate, which owns record
 // creation and the Validated/Draft decision.
@@ -15,7 +15,7 @@ import { Plus } from "@phosphor-icons/react/dist/ssr"
 import { Button } from "@/components/ui/button"
 import { StepMode } from "@/components/project-wizard/steps/StepMode"
 import type { ProjectMode } from "@/components/project-wizard/types"
-import { SchemeWizard } from "@/components/wastehero/scheme-wizard/scheme-wizard"
+import { SchemeWizard } from "@/components/waste/scheme-wizard/scheme-wizard"
 import {
   resolvedDraftGroups,
   resolvedDraftPlans,

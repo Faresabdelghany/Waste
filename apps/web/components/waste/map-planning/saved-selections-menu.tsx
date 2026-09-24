@@ -17,7 +17,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { businessFilterChips, type BusinessFilters } from "@waste/domain/business-filters"
 import { formatShortDate } from "@/lib/map-planning/format"
 import {
-  SAVED_SELECTIONS_STORAGE_KEY,
   addSavedSelection,
   parseSavedSelections,
   removeSavedSelection,
@@ -25,6 +24,7 @@ import {
   serializeSavedSelections,
   type SavedSelection,
 } from "@/lib/map-planning/saved-selections"
+import { readPersisted, SAVED_SELECTIONS_STORAGE_KEY } from "@/lib/storage-keys"
 import { COLLECTION_WINDOW_LABELS, type CollectionWindow } from "@waste/domain/map-planning/schedule"
 import type { SelectionShape } from "@waste/domain/map-planning/selection"
 import { cn } from "@/lib/utils"
@@ -66,7 +66,11 @@ export function SavedSelectionsMenu({ shape, filters, window, onLoad }: SavedSel
   // first client render agree, and never write before reading.
   useEffect(() => {
     try {
-      setSelections(parseSavedSelections(globalThis.localStorage?.getItem(SAVED_SELECTIONS_STORAGE_KEY) ?? null))
+      setSelections(
+        parseSavedSelections(
+          readPersisted(globalThis.localStorage, SAVED_SELECTIONS_STORAGE_KEY),
+        ),
+      )
     } catch {
       // A blocked store leaves the menu empty but usable for the session.
     }

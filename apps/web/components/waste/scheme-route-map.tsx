@@ -10,7 +10,7 @@
 
 import { useState } from "react"
 
-import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
+import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import {
   getModuleDefinition,
   type BusinessRecord,

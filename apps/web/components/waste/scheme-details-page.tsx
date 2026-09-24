@@ -109,14 +109,14 @@ import { ChipOverflow } from "@/components/chip-overflow"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { StatRow } from "@/components/projects/StatRow"
 import { SidebarTrigger } from "@/components/ui/sidebar"
-import { BusinessFilterPopover } from "@/components/wastehero/business-filter-popover"
-import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
+import { BusinessFilterPopover } from "@/components/waste/business-filter-popover"
+import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import {
   NoMatchingRecords,
   statusClasses,
-} from "@/components/wastehero/business-record-views"
-import { RecordSearchInput } from "@/components/wastehero/record-search-input"
-import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
+} from "@/components/waste/business-record-views"
+import { RecordSearchInput } from "@/components/waste/record-search-input"
+import { useModuleRecords } from "@/components/waste/scheme-route-map"
 
 const GENERATED_AT_FORMAT = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",

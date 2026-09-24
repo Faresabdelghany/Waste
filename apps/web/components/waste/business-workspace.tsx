@@ -207,7 +207,7 @@ import { TaskRowBase } from "@/components/tasks/TaskRowBase"
 import {
   BusinessFilterPopover,
   canonicalCalendarName,
-} from "@/components/wastehero/business-filter-popover"
+} from "@/components/waste/business-filter-popover"
 import {
   businessFilterChips,
   emptyBusinessFilters,
@@ -216,7 +216,7 @@ import {
   type BusinessFilterKey,
   type BusinessFilters,
 } from "@waste/domain/business-filters"
-import { RecordSearchInput } from "@/components/wastehero/record-search-input"
+import { RecordSearchInput } from "@/components/waste/record-search-input"
 import {
   canonicalServiceFrequencyName,
   resolveServiceFrequencyValue,
@@ -229,7 +229,7 @@ import {
   type BusinessGroupOption,
   type BusinessViewOptions,
   type BusinessViewType,
-} from "@/components/wastehero/business-view-options-popover"
+} from "@/components/waste/business-view-options-popover"
 import {
   BusinessRecordBoardView,
   BusinessRecordCardsView,
@@ -238,25 +238,25 @@ import {
   recordProgress,
   statusClasses,
   type RecordExtraAction,
-} from "@/components/wastehero/business-record-views"
-import { BusinessRecordFormDialog } from "@/components/wastehero/business-record-form-dialog"
+} from "@/components/waste/business-record-views"
+import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import {
   RouteCreateEntry,
   type GuidedRouteData,
-} from "@/components/wastehero/route-create-flow"
+} from "@/components/waste/route-create-flow"
 import {
   SchemeCreateEntry,
   resolvedDraftGroups,
   resolvedDraftPlans,
   validateGuidedScheme,
   type GuidedSchemeData,
-} from "@/components/wastehero/scheme-create-flow"
-import { CollectionGroupsEditorDialog } from "@/components/wastehero/collection-groups-editor"
-import { SchemeGenerateRoutesDialog } from "@/components/wastehero/scheme-generate-routes"
-import { SchemeDetailsPage } from "@/components/wastehero/scheme-details-page"
-import { SchemePlanAheadRunner } from "@/components/wastehero/scheme-plan-ahead"
-import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
-import { useActiveRoutes } from "@/components/wastehero/active-routes-store"
+} from "@/components/waste/scheme-create-flow"
+import { CollectionGroupsEditorDialog } from "@/components/waste/collection-groups-editor"
+import { SchemeGenerateRoutesDialog } from "@/components/waste/scheme-generate-routes"
+import { SchemeDetailsPage } from "@/components/waste/scheme-details-page"
+import { SchemePlanAheadRunner } from "@/components/waste/scheme-plan-ahead"
+import { useBusinessRecordStore } from "@/components/waste/business-record-store"
+import { useActiveRoutes } from "@/components/waste/active-routes-store"
 import {
   useAssetManagementStore,
   type MeasurementSetting,
@@ -270,11 +270,11 @@ import {
   type PricingZone,
   type ServiceLevel,
 } from "@/components/settings/commercial-registries-store"
-import { ServiceProviderDetailsPage } from "@/components/wastehero/service-provider-details-page"
-import { ContainerDetailsSheet } from "@/components/wastehero/containers-assets-register"
-import { MapPlanningView } from "@/components/wastehero/map-planning/map-planning-view"
+import { ServiceProviderDetailsPage } from "@/components/waste/service-provider-details-page"
+import { ContainerDetailsSheet } from "@/components/waste/containers-assets-register"
+import { MapPlanningView } from "@/components/waste/map-planning/map-planning-view"
 import { SERVICE_AREAS_MODULE, serviceAreaFormValues } from "@/lib/data/service-areas"
-import { RouteDetailsPage } from "@/components/wastehero/route-details-page"
+import { RouteDetailsPage } from "@/components/waste/route-details-page"
 import { TicketDetailsDialog } from "@/components/tickets/TicketDetailsDialog"
 import { useOrganizationStore } from "@/components/settings/organization-store"
 import {

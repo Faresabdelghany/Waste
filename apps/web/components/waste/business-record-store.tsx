@@ -20,8 +20,10 @@ import {
   hasLegacyIds,
   migrateLegacyRecordBuckets,
 } from "@/lib/data/legacy-ids"
-
-const STORAGE_KEY = "wastehero-business-records-v1"
+import {
+  BUSINESS_RECORDS_STORAGE_KEY,
+  readPersisted,
+} from "@/lib/storage-keys"
 
 /**
  * Key renames specific to this store's records, on top of the shared map in
@@ -105,7 +107,10 @@ export function BusinessRecordStoreProvider({
   useEffect(() => {
     const store = stores.records
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY)
+      const raw = readPersisted(
+        window.localStorage,
+        BUSINESS_RECORDS_STORAGE_KEY,
+      )
       const parsed: unknown = raw ? JSON.parse(raw) : null
       if (isStoredRecords(parsed)) {
         // Browsers that wrote records before the Contractor → Service provider
@@ -126,7 +131,7 @@ export function BusinessRecordStoreProvider({
     const persist = () => {
       try {
         window.localStorage.setItem(
-          STORAGE_KEY,
+          BUSINESS_RECORDS_STORAGE_KEY,
           JSON.stringify(store.getSnapshot()),
         )
       } catch {

@@ -54,7 +54,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useModuleRecords } from "@/components/wastehero/scheme-route-map"
+import { useModuleRecords } from "@/components/waste/scheme-route-map"
 import {
   DropdownMenu,
   DropdownMenuContent,

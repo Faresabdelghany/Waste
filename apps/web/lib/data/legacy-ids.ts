@@ -2,7 +2,9 @@
  * Legacy identifiers from the Contractor → Service provider and
  * Contract area → Service area rename (2026-09-02), plus the Areas & Zones
  * move from the Plan workspace to Settings (2026-09-03, D37: the module key
- * `plan.areas` became `configure.areas`; record ids did not change).
+ * `plan.areas` became `configure.areas`; record ids did not change), plus the
+ * demo tenant's record id (2026-09-24, when the fixture company became
+ * Kystbyen Renovation A/S).
  *
  * Fixtures and code use the new ids only. Browser-local state (localStorage)
  * and bookmarked URLs written before the rename still carry the old ids, so
@@ -69,6 +71,19 @@ export const LEGACY_MODULE_KEYS: Readonly<Record<string, string>> = {
  * alone too. New ids never contain a legacy token, which is what makes the
  * rewrite idempotent.
  */
+/**
+ * Whole record ids that were renamed rather than re-tokenised. The demo
+ * tenant's company record is the only one: the fixture company took the
+ * working name of the product until 2026-09-24 and is now the fictional
+ * Kystbyen Renovation A/S. The id is persisted — it keys record buckets,
+ * `relationRefs` targets, role access maps and `?record=` bookmarks — so it
+ * is rewritten on load like every other retired id. The new id is absent from
+ * the map, which is what makes the rewrite idempotent.
+ */
+export const LEGACY_RECORD_IDS: Readonly<Record<string, string>> = {
+  "company-wastehero-dk": "company-kystbyen-dk",
+}
+
 export const LEGACY_ID_TOKENS: ReadonlyArray<readonly [string, string]> = [
   ["contract-areas", "service-areas"],
   ["contract-area", "service-area"],
@@ -209,10 +224,13 @@ function lookup(
 
 /**
  * Rewrites one id-shaped string (module id, module key, record id, enum
- * value). Anything that is not id-shaped — display text, names, dates with
- * spaces, camelCase field ids — is returned untouched.
+ * value): a wholly renamed record id first, then the token rewrite. Anything
+ * that is not id-shaped — display text, names, dates with spaces, camelCase
+ * field ids — is returned untouched.
  */
 export function migrateLegacyId(value: string): string {
+  const renamed = lookup(LEGACY_RECORD_IDS, value)
+  if (renamed !== undefined) return renamed
   if (!ID_SHAPE.test(value)) return value
   return value.replace(
     LEGACY_ID_TOKEN_PATTERN,
@@ -422,7 +440,8 @@ export function migrateLegacyRecordBuckets<R extends { id: string }>(
 }
 
 /**
- * True when serialized state still mentions a retired identifier or the moved
+ * True when serialized state still mentions a retired identifier (a legacy
+ * term, the demo tenant's old company id) or the moved
  * Areas & Zones module — as the `plan.areas` bucket/access key or as a stored
  * `workspaceId: "plan"` / `moduleId: "areas"` pair. A cheap, case-insensitive
  * pre-check — it may report free text such as "Subcontractor", so callers
@@ -430,7 +449,7 @@ export function migrateLegacyRecordBuckets<R extends { id: string }>(
  * actually changed.
  */
 export function hasLegacyIds(serialized: string): boolean {
-  return /contractor|contract[- ]?area|plan\.(?:areas|calendars)|"workspaceId":\s*"plan",\s*"moduleId":\s*"(?:areas|calendars)"/i.test(
+  return /contractor|contract[- ]?area|company-wastehero-dk|plan\.(?:areas|calendars)|"workspaceId":\s*"plan",\s*"moduleId":\s*"(?:areas|calendars)"/i.test(
     serialized,
   )
 }

@@ -19,7 +19,7 @@ export type WorkspaceId =
   | "configure"
   | "control-center"
 
-export const FIXTURE_COMPANY_ID = "company-wastehero-dk"
+export const FIXTURE_COMPANY_ID = "company-kystbyen-dk"
 
 export const FIXTURE_PROJECT_IDS = {
   copenhagen: "project-copenhagen",
@@ -241,7 +241,7 @@ const companyWideFixtureRecordIds = [
   "compliance-gps",
   "report-mgmt-july",
   "metric-proof",
-  "company-wastehero-dk",
+  "company-kystbyen-dk",
   "user-olivia",
   "role-service-provider-foreman",
   "user-temp",
@@ -2051,7 +2051,7 @@ const plan: WorkspaceDefinition = {
     // Map Planning (2026-09-16) replaced the Plan workspace's list modules:
     // a read-and-select surface over the container and property registry
     // with no records of its own — the module registers for navigation,
-    // permissions, and links; components/wastehero/map-planning renders it.
+    // permissions, and links; components/waste/map-planning renders it.
     {
       id: "map-planning",
       label: "Map Planning",
@@ -5681,7 +5681,7 @@ const configure: WorkspaceDefinition = {
       ],
       records: [
         record(
-          "company-wastehero-dk",
+          "company-kystbyen-dk",
           "Kystbyen Renovation A/S",
           "Company · tenant",
           "Active",

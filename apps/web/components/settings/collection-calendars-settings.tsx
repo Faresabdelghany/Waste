@@ -33,12 +33,12 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
-import { BusinessRecordFormDialog } from "@/components/wastehero/business-record-form-dialog"
+import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import {
   useBusinessRecordStore,
   useBusinessRecordsHydrated,
-} from "@/components/wastehero/business-record-store"
-import { statusClasses } from "@/components/wastehero/business-record-views"
+} from "@/components/waste/business-record-store"
+import { statusClasses } from "@/components/waste/business-record-views"
 import type {
   BusinessFormField,
   BusinessFormOption,

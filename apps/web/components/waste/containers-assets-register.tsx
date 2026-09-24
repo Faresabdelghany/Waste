@@ -70,7 +70,7 @@ import {
 import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAssetManagementStore } from "@/components/settings/asset-management-store"
-import { canonicalCalendarName } from "@/components/wastehero/business-filter-popover"
+import { canonicalCalendarName } from "@/components/waste/business-filter-popover"
 
 export type ContainerProjectScope = "copenhagen" | "harbor" | "all"
 

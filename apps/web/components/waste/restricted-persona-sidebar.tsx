@@ -40,12 +40,12 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { ProgressCircle } from "@/components/progress-circle"
-import { useBusinessRecordStore } from "@/components/wastehero/business-record-store"
+import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import {
   resolveActiveRouteSummaries,
   routeDayFixtures,
   useActiveRoutes,
-} from "@/components/wastehero/active-routes-store"
+} from "@/components/waste/active-routes-store"
 
 export type RestrictedPersona = "citizen" | "service-provider"
 

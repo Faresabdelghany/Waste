@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { BusinessFilterPopover } from "@/components/wastehero/business-filter-popover"
+import { BusinessFilterPopover } from "@/components/waste/business-filter-popover"
 import {
   businessFilterChips,
   removeBusinessFilterValue,

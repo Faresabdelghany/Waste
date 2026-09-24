@@ -13,8 +13,6 @@ import { useTheme } from "next-themes"
 
 import { createExternalStore, type ExternalStore } from "@/lib/external-store"
 import {
-  APP_THEME_SELECTION_STORAGE_KEY,
-  CUSTOM_THEME_STORAGE_KEY,
   defaultCustomTheme,
   defaultThemeSelection,
   getThemePreset,
@@ -25,6 +23,11 @@ import {
   type AppThemeSelection,
   type CustomThemePalette,
 } from "@/lib/app-themes"
+import {
+  APP_THEME_SELECTION_STORAGE_KEY,
+  CUSTOM_THEME_STORAGE_KEY,
+  readPersisted,
+} from "@/lib/storage-keys"
 
 type AppThemeContextValue = {
   selection: AppThemeSelection
@@ -97,7 +100,10 @@ function applyThemeSelection(
 
 function readStoredPalette(): CustomThemePalette {
   try {
-    const rawPalette = window.localStorage.getItem(CUSTOM_THEME_STORAGE_KEY)
+    const rawPalette = readPersisted(
+      window.localStorage,
+      CUSTOM_THEME_STORAGE_KEY,
+    )
     if (!rawPalette) return defaultCustomTheme
     const parsed: unknown = JSON.parse(rawPalette)
     return isCustomThemePalette(parsed)
@@ -114,7 +120,8 @@ function readStoredSelection(): AppThemeSelection {
   ).matches
 
   try {
-    const stored = window.localStorage.getItem(
+    const stored = readPersisted(
+      window.localStorage,
       APP_THEME_SELECTION_STORAGE_KEY,
     )
     const migratedStored = migrateThemeSelection(stored, prefersDark)
