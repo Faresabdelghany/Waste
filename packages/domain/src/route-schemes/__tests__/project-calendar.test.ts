@@ -157,6 +157,24 @@ describe("resolveProjectCalendar", () => {
     assert.equal(egyptian.list?.dates.get("2027-03-08"), "Holiday")
   })
 
+  test("a name a per-year record carries wins over the list's lookup; the lookup names the rest", () => {
+    const named = [
+      ...calendars,
+      stub("cal-cairo-named", "Cairo Operations 2028", {
+        projectIds: ["project-cairo"],
+        submittedValues: {
+          holidayDates: "2028-02-26, 2028-01-07",
+          holidayNames: JSON.stringify({ "2028-02-26": "Eid al-Fitr", "2028-01-07": "Coptic Christmas Day" }),
+        },
+      }),
+    ]
+    const list = resolveProjectCalendar("project-cairo", { projects, calendars: named }).list
+    assert.equal(list?.dates.get("2028-02-26"), "Eid al-Fitr")
+    assert.equal(list?.dates.get("2028-01-07"), "Coptic Christmas Day")
+    assert.equal(list?.dates.get("2027-01-07"), "Coptic Christmas")
+    assert.equal(list?.dates.get("2027-03-08"), "Holiday")
+  })
+
   test("no holidayList on the project means no list — dated calendars alone do not make one", () => {
     assert.equal(resolveProjectCalendar("project-harbor", { projects, calendars }).list, null)
     assert.equal(

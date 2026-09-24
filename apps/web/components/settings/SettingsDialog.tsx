@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import {
   Bell,
   CalendarBlank,
+  CalendarCheck,
   CaretLeft,
   CheckCircle,
   CreditCard,
@@ -49,6 +50,8 @@ import { AssetManagementSettings } from "@/components/settings/asset-management-
 import { CommercialDefaultsExtras, CommercialSectionPane } from "@/components/settings/commercial-settings"
 import { PlanningAreasSettings } from "@/components/settings/planning-areas-settings"
 import { CollectionCalendarsSettings } from "@/components/settings/collection-calendars-settings"
+import { HolidayListsSettings } from "@/components/settings/holiday-lists-settings"
+import { HOLIDAY_LISTS_SETTINGS_PANE_ID } from "@/lib/data/business-links"
 import { PLANNING_AREAS_SETTINGS_PANE_ID } from "@/lib/data/planning-areas"
 import { COLLECTION_CALENDARS_SETTINGS_PANE_ID } from "@/lib/data/collection-calendars"
 import { migrateLegacyId } from "@/lib/data/legacy-ids"
@@ -129,6 +132,8 @@ const settingsSections: Array<{
       { id: PLANNING_AREAS_SETTINGS_PANE_ID, label: "Areas & Zones", icon: MapTrifold },
       // Collection Calendars moved here from the Plan workspace (2026-09-16).
       { id: COLLECTION_CALENDARS_SETTINGS_PANE_ID, label: "Collection calendars", icon: CalendarBlank },
+      // Each project's holiday list — name, weekend, dated holidays per year (issue #36).
+      { id: HOLIDAY_LISTS_SETTINGS_PANE_ID, label: "Holiday lists", icon: CalendarCheck },
       { id: "operations-setup", label: "Operations setup", icon: SlidersHorizontal },
       { id: "ticket-comms", label: "Tickets & communication", icon: Bell },
     ],
@@ -446,9 +451,14 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
       },
     ],
   },
+  // The working week and the holiday lists left this group on 2026-09-24
+  // (issue #36): both are project attributes maintained under Holiday lists,
+  // so the static "Default working days" select and the "2027 holiday
+  // calendar" status that stood beside them are gone.
   calendars: {
-    title: "Calendars and working days",
-    description: "Week numbering, default working days, holidays, and service promises.",
+    title: "Calendars",
+    description:
+      "Week numbering. The working week and the holiday lists are set per project under Holiday lists.",
     groups: [
       {
         title: "Working calendar",
@@ -464,29 +474,6 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
               { value: "iso", label: "ISO weeks · Monday start" },
               { value: "custom", label: "Custom week numbering" },
             ],
-          },
-          {
-            id: "calendar-working-days",
-            label: "Default working days",
-            description: "Holiday dates skip individual service dates.",
-            scope: "Project",
-            type: "select",
-            value: "mon-fri",
-            options: [
-              { value: "mon-fri", label: "Monday–Friday" },
-              { value: "mon-sat", label: "Monday–Saturday" },
-              { value: "all", label: "All days" },
-            ],
-          },
-          {
-            id: "calendar-2027",
-            label: "2027 holiday calendar",
-            description: "Two replacement dates currently fall outside permitted working days.",
-            scope: "Project",
-            type: "status",
-            value: "2 validation issues",
-            tone: "danger",
-            action: "Resolve issues",
           },
         ],
       },
@@ -1314,6 +1301,12 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
       "The per-year holiday calendars of each project — the dated records behind the project's holiday list that route generation reads.",
     groups: [],
   },
+  [HOLIDAY_LISTS_SETTINGS_PANE_ID]: {
+    title: "Holiday lists",
+    description:
+      "Each project's holiday list: its name, the weekend the project rests on, and the dated holidays of every year.",
+    groups: [],
+  },
   access: {
     title: "Users and roles",
     description:
@@ -1323,7 +1316,7 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   "operations-setup": {
     title: "Operations setup",
     description:
-      "Calendars, working-day defaults, operational master data, maps, areas, zones, and location behavior.",
+      "Week numbering, operational master data, maps, areas, zones, and location behavior. The working week and the holiday lists are set per project under Holiday lists.",
     groups: [
       ...paneDefinitions.calendars.groups,
       ...paneDefinitions["master-data"].groups,
@@ -1443,18 +1436,15 @@ function initialSettingValues(): Record<string, SettingValue> {
   )
 }
 
-// Control ids renamed since values were first persisted (issue #14: the
-// working-days id collided with the retired plan.calendar-days module).
-// Stored values under the old id keep loading; the next save writes the new id.
-// Ids renamed on 2026-09-02 (the `service-providers-*` governance switches)
-// resolve through `migrateLegacyId` first, so the retired ids stay out of here.
-const legacySettingIds: Record<string, string> = {
-  "calendar-days": "calendar-working-days",
-}
-
+// Control ids renamed since values were first persisted resolve through
+// `migrateLegacyId` (the `service-providers-*` governance switches of
+// 2026-09-02). The one rename this map used to carry — issue #14's
+// `calendar-days` → `calendar-working-days` — went with the control on
+// 2026-09-24 (issue #36): the working week is the project's weekend now,
+// and a stored value under either id is dropped below like any other
+// value without a control.
 function migrateSettingId(controlId: string): string {
-  const migratedId = migrateLegacyId(controlId)
-  return legacySettingIds[migratedId] ?? migratedId
+  return migrateLegacyId(controlId)
 }
 
 function mergeStoredSettingValues(
@@ -1783,6 +1773,8 @@ function SettingsPane({
         <PlanningAreasSettings />
       ) : paneId === COLLECTION_CALENDARS_SETTINGS_PANE_ID ? (
         <CollectionCalendarsSettings />
+      ) : paneId === HOLIDAY_LISTS_SETTINGS_PANE_ID ? (
+        <HolidayListsSettings />
       ) : paneId.startsWith("commercial-") ? (
         <CommercialSectionPane paneId={paneId} />
       ) : (

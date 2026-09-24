@@ -21,7 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { HOLIDAY_SETTINGS_HREF } from "@/lib/data/business-links"
+import { holidaySettingsHref } from "@/lib/data/business-links"
 import { projectCalendarLabel } from "@waste/domain/route-schemes/project-calendar"
 import {
   formatClockTime,
@@ -205,7 +205,7 @@ export function StepRecurrence({
               className="h-auto shrink-0 p-0 text-xs text-current"
               asChild
             >
-              <Link href={HOLIDAY_SETTINGS_HREF}>Settings</Link>
+              <Link href={holidaySettingsHref(data.projectId)}>Settings</Link>
             </Button>
           </div>
         </div>

@@ -12,7 +12,10 @@ import {
   wizard,
 } from "../helpers/route-schemes"
 
-const HOLIDAY_SETTINGS_HREF = "/settings?pane=operations-setup"
+// Settings › Operations › Holiday lists, opened on the scheme's project
+// (lib/data/business-links.ts, holidaySettingsHref).
+const holidaySettingsHref = (projectId: string) =>
+  `/settings?pane=holiday-lists&project=${projectId}`
 
 const AREA_BY_PROJECT: Record<string, string> = {
   "Copenhagen Central": "Indre By Operations",
@@ -44,7 +47,7 @@ test("the holiday list and working week are one read-only field beside the polic
   await expect(field).not.toHaveClass(/amber/)
   await expect(field.getByRole("link", { name: "Settings", exact: true })).toHaveAttribute(
     "href",
-    HOLIDAY_SETTINGS_HREF,
+    holidaySettingsHref("project-copenhagen"),
   )
   // No "from project" wording, no holiday picker anywhere in the wizard.
   await expect(root.getByText(/from project/)).toHaveCount(0)
@@ -58,7 +61,10 @@ test("a project without a holiday list shows the amber field and treats every we
   const field = projectCalendarField(page)
   await expect(field).toContainText("None on this project · Sat–Sun weekend")
   await expect(field).toHaveClass(/amber/)
-  await expect(field.getByRole("link", { name: "Settings", exact: true })).toBeVisible()
+  await expect(field.getByRole("link", { name: "Settings", exact: true })).toHaveAttribute(
+    "href",
+    holidaySettingsHref("project-harbor"),
+  )
   await fillRecurrence(page, {
     effectiveFrom: "2026-12-21",
     effectiveTo: "2026-12-31",

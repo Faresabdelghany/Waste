@@ -59,7 +59,7 @@ import {
   weekendLabel,
   type ProjectCalendar,
 } from "@waste/domain/route-schemes/project-calendar"
-import { HOLIDAY_SETTINGS_HREF } from "@/lib/data/business-links"
+import { holidaySettingsHref } from "@/lib/data/business-links"
 import { HOLIDAY_POLICY_LABELS, type HolidayPolicy } from "@waste/domain/route-schemes/occurrences"
 import { stopRuleSummary } from "@waste/domain/route-schemes/matching"
 import { isPlanAheadEnabled, setPlanAhead } from "@waste/domain/route-schemes/plan-ahead"
@@ -468,7 +468,12 @@ export function SchemeDetailsPage({
           <SchemeStopsTab stops={schemeStops} generationBlocked={!canGenerate} />
         </TabsContent>
         <TabsContent value="holidays" className="mt-0 min-h-0 flex-1 overflow-y-auto">
-          <SchemeHolidaysTab calendar={projectCalendar} policy={holidayPolicy} today={today} />
+          <SchemeHolidaysTab
+            calendar={projectCalendar}
+            policy={holidayPolicy}
+            today={today}
+            projectId={schemeProjectId(record)}
+          />
         </TabsContent>
       </Tabs>
     </div>
@@ -1207,14 +1212,17 @@ function SchemeHolidaysTab({
   calendar,
   policy,
   today,
+  projectId,
 }: {
   calendar: ProjectCalendar
   policy: HolidayPolicy
   today: string
+  /** The scheme's project — Settings opens on its holiday list. */
+  projectId: string | undefined
 }) {
   const settingsLink = (
     <Button size="sm" variant="outline" asChild>
-      <Link href={HOLIDAY_SETTINGS_HREF}>
+      <Link href={holidaySettingsHref(projectId)}>
         <ArrowSquareOut className="h-4 w-4" />
         View in Settings
       </Link>
