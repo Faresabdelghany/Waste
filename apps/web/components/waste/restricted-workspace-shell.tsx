@@ -8,9 +8,11 @@ import {
   type RestrictedPersona,
 } from "@/components/waste/restricted-persona-sidebar"
 import {
+  FIXTURE_PROJECT_IDS,
   FIXTURE_SERVICE_PROVIDER_IDS,
   type WorkspaceId,
 } from "@/lib/data/business-modules"
+import type { ProjectScope } from "@/lib/data/project-scope"
 
 type RestrictedWorkspacePage = {
   id: string
@@ -26,7 +28,8 @@ type RestrictedWorkspacePage = {
 }
 
 type RestrictedWorkspaceDefinition = {
-  fixedProjectScope: "copenhagen" | "harbor" | "all"
+  /** The project record the persona works in — one of the organisation module's, or every permitted one. */
+  fixedProjectScope: ProjectScope
   fixedScopeLabel: string
   /** Every record and relation option is isolated to this service provider. */
   serviceProviderScopeId?: string
@@ -42,7 +45,7 @@ const restrictedWorkspaceDefinitions: Record<
   RestrictedWorkspaceDefinition
 > = {
   citizen: {
-    fixedProjectScope: "copenhagen",
+    fixedProjectScope: FIXTURE_PROJECT_IDS.copenhagen,
     fixedScopeLabel: "Østerbro Housing · Parkvej 18",
     pages: [
       {
@@ -61,7 +64,7 @@ const restrictedWorkspaceDefinitions: Record<
     ],
   },
   "service-provider": {
-    fixedProjectScope: "copenhagen",
+    fixedProjectScope: FIXTURE_PROJECT_IDS.copenhagen,
     fixedScopeLabel: "NordRen ApS · CA-Ø-2",
     serviceProviderScopeId: FIXTURE_SERVICE_PROVIDER_IDS.nordren,
     permissionsRoleId: "role-service-provider-manager",
