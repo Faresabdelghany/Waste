@@ -25,8 +25,17 @@
 // boundary; packages/db/src/__tests__/statuses.test.ts holds the two lists in
 // lockstep, so adding a status is one code change and one migration, never
 // half of each.
+//
+// A Project carries its working week (Issue #97): `weekend`, the days it
+// rests on, as a set of `ServiceDay`s from `planning.ts` (each named once,
+// possibly none), never derived from a weekday number since Cairo rests
+// Friday–Saturday; and `holidayList`, the name its holidays are looked up
+// under, null for a project that rests on its weekend only, whatever calendars
+// it has. A create body may leave both out and gets the database's defaults,
+// Saturday–Sunday and no list, which the schema says so the document does too.
 import * as z from "zod"
 
+import { ServiceDays } from "./planning"
 import { changesSomething, somethingToChange, stamped } from "./resource"
 import { Label } from "./text"
 
@@ -74,6 +83,9 @@ export const CompanyPatch = z
   .refine(changesSomething, somethingToChange)
 export type CompanyPatch = z.infer<typeof CompanyPatch>
 
+/** The working week the database gives a project that says nothing: Saturday and Sunday. */
+const DEFAULT_WEEKEND: ServiceDays = ["saturday", "sunday"]
+
 export const Project = z.object({
   ...stamped,
   name: Label,
@@ -83,6 +95,10 @@ export const Project = z.object({
   currency: Currency,
   timezone: Timezone,
   status: ProjectStatus,
+  /** The days the project rests on; a holiday policy shifts a collection past them. */
+  weekend: ServiceDays,
+  /** The name its holidays are looked up under (`Danish public holidays`); null is no list, and then the project rests on its weekend only. */
+  holidayList: Label.nullable(),
 })
 export type Project = z.infer<typeof Project>
 
@@ -93,6 +109,8 @@ export const ProjectCreate = z.strictObject({
   currency: Currency,
   timezone: Timezone,
   status: ProjectStatus.default("onboarding").describe("Defaults to onboarding when absent: a project is onboarding until it runs."),
+  weekend: ServiceDays.default(DEFAULT_WEEKEND).describe("Defaults to Saturday and Sunday when absent: the days the project rests on, each named once."),
+  holidayList: Label.nullable().optional().describe("Null or absent is no holiday list: the project then rests on its weekend only, whatever calendars it has."),
 })
 export type ProjectCreate = z.infer<typeof ProjectCreate>
 
@@ -104,6 +122,9 @@ export const ProjectPatch = z
     currency: Currency.optional(),
     timezone: Timezone.optional(),
     status: ProjectStatus.optional(),
+    weekend: ServiceDays.optional(),
+    /** Null drops the list; a name sets it. */
+    holidayList: Label.nullable().optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type ProjectPatch = z.infer<typeof ProjectPatch>

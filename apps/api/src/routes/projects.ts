@@ -21,6 +21,7 @@
 // → Company & Projects is one surface.
 import { Project, ProjectCreate, ProjectPatch, type ProjectStatus } from "@waste/contracts/organisation"
 import { Page, PageRequest } from "@waste/contracts/pagination"
+import type { ServiceDay } from "@waste/contracts/planning"
 import { project } from "@waste/db/schema/organisation"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -44,13 +45,15 @@ const columns = {
   currency: project.currency,
   timezone: project.timezone,
   status: project.status,
+  weekend: project.weekend,
+  holidayList: project.holidayList,
   createdAt: project.createdAt,
   updatedAt: project.updatedAt,
 }
 
 type Row = Pick<typeof project.$inferSelect, keyof typeof columns>
 
-/** The row on the wire. `status` is text with a CHECK in the database and this enum here; packages/db holds the two lists in lockstep. */
+/** The row on the wire. `status` is text with a CHECK in the database and this enum here; packages/db holds the two lists in lockstep. `weekend` is a `text[]` held to the seven by the same tuple the enum reads. */
 function projectOf(row: Row): Project {
   return {
     id: row.id,
@@ -60,6 +63,8 @@ function projectOf(row: Row): Project {
     currency: row.currency,
     timezone: row.timezone,
     status: row.status as ProjectStatus,
+    weekend: row.weekend as ServiceDay[],
+    holidayList: row.holidayList,
     ...stampsOf(row),
   }
 }

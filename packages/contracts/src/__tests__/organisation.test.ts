@@ -35,6 +35,8 @@ const project = {
   currency: "DKK",
   timezone: "Europe/Copenhagen",
   status: "onboarding",
+  weekend: ["saturday", "sunday"],
+  holidayList: "Danish public holidays",
   ...STAMPS,
 }
 
@@ -139,6 +141,20 @@ describe("Project", () => {
     }
   })
 
+  test("carries its working week (#97): the weekend a set of distinct days, possibly none, and the holiday list a label or null", () => {
+    const cairo = { ...project, weekend: ["friday", "saturday"], holidayList: "Egyptian public holidays" }
+    assert.deepEqual(Project.parse(cairo), cairo)
+    const restless = { ...project, weekend: [], holidayList: null }
+    assert.deepEqual(Project.parse(restless), restless)
+    assert.deepEqual(refusal(Project.safeParse({ ...project, weekend: ["saturday", "saturday"] })), [
+      { path: "weekend", message: "Name each day once: a set of days holds each day at most once" },
+    ])
+    assert.equal(Project.safeParse({ ...project, weekend: ["Saturday"] }).success, false)
+    assert.equal(Project.safeParse({ ...project, holidayList: "" }).success, false)
+    const { weekend: _weekend, ...withoutWeekend } = project
+    assert.equal(Project.safeParse(withoutWeekend).success, false, "the resource always says which days it rests on")
+  })
+
   test("takes an IANA timezone by shape: Area/Location, or UTC", () => {
     for (const timezone of ["Europe/Copenhagen", "Africa/Cairo", "America/Argentina/Buenos_Aires", "America/Port-au-Prince", "Etc/GMT+2", "UTC"]) {
       assert.equal(Project.parse({ ...project, timezone }).timezone, timezone, timezone)
@@ -162,6 +178,17 @@ describe("ProjectCreate", () => {
     assert.equal(ProjectCreate.parse(body).status, "onboarding")
     assert.equal(ProjectCreate.parse({ ...body, status: "active" }).status, "active")
     assert.match(ProjectCreate.shape.status.description ?? "", /onboarding/)
+  })
+
+  test("defaults the weekend to Saturday and Sunday and the holiday list to nothing, and says so in the schema (#97)", () => {
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, weekend: _weekend, holidayList: _holidayList, ...body } = project
+    const parsed = ProjectCreate.parse(body)
+    assert.deepEqual(parsed.weekend, ["saturday", "sunday"])
+    assert.equal(parsed.holidayList, undefined, "absent stays absent: the column's null is the database's")
+    assert.deepEqual(ProjectCreate.parse({ ...body, weekend: ["friday", "saturday"], holidayList: null }).weekend, ["friday", "saturday"])
+    assert.match(ProjectCreate.shape.weekend.description ?? "", /Saturday and Sunday/)
+    assert.match(ProjectCreate.shape.holidayList.description ?? "", /weekend only/)
+    assert.deepEqual(refusal(ProjectCreate.safeParse({ ...body, weekend: ["monday", "monday"] })).map((issue) => issue.path), ["weekend"])
   })
 
   test("needs a name, a kind, a language, a currency and a timezone", () => {
@@ -188,6 +215,13 @@ describe("ProjectPatch", () => {
     assert.deepEqual(refusal(ProjectPatch.safeParse({})), [{ path: "", message: "Give at least one field to change" }])
     assert.match(refusal(ProjectPatch.safeParse({ name: "x", id: ID }))[0].message, /id/)
     assert.equal(ProjectPatch.safeParse({ timezone: "Copenhagen" }).success, false)
+  })
+
+  test("moves the working week (#97): a new weekend, a new list, or null to drop the list", () => {
+    assert.deepEqual(ProjectPatch.parse({ weekend: ["friday", "saturday"] }), { weekend: ["friday", "saturday"] })
+    assert.deepEqual(ProjectPatch.parse({ holidayList: "Egyptian public holidays" }), { holidayList: "Egyptian public holidays" })
+    assert.deepEqual(ProjectPatch.parse({ holidayList: null }), { holidayList: null })
+    assert.deepEqual(refusal(ProjectPatch.safeParse({ weekend: ["sunday", "sunday"] })).map((issue) => issue.path), ["weekend"])
   })
 })
 
