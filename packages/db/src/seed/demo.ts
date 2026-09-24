@@ -1,5 +1,5 @@
 // The demo company, as `pnpm db:seed` writes it (Issue #70, slice 2): the
-// tenant the prototype has always shown — WasteHero Denmark, its three
+// tenant the prototype has always shown — Kystbyen Renovation, its three
 // projects, the two service providers it works with, the eleven seeded roles
 // with their grants, and the two accounts the login picker offers.
 //
@@ -31,11 +31,11 @@
 // What this seed reserves on a database it shares with the test suites, and
 // what a per-tenant test file must therefore not use:
 //
-//   DK / 38144209 — `unique (country, registration_number)` on `company` is
+//   DK / 12345678 — `unique (country, registration_number)` on `company` is
 //   global, so no other company on the database may carry that pair. A test
 //   company takes a registration number of its own.
 //
-//   olivia.larsen@wastehero.io and lars.mikkelsen@nordren.dk — the access
+//   olivia.larsen@kystbyen.example and lars.mikkelsen@nordren.dk — the access
 //   token hook binds a first sign-in by e-mail across the whole database, so
 //   an account elsewhere with one of these addresses would be bound by it and
 //   then refused by `unique (auth_user_id)`. A test account takes an address
@@ -102,9 +102,9 @@ const COMPANY_ID = DEMO_IDS.company
 const COMPANY: typeof company.$inferInsert = {
   id: COMPANY_ID,
   companyId: COMPANY_ID,
-  name: "WasteHero Denmark",
-  legalName: "WasteHero Denmark A/S",
-  registrationNumber: "38144209",
+  name: "Kystbyen Renovation",
+  legalName: "Kystbyen Renovation A/S",
+  registrationNumber: "12345678",
   country: "DK",
   status: "active",
 }
@@ -197,7 +197,7 @@ const USERS: (typeof userAccount.$inferInsert)[] = [
     companyId: COMPANY_ID,
     // The prototype spells this address two ways; the seed uses the one an
     // invitation can reach (lib/data/demo-accounts.ts), not `.example`.
-    email: "olivia.larsen@wastehero.io",
+    email: "olivia.larsen@kystbyen.example",
     fullName: "Olivia Larsen",
     roleId: DEMO_IDS.roles["company-administrator"],
     allProjects: true,

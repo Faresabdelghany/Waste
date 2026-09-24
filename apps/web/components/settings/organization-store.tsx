@@ -260,9 +260,9 @@ const fixtureState: OrganizationState = {
   companies: [
     {
       id: FIXTURE_COMPANY_ID,
-      name: "WasteHero Denmark",
-      legalName: "WasteHero Denmark A/S",
-      registrationNumber: "38144209",
+      name: "Kystbyen Renovation",
+      legalName: "Kystbyen Renovation A/S",
+      registrationNumber: "12345678",
       status: "Active",
       source: "fixture",
       createdAt: fixtureCreatedAt,
@@ -299,7 +299,7 @@ const fixtureState: OrganizationState = {
       id: "user-olivia",
       companyId: FIXTURE_COMPANY_ID,
       fullName: "Olivia Larsen",
-      email: "olivia.larsen@wastehero.example",
+      email: "olivia.larsen@kystbyen.example",
       role: "Company Administrator",
       status: "Active",
       accessMode: "all-company-projects",

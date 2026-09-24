@@ -16,9 +16,9 @@ export function LoginView() {
         <div className="px-6 pt-8 pb-6">
           <div className="flex flex-col items-center gap-1.5 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
-              <Image src="/logo-wrapper.png" alt="WasteHero" width={24} height={24} />
+              <Image src="/logo-wrapper.png" alt="Waste" width={24} height={24} />
             </div>
-            <h1 className="mt-2 text-xl font-semibold">Sign in to WasteHero</h1>
+            <h1 className="mt-2 text-xl font-semibold">Sign in to Waste</h1>
             <p className="text-sm text-muted-foreground">
               Choose an account to continue.
             </p>

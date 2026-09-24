@@ -182,7 +182,7 @@ const paneDefinitions: Record<string, SettingsPaneDefinition> = {
             description: "Used for authentication and configured notification delivery.",
             scope: "Personal",
             type: "input",
-            value: "olivia.larsen@wastehero.example",
+            value: "olivia.larsen@kystbyen.example",
           },
           {
             id: "account-role",

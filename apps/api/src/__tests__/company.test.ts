@@ -95,11 +95,11 @@ describe("the company endpoints", { skip: database.skip }, () => {
   describe("PATCH /company", () => {
     test("changes what an administrator may change and answers the row as it now stands", async () => {
       const before_ = await companyOf(olivia)
-      const response = await olivia("/company", { method: "PATCH", body: { name: "WasteHero Nord", legalName: "WasteHero Nord A/S" } })
+      const response = await olivia("/company", { method: "PATCH", body: { name: "Kystbyen Nord", legalName: "Kystbyen Nord A/S" } })
       assert.equal(response.status, 200)
       const body = Company.parse(await response.json())
-      assert.equal(body.name, "WasteHero Nord")
-      assert.equal(body.legalName, "WasteHero Nord A/S")
+      assert.equal(body.name, "Kystbyen Nord")
+      assert.equal(body.legalName, "Kystbyen Nord A/S")
       assert.equal(body.id, a.companyId)
       assert.equal(body.registrationNumber, before_.registrationNumber, "what the patch did not name it did not touch")
       assert.ok(body.updatedAt > before_.updatedAt, `${body.updatedAt} must be after ${before_.updatedAt}`)

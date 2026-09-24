@@ -58,7 +58,7 @@ Restricted persona surfaces sit alongside the internal workspaces:
 
 ### Domain language
 
-`CONTEXT.md` is the canonical glossary. Every term lists synonyms to avoid — use the exact terms in UI copy and identifiers (e.g. **Agreement** not Subscription, **Route Scheme** not Route, **Warehouse** not Depot, **Ticket** not Alert). In WasteHero language a **Project** is an operating scope (municipality, contract, region) — never a route.
+`CONTEXT.md` is the canonical glossary. Every term lists synonyms to avoid — use the exact terms in UI copy and identifiers (e.g. **Agreement** not Subscription, **Route Scheme** not Route, **Warehouse** not Depot, **Ticket** not Alert). In Waste language a **Project** is an operating scope (municipality, contract, region) — never a route.
 
 ## Getting Started
 

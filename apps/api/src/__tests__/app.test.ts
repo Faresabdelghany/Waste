@@ -102,7 +102,7 @@ describe("GET /openapi.json", () => {
     assert.match(response.headers.get("content-type") ?? "", /^application\/json/)
     const document = (await response.json()) as Spec
     assert.equal(document.openapi, "3.1.0")
-    assert.equal(document.info.title, "WasteHero API")
+    assert.equal(document.info.title, "Waste API")
     assert.equal(document.info.version, manifest.version)
     const result = await new Validator().validate(document)
     assert.equal(result.valid, true, JSON.stringify(result.errors))

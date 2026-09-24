@@ -191,7 +191,7 @@ describe("the Organisation & Access tables against a fresh database", { skip: da
   test("an e-mail is lowercase (23514 user_account_email_lowercase) and unique within the company (23505 user_account_email_key), not across companies", () =>
     seeded(async (tx) => {
       await assert.rejects(
-        tx.transaction((savepoint) => savepoint.insert(userAccount).values({ id: a.spare, companyId: a.company, email: "Olivia.Larsen@wastehero.io", fullName: "Olivia", roleId: a.role })),
+        tx.transaction((savepoint) => savepoint.insert(userAccount).values({ id: a.spare, companyId: a.company, email: "Olivia.Larsen@kystbyen.example", fullName: "Olivia", roleId: a.role })),
         refusedWith("23514", /user_account_email_lowercase/),
       )
       await assert.rejects(

@@ -19,9 +19,9 @@ const STAMPS = { createdAt: "2026-09-24T13:41:00.000Z", updatedAt: "2026-09-24T1
 
 const company = {
   id: ID,
-  name: "WasteHero Denmark",
-  legalName: "WasteHero Denmark A/S",
-  registrationNumber: "38144209",
+  name: "Kystbyen Renovation",
+  legalName: "Kystbyen Renovation A/S",
+  registrationNumber: "12345678",
   country: "DK",
   status: "active",
   ...STAMPS,
@@ -93,9 +93,9 @@ describe("Company", () => {
 
 describe("CompanyPatch", () => {
   test("changes what an administrator may change, one field or several", () => {
-    assert.deepEqual(CompanyPatch.parse({ name: "WasteHero DK" }), { name: "WasteHero DK" })
-    assert.deepEqual(CompanyPatch.parse({ legalName: "WasteHero DK A/S", registrationNumber: "12345678", country: "SE" }), {
-      legalName: "WasteHero DK A/S",
+    assert.deepEqual(CompanyPatch.parse({ name: "Kystbyen DK" }), { name: "Kystbyen DK" })
+    assert.deepEqual(CompanyPatch.parse({ legalName: "Kystbyen DK A/S", registrationNumber: "12345678", country: "SE" }), {
+      legalName: "Kystbyen DK A/S",
       registrationNumber: "12345678",
       country: "SE",
     })

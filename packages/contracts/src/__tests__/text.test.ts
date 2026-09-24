@@ -35,7 +35,7 @@ describe("Label", () => {
 
 describe("the schemas that take a label", () => {
   const project = { name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen" }
-  const invite = { email: "olivia.larsen@wastehero.io", fullName: "Olivia Larsen", roleId: ID, allProjects: true as const }
+  const invite = { email: "olivia.larsen@kystbyen.example", fullName: "Olivia Larsen", roleId: ID, allProjects: true as const }
 
   test("hold a write body to it: a blank name and a name past the bound are both refused, by path", () => {
     for (const name of ["   ", longer]) {
@@ -58,8 +58,8 @@ describe("the schemas that take a label", () => {
 
   test("hold GET /me to the same rule, so one spelling covers the resource and the summary of it", () => {
     const me = {
-      user: { id: ID, email: "olivia.larsen@wastehero.io", fullName: "Olivia Larsen", status: "active", allProjects: true, primaryAdministrator: true },
-      company: { id: ID, name: "WasteHero Denmark" },
+      user: { id: ID, email: "olivia.larsen@kystbyen.example", fullName: "Olivia Larsen", status: "active", allProjects: true, primaryAdministrator: true },
+      company: { id: ID, name: "Kystbyen Renovation" },
       role: { id: ID, key: "company-administrator", name: "Company Administrator", scope: "Company", system: true, grants: [] },
       projects: [{ id: ID, name: "Copenhagen Central" }],
       serviceProvider: null,

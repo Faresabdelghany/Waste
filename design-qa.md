@@ -17,9 +17,9 @@
 
 ## Full-view comparison
 
-The implementation reproduces the selected direction's essential composition and hierarchy: the WasteHero sidebar and dark theme, compact route-performance toolbar, horizontal four-metric strip, dominant throughput chart, actionable route-attention list, and dense sortable route-health table. The final desktop layout fits inside the `1536 × 1024` viewport without document scrolling or horizontal overflow.
+The implementation reproduces the selected direction's essential composition and hierarchy: the Waste sidebar and dark theme, compact route-performance toolbar, horizontal four-metric strip, dominant throughput chart, actionable route-attention list, and dense sortable route-health table. The final desktop layout fits inside the `1536 × 1024` viewport without document scrolling or horizontal overflow.
 
-Intentional product constraints are preserved: the existing WasteHero shell, Olivia Larsen profile, Settings and Ticket templates links, theme tokens, Phosphor icons, and project naming conventions remain in place instead of copying the generated mock's fictional user details.
+Intentional product constraints are preserved: the existing Waste shell, Olivia Larsen profile, Settings and Ticket templates links, theme tokens, Phosphor icons, and project naming conventions remain in place instead of copying the generated mock's fictional user details.
 
 ## Focused comparison
 
@@ -29,9 +29,9 @@ Required fidelity surfaces:
 
 - Fonts and typography: existing Geist/system product typography is preserved. Heading, body, metric, table, and metadata weights closely match the mock; no clipping or unwanted wrapping remains.
 - Spacing and layout rhythm: the implementation matches the mock's compact frame, toolbar, KPI strip, chart/list split, and table density. Dividers and shared surfaces provide most of the structure, with restrained borders and no nested card mosaic.
-- Colors and visual tokens: the active WasteHero dark-theme tokens are used throughout. Blue-violet primary, teal success, amber monitor, rose risk, and neutral graphite surfaces match the selected direction.
-- Image quality and asset fidelity: this analytical screen contains no raster content beyond the existing WasteHero logo and avatar. All UI marks use the project's existing Phosphor icon library and Recharts; no emoji, handcrafted SVG, CSS art, or placeholder imagery was introduced.
-- Copy and content: project-management concepts were replaced with the requested WasteHero route data: routes, stops, exceptions, proof completion, SLA performance, operating areas, and service types.
+- Colors and visual tokens: the active Waste dark-theme tokens are used throughout. Blue-violet primary, teal success, amber monitor, rose risk, and neutral graphite surfaces match the selected direction.
+- Image quality and asset fidelity: this analytical screen contains no raster content beyond the existing Waste logo and avatar. All UI marks use the project's existing Phosphor icon library and Recharts; no emoji, handcrafted SVG, CSS art, or placeholder imagery was introduced.
+- Copy and content: project-management concepts were replaced with the requested Waste route data: routes, stops, exceptions, proof completion, SLA performance, operating areas, and service types.
 
 ## Comparison history
 
@@ -78,9 +78,9 @@ Required fidelity surfaces:
 
 ## Implementation checklist
 
-- [x] Preserve the WasteHero shell and theme system.
+- [x] Preserve the Waste shell and theme system.
 - [x] Implement option 1's compact KPI, chart, attention list, and health table hierarchy.
-- [x] Replace demo project data with WasteHero operational route data.
+- [x] Replace demo project data with Waste operational route data.
 - [x] Keep filters, route drill-down, sorting, pagination, chart cadence, and Export functional.
 - [x] Verify desktop and mobile layout, browser console, TypeScript, production build, and visual fidelity.
 

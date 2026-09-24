@@ -8,7 +8,7 @@ import { SettingsWorkspace } from "@/components/settings/SettingsDialog"
 export const instant = false;
 
 export const metadata: Metadata = {
-  title: "Settings · WasteHero",
+  title: "Settings · Waste",
 }
 
 type SettingsPageProps = {

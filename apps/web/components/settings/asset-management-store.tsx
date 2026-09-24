@@ -474,7 +474,7 @@ const defaultState: AssetManagementState = {
     },
   ],
   importJobs: [],
-  locksmithEmail: "keys@wastehero.example",
+  locksmithEmail: "keys@kystbyen.example",
   features: {
     inventoryEnabled: true,
     wastewaterTreatmentEnabled: true,

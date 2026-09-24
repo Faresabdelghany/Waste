@@ -117,13 +117,13 @@ function organizationForRecord(record: BusinessRecord) {
   if (record.facts["Service provider"]) {
     return record.facts["Service provider"].replace(/\s+only$/i, "")
   }
-  return "WasteHero Denmark"
+  return "Kystbyen Renovation"
 }
 
 function emailForRecord(record: BusinessRecord) {
   if (record.submittedValues?.email) return String(record.submittedValues.email)
-  if (record.id === "user-olivia") return "olivia.larsen@wastehero.example"
-  if (record.id === "user-temp") return "integration.user@wastehero.example"
+  if (record.id === "user-olivia") return "olivia.larsen@kystbyen.example"
+  if (record.id === "user-temp") return "integration.user@kystbyen.example"
   return "Managed service provider account"
 }
 

@@ -6,13 +6,13 @@ import { Me } from "../me"
 const olivia = {
   user: {
     id: "01a0d2a4-a280-7005-8000-000000000001",
-    email: "olivia.larsen@wastehero.io",
+    email: "olivia.larsen@kystbyen.example",
     fullName: "Olivia Larsen",
     status: "active",
     allProjects: true,
     primaryAdministrator: true,
   },
-  company: { id: "01a0d2a4-a280-7001-8000-000000000001", name: "WasteHero Denmark" },
+  company: { id: "01a0d2a4-a280-7001-8000-000000000001", name: "Kystbyen Renovation" },
   role: {
     id: "01a0d2a4-a280-7004-8000-000000000001",
     key: "company-administrator",
@@ -38,7 +38,7 @@ const lars = {
     allProjects: false,
     primaryAdministrator: false,
   },
-  company: { id: "01a0d2a4-a280-7001-8000-000000000001", name: "WasteHero Denmark" },
+  company: { id: "01a0d2a4-a280-7001-8000-000000000001", name: "Kystbyen Renovation" },
   role: {
     id: "01a0d2a4-a280-7004-8000-000000000008",
     key: "service-provider-manager",

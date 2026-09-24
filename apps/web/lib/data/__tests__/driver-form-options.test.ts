@@ -16,9 +16,9 @@ const wh24 = record("vehicle-wh24", "WH-24 · CN 42 018", "Rear loader 18 t · N
 })
 
 describe("driverFormOptions", () => {
-  const madsRecord = record("driver-mads", "Mads Jensen", "WasteHero", { Licence: "C/CE · valid 2028" })
-  const emilRecord = record("driver-emil", "Emil Kristensen", "WasteHero", { Licence: "B · valid 2030" })
-  const unknownRecord = record("driver-new", "New Driver", "WasteHero", {})
+  const madsRecord = record("driver-mads", "Mads Jensen", "Kystbyen", { Licence: "C/CE · valid 2028" })
+  const emilRecord = record("driver-emil", "Emil Kristensen", "Kystbyen", { Licence: "B · valid 2030" })
+  const unknownRecord = record("driver-new", "New Driver", "Kystbyen", {})
 
   test("lists every driver; an ineligible one is disabled with the reason, unknown ⇒ ineligible", () => {
     assert.deepEqual(driverFormOptions([madsRecord, emilRecord, unknownRecord], wh24), [

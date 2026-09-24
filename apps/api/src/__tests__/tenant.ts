@@ -123,7 +123,7 @@ export async function seedTenant(pool: Database): Promise<Tenant> {
       companyId,
       name: tenant.name,
       legalName: `${tenant.name} A/S`,
-      // Eight digits like a CVR number; the demo company's is 38144209.
+      // Eight digits like a CVR number; the demo company's is 12345678.
       registrationNumber: String(randomInt(10_000_000, 100_000_000)),
       country: "DK",
       status: "active",

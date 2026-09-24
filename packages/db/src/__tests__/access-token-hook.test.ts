@@ -30,7 +30,7 @@ const HOOK = "public.custom_access_token_hook"
 const companyId = "018f7c2e-c000-7000-8000-000000000001"
 const roleId = "018f7c2e-c000-7000-8000-000000000002"
 // Addresses of this file's own: the hook binds by e-mail across the whole
-// database, so an address the demo seed also invited (olivia.larsen@wastehero.io,
+// database, so an address the demo seed also invited (olivia.larsen@kystbyen.example,
 // src/seed/demo.ts) would be bound twice and refused by `unique (auth_user_id)`.
 const accounts = {
   invited: { id: "018f7c2e-c000-7000-8000-000000000011", email: "invited.colleague@hook-test.example" },
@@ -94,7 +94,7 @@ describe("the access token hook against the database", { skip: database.skip }, 
     auth = createDb(withUser(database.adminUrl, AUTH_ADMIN), { max: 1 })
     await cleanUp()
     // This file's own company, not the demo seed's: `unique (country,
-    // registration_number)` is global, and `pnpm db:seed` owns DK 38144209 on
+    // registration_number)` is global, and `pnpm db:seed` owns DK 12345678 on
     // this shared database (src/seed/demo.ts).
     await owner.db.insert(company).values({ id: companyId, companyId, name: "Hook Test A/S", legalName: "Hook Test ApS", registrationNumber: "99000001", country: "DK", status: "active" })
     await owner.db.insert(role).values({ id: roleId, companyId, key: "company-administrator", name: "Company Administrator", scope: "Company", description: "Everything in the company", system: true })

@@ -86,7 +86,7 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     return row
   }
 
-  test("a clean database becomes WasteHero Denmark: three projects, two service providers, eleven roles with their grants, two accounts", async () => {
+  test("a clean database becomes Kystbyen Renovation: three projects, two service providers, eleven roles with their grants, two accounts", async () => {
     const report = await seedDemo(fresh.url)
     assert.equal(report.companyId, DEMO_IDS.company)
     assert.ok(report.changed > 0)
@@ -105,9 +105,9 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
       {
         id: DEMO_IDS.company,
         companyId: DEMO_IDS.company,
-        name: "WasteHero Denmark",
-        legalName: "WasteHero Denmark A/S",
-        registrationNumber: "38144209",
+        name: "Kystbyen Renovation",
+        legalName: "Kystbyen Renovation A/S",
+        registrationNumber: "12345678",
         country: "DK",
         status: "active",
         createdAt: undefined,
@@ -150,7 +150,7 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
       accounts.map((row) => [row.id, row.email, row.fullName, row.allProjects, row.primaryAdministrator, row.serviceProviderId, row.authUserId, row.deactivatedAt]),
       [
         [DEMO_IDS.users.lars, "lars.mikkelsen@nordren.dk", "Lars Mikkelsen", false, false, DEMO_IDS.serviceProviders.nordren, null, null],
-        [DEMO_IDS.users.olivia, "olivia.larsen@wastehero.io", "Olivia Larsen", true, true, null, null, null],
+        [DEMO_IDS.users.olivia, "olivia.larsen@kystbyen.example", "Olivia Larsen", true, true, null, null, null],
       ],
     )
   })
@@ -194,7 +194,7 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
 
   test("what someone edited by hand goes back to what the seed says, and a grant the charter does not name is removed", async () => {
     const settled = await snapshot()
-    await owner.db.update(company).set({ name: "WasteHero Sverige" }).where(eq(company.id, DEMO_IDS.company))
+    await owner.db.update(company).set({ name: "Kystbyen Sverige" }).where(eq(company.id, DEMO_IDS.company))
     // A camelCase column too: `set` is keyed by the property name and the
     // column is `contact_email` in the database, which is what `propertyOf`
     // is for — an edit here that did not come back would mean the seed had
@@ -215,7 +215,7 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     const report = await seedDemo(fresh.url)
     assert.ok(report.changed > 0)
     const [restored] = await owner.db.select().from(company)
-    assert.equal(restored.name, "WasteHero Denmark")
+    assert.equal(restored.name, "Kystbyen Renovation")
     const [nordren] = await owner.db.select().from(serviceProvider).where(eq(serviceProvider.id, DEMO_IDS.serviceProviders.nordren))
     assert.equal(nordren.contactEmail, "lars.mikkelsen@nordren.dk")
     const driverGrants = await owner.db.select().from(roleGrant).where(eq(roleGrant.roleId, DEMO_IDS.roles.driver))

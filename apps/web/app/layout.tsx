@@ -28,7 +28,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "WasteHero Operations",
+  title: "Waste Operations",
   description: "Plan, deliver, monitor, and improve waste and recycling services.",
   icons: {
     icon: "/icon.png",

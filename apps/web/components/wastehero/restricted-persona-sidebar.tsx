@@ -133,10 +133,10 @@ function ServiceProviderManagerSidebar() {
         <div className="flex items-center">
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-              <Image src="/logo-wrapper.png" alt="WasteHero" width={16} height={16} />
+              <Image src="/logo-wrapper.png" alt="Waste" width={16} height={16} />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-semibold">WasteHero</span>
+              <span className="text-sm font-semibold">Waste</span>
               <span className="text-xs text-sidebar-foreground/60">NordRen ApS</span>
             </div>
           </div>
@@ -264,10 +264,10 @@ export function RestrictedPersonaSidebar({ persona }: RestrictedPersonaSidebarPr
       <SidebarHeader className="gap-4 p-4">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-            <Image src="/logo-wrapper.png" alt="WasteHero" width={16} height={16} />
+            <Image src="/logo-wrapper.png" alt="Waste" width={16} height={16} />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-semibold">WasteHero</p>
+            <p className="text-sm font-semibold">Waste</p>
             <p className="truncate text-xs text-sidebar-foreground/60">{definition.personaLabel}</p>
           </div>
         </div>

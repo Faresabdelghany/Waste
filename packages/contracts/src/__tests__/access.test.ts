@@ -11,7 +11,7 @@ const STAMPS = { createdAt: "2026-09-24T13:41:00.000Z", updatedAt: "2026-09-24T1
 
 const user = {
   id: ID,
-  email: "olivia.larsen@wastehero.io",
+  email: "olivia.larsen@kystbyen.example",
   fullName: "Olivia Larsen",
   status: "active",
   roleId: ROLE_ID,
@@ -89,7 +89,7 @@ describe("User", () => {
 })
 
 describe("UserInvite", () => {
-  const invite = { email: "new.colleague@wastehero.io", fullName: "New Colleague", roleId: ROLE_ID }
+  const invite = { email: "new.colleague@kystbyen.example", fullName: "New Colleague", roleId: ROLE_ID }
 
   test("takes exactly one of the three ways to reach something", () => {
     assert.deepEqual(UserInvite.parse({ ...invite, allProjects: true }), { ...invite, allProjects: true })
@@ -135,7 +135,7 @@ describe("UserInvite", () => {
   })
 
   test("keeps the e-mail as it was typed: lowercasing is the route's, before the database sees it", () => {
-    assert.equal(UserInvite.parse({ ...invite, email: "New.Colleague@WasteHero.io", allProjects: true }).email, "New.Colleague@WasteHero.io")
+    assert.equal(UserInvite.parse({ ...invite, email: "New.Colleague@Kystbyen.example", allProjects: true }).email, "New.Colleague@Kystbyen.example")
   })
 })
 

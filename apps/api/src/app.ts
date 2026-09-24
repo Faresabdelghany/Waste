@@ -120,7 +120,7 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
     openAPIRouteHandler(app, {
       documentation: {
         info: {
-          title: "WasteHero API",
+          title: "Waste API",
           version: manifest.version,
           description: "The only web boundary to domain data (ADR-0001). Every route but the probes and this document takes a Supabase access token as a bearer token; every error is an RFC 9457 problem.",
         },

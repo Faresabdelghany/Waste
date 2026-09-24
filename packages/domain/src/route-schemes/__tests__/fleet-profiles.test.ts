@@ -87,18 +87,18 @@ describe("vehicleProfile", () => {
 
 describe("drivers", () => {
   const mads = driverProfile(
-    record("driver-mads", "Mads Jensen", "WasteHero · residual · mixed", { Licence: "C/CE · valid 2028" }),
+    record("driver-mads", "Mads Jensen", "Kystbyen · residual · mixed", { Licence: "C/CE · valid 2028" }),
   )
   const freja = driverProfile(
-    record("driver-freja", "Freja Nielsen", "WasteHero · glass · crane", {
+    record("driver-freja", "Freja Nielsen", "Kystbyen · glass · crane", {
       Licence: "C/CE + crane · valid 2027",
     }),
   )
   const lars = driverProfile(
     record("driver-lars", "Lars Møller", "NordRen ApS · organic", { Licence: "C · expires 5 Sep 2026" }),
   )
-  const emil = driverProfile(record("driver-emil", "Emil Kristensen", "WasteHero", { Licence: "B · valid 2030" }))
-  const unknown = driverProfile(record("driver-new", "New Driver", "WasteHero", {}))
+  const emil = driverProfile(record("driver-emil", "Emil Kristensen", "Kystbyen", { Licence: "B · valid 2030" }))
+  const unknown = driverProfile(record("driver-new", "New Driver", "Kystbyen", {}))
 
   test("parses licence classes out of the free-text fact", () => {
     assert.deepEqual(mads.licences, ["C", "CE"])
@@ -159,9 +159,9 @@ describe("drivers", () => {
   })
 
   test("driverIneligibilityReason: the reason beside a disabled driver, unknown ⇒ ineligible, nothing judged without a vehicle", () => {
-    const madsRecord = record("driver-mads", "Mads Jensen", "WasteHero", { Licence: "C/CE · valid 2028" })
-    const emilRecord = record("driver-emil", "Emil Kristensen", "WasteHero", { Licence: "B · valid 2030" })
-    const unknownRecord = record("driver-new", "New Driver", "WasteHero", {})
+    const madsRecord = record("driver-mads", "Mads Jensen", "Kystbyen", { Licence: "C/CE · valid 2028" })
+    const emilRecord = record("driver-emil", "Emil Kristensen", "Kystbyen", { Licence: "B · valid 2030" })
+    const unknownRecord = record("driver-new", "New Driver", "Kystbyen", {})
     assert.equal(driverIneligibilityReason(emilRecord, wh24), "Needs C licence")
     assert.equal(driverIneligibilityReason(unknownRecord, wh24), NO_LICENCE_ON_RECORD)
     assert.equal(driverIneligibilityReason(madsRecord, wh24), undefined)
