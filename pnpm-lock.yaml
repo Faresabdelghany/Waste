@@ -456,6 +456,9 @@ importers:
 
   packages/contracts:
     dependencies:
+      '@waste/domain':
+        specifier: workspace:*
+        version: link:../domain
       zod:
         specifier: ^4.6.5
         version: 4.6.5
@@ -481,6 +484,9 @@ importers:
       '@waste/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@waste/domain':
+        specifier: workspace:*
+        version: link:../domain
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(postgres@3.4.9)

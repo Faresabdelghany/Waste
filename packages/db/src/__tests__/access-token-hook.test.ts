@@ -29,10 +29,13 @@ const HOOK = "public.custom_access_token_hook"
 
 const companyId = "018f7c2e-c000-7000-8000-000000000001"
 const roleId = "018f7c2e-c000-7000-8000-000000000002"
+// Addresses of this file's own: the hook binds by e-mail across the whole
+// database, so an address the demo seed also invited (olivia.larsen@wastehero.io,
+// src/seed/demo.ts) would be bound twice and refused by `unique (auth_user_id)`.
 const accounts = {
-  invited: { id: "018f7c2e-c000-7000-8000-000000000011", email: "olivia.larsen@wastehero.io" },
-  deactivated: { id: "018f7c2e-c000-7000-8000-000000000012", email: "former.colleague@wastehero.io" },
-  neverBound: { id: "018f7c2e-c000-7000-8000-000000000013", email: "left.before.signing.in@wastehero.io" },
+  invited: { id: "018f7c2e-c000-7000-8000-000000000011", email: "invited.colleague@hook-test.example" },
+  deactivated: { id: "018f7c2e-c000-7000-8000-000000000012", email: "former.colleague@hook-test.example" },
+  neverBound: { id: "018f7c2e-c000-7000-8000-000000000013", email: "left.before.signing.in@hook-test.example" },
 }
 /** The auth users, one per account and one nobody invited into the company. */
 const authUsers = {
@@ -90,10 +93,13 @@ describe("the access token hook against the database", { skip: database.skip }, 
     owner = createDb(database.adminUrl, { max: 2 })
     auth = createDb(withUser(database.adminUrl, AUTH_ADMIN), { max: 1 })
     await cleanUp()
-    await owner.db.insert(company).values({ id: companyId, companyId, name: "WasteHero Denmark", legalName: "WasteHero ApS", registrationNumber: "38144209", country: "DK", status: "active" })
+    // This file's own company, not the demo seed's: `unique (country,
+    // registration_number)` is global, and `pnpm db:seed` owns DK 38144209 on
+    // this shared database (src/seed/demo.ts).
+    await owner.db.insert(company).values({ id: companyId, companyId, name: "Hook Test A/S", legalName: "Hook Test ApS", registrationNumber: "99000001", country: "DK", status: "active" })
     await owner.db.insert(role).values({ id: roleId, companyId, key: "company-administrator", name: "Company Administrator", scope: "Company", description: "Everything in the company", system: true })
     await owner.db.insert(userAccount).values([
-      { id: accounts.invited.id, companyId, email: accounts.invited.email, fullName: "Olivia Larsen", roleId, allProjects: true, primaryAdministrator: true },
+      { id: accounts.invited.id, companyId, email: accounts.invited.email, fullName: "Invited Colleague", roleId, allProjects: true, primaryAdministrator: true },
       { id: accounts.deactivated.id, companyId, email: accounts.deactivated.email, fullName: "Former Colleague", roleId, authUserId: authUsers.deactivated, deactivatedAt: new Date("2026-09-01T09:00:00Z") },
       { id: accounts.neverBound.id, companyId, email: accounts.neverBound.email, fullName: "Left Before Signing In", roleId, deactivatedAt: new Date("2026-09-02T09:00:00Z") },
     ])
@@ -127,7 +133,7 @@ describe("the access token hook against the database", { skip: database.skip }, 
 
   test("first sign-in binds the invited account by its e-mail, case-insensitively, and adds app_metadata.company_id, every other claim untouched", async () => {
     assert.equal(await boundTo(accounts.invited.id), null)
-    const input = event(authUsers.invited, "Olivia.Larsen@WasteHero.io", { provider: "email", providers: ["email"] })
+    const input = event(authUsers.invited, "Invited.Colleague@Hook-Test.Example", { provider: "email", providers: ["email"] })
     const result = await hook(input)
     assert.deepEqual(result, {
       ...input,

@@ -1,3 +1,5 @@
+import { SYSTEM_ROLES } from "@waste/domain/access/system-roles"
+
 import {
   businessWorkspaces,
   type WorkspaceId,
@@ -89,136 +91,19 @@ export function isRoleAccessMap(value: unknown): value is RoleAccessMap {
   )
 }
 
-const ALL_ACTIONS: RolePermissionAction[] = [...ROLE_PERMISSION_ACTIONS]
-const VIEW_EDIT: RolePermissionAction[] = ["view", "edit"]
-const VIEW_EDIT_CREATE: RolePermissionAction[] = ["view", "edit", "create"]
-const VIEW_ONLY: RolePermissionAction[] = ["view"]
-
-function workspaceGrant(
-  workspaceId: WorkspaceId,
-  actions: RolePermissionAction[],
-): RoleAccessMap {
-  const grant: RoleAccessMap = {}
-  for (const module of businessWorkspaces[workspaceId].modules) {
-    grant[`${workspaceId}.${module.id}`] = [...actions]
-  }
-  return grant
-}
-
-function mergeAccess(...maps: RoleAccessMap[]): RoleAccessMap {
-  const merged: RoleAccessMap = {}
-  for (const map of maps) {
-    for (const [key, actions] of Object.entries(map)) {
-      merged[key] = [...new Set([...(merged[key] ?? []), ...actions])]
-    }
-  }
-  return merged
-}
-
 // Seeded grants for the built-in roles, keyed by fixture role id, so the
-// permission matrix reflects each role's charter out of the box. Custom roles
-// (and any unknown id) start with nothing granted.
-const DEFAULT_ROLE_ACCESS: Record<string, RoleAccessMap> = {
-  "role-company-administrator": mergeAccess(
-    ...SECTION_ORDER.map((workspaceId) =>
-      workspaceGrant(workspaceId, ALL_ACTIONS),
-    ),
-  ),
-  "role-operations-manager": mergeAccess(
-    workspaceGrant("operate", ALL_ACTIONS),
-    workspaceGrant("plan", ALL_ACTIONS),
-    workspaceGrant("route-studio", ALL_ACTIONS),
-    workspaceGrant("fleet", ALL_ACTIONS),
-    workspaceGrant("resources", VIEW_EDIT),
-    workspaceGrant("service-providers", VIEW_EDIT),
-    workspaceGrant("customers", VIEW_ONLY),
-    workspaceGrant("commercial", VIEW_ONLY),
-    workspaceGrant("improve", VIEW_ONLY),
-    {
-      // Areas & Zones (2026-09-03, D37) and Collection Calendars (2026-09-16)
-      // moved from Plan to Settings: the roles that had full Plan access keep
-      // full access to both modules.
-      "configure.areas": ALL_ACTIONS,
-      "configure.calendars": ALL_ACTIONS,
-      "configure.master": VIEW_EDIT,
-      "configure.templates": VIEW_EDIT,
-    },
-  ),
-  "role-dispatcher": mergeAccess(
-    workspaceGrant("operate", VIEW_EDIT_CREATE),
-    workspaceGrant("route-studio", VIEW_EDIT),
-    workspaceGrant("fleet", VIEW_ONLY),
-    workspaceGrant("customers", VIEW_ONLY),
-    { "improve.performance": VIEW_ONLY },
-  ),
-  "role-route-planner": mergeAccess(
-    workspaceGrant("plan", ALL_ACTIONS),
-    workspaceGrant("route-studio", ALL_ACTIONS),
-    workspaceGrant("fleet", VIEW_ONLY),
-    workspaceGrant("customers", VIEW_ONLY),
-    workspaceGrant("resources", VIEW_ONLY),
-    {
-      "configure.areas": ALL_ACTIONS,
-      "configure.calendars": ALL_ACTIONS,
-      "improve.analytics": VIEW_ONLY,
-    },
-  ),
-  "role-fleet-manager": mergeAccess(
-    workspaceGrant("fleet", ALL_ACTIONS),
-    workspaceGrant("resources", VIEW_EDIT),
-    workspaceGrant("route-studio", VIEW_ONLY),
-    workspaceGrant("operate", VIEW_ONLY),
-    workspaceGrant("improve", VIEW_ONLY),
-  ),
-  "role-customer-service": mergeAccess(
-    workspaceGrant("customers", VIEW_EDIT_CREATE),
-    workspaceGrant("operate", VIEW_EDIT_CREATE),
-    {
-      "commercial.invoices": VIEW_ONLY,
-      "configure.templates": VIEW_EDIT,
-    },
-  ),
-  "role-finance-specialist": mergeAccess(
-    workspaceGrant("commercial", ALL_ACTIONS),
-    workspaceGrant("customers", VIEW_ONLY),
-    workspaceGrant("service-providers", VIEW_ONLY),
-    workspaceGrant("improve", VIEW_ONLY),
-    { "configure.finance": VIEW_EDIT },
-  ),
-  "role-service-provider-manager": mergeAccess(
-    workspaceGrant("service-providers", VIEW_EDIT),
-    workspaceGrant("fleet", VIEW_EDIT),
-    workspaceGrant("route-studio", VIEW_ONLY),
-    workspaceGrant("operate", VIEW_ONLY),
-    {
-      // The restricted service provider workspace reads these grants live: fleet is
-      // fully self-managed, tickets can be raised, and service provider users are
-      // fully administered by the manager — while routes stay read-only.
-      "fleet.vehicles": ALL_ACTIONS,
-      "fleet.drivers": ALL_ACTIONS,
-      "operate.tickets": ["view", "create"],
-      "service-providers.service-provider-workspace": ALL_ACTIONS,
-      "commercial.service-provider-prices": VIEW_ONLY,
-      "commercial.settlements": VIEW_ONLY,
-    },
-  ),
-  "role-service-provider-foreman": mergeAccess(
-    workspaceGrant("service-providers", VIEW_ONLY),
-    workspaceGrant("fleet", VIEW_EDIT),
-    workspaceGrant("route-studio", VIEW_ONLY),
-    workspaceGrant("operate", VIEW_ONLY),
-  ),
-  "role-driver": {
-    "operate.driver-app": VIEW_EDIT,
-    "route-studio.routes": VIEW_ONLY,
-    "route-studio.pickups": VIEW_EDIT,
-  },
-  "role-integration-writer": {
-    "improve.imports": VIEW_EDIT_CREATE,
-    "configure.integrations": VIEW_EDIT,
-    "configure.privacy": VIEW_ONLY,
-  },
-}
+// permission matrix reflects each role's charter out of the box. The charters
+// themselves live in @waste/domain/access/system-roles, where the database
+// seed reads them too (Issue #70): one source for the grants a company starts
+// with, whether they are drawn as a matrix or written as `role_grant` rows.
+// The web's fixture roles are ided `role-<key>`; custom roles (and any unknown
+// id) start with nothing granted.
+const DEFAULT_ROLE_ACCESS: Record<string, RoleAccessMap> = Object.fromEntries(
+  SYSTEM_ROLES.map((role) => [
+    `role-${role.key}`,
+    Object.fromEntries(role.grants.map((grant) => [grant.moduleKey, [...grant.actions]])),
+  ]),
+)
 
 export function defaultAccessForRole(roleId: string): RoleAccessMap {
   const defaults = DEFAULT_ROLE_ACCESS[roleId]

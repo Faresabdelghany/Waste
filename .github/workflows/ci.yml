@@ -45,6 +45,9 @@ jobs:
       - run: pnpm db:start
       - run: pnpm db:migrate
       - run: pnpm db:bootstrap
+      # The demo company, as a fresh clone gets it: the seed is idempotent, so
+      # this is also the step that would catch a seed that writes twice.
+      - run: pnpm db:seed
 
       - run: pnpm test
       - run: pnpm build

@@ -14,7 +14,8 @@
     "db:stop": "supabase stop",
     "db:generate": "pnpm --filter @waste/db generate",
     "db:migrate": "pnpm --filter @waste/db migrate",
-    "db:bootstrap": "pnpm --filter @waste/db bootstrap"
+    "db:bootstrap": "pnpm --filter @waste/db bootstrap",
+    "db:seed": "pnpm --filter @waste/db seed"
   },
   "devDependencies": {
     "@typescript/native": "npm:typescript@^7.0.2",
