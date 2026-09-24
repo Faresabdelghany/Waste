@@ -1,10 +1,11 @@
 // The company's user accounts: who may sign in here, as whom, and what they
 // reach. `GET /users` lists them a page at a time, `POST /users` invites one,
-// `GET /users/:id` reads one, `PATCH /users/:id` changes one, and the two
-// commands switch an account off and on again. There is no delete: an account
-// that has worked has routes, tickets and weights behind it, and taking away
-// its access is what "remove a user" means (Supabase's auth user is theirs to
-// delete, not ours — the API holds no service key).
+// `GET /users/:id` reads one, `PATCH /users/:id` changes one, and three
+// commands switch an account off, on again, and make it the primary
+// administrator. There is no delete: an account that has worked has routes,
+// tickets and weights behind it, and taking away its access is what "remove a
+// user" means (Supabase's auth user is theirs to delete, not ours — the API
+// holds no service key).
 //
 // An invitation writes the account with no login bound, so its status is
 // `invited`; the invitation e-mail itself is Supabase's. The e-mail is
@@ -25,7 +26,12 @@
 // The primary administrator is the tenant's last way in: it cannot be
 // deactivated, moved to another role, or narrowed to some projects or to a
 // provider. Each is a 409 with a sentence stating the rule, because the
-// request is well-formed and would be fine against another account.
+// request is well-formed and would be fine against another account. The flag
+// itself moves through one command, `POST /users/:id/make-primary-administrator`
+// (Issue #73), to an account that is active and reaches every project; the
+// partial unique index allows one holder per company, so the command takes
+// the flag off the old holder before it puts it on the new one, in one
+// transaction under the company's row lock.
 //
 // A body naming a role, a project or a provider that is not this company's is
 // a 400 on that field, not a 500 from a foreign key: the fence hides the
@@ -34,13 +40,16 @@
 // beside the fence (ADR-0001: the API is the authority, RLS the backstop).
 //
 // The grant is `configure.access`, the one Settings → Users, Roles & Teams
-// surface: `view` to look, `create` to invite, `edit` to change, deactivate
-// or reactivate.
+// surface: `view` to look, `create` to invite, `edit` to change, deactivate,
+// reactivate or move the primary administrator's flag — `edit` and not the
+// primary administrator alone, because the flag usually moves when its holder
+// has left, and whoever is left must be able to move it before they can
+// deactivate them.
 import { User, UserInvite, UserPatch } from "@waste/contracts/access"
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { projectAccess, role, serviceProviderAccess, userAccount } from "@waste/db/schema/access"
-import { project, serviceProvider } from "@waste/db/schema/organisation"
+import { company, project, serviceProvider } from "@waste/db/schema/organisation"
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -51,7 +60,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { describeJson, IdParam, lockRow, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "configure.access"
 const UserPage = Page(User)
@@ -133,14 +142,21 @@ async function findUser(tx: Tx, companyId: string, id: string): Promise<Row | un
   return row
 }
 
-// The three refusals state the rule and stop there. Telling a caller to make
-// another account the primary administrator first would be advice no route
-// can take: which account it is, is the seed's, and nothing here moves it
-// (Issue #70 left that to the slice that needs it).
+// The three refusals state the rule and stop there: which account should hold
+// the flag instead is the company's decision, made through the command below.
 const PRIMARY_DEACTIVATE = "The primary administrator cannot be deactivated: it is the company's last way in"
 const PRIMARY_ROLE = "The primary administrator cannot be moved to another role"
 const PRIMARY_ACCESS =
   "The primary administrator reaches every project: it cannot be narrowed to some projects or to a service provider"
+
+// What the flag may not move to, each its own sentence, since each is fixed a
+// different way — reactivate it, wait for its first sign-in, widen its access
+// — or by picking another account. The last is PRIMARY_ACCESS read from the
+// other side: a transfer must not produce the account a patch refuses to make.
+const TARGET_DEACTIVATED = "A deactivated account cannot be the primary administrator: it is the company's last way in, and this one is switched off"
+const TARGET_INVITED = "An account nobody has signed in as cannot be the primary administrator: the company's last way in has to be a login that works"
+const TARGET_PROVIDER = "A service provider's account cannot be the primary administrator: it reaches its provider, not the company"
+const TARGET_NARROW = "The primary administrator reaches every project: give the account every project before making it the primary administrator"
 
 /** A 400 in the shape the validator's would have, for what only the database could tell us. */
 const unknownReference = (errors: { path: string; message: string }[]) => problem(400, { detail: "The request body is invalid", errors })
@@ -355,6 +371,12 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const { companyId } = c.get("principal")
 
+        // The primary administrator's rules are the API's, read first and
+        // written after, so the row is locked before the read: a transfer in
+        // flight to this very account has committed by the time it is read,
+        // and the account is refused as the primary administrator it now is
+        // (routes/shared.ts on why a rule the API holds needs the lock).
+        await lockRow(tx, userAccount, { companyId, id })
         const current = await findUser(tx, companyId, id)
         if (current === undefined) throw noSuchUser(id)
 
@@ -407,6 +429,8 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const { companyId } = c.get("principal")
+        // Locked before it is read, for the same reason as the patch above.
+        await lockRow(tx, userAccount, { companyId, id })
         const current = await findUser(tx, companyId, id)
         if (current === undefined) throw noSuchUser(id)
         if (current.primaryAdministrator) throw problem(409, { detail: PRIMARY_DEACTIVATE })
@@ -451,6 +475,64 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const [row] = await tx
           .update(userAccount)
           .set({ deactivatedAt: null })
+          .where(and(eq(userAccount.companyId, companyId), eq(userAccount.id, id)))
+          .returning(columns)
+        if (row === undefined) throw noSuchUser(id)
+        return c.json(await userWithAccess(tx, companyId, row))
+      },
+    )
+    .post(
+      "/users/:id/make-primary-administrator",
+      describeRoute({
+        operationId: "makePrimaryAdministrator",
+        summary: "Make a user the primary administrator",
+        description:
+          "Moves the primary administrator's flag to this account and takes it off the one that carried it, in the request's one transaction under the company's row lock, so two transfers at once take turns and the company never has two or none. The account must be active — signed in as at least once and not deactivated — and must reach every project: a service provider's account, or one given some projects only, is refused (409), because the primary administrator is the company's last way in and reaches all of it. An account that already is the primary administrator answers 200 unchanged. The grant is `edit` on `configure.access` rather than the primary administrator's alone: the flag usually moves because its holder has left, and another administrator has to be able to move it before deactivating them.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The user, now the primary administrator.", User),
+          400: describeProblem("The path does not hold an id."),
+          401: describeProblem("No usable token (see WWW-Authenticate)."),
+          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.access`."),
+          404: describeProblem("No user with that id in this company."),
+          409: describeProblem(
+            "The account is deactivated, has never been signed in as, belongs to a service provider, or reaches some projects only.",
+          ),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "edit"),
+      validate("param", IdParam),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const tx = c.get("tx")
+        const { companyId } = c.get("principal")
+
+        // One primary administrator per company is the company's rule, so its
+        // row is the lock two transfers serialise on: the second waits, then
+        // reads what the first wrote. The target's own lock follows, from the
+        // top down, so a deactivation or a patch of it in flight has finished
+        // before the flag moves (both take that same lock before they read).
+        await lockRow(tx, company, { companyId, id: companyId })
+        await lockRow(tx, userAccount, { companyId, id })
+        const current = await findUser(tx, companyId, id)
+        if (current === undefined) throw noSuchUser(id)
+        if (current.primaryAdministrator) return c.json(await userWithAccess(tx, companyId, current))
+        if (current.deactivatedAt !== null) throw problem(409, { detail: TARGET_DEACTIVATED })
+        if (current.authUserId === null) throw problem(409, { detail: TARGET_INVITED })
+        if (current.serviceProviderId !== null) throw problem(409, { detail: TARGET_PROVIDER })
+        if (!current.allProjects) throw problem(409, { detail: TARGET_NARROW })
+
+        // Off the holder first, on the target second, as two statements: the
+        // partial unique index checks each row as it is written, so one
+        // statement over both rows, or the other order, would trip it.
+        await tx
+          .update(userAccount)
+          .set({ primaryAdministrator: false })
+          .where(and(eq(userAccount.companyId, companyId), eq(userAccount.primaryAdministrator, true)))
+        const [row] = await tx
+          .update(userAccount)
+          .set({ primaryAdministrator: true })
           .where(and(eq(userAccount.companyId, companyId), eq(userAccount.id, id)))
           .returning(columns)
         if (row === undefined) throw noSuchUser(id)

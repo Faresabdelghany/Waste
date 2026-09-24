@@ -171,6 +171,7 @@ describe("GET /openapi.json", () => {
       "/users",
       "/users/{id}",
       "/users/{id}/deactivate",
+      "/users/{id}/make-primary-administrator",
       "/users/{id}/reactivate",
       "/waste-fractions",
       "/waste-fractions/{id}",
@@ -225,8 +226,8 @@ describe("GET /openapi.json", () => {
     }
     assert.equal(
       secured,
-      73,
-      "/me, the ten organisation routes, the eleven access routes and the fifty-one registry routes: waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each — the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each — agreements with their subscriptions, and containers with their placements",
+      74,
+      "/me, the ten organisation routes, the twelve access routes and the fifty-one registry routes: waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each — the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each — agreements with their subscriptions, and containers with their placements",
     )
   })
 
@@ -278,6 +279,7 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(operations("/users/{id}"), { get: "getUser", patch: "patchUser" })
     assert.deepEqual(operations("/users/{id}/deactivate"), { post: "deactivateUser" })
     assert.deepEqual(operations("/users/{id}/reactivate"), { post: "reactivateUser" })
+    assert.deepEqual(operations("/users/{id}/make-primary-administrator"), { post: "makePrimaryAdministrator" })
     assert.deepEqual(operations("/roles"), { get: "listRoles", post: "createRole" })
     assert.deepEqual(operations("/roles/{id}"), { get: "getRole", patch: "patchRole" })
     assert.deepEqual(operations("/roles/{id}/grants"), { put: "putRoleGrants" })
@@ -288,6 +290,7 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(Object.keys(document.paths["/users/{id}"].patch.responses), ["200", "400", "401", "403", "404", "409"])
     assert.deepEqual(Object.keys(document.paths["/users/{id}/deactivate"].post.responses), ["200", "400", "401", "403", "404", "409"])
     assert.deepEqual(Object.keys(document.paths["/users/{id}/reactivate"].post.responses), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(Object.keys(document.paths["/users/{id}/make-primary-administrator"].post.responses), ["200", "400", "401", "403", "404", "409"])
     assert.deepEqual(Object.keys(document.paths["/roles/{id}/grants"].put.responses), ["200", "400", "401", "403", "404"])
     for (const [path, method] of [["/users/{id}", "patch"], ["/roles/{id}/grants", "put"]] as const) {
       for (const [status, operation] of Object.entries(document.paths[path][method].responses)) {
@@ -300,6 +303,10 @@ describe("GET /openapi.json", () => {
     assert.match(document.paths["/users"].post.description ?? "", /exactly one of `allProjects: true`, `projectIds` or `serviceProviderId`/)
     assert.match(document.paths["/users/{id}"].patch.description ?? "", /primary administrator cannot be moved to another role or narrowed \(409\)/)
     assert.match(document.paths["/users/{id}/deactivate"].post.description ?? "", /primary administrator cannot be deactivated \(409\)/)
+    const transfer = document.paths["/users/{id}/make-primary-administrator"].post.description ?? ""
+    assert.match(transfer, /service provider's account, or one given some projects only, is refused \(409\)/)
+    assert.match(transfer, /already is the primary administrator answers 200 unchanged/)
+    assert.match(transfer, /`edit` on `configure.access` rather than the primary administrator's alone/, "the grant is a choice, and the document says which")
     assert.match(document.paths["/roles/{id}/grants"].put.description ?? "", /imply `view`/)
 
     for (const path of ["/users", "/roles"]) {
@@ -317,6 +324,7 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(document.paths["/roles"].post.requestBody?.content["application/json"].schema.required, ["name", "scope", "description"])
     assert.deepEqual(document.paths["/roles/{id}/grants"].put.requestBody?.content["application/json"].schema.required, ["grants"])
     assert.equal(document.paths["/users/{id}/deactivate"].post.requestBody, undefined, "a command takes no body")
+    assert.equal(document.paths["/users/{id}/make-primary-administrator"].post.requestBody, undefined, "so does the transfer: the path names the account")
   })
 
   test("documents each registry route with its verbs, its problems and the rules a client must know", async () => {
