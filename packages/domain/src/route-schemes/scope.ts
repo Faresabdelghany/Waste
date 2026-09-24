@@ -7,14 +7,19 @@
 // container types and checkCollectionGroups names a group whose types fall
 // outside it. Pure data — no UI or store dependencies.
 //
-// The three values are the prototype's. Round 2's five (Collection, Exchange,
-// Delivery, Removal, Cleaning) mapped to nothing and are not read: a stored
-// "Collection" is treated as unset.
+// The first three values are the prototype's. Round 2's five (Collection,
+// Exchange, Delivery, Removal, Cleaning) mapped to nothing and are not read:
+// a stored "Collection" is treated as unset. Issue #42 (2026-09-24) added
+// the two kinds of work the fleet already does and no service type named:
+// crane emptying (WH-31, the Glass crane) and tank emptying (the vacuum
+// tanker), so every container type in the vocabulary is plannable.
 
 export const SCHEME_SERVICE_TYPES = [
   "Container collection",
   "Underground collection",
   "Kerbside collection",
+  "Crane collection",
+  "Tank emptying",
 ] as const
 
 export type SchemeServiceType = (typeof SCHEME_SERVICE_TYPES)[number]
@@ -25,13 +30,18 @@ export const isSchemeServiceType = (value: unknown): value is SchemeServiceType 
 /**
  * Container types (display vocabulary, matching.ts) per service type. Two-
  * wheel 140 L bins are kerbside bins too — the prototype's vocabulary had no
- * 140 L. Igloo · 2,500 L and Wastewater tank · 3,000 L belong to no service
- * type yet (ticketed).
+ * 140 L. A container type may belong to several service types (240 L is a
+ * container-collection bin and a kerbside bin; Underground · 5,000 L has its
+ * own service type and is crane-emptied, so it is also crane work — the same
+ * statement CONTAINER_VEHICLE_COMPATIBILITY makes). Every type in the
+ * vocabulary belongs to at least one service type; scope.test.ts holds it.
  */
 export const SERVICE_TYPE_CONTAINER_TYPES: Readonly<Record<SchemeServiceType, readonly string[]>> = {
   "Container collection": ["Two-wheel bin · 240 L", "Four-wheel bin · 660 L", "Four-wheel bin · 1,100 L"],
   "Underground collection": ["Underground · 5,000 L"],
   "Kerbside collection": ["Two-wheel bin · 140 L", "Two-wheel bin · 240 L"],
+  "Crane collection": ["Igloo · 2,500 L", "Underground · 5,000 L"],
+  "Tank emptying": ["Wastewater tank · 3,000 L"],
 }
 
 /** The container types a scheme of this service type may collect; null = no service type, no restriction. */
