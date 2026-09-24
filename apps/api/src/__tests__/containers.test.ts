@@ -153,6 +153,12 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
     )
   const subscribeTo = (held: Agreement, productId: string, propertyId: string) =>
     create(olivia, `/agreements/${held.id}/subscriptions`, { productId, propertyId, validFrom: JANUARY }, Subscription)
+  /** Gives a subscription an end, so a placement of it has a bound to fall outside of. */
+  const endSubscription = async (held: Subscription, validTo: string): Promise<Subscription> => {
+    const response = await olivia(`/subscriptions/${held.id}`, { method: "PATCH", body: { validTo } })
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+    return Subscription.parse(await response.json())
+  }
 
   /** A container body a caller may send: a label of this test's own, in Copenhagen Central unless it says otherwise. */
   const body = (label: string, values: Record<string, unknown> = {}) => ({
@@ -379,7 +385,7 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
         (await product(a.projects.copenhagen.id, "Bounded collection", weekly.id)).id,
         (await property(a.projects.copenhagen.id, "Bounded 1", "Bounded 1, 2100 København Ø")).id,
       )
-      await olivia(`/subscriptions/${bounded.id}`, { method: "PATCH", body: { validTo: OCTOBER } })
+      assert.equal((await endSubscription(bounded, OCTOBER)).validTo, OCTOBER)
       const into = await container("BIN-3443")
 
       const open = await refused(
@@ -514,7 +520,7 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
         (await product(a.projects.copenhagen.id, "Ending collection", weekly.id)).id,
         (await property(a.projects.copenhagen.id, "Ending 1", "Ending 1, 2100 København Ø")).id,
       )
-      await olivia(`/subscriptions/${bounded.id}`, { method: "PATCH", body: { validTo: OCTOBER } })
+      assert.equal((await endSubscription(bounded, OCTOBER)).validTo, OCTOBER)
       const placed = await place(await container("BIN-3462"), { subscriptionId: bounded.id, validFrom: APRIL, validTo: JULY })
 
       const glass = await create(olivia, "/waste-fractions", { key: "glass", name: "Glass" }, WasteFraction)

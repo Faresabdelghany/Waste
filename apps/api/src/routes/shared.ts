@@ -27,6 +27,14 @@
 // name key and its `no_overlap` constraint say different things to a person —
 // and a sentence written for one must not answer the other.
 //
+//   a row lock     — a rule the API holds rather than the database is only
+//                    held per transaction, and two transactions that read
+//                    the same parent and then write can each pass it. Where
+//                    a route holds such a rule, it takes the parent's row
+//                    lock first (`lockRow`) and reads afterwards, so the
+//                    two serialise on that row (routes/periods.ts says which
+//                    rule and which parent).
+//
 // Nothing here knows a table or a resource: what is not shared by every route
 // module stays in the one that owns it.
 import { Id } from "@waste/contracts/ids"
@@ -104,6 +112,31 @@ export async function requireRow(
     .where(and(eq(table.companyId, row.companyId), eq(table.id, row.id), row.also))
     .limit(1)
   if (found === undefined) throw invalidRequest("body", [refusal])
+}
+
+/**
+ * Takes the row lock of the record a rule hangs off, inside the request's
+ * one transaction, and reads nothing back: `select … for update`.
+ *
+ * A rule the database holds — a key, a period that overlaps — needs none of
+ * this. A rule the API holds does: containment (routes/periods.ts) is read
+ * first and written after, so without a lock a transaction shortening a
+ * parent and a transaction adding a child both read the state the other has
+ * not written yet and both pass. Taking the parent's lock before the read
+ * makes the second transaction wait and then see what the first wrote.
+ *
+ * A route locks the parent before it reads it, and where it locks two rows
+ * it takes them from the top down — the agreement before the subscription —
+ * so two requests can never hold half of each other's pair. A row that is
+ * not there locks nothing, and the read that follows answers the 404.
+ */
+export async function lockRow(tx: Tx, table: TenantTable, row: { companyId: string; id: string }): Promise<void> {
+  await tx
+    .select({ id: table.id })
+    .from(table)
+    .where(and(eq(table.companyId, row.companyId), eq(table.id, row.id)))
+    .limit(1)
+    .for("update")
 }
 
 /** What the two above share: run the write, and answer the sentence the route wrote for the constraint it hit. */

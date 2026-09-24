@@ -71,7 +71,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { periodAfter, periodOf, requireWithin, type Period } from "./periods"
 import { requireContainerType, requireServiceFrequency, requireWasteFraction } from "./references"
-import { describeJson, IdParam, refuseDuplicate, refuseOverlap, stampsOf } from "./shared"
+import { describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stampsOf } from "./shared"
 
 const MODULE = "resources.containers"
 const ContainerPage = Page(Container)
@@ -383,7 +383,13 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const patch = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
+
+        // The row first, then what the patch points at: an id nobody minted
+        // is a 404 here as in every other family, and not a 400 about a type
+        // that was never going to be written.
+        if ((await findContainer(tx, principal, id)) === undefined) throw noSuchContainer(id)
         await requireContainerType(tx, principal.companyId, patch.containerTypeId)
+
         const sentences: Record<string, string> = patch.label === undefined ? {} : { [LABEL_TAKEN]: labelTaken(patch.label) }
         const [row] = await refuseDuplicate(sentences, () =>
           tx
@@ -428,6 +434,10 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const into = await findContainer(tx, principal, id)
         if (into === undefined) throw noSuchContainer(id)
         const within = { companyId: principal.companyId, projectId: into.projectId }
+        // The subscription this placement is held inside, locked before its
+        // period is read, so a patch shortening it cannot commit between the
+        // two (routes/shared.ts).
+        await lockRow(tx, subscription, { companyId: principal.companyId, id: values.subscriptionId })
         const served = await findSubscriptionPeriod(tx, within, values.subscriptionId)
         await requireWasteFraction(tx, principal.companyId, values.wasteFractionId)
         await requireServiceFrequency(tx, within, values.serviceFrequencyId)
@@ -548,12 +558,21 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const principal = c.get("principal")
 
-        const current = await findPlacement(tx, principal, id)
+        let current = await findPlacement(tx, principal, id)
         if (current === undefined) throw noSuchPlacement(id)
         const within = { companyId: principal.companyId, projectId: current.projectId }
         await requireWasteFraction(tx, principal.companyId, patch.wasteFractionId)
         await requireServiceFrequency(tx, within, patch.serviceFrequencyId)
-        if (patch.validTo !== undefined) requireWithin(servedPeriod(current), periodAfter(current, patch), OUTSIDE_SUBSCRIPTION)
+
+        if (patch.validTo !== undefined) {
+          // The subscription this placement is held inside, locked and then
+          // read again underneath the lock: the read above only said which
+          // subscription to lock.
+          await lockRow(tx, subscription, { companyId: principal.companyId, id: current.subscriptionId })
+          current = await findPlacement(tx, principal, id)
+          if (current === undefined) throw noSuchPlacement(id)
+          requireWithin(servedPeriod(current), periodAfter(current, patch), OUTSIDE_SUBSCRIPTION)
+        }
 
         const [written] = await refuseOverlap({ [ALREADY_PLACED]: alreadyPlaced(current.label) }, () =>
           tx

@@ -30,6 +30,17 @@
 // half-open — `validFrom` is the first day in force and `validTo` the first
 // day out of it — which is why a child ending exactly when its parent does is
 // inside it, and a child with no end is outside a parent that has one.
+//
+// The rule is held per transaction, under the parent's row lock. Both sides
+// read the parent and then write, so without a lock a request shortening an
+// Agreement and a request adding a Subscription to it each read a state the
+// other has not committed yet and both pass. Every route that holds this
+// rule therefore takes the parent's lock before it reads it (`lockRow`,
+// routes/shared.ts) — the Agreement for a subscription's create or patch and
+// for the agreement's own patch, the Subscription for a placement's create
+// or patch and for the subscription's own — and where a route locks two, it
+// takes them from the top down, the Agreement before the Subscription, so no
+// two requests hold half of each other's pair.
 import { ENDS_AFTER_IT_STARTS, validityOrdered } from "@waste/contracts/validity"
 import type { ValidityColumns } from "@waste/db/schema/columns"
 import { sql, type SQL } from "drizzle-orm"

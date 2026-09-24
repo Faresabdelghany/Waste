@@ -61,7 +61,7 @@ import { agreement, subscription } from "@waste/db/schema/agreements"
 import { containerServicePlacement } from "@waste/db/schema/containers"
 import { count } from "@waste/domain/text"
 import { and, asc, count as countRows, eq, gt, or, type SQL } from "drizzle-orm"
-import type { PgTable } from "drizzle-orm/pg-core"
+import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -73,7 +73,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { notWithin, periodAfter, periodOf, requireOrdered, requireWithin, type Period } from "./periods"
 import { requireCustomer, requireProduct, requireProperty, requireSharedCollectionPoint } from "./references"
-import { describeJson, IdParam, refuseOverlap, stampsOf } from "./shared"
+import { describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
 
 const MODULE = "customers.agreements"
 const AgreementPage = Page(Agreement)
@@ -219,6 +219,33 @@ async function strayCount(tx: Tx, table: PgTable, where: SQL | undefined): Promi
   return row?.rows ?? 0
 }
 
+/** A child table of an effective-dated record: the tenant, the period, and the column naming the parent. */
+type ChildTable = PgTable & { companyId: PgColumn; validFrom: PgColumn; validTo: PgColumn }
+
+/**
+ * The other side of the containment rule, for a parent whose period is
+ * moving: the children the new period would leave outside are counted and
+ * the write is refused with the count, because those rows are not in the
+ * body and the caller has to end them first. Both parents here ask it —
+ * an agreement of its subscriptions, a subscription of its placements —
+ * and it is one rule, so it is one function.
+ */
+async function refuseStranded(
+  tx: Tx,
+  table: ChildTable,
+  parentColumn: PgColumn,
+  parent: { companyId: string; id: string },
+  period: Period,
+  sentence: (rows: number) => string,
+): Promise<void> {
+  const strays = await strayCount(
+    tx,
+    table,
+    and(eq(table.companyId, parent.companyId), eq(parentColumn, parent.id), notWithin(table, period)),
+  )
+  if (strays > 0) throw problem(409, { detail: sentence(strays) })
+}
+
 export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
   return new Hono<AuthEnv>()
     .get(
@@ -355,6 +382,10 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const principal = c.get("principal")
 
+        // The row this patch counts children against, locked before it is
+        // read: a shortening and a subscription being added to it are the
+        // two halves of one rule, and they serialise here (routes/shared.ts).
+        await lockRow(tx, agreement, { companyId: principal.companyId, id })
         const current = await findAgreement(tx, principal, id)
         if (current === undefined) throw noSuchAgreement(id)
         await requireCustomer(tx, principal.companyId, patch.customerId, "customerId")
@@ -363,16 +394,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
         if (patch.validFrom !== undefined || patch.validTo !== undefined) {
           const period = periodAfter(current, patch)
           requireOrdered(period)
-          const strays = await strayCount(
-            tx,
-            subscription,
-            and(
-              eq(subscription.companyId, principal.companyId),
-              eq(subscription.agreementId, id),
-              notWithin(subscription, period),
-            ),
-          )
-          if (strays > 0) throw problem(409, { detail: strandedSubscriptions(strays) })
+          await refuseStranded(tx, subscription, subscription.agreementId, { companyId: principal.companyId, id }, period, strandedSubscriptions)
         }
 
         const [row] = await refuseOverlap({ [NUMBER_RUNNING]: numberRunning(patch.number ?? current.number) }, () =>
@@ -458,6 +480,9 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const principal = c.get("principal")
 
+        // The agreement this subscription is held inside, locked before it
+        // is read, so a patch shortening it cannot commit between the two.
+        await lockRow(tx, agreement, { companyId: principal.companyId, id })
         const parent = await findAgreement(tx, principal, id)
         if (parent === undefined) throw noSuchAgreement(id)
         const within = { companyId: principal.companyId, projectId: parent.projectId }
@@ -538,22 +563,29 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const principal = c.get("principal")
 
-        const current = await findSubscription(tx, principal, id)
+        let current = await findSubscription(tx, principal, id)
         if (current === undefined) throw noSuchSubscription(id)
 
         if (patch.validFrom !== undefined || patch.validTo !== undefined) {
+          // This patch is both a child of its agreement and the parent of
+          // its placements, so it takes both row locks — top down, the
+          // agreement first — and reads again underneath them, since the
+          // read above only said which agreement to lock.
+          await lockRow(tx, agreement, { companyId: principal.companyId, id: current.agreementId })
+          await lockRow(tx, subscription, { companyId: principal.companyId, id })
+          current = await findSubscription(tx, principal, id)
+          if (current === undefined) throw noSuchSubscription(id)
+
           const period = periodAfter(current, patch)
           requireWithin(current.agreement, period, OUTSIDE_AGREEMENT)
-          const strays = await strayCount(
+          await refuseStranded(
             tx,
             containerServicePlacement,
-            and(
-              eq(containerServicePlacement.companyId, principal.companyId),
-              eq(containerServicePlacement.subscriptionId, id),
-              notWithin(containerServicePlacement, period),
-            ),
+            containerServicePlacement.subscriptionId,
+            { companyId: principal.companyId, id },
+            period,
+            strandedPlacements,
           )
-          if (strays > 0) throw problem(409, { detail: strandedPlacements(strays) })
         }
 
         const [row] = await refuseOverlap({ [PLACE_SUBSCRIBED]: PLACE_SUBSCRIBED_SENTENCE }, () =>
