@@ -870,7 +870,7 @@ function SchemeRoutesTab({
   pickups: readonly BusinessRecord[]
   /** Generation cannot run right now — blocking issues or unsaved Draft. */
   generationBlocked: boolean
-  /** Rule groups whose matched containers shifted at the last run (issue #41) — derived, never persisted. */
+  /** Rule groups whose matched containers shifted at their most recent change (issue #41) — derived, never persisted. */
   containerDrift: readonly CollectionGroupContainerDrift[]
 }) {
   const router = useRouter()
@@ -900,12 +900,13 @@ function SchemeRoutesTab({
             <Warning className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
             <div className="min-w-0">
               <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                Matched containers shifted at the last generation run
+                Matched containers shifted between generation runs
               </p>
               <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-300/90">
-                The stop rule resolved a different container set than the run
-                before, so the routes below changed shape. Review them, or
-                adjust the rule via Edit collection groups.
+                The stop rule resolved a different container set than before,
+                so the routes below changed shape. Review them, or adjust the
+                rule via Edit collection groups; the notice stays until the
+                matched set moves again.
               </p>
               <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-amber-800/90 dark:text-amber-300/90">
                 {containerDrift.map((drift) => (

@@ -188,20 +188,20 @@ describe("generation runs stamp what they matched and compare with the run befor
     assert.deepEqual(driftWarnings(schemeAttention(first.scheme, related(first.scheme, thirty))), [])
   })
 
-  test("an unchanged set is no drift, and the third identical run writes nothing", () => {
+  test("an unchanged set is no drift, and an identical run writes nothing", () => {
     const first = run(ruleScheme(), thirty, "2026-09-24T06:00:00.000Z")
     const second = run(first.scheme, thirty, "2026-09-25T06:00:00.000Z")
     assert.deepEqual(second.plan.containerDrift, [])
-    // The history advances (the previous stamp is now filled)…
-    assert.notEqual(second.scheme, first.scheme)
-    assert.deepEqual(generationMatchHistoryOf(second.scheme.submittedValues).previous, first.plan.matches)
-    // …and once both stamps agree, a run of the same set returns its input.
+    // The history advances only when the set moves: the second run of the
+    // same set returns its input, and so does the third.
+    assert.equal(second.scheme, first.scheme)
     const third = run(second.scheme, thirty, "2026-09-26T06:00:00.000Z")
     assert.equal(third.scheme, second.scheme)
+    assert.deepEqual(generationMatchHistoryOf(third.scheme.submittedValues).previous, {})
     assert.deepEqual(driftWarnings(schemeAttention(third.scheme, related(third.scheme, thirty))), [])
   })
 
-  test("a shift past the threshold is reported by the plan, the run summary and the Attention badge, and clears when the next run matches again", () => {
+  test("a shift past the threshold is reported by the plan, the run summary and the Attention badge, persists across identical runs, and clears when the set moves back within the threshold", () => {
     const first = run(ruleScheme(), thirty, "2026-09-24T06:00:00.000Z")
     // Four containers join the area: 4 of 30 = 13 %.
     const grown = [...thirty, ...["d01", "d02", "d03", "d04"].map((id) => container(id))]
@@ -214,7 +214,7 @@ describe("generation runs stamp what they matched and compare with the run befor
     assert.deepEqual(second.plan.containerDrift[0].joined, ["d01", "d02", "d03", "d04"])
     assert.deepEqual(second.plan.containerDrift[0].left, [])
     assert.deepEqual(second.result.summary.containerDrift, second.plan.containerDrift)
-    const sentence = "Matched containers shifted 13 % since the previous generation run: 4 joined, 0 left of 30"
+    const sentence = "Matched containers shifted 13 % between generation runs: 4 joined, 0 left of 30"
     assert.equal(containerDriftWarning(second.plan.containerDrift), sentence)
 
     // The stamped record derives the same sentence from its two stamps alone.
@@ -224,10 +224,26 @@ describe("generation runs stamp what they matched and compare with the run befor
     const assessment = schemeLiveAssessment(second.scheme, related(second.scheme, grown))
     assert.deepEqual(assessment?.containerDrift, second.plan.containerDrift)
 
-    // The next run matches the same set again: the Attention clears.
+    // An identical run — every Plan Ahead load while the base holds still —
+    // finds nothing new, writes nothing, and leaves the badge where it is.
     const third = run(second.scheme, grown, "2026-09-26T06:00:00.000Z")
     assert.deepEqual(third.plan.containerDrift, [])
-    assert.deepEqual(driftWarnings(schemeAttention(third.scheme, related(third.scheme, grown))), [])
+    assert.equal(third.scheme, second.scheme)
+    assert.deepEqual(driftWarnings(schemeAttention(third.scheme, related(third.scheme, grown))), [sentence])
+
+    // The set moves again, within the threshold: 3 of 34 leave (9 %). The
+    // most recent change is no drift, so the Attention clears.
+    const settled = grown.slice(0, 31)
+    const fourth = run(third.scheme, settled, "2026-09-27T06:00:00.000Z")
+    assert.deepEqual(fourth.plan.containerDrift, [])
+    assert.notEqual(fourth.scheme, third.scheme)
+    assert.deepEqual(driftWarnings(schemeAttention(fourth.scheme, related(fourth.scheme, settled))), [])
+
+    // A move past the threshold puts a new sentence on the badge: 4 of 31 leave (13 %).
+    const fifth = run(fourth.scheme, settled.slice(0, 27), "2026-09-28T06:00:00.000Z")
+    assert.deepEqual(driftWarnings(schemeAttention(fifth.scheme, related(fifth.scheme, settled.slice(0, 27)))), [
+      "Matched containers shifted 13 % between generation runs: 0 joined, 4 left of 31",
+    ])
   })
 
   test("containers leaving count too: 4 of 30 taken out of service is a drift", () => {
@@ -238,7 +254,7 @@ describe("generation runs stamp what they matched and compare with the run befor
     const second = run(first.scheme, shrunk, "2026-09-25T06:00:00.000Z")
     assert.equal(
       containerDriftWarning(second.plan.containerDrift),
-      "Matched containers shifted 13 % since the previous generation run: 0 joined, 4 left of 30",
+      "Matched containers shifted 13 % between generation runs: 0 joined, 4 left of 30",
     )
   })
 
@@ -298,7 +314,7 @@ describe("generation runs stamp what they matched and compare with the run befor
     const second = run(first.scheme, moved, "2026-09-25T06:00:00.000Z")
     assert.equal(
       containerDriftWarning(second.plan.containerDrift),
-      "Matched containers shifted since the previous generation run: Residual run 13 % (4 joined, 0 left of 30); Organic run 40 % (2 joined, 0 left of 5)",
+      "Matched containers shifted between generation runs: Residual run 13 % (4 joined, 0 left of 30); Organic run 40 % (2 joined, 0 left of 5)",
     )
   })
 
@@ -380,7 +396,7 @@ describe("Plan Ahead stamps every run and reports drifted schemes in its summary
       generatedAt: at,
     })
 
-  test("an already-recorded scheme comes back stamped on the first run, drifted on the second, and quiet once the history agrees", () => {
+  test("an already-recorded scheme comes back stamped on the first run, drifted on the second, and not at all on a load of the same set", () => {
     const first = auto(armed, thirty, "2026-09-24T06:00:00.000Z")
     assert.equal(first.schemes.length, 1)
     assert.deepEqual(first.summary.containerDrift, [])
@@ -392,19 +408,19 @@ describe("Plan Ahead stamps every run and reports drifted schemes in its summary
     const grown = [...thirty, ...["d01", "d02", "d03", "d04"].map((id) => container(id))]
     const second = auto(first.schemes[0], grown, "2026-09-25T06:00:00.000Z")
     assert.equal(second.schemes.length, 1)
+    const sentence = "Matched containers shifted 13 % between generation runs: 4 joined, 0 left of 30"
     assert.deepEqual(second.summary.containerDrift, [
-      {
-        schemeId: "scheme-drift",
-        schemeName: "RS-Drift",
-        warning: "Matched containers shifted 13 % since the previous generation run: 4 joined, 0 left of 30",
-      },
+      { schemeId: "scheme-drift", schemeName: "RS-Drift", warning: sentence },
     ])
 
-    // The matching run advances the history (one write), then nothing moves.
+    // The next load of the same set writes no scheme and toasts nothing,
+    // and the stored record keeps the badge until the set moves again.
     const third = auto(second.schemes[0], grown, "2026-09-26T06:00:00.000Z")
-    assert.equal(third.schemes.length, 1)
+    assert.equal(third.schemes.length, 0)
     assert.deepEqual(third.summary.containerDrift, [])
-    const fourth = auto(third.schemes[0], grown, "2026-09-27T06:00:00.000Z")
-    assert.equal(fourth.schemes.length, 0)
+    assert.deepEqual(
+      driftWarnings(schemeAttention(second.schemes[0], related(second.schemes[0], grown))),
+      [sentence],
+    )
   })
 })

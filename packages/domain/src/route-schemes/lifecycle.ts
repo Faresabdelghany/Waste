@@ -115,24 +115,21 @@ export function withEffectiveSchemeStatus(
 }
 
 /**
- * The matches stamp every run leaves (issue #41): the last run's matches
- * move to the previous stamp and this run's take their place, over the
- * scheme's rule groups only. Returns the input unchanged when both stamps
- * already say what the run would write — a manual scheme, or a quiet Plan
- * Ahead load after the history has settled — so callers upsert only what
- * changed (`next !== scheme`).
+ * The matches stamp a run leaves (issue #41), over the scheme's rule groups
+ * only. The history advances only when the run's matches differ from the
+ * last stamp: then the last stamp becomes the previous one and this run's
+ * matches the last. A run that matches what the last run matched returns
+ * the input unchanged — a manual scheme, or every Plan Ahead load while the
+ * container base holds still — so callers upsert only what changed
+ * (`next !== scheme`), and a drift stays on the badge until the set moves
+ * again rather than clearing on the next page load.
  */
 export function recordGenerationMatches(
   scheme: BusinessRecord,
   matches: GenerationMatches,
 ): BusinessRecord {
   const history = generationMatchHistoryOf(scheme.submittedValues)
-  if (
-    sameGenerationMatches(history.previous, history.last) &&
-    sameGenerationMatches(history.last, matches)
-  ) {
-    return scheme
-  }
+  if (sameGenerationMatches(history.last, matches)) return scheme
   return {
     ...scheme,
     submittedValues: {
@@ -239,10 +236,10 @@ export type SchemeRelatedRecords = {
 export type SchemeLiveAssessment = {
   validation: SchemeValidationResult
   /**
-   * Rule groups whose matched containers drifted between the scheme's last
-   * two generation runs (issue #41), read from the two stamps the runs left —
-   * never from the live container base, so the badge reports what a run did
-   * and clears when the next run matches the same set again.
+   * Rule groups whose matched containers drifted at the most recent change
+   * of the matched set (issue #41), read from the two stamps the runs left —
+   * never from the live container base, so the badge reports what a run
+   * found and persists across identical runs until the set moves again.
    */
   containerDrift: CollectionGroupContainerDrift[]
 }

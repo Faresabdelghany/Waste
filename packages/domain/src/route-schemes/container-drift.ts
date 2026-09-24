@@ -29,6 +29,13 @@
 // shift. A shift strictly above CONTAINER_DRIFT_THRESHOLD_PERCENT (10 %) is a
 // drift; exactly 10 % is not. The comparison is integer arithmetic
 // (100 × changed > previous × 10), so 3 of 30 is never a drift by float noise.
+//
+// Persistence. The history advances only when a run's matches differ from the
+// last stamp (recordGenerationMatches), so the two stamps are always the two
+// most recent DISTINCT sets: Attention means "the most recent change of the
+// matched set was a drift" and stays until the set moves again — a move back
+// within the threshold clears it, a rule edit restarts the comparison — rather
+// than clearing on the next Plan Ahead load of the same set.
 
 import {
   IMPLICIT_GROUP_ID,
@@ -174,11 +181,11 @@ export function generationMatchHistoryOf(
 }
 
 /**
- * The two values a run writes: the last stamp becomes the previous one and
- * the run's matches the last. A run that matches what the last run matched
- * still advances the history, which is what lets a drift clear on the next
- * matching run; the run after that changes nothing (recordGenerationMatches
- * then returns its input, so a quiet Plan Ahead load writes no scheme).
+ * The two values a run writes when its matches differ from the last stamp:
+ * the last stamp becomes the previous one and the run's matches the last.
+ * recordGenerationMatches calls this only on such a change, so the stamps
+ * hold the two most recent distinct sets and a run of the same set writes
+ * nothing.
  */
 export function generationMatchValues(
   history: GenerationMatchHistory,
@@ -254,11 +261,11 @@ export function containerDriftMovement(drift: CollectionGroupContainerDrift): st
 }
 
 /**
- * The one Attention sentence for a run's drift, or null when nothing drifted:
- * "Matched containers shifted 13 % since the previous generation run: 4
- * joined, 0 left of 30" for the implicit shared group, one clause per named
- * group otherwise. The same sentence serves the plan preview (this run
- * against the last) and the badge (the last run against the one before).
+ * The one Attention sentence for a drift, or null when nothing drifted:
+ * "Matched containers shifted 13 % between generation runs: 4 joined, 0 left
+ * of 30" for the implicit shared group, one clause per named group
+ * otherwise. The same sentence serves the plan preview (this run against the
+ * last stamp) and the badge (the two most recent distinct sets).
  */
 export function containerDriftWarning(
   drift: readonly CollectionGroupContainerDrift[],
@@ -266,10 +273,10 @@ export function containerDriftWarning(
   if (drift.length === 0) return null
   const [only] = drift
   if (drift.length === 1 && only.groupName === undefined) {
-    return `Matched containers shifted ${percentOf(only.shift)} since the previous generation run: ${movementOf(only)}`
+    return `Matched containers shifted ${percentOf(only.shift)} between generation runs: ${movementOf(only)}`
   }
   const clauses = drift.map(
     (entry) => `${entry.groupName ?? "stop rule"} ${percentOf(entry.shift)} (${movementOf(entry)})`,
   )
-  return `Matched containers shifted since the previous generation run: ${clauses.join("; ")}`
+  return `Matched containers shifted between generation runs: ${clauses.join("; ")}`
 }
