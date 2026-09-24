@@ -50,6 +50,7 @@
       ],
       "cache": false,
       "env": [
+        "DATABASE_ADMIN_URL",
         "DATABASE_URL",
         "SUPABASE_URL",
         "REQUIRE_DATABASE"

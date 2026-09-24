@@ -11,12 +11,17 @@
 // or a deactivated account is refused on the very next call and nothing is
 // cached anywhere.
 //
-// The tenant fence does the rest: the lookup itself sees only the company the
-// claim names, so a login with an account in another company, an unknown
-// `sub`, a deactivated account and a company that does not exist are all the
-// same "no active account here", a 403 with the problem body (a 401 would say
-// "get a better token", and no token would help). A token with no company
-// claim is the hook's "no account at all", also 403.
+// The API binds the claim to the tenant itself: every lookup below carries
+// `company_id = companyId`, and the company in the Principal is the joined
+// row's, not the claim's. The tenant fence is the second stop, not the only
+// one (ADR-0001: the API is the authority, RLS the backstop), so a pool that
+// ever ran as a role with BYPASSRLS, or a table that lost its fence, would
+// still refuse company A's account for a company-B claim. Either way a login
+// with an account in another company, an unknown `sub`, a deactivated account
+// and a company that does not exist are all the same "no active account
+// here", a 403 with the problem body (a 401 would say "get a better token",
+// and no token would help). A token with no company claim is the hook's "no
+// account at all", also 403.
 //
 // The handler runs inside that same transaction and receives it as `tx`:
 // no handler opens a transaction of its own, so a request's reads and writes
@@ -115,28 +120,31 @@ export async function resolvePrincipal(tx: Tx, { userId, companyId }: Login): Pr
       roleName: role.name,
       roleScope: role.scope,
       roleSystem: role.system,
+      companyId: company.id,
       companyName: company.name,
     })
     .from(userAccount)
-    // The joins spell the composite keys, as the fence already implies them.
+    // The joins spell the composite keys, as the fence already implies them;
+    // the where binds the account to the claim's company, which the fence
+    // alone would leave to itself.
     .innerJoin(role, and(eq(role.companyId, userAccount.companyId), eq(role.id, userAccount.roleId)))
     .innerJoin(company, eq(company.id, userAccount.companyId))
-    .where(and(eq(userAccount.authUserId, userId), isNull(userAccount.deactivatedAt)))
+    .where(and(eq(userAccount.companyId, companyId), eq(userAccount.authUserId, userId), isNull(userAccount.deactivatedAt)))
     .limit(1)
   if (found === undefined) return null
 
   const grantRows = await tx
     .select({ moduleKey: roleGrant.moduleKey, action: roleGrant.action })
     .from(roleGrant)
-    .where(eq(roleGrant.roleId, found.roleId))
+    .where(and(eq(roleGrant.companyId, companyId), eq(roleGrant.roleId, found.roleId)))
 
   const projects = found.allProjects
-    ? await tx.select({ id: project.id, name: project.name }).from(project).orderBy(asc(project.name))
+    ? await tx.select({ id: project.id, name: project.name }).from(project).where(eq(project.companyId, companyId)).orderBy(asc(project.name))
     : await tx
         .select({ id: project.id, name: project.name })
         .from(projectAccess)
         .innerJoin(project, and(eq(project.companyId, projectAccess.companyId), eq(project.id, projectAccess.projectId)))
-        .where(eq(projectAccess.userAccountId, found.id))
+        .where(and(eq(projectAccess.companyId, companyId), eq(projectAccess.userAccountId, found.id)))
         .orderBy(asc(project.name))
 
   const [provider] =
@@ -145,12 +153,12 @@ export async function resolvePrincipal(tx: Tx, { userId, companyId }: Login): Pr
       : await tx
           .select({ id: serviceProvider.id, legalName: serviceProvider.legalName })
           .from(serviceProvider)
-          .where(eq(serviceProvider.id, found.serviceProviderId))
+          .where(and(eq(serviceProvider.companyId, companyId), eq(serviceProvider.id, found.serviceProviderId)))
           .limit(1)
 
   return {
     userId,
-    companyId,
+    companyId: found.companyId,
     user: {
       id: found.id,
       email: found.email,
@@ -158,7 +166,7 @@ export async function resolvePrincipal(tx: Tx, { userId, companyId }: Login): Pr
       allProjects: found.allProjects,
       primaryAdministrator: found.primaryAdministrator,
     },
-    company: { id: companyId, name: found.companyName },
+    company: { id: found.companyId, name: found.companyName },
     role: { id: found.roleId, key: found.roleKey, name: found.roleName, scope: found.roleScope, system: found.roleSystem },
     grants: grantsOf(grantRows),
     projects,

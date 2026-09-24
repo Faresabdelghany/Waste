@@ -4,21 +4,22 @@ import { after, before, describe, test } from "node:test"
 
 import { Me } from "@waste/contracts/me"
 import { createDb, type Database } from "@waste/db/client"
-import { project } from "@waste/db/schema/organisation"
+import { company, project } from "@waste/db/schema/organisation"
 import { withCompany } from "@waste/db/tenant"
-import { and, eq } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import { Hono } from "hono"
 
 import { createApp } from "../app"
-import { authenticate, type AuthEnv } from "../auth/principal"
+import { authenticate, resolvePrincipal, type AuthEnv } from "../auth/principal"
 import { requireGrant } from "../auth/require"
 import { errorHandler, problem } from "../problem"
-import { databaseUnderTest } from "./database"
+import { databaseUnderTest, ownerUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { dropTenant, seedTenant, testId, type Account, type Tenant } from "./tenant"
 import { signingKeys, signToken, type SigningKeys } from "./tokens"
 
 const database = databaseUnderTest()
+const owner = ownerUnderTest()
 
 describe("the request path against the database", { skip: database.skip }, () => {
   let pool: Database
@@ -122,6 +123,7 @@ describe("the request path against the database", { skip: database.skip }, () =>
     test("answers the other tenant's Olivia her own company: two tenants on one database never meet", async () => {
       const body = Me.parse(await (await get("/me", await tokenFor(b.users.olivia, b.companyId))).json())
       assert.equal(body.company.id, b.companyId)
+      assert.equal(body.company.name, b.name)
       assert.equal(body.user.id, b.users.olivia.id)
       assert.deepEqual(
         body.projects.map((p) => p.id),
@@ -156,6 +158,51 @@ describe("the request path against the database", { skip: database.skip }, () =>
 
     test("an invited account has no login to sign a token for", () => {
       assert.equal(a.users.invited.authUserId, null)
+    })
+  })
+
+  describe("resolvePrincipal binds the claim to the tenant itself, not through the fence", () => {
+    const login = (account: Account) => {
+      if (account.authUserId === null) throw new Error(`${account.email} has never signed in`)
+      return account.authUserId
+    }
+
+    test("with the fence open to the account's company and the claim naming another, the account is not resolved", async () => {
+      // Tenant A's rows are visible here; only the lookup's own predicate can refuse a claim for B.
+      const principal = await withCompany(pool.db, a.companyId, (tx) => resolvePrincipal(tx, { userId: login(a.users.olivia), companyId: b.companyId }))
+      assert.equal(principal, null)
+      const own = await withCompany(pool.db, a.companyId, (tx) => resolvePrincipal(tx, { userId: login(a.users.olivia), companyId: a.companyId }))
+      assert.equal(own?.company.id, a.companyId)
+    })
+
+    test("as the owner, who bypasses RLS and sees every tenant, the lookups still stay inside the claim's company", { skip: owner.skip }, async () => {
+      const admin = createDb(owner.url, { max: 1 })
+      try {
+        await admin.db.transaction(async (tx) => {
+          const visible = await tx.select({ id: company.id }).from(company).where(inArray(company.id, [a.companyId, b.companyId]))
+          assert.equal(visible.length, 2, "both tenants must be visible, or this proves nothing about the predicate")
+
+          assert.equal(await resolvePrincipal(tx, { userId: login(a.users.olivia), companyId: b.companyId }), null, "A's account under B's claim")
+          assert.equal(await resolvePrincipal(tx, { userId: login(b.users.olivia), companyId: a.companyId }), null, "B's account under A's claim")
+
+          const olivia = await resolvePrincipal(tx, { userId: login(a.users.olivia), companyId: a.companyId })
+          assert.ok(olivia)
+          assert.equal(olivia.companyId, a.companyId)
+          assert.deepEqual(olivia.company, { id: a.companyId, name: a.name })
+          assert.deepEqual(olivia.projects, [a.projects.cairo, a.projects.copenhagen, a.projects.harbor], "A's three projects and none of B's")
+          assert.equal(olivia.grants.length, 50)
+
+          const lars = await resolvePrincipal(tx, { userId: login(a.users.lars), companyId: a.companyId })
+          assert.deepEqual(lars?.serviceProvider, a.serviceProviders.nordren)
+          assert.deepEqual(lars?.projects, [])
+
+          const viewer = await resolvePrincipal(tx, { userId: login(a.users.viewer), companyId: a.companyId })
+          assert.deepEqual(viewer?.projects, [a.projects.copenhagen], "her Project Access row and not B's viewer's")
+          assert.deepEqual(viewer?.grants, [{ moduleKey: "configure.access", actions: ["view"] }])
+        })
+      } finally {
+        await admin.close()
+      }
     })
   })
 
