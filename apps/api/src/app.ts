@@ -32,11 +32,19 @@ import { authenticate, BEARER_AUTH, BEARER_SECURITY_SCHEME } from "./auth/princi
 import type { Verifier } from "./auth/verify"
 import { errorHandler, notFound } from "./problem"
 import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS } from "./readiness"
+import { agreementRoutes } from "./routes/agreements"
+import { catalogueRoutes } from "./routes/catalogue"
 import { companyRoutes } from "./routes/company"
+import { containerRoutes } from "./routes/containers"
+import { customerRoutes } from "./routes/customers"
 import { meRoutes } from "./routes/me"
+import { productRoutes } from "./routes/products"
 import { projectRoutes } from "./routes/projects"
+import { propertyRoutes } from "./routes/properties"
+import { propertyGroupRoutes } from "./routes/property-groups"
 import { roleRoutes } from "./routes/roles"
 import { serviceProviderRoutes } from "./routes/service-providers"
+import { sharedCollectionPointRoutes } from "./routes/shared-collection-points"
 import { userRoutes } from "./routes/users"
 
 export type AppOptions = {
@@ -114,6 +122,14 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   app.route("/", serviceProviderRoutes(guard))
   app.route("/", userRoutes(guard))
   app.route("/", roleRoutes(guard))
+  app.route("/", catalogueRoutes(guard))
+  app.route("/", productRoutes(guard))
+  app.route("/", customerRoutes(guard))
+  app.route("/", propertyRoutes(guard))
+  app.route("/", propertyGroupRoutes(guard))
+  app.route("/", sharedCollectionPointRoutes(guard))
+  app.route("/", agreementRoutes(guard))
+  app.route("/", containerRoutes(guard))
 
   app.get(
     "/openapi.json",

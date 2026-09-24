@@ -128,24 +128,52 @@ describe("GET /openapi.json", () => {
     assert.deepEqual([...documented].sort(), [...registered].sort())
   })
 
-  test("documents the probes and every route of the organisation and access context, and no other path", async () => {
+  test("documents the probes and every route of the organisation, access and registry contexts, and no other path", async () => {
     const document = await spec()
     assert.deepEqual(Object.keys(document.paths).sort(), [
+      "/agreements",
+      "/agreements/{id}",
+      "/agreements/{id}/subscriptions",
       "/company",
+      "/container-types",
+      "/container-types/{id}",
+      "/containers",
+      "/containers/{id}",
+      "/containers/{id}/placements",
+      "/customers",
+      "/customers/{id}",
       "/healthz",
       "/me",
+      "/placements",
+      "/placements/{id}",
+      "/products",
+      "/products/{id}",
       "/projects",
       "/projects/{id}",
+      "/properties",
+      "/properties/{id}",
+      "/properties/{id}/parties",
+      "/property-groups",
+      "/property-groups/{id}",
+      "/property-groups/{id}/members",
       "/readyz",
       "/roles",
       "/roles/{id}",
       "/roles/{id}/grants",
+      "/service-frequencies",
+      "/service-frequencies/{id}",
       "/service-providers",
       "/service-providers/{id}",
+      "/shared-collection-points",
+      "/shared-collection-points/{id}",
+      "/shared-collection-points/{id}/members",
+      "/subscriptions/{id}",
       "/users",
       "/users/{id}",
       "/users/{id}/deactivate",
       "/users/{id}/reactivate",
+      "/waste-fractions",
+      "/waste-fractions/{id}",
     ])
     assert.equal(document.paths["/healthz"].get.operationId, "getHealth")
     const health = schemaOf(document, "/healthz", "200")
@@ -195,7 +223,11 @@ describe("GET /openapi.json", () => {
         }
       }
     }
-    assert.equal(secured, 22, "/me, the ten organisation routes and the eleven access routes")
+    assert.equal(
+      secured,
+      73,
+      "/me, the ten organisation routes, the eleven access routes and the fifty-one registry routes: waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each — the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each — agreements with their subscriptions, and containers with their placements",
+    )
   })
 
   test("documents each organisation route with its verbs, its problems and its page of items", async () => {
@@ -285,6 +317,185 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(document.paths["/roles"].post.requestBody?.content["application/json"].schema.required, ["name", "scope", "description"])
     assert.deepEqual(document.paths["/roles/{id}/grants"].put.requestBody?.content["application/json"].schema.required, ["grants"])
     assert.equal(document.paths["/users/{id}/deactivate"].post.requestBody, undefined, "a command takes no body")
+  })
+
+  test("documents each registry route with its verbs, its problems and the rules a client must know", async () => {
+    const document = await spec()
+    const operations = (path: string) =>
+      Object.fromEntries(Object.entries(document.paths[path]).map(([method, operation]) => [method, operation.operationId]))
+
+    assert.deepEqual(operations("/waste-fractions"), { get: "listWasteFractions", post: "createWasteFraction" })
+    assert.deepEqual(operations("/waste-fractions/{id}"), { get: "getWasteFraction", patch: "patchWasteFraction" })
+    assert.deepEqual(operations("/container-types"), { get: "listContainerTypes", post: "createContainerType" })
+    assert.deepEqual(operations("/container-types/{id}"), { get: "getContainerType", patch: "patchContainerType" })
+    assert.deepEqual(operations("/service-frequencies"), { get: "listServiceFrequencies", post: "createServiceFrequency" })
+    assert.deepEqual(operations("/service-frequencies/{id}"), { get: "getServiceFrequency", patch: "patchServiceFrequency" })
+    assert.deepEqual(operations("/products"), { get: "listProducts", post: "createProduct" })
+    assert.deepEqual(operations("/products/{id}"), { get: "getProduct", patch: "patchProduct" })
+    assert.deepEqual(operations("/customers"), { get: "listCustomers", post: "createCustomer" })
+    assert.deepEqual(operations("/customers/{id}"), { get: "getCustomer", patch: "patchCustomer" })
+    assert.deepEqual(operations("/properties"), { get: "listProperties", post: "createProperty" })
+    assert.deepEqual(operations("/properties/{id}"), { get: "getProperty", patch: "patchProperty" })
+    assert.deepEqual(operations("/properties/{id}/parties"), { put: "putPropertyParties" })
+    assert.deepEqual(operations("/property-groups"), { get: "listPropertyGroups", post: "createPropertyGroup" })
+    assert.deepEqual(operations("/property-groups/{id}"), { get: "getPropertyGroup", patch: "patchPropertyGroup" })
+    assert.deepEqual(operations("/property-groups/{id}/members"), { put: "putPropertyGroupMembers" })
+    assert.deepEqual(operations("/shared-collection-points"), { get: "listSharedCollectionPoints", post: "createSharedCollectionPoint" })
+    assert.deepEqual(operations("/shared-collection-points/{id}"), { get: "getSharedCollectionPoint", patch: "patchSharedCollectionPoint" })
+    assert.deepEqual(operations("/shared-collection-points/{id}/members"), { put: "putSharedCollectionPointMembers" })
+
+    // What a caller can earn on each of them, and in what shape.
+    const families = ["/waste-fractions", "/container-types", "/service-frequencies", "/products", "/customers", "/properties", "/property-groups", "/shared-collection-points"]
+    for (const path of families) {
+      assert.deepEqual(Object.keys(document.paths[path].get.responses), ["200", "400", "401", "403"], path)
+      assert.deepEqual(Object.keys(document.paths[path].post.responses), ["201", "400", "401", "403", "409"], path)
+      assert.deepEqual(Object.keys(document.paths[`${path}/{id}`].get.responses), ["200", "400", "401", "403", "404"], path)
+      assert.deepEqual(Object.keys(document.paths[`${path}/{id}`].patch.responses), ["200", "400", "401", "403", "404", "409"], path)
+    }
+    // A set is replaced whole, and nothing there can collide: a repeated
+    // entry is the body's own 400 and never the database's 409.
+    for (const [path, set] of [
+      ["/properties/{id}/parties", "parties"],
+      ["/property-groups/{id}/members", "members"],
+      ["/shared-collection-points/{id}/members", "members"],
+    ] as const) {
+      assert.deepEqual(Object.keys(document.paths[path].put.responses), ["200", "400", "401", "403", "404"], path)
+      assert.deepEqual(document.paths[path].put.requestBody?.content["application/json"].schema.required, [set], path)
+    }
+    for (const [status, operation] of Object.entries(document.paths["/products/{id}"].patch.responses)) {
+      const media = Object.keys(operation.content)
+      assert.deepEqual(media, [status === "200" ? "application/json" : "application/problem+json"], status)
+    }
+
+    // A project-scoped list takes the project filter beside the page; a company-wide one does not.
+    const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
+    for (const path of ["/service-frequencies", "/products", "/property-groups", "/shared-collection-points"]) {
+      assert.deepEqual(byName(document.paths[path].get).sort(), ["query:cursor", "query:limit", "query:projectId"], path)
+    }
+    for (const path of ["/waste-fractions", "/container-types", "/customers"]) {
+      assert.deepEqual(byName(document.paths[path].get).sort(), ["query:cursor", "query:limit"], path)
+    }
+    assert.deepEqual(byName(document.paths["/customers/{id}"].patch), ["path:id"])
+    // The portal's read model is a filter of its own beside the project's.
+    assert.deepEqual(byName(document.paths["/properties"].get).sort(), ["query:cursor", "query:customerId", "query:limit", "query:projectId"])
+    assert.deepEqual(byName(document.paths["/properties/{id}/parties"].put), ["path:id"])
+
+    // The rules a client must know are in the prose, not only in the code.
+    assert.match(document.paths["/waste-fractions/{id}"].patch.description ?? "", /key is not patchable/)
+    assert.match(document.paths["/service-frequencies"].post.description ?? "", /an interval needs a rate to belong to/)
+    assert.match(document.paths["/service-frequencies/{id}"].patch.description ?? "", /held against the stored row/)
+    assert.match(document.paths["/products"].post.description ?? "", /service frequency must be one of the named project's/)
+    assert.match(document.paths["/products"].get.description ?? "", /an account that works in none[^.]*reads an empty page/)
+    assert.match(document.paths["/customers"].post.description ?? "", /e-mail is stored lowercase/)
+    assert.match(document.paths["/properties"].get.description ?? "", /citizen portal's read model/)
+    assert.match(document.paths["/properties"].post.description ?? "", /a location outside the WGS 84 range is refused before the database sees it/)
+    assert.match(document.paths["/properties/{id}/parties"].put.description ?? "", /Replaces the whole list/)
+    assert.match(document.paths["/property-groups/{id}/members"].put.description ?? "", /a property of the group's own project/)
+    assert.match(document.paths["/shared-collection-points"].post.description ?? "", /the place is the record/)
+
+    // A write takes a JSON body, and it is the strict one the contracts spell.
+    const required = (path: string) => document.paths[path].post.requestBody?.content["application/json"].schema.required
+    assert.deepEqual(required("/waste-fractions"), ["key", "name"])
+    assert.deepEqual(required("/container-types"), ["name"])
+    assert.deepEqual(required("/service-frequencies"), ["projectId", "name"])
+    assert.deepEqual(required("/products"), ["projectId", "name", "kind", "unit"])
+    assert.deepEqual(required("/customers"), ["kind", "name"])
+    assert.deepEqual(required("/properties"), ["projectId", "name", "address", "kind"])
+    assert.deepEqual(required("/property-groups"), ["projectId", "name", "purpose"])
+    assert.deepEqual(required("/shared-collection-points"), [
+      "projectId",
+      "name",
+      "kind",
+      "address",
+      "location",
+      "operatingModel",
+      "accessMode",
+      "billingMode",
+    ])
+
+    for (const path of ["/waste-fractions", "/products", "/customers", "/properties", "/property-groups", "/shared-collection-points"]) {
+      const page = document.paths[path].get.responses["200"].content["application/json"].schema
+      assert.deepEqual(page.required, ["items", "nextCursor"], path)
+      assert.equal(page.properties?.items.type, "array", path)
+    }
+  })
+
+  test("documents each effective-dated route with its verbs, its problems and the rules a client must know", async () => {
+    const document = await spec()
+    const operations = (path: string) =>
+      Object.fromEntries(Object.entries(document.paths[path]).map(([method, operation]) => [method, operation.operationId]))
+
+    assert.deepEqual(operations("/agreements"), { get: "listAgreements", post: "createAgreement" })
+    assert.deepEqual(operations("/agreements/{id}"), { get: "getAgreement", patch: "patchAgreement" })
+    assert.deepEqual(operations("/agreements/{id}/subscriptions"), { get: "listAgreementSubscriptions", post: "createSubscription" })
+    assert.deepEqual(operations("/subscriptions/{id}"), { get: "getSubscription", patch: "patchSubscription" })
+    assert.deepEqual(operations("/containers"), { get: "listContainers", post: "createContainer" })
+    assert.deepEqual(operations("/containers/{id}"), { get: "getContainer", patch: "patchContainer" })
+    assert.deepEqual(operations("/containers/{id}/placements"), { post: "createPlacement" })
+    assert.deepEqual(operations("/placements"), { get: "listPlacements" })
+    assert.deepEqual(operations("/placements/{id}"), { get: "getPlacement", patch: "patchPlacement" })
+
+    // A child hangs off a path, so its create can answer 404 as well as 409.
+    for (const path of ["/agreements", "/containers"]) {
+      assert.deepEqual(Object.keys(document.paths[path].get.responses), ["200", "400", "401", "403"], path)
+      assert.deepEqual(Object.keys(document.paths[path].post.responses), ["201", "400", "401", "403", "409"], path)
+      assert.deepEqual(Object.keys(document.paths[`${path}/{id}`].get.responses), ["200", "400", "401", "403", "404"], path)
+      assert.deepEqual(Object.keys(document.paths[`${path}/{id}`].patch.responses), ["200", "400", "401", "403", "404", "409"], path)
+    }
+    assert.deepEqual(Object.keys(document.paths["/agreements/{id}/subscriptions"].get.responses), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(Object.keys(document.paths["/agreements/{id}/subscriptions"].post.responses), ["201", "400", "401", "403", "404", "409"])
+    assert.deepEqual(Object.keys(document.paths["/containers/{id}/placements"].post.responses), ["201", "400", "401", "403", "404", "409"])
+    assert.deepEqual(Object.keys(document.paths["/subscriptions/{id}"].patch.responses), ["200", "400", "401", "403", "404", "409"])
+    assert.deepEqual(Object.keys(document.paths["/placements"].get.responses), ["200", "400", "401", "403"])
+    assert.deepEqual(Object.keys(document.paths["/placements/{id}"].patch.responses), ["200", "400", "401", "403", "404", "409"])
+
+    // What is asked for by day, and what by id: the filters each list takes.
+    const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
+    assert.deepEqual(byName(document.paths["/agreements"].get).sort(), [
+      "query:cursor",
+      "query:customerId",
+      "query:limit",
+      "query:number",
+      "query:projectId",
+      "query:validOn",
+    ])
+    assert.deepEqual(byName(document.paths["/agreements/{id}/subscriptions"].get).sort(), ["path:id", "query:cursor", "query:limit", "query:validOn"])
+    assert.deepEqual(byName(document.paths["/containers"].get).sort(), ["query:containerTypeId", "query:cursor", "query:limit", "query:projectId"])
+    assert.deepEqual(byName(document.paths["/placements"].get).sort(), [
+      "query:containerId",
+      "query:cursor",
+      "query:limit",
+      "query:projectId",
+      "query:propertyId",
+      "query:sharedCollectionPointId",
+      "query:subscriptionId",
+      "query:validOn",
+    ])
+    assert.deepEqual(byName(document.paths["/containers/{id}/placements"].post), ["path:id"])
+
+    // The rules a client must know are in the prose, not only in the code.
+    assert.match(document.paths["/agreements"].post.description ?? "", /a number may name a later agreement once the earlier one has ended/)
+    assert.match(document.paths["/agreements"].get.description ?? "", /holds or pays for/)
+    assert.match(document.paths["/agreements/{id}"].patch.description ?? "", /a shortening that would strand one is refused \(409\)/)
+    assert.match(document.paths["/agreements/{id}/subscriptions"].post.description ?? "", /exactly one of `propertyId` and `sharedCollectionPointId`/)
+    assert.match(document.paths["/subscriptions/{id}"].patch.description ?? "", /The product and the place do not change/)
+    assert.match(document.paths["/containers"].post.description ?? "", /unique across the company, not inside a project/)
+    assert.match(document.paths["/containers/{id}/placements"].post.description ?? "", /one container serves in one place at a time/)
+    assert.match(document.paths["/placements"].get.description ?? "", /only answerable for a day/)
+    assert.match(document.paths["/placements/{id}"].get.description ?? "", /read on every request and never stored/)
+
+    // A write takes a JSON body, and it is the strict one the contracts spell.
+    const required = (path: string) => document.paths[path].post.requestBody?.content["application/json"].schema.required
+    assert.deepEqual(required("/agreements"), ["projectId", "number", "customerId", "payerCustomerId", "billingCadence", "currency", "validFrom"])
+    assert.deepEqual(required("/agreements/{id}/subscriptions"), ["productId", "validFrom"])
+    assert.deepEqual(required("/containers"), ["projectId", "label", "containerTypeId"])
+    assert.deepEqual(required("/containers/{id}/placements"), ["subscriptionId", "wasteFractionId", "validFrom"])
+
+    for (const path of ["/agreements", "/agreements/{id}/subscriptions", "/containers", "/placements"]) {
+      const page = document.paths[path].get.responses["200"].content["application/json"].schema
+      assert.deepEqual(page.required, ["items", "nextCursor"], path)
+      assert.equal(page.properties?.items.type, "array", path)
+    }
   })
 
   test("documents /me with the problem responses a token can earn", async () => {

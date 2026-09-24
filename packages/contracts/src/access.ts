@@ -31,18 +31,8 @@ import * as z from "zod"
 import { IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { Grant } from "./permissions"
+import { changesSomething, somethingToChange, stamped } from "./resource"
 import { Label } from "./text"
-
-/** What the server owns on every resource here. */
-const stamped = {
-  id: Id,
-  createdAt: IsoDateTime,
-  updatedAt: IsoDateTime,
-}
-
-/** A patch must change something. */
-const somethingToChange = { message: "Give at least one field to change" }
-const changesSomething = (patch: object) => Object.keys(patch).length > 0
 
 /**
  * A user's status, derived from the row: `invited` until a login is bound,

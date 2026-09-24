@@ -29,6 +29,13 @@
       "when": 1790223952398,
       "tag": "0003_revoke_hook_from_service_role",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790253827871,
+      "tag": "0004_registry",
+      "breakpoints": true
     }
   ]
 }

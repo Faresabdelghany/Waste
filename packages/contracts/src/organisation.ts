@@ -27,8 +27,7 @@
 // half of each.
 import * as z from "zod"
 
-import { IsoDateTime } from "./dates"
-import { Id } from "./ids"
+import { changesSomething, somethingToChange, stamped } from "./resource"
 import { Label } from "./text"
 
 /** A company's status: onboarding until its first project runs. */
@@ -42,8 +41,8 @@ export type ProjectStatus = z.infer<typeof ProjectStatus>
 /** ISO 3166-1 alpha-2, uppercase (`DK`). */
 const Country = z.string().regex(/^[A-Z]{2}$/, "a two-letter uppercase ISO 3166-1 alpha-2 country code, such as DK")
 
-/** ISO 4217, uppercase (`DKK`). */
-const Currency = z.string().regex(/^[A-Z]{3}$/, "a three-letter uppercase ISO 4217 currency code, such as DKK")
+/** ISO 4217, uppercase (`DKK`). An Agreement is billed in one of these too. */
+export const Currency = z.string().regex(/^[A-Z]{3}$/, "a three-letter uppercase ISO 4217 currency code, such as DKK")
 
 /** A BCP 47 language tag by shape (`da`, `en-GB`, `zh-Hans-CN`). */
 const Language = z.string().regex(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/, "a BCP 47 language tag, such as da or en-GB")
@@ -52,19 +51,6 @@ const Language = z.string().regex(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/, "a BCP 47 
 const Timezone = z
   .string()
   .regex(/^(UTC|[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z][A-Za-z0-9_+-]*)+)$/, "an IANA timezone name, such as Europe/Copenhagen")
-
-/** What the server owns on every resource here. */
-const stamped = {
-  id: Id,
-  /** When the row was made. */
-  createdAt: IsoDateTime,
-  /** When it last changed; the database keeps it, not the caller. */
-  updatedAt: IsoDateTime,
-}
-
-/** A patch must change something. */
-const somethingToChange = { message: "Give at least one field to change" }
-const changesSomething = (patch: object) => Object.keys(patch).length > 0
 
 export const Company = z.object({
   ...stamped,
