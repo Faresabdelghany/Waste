@@ -145,12 +145,12 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     const grants = await grantChecksum()
     assert.equal(grants.count, expectedGrants)
 
-    const accounts = await owner.db.select().from(userAccount).orderBy(userAccount.email)
+    const accounts = await owner.db.select().from(userAccount).orderBy(userAccount.id)
     assert.deepEqual(
       accounts.map((row) => [row.id, row.email, row.fullName, row.allProjects, row.primaryAdministrator, row.serviceProviderId, row.authUserId, row.deactivatedAt]),
       [
-        [DEMO_IDS.users.lars, "lars.mikkelsen@nordren.dk", "Lars Mikkelsen", false, false, DEMO_IDS.serviceProviders.nordren, null, null],
-        [DEMO_IDS.users.olivia, "olivia.larsen@kystbyen.example", "Olivia Larsen", true, true, null, null, null],
+        [DEMO_IDS.users.olivia, "fares4389@gmail.com", "Olivia Larsen", true, true, null, null, null],
+        [DEMO_IDS.users.lars, "fares4389+lars@gmail.com", "Lars Mikkelsen", false, false, DEMO_IDS.serviceProviders.nordren, null, null],
       ],
     )
   })

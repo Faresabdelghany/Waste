@@ -30,7 +30,7 @@ const HOOK = "public.custom_access_token_hook"
 const companyId = "018f7c2e-c000-7000-8000-000000000001"
 const roleId = "018f7c2e-c000-7000-8000-000000000002"
 // Addresses of this file's own: the hook binds by e-mail across the whole
-// database, so an address the demo seed also invited (olivia.larsen@kystbyen.example,
+// database, so an address the demo seed also invited (fares4389@gmail.com,
 // src/seed/demo.ts) would be bound twice and refused by `unique (auth_user_id)`.
 const accounts = {
   invited: { id: "018f7c2e-c000-7000-8000-000000000011", email: "invited.colleague@hook-test.example" },
