@@ -23,7 +23,9 @@
 //
 // Its exclusion constraint is over `container_id` alone: a container serves in
 // one place at a time. Nothing references a placement, so it has no
-// `projectKey` of its own; `POST /containers/:id/placements` is the seam the
+// `projectKey` of its own and therefore no unique constraint leading with
+// `(company_id, project_id)`: its reference to the Project takes a
+// `tenantIndex` instead. `POST /containers/:id/placements` is the seam the
 // "issue into service" command grows into when the ledger arrives.
 import { CONTAINER_OWNERSHIPS } from "@waste/domain/registry/vocabulary"
 import { text, uuid } from "drizzle-orm/pg-core"
@@ -83,6 +85,7 @@ export const containerServicePlacement = wms.table(
     projectReference(t, [t.serviceFrequencyId], serviceFrequency),
     tenantReference(t, [t.wasteFractionId], wasteFraction),
     validPeriod(t),
+    tenantIndex(t, t.projectId),
     tenantIndex(t, t.subscriptionId),
     tenantIndex(t, t.wasteFractionId),
     tenantIndex(t, t.serviceFrequencyId),

@@ -314,9 +314,12 @@ CREATE INDEX "product_service_frequency_id_idx" ON "wms"."product" USING btree (
 CREATE UNIQUE INDEX "customer_registration_number_idx" ON "wms"."customer" USING btree ("company_id","registration_number") WHERE "wms"."customer"."registration_number" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "property_registry_id_idx" ON "wms"."property" USING btree ("company_id","registry_id") WHERE "wms"."property"."registry_id" is not null;--> statement-breakpoint
 CREATE INDEX "property_group_responsible_customer_id_idx" ON "wms"."property_group" USING btree ("company_id","responsible_customer_id");--> statement-breakpoint
+CREATE INDEX "property_group_member_project_id_idx" ON "wms"."property_group_member" USING btree ("company_id","project_id");--> statement-breakpoint
 CREATE INDEX "property_group_member_property_id_idx" ON "wms"."property_group_member" USING btree ("company_id","property_id");--> statement-breakpoint
+CREATE INDEX "property_party_project_id_idx" ON "wms"."property_party" USING btree ("company_id","project_id");--> statement-breakpoint
 CREATE INDEX "property_party_customer_id_idx" ON "wms"."property_party" USING btree ("company_id","customer_id");--> statement-breakpoint
 CREATE INDEX "shared_collection_point_responsible_customer_id_idx" ON "wms"."shared_collection_point" USING btree ("company_id","responsible_customer_id");--> statement-breakpoint
+CREATE INDEX "shared_collection_point_member_project_id_idx" ON "wms"."shared_collection_point_member" USING btree ("company_id","project_id");--> statement-breakpoint
 CREATE INDEX "shared_collection_point_member_property_id_idx" ON "wms"."shared_collection_point_member" USING btree ("company_id","property_id");--> statement-breakpoint
 CREATE INDEX "agreement_number_idx" ON "wms"."agreement" USING btree ("company_id","number");--> statement-breakpoint
 CREATE INDEX "agreement_customer_id_idx" ON "wms"."agreement" USING btree ("company_id","customer_id");--> statement-breakpoint
@@ -325,6 +328,7 @@ CREATE INDEX "subscription_product_id_idx" ON "wms"."subscription" USING btree (
 CREATE INDEX "subscription_property_id_idx" ON "wms"."subscription" USING btree ("company_id","property_id");--> statement-breakpoint
 CREATE INDEX "subscription_shared_collection_point_id_idx" ON "wms"."subscription" USING btree ("company_id","shared_collection_point_id");--> statement-breakpoint
 CREATE INDEX "container_container_type_id_idx" ON "wms"."container" USING btree ("company_id","container_type_id");--> statement-breakpoint
+CREATE INDEX "container_service_placement_project_id_idx" ON "wms"."container_service_placement" USING btree ("company_id","project_id");--> statement-breakpoint
 CREATE INDEX "container_service_placement_subscription_id_idx" ON "wms"."container_service_placement" USING btree ("company_id","subscription_id");--> statement-breakpoint
 CREATE INDEX "container_service_placement_waste_fraction_id_idx" ON "wms"."container_service_placement" USING btree ("company_id","waste_fraction_id");--> statement-breakpoint
 CREATE INDEX "container_service_placement_service_frequency_id_idx" ON "wms"."container_service_placement" USING btree ("company_id","service_frequency_id");

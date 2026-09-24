@@ -6,12 +6,13 @@
 //
 // `customer` is one record for a person or an organisation; the prototype's
 // "Contacts & Companies" is this one table. A person has no natural key, so
-// two records for one person are merged by hand later; an organisation's
-// registration number is unique per company where it is given, which is a
-// partial unique index and not a constraint, since most rows have none.
-// `registration_number` is optional for both kinds — a sole trader may have
-// none — and the form decides what it asks for. The e-mail is not unique: a
-// housing administrator's address serves many organisations.
+// two records for one person are merged by hand later; a registration number,
+// whoever carries it, is one customer's within the company where it is given,
+// which is a partial unique index and not a constraint, since most rows have
+// none. `registration_number` is optional for a person and an organisation
+// alike — a sole trader may have none — and the form decides what it asks for.
+// The e-mail is not unique: a housing administrator's address serves many
+// organisations.
 //
 // `property` is the service address. Its `location` is the first point this
 // system stores rather than derives: a geocoded property, so map planning
@@ -37,6 +38,11 @@
 // both tables are project-scoped, so the key carries `project_id` and a group
 // of one project cannot gather another project's properties. A Customer is
 // company-wide, so a party's reference to it is a plain `tenantReference`.
+// Nothing references a party or a member, so those tables carry no
+// `projectKey`, and their reference to the Project has no unique constraint
+// leading with `(company_id, project_id)`: they take a `tenantIndex` on
+// `project_id` instead, as migrations/README.md requires of every referencing
+// column set.
 import {
   CUSTOMER_KINDS,
   CUSTOMER_STATUSES,
@@ -143,6 +149,7 @@ export const propertyParty = wms.table(
     tenantReference(t, [t.customerId], customer),
     // One Customer may be several things to one Property (an owner who also pays), so the role is part of the key.
     tenantUnique(t, t.propertyId, t.customerId, t.role),
+    tenantIndex(t, t.projectId),
     tenantIndex(t, t.customerId),
     oneOf(t.role, PROPERTY_PARTY_ROLES),
   ],
@@ -188,6 +195,7 @@ export const propertyGroupMember = wms.table(
     projectReference(t, [t.propertyGroupId], propertyGroup),
     projectReference(t, [t.propertyId], property),
     tenantUnique(t, t.propertyGroupId, t.propertyId),
+    tenantIndex(t, t.projectId),
     tenantIndex(t, t.propertyId),
     oneOf(t.role, PROPERTY_GROUP_MEMBER_ROLES),
   ],
@@ -253,6 +261,7 @@ export const sharedCollectionPointMember = wms.table(
     // 73 bytes, which names.ts refuses and Postgres would truncate; the key is
     // named for what it holds instead.
     unique(tableObjectName(t.companyId.table, "membership_key", "sharedCollectionPointMember")).on(t.companyId, t.sharedCollectionPointId, t.propertyId),
+    tenantIndex(t, t.projectId),
     tenantIndex(t, t.propertyId),
     oneOf(t.role, SHARED_COLLECTION_POINT_MEMBER_ROLES),
   ],

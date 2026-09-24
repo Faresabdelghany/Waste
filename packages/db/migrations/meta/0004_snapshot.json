@@ -1,5 +1,5 @@
 {
-  "id": "d882d1b4-49f6-46a4-8aaf-156e1405809c",
+  "id": "58f9ebd9-3b23-4d76-bd06-636cb6428dcd",
   "prevId": "4a9904ec-ced4-4a47-b20f-0d21fceda681",
   "version": "7",
   "dialect": "postgresql",
@@ -2063,6 +2063,27 @@
         }
       },
       "indexes": {
+        "property_group_member_project_id_idx": {
+          "name": "property_group_member_project_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "property_group_member_property_id_idx": {
           "name": "property_group_member_property_id_idx",
           "columns": [
@@ -2231,6 +2252,27 @@
         }
       },
       "indexes": {
+        "property_party_project_id_idx": {
+          "name": "property_party_project_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "property_party_customer_id_idx": {
           "name": "property_party_customer_id_idx",
           "columns": [
@@ -2633,6 +2675,27 @@
         }
       },
       "indexes": {
+        "shared_collection_point_member_project_id_idx": {
+          "name": "shared_collection_point_member_project_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "shared_collection_point_member_property_id_idx": {
           "name": "shared_collection_point_member_property_id_idx",
           "columns": [
@@ -3538,6 +3601,27 @@
         }
       },
       "indexes": {
+        "container_service_placement_project_id_idx": {
+          "name": "container_service_placement_project_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "container_service_placement_subscription_id_idx": {
           "name": "container_service_placement_subscription_id_idx",
           "columns": [
