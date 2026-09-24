@@ -35,8 +35,9 @@
 //   global, so no other company on the database may carry that pair. A test
 //   company takes a registration number of its own.
 //
-//   olivia.larsen@kystbyen.example and lars.mikkelsen@nordren.dk — the access
-//   token hook binds a first sign-in by e-mail across the whole database, so
+//   fares4389@gmail.com and fares4389+lars@gmail.com (both reaching the one
+//   inbox that receives the invitations for now) — the access token hook
+//   binds a first sign-in by e-mail across the whole database, so
 //   an account elsewhere with one of these addresses would be bound by it and
 //   then refused by `unique (auth_user_id)`. A test account takes an address
 //   on a random `.example` domain.
@@ -89,7 +90,7 @@ export const DEMO_IDS = {
     "integration-writer": "01a0d2a4-a280-7004-8000-00000000000b",
   } satisfies Record<SystemRoleKey, string>,
   users: {
-    olivia: "01a0d2a4-a280-7005-8000-000000000001",
+    fares: "01a0d2a4-a280-7005-8000-000000000001",
     lars: "01a0d2a4-a280-7005-8000-000000000002",
   },
   serviceProviderAccess: {
@@ -193,12 +194,12 @@ const GRANTS: (typeof roleGrant.$inferInsert)[] = SYSTEM_ROLES.flatMap((systemRo
 // them on first sign-in: `auth_user_id` is null here and stays the hook's.
 const USERS: (typeof userAccount.$inferInsert)[] = [
   {
-    id: DEMO_IDS.users.olivia,
+    id: DEMO_IDS.users.fares,
     companyId: COMPANY_ID,
-    // The prototype spells this address two ways; the seed uses the one an
-    // invitation can reach (lib/data/demo-accounts.ts), not `.example`.
-    email: "olivia.larsen@kystbyen.example",
-    fullName: "Olivia Larsen",
+    // For now both invitations go to one real inbox (see the header); the
+    // prototype keeps its fixture address in lib/data/demo-accounts.ts until Issue 5.
+    email: "fares4389@gmail.com",
+    fullName: "Fares Abdelghany",
     roleId: DEMO_IDS.roles["company-administrator"],
     allProjects: true,
     primaryAdministrator: true,
@@ -206,7 +207,7 @@ const USERS: (typeof userAccount.$inferInsert)[] = [
   {
     id: DEMO_IDS.users.lars,
     companyId: COMPANY_ID,
-    email: "lars.mikkelsen@nordren.dk",
+    email: "fares4389+lars@gmail.com",
     fullName: "Lars Mikkelsen",
     roleId: DEMO_IDS.roles["service-provider-manager"],
     serviceProviderId: DEMO_IDS.serviceProviders.nordren,

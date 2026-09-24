@@ -145,18 +145,18 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     const grants = await grantChecksum()
     assert.equal(grants.count, expectedGrants)
 
-    const accounts = await owner.db.select().from(userAccount).orderBy(userAccount.email)
+    const accounts = await owner.db.select().from(userAccount).orderBy(userAccount.id)
     assert.deepEqual(
       accounts.map((row) => [row.id, row.email, row.fullName, row.allProjects, row.primaryAdministrator, row.serviceProviderId, row.authUserId, row.deactivatedAt]),
       [
-        [DEMO_IDS.users.lars, "lars.mikkelsen@nordren.dk", "Lars Mikkelsen", false, false, DEMO_IDS.serviceProviders.nordren, null, null],
-        [DEMO_IDS.users.olivia, "olivia.larsen@kystbyen.example", "Olivia Larsen", true, true, null, null, null],
+        [DEMO_IDS.users.fares, "fares4389@gmail.com", "Fares Abdelghany", true, true, null, null, null],
+        [DEMO_IDS.users.lars, "fares4389+lars@gmail.com", "Lars Mikkelsen", false, false, DEMO_IDS.serviceProviders.nordren, null, null],
       ],
     )
   })
 
-  test("Olivia works in every project and for no service provider; Lars works for NordRen and in no project", async () => {
-    const [olivia] = await owner.db.select().from(userAccount).where(eq(userAccount.id, DEMO_IDS.users.olivia))
+  test("Fares works in every project and for no service provider; Lars works for NordRen and in no project", async () => {
+    const [fares] = await owner.db.select().from(userAccount).where(eq(userAccount.id, DEMO_IDS.users.fares))
     const [lars] = await owner.db.select().from(userAccount).where(eq(userAccount.id, DEMO_IDS.users.lars))
     const roles = await owner.db.select().from(role)
     const key = (id: string) => roles.find((row) => row.id === id)?.key
@@ -165,13 +165,13 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     // `all_projects`, otherwise exactly its project_access rows.
     const projects = await owner.db.select().from(project)
     const access = await owner.db.select().from(projectAccess)
-    const reaches = (account: typeof olivia) =>
+    const reaches = (account: typeof fares) =>
       account.allProjects ? projects.map((row) => row.id).sort() : access.filter((row) => row.userAccountId === account.id).map((row) => row.projectId).sort()
 
-    assert.equal(key(olivia.roleId), "company-administrator")
-    assert.deepEqual(reaches(olivia), Object.values(DEMO_IDS.projects).sort())
-    assert.equal(olivia.serviceProviderId, null)
-    assert.equal(olivia.primaryAdministrator, true)
+    assert.equal(key(fares.roleId), "company-administrator")
+    assert.deepEqual(reaches(fares), Object.values(DEMO_IDS.projects).sort())
+    assert.equal(fares.serviceProviderId, null)
+    assert.equal(fares.primaryAdministrator, true)
 
     assert.equal(key(lars.roleId), "service-provider-manager")
     assert.deepEqual(reaches(lars), [])
