@@ -25,6 +25,7 @@ import { containerType, product, serviceFrequency, wasteFraction } from "@waste/
 import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { vehicleAllocation, vehicleAllocationEvent } from "@waste/db/schema/allocations"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
+import { driverCommand, outboxEvent, pickup, proofOfService, route, session, unload } from "@waste/db/schema/execution"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
 import { containerTypeVehicleType, vehicleType } from "@waste/db/schema/fleet-types"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "@waste/db/schema/places"
@@ -243,18 +244,31 @@ export async function grantRole(pool: Database, companyId: string, roleId: strin
  * fractions, container types and containers (Issue #97), and Resources'
  * eleven go between them — a group names a vehicle and a driver, a scheme a
  * depot and a station, a movement a container and a placement (Issue #101).
- * The two ledgers, `stock_movement` and `vehicle_allocation_event`, are swept
- * first and as the owner (`owner`, a pool on `DATABASE_ADMIN_URL`), since
- * `wms_api` may not delete from them and the keys would stop the containers
- * and allocations going otherwise (#101 §6.24); a suite that writes no ledger
- * row passes none, and one that does and passes none fails loudly on the key.
+ * The ledgers are swept first and as the owner (`owner`, a pool on
+ * `DATABASE_ADMIN_URL`), since `wms_api` may not delete from them and the keys
+ * would stop the rows they name going otherwise (#101 §6.24): Resources' two,
+ * `stock_movement` and `vehicle_allocation_event`, and Execution's three,
+ * `proof_of_service`, `unload` and `driver_command` (Issue #104), which name
+ * sessions, pickups and routes. A suite that writes no ledger row passes
+ * none, and one that does and passes none fails loudly on the key. Execution's
+ * other four go next as `wms_api`, children first — the outbox, then sessions,
+ * pickups and routes — and before Planning's and Resources', since a route
+ * names a scheme, a group, vehicles, drivers, a depot and a station, and a
+ * pickup names containers, properties, points and fractions.
  */
 export async function dropTenant(pool: Database, companyId: string, owner?: Database): Promise<void> {
   if (owner !== undefined) {
+    await owner.db.delete(proofOfService).where(eq(proofOfService.companyId, companyId))
+    await owner.db.delete(unload).where(eq(unload.companyId, companyId))
+    await owner.db.delete(driverCommand).where(eq(driverCommand.companyId, companyId))
     await owner.db.delete(vehicleAllocationEvent).where(eq(vehicleAllocationEvent.companyId, companyId))
     await owner.db.delete(stockMovement).where(eq(stockMovement.companyId, companyId))
   }
   await withCompany(pool.db, companyId, async (tx: Tx) => {
+    await tx.delete(outboxEvent).where(eq(outboxEvent.companyId, companyId))
+    await tx.delete(session).where(eq(session.companyId, companyId))
+    await tx.delete(pickup).where(eq(pickup.companyId, companyId))
+    await tx.delete(route).where(eq(route.companyId, companyId))
     await tx.delete(collectionGroupContainer).where(eq(collectionGroupContainer.companyId, companyId))
     await tx.delete(collectionGroupContainerType).where(eq(collectionGroupContainerType.companyId, companyId))
     await tx.delete(collectionGroupFraction).where(eq(collectionGroupFraction.companyId, companyId))

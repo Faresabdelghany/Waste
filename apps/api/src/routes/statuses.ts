@@ -166,8 +166,8 @@ export function requireWarehouseTakesStock(found: WarehouseRef): void {
 // them (routes/vehicles.ts, routes/drivers.ts, counting through
 // `refuseStranded` with the pieces below).
 
-/** Who names a fleet row afresh, as its sentence says what it needs: "an allocation needs a vehicle in service", "a collection group needs an active driver". */
-export type FleetReference = "an allocation" | "a collection group"
+/** Who names a fleet row afresh, as its sentence says what it needs: "an allocation needs a vehicle in service", "a collection group needs an active driver", "a route needs a trailer in service" (Execution's Planned Assignment, Issue #104). */
+export type FleetReference = "an allocation" | "a collection group" | "a route"
 
 /** What a body naming a retired vehicle is told — as the vehicle, or as an allocation's trailer: "WH-99 is retired; an allocation needs a vehicle in service", "WH-T99 is retired; an allocation needs a trailer in service". */
 export const isRetired = (label: string, by: FleetReference, as: "vehicle" | "trailer" = "vehicle"): string => `${label} is retired; ${by} needs a ${as} in service`
