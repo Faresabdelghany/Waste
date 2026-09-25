@@ -39,10 +39,12 @@ import { container } from "@waste/db/schema/containers"
 import { customer, property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { vehicleType } from "@waste/db/schema/fleet-types"
 import { serviceProvider } from "@waste/db/schema/organisation"
+import { warehouse } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
-import { eq } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 
+import { invalidRequest } from "../problem"
 import { requireRow, requireStatus, type NamedRow, type TenantTable } from "./shared"
 
 /** What a body is told when it names a customer this company does not have; one sentence, wherever the id sat. */
@@ -192,4 +194,36 @@ export async function requireServiceProvider(tx: Tx, companyId: string, id: stri
 export async function requireVehicleType(tx: Tx, companyId: string, id: string | null | undefined, path = "vehicleTypeId"): Promise<void> {
   if (id == null) return
   await requireRow(tx, vehicleType, inCompany(companyId, id), { path, message: "Not a vehicle type of this company" })
+}
+
+// Resources, slice 2 round: the one check the container list makes of its
+// `warehouseId` filter, spelled here since slices 3 and 5 name a warehouse
+// from a body too (a depot's colocated warehouse, a movement's place).
+
+/** What a body or a query is told when it reaches for a warehouse outside the project, or the projects, it may see. */
+export const NOT_A_WAREHOUSE = "Not a warehouse of this project"
+
+/**
+ * A warehouse a body or a query names: the project's — or, for a list that
+ * names no project, one of the caller's projects, handed in as their ids. A
+ * `query` target is refused on the query string; a body on the body.
+ */
+export async function requireWarehouse(
+  tx: Tx,
+  scope: { companyId: string; projectId: string | readonly string[] },
+  id: string | null | undefined,
+  path = "warehouseId",
+  target: "body" | "query" = "body",
+): Promise<void> {
+  if (id == null) return
+  const refusal = () => invalidRequest(target, [{ path, message: NOT_A_WAREHOUSE }])
+  const projects = typeof scope.projectId === "string" ? [scope.projectId] : [...scope.projectId]
+  // An account that works in no project sees no warehouse; `in ()` is not SQL.
+  if (projects.length === 0) throw refusal()
+  const [found] = await tx
+    .select({ id: warehouse.id })
+    .from(warehouse)
+    .where(and(eq(warehouse.companyId, scope.companyId), inArray(warehouse.projectId, projects), eq(warehouse.id, id)))
+    .limit(1)
+  if (found === undefined) throw refusal()
 }

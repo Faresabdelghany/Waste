@@ -38,9 +38,10 @@ const JULY = "2026-07-01"
 const OCTOBER = "2026-10-01"
 const NEXT_YEAR = "2027-01-01"
 
-describe("the container and placement endpoints", { skip: database.skip || owner.skip }, () => {
+describe("the container and placement endpoints", { skip: database.skip }, () => {
   let pool: Database
-  let ownerPool: Database
+  /** Opened only where the owner's URL is set; the assetState suite below needs it and skips without it. */
+  let ownerPool: Database | undefined
   let keys: SigningKeys
   /** The company under test. */
   let a: Tenant
@@ -78,7 +79,7 @@ describe("the container and placement endpoints", { skip: database.skip || owner
 
   before(async () => {
     pool = createDb(database.url, { max: 4 })
-    ownerPool = createDb(owner.url, { max: 1 })
+    ownerPool = owner.skip ? undefined : createDb(owner.url, { max: 1 })
     keys = await signingKeys()
     a = await seedTenant(pool)
     b = await seedTenant(pool)
@@ -330,7 +331,7 @@ describe("the container and placement endpoints", { skip: database.skip || owner
     })
   })
 
-  describe("assetState, the ledger's reading (Issue #101)", () => {
+  describe("assetState, the ledger's reading (Issue #101)", { skip: owner.skip }, () => {
     test("is null for a container with no movement, and where the latest movement left it once one is recorded, on the read, the list and the patch alike", async () => {
       const created = await container("BIN-3490")
       assert.equal(created.assetState, null)
@@ -365,10 +366,12 @@ describe("the container and placement endpoints", { skip: database.skip || owner
     test("holds warehouseId to the projects the caller works in, naming the filter", async () => {
       const havnen = await warehouseIn(a.projects.harbor.id, "WH-3494")
       const outside = await refused(await viewer(`/containers?warehouseId=${havnen}`), 400)
-      assert.deepEqual(outside.errors, [{ path: "warehouseId", message: "Not a warehouse of the projects this account works in" }], "Vera works in Copenhagen Central only")
+      assert.deepEqual(outside.errors, [{ path: "warehouseId", message: "Not a warehouse of this project" }], "Vera works in Copenhagen Central only")
       assert.deepEqual((await page(olivia, `?warehouseId=${havnen}`)).items, [], "Olivia works in every project and finds nothing standing there")
+      const elsewhere = await refused(await olivia(`/containers?projectId=${a.projects.copenhagen.id}&warehouseId=${havnen}`), 400)
+      assert.deepEqual(elsewhere.errors, [{ path: "warehouseId", message: "Not a warehouse of this project" }], "the project named bounds the warehouse")
       const nobody = await refused(await olivia(`/containers?warehouseId=${testId()}`), 400)
-      assert.deepEqual(nobody.errors, [{ path: "warehouseId", message: "Not a warehouse of the projects this account works in" }])
+      assert.deepEqual(nobody.errors, [{ path: "warehouseId", message: "Not a warehouse of this project" }])
       assert.deepEqual((await refused(await olivia("/containers?assetStatus=in-transit"), 400)).errors?.map((error) => error.path), ["assetStatus"], "a state outside the vocabulary")
     })
   })

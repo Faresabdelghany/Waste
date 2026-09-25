@@ -40,11 +40,14 @@
 // so container A cannot be recorded as issued into container B's placement,
 // whatever the API does. It references itself through `corrects_movement_id`,
 // the adjustment's pointer at the row it corrects, for which it carries
-// `tenantKey`. The index the fold reads is `(company_id, container_id, id
-// desc)`, spelled inline since `tenantIndex` would derive
-// `_container_id_id_idx` and knows no direction: query/asset-state.ts looks
-// the latest movement of one container up per row, `where company_id = ? and
-// container_id = ? order by id desc limit 1`, one probe into this index.
+// `tenantKey`. The index the fold reads is `(company_id, container_id, id)`,
+// spelled inline since `tenantIndex` would derive `_container_id_id_idx`:
+// query/asset-state.ts looks the latest movement of one container up per row,
+// `where company_id = ? and container_id = ? order by id desc limit 1`, which
+// the planner serves as one backward probe into this ascending index. It is
+// not declared descending on purpose: drizzle-kit renders `DESC` as `DESC
+// NULLS LAST`, while `ORDER BY id DESC` means nulls first, and the mismatch
+// costs a sort where the plain index gives an Index Scan Backward.
 import { STOCK_MOVEMENT_KINDS, STOCK_PLACE_KINDS } from "@waste/domain/resources/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, index, text, timestamp, uuid } from "drizzle-orm/pg-core"
@@ -109,8 +112,8 @@ export const stockMovement = wms.table(
       tableObjectName(t.id.table, "kind_shape", "stockMovement"),
       sql`case ${t.kind} when 'receipt' then ${t.fromKind} = 'supplier' and ${t.toKind} = 'warehouse' when 'issue' then ${t.fromKind} in ('warehouse', 'maintenance') and ${t.toKind} = 'service' when 'return' then ${t.fromKind} = 'service' and ${t.toKind} in ('warehouse', 'maintenance') when 'transfer' then ${t.fromKind} in ('warehouse', 'maintenance') and ${t.toKind} in ('warehouse', 'maintenance') when 'decommission' then ${t.fromKind} in ('warehouse', 'maintenance', 'service') and ${t.toKind} = 'scrap' when 'adjustment' then ${t.fromKind} <> 'service' and ${t.toKind} in ('warehouse', 'maintenance', 'scrap') else false end`,
     ),
-    // The fold reads the latest row of one container: `where company_id = ? and container_id = ? order by id desc limit 1`, one probe into this index.
-    index(tableObjectName(t.companyId.table, "container_id_idx", "stockMovement")).on(t.companyId, t.containerId, t.id.desc()),
+    // The fold reads the latest row of one container: `where company_id = ? and container_id = ? order by id desc limit 1`, one backward probe into this index (ascending on purpose, see the header).
+    index(tableObjectName(t.companyId.table, "container_id_idx", "stockMovement")).on(t.companyId, t.containerId, t.id),
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.fromWarehouseId),
     tenantIndex(t, t.toWarehouseId),

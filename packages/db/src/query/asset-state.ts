@@ -12,10 +12,12 @@
 //
 // A LATERAL lookup per row, not a fold of the whole ledger: `select … from
 // stock_movement where company_id = ? and container_id = <the row's id> order
-// by id desc limit 1`, one probe into `stock_movement_container_id_idx`
-// (`(company_id, container_id, id desc)`) for each container the outer query
-// answers, so a page of fifty costs fifty probes and never a `DISTINCT ON`
-// over every movement the company ever recorded.
+// by id desc limit 1`, one backward probe into `stock_movement_container_id_idx`
+// (`(company_id, container_id, id)`, ascending: an Index Scan Backward serves
+// the `desc`, where a `DESC NULLS LAST` index would not match `ORDER BY id
+// DESC`'s nulls-first default and cost a sort) for each container the outer
+// query answers, so a page of fifty costs fifty probes and never a `DISTINCT
+// ON` over every movement the company ever recorded.
 //
 // The fold is in recording order — the id, a UUIDv7, is the order the rows
 // were made in — and not by `occurred_at`. A command holds every movement's

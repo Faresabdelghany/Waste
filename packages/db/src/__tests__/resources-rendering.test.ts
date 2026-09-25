@@ -360,8 +360,8 @@ const expected = [
   partialUniqueIndex("driver", "driver_user_account_id_idx", ["company_id", "user_account_id"], `${ref("driver", "user_account_id")} is not null`),
   index("driver", "driver_service_provider_id_idx", "company_id", "service_provider_id"),
   index("driver", "driver_home_depot_id_idx", "company_id", "home_depot_id"),
-  // The fold's one probe per container: the latest movement first.
-  `CREATE INDEX "stock_movement_container_id_idx" ON "wms"."stock_movement" USING btree ("company_id","container_id","id" DESC NULLS LAST);`,
+  // The fold's one backward probe per container; ascending on purpose, since drizzle-kit's DESC is DESC NULLS LAST and would not match ORDER BY id DESC.
+  index("stock_movement", "stock_movement_container_id_idx", "company_id", "container_id", "id"),
   index("stock_movement", "stock_movement_project_id_idx", "company_id", "project_id"),
   index("stock_movement", "stock_movement_from_warehouse_id_idx", "company_id", "from_warehouse_id"),
   index("stock_movement", "stock_movement_to_warehouse_id_idx", "company_id", "to_warehouse_id"),

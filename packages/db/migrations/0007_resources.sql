@@ -330,7 +330,7 @@ CREATE UNIQUE INDEX "driver_workforce_reference_idx" ON "wms"."driver" USING btr
 CREATE UNIQUE INDEX "driver_user_account_id_idx" ON "wms"."driver" USING btree ("company_id","user_account_id") WHERE "wms"."driver"."user_account_id" is not null;--> statement-breakpoint
 CREATE INDEX "driver_service_provider_id_idx" ON "wms"."driver" USING btree ("company_id","service_provider_id");--> statement-breakpoint
 CREATE INDEX "driver_home_depot_id_idx" ON "wms"."driver" USING btree ("company_id","home_depot_id");--> statement-breakpoint
-CREATE INDEX "stock_movement_container_id_idx" ON "wms"."stock_movement" USING btree ("company_id","container_id","id" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "stock_movement_container_id_idx" ON "wms"."stock_movement" USING btree ("company_id","container_id","id");--> statement-breakpoint
 CREATE INDEX "stock_movement_project_id_idx" ON "wms"."stock_movement" USING btree ("company_id","project_id");--> statement-breakpoint
 CREATE INDEX "stock_movement_from_warehouse_id_idx" ON "wms"."stock_movement" USING btree ("company_id","from_warehouse_id");--> statement-breakpoint
 CREATE INDEX "stock_movement_to_warehouse_id_idx" ON "wms"."stock_movement" USING btree ("company_id","to_warehouse_id");--> statement-breakpoint

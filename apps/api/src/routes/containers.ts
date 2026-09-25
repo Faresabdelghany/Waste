@@ -82,20 +82,19 @@ import { subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
-import { warehouse } from "@waste/db/schema/places"
 import type { AssetStatus } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, gt, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { periodAfter, periodOf, requireWithin, type Period } from "./periods"
-import { requireContainerType, requireServiceFrequency, requireWasteFraction, type Scope } from "./references"
+import { requireContainerType, requireServiceFrequency, requireWarehouse, requireWasteFraction, type Scope } from "./references"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stampsOf } from "./shared"
 import { refuseUnservedPlace, type Place } from "./statuses"
 
@@ -149,13 +148,16 @@ function containersFrom(tx: Tx, companyId: string) {
 
 /** The reading as the wire spells it: null with no movement, else where the latest one left the container. */
 function assetStateOfRow(row: Row): AssetState | null {
-  if (row.stateMovementId === null || row.stateSince === null) return null
-  if (row.stateStatus === null) {
-    // The kind check keeps every arrival at a place with a state; a row without one is a broken invariant, not a client's doing.
-    throw new Error(`stock_movement ${row.stateMovementId} arrived at a place with no asset state`)
+  if (row.stateMovementId === null) return null
+  if (row.stateStatus === null || row.stateSince === null) {
+    // A movement is NOT NULL on `occurred_at`, and the kind check keeps every arrival at a place with a state: a null beside a movement is a broken invariant, not a client's doing.
+    throw new Error(`stock_movement ${row.stateMovementId} has no ${row.stateStatus === null ? "asset state" : "occurred_at"} to answer`)
   }
   return { status: row.stateStatus, warehouseId: row.stateWarehouseId, placementId: row.statePlacementId, since: row.stateSince.toISOString(), movementId: row.stateMovementId }
 }
+
+/** The reading a container has before any movement: what a create answers, since a row just made has none by construction. */
+const NO_STATE = { stateStatus: null, stateWarehouseId: null, statePlacementId: null, stateSince: null, stateMovementId: null }
 
 /** The row on the wire. `ownership` is text with a CHECK in the database and an enum here; the vocabulary holds the two in lockstep. */
 function containerOf(row: Row): Container {
@@ -174,8 +176,6 @@ function containerOf(row: Row): Container {
   }
 }
 
-/** What a list is told when it asks for the containers standing in a warehouse the caller cannot see; the composite key and the fence hold the same line. */
-const NOT_A_WAREHOUSE_HERE = "Not a warehouse of the projects this account works in"
 
 /**
  * The placement as the wire spells it, the last field computed rather than
@@ -252,21 +252,11 @@ async function findContainer(tx: Tx, principal: Principal, id: string): Promise<
   return row
 }
 
-/** The row a write just made, read back through the one statement, so the answer carries the reading the next read will. */
+/** The row a patch just changed, read back through the one statement, so the answer carries the reading the next read will; a create needs none, since a new container has no movement. */
 async function readBack(tx: Tx, principal: Principal, id: string): Promise<Row> {
   const row = await findContainer(tx, principal, id)
   if (row === undefined) throw new Error(`container ${id} was written and is not there to read back`)
   return row
-}
-
-/** A warehouse the list may ask about: this company's, in a project the caller works in — a 400 on the filter otherwise, like a project outside the scope. */
-async function requireWarehouseInProjects(tx: Tx, principal: Principal, id: string): Promise<void> {
-  const [row] = await tx
-    .select({ id: warehouse.id })
-    .from(warehouse)
-    .where(and(eq(warehouse.companyId, principal.companyId), inProjects(warehouse.projectId, principal), eq(warehouse.id, id)))
-    .limit(1)
-  if (row === undefined) throw invalidRequest("query", [{ path: "warehouseId", message: NOT_A_WAREHOUSE_HERE }])
 }
 
 /**
@@ -357,7 +347,7 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "listContainers",
         summary: "The containers the caller's projects hold",
         description:
-          "One page of containers, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused, and `containerTypeId` narrows it to one type. Each container carries `assetState`, the ledger's reading — its latest Stock Movement folded onto in-warehouse, in-service, in-maintenance or retired, null for a container with no movement yet — and `assetStatus` narrows the page to one state, `warehouseId` to the containers standing in that warehouse, in stock or in maintenance; a warehouse outside the projects this account works in is refused. Where a container serves is the placement valid on the day asked, `GET /placements`. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of containers, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused, and `containerTypeId` narrows it to one type. Each container carries `assetState`, the ledger's reading — its latest Stock Movement folded onto in-warehouse, in-service, in-maintenance or retired, null for a container with no movement yet — and `assetStatus` narrows the page to one state, `warehouseId` to the containers standing in that warehouse, in stock or in maintenance; a warehouse outside the project named, or the projects this account works in, is refused. Where a container serves is the placement valid on the day asked, `GET /placements`. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of containers, each with the ledger's reading.", ContainerPage),
@@ -375,7 +365,8 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        if (warehouseId !== undefined) await requireWarehouseInProjects(tx, principal, warehouseId)
+        // The warehouse asked about is one the caller may see: the project named, or any the caller works in.
+        if (warehouseId !== undefined) await requireWarehouse(tx, { companyId: principal.companyId, projectId: projectId ?? projectIdsOf(principal) }, warehouseId, "warehouseId", "query")
         const { state, query } = containersFrom(tx, principal.companyId)
         const rows = await query
           .where(
@@ -425,9 +416,10 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
           tx
             .insert(container)
             .values({ ...values, id: newId(), companyId: principal.companyId })
-            .returning({ id: container.id }),
+            .returning(columns),
         )
-        return created(c, "/containers", containerOf(await readBack(tx, principal, row.id)))
+        // A container just registered has no movement, so its state is null by construction and needs no probe.
+        return created(c, "/containers", containerOf({ ...row, ...NO_STATE }))
       },
     )
     .get(

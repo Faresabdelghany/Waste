@@ -17,8 +17,8 @@ export type KeyRange = { columns: readonly [string, string]; noun: string; set: 
 /** One column of a resolved key: its database name, and the column for what the caller still has to check of it (nullability). */
 export type KeyColumn = { name: string; column: PgColumn }
 
-/** A key as a helper writes it: the table it is on, and the caller's columns after `company_id`, each once and none of the range. */
-export type ResolvedKey = { target: string; own: KeyColumn[] }
+/** A key as a helper writes it: the table it is on, its columns by database name (for whatever else the helper has to look up on the table), and the caller's columns after `company_id`, each once and none of the range. */
+export type ResolvedKey = { target: string; columns: Map<string, PgColumn>; own: KeyColumn[] }
 
 /**
  * The caller's key columns, checked and de-duplicated. `company_id` is not
@@ -46,5 +46,5 @@ export function resolveKey(table: PgTable, key: readonly PgColumn[], helper: str
     if (name === "company_id" || own.some((seen) => seen.name === name)) continue
     own.push({ name, column })
   }
-  return { target, own }
+  return { target, columns, own }
 }

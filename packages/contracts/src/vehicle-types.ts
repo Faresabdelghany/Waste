@@ -6,7 +6,9 @@
 // and a Stop Matching Rule names a vehicle type by id.
 //
 // The `key` is the stable slug the rest of the system quotes (`rear-loader`),
-// held to the one key shape of text.ts (`Slug`, as a waste fraction's) and set once:
+// held to the one key shape of text.ts (`Slug`, as a waste fraction's — its
+// bound is `KEY_MAX`, 50, where slice 2 first said 64; pre-release, with no
+// key stored anywhere, one bound for every key is the better rule) and set once:
 // the patch takes the name and the description and never the key, since a
 // rule or an import that quotes the old one goes on quoting it, and a type
 // that needs another key is another type. The compatibility set travels with

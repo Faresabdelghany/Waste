@@ -425,6 +425,24 @@ describe("the project-scoped key helpers", () => {
     assert.throws(() => getTableConfig(empty), /projectReference: "specimen_project_empty" names no columns beside company_id and project_id/)
   })
 
+  test("a reference through another column points at the target's own columns, and a key through another column is of the table's own — a column of another table is refused by name", () => {
+    const through = wms.table("specimen_project_through", { ...id, ...projectScoped, ...timestamps, ownerId: uuid().notNull(), code: text().notNull() }, (t) => [projectKey(t, t.ownerId)])
+    const elsewhere = wms.table("specimen_project_elsewhere", { ...id, ...projectScoped, ownerId: uuid().notNull() })
+    const sound = wms.table("specimen_project_via", { ...id, ...projectScoped, ownerId: uuid().notNull(), throughId: uuid() }, (t) => [
+      projectReference(t, [t.ownerId, t.throughId], through, [through.ownerId, through.id]),
+    ])
+    assert.deepEqual(getTableConfig(sound).foreignKeys.length, 1)
+    assert.match(getTableConfig(through).uniqueConstraints[0].name ?? "", /^specimen_project_through_owner_id_project_key$/)
+    const astray = wms.table("specimen_project_astray", { ...id, ...projectScoped, ownerId: uuid().notNull(), throughId: uuid() }, (t) => [
+      projectReference(t, [t.ownerId, t.throughId], through, [elsewhere.ownerId, through.id]),
+    ])
+    assert.throws(() => getTableConfig(astray), /projectReference: column "owner_id" is not a column of "specimen_project_through", the table the key points at/)
+    const short = wms.table("specimen_project_short", { ...id, ...projectScoped, ownerId: uuid().notNull() }, (t) => [projectReference(t, [t.ownerId], through, [through.ownerId, through.id])])
+    assert.throws(() => getTableConfig(short), /projectReference: "specimen_project_short" names 1 column\(s\) for a key of 2 in "specimen_project_through"/)
+    const foreignKey = wms.table("specimen_project_foreign_key", { ...id, ...projectScoped, ...timestamps }, (t) => [projectKey(t, elsewhere.ownerId)])
+    assert.throws(() => getTableConfig(foreignKey), /projectKey: column "owner_id" is not a column of "specimen_project_foreign_key"/)
+  })
+
   test("refuse a name Postgres would truncate, at definition time", () => {
     const name = `specimen_project_key_${"o".repeat(31)}`
     const long = wms.table(name, { ...id, ...projectScoped }, (t) => [projectKey(t)])

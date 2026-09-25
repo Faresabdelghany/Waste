@@ -120,6 +120,11 @@ export function projectReference(columns: ProjectColumns, own: PgColumn[], targe
   if (own.length !== foreign.length) {
     throw new Error(`${helper}: ${tableOf(columns.companyId)} names ${own.length} column(s) for a key of ${foreign.length} in ${tableOf(target.companyId)}`)
   }
+  for (const column of foreign) {
+    if (column.table !== target.id.table) {
+      throw new Error(`${helper}: column "${columnName(column)}" is not a column of ${tableOf(target.id)}, the table the key points at`)
+    }
+  }
   return foreignKey({
     name: tableObjectName(columns.companyId.table, `${named(own)}_fk`, helper),
     columns: [columns.companyId, columns.projectId, ...own],
@@ -139,8 +144,14 @@ export function tenantKey(columns: TenantTable): UniqueConstraintBuilder {
  * another of its columns as well, so the key it points at carries that column.
  */
 export function projectKey(columns: ProjectTable, ...through: PgColumn[]): UniqueConstraintBuilder {
+  const helper = "projectKey"
+  for (const column of through) {
+    if (column.table !== columns.id.table) {
+      throw new Error(`${helper}: column "${columnName(column)}" is not a column of ${tableOf(columns.id)}`)
+    }
+  }
   const suffix = through.length === 0 ? "project_key" : `${named(through)}_project_key`
-  return unique(tableObjectName(columns.companyId.table, suffix, "projectKey")).on(columns.companyId, columns.projectId, ...through, columns.id)
+  return unique(tableObjectName(columns.companyId.table, suffix, helper)).on(columns.companyId, columns.projectId, ...through, columns.id)
 }
 
 /** `UNIQUE (company_id, ...own)`, named `<table>_<own>_key`: a business key, which is always the tenant's. */

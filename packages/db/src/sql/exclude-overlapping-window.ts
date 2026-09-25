@@ -30,7 +30,7 @@ import { getTableConfig, type PgColumn, type PgTable } from "drizzle-orm/pg-core
 
 import { WINDOW_CHECK } from "../schema/columns"
 import { literal } from "../schema/checks"
-import { columnsByName, quoted, tableObjectName } from "../names"
+import { columnName, quoted, tableObjectName } from "../names"
 import { NO_OVERLAP } from "./exclude-overlapping"
 import { resolveKey } from "./key"
 
@@ -51,7 +51,7 @@ const keyWord = (column: string): string => column.replace(/_id$/, "")
 
 /** The statement that adds the exclusion constraint for this key over the window, for the table's migration file. */
 export function excludeOverlappingWindow(table: PgTable, key: [PgColumn, ...PgColumn[]], where: WindowPredicate = {}): string[] {
-  const { target, own } = resolveKey(table, key, HELPER, WINDOW_COLUMNS)
+  const { target, columns, own } = resolveKey(table, key, HELPER, WINDOW_COLUMNS)
   const checkName = tableObjectName(table, WINDOW_CHECK, HELPER)
   if (!getTableConfig(table).checks.some((check) => check.name === checkName)) {
     throw new Error(`${HELPER}: ${target} has no "${checkName}" check; add orderedWindow(columns) beside its columns, or an empty window would pass the constraint`)
@@ -61,10 +61,10 @@ export function excludeOverlappingWindow(table: PgTable, key: [PgColumn, ...PgCo
   }
   const predicate = own.filter(({ column }) => !column.notNull).map(({ name }) => `${quoted(name)} is not null`)
   if (where.live !== undefined) {
-    const columns = columnsByName(table)
-    const name = [...columns].find(([, candidate]) => candidate === where.live?.column)?.[0]
+    const live = where.live.column
+    const name = [...columns].find(([, candidate]) => candidate === live)?.[0]
     if (name === undefined) {
-      throw new Error(`${HELPER}: live column "${where.live.column.name}" is not a column of ${target}`)
+      throw new Error(`${HELPER}: live column "${columnName(live)}" is not a column of ${target}`)
     }
     predicate.push(`${quoted(name)} <> ${literal(where.live.not)}`)
   }
