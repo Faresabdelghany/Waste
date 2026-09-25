@@ -10,7 +10,7 @@ import { Session } from "@waste/contracts/sessions"
 import { NET_IS_GROSS_LESS_TARE, Unload } from "@waste/contracts/unloads"
 import { createDb, type Database } from "@waste/db/client"
 import { property as propertyTable, sharedCollectionPoint } from "@waste/db/schema/customers"
-import { driverCommand, outboxEvent, pickup as pickupTable, proofOfService, session as sessionTable } from "@waste/db/schema/execution"
+import { driverCommand, outboxEvent, pickup as pickupTable, proofOfService, route as routeTable, session as sessionTable } from "@waste/db/schema/execution"
 import { vehicle as vehicleTable } from "@waste/db/schema/fleet"
 import { withCompany } from "@waste/db/tenant"
 import {
@@ -31,14 +31,14 @@ import {
 } from "@waste/domain/execution/commands"
 import { alreadyActive, alreadyDecided, doesNotChange, notActive, notDispatched } from "@waste/domain/execution/transitions"
 import type { DriverCommandKind } from "@waste/domain/execution/vocabulary"
-import { and, asc, count, eq, isNull } from "drizzle-orm"
+import { and, asc, count, eq, isNull, sql } from "drizzle-orm"
 import { Hono } from "hono"
 
 import { createApp } from "../app"
 import { NOT_A_DRIVERS_LOGIN } from "../auth/driver"
 import { authenticate } from "../auth/principal"
 import { errorHandler } from "../problem"
-import { ANOTHER_DEVICES_COMMAND, driverDoorRoutes } from "../routes/driver"
+import { ANOTHER_DEVICES_COMMAND, driverDoorRoutes, HELD_AT_WRITE } from "../routes/driver"
 import { routeRoutes } from "../routes/routes"
 import { COMMAND_BACKDATE_MS, OCCURRED_AT_SKEW_MS } from "../routes/shared"
 import { callingAs, type Call } from "./calls"
@@ -54,7 +54,7 @@ const database = databaseUnderTest()
 const owner = ownerUnderTest()
 
 const RoutePage = Page(Route)
-/** A page of receipts as the door answers it, every item the contract's shape — a rejection for a route the driver does not reach included, its `routeId` null. */
+/** A page of receipts as the door answers it, every item the contract's shape — a rejection for a route of another project, another company or none included, its `routeId` null. */
 const ReceiptPage = Page(DriverCommandReceipt)
 
 /** The request's clock: the afternoon of the operating date, pinned, so every instant a command carries (06:30 to 12:30) is behind it; moved by the tests that need it to move. */
@@ -990,7 +990,7 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
       assert.deepEqual(await written(), before)
     })
 
-    test("two of one driver's routes started at once meet on the one-live-session-per-driver index: one starts, the other is that command's rejection naming the winner, and both batches go on", async () => {
+    test("two of one driver's routes started at once meet on the one-live-session-per-driver index: one starts, the other is that command's rejection naming the winner — by the rule or at the write, whichever the timing gives — and both batches go on", async () => {
       const first = await minted()
       const second = await minted()
       const batches = [first, second].map((route) => [envelope("start-route", route.id, { vehicleId: fleet.vehicles.wh24.id }), envelope("pause", route.id, {}, { occurredAt: at("06:31") })])
@@ -1001,7 +1001,7 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
       const lost = won === first ? second : first
       const loser = won === first ? right : left
       assert.equal(loser[0].problem?.status, 409)
-      assert.equal(loser[0].problem?.detail, alreadyOnRoute("Mads Jensen", won.label), "the rule `decide` would have applied a statement later, naming the route that won")
+      assert.equal(loser[0].problem?.detail, alreadyOnRoute("Mads Jensen", won.label), "the rule's sentence naming the route that won, whether the rule or the index refused; the test below pins the index")
       assert.equal(loser[1].problem?.detail, notActive(lost.label), "the rest of the losing batch was judged and recorded, not lost")
       assert.deepEqual((await detail(lost.id)).sessions, [], "the loser's session was rolled back")
       assert.equal((await detail(lost.id)).status, "ready")
@@ -1016,6 +1016,79 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
           `${route.label}: both commands have their receipt`,
         )
       }
+    })
+
+    test("a start the index holds at the write — the winner's session uncommitted when the loser's rule read it, committed when the loser's insert landed — is that command's rejection naming the winner, recorded, and noted in the log as held at the write", async () => {
+      // What the concurrent test above cannot pin: its loser may lose by the rule (`driverOpenOn` read the winner's committed row a statement before the write) or at the write (the index refused the insert), and the sentence is the same either way, so that test passes without the catch ever running. Here the winner is hand-driven — Mads's session on the first route, inserted the way the fixtures insert one, in a transaction held open — so the loser's rule read cannot see it (READ COMMITTED: an uncommitted row is invisible) and its insert waits on the winner's outcome under `session_driver_open_idx`; the winner commits only once Postgres reports the loser blocked behind it (`pg_blocking_pids`), and the insert then fails with 23505 on a row the loser could not have read.
+      const first = await minted()
+      const second = await minted()
+      const batch = [envelope("start-route", second.id, { vehicleId: fleet.vehicles.wh24.id }), envelope("pause", second.id, {}, { occurredAt: at("06:31") })]
+      const winnersSession = mint()
+      const released = Promise.withResolvers<void>()
+      const inserted = Promise.withResolvers<number>()
+      const winner = withCompany(pool.db, a.companyId, async (tx) => {
+        const [{ pid }] = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
+        await tx.insert(sessionTable).values({
+          id: winnersSession,
+          companyId: a.companyId,
+          projectId: a.projects.copenhagen.id,
+          routeId: first.id,
+          driverId: fleet.drivers.mads.id,
+          vehicleId: fleet.vehicles.wh24.id,
+          deviceId: "device-mads-01",
+          appVersion: "1.4.0",
+          startedAt: new Date(at("06:30")),
+          lastSeenAt: MORNING,
+        })
+        await tx
+          .update(routeTable)
+          .set({ status: "active", startedAt: new Date(at("06:30")), actualVehicleId: fleet.vehicles.wh24.id, actualDriverId: fleet.drivers.mads.id })
+          .where(and(eq(routeTable.companyId, a.companyId), eq(routeTable.id, first.id)))
+        inserted.resolve(pid)
+        await released.promise
+      })
+      /** Rejects if the winner ends before it is released — an insert refused, say — so a broken winner fails the test instead of hanging it on the pid. */
+      const endedEarly = winner.then(() => Promise.reject(new Error("the winner's transaction ended before it was released")))
+      void endedEarly.catch(() => undefined)
+      logged.length = 0
+      const losing = send(batch)
+      try {
+        const pid = await Promise.race([inserted.promise, endedEarly])
+        // Postgres names the backends a process blocks: the loser's insert is waiting on the winner's transaction once this answers a row, and not before.
+        const blocked = async (): Promise<boolean> => (await pool.sql`select pid from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))`).length > 0
+        const deadline = Date.now() + 10_000
+        while (!(await blocked())) {
+          assert.ok(Date.now() < deadline, "the loser's insert never waited on the winner: the index did not hold it")
+          await new Promise((resolve) => setTimeout(resolve, 20))
+        }
+      } finally {
+        released.resolve()
+        await winner
+        await losing.catch(() => undefined)
+      }
+      const loser = await losing
+      assert.deepEqual(loser.map((outcome) => outcome.outcome), ["rejected", "rejected"])
+      assert.deepEqual([loser[0].problem?.status, loser[0].problem?.detail], [409, alreadyOnRoute("Mads Jensen", first.label)], "the rule's sentence, naming the route that won")
+      assert.equal(loser[1].problem?.detail, notActive(second.label), "the rest of the batch was judged and recorded")
+      assert.deepEqual(
+        logged,
+        [{ event: HELD_AT_WRITE, constraint: "session_driver_open_idx", commandId: batch[0].id, kind: "start-route", routeId: second.id, driverId: fleet.drivers.mads.id }],
+        "the write is what held it, and the log says so: the one way to tell this door from the rule's",
+      )
+      assert.equal(HELD_AT_WRITE, "driver-command-held-at-write")
+      const page = await receipts(`?routeId=${second.id}`)
+      assert.deepEqual(
+        page.items.map((receipt) => [receipt.id, receipt.outcome, receipt.problem?.detail]),
+        [
+          [batch[0].id, "rejected", alreadyOnRoute("Mads Jensen", first.label)],
+          [batch[1].id, "rejected", notActive(second.label)],
+        ],
+        "both commands have their receipt",
+      )
+      const lost = await detail(second.id)
+      assert.deepEqual([lost.status, lost.sessions], ["ready", []], "the loser's session was rolled back")
+      const won = await detail(first.id)
+      assert.deepEqual([won.status, won.sessions.map((session) => session.id)], ["active", [winnersSession]], "the winner's stands")
     })
 
     test("two overlapping uploads of one batch leave one receipt per command and answer one applied and one replayed", async () => {

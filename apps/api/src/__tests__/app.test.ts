@@ -381,7 +381,7 @@ describe("GET /openapi.json", () => {
     assert.match(door, /An id that another device's command already holds .* is refused \(409, `That command id belongs to another device's command`\) and never replayed/)
     assert.match(door, /two of the driver's routes started at once, each batch under its own route's lock, meet on the one-live-session-per-driver index/)
     assert.match(door, /a route-level `report-problem`'s `pickup-problem-reported` the route with its problem proof as `proofs`/)
-    assert.match(door, /assigned to another driver names that route and no session and no pickup/)
+    assert.match(door, /assigned to another driver names that route — which `GET \/driver\/routes\/:id` still answers 404 for — and no session and no pickup/)
     assert.match(door, /A body that fails its kind's schema is one command's rejection, never the batch's/)
     assert.match(door, /at most five minutes ahead of the request's clock \(400, `Recorded after it happened`\)/)
     assert.match(door, /at most forty-eight hours behind it \(400, `Recorded more than 48 hours after it happened`\)/)
@@ -389,8 +389,12 @@ describe("GET /openapi.json", () => {
     assert.match(door, /Mads Jensen is already on route RC-1039; end it first/)
     assert.match(door, /Pickup 12 is already completed/)
     assert.match(door, /The object key names another route or another command/)
-    assert.match(door, /recorded without a route, in the driver's project, the claimed route id kept beside the body/)
-    assert.match(document.paths["/driver/commands"].get.description ?? "", /oldest first/)
+    assert.match(door, /a rejection for a route of another project, another company or none is recorded without a route, in the driver's project, the claimed route id kept beside the body/)
+    // The receipts page states the receipt's `routeId` rule the same way: named for a route of the driver's project, another driver's included, null otherwise.
+    const receipts = document.paths["/driver/commands"].get.description ?? ""
+    assert.match(receipts, /oldest first/)
+    assert.match(receipts, /`routeId` names the route the command claimed when that route is of this driver's project — one assigned to another driver included, which `GET \/driver\/routes\/:id` still answers 404 for, so a receipt may name a route the device cannot read/)
+    assert.match(receipts, /is null for a route of another project, another company or none, the claimed id then kept in the body as `\{ routeId, body \}`/)
 
     for (const path of ["/driver/routes", "/driver/commands"]) {
       const page = document.paths[path].get.responses["200"].content["application/json"].schema
