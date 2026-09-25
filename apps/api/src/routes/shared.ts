@@ -34,6 +34,10 @@
 //                    lock first (`lockRow`) and reads afterwards, so the
 //                    two serialise on that row (routes/periods.ts says which
 //                    rule and which parent).
+//   a status       — where the row a body names carries one, the lookup that
+//                    proves it is there answers it too (`requireStatus`), so
+//                    the gate a new reference passes (routes/statuses.ts,
+//                    Issue #79) costs no second statement.
 //
 // Nothing here knows a table or a resource: what is not shared by every route
 // module stays in the one that owns it.
@@ -83,6 +87,15 @@ export async function refuseOverlap<T>(sentences: Readonly<Record<string, string
 /** A table a row can be looked up in the way every table of this system can be: by its own id, inside a company. */
 export type TenantTable = PgTable & { id: PgColumn; companyId: PgColumn }
 
+/** A table whose rows carry a status beside the key: every Registry record that is not effective-dated. */
+export type StatusTable = TenantTable & { status: PgColumn }
+
+/** The row a body named: this company's, and under whatever else its key demands. */
+export type NamedRow = { companyId: string; id: string; also?: SQL }
+
+/** What a row that is not there is told: a 400 at the field that named it. */
+export type Refusal = { path: string; message: string }
+
 /**
  * Holds an id a body named to a row that is really there — in this company,
  * and under whatever else its key demands, which `also` carries: the project
@@ -100,18 +113,30 @@ export type TenantTable = PgTable & { id: PgColumn; companyId: PgColumn }
  * product makes of its container type is the check a subscription will make
  * of its product and an agreement of its customer.
  */
-export async function requireRow(
-  tx: Tx,
-  table: TenantTable,
-  row: { companyId: string; id: string; also?: SQL },
-  refusal: { path: string; message: string },
-): Promise<void> {
+export async function requireRow(tx: Tx, table: TenantTable, row: NamedRow, refusal: Refusal): Promise<void> {
+  await answering(tx, table, table.id, row, refusal)
+}
+
+/**
+ * The same lookup for a table whose rows carry a status, answering it: one
+ * statement proves the row is there and says what state it is in, so a route
+ * that gates a new reference on that state (routes/statuses.ts) asks once,
+ * and a row that is not there is still the 400 above, before any 409. The
+ * caller names the vocabulary the column's check holds the value to.
+ */
+export async function requireStatus<Status extends string>(tx: Tx, table: StatusTable, row: NamedRow, refusal: Refusal): Promise<Status> {
+  return (await answering(tx, table, table.status, row, refusal)) as Status
+}
+
+/** One column of the row a body named, or the refusal when there is no such row. */
+async function answering(tx: Tx, table: TenantTable, column: PgColumn, row: NamedRow, refusal: Refusal): Promise<unknown> {
   const [found] = await tx
-    .select({ id: table.id })
+    .select({ answer: column })
     .from(table)
     .where(and(eq(table.companyId, row.companyId), eq(table.id, row.id), row.also))
     .limit(1)
   if (found === undefined) throw invalidRequest("body", [refusal])
+  return found.answer
 }
 
 /**

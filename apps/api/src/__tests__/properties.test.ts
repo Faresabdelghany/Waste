@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
+import { Agreement, Subscription } from "@waste/contracts/agreements"
+import { Product } from "@waste/contracts/catalogue"
 import { Customer, Property } from "@waste/contracts/customers"
 import type { Point } from "@waste/contracts/geojson"
 import { Id } from "@waste/contracts/ids"
@@ -389,6 +391,29 @@ describe("the property endpoints", { skip: database.skip }, () => {
       assert.equal((await one(other, theirProperty.id)).status, "active")
       const elsewhere = await create(olivia, "/properties", body(a.projects.harbor.id, "Kran 4"), Property)
       await refused(await viewer(`/properties/${elsewhere.id}`, { method: "PATCH", body: { status: "inactive" } }), 404)
+    })
+
+    test("may be set inactive while a subscription stands at it: a status gates a new reference and never an existing one", async () => {
+      const served = await create(olivia, "/properties", body(a.projects.copenhagen.id, "Served, then not"), Property)
+      const held = await create(
+        olivia,
+        "/agreements",
+        { projectId: a.projects.copenhagen.id, number: "AGR-PROP-1", customerId: housing.id, payerCustomerId: housing.id, billingCadence: "monthly", currency: "DKK", validFrom: "2026-01-01" },
+        Agreement,
+      )
+      const offered = await create(
+        olivia,
+        "/products",
+        { projectId: a.projects.copenhagen.id, name: "Residual collection", kind: "container-collection", unit: "pickup", status: "active" },
+        Product,
+      )
+      const standing = await create(olivia, `/agreements/${held.id}/subscriptions`, { productId: offered.id, propertyId: served.id, validFrom: "2026-01-01" }, Subscription)
+
+      const changed = await patch(olivia, served.id, { status: "inactive" })
+      assert.equal(changed.status, "inactive", "the row's own status never blocks a write to the row")
+      const read = await olivia(`/subscriptions/${standing.id}`)
+      assert.equal(read.status, 200)
+      assert.deepEqual(Subscription.parse(await read.json()), standing, "the subscription stands as it was; its period says when it ends")
     })
 
     test("refuses a rename onto a name the project already uses", async () => {

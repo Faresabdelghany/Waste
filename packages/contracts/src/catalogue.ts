@@ -207,7 +207,7 @@ export const ProductCreate = z.strictObject({
   projectId: Id,
   name: Label,
   kind: ProductKind,
-  status: ProductStatus.default("draft").describe("Defaults to draft when absent: a Product is written before it is offered. The status is a catalogue state and does not gate a subscription."),
+  status: ProductStatus.default("draft").describe("Defaults to draft when absent: a Product is written before it is offered, and only an active one can be subscribed to."),
   unit: ProductUnit,
   containerTypeId: Id.nullable().optional(),
   wasteFractionId: Id.nullable().optional(),
