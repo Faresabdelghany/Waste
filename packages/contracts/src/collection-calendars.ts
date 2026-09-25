@@ -45,6 +45,16 @@ export const OUTSIDE_CALENDAR_PERIOD = "Outside the calendar's period"
 export const withinPeriod = (period: { validFrom: string; validTo?: string | null }, day: string): boolean =>
   day >= period.validFrom && (period.validTo == null || day < period.validTo)
 
+/**
+ * The indexes, in body order, of the holidays whose day the period does not
+ * cover: what the create schema (which sees the period in the same body) and
+ * the set route (which reads it off the stored calendar) each turn into a 400
+ * at `holidays.N.day` with `OUTSIDE_CALENDAR_PERIOD`, so the rule and the path
+ * are spelled once.
+ */
+export const holidaysOutside = (period: { validFrom: string; validTo?: string | null }, holidays: readonly { day: string }[]): number[] =>
+  holidays.flatMap((holiday, n) => (withinPeriod(period, holiday.day) ? [] : [n]))
+
 /** One holiday: the day, and what it is called where somebody said. */
 export const CollectionCalendarHoliday = z.strictObject({
   day: IsoDate,
@@ -71,12 +81,14 @@ type Dated = { validFrom?: unknown; validTo?: unknown; holidays?: unknown }
 const holidaysWithinPeriod = (body: Dated, ctx: z.RefinementCtx) => {
   const { validFrom, validTo, holidays } = body
   if (typeof validFrom !== "string" || !Array.isArray(holidays) || (validTo != null && typeof validTo !== "string")) return
-  const period = { validFrom, validTo: validTo as string | null | undefined }
-  holidays.forEach((holiday: { day?: unknown }, n) => {
-    if (typeof holiday?.day === "string" && !withinPeriod(period, holiday.day)) {
-      ctx.addIssue({ code: "custom", message: OUTSIDE_CALENDAR_PERIOD, path: ["holidays", n, "day"] })
-    }
-  })
+  const dated: { day: string }[] = []
+  for (const holiday of holidays as { day?: unknown }[]) {
+    if (typeof holiday?.day !== "string") return
+    dated.push({ day: holiday.day })
+  }
+  for (const n of holidaysOutside({ validFrom, validTo: validTo as string | null | undefined }, dated)) {
+    ctx.addIssue({ code: "custom", message: OUTSIDE_CALENDAR_PERIOD, path: ["holidays", n, "day"] })
+  }
 }
 
 export const CollectionCalendar = z

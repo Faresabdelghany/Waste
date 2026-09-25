@@ -4,7 +4,7 @@ import { after, before, describe, test } from "node:test"
 import type { Polygon } from "@waste/contracts/geojson"
 import { Id } from "@waste/contracts/ids"
 import { Page } from "@waste/contracts/pagination"
-import { PlanningArea, PlanningAreaBoundary } from "@waste/contracts/planning-areas"
+import { PlanningArea, PlanningAreaBoundary, PlanningAreaCreated } from "@waste/contracts/planning-areas"
 import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
@@ -67,8 +67,17 @@ const BOW_TIE: Polygon = {
   ],
 }
 
-const RING_CROSSES = "Not a valid polygon: the ring crosses itself"
+/** One sentence for whatever PostGIS refuses: the constraint cannot say which of its reasons it was. */
+const NOT_A_VALID_POLYGON = "Not a valid polygon"
 const BOUNDARY_RUNNING = "This planning area already has a boundary in force over that period; end it first"
+
+/**
+ * The stamp is the transaction's `now()`, at millisecond precision on the
+ * wire, so two requests in one millisecond read the same instant. A claim
+ * that the stamp moved waits the millisecond out first; a claim that is not
+ * about the stamp compares with `>=`.
+ */
+const later = () => new Promise<void>((resolve) => setTimeout(resolve, 5))
 
 describe("the planning area and boundary endpoints", { skip: database.skip }, () => {
   let pool: Database
@@ -187,21 +196,32 @@ describe("the planning area and boundary endpoints", { skip: database.skip }, ()
       assert.deepEqual([created.code, created.name, created.purpose], ["OP-CEN-01", "Copenhagen Central North", "service-operations"])
       assert.deepEqual(await one(olivia, created.id), created)
       assert.deepEqual((await boundaries(olivia, created.id)).items, [], "an area may be registered first and drawn later")
+
+      const response = await olivia("/planning-areas", { method: "POST", body: body("OP-CEN-01b") })
+      assert.equal(response.status, 201)
+      assert.equal(PlanningAreaCreated.parse(await response.json()).boundary, null, "the 201 says no version was drawn")
     })
 
-    test("writes the first boundary in the same transaction when the body carries one", async () => {
-      const created = await area("OP-CEN-02", { boundary: { boundary: SQUARE, validFrom: JANUARY, validTo: NEXT_YEAR } })
-      const { items } = await boundaries(olivia, created.id)
-      assert.equal(items.length, 1)
-      assert.equal(items[0].planningAreaId, created.id)
-      assert.equal(items[0].projectId, created.projectId, "the version's project is the area's")
-      assert.deepEqual(items[0].boundary, SQUARE, "the polygon reads back as the GeoJSON it was written as")
-      assert.deepEqual([items[0].validFrom, items[0].validTo], [JANUARY, NEXT_YEAR])
+    test("writes the first boundary in the same transaction when the body carries one, and answers it beside the area", async () => {
+      const response = await olivia("/planning-areas", { method: "POST", body: body("OP-CEN-02", { boundary: { boundary: SQUARE, validFrom: JANUARY, validTo: NEXT_YEAR } }) })
+      assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
+      const created = PlanningAreaCreated.parse(await response.json())
+      assert.notEqual(created.boundary, null, "the client learns the version's id from the one request")
+      const version = created.boundary as PlanningAreaBoundary
+      assert.equal(Id.parse(version.id), version.id)
+      assert.equal(version.planningAreaId, created.id)
+      assert.equal(version.projectId, created.projectId, "the version's project is the area's")
+      assert.deepEqual(version.boundary, SQUARE, "the polygon reads back as the GeoJSON it was written as")
+      assert.deepEqual([version.validFrom, version.validTo], [JANUARY, NEXT_YEAR])
+      assert.deepEqual((await boundaries(olivia, created.id)).items, [version], "and it is the one version the area has")
+      assert.deepEqual(await oneBoundary(olivia, version.id), version)
+      const { boundary: _boundary, ...areaAlone } = created
+      assert.deepEqual(await one(olivia, created.id), areaAlone, "the area on its own carries no version")
     })
 
     test("refuses a first boundary whose ring crosses itself as a 400 on boundary.boundary, and writes neither the area nor the version", async () => {
       const problem = await refused(await olivia("/planning-areas", { method: "POST", body: body("OP-CEN-03", { boundary: { boundary: BOW_TIE, validFrom: JANUARY } }) }), 400)
-      assert.deepEqual(problem.errors, [{ path: "boundary.boundary", message: RING_CROSSES }])
+      assert.deepEqual(problem.errors, [{ path: "boundary.boundary", message: NOT_A_VALID_POLYGON }])
       assert.equal((await page(olivia, "?limit=200")).items.some((row) => row.code === "OP-CEN-03"), false, "the area went with the version: one transaction")
 
       const backwards = await refused(await olivia("/planning-areas", { method: "POST", body: body("OP-CEN-03", { boundary: { boundary: SQUARE, validFrom: JULY, validTo: JULY } }) }), 400)
@@ -297,6 +317,7 @@ describe("the planning area and boundary endpoints", { skip: database.skip }, ()
   describe("PATCH /planning-areas/:id", () => {
     test("changes the name and the purpose and leaves the code, which is not a field of the patch", async () => {
       const created = await area("OP-CEN-30")
+      await later()
       const changed = await patch(olivia, created.id, { name: "Nørrebro", purpose: "notification" })
       assert.deepEqual([changed.code, changed.name, changed.purpose], ["OP-CEN-30", "Nørrebro", "notification"])
       assert.ok(changed.updatedAt > created.updatedAt)
@@ -340,11 +361,11 @@ describe("the planning area and boundary endpoints", { skip: database.skip }, ()
       assert.equal(running.validTo, null, "a version with no end is the one still in force")
     })
 
-    test("refuses a ring that crosses itself as a 400 on boundary — the database's check, answered as the schema's would be — and writes nothing", async () => {
+    test("refuses a ring that crosses itself as a 400 on boundary — PostGIS's check, answered as the schema's would be — and writes nothing", async () => {
       const created = await area("OP-CEN-41")
       const problem = await refused(await olivia(`/planning-areas/${created.id}/boundaries`, { method: "POST", body: { boundary: BOW_TIE, validFrom: JANUARY } }), 400)
       assert.equal(problem.detail, "The request body is invalid")
-      assert.deepEqual(problem.errors, [{ path: "boundary", message: RING_CROSSES }])
+      assert.deepEqual(problem.errors, [{ path: "boundary", message: NOT_A_VALID_POLYGON }])
       assert.deepEqual((await boundaries(olivia, created.id)).items, [])
 
       // What the shape rule can see never reaches the database: an ordinate off the globe is the contracts' 400, at the ordinate.
@@ -465,6 +486,7 @@ describe("the planning area and boundary endpoints", { skip: database.skip }, ()
     test("ends a version, reopens it, and redraws it, moving the stamp each time", async () => {
       const created = await area("OP-CEN-71")
       const written = await addBoundary(created.id)
+      await later()
       const ended = await patchBoundary(olivia, written.id, { validTo: JULY })
       assert.equal(ended.validTo, JULY)
       assert.equal(ended.validFrom, JANUARY, "the start does not move")
@@ -504,7 +526,7 @@ describe("the planning area and boundary endpoints", { skip: database.skip }, ()
       const created = await area("OP-CEN-74")
       const written = await addBoundary(created.id)
       const problem = await refused(await olivia(`/planning-area-boundaries/${written.id}`, { method: "PATCH", body: { boundary: BOW_TIE } }), 400)
-      assert.deepEqual(problem.errors, [{ path: "boundary", message: RING_CROSSES }])
+      assert.deepEqual(problem.errors, [{ path: "boundary", message: NOT_A_VALID_POLYGON }])
       const stored = await oneBoundary(olivia, written.id)
       assert.deepEqual(stored.boundary, SQUARE)
       assert.equal(stored.updatedAt, written.updatedAt, "a refused patch does not move the stamp")

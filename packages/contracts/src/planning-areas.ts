@@ -22,14 +22,22 @@
 // The code is set once, like a waste fraction's key: a scheme, a Service Area
 // or a report that quotes it goes on quoting it, and an area that needs
 // another code is another area. A create may carry the first boundary, so the
-// form that draws an area is one request; a boundary's patch moves its end or
-// redraws it, and never its start, since a version begins where the earlier
-// ended.
+// form that draws an area is one request, and its 201 is `PlanningAreaCreated`
+// — the area with the version written beside it, or null when none was drawn —
+// so the client learns the version's id without a second request; a
+// boundary's patch moves its end or redraws it, and never its start, since a
+// version begins where the earlier ended.
+//
+// Two list queries for the versions, because two routes read them: the
+// project-wide one (`PlanningAreaBoundaryListQuery`, the Layers control's,
+// by project, area and day) and one area's own (`PlanningAreaBoundaryVersionsQuery`,
+// by day alone, since the path says the area and the area the project).
 import * as z from "zod"
 
 import { IsoDate } from "./dates"
 import { FlatPolygon } from "./geojson"
 import { Id } from "./ids"
+import { PageRequest } from "./pagination"
 import { PlanningAreaPurpose } from "./planning"
 import { ProjectScopedListQuery } from "./queries"
 import { changesSomething, somethingToChange, stamped } from "./resource"
@@ -88,6 +96,12 @@ export const PlanningAreaCreate = z.strictObject({
 })
 export type PlanningAreaCreate = z.infer<typeof PlanningAreaCreate>
 
+/** What a create answers: the area as written, and the first version beside it when the body drew one — null when it did not — so the client has both ids from the one request. */
+export const PlanningAreaCreated = PlanningArea.extend({
+  boundary: PlanningAreaBoundary.nullable(),
+})
+export type PlanningAreaCreated = z.infer<typeof PlanningAreaCreated>
+
 /** The name and the purpose; the code is the reference the rest of the system quotes, and the boundaries are versions with routes of their own. */
 export const PlanningAreaPatch = z
   .strictObject({
@@ -110,3 +124,10 @@ export const PlanningAreaBoundaryListQuery = ProjectScopedListQuery.extend({
   validOn: IsoDate.optional(),
 })
 export type PlanningAreaBoundaryListQuery = z.infer<typeof PlanningAreaBoundaryListQuery>
+
+/** A page of one area's versions, in force on a day: the path says the area and the area the project, so the day is the only filter beside the page. */
+export const PlanningAreaBoundaryVersionsQuery = PageRequest.extend({
+  /** The day the period is read against; absent asks for every version, whenever it ran. */
+  validOn: IsoDate.optional(),
+})
+export type PlanningAreaBoundaryVersionsQuery = z.infer<typeof PlanningAreaBoundaryVersionsQuery>

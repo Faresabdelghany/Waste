@@ -35,7 +35,6 @@ import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
 import type { Tx } from "@waste/db/client"
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
-import { collectionCalendar } from "@waste/db/schema/collection-calendars"
 import { container } from "@waste/db/schema/containers"
 import { customer, property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { serviceProvider } from "@waste/db/schema/organisation"
@@ -145,15 +144,12 @@ export async function requireSharedCollectionPoint(
 }
 
 // The Planning context (Issue #97) keys everything on a Project too, so its
-// checks are all `inProject`. Two of its rows are named by other rows: a
-// planning area by a Route Scheme, a collection calendar by nothing yet on a
-// body (the path names it), so the second is here for the day something does.
+// checks are all `inProject`. A collection calendar has no check here: no body
+// names one (the path does, and a scheme reads its project's calendars and
+// never picks one), and a check nothing calls is added the day something does.
 
 /** What a body is told when it reaches for a planning area of another project; the fence the composite key already holds it to. */
 export const NOT_A_PLANNING_AREA = "Not a planning area of this project"
-
-/** What a body is told when it reaches for a collection calendar of another project. */
-export const NOT_A_COLLECTION_CALENDAR = "Not a collection calendar of this project"
 
 /** A Planning Area a body names: the project's, since where work happens is planned inside one project. */
 export async function requirePlanningArea(
@@ -164,17 +160,6 @@ export async function requirePlanningArea(
 ): Promise<void> {
   if (id == null) return
   await requireRow(tx, planningArea, inProject(planningArea, scope, id), { path, message: NOT_A_PLANNING_AREA })
-}
-
-/** A Collection Calendar a body names: the project's, since a project has one calendar in force at a time and a scheme reads its project's. */
-export async function requireCollectionCalendar(
-  tx: Tx,
-  scope: Scope,
-  id: string | null | undefined,
-  path = "collectionCalendarId",
-): Promise<void> {
-  if (id == null) return
-  await requireRow(tx, collectionCalendar, inProject(collectionCalendar, scope, id), { path, message: NOT_A_COLLECTION_CALENDAR })
 }
 
 // What a Collection Group names (Issue #97, slice 4): a container is the

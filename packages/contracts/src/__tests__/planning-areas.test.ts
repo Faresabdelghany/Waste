@@ -7,7 +7,9 @@ import {
   PlanningAreaBoundaryCreate,
   PlanningAreaBoundaryListQuery,
   PlanningAreaBoundaryPatch,
+  PlanningAreaBoundaryVersionsQuery,
   PlanningAreaCreate,
+  PlanningAreaCreated,
   PlanningAreaListQuery,
   PlanningAreaPatch,
 } from "../planning-areas"
@@ -77,6 +79,17 @@ describe("PlanningAreaCreate and PlanningAreaPatch", () => {
   })
 })
 
+describe("PlanningAreaCreated", () => {
+  test("is the area as written with the first version beside it, or null when the body drew none: the 201 always says which", () => {
+    const area = { id: ID, projectId: OTHER, code: "OP-CEN-01", name: "Copenhagen Central", purpose: "route-planning", ...STAMPS }
+    const version = { id: THIRD, projectId: OTHER, planningAreaId: ID, boundary: SQUARE, validFrom: "2026-01-01", validTo: null, ...STAMPS }
+    assert.deepEqual(PlanningAreaCreated.parse({ ...area, boundary: version }), { ...area, boundary: version })
+    assert.equal(PlanningAreaCreated.parse({ ...area, boundary: null }).boundary, null)
+    assert.equal(PlanningAreaCreated.safeParse(area).success, false, "an absent boundary is not a null one: the body always answers the question")
+    assert.equal(PlanningAreaCreated.safeParse({ ...area, boundary: { ...version, validTo: "2026-01-01" } }).success, false, "the version inside is held to its own rules")
+  })
+})
+
 describe("PlanningAreaBoundary", () => {
   test("is one version of the outline: a closed polygon over a half-open period", () => {
     assert.deepEqual(PlanningAreaBoundary.parse(boundary), boundary)
@@ -136,5 +149,13 @@ describe("PlanningAreaListQuery and PlanningAreaBoundaryListQuery", () => {
       limit: 50,
     })
     assert.equal(PlanningAreaBoundaryListQuery.safeParse({ validOn: "2026-06-01T00:00:00Z" }).success, false)
+  })
+
+  test("page one area's versions by the day in force alone: the path says the area and the area the project", () => {
+    assert.deepEqual(PlanningAreaBoundaryVersionsQuery.parse({}), { limit: 50 })
+    assert.deepEqual(PlanningAreaBoundaryVersionsQuery.parse({ validOn: "2026-06-01", limit: "10" }), { validOn: "2026-06-01", limit: 10 })
+    assert.equal(PlanningAreaBoundaryVersionsQuery.safeParse({ validOn: "June" }).success, false)
+    assert.equal("projectId" in PlanningAreaBoundaryVersionsQuery.shape, false, "no project filter: the area's is the only one")
+    assert.equal("planningAreaId" in PlanningAreaBoundaryVersionsQuery.shape, false)
   })
 })

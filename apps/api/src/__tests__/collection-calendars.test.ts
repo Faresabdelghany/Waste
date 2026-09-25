@@ -23,6 +23,14 @@ const CALENDAR_RUNNING = "This project already has a calendar in force over that
 const OUTSIDE = OUTSIDE_CALENDAR_PERIOD
 
 /**
+ * The stamp is the transaction's `now()`, at millisecond precision on the
+ * wire, so two requests in one millisecond read the same instant. A claim
+ * that the stamp moved waits the millisecond out first; a claim that is not
+ * about the stamp compares with `>=`.
+ */
+const later = () => new Promise<void>((resolve) => setTimeout(resolve, 5))
+
+/**
  * A project has one calendar in force at a time, so every calendar of
  * Copenhagen Central in this file takes a year of its own: the per-year
  * records tile the timeline, and a test that wrote a second 2026 would be
@@ -282,6 +290,7 @@ describe("the collection calendar endpoints", { skip: database.skip }, () => {
   describe("PATCH /collection-calendars/:id", () => {
     test("changes what the body names, leaves the holidays, and moves the stamp", async () => {
       const created = await calendar(2042, { holidays: [{ day: "2042-06-05", name: "Grundlovsdag" }] })
+      await later()
       const changed = await patch(olivia, created.id, { name: "Copenhagen Central 2042 (revised)", validTo: "2042-12-01" })
       assert.equal(changed.name, "Copenhagen Central 2042 (revised)")
       assert.deepEqual([changed.validFrom, changed.validTo], ["2042-01-01", "2042-12-01"])
@@ -317,7 +326,7 @@ describe("the collection calendar endpoints", { skip: database.skip }, () => {
       const onTheLastDay = await patch(olivia, created.id, { validTo: "2047-01-01" })
       const boundary = await put(olivia, created.id, [{ day: "2046-12-31", name: "New Year's Eve" }])
       assert.equal(boundary.holidays.length, 1, "the last day of the period is inside it")
-      assert.ok(onTheLastDay.updatedAt < boundary.updatedAt)
+      assert.ok(onTheLastDay.updatedAt <= boundary.updatedAt)
     })
 
     test("counts the holidays in the way, and the sentence reads as a plural once there is more than one", async () => {
@@ -359,6 +368,7 @@ describe("the collection calendar endpoints", { skip: database.skip }, () => {
   describe("PUT /collection-calendars/:id/holidays", () => {
     test("replaces the whole list, answers it by day, and moves the calendar's stamp", async () => {
       const created = await calendar(2054, { holidays: [{ day: "2054-06-05", name: "Grundlovsdag" }] })
+      await later()
       const replaced = await put(olivia, created.id, [
         { day: "2054-12-25", name: "Christmas Day" },
         { day: "2054-01-01", name: "New Year's Day" },
@@ -373,7 +383,8 @@ describe("the collection calendar endpoints", { skip: database.skip }, () => {
       assert.deepEqual(await one(olivia, created.id), replaced)
       const emptied = await put(olivia, created.id, [])
       assert.deepEqual(emptied.holidays, [], "an empty list is a year without holidays")
-      assert.ok(emptied.updatedAt > replaced.updatedAt)
+      assert.ok(emptied.updatedAt >= replaced.updatedAt)
+      assert.deepEqual(await one(olivia, created.id), emptied, "what the write answered is what the next read says, though it read nothing back")
     })
 
     test("refuses a day outside the calendar's period by entry, and leaves the calendar as it was, stamp included", async () => {

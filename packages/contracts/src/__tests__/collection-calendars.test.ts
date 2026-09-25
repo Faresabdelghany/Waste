@@ -9,6 +9,7 @@ import {
   CollectionCalendarListQuery,
   CollectionCalendarPatch,
   HOLIDAYS_MAX,
+  holidaysOutside,
   ONE_HOLIDAY_PER_DAY,
   OUTSIDE_CALENDAR_PERIOD,
   withinPeriod,
@@ -82,6 +83,11 @@ describe("CollectionCalendarCreate and CollectionCalendarPatch", () => {
     assert.equal(CollectionCalendarHolidaysSet.safeParse({ holidays: stray }).success, true)
     assert.equal(withinPeriod({ validFrom: "2026-01-01", validTo: "2027-01-01" }, "2027-01-01"), false)
     assert.equal(withinPeriod({ validFrom: "2026-01-01", validTo: null }, "2099-12-31"), true)
+    // The one predicate behind the schema's issues and the route's 400: the indexes, in body order.
+    assert.deepEqual(holidaysOutside({ validFrom: "2026-01-01", validTo: "2027-01-01" }, stray), [1, 2])
+    assert.deepEqual(holidaysOutside({ validFrom: "2026-01-01", validTo: null }, stray), [1], "an open end strands nothing after the start")
+    assert.deepEqual(holidaysOutside({ validFrom: "2026-01-01", validTo: "2027-01-01" }, holidays), [])
+    assert.deepEqual(holidaysOutside({ validFrom: "2026-01-01" }, []), [])
   })
 
   test("refuse a backwards period, two holidays on one day, and more than 400 of them", () => {

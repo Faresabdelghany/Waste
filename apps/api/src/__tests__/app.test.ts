@@ -415,11 +415,18 @@ describe("GET /openapi.json", () => {
 
     // The rules a client must know are in the prose, not only in the code.
     assert.match(document.paths["/planning-areas"].post.description ?? "", /code is the stable reference[^.]*set once/)
-    assert.match(document.paths["/planning-areas"].post.description ?? "", /ring that crosses itself[^.]*400 on `boundary\.boundary`/)
+    assert.match(document.paths["/planning-areas"].post.description ?? "", /the ring and the globe are the contracts'/)
+    assert.match(document.paths["/planning-areas"].post.description ?? "", /valid polygon is PostGIS's[^.]*400 on `boundary\.boundary`, "Not a valid polygon"/)
+    assert.match(document.paths["/planning-areas"].post.description ?? "", /answered beside the area \(null when none was drawn\)/)
+    assert.ok(
+      document.paths["/planning-areas"].post.responses["201"].content["application/json"].schema.required?.includes("boundary"),
+      "the 201 always says whether a version was written",
+    )
     assert.match(document.paths["/planning-areas/{id}"].patch.description ?? "", /The code does not change/)
     assert.match(document.paths["/planning-areas/{id}/boundaries"].get.description ?? "", /none on a day between two versions/)
     assert.match(document.paths["/planning-areas/{id}/boundaries"].post.description ?? "", /One boundary of an area is in force at a time/)
-    assert.match(document.paths["/planning-areas/{id}/boundaries"].post.description ?? "", /ring that crosses itself is refused by the database and answered as a 400 on `boundary`/)
+    assert.match(document.paths["/planning-areas/{id}/boundaries"].post.description ?? "", /valid polygon is PostGIS's[^.]*400 on `boundary`, "Not a valid polygon"/)
+    assert.match(document.paths["/planning-area-boundaries/{id}"].patch.description ?? "", /valid polygon is PostGIS's/)
     assert.match(document.paths["/planning-area-boundaries"].get.description ?? "", /Layers control/)
     assert.match(document.paths["/planning-area-boundaries/{id}"].patch.description ?? "", /the start does not move/)
     assert.match(document.paths["/collection-calendars"].post.description ?? "", /a project has one calendar in force at a time/)

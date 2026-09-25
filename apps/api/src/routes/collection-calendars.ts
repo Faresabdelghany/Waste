@@ -29,7 +29,8 @@
 // and like routes/periods.ts it has two sides: a holiday put outside the
 // calendar's period is a 400 naming the entry (`holidays.N.day`), since the
 // caller chose it; a period shortened under its holidays is a 409 counting
-// them, since the rows in the way are not in the body and have to be removed
+// them (`refuseStranded`, routes/periods.ts, handed the `where` over the
+// day), since the rows in the way are not in the body and have to be removed
 // first. Postgres cannot say a child's day lies inside its parent's period
 // without a trigger, so the API says it, under the calendar's row lock
 // (`lockRow`, routes/shared.ts) on the patch — the PUT's own stamping update
@@ -37,9 +38,12 @@
 // row and neither passes on a state the other has not written. The
 // contracts already refuse two holidays on one day (a 400 on `holidays`, not
 // the key's 409), and hold a create body's holidays inside its own period
-// where they can see both (`withinPeriod`, `OUTSIDE_CALENDAR_PERIOD`); the
-// PUT's body has no period, so the same rule and the same sentence run here
-// against the stored row, and a client reads one answer whichever noticed.
+// where they can see both; the PUT's body has no period, so the same
+// predicate (`holidaysOutside`) and the same sentence (`OUTSIDE_CALENDAR_PERIOD`)
+// run here against the stored row, and a client reads one answer whichever
+// noticed. A write answers the set it was handed, sorted the way the table
+// reads it back — by day, which a set names once — rather than reading it
+// again: the rows carry nothing the database adds.
 //
 // The rest is the shape every project-scoped family has: each statement
 // carries the tenant and `inProjects` (auth/projects.ts), a create names a
@@ -56,8 +60,8 @@ import {
   CollectionCalendarHolidaysSet,
   CollectionCalendarListQuery,
   CollectionCalendarPatch,
+  holidaysOutside,
   OUTSIDE_CALENDAR_PERIOD,
-  withinPeriod,
   type CollectionCalendarHoliday,
 } from "@waste/contracts/collection-calendars"
 import { Page } from "@waste/contracts/pagination"
@@ -65,7 +69,7 @@ import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { count } from "@waste/domain/text"
-import { and, asc, count as countRows, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm"
+import { and, asc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -75,7 +79,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { periodAfter, requireOrdered, type Period } from "./periods"
+import { periodAfter, refuseStranded, requireOrdered, type Period } from "./periods"
 import { describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stampsOf } from "./shared"
 
 const MODULE = "configure.calendars"
@@ -143,16 +147,19 @@ async function findCalendar(tx: Tx, principal: Principal, id: string): Promise<R
 /**
  * Holds a whole list of holidays to the calendar's period, or refuses the
  * request naming every entry that lies outside, at the path the body spelled
- * it — the contracts' own rule and sentence (`withinPeriod`,
+ * it — the contracts' own predicate and sentence (`holidaysOutside`,
  * `OUTSIDE_CALENDAR_PERIOD`), which the create schema runs where it can see
  * the period and this runs where only the stored row knows it. Every entry
  * rather than the lowest, because the check is in memory and a form can mark
  * them all at once.
  */
 function requireHolidaysWithin(period: Period, holidays: readonly Holiday[]): void {
-  const errors = holidays.flatMap((holiday, index) => (withinPeriod(period, holiday.day) ? [] : [{ path: `holidays.${index}.day`, message: OUTSIDE_CALENDAR_PERIOD }]))
+  const errors = holidaysOutside(period, holidays).map((n) => ({ path: `holidays.${n}.day`, message: OUTSIDE_CALENDAR_PERIOD }))
   if (errors.length > 0) throw invalidRequest("body", errors)
 }
+
+/** The body's holidays in the order the table reads them back — by day, which a set names once — so what a write answers is what the next read says, without reading. */
+const byDay = (holidays: readonly Holiday[]): Holiday[] => [...holidays].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0))
 
 /**
  * The holidays of a whole page in one query, grouped by calendar and sorted
@@ -198,21 +205,16 @@ async function writeHolidays(tx: Tx, parent: Parent, holidays: readonly Holiday[
 }
 
 /**
- * How many holidays of the calendar the period it is moving to would leave
- * outside; the count the 409 states. The calendar has already been read under
- * the caller's scope and a holiday's project is the calendar's by the
- * composite key, so this asks for the company and the calendar and does not
- * repeat `inProjects`: a count that refuses a write must not be the one
- * statement here that could miss a row.
+ * The `where` of the holidays a calendar's move would strand, for
+ * `refuseStranded` (routes/periods.ts): this company's rows of the calendar
+ * on a day the new period does not cover — before the start, or on or after
+ * the end where there is one. A holiday is a day and not a period, which is
+ * why this is not `notWithin`.
  */
-async function strayHolidayCount(tx: Tx, parent: { companyId: string; id: string }, period: Period): Promise<number> {
+const strandedHolidayDays = (parent: { companyId: string; id: string }, period: Period) => {
   const before = lt(collectionCalendarHoliday.day, period.validFrom)
   const outside = period.validTo === null ? before : or(before, gte(collectionCalendarHoliday.day, period.validTo))
-  const [row] = await tx
-    .select({ rows: countRows() })
-    .from(collectionCalendarHoliday)
-    .where(and(eq(collectionCalendarHoliday.companyId, parent.companyId), eq(collectionCalendarHoliday.collectionCalendarId, parent.id), outside))
-  return row?.rows ?? 0
+  return and(eq(collectionCalendarHoliday.companyId, parent.companyId), eq(collectionCalendarHoliday.collectionCalendarId, parent.id), outside)
 }
 
 /** One calendar on the wire, its holidays read back the way a page reads them, so an answer equals the next read. */
@@ -301,7 +303,7 @@ export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
           ),
         )
         await writeHolidays(tx, { companyId: principal.companyId, projectId: row.projectId, id: row.id }, holidays)
-        return c.json(await calendarWithHolidays(tx, principal.companyId, row), 201)
+        return c.json(calendarOf(row, byDay(holidays)), 201)
       },
     )
     .get(
@@ -369,8 +371,7 @@ export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
         if (patch.validFrom !== undefined || patch.validTo !== undefined) {
           const period = periodAfter(current, patch)
           requireOrdered(period)
-          const strays = await strayHolidayCount(tx, { companyId: principal.companyId, id }, period)
-          if (strays > 0) throw problem(409, { detail: strandedHolidays(strays) })
+          await refuseStranded(tx, collectionCalendarHoliday, strandedHolidayDays({ companyId: principal.companyId, id }, period), strandedHolidays)
         }
 
         const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
@@ -432,7 +433,7 @@ export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
           .delete(collectionCalendarHoliday)
           .where(and(eq(collectionCalendarHoliday.companyId, principal.companyId), eq(collectionCalendarHoliday.collectionCalendarId, id)))
         await writeHolidays(tx, { companyId: principal.companyId, projectId: row.projectId, id: row.id }, holidays)
-        return c.json(await calendarWithHolidays(tx, principal.companyId, row))
+        return c.json(calendarOf(row, byDay(holidays)))
       },
     )
 }
