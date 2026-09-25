@@ -34,6 +34,8 @@ import { errorHandler, notFound } from "./problem"
 import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS } from "./readiness"
 import { agreementRoutes } from "./routes/agreements"
 import { alertRoutes } from "./routes/alerts"
+import { billableEventRoutes } from "./routes/billable-events"
+import { billingRunRoutes } from "./routes/billing-runs"
 import { catalogueRoutes } from "./routes/catalogue"
 import { collectionCalendarRoutes } from "./routes/collection-calendars"
 import { collectionGroupRoutes } from "./routes/collection-groups"
@@ -43,6 +45,7 @@ import { customerRoutes } from "./routes/customers"
 import { depotRoutes } from "./routes/depots"
 import { driverDoorRoutes } from "./routes/driver"
 import { driverRoutes } from "./routes/drivers"
+import { invoiceRoutes } from "./routes/invoices"
 import { lifecycleRoutes } from "./routes/lifecycle"
 import { liveRoutes } from "./routes/live"
 import { meRoutes } from "./routes/me"
@@ -184,6 +187,10 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   app.route("/", priceListRoutes(guard))
   app.route("/", serviceAreaRoutes(guard))
   app.route("/", serviceProviderPriceRoutes(guard))
+  // Finance & Contracting's billing half (Issue #112, slice 4): a cancellation is stamped with the request's clock, a run and a credit note issue on "today" on the project's clock and publish with the request's instant, so all three take `now`. The preview goes on before the run module's `:id` read would otherwise be asked to take "preview" as an id.
+  app.route("/", billableEventRoutes(guard, { now }))
+  app.route("/", billingRunRoutes(guard, { now }))
+  app.route("/", invoiceRoutes(guard, { now }))
 
   app.get(
     "/openapi.json",

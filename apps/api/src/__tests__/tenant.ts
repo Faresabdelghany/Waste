@@ -26,7 +26,7 @@ import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/
 import { vehicleAllocation, vehicleAllocationEvent } from "@waste/db/schema/allocations"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, unload } from "@waste/db/schema/execution"
-import { priceList, priceListRow, serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceAreaWasteFraction, serviceProviderPrice } from "@waste/db/schema/finance"
+import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceAreaWasteFraction, serviceProviderPrice } from "@waste/db/schema/finance"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
 import { containerTypeVehicleType, vehicleType } from "@waste/db/schema/fleet-types"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "@waste/db/schema/places"
@@ -262,10 +262,20 @@ export async function grantRole(pool: Database, companyId: string, roleId: strin
  * end). Execution's other four go next, children first — the outbox, then
  * sessions, pickups and routes — and before Planning's and Resources', since a
  * route names a scheme, a group, vehicles, drivers, a depot and a station, and
- * a pickup names containers, properties, points and fractions.
+ * a pickup names containers, properties, points and fractions. Finance's
+ * billing half (Issue #112, slice 4) goes first of all: its three ledgers as
+ * the owner — `invoice_line` (it names events, invoices and lines), `invoice`
+ * (it names runs) and `billing_run_exclusion` — then, as `wms_api`,
+ * `billing_run` and `billable_event` before `ticket`, since an event names
+ * tickets, pickups, routes, agreements, products and price rows; and
+ * `price_list_row` and `price_list` after `agreement` (which names the list)
+ * and before `product` (which the row names).
  */
 export async function dropTenant(pool: Database, companyId: string, owner?: Database): Promise<void> {
   if (owner !== undefined) {
+    await owner.db.delete(invoiceLine).where(eq(invoiceLine.companyId, companyId))
+    await owner.db.delete(invoice).where(eq(invoice.companyId, companyId))
+    await owner.db.delete(billingRunExclusion).where(eq(billingRunExclusion.companyId, companyId))
     await owner.db.delete(ticketEvent).where(eq(ticketEvent.companyId, companyId))
     await owner.db.delete(proofOfService).where(eq(proofOfService.companyId, companyId))
     await owner.db.delete(unload).where(eq(unload.companyId, companyId))
@@ -274,6 +284,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await owner.db.delete(stockMovement).where(eq(stockMovement.companyId, companyId))
   }
   await withCompany(pool.db, companyId, async (tx: Tx) => {
+    await tx.delete(billingRun).where(eq(billingRun.companyId, companyId))
+    await tx.delete(billableEvent).where(eq(billableEvent.companyId, companyId))
     await tx.delete(alert).where(eq(alert.companyId, companyId))
     await tx.delete(ticket).where(eq(ticket.companyId, companyId))
     await tx.delete(outboxEvent).where(eq(outboxEvent.companyId, companyId))
