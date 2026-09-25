@@ -154,7 +154,7 @@ export function StepRouteMap({
               </span>
             </span>
             <span>
-              {routeEstimateAdapter.label}
+              {routeEstimateAdapter.labels.estimate}
               {regeneratedAt
                 ? ` · Regenerated ${formatClockTime(`${regeneratedAt.getHours()}:${regeneratedAt.getMinutes()}`)}`
                 : ""}
