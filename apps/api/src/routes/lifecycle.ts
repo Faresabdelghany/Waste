@@ -117,7 +117,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { requireWithin } from "./periods"
 import { requireWarehouse, type Scope } from "./references"
-import { describeJson, IdParam, lockRow, refuseOverlap } from "./shared"
+import { describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS, refuseOverlap } from "./shared"
 import { requireWarehouseTakesStock } from "./statuses"
 
 const MODULE = "resources.containers"
@@ -181,12 +181,11 @@ export const placementAlreadyEnded = (label: string, day: string) => `Container 
 // The 400s: a body that says something the ledger cannot take.
 
 /**
- * How far ahead of the request's clock `occurredAt` may run: a driver's
- * device keeps its own time, and a scan stamped a minute or two ahead of the
- * server is a scan, not a prophecy. Beyond it the instant is refused as
- * recorded before it happened.
+ * How far ahead of the request's clock `occurredAt` may run: the one constant
+ * the ledger and the driver door share, spelled in routes/shared.ts since
+ * Execution (Issue #104) and re-exported here for the ledger's callers.
  */
-export const OCCURRED_AT_SKEW_MS = 5 * 60_000
+export { OCCURRED_AT_SKEW_MS }
 /** `occurredAt` further ahead of the request's clock than a device's clock accounts for. */
 export const RECORDED_AFTER_IT_HAPPENED = "A movement is recorded after it happened"
 /** A transfer to the place the container already stands in. */

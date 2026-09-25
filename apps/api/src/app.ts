@@ -40,6 +40,7 @@ import { companyRoutes } from "./routes/company"
 import { containerRoutes } from "./routes/containers"
 import { customerRoutes } from "./routes/customers"
 import { depotRoutes } from "./routes/depots"
+import { driverDoorRoutes } from "./routes/driver"
 import { driverRoutes } from "./routes/drivers"
 import { lifecycleRoutes } from "./routes/lifecycle"
 import { liveRoutes } from "./routes/live"
@@ -169,6 +170,8 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   app.route("/", routeRoutes(guard, { now }))
   app.route("/", pickupRoutes(guard, { now }))
   app.route("/", unloadRoutes(guard, { now }))
+  // The driver door (Issue #104, slice 4) goes on after the office: its commands are judged against the request's clock, so it takes `now` like the ledger routes.
+  app.route("/", driverDoorRoutes(guard, { now }))
 
   app.get(
     "/openapi.json",
