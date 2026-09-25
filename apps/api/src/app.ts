@@ -53,6 +53,7 @@ import { serviceProviderRoutes } from "./routes/service-providers"
 import { sharedCollectionPointRoutes } from "./routes/shared-collection-points"
 import { unloadingStationRoutes } from "./routes/unloading-stations"
 import { userRoutes } from "./routes/users"
+import { vehicleAllocationRoutes } from "./routes/vehicle-allocations"
 import { vehicleTypeRoutes } from "./routes/vehicle-types"
 import { warehouseRoutes } from "./routes/warehouses"
 
@@ -148,6 +149,7 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   app.route("/", warehouseRoutes(guard))
   app.route("/", depotRoutes(guard))
   app.route("/", unloadingStationRoutes(guard))
+  app.route("/", vehicleAllocationRoutes(guard))
 
   app.get(
     "/openapi.json",

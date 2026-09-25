@@ -26,12 +26,20 @@
 // #101): a row of the company's `vehicle_type`, where 0006 had a token.
 //
 // Resources also gave the group a vehicle and a driver and the scheme a depot
-// and an unloading station (migration 0007). They are read here — `groupOf`
-// and `schemeOf` answer them, null until something writes them — and written
-// by nothing yet: the routes that hold them (a powered vehicle of the project,
-// a driver who may take it, no vehicle or driver on two groups a shared day, a
-// depot of the project, a station of the company) arrive with #101's slice 6,
-// and the contracts keep the four off every write body until then.
+// and an unloading station (migration 0007), and #101's slice 6 the rules
+// that hold them. A group's `vehicleId` is a `powered-vehicle` of the scheme's
+// project and its `driverId` a driver of it — two more sets of
+// `requireGroupReferences`, held like the others, their sentences spelled in
+// routes/fleet-lookups.ts. A group naming both names a driver who may take
+// that vehicle: `requireGroupDriver` is the licence rule of
+// @waste/domain/resources/licence judged on the day the scheme's period
+// starts or today on the project's clock, whichever is later (#101 §6.18), a
+// 400 at `driverId` in the words an allocation refuses with, whatever the
+// scheme's status. And on a `validated` scheme no vehicle or driver is on two
+// groups that run on a shared day, which joined the domain's structural rules
+// and so `requireStructure`, which reads the callsigns and names the sentences
+// spell in two queries when a validated scheme's groups name any. The scheme's
+// depot and station are held by routes/route-schemes.ts.
 //
 // The two rules a scheme is held to across its groups are the domain's
 // (@waste/domain/planning/checks): the structural rules of a validated scheme,
@@ -42,10 +50,20 @@ import type { CollectionGroup, RouteScheme, StopMatchingRule } from "@waste/cont
 import type { Tx } from "@waste/db/client"
 import { containerType, wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
+import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
 import { serviceProvider } from "@waste/db/schema/organisation"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
-import { alreadyPicked, containerPickedTwice, schemeStructureIssues, type ContainerPick, type GroupStructure } from "@waste/domain/planning/checks"
+import {
+  alreadyPicked,
+  containerPickedTwice,
+  groupDriverIssue,
+  schemeLicenceDay,
+  schemeStructureIssues,
+  type ContainerPick,
+  type GroupStructure,
+  type NamedResource,
+} from "@waste/domain/planning/checks"
 import type { HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, ServiceDay, ServiceType, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
 import { and, asc, eq, inArray, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
@@ -54,6 +72,8 @@ import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { newId } from "../ids"
 import { invalidRequest, problem } from "../problem"
+import { dayInTimezone } from "./days"
+import { findDriver, findVehicle, projectTimezone, vehicleLabel } from "./fleet-lookups"
 import { requireContainer, requireContainerType, requireServiceProvider, requireVehicleType, requireWasteFraction } from "./references"
 import { stamp, stampsOf, timeOf, type TenantTable } from "./shared"
 
@@ -253,13 +273,15 @@ export async function findScheme(tx: Tx, principal: Principal, id: string): Prom
 /** One id a body names and where it names it, for the one lookup per set below. */
 export type Named = { path: string; id: string }
 
-/** Every id a body names across its groups, by what it names: the rule's fractions, container types and vehicle type, the picked containers, the providers. */
+/** Every id a body names across its groups, by what it names: the rule's fractions, container types and vehicle type, the picked containers, the providers, the vehicles and the drivers. */
 export type GroupReferences = {
   fractions: Named[]
   containerTypes: Named[]
   vehicleTypes: Named[]
   containers: Named[]
   providers: Named[]
+  vehicles: Named[]
+  drivers: Named[]
 }
 
 /** What a body's checks are bounded by: the caller's company, and the project the scheme is in. */
@@ -275,7 +297,13 @@ export type ReferencePaths = { prefix?: string; rulePrefix?: string }
  * body is the rule, and the containers PUT's with only `containerIds`.
  */
 export function referencesOf(
-  group: { rule?: StopMatchingRule | null; containerIds?: readonly string[] | null; serviceProviderId?: string | null },
+  group: {
+    rule?: StopMatchingRule | null
+    containerIds?: readonly string[] | null
+    serviceProviderId?: string | null
+    vehicleId?: string | null
+    driverId?: string | null
+  },
   { prefix = "", rulePrefix = `${prefix}rule.` }: ReferencePaths = {},
 ): GroupReferences {
   return {
@@ -284,6 +312,8 @@ export function referencesOf(
     vehicleTypes: group.rule?.vehicleTypeId == null ? [] : [{ path: `${rulePrefix}vehicleTypeId`, id: group.rule.vehicleTypeId }],
     containers: (group.containerIds ?? []).map((id, m) => ({ path: `${prefix}containerIds.${m}`, id })),
     providers: group.serviceProviderId == null ? [] : [{ path: `${prefix}serviceProviderId`, id: group.serviceProviderId }],
+    vehicles: group.vehicleId == null ? [] : [{ path: `${prefix}vehicleId`, id: group.vehicleId }],
+    drivers: group.driverId == null ? [] : [{ path: `${prefix}driverId`, id: group.driverId }],
   }
 }
 
@@ -295,6 +325,8 @@ export function mergeReferences(all: readonly GroupReferences[]): GroupReference
     vehicleTypes: all.flatMap((refs) => refs.vehicleTypes),
     containers: all.flatMap((refs) => refs.containers),
     providers: all.flatMap((refs) => refs.providers),
+    vehicles: all.flatMap((refs) => refs.vehicles),
+    drivers: all.flatMap((refs) => refs.drivers),
   }
 }
 
@@ -319,9 +351,10 @@ async function firstMissing(tx: Tx, table: TenantTable, within: SQL | undefined,
 /**
  * Holds every id a body names to what its key allows, one statement per set:
  * a waste fraction, a container type and a vehicle type are the company's, a
- * container is the scheme's project's, a Service Provider the company's. The
- * first entry that is wrong, set by set in the order a body reads, is a 400
- * at its path.
+ * container is the scheme's project's, a Service Provider the company's, and,
+ * since Resources (Issue #101), a vehicle is a powered vehicle of the scheme's
+ * project and a driver one of its drivers. The first entry that is wrong, set
+ * by set in the order a body reads, is a 400 at its path.
  */
 export async function requireGroupReferences(tx: Tx, scope: Scope, refs: GroupReferences): Promise<void> {
   const fraction = await firstMissing(tx, wasteFraction, eq(wasteFraction.companyId, scope.companyId), refs.fractions)
@@ -334,6 +367,42 @@ export async function requireGroupReferences(tx: Tx, scope: Scope, refs: GroupRe
   if (picked !== undefined) await requireContainer(tx, scope, picked.id, picked.path)
   const provider = await firstMissing(tx, serviceProvider, eq(serviceProvider.companyId, scope.companyId), refs.providers)
   if (provider !== undefined) await requireServiceProvider(tx, scope.companyId, provider.id, provider.path)
+  const truck = await firstMissing(
+    tx,
+    vehicle,
+    and(eq(vehicle.companyId, scope.companyId), eq(vehicle.projectId, scope.projectId), eq(vehicle.kind, "powered-vehicle")),
+    refs.vehicles,
+  )
+  if (truck !== undefined) await findVehicle(tx, scope, truck.id, "powered-vehicle", truck.path)
+  const who = await firstMissing(tx, driver, and(eq(driver.companyId, scope.companyId), eq(driver.projectId, scope.projectId)), refs.drivers)
+  if (who !== undefined) await findDriver(tx, scope, who.id, who.path)
+}
+
+/**
+ * A group naming both a vehicle and a driver names a driver who may take that
+ * vehicle (Issue #101 §6.18): the licence rule, judged on the day the
+ * scheme's period starts or today on the project's clock, whichever is later,
+ * and refused as a 400 at `path` in the domain's sentence — the same words an
+ * allocation refuses with. A group naming one or neither is asked nothing.
+ * Both rows were held to the project a moment ago (`requireGroupReferences`),
+ * so this reads them for their class, label, licence and name.
+ */
+export async function requireGroupDriver(
+  tx: Tx,
+  scope: Scope,
+  scheme: { validFrom: string },
+  group: { vehicleId?: string | null; driverId?: string | null },
+  path = "driverId",
+): Promise<void> {
+  if (group.vehicleId == null || group.driverId == null) return
+  const [truck, who, timezone] = await Promise.all([
+    findVehicle(tx, scope, group.vehicleId, "powered-vehicle", path.replace(/driverId$/, "vehicleId")),
+    findDriver(tx, scope, group.driverId, path),
+    projectTimezone(tx, scope.companyId, scope.projectId),
+  ])
+  const judged = schemeLicenceDay(scheme.validFrom, dayInTimezone(new Date(), timezone))
+  const issue = groupDriverIssue({ vehicle: { label: vehicleLabel(truck), requiredLicenceClass: truck.requiredLicenceClass }, driver: who }, judged)
+  if (issue !== undefined) throw invalidRequest("body", [{ path, message: issue }])
 }
 
 /** What a group's sets are written from: the group's id, the rule it matches by or null, and the containers it picks in stop order. */
@@ -403,14 +472,45 @@ export type GroupShape = {
   stopSource: string
   rule?: { wasteFractionIds: readonly string[] } | null
   containerIds?: readonly string[] | null
+  vehicleId?: string | null
+  driverId?: string | null
 }
 
-const structureOf = (group: GroupShape): GroupStructure => ({
+/** The labels the two-groups sentences spell a vehicle and a driver by, keyed by id. */
+type FleetLabels = { vehicles: Map<string, string>; drivers: Map<string, string> }
+
+const NO_LABELS: FleetLabels = { vehicles: new Map(), drivers: new Map() }
+
+/** The callsign or plate of every vehicle and the name of every driver the groups name, in one query each; none when they name none. */
+async function fleetLabelsOf(tx: Tx, companyId: string, groups: readonly GroupShape[]): Promise<FleetLabels> {
+  const vehicleIds = [...new Set(groups.flatMap((group) => (group.vehicleId == null ? [] : [group.vehicleId])))]
+  const driverIds = [...new Set(groups.flatMap((group) => (group.driverId == null ? [] : [group.driverId])))]
+  const [vehicles, drivers] = await Promise.all([
+    vehicleIds.length === 0
+      ? []
+      : tx
+          .select({ id: vehicle.id, registration: vehicle.registration, callsign: vehicle.callsign })
+          .from(vehicle)
+          .where(and(eq(vehicle.companyId, companyId), inArray(vehicle.id, vehicleIds))),
+    driverIds.length === 0 ? [] : tx.select({ id: driver.id, name: driver.name }).from(driver).where(and(eq(driver.companyId, companyId), inArray(driver.id, driverIds))),
+  ])
+  return {
+    vehicles: new Map(vehicles.map((row) => [row.id, vehicleLabel(row)])),
+    drivers: new Map(drivers.map((row) => [row.id, row.name])),
+  }
+}
+
+/** The resource as the sentence names it; a row nobody labelled (it cannot happen: the key holds it) is named by its id rather than dropped. */
+const named = (id: string | null | undefined, labels: Map<string, string>): NamedResource | null => (id == null ? null : { id, label: labels.get(id) ?? id })
+
+const structureOf = (group: GroupShape, labels: FleetLabels): GroupStructure => ({
   name: group.name,
   days: group.days,
   stopSource: group.stopSource,
   fractionCount: group.rule?.wasteFractionIds.length ?? 0,
   containerCount: group.containerIds?.length ?? 0,
+  vehicle: named(group.vehicleId, labels.vehicles),
+  driver: named(group.driverId, labels.drivers),
 })
 
 /** A group's picks as the two-groups-one-day rule reads them. */
@@ -419,14 +519,23 @@ export const pickOf = (group: GroupShape): ContainerPick => ({ group: group.name
 /**
  * The structural rules of a validated scheme, as the write would leave it: a
  * scheme that is or becomes `validated` and does not hold is refused with a
- * 409 listing every sentence, one after the other; a draft is not asked.
+ * 409 listing every sentence, one after the other; a draft is not asked. The
+ * vehicle and driver sentences name a callsign and a person (Issue #101), so
+ * the labels of what the groups name are read first, two queries at most and
+ * none when no group names a vehicle or a driver.
  */
-export function requireStructure(scheme: { status: string; serviceDays: readonly string[]; planningAreaId: string | null }, groups: readonly GroupShape[]): void {
+export async function requireStructure(
+  tx: Tx,
+  companyId: string,
+  scheme: { status: string; serviceDays: readonly string[]; planningAreaId: string | null },
+  groups: readonly GroupShape[],
+): Promise<void> {
   if (scheme.status !== "validated") return
+  const labels = groups.some((group) => group.vehicleId != null || group.driverId != null) ? await fleetLabelsOf(tx, companyId, groups) : NO_LABELS
   const issues = schemeStructureIssues({
     serviceDays: scheme.serviceDays,
     hasPlanningArea: scheme.planningAreaId !== null,
-    collectionGroups: groups.map(structureOf),
+    collectionGroups: groups.map((group) => structureOf(group, labels)),
   })
   if (issues.length > 0) throw problem(409, { detail: issues.join(". ") })
 }

@@ -35,13 +35,15 @@
 //
 // Resources gave the group its vehicle and default driver and the scheme its
 // depot and unloading station (Issue #101): the four are on the resources,
-// nullable, and on no write body yet — the routes that hold them (a powered
-// vehicle of the project, a driver who may take it, no vehicle or driver on
-// two groups a shared day, a depot of the project, a station of the company)
-// arrive with #101's slice 6, and a body may not say what nothing yet holds.
-// Not here either: a scheme's own service demand (a Subscription is the
-// Registry's), and `lastGeneratedAt` and the drift stamps (part B adds them
-// to the resource).
+// nullable, and since #101's slice 6 on the write bodies too — the group's
+// create and patch take `vehicleId` and `driverId`, the scheme's create and
+// patch `depotId` and `unloadingStationId`, each nullable so a form may clear
+// what it set — and the routes hold them: a powered vehicle of the project, a
+// driver of the project who may take that vehicle, no vehicle or driver on
+// two groups a shared day (a validated scheme's structural rule), a depot of
+// the project, a station of the company. Not here: a scheme's own service
+// demand (a Subscription is the Registry's), and `lastGeneratedAt` and the
+// drift stamps (part B adds them to the resource).
 import { OCCURRENCE_STATUSES, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 import * as z from "zod"
 
@@ -124,9 +126,9 @@ export const CollectionGroup = z.object({
   /** The picked containers in stop order, for a manual group; empty for a rule group. */
   containerIds: z.array(Id),
   serviceProviderId: Id.nullable(),
-  /** The vehicle the group runs with, a powered vehicle of the project; null while unsaid. Read only until #101's slice 6 holds it. */
+  /** The vehicle the group runs with, a powered vehicle of the project; null while unsaid. */
   vehicleId: Id.nullable(),
-  /** The default driver; null while unsaid. Read only until #101's slice 6 holds it. */
+  /** The default driver, one of the project's who may take the vehicle; null while unsaid. */
   driverId: Id.nullable(),
 })
 export type CollectionGroup = z.infer<typeof CollectionGroup>
@@ -158,17 +160,23 @@ export const CollectionGroupCreate = z
     rule: StopMatchingRule.nullable().optional(),
     containerIds: ContainerIds.nullable().optional(),
     serviceProviderId: Id.nullable().optional(),
+    /** A powered vehicle of the scheme's project (Issue #101). */
+    vehicleId: Id.nullable().optional(),
+    /** A driver of the scheme's project who may take the vehicle, judged on the scheme's start or today, whichever is later (Issue #101). */
+    driverId: Id.nullable().optional(),
   })
   .refine(oneWayToFindStopsGiven, oneWayToFindStops)
 export type CollectionGroupCreate = z.infer<typeof CollectionGroupCreate>
 
-/** The name, the order, the days and the provider; the source, the rule and the list never move through a patch. */
+/** The name, the order, the days, the provider, the vehicle and the driver; the source, the rule and the list never move through a patch. */
 export const CollectionGroupPatch = z
   .strictObject({
     name: Label.optional(),
     position: Ordinal.optional(),
     days: ServiceDays.optional(),
     serviceProviderId: Id.nullable().optional(),
+    vehicleId: Id.nullable().optional(),
+    driverId: Id.nullable().optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type CollectionGroupPatch = z.infer<typeof CollectionGroupPatch>
@@ -236,9 +244,9 @@ const RouteSchemeFields = {
   /** Whether the nightly job keeps the coming week planned. */
   planAhead: z.boolean(),
   status: RouteSchemeStatus,
-  /** Where the routes depart from, a depot of the project; null while unsaid. Read only until #101's slice 6 holds it. */
+  /** Where the routes depart from, a depot of the project; null while unsaid. */
   depotId: Id.nullable(),
-  /** Where the routes empty, a station of the company; null while unsaid. Read only until #101's slice 6 holds it. */
+  /** Where the routes empty, a station of the company; null while unsaid. */
   unloadingStationId: Id.nullable(),
   /** By position. */
   collectionGroups: z.array(CollectionGroup),
@@ -262,6 +270,10 @@ export const RouteSchemeCreate = z
     editPolicy: SchemeEditPolicy.default("ask").describe("Defaults to ask when absent; stored, consumed by nothing yet."),
     planAhead: z.boolean().default(true).describe("Defaults to true when absent: the nightly job keeps the coming week planned."),
     status: RouteSchemeStatus.default("draft").describe("Defaults to draft when absent: a draft accepts partial configuration, a validated scheme is held to the structural rules."),
+    /** A depot of the project (Issue #101). */
+    depotId: Id.nullable().optional(),
+    /** An unloading station of the company (Issue #101). */
+    unloadingStationId: Id.nullable().optional(),
     /** At least one: a scheme without explicit groups has one implicit group, which the server writes as a row. At most `GROUPS_MAX`. */
     collectionGroups: z.array(CollectionGroupCreate).min(1).max(GROUPS_MAX, AT_MOST_GROUPS),
     ...ValidityCreate,
@@ -300,6 +312,10 @@ export const RouteSchemePatch = z
     editPolicy: SchemeEditPolicy.optional(),
     planAhead: z.boolean().optional(),
     status: RouteSchemeStatus.optional(),
+    /** A depot of the project; null clears it. */
+    depotId: Id.nullable().optional(),
+    /** An unloading station of the company; null clears it. */
+    unloadingStationId: Id.nullable().optional(),
     validFrom: IsoDate.optional(),
     /** Null reopens the period; a day ends it. */
     validTo: IsoDate.nullable().optional(),

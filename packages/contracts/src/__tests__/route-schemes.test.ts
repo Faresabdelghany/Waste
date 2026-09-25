@@ -99,11 +99,15 @@ describe("CollectionGroup", () => {
     assert.deepEqual(CollectionGroup.parse(stopped), stopped, "a group that no longer runs keeps its row with no days")
   })
 
-  test("carries its vehicle and its driver on the resource and on no write body: Resources' columns, held by nothing yet (#101, slice 6)", () => {
-    for (const key of ["vehicleId", "driverId"]) {
+  test("carries its vehicle and its driver on the resource and on both write bodies, each nullable so a form may clear it (#101, slice 6)", () => {
+    for (const key of ["vehicleId", "driverId"] as const) {
       assert.ok(Object.keys(CollectionGroup.shape).includes(key), key)
-      assert.match(refusal(CollectionGroupCreate.safeParse({ name: "x", days: [], stopSource: "rule", rule, [key]: FOURTH }))[0].message, new RegExp(key))
-      assert.match(refusal(CollectionGroupPatch.safeParse({ [key]: FOURTH }))[0].message, new RegExp(key))
+      assert.equal(CollectionGroupCreate.parse({ name: "x", days: [], stopSource: "rule", rule, [key]: FOURTH })[key], FOURTH, key)
+      assert.equal(CollectionGroupCreate.parse({ name: "x", days: [], stopSource: "rule", rule, [key]: null })[key], null, key)
+      assert.equal(CollectionGroupCreate.parse({ name: "x", days: [], stopSource: "rule", rule })[key], undefined, "absent is unsaid, not null")
+      assert.deepEqual(CollectionGroupPatch.parse({ [key]: FOURTH }), { [key]: FOURTH }, "naming one is a change")
+      assert.deepEqual(CollectionGroupPatch.parse({ [key]: null }), { [key]: null })
+      assert.deepEqual(refusal(CollectionGroupPatch.safeParse({ [key]: "not-an-id" })).map((issue) => issue.path), [key])
     }
   })
 
@@ -177,13 +181,17 @@ describe("RouteScheme", () => {
     assert.equal(Object.keys(RouteScheme.shape).includes("lastGeneratedAt"), false)
   })
 
-  test("carries its depot and its unloading station on the resource and on no write body: Resources' columns, held by nothing yet (#101, slice 6)", () => {
-    for (const key of ["depotId", "unloadingStationId"]) {
+  test("carries its depot and its unloading station on the resource and on both write bodies, each nullable so a form may clear it (#101, slice 6)", () => {
+    const body = { projectId: THIRD, name: "x", serviceType: "container-collection", frequency: "weekly", serviceDays: ["monday"], collectionGroups: [{ name: "g", days: [], stopSource: "rule", rule }], validFrom: "2026-01-01" }
+    for (const key of ["depotId", "unloadingStationId"] as const) {
       assert.ok(Object.keys(RouteScheme.shape).includes(key), key)
-      assert.match(refusal(RouteSchemePatch.safeParse({ [key]: FOURTH }))[0].message, new RegExp(key))
+      assert.equal(RouteSchemeCreate.parse({ ...body, [key]: FOURTH })[key], FOURTH, key)
+      assert.equal(RouteSchemeCreate.parse({ ...body, [key]: null })[key], null, key)
+      assert.equal(RouteSchemeCreate.parse(body)[key], undefined, "absent is unsaid, not null")
+      assert.deepEqual(RouteSchemePatch.parse({ [key]: FOURTH }), { [key]: FOURTH }, "naming one is a change")
+      assert.deepEqual(RouteSchemePatch.parse({ [key]: null }), { [key]: null })
+      assert.deepEqual(refusal(RouteSchemePatch.safeParse({ [key]: "not-an-id" })).map((issue) => issue.path), [key])
     }
-    const body = { projectId: THIRD, name: "x", serviceType: "container-collection", frequency: "weekly", serviceDays: ["monday"], collectionGroups: [{ name: "g", days: [], stopSource: "rule", rule }], validFrom: "2026-01-01", depotId: FOURTH }
-    assert.match(refusal(RouteSchemeCreate.safeParse(body))[0].message, /depotId/)
   })
 
   test("holds the period, the rotation and the days on the way out too", () => {
