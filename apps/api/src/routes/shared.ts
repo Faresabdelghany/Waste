@@ -53,7 +53,7 @@ import type { Context } from "hono"
 import { resolver } from "hono-openapi"
 import * as z from "zod"
 
-import { exclusionConstraintOf, invalidRequest, problem, uniqueConstraintOf } from "../problem"
+import { checkConstraintOf, exclusionConstraintOf, invalidRequest, problem, uniqueConstraintOf } from "../problem"
 
 /** The path parameter of every `/<resource>/:id` route. */
 export const IdParam = z.object({ id: Id })
@@ -228,5 +228,31 @@ async function refused<T>(
     const detail = constraint === undefined ? undefined : sentences[constraint]
     if (detail === undefined) throw error
     throw problem(409, { detail })
+  }
+}
+
+/** What a check the database ran says about the value it refused: the field the body carried it in, and the sentence. */
+export type CheckRefusal = { path: string; message: string }
+
+/**
+ * The third door, one SQLSTATE further along (Issue #97): a check violation
+ * (23514) the route named becomes a 400 on the field, in the shape the
+ * validator's own refusals take. A 400 and not a 409, because nothing else in
+ * the table says otherwise — the row is alone and its own value will not do,
+ * which is what a schema says of a value it refuses; the only difference is
+ * who noticed. The API runs every check it can before the write, so this door
+ * is for the check only the database can run: `st_isvalid` on a polygon,
+ * whose ring may cross itself in a way the shape rule cannot see. A check the
+ * route did not name is left to the error handler, which answers a 500 and
+ * logs the constraint — the signal that a sentence is missing here.
+ */
+export async function refuseCheck<T>(sentences: Readonly<Record<string, CheckRefusal>>, write: () => Promise<T>): Promise<T> {
+  try {
+    return await write()
+  } catch (error) {
+    const constraint = checkConstraintOf(error)
+    const refusal = constraint === undefined ? undefined : sentences[constraint]
+    if (refusal === undefined) throw error
+    throw invalidRequest("body", [refusal])
   }
 }

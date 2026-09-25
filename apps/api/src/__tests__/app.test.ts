@@ -128,12 +128,15 @@ describe("GET /openapi.json", () => {
     assert.deepEqual([...documented].sort(), [...registered].sort())
   })
 
-  test("documents the probes and every route of the organisation, access and registry contexts, and no other path", async () => {
+  test("documents the probes and every route of the organisation, access, registry and planning contexts, and no other path", async () => {
     const document = await spec()
     assert.deepEqual(Object.keys(document.paths).sort(), [
       "/agreements",
       "/agreements/{id}",
       "/agreements/{id}/subscriptions",
+      "/collection-calendars",
+      "/collection-calendars/{id}",
+      "/collection-calendars/{id}/holidays",
       "/collection-groups/{id}",
       "/collection-groups/{id}/containers",
       "/collection-groups/{id}/stop-matching-rule",
@@ -149,6 +152,11 @@ describe("GET /openapi.json", () => {
       "/me",
       "/placements",
       "/placements/{id}",
+      "/planning-area-boundaries",
+      "/planning-area-boundaries/{id}",
+      "/planning-areas",
+      "/planning-areas/{id}",
+      "/planning-areas/{id}/boundaries",
       "/products",
       "/products/{id}",
       "/projects",
@@ -233,8 +241,8 @@ describe("GET /openapi.json", () => {
     }
     assert.equal(
       secured,
-      85,
-      "/me, the ten organisation routes, the twelve access routes, the fifty-one registry routes: waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each — the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each — agreements with their subscriptions, and containers with their placements; and the eleven planning routes of slice 4 — route schemes with the occurrence read, five, and collection groups with their two set replacements, six",
+      99,
+      "/me, the ten organisation routes, the twelve access routes, the fifty-one registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each, agreements with their subscriptions and containers with their placements — and the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six",
     )
   })
 
@@ -360,6 +368,76 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(document.paths["/roles/{id}/grants"].put.requestBody?.content["application/json"].schema.required, ["grants"])
     assert.equal(document.paths["/users/{id}/deactivate"].post.requestBody, undefined, "a command takes no body")
     assert.equal(document.paths["/users/{id}/make-primary-administrator"].post.requestBody, undefined, "so does the transfer: the path names the account")
+  })
+
+  test("documents each planning route with its verbs, its problems and the rules a client must know", async () => {
+    const document = await spec()
+    const operations = (path: string) =>
+      Object.fromEntries(Object.entries(document.paths[path]).map(([method, operation]) => [method, operation.operationId]))
+
+    assert.deepEqual(operations("/planning-areas"), { get: "listPlanningAreas", post: "createPlanningArea" })
+    assert.deepEqual(operations("/planning-areas/{id}"), { get: "getPlanningArea", patch: "patchPlanningArea" })
+    assert.deepEqual(operations("/planning-areas/{id}/boundaries"), { get: "listPlanningAreaBoundaries", post: "createPlanningAreaBoundary" })
+    assert.deepEqual(operations("/planning-area-boundaries"), { get: "listPlanningAreaBoundariesAcrossAreas" })
+    assert.deepEqual(operations("/planning-area-boundaries/{id}"), { get: "getPlanningAreaBoundary", patch: "patchPlanningAreaBoundary" })
+    assert.deepEqual(operations("/collection-calendars"), { get: "listCollectionCalendars", post: "createCollectionCalendar" })
+    assert.deepEqual(operations("/collection-calendars/{id}"), { get: "getCollectionCalendar", patch: "patchCollectionCalendar" })
+    assert.deepEqual(operations("/collection-calendars/{id}/holidays"), { put: "putCollectionCalendarHolidays" })
+
+    // What a caller can earn on each of them, and in what shape.
+    for (const path of ["/planning-areas", "/collection-calendars"]) {
+      assert.deepEqual(Object.keys(document.paths[path].get.responses), ["200", "400", "401", "403"], path)
+      assert.deepEqual(Object.keys(document.paths[path].post.responses), ["201", "400", "401", "403", "409"], path)
+      assert.deepEqual(Object.keys(document.paths[`${path}/{id}`].get.responses), ["200", "400", "401", "403", "404"], path)
+      assert.deepEqual(Object.keys(document.paths[`${path}/{id}`].patch.responses), ["200", "400", "401", "403", "404", "409"], path)
+    }
+    // A version hangs off its area: the nested list and create answer the area's 404, the create the overlap's 409.
+    assert.deepEqual(Object.keys(document.paths["/planning-areas/{id}/boundaries"].get.responses), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(Object.keys(document.paths["/planning-areas/{id}/boundaries"].post.responses), ["201", "400", "401", "403", "404", "409"])
+    assert.deepEqual(Object.keys(document.paths["/planning-area-boundaries"].get.responses), ["200", "400", "401", "403"])
+    assert.deepEqual(Object.keys(document.paths["/planning-area-boundaries/{id}"].get.responses), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(Object.keys(document.paths["/planning-area-boundaries/{id}"].patch.responses), ["200", "400", "401", "403", "404", "409"])
+    // A set is replaced whole, and nothing there can collide: a repeated day is the body's own 400 and never the key's 409.
+    assert.deepEqual(Object.keys(document.paths["/collection-calendars/{id}/holidays"].put.responses), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(document.paths["/collection-calendars/{id}/holidays"].put.requestBody?.content["application/json"].schema.required, ["holidays"])
+    for (const [status, operation] of Object.entries(document.paths["/planning-area-boundaries/{id}"].patch.responses)) {
+      const media = Object.keys(operation.content)
+      assert.deepEqual(media, [status === "200" ? "application/json" : "application/problem+json"], status)
+    }
+
+    // Every list is project-scoped and takes the project filter beside the page; each adds its own.
+    const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
+    assert.deepEqual(byName(document.paths["/planning-areas"].get).sort(), ["query:cursor", "query:limit", "query:projectId", "query:purpose"])
+    assert.deepEqual(byName(document.paths["/planning-area-boundaries"].get).sort(), ["query:cursor", "query:limit", "query:planningAreaId", "query:projectId", "query:validOn"])
+    assert.deepEqual(byName(document.paths["/planning-areas/{id}/boundaries"].get).sort(), ["path:id", "query:cursor", "query:limit", "query:validOn"])
+    assert.deepEqual(byName(document.paths["/collection-calendars"].get).sort(), ["query:cursor", "query:limit", "query:projectId", "query:validOn"])
+    assert.deepEqual(byName(document.paths["/collection-calendars/{id}/holidays"].put), ["path:id"])
+
+    // The rules a client must know are in the prose, not only in the code.
+    assert.match(document.paths["/planning-areas"].post.description ?? "", /code is the stable reference[^.]*set once/)
+    assert.match(document.paths["/planning-areas"].post.description ?? "", /ring that crosses itself[^.]*400 on `boundary\.boundary`/)
+    assert.match(document.paths["/planning-areas/{id}"].patch.description ?? "", /The code does not change/)
+    assert.match(document.paths["/planning-areas/{id}/boundaries"].get.description ?? "", /none on a day between two versions/)
+    assert.match(document.paths["/planning-areas/{id}/boundaries"].post.description ?? "", /One boundary of an area is in force at a time/)
+    assert.match(document.paths["/planning-areas/{id}/boundaries"].post.description ?? "", /ring that crosses itself is refused by the database and answered as a 400 on `boundary`/)
+    assert.match(document.paths["/planning-area-boundaries"].get.description ?? "", /Layers control/)
+    assert.match(document.paths["/planning-area-boundaries/{id}"].patch.description ?? "", /the start does not move/)
+    assert.match(document.paths["/collection-calendars"].post.description ?? "", /a project has one calendar in force at a time/)
+    assert.match(document.paths["/collection-calendars"].post.description ?? "", /each a day inside the period \(400 on `holidays\.N\.day` otherwise\)/)
+    assert.match(document.paths["/collection-calendars/{id}"].patch.description ?? "", /a shortening that would leave one outside is refused \(409\) counting them/)
+    assert.match(document.paths["/collection-calendars/{id}/holidays"].put.description ?? "", /Replaces the whole list/)
+    assert.match(document.paths["/collection-calendars"].get.description ?? "", /an account that works in none[^.]*reads an empty page/)
+    assert.match(document.paths["/planning-areas"].get.description ?? "", /an account that works in none[^.]*reads an empty page/)
+    // The project's two new fields are stated where they are written (Issue #97).
+    assert.match(document.paths["/projects/{id}"].patch.description ?? "", /`weekend` replaces the days the project rests on/)
+    assert.match(document.paths["/projects/{id}"].patch.description ?? "", /`holidayList`[^.]*as null takes it away[^.]*rests on its weekend only/)
+    assert.match(document.paths["/projects"].post.description ?? "", /Saturday and Sunday unless the body says otherwise/)
+
+    // A write takes a JSON body, and it is the strict one the contracts spell.
+    const required = (path: string) => document.paths[path].post.requestBody?.content["application/json"].schema.required
+    assert.deepEqual(required("/planning-areas"), ["projectId", "code", "name", "purpose"])
+    assert.deepEqual(required("/planning-areas/{id}/boundaries"), ["boundary", "validFrom"])
+    assert.deepEqual(required("/collection-calendars"), ["projectId", "name", "validFrom"])
   })
 
   test("documents each registry route with its verbs, its problems and the rules a client must know", async () => {
