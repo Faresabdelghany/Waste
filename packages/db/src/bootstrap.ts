@@ -1,13 +1,15 @@
-// The foundation migration creates the API role NOLOGIN, because a password
-// does not belong in a migration. Giving it LOGIN and a password is a
-// per-environment step: `planLocalBootstrap` + `grantLogin` do it for the
-// local stack and CI (scripts/bootstrap-local.ts), and an operator runs the
-// same ALTER ROLE once on a hosted project. The password travels as a query
-// parameter into a transaction-local setting and is spliced into ALTER ROLE by
-// format(%L) inside the database, so no client-side quoting is involved.
+// The migrations create the two service roles NOLOGIN — the API role in the
+// foundation, the sync role in 0008 (Issue #104) — because a password does
+// not belong in a migration. Giving a role LOGIN and a password is a
+// per-environment step: `planLocalBootstrap` and `planSyncBootstrap` decide
+// it from the URLs and `grantLogin` does it, for the local stack and CI
+// (scripts/bootstrap-local.ts), and an operator runs the same ALTER ROLE once
+// on a hosted project. The password travels as a query parameter into a
+// transaction-local setting and is spliced into ALTER ROLE by format(%L)
+// inside the database, so no client-side quoting is involved.
 import { createDb } from "./client"
 import { isLocalHost } from "./local-host"
-import { API_ROLE } from "./roles"
+import { API_ROLE, SYNC_ROLE } from "./roles"
 
 export type GrantLoginOptions = {
   /** A plain identifier: lowercase letters, digits and underscores. */
@@ -35,31 +37,41 @@ export async function grantLogin(adminUrl: string, { role, password }: GrantLogi
   }
 }
 
-export type LocalBootstrapPlan = {
+export type LocalBootstrapPlan<Role extends string = string> = {
   adminUrl: string
-  role: typeof API_ROLE
+  role: Role
   password: string
 }
 
 /**
- * What the local bootstrap will do, decided from the two URLs and nothing
- * else: the admin URL must be the local stack, and DATABASE_URL must log in as
- * the API role, whose password it carries. Pure, so the refusals are unit-tested.
+ * What a local bootstrap of one role will do, decided from the two URLs and
+ * nothing else: the admin URL must be the local stack, and the role's URL
+ * must log in as that role, whose password it carries. Pure, so the refusals
+ * are unit-tested. `variable` names the URL in the refusals, since the person
+ * fixes an environment variable and not an argument.
  */
-export function planLocalBootstrap({ adminUrl, appUrl }: { adminUrl: string; appUrl: string }): LocalBootstrapPlan {
+export function planLocalLogin<Role extends string>({ adminUrl, url, role, variable }: { adminUrl: string; url: string; role: Role; variable: string }): LocalBootstrapPlan<Role> {
   if (!isLocalHost(adminUrl)) {
     throw new Error(
-      `bootstrap is for the local stack; DATABASE_ADMIN_URL points at ${new URL(adminUrl).hostname}. On a hosted project run ALTER ROLE ${API_ROLE} WITH LOGIN PASSWORD ... by hand.`,
+      `bootstrap is for the local stack; DATABASE_ADMIN_URL points at ${new URL(adminUrl).hostname}. On a hosted project run ALTER ROLE ${role} WITH LOGIN PASSWORD ... by hand.`,
     )
   }
-  const app = new URL(appUrl)
-  const user = decodeURIComponent(app.username)
-  if (user !== API_ROLE) {
-    throw new Error(`DATABASE_URL logs in as "${user}", not "${API_ROLE}": bootstrap sets the API role's password and nothing else`)
+  const parsed = new URL(url)
+  const user = decodeURIComponent(parsed.username)
+  if (user !== role) {
+    throw new Error(`${variable} logs in as "${user}", not "${role}": bootstrap sets the ${role} role's password and nothing else`)
   }
-  const password = decodeURIComponent(app.password)
+  const password = decodeURIComponent(parsed.password)
   if (password.length === 0) {
-    throw new Error("DATABASE_URL carries no password for the API role")
+    throw new Error(`${variable} carries no password for the ${role} role`)
   }
-  return { adminUrl, role: API_ROLE, password }
+  return { adminUrl, role, password }
 }
+
+/** The API role's login from `DATABASE_URL`: the plan every environment runs. */
+export const planLocalBootstrap = ({ adminUrl, appUrl }: { adminUrl: string; appUrl: string }): LocalBootstrapPlan<typeof API_ROLE> =>
+  planLocalLogin({ adminUrl, url: appUrl, role: API_ROLE, variable: "DATABASE_URL" })
+
+/** The sync role's login from `SYNC_DATABASE_URL` (Issue #104): the plan an environment with a PowerSync instance runs beside the API's. */
+export const planSyncBootstrap = ({ adminUrl, syncUrl }: { adminUrl: string; syncUrl: string }): LocalBootstrapPlan<typeof SYNC_ROLE> =>
+  planLocalLogin({ adminUrl, url: syncUrl, role: SYNC_ROLE, variable: "SYNC_DATABASE_URL" })

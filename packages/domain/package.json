@@ -13,6 +13,7 @@
     "./registry/__tests__/*": null,
     "./planning/__tests__/*": null,
     "./resources/__tests__/*": null,
+    "./execution/__tests__/*": null,
     "./*": "./src/*.ts"
   },
   "scripts": {

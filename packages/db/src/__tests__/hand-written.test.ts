@@ -359,16 +359,20 @@ describe("the migrations carry every table's hand-written statements", () => {
     }
   })
 
-  test("the schema has exactly two ledgers and one reservation, and no ledger carries a trigger anywhere", async () => {
+  test("the schema has exactly five ledgers and one reservation, and no ledger carries a trigger anywhere", async () => {
     const all = await tables()
     const ledgers = all.filter(isLedger).map((table) => createTableStatement(table))
-    assert.deepEqual(ledgers.sort(), ['CREATE TABLE "wms"."stock_movement" (', 'CREATE TABLE "wms"."vehicle_allocation_event" ('])
+    const LEDGERS = ["driver_command", "proof_of_service", "stock_movement", "unload", "vehicle_allocation_event"]
+    assert.deepEqual(
+      ledgers.sort(),
+      LEDGERS.map((name) => `CREATE TABLE "wms"."${name}" (`),
+    )
     assert.deepEqual(
       all.filter(isReservation).map((table) => createTableStatement(table)),
       ['CREATE TABLE "wms"."vehicle_allocation" ('],
     )
     const text = (await migrations()).map((file) => file.text).join("\n")
-    for (const name of ["stock_movement", "vehicle_allocation_event"]) {
+    for (const name of LEDGERS) {
       assert.equal(text.includes(`"${name}_touch_updated_at"`), false, `${name} has no updated_at to touch`)
     }
   })

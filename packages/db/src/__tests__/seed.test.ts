@@ -208,6 +208,8 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
         registrationNumber: "12345678",
         country: "DK",
         status: "active",
+        // The route-number counter (Issue #104): the seed writes no route, so the column keeps its default.
+        nextRouteNumber: 1000,
         createdAt: undefined,
         updatedAt: undefined,
       },

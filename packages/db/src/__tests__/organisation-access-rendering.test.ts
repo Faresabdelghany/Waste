@@ -71,26 +71,36 @@ const projectTable = (planning: boolean): string =>
       : []),
   ])
 
-/**
- * What 0006 changed on a table 0002 created (Issue #97: `project` gained
- * `weekend` and `holiday_list` through an `ALTER TABLE`, which
- * planning-rendering.test.ts pins): the statement as drizzle-kit generates it
- * now, and as it generated it as of 0002. An applied file is never edited, so
- * 0002 is held to the earlier spelling.
- */
-const CHANGED_IN_0006 = new Map([[projectTable(true), projectTable(false)]])
-
-const expected = [
+/** The company table as drizzle-kit writes it today, and as it wrote it as of 0002, before 0008 gave it the route-number counter (Issue #104). */
+const companyTable = (execution: boolean): string =>
   createTable("company", [
     '\t"name" text NOT NULL,',
     '\t"legal_name" text NOT NULL,',
     '\t"registration_number" text NOT NULL,',
     '\t"country" text NOT NULL,',
     '\t"status" text NOT NULL,',
+    ...(execution ? ['\t"next_route_number" integer DEFAULT 1000 NOT NULL,'] : []),
     '\tCONSTRAINT "company_country_registration_number_key" UNIQUE("country","registration_number"),',
     `\tCONSTRAINT "company_self" CHECK (${ref("company", "company_id")} = ${ref("company", "id")}),`,
     `\tCONSTRAINT "company_status_one_of" CHECK (${ref("company", "status")} ${STATUS})`,
-  ]),
+  ])
+
+/**
+ * What later files changed on tables 0002 created (Issue #97: `project` gained
+ * `weekend` and `holiday_list` in 0006, which planning-rendering.test.ts pins;
+ * Issue #104: `company` gained `next_route_number` in 0008, which
+ * execution-rendering.test.ts pins), each through an `ALTER TABLE`: the
+ * statement as drizzle-kit generates it now, and as it generated it as of
+ * 0002. An applied file is never edited, so 0002 is held to the earlier
+ * spelling.
+ */
+const CHANGED_LATER = new Map([
+  [projectTable(true), projectTable(false)],
+  [companyTable(true), companyTable(false)],
+])
+
+const expected = [
+  companyTable(true),
   projectTable(true),
   createTable("service_provider", [
     '\t"legal_name" text NOT NULL,',
@@ -177,7 +187,7 @@ describe("the Organisation & Access tables as drizzle-kit writes them", () => {
     // never edited.
     const generated = (await statementsFor(tables))
       .filter((statement) => !ADDED_IN_0005.includes(statement))
-      .map((statement) => CHANGED_IN_0006.get(statement) ?? statement)
+      .map((statement) => CHANGED_LATER.get(statement) ?? statement)
       .map(normalised)
       .sort()
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)

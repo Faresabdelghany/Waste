@@ -7,7 +7,9 @@
 // (Issue #101, migration 0007), whose five do too — and whose vehicle types,
 // vehicles, drivers, depots and stations Planning's route-schemes.ts now
 // references, which is an import there and no reordering here, since
-// drizzle-kit sorts a module's exports. What is exported here is what
+// drizzle-kit sorts a module's exports — then Execution (Issue #104,
+// migration 0008), one file of seven tables that reference all four contexts
+// before it. What is exported here is what
 // `pnpm db:generate` sees and what the hand-written gate
 // (__tests__/hand-written.test.ts) holds to its fence and trigger, or to its
 // fence and revoke for a ledger.
@@ -26,3 +28,4 @@ export * from "./places"
 export * from "./fleet"
 export * from "./stock"
 export * from "./allocations"
+export * from "./execution"

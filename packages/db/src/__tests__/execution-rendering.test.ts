@@ -1,0 +1,465 @@
+// The Execution tables (Issue #104, slice 1) as drizzle-kit writes them: the
+// seven CREATE TABLE statements with their columns, keys, uniques, checks and
+// partial indexes — three more ledgers, the two shape checks tying a route's
+// columns to its status, the pickup's and the session's project keys that
+// carry the route, the proof's CASE built from the domain's PROOF_SHAPES, the
+// first jsonb columns, the second index without the tenant — and the ALTER
+// TABLE that gives `company` its route-number counter; then migration 0008,
+// which has to begin with exactly those statements, so the file and `pnpm
+// db:generate` cannot drift apart, and to carry below them what the helpers
+// write for each table — the fence and the trigger, or for the three ledgers
+// the fence and the revoke — and then what is nobody's table, the sync role
+// and the publication, verbatim from sql/publication.ts. No database.
+//
+// This is also what makes a change to the vocabulary or to PROOF_SHAPES a
+// migration: the values and the CASE are spelled here as the file spells
+// them, so adding a kind or moving a column in the domain fails this test
+// until a migration replaces the check.
+import assert from "node:assert/strict"
+import { readFile } from "node:fs/promises"
+import { join } from "node:path"
+import { describe, test } from "node:test"
+
+import { PROOF_SHAPES } from "@waste/domain/execution/proof-shapes"
+import { PICKUP_REASONS, PICKUP_STATUSES, PROOF_KINDS } from "@waste/domain/execution/vocabulary"
+import { getTableName, is, sql } from "drizzle-orm"
+import { check, PgTable, text } from "drizzle-orm/pg-core"
+
+import { MIGRATIONS_FOLDER } from "../migrate"
+import { tableObjectName } from "../names"
+import { API_ROLE, SYNC_ROLE } from "../roles"
+import * as schema from "../schema"
+import { oneOf } from "../schema/checks"
+import { id, tenant, timestamps } from "../schema/columns"
+import { driverCommand, outboxEvent, pickup, proofOfService, route, session, unload } from "../schema/execution"
+import { company, COMPANY_STATUSES } from "../schema/organisation"
+import { uniqueOn } from "../schema/references"
+import { wms } from "../schema/wms"
+import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
+import { PUBLICATION, powersyncStatements, publicationStatement, SYNCED_TABLES, syncedTableNames, syncGrantStatements, syncRoleStatements } from "../sql/publication"
+import { checksOf, companyFk, createTable, foreignKey, geometryCheck, ID, index, list, oneOfCheck, partialUniqueIndex, positiveCheck, projectFk, projectFkTo, ref, tenantFk, uniqueKey } from "./rendering"
+import { statementsBetween, statementsFor } from "./specimen"
+
+/** The seven tables in the order src/schema/execution.ts defines them; drizzle-kit's own loader sorts a module's exports, which the migration test allows for. */
+const tables = { route, pickup, session, proofOfService, unload, driverCommand, outboxEvent }
+
+const MIGRATION = "0008_execution.sql"
+const COMPANY = '"company_id" uuid NOT NULL'
+const PROJECT = '"project_id" uuid NOT NULL'
+const RECORDED = '"recorded_at" timestamp with time zone DEFAULT now() NOT NULL'
+const INSTANT = "timestamp with time zone"
+
+/** A ledger's CREATE TABLE: id, tenant, project, the one stamp, then its own lines. */
+const createLedger = (name: string, lines: string[]): string => [`CREATE TABLE "wms"."${name}" (`, [ID, COMPANY, PROJECT, RECORDED, ...lines].map((line) => `\t${line}`).join(",\n"), ");", ""].join("\n")
+
+const REASONS = [...PICKUP_REASONS]
+const STATUSES = [...PICKUP_STATUSES]
+const SOURCES = ["driver-app", "dispatch", "integration"]
+
+/** A FOREIGN KEY through the route: `(company_id, project_id, route_id, <column>) → target (company_id, project_id, route_id, id)`. */
+const throughRouteFk = (table: string, column: string, target: string): string =>
+  foreignKey(table, `${table}_route_id_${column}_fk`, ["company_id", "project_id", "route_id", column], target, ["company_id", "project_id", "route_id", "id"])
+
+const sessionShape = (table: string): string => `CONSTRAINT "${table}_session_shape" CHECK ((${ref(table, "source")} = 'driver-app') = (${ref(table, "session_id")} is not null))`
+
+/** The proof's kind CASE, spelled as the file spells it, kind by kind. */
+const kindShape = (() => {
+  const column = (name: string) => ref("proof_of_service", name)
+  const none = (name: string) => `${column(name)} is null`
+  const some = (name: string) => `${column(name)} is not null`
+  const bare = [none("reason"), none("object_key"), none("weight_kg"), none("outcome")].join(" and ")
+  const reasoned = [some("reason"), none("object_key"), none("weight_kg"), none("outcome")].join(" and ")
+  const clauses = [
+    `when 'arrival' then ${bare}`,
+    `when 'completion' then ${bare}`,
+    `when 'skip' then ${reasoned}`,
+    `when 'failure' then ${reasoned}`,
+    `when 'problem' then ${reasoned} and ${some("note")}`,
+    `when 'photo' then ${[none("reason"), some("object_key"), none("weight_kg"), none("outcome")].join(" and ")}`,
+    `when 'weight' then ${[none("reason"), none("object_key"), some("weight_kg"), none("outcome")].join(" and ")}`,
+    `when 'signature' then ${[none("reason"), some("object_key"), none("weight_kg"), none("outcome")].join(" and ")}`,
+    `when 'note' then ${bare} and ${some("note")}`,
+    `when 'correction' then ${[none("object_key"), none("weight_kg"), some("outcome"), some("note")].join(" and ")} and ${column("source")} = 'dispatch'`,
+  ]
+  return `CONSTRAINT "proof_of_service_kind_shape" CHECK (case ${column("kind")} ${clauses.join(" ")} else false end)`
+})()
+
+const stampsShape = (() => {
+  const column = (name: string) => ref("route", name)
+  const stamps = (dispatched: boolean, started: boolean, completed: boolean, cancelled: boolean) =>
+    [
+      `${column("dispatched_at")} is ${dispatched ? "not null" : "null"}`,
+      `${column("started_at")} is ${started ? "not null" : "null"}`,
+      `${column("completed_at")} is ${completed ? "not null" : "null"}`,
+      `${column("cancelled_at")} is ${cancelled ? "not null" : "null"}`,
+    ].join(" and ")
+  return `CONSTRAINT "route_stamps_shape" CHECK (case ${column("status")} when 'planned' then ${stamps(false, false, false, false)} when 'ready' then ${stamps(true, false, false, false)} when 'active' then ${stamps(true, true, false, false)} when 'completed' then ${stamps(true, true, true, false)} when 'cancelled' then ${column("cancelled_at")} is not null and ${column("completed_at")} is null and (${column("started_at")} is null or ${column("dispatched_at")} is not null) else false end)`
+})()
+
+const expected = [
+  createTable("route", "project", [
+    '"route_scheme_id" uuid NOT NULL',
+    '"collection_group_id" uuid NOT NULL',
+    '"service_date" date NOT NULL',
+    '"operating_date" date NOT NULL',
+    `"status" text DEFAULT 'planned' NOT NULL`,
+    '"cancelled_by_generation" boolean DEFAULT false NOT NULL',
+    '"note" text',
+    '"number" integer NOT NULL',
+    '"planned_start_time" time',
+    '"planned_vehicle_id" uuid',
+    '"planned_driver_id" uuid',
+    '"planned_trailer_id" uuid',
+    '"depot_id" uuid',
+    '"planned_service_provider_id" uuid',
+    '"unloading_station_id" uuid',
+    '"actual_vehicle_id" uuid',
+    '"actual_driver_id" uuid',
+    '"actual_trailer_id" uuid',
+    `"dispatched_at" ${INSTANT}`,
+    `"started_at" ${INSTANT}`,
+    `"completed_at" ${INSTANT}`,
+    `"cancelled_at" ${INSTANT}`,
+    uniqueKey("route_generation_key", "company_id", "route_scheme_id", "collection_group_id", "service_date"),
+    uniqueKey("route_number_key", "company_id", "number"),
+    uniqueKey("route_project_key", "company_id", "project_id", "id"),
+    oneOfCheck("route", "status", "planned", "ready", "active", "completed", "cancelled"),
+    `CONSTRAINT "route_actual_shape" CHECK ((${ref("route", "actual_driver_id")} is not null) = (${ref("route", "started_at")} is not null) and (${ref("route", "actual_vehicle_id")} is not null) = (${ref("route", "started_at")} is not null) and (${ref("route", "actual_trailer_id")} is null or ${ref("route", "started_at")} is not null))`,
+    stampsShape,
+  ]),
+  createTable("pickup", "project", [
+    '"route_id" uuid NOT NULL',
+    '"container_id" uuid NOT NULL',
+    '"position" integer NOT NULL',
+    `"status" text DEFAULT 'planned' NOT NULL`,
+    '"note" text',
+    '"property_id" uuid',
+    '"shared_collection_point_id" uuid',
+    '"waste_fraction_id" uuid NOT NULL',
+    `"arrived_at" ${INSTANT}`,
+    `"outcome_at" ${INSTANT}`,
+    '"reason" text',
+    uniqueKey("pickup_route_id_container_id_key", "company_id", "route_id", "container_id"),
+    uniqueKey("pickup_route_id_project_key", "company_id", "project_id", "route_id", "id"),
+    oneOfCheck("pickup", "status", ...STATUSES),
+    oneOfCheck("pickup", "reason", ...REASONS),
+    positiveCheck("pickup", "position"),
+    `CONSTRAINT "pickup_place_exactly_one" CHECK ((${ref("pickup", "property_id")} is not null)::int + (${ref("pickup", "shared_collection_point_id")} is not null)::int = 1)`,
+    `CONSTRAINT "pickup_outcome_shape" CHECK ((${ref("pickup", "status")} <> 'planned') = (${ref("pickup", "outcome_at")} is not null))`,
+    `CONSTRAINT "pickup_reason_shape" CHECK ((${ref("pickup", "status")} in ('skipped', 'failed')) = (${ref("pickup", "reason")} is not null))`,
+  ]),
+  createTable("session", "project", [
+    '"route_id" uuid NOT NULL',
+    '"driver_id" uuid NOT NULL',
+    '"vehicle_id" uuid NOT NULL',
+    '"trailer_id" uuid',
+    '"device_id" text NOT NULL',
+    '"app_version" text',
+    `"started_at" ${INSTANT} NOT NULL`,
+    `"ended_at" ${INSTANT}`,
+    `"paused_at" ${INSTANT}`,
+    `"last_seen_at" ${INSTANT} NOT NULL`,
+    uniqueKey("session_route_id_project_key", "company_id", "project_id", "route_id", "id"),
+  ]),
+  createLedger("proof_of_service", [
+    '"route_id" uuid NOT NULL',
+    '"pickup_id" uuid',
+    '"session_id" uuid',
+    '"kind" text NOT NULL',
+    '"source" text NOT NULL',
+    `"occurred_at" ${INSTANT} NOT NULL`,
+    '"recorded_by" uuid NOT NULL',
+    '"device_id" text',
+    '"location" geometry(Point, 4326)',
+    '"location_accuracy_m" integer',
+    '"reason" text',
+    '"note" text',
+    '"weight_kg" integer',
+    '"object_key" text',
+    '"outcome" text',
+    oneOfCheck("proof_of_service", "kind", ...PROOF_KINDS),
+    oneOfCheck("proof_of_service", "source", ...SOURCES),
+    oneOfCheck("proof_of_service", "reason", ...REASONS),
+    oneOfCheck("proof_of_service", "outcome", ...STATUSES),
+    geometryCheck("proof_of_service", "location"),
+    positiveCheck("proof_of_service", "location_accuracy_m"),
+    positiveCheck("proof_of_service", "weight_kg"),
+    `CONSTRAINT "proof_of_service_pickup_shape" CHECK (${ref("proof_of_service", "kind")} in (${list("problem", "photo", "note")}) or ${ref("proof_of_service", "pickup_id")} is not null)`,
+    sessionShape("proof_of_service"),
+    kindShape,
+  ]),
+  createLedger("unload", [
+    '"route_id" uuid NOT NULL',
+    '"session_id" uuid',
+    '"unloading_station_id" uuid NOT NULL',
+    '"waste_fraction_id" uuid NOT NULL',
+    '"source" text NOT NULL',
+    `"occurred_at" ${INSTANT} NOT NULL`,
+    '"recorded_by" uuid NOT NULL',
+    '"device_id" text',
+    '"location" geometry(Point, 4326)',
+    '"gross_kg" integer',
+    '"tare_kg" integer',
+    '"net_kg" integer NOT NULL',
+    '"weighbridge_ticket" text',
+    '"object_key" text',
+    '"note" text',
+    oneOfCheck("unload", "source", ...SOURCES),
+    geometryCheck("unload", "location"),
+    positiveCheck("unload", "gross_kg"),
+    positiveCheck("unload", "tare_kg"),
+    positiveCheck("unload", "net_kg"),
+    sessionShape("unload"),
+    `CONSTRAINT "unload_weights_shape" CHECK ((${ref("unload", "gross_kg")} is null) = (${ref("unload", "tare_kg")} is null) and (${ref("unload", "gross_kg")} is null or ${ref("unload", "net_kg")} = ${ref("unload", "gross_kg")} - ${ref("unload", "tare_kg")}))`,
+  ]),
+  createLedger("driver_command", [
+    '"route_id" uuid NOT NULL',
+    '"session_id" uuid',
+    '"pickup_id" uuid',
+    '"driver_id" uuid NOT NULL',
+    '"device_id" text NOT NULL',
+    '"kind" text NOT NULL',
+    `"occurred_at" ${INSTANT} NOT NULL`,
+    '"body" jsonb NOT NULL',
+    '"outcome" text NOT NULL',
+    '"problem" jsonb',
+    oneOfCheck("driver_command", "kind", "start-route", "arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-unload", "pause", "resume", "end-route"),
+    oneOfCheck("driver_command", "outcome", "applied", "rejected"),
+    `CONSTRAINT "driver_command_problem_shape" CHECK ((${ref("driver_command", "outcome")} = 'rejected') = (${ref("driver_command", "problem")} is not null))`,
+  ]),
+  createTable("outbox_event", "project", [
+    '"kind" text NOT NULL',
+    '"aggregate_kind" text NOT NULL',
+    '"aggregate_id" uuid NOT NULL',
+    `"occurred_at" ${INSTANT} NOT NULL`,
+    '"payload" jsonb NOT NULL',
+    `"published_at" ${INSTANT}`,
+    oneOfCheck("outbox_event", "kind", "route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-corrected", "unload-recorded", "command-rejected"),
+    oneOfCheck("outbox_event", "aggregate_kind", "route", "pickup", "unload", "command"),
+  ]),
+  companyFk("route"),
+  projectFk("route"),
+  projectFkTo("route", "route_scheme_id", "route_scheme"),
+  projectFkTo("route", "collection_group_id", "collection_group"),
+  projectFkTo("route", "planned_vehicle_id", "vehicle"),
+  projectFkTo("route", "planned_trailer_id", "vehicle"),
+  projectFkTo("route", "planned_driver_id", "driver"),
+  projectFkTo("route", "depot_id", "depot"),
+  tenantFk("route", "planned_service_provider_id", "service_provider"),
+  tenantFk("route", "unloading_station_id", "unloading_station"),
+  projectFkTo("route", "actual_vehicle_id", "vehicle"),
+  projectFkTo("route", "actual_trailer_id", "vehicle"),
+  projectFkTo("route", "actual_driver_id", "driver"),
+  companyFk("pickup"),
+  projectFk("pickup"),
+  projectFkTo("pickup", "route_id", "route"),
+  projectFkTo("pickup", "container_id", "container"),
+  projectFkTo("pickup", "property_id", "property"),
+  projectFkTo("pickup", "shared_collection_point_id", "shared_collection_point"),
+  tenantFk("pickup", "waste_fraction_id", "waste_fraction"),
+  companyFk("session"),
+  projectFk("session"),
+  projectFkTo("session", "route_id", "route"),
+  projectFkTo("session", "driver_id", "driver"),
+  projectFkTo("session", "vehicle_id", "vehicle"),
+  projectFkTo("session", "trailer_id", "vehicle"),
+  companyFk("proof_of_service"),
+  projectFk("proof_of_service"),
+  projectFkTo("proof_of_service", "route_id", "route"),
+  // A pickup and a session of the route the proof names: the key carries the route on both sides.
+  throughRouteFk("proof_of_service", "pickup_id", "pickup"),
+  throughRouteFk("proof_of_service", "session_id", "session"),
+  tenantFk("proof_of_service", "recorded_by", "user_account"),
+  companyFk("unload"),
+  projectFk("unload"),
+  projectFkTo("unload", "route_id", "route"),
+  throughRouteFk("unload", "session_id", "session"),
+  tenantFk("unload", "unloading_station_id", "unloading_station"),
+  tenantFk("unload", "waste_fraction_id", "waste_fraction"),
+  tenantFk("unload", "recorded_by", "user_account"),
+  companyFk("driver_command"),
+  projectFk("driver_command"),
+  projectFkTo("driver_command", "route_id", "route"),
+  throughRouteFk("driver_command", "session_id", "session"),
+  throughRouteFk("driver_command", "pickup_id", "pickup"),
+  projectFkTo("driver_command", "driver_id", "driver"),
+  companyFk("outbox_event"),
+  projectFk("outbox_event"),
+  index("route", "route_collection_group_id_idx", "company_id", "collection_group_id"),
+  index("route", "route_project_id_operating_date_idx", "company_id", "project_id", "operating_date"),
+  index("route", "route_planned_driver_id_status_idx", "company_id", "planned_driver_id", "status"),
+  index("route", "route_actual_driver_id_idx", "company_id", "actual_driver_id"),
+  index("route", "route_planned_vehicle_id_idx", "company_id", "planned_vehicle_id"),
+  index("route", "route_planned_trailer_id_idx", "company_id", "planned_trailer_id"),
+  index("route", "route_depot_id_idx", "company_id", "depot_id"),
+  index("route", "route_planned_service_provider_id_idx", "company_id", "planned_service_provider_id"),
+  index("route", "route_unloading_station_id_idx", "company_id", "unloading_station_id"),
+  index("route", "route_actual_vehicle_id_idx", "company_id", "actual_vehicle_id"),
+  index("route", "route_actual_trailer_id_idx", "company_id", "actual_trailer_id"),
+  index("pickup", "pickup_project_id_idx", "company_id", "project_id"),
+  index("pickup", "pickup_container_id_idx", "company_id", "container_id"),
+  index("pickup", "pickup_property_id_idx", "company_id", "property_id"),
+  index("pickup", "pickup_shared_collection_point_id_idx", "company_id", "shared_collection_point_id"),
+  index("pickup", "pickup_waste_fraction_id_idx", "company_id", "waste_fraction_id"),
+  index("pickup", "pickup_route_id_position_idx", "company_id", "route_id", "position"),
+  // One live session per route and one per driver: the open rows alone are in the index.
+  partialUniqueIndex("session", "session_route_open_idx", ["company_id", "route_id"], `${ref("session", "ended_at")} is null`),
+  partialUniqueIndex("session", "session_driver_open_idx", ["company_id", "driver_id"], `${ref("session", "ended_at")} is null`),
+  index("session", "session_project_id_idx", "company_id", "project_id"),
+  index("session", "session_route_id_idx", "company_id", "route_id"),
+  index("session", "session_driver_id_idx", "company_id", "driver_id"),
+  index("session", "session_vehicle_id_idx", "company_id", "vehicle_id"),
+  index("session", "session_trailer_id_idx", "company_id", "trailer_id"),
+  // The route's timeline in recording order, leading with the route.
+  index("proof_of_service", "proof_of_service_route_id_idx", "company_id", "route_id", "id"),
+  index("proof_of_service", "proof_of_service_project_id_idx", "company_id", "project_id"),
+  index("proof_of_service", "proof_of_service_pickup_id_idx", "company_id", "pickup_id"),
+  index("proof_of_service", "proof_of_service_session_id_idx", "company_id", "session_id"),
+  index("proof_of_service", "proof_of_service_recorded_by_idx", "company_id", "recorded_by"),
+  index("unload", "unload_route_id_idx", "company_id", "route_id"),
+  index("unload", "unload_session_id_idx", "company_id", "session_id"),
+  index("unload", "unload_unloading_station_id_idx", "company_id", "unloading_station_id"),
+  index("unload", "unload_waste_fraction_id_idx", "company_id", "waste_fraction_id"),
+  index("unload", "unload_recorded_by_idx", "company_id", "recorded_by"),
+  index("unload", "unload_project_id_occurred_at_idx", "company_id", "project_id", "occurred_at"),
+  index("driver_command", "driver_command_project_id_idx", "company_id", "project_id"),
+  index("driver_command", "driver_command_route_id_idx", "company_id", "route_id"),
+  index("driver_command", "driver_command_pickup_id_idx", "company_id", "pickup_id"),
+  index("driver_command", "driver_command_driver_id_idx", "company_id", "driver_id"),
+  // A session's log in order, leading with the session.
+  index("driver_command", "driver_command_session_id_idx", "company_id", "session_id", "id"),
+  // The relay's read, across companies: the second index without the tenant after the hook's e-mail index.
+  `CREATE INDEX "outbox_event_published_at_id_idx" ON "wms"."outbox_event" USING btree ("published_at","id") WHERE ${ref("outbox_event", "published_at")} is null;`,
+  index("outbox_event", "outbox_event_project_id_idx", "company_id", "project_id"),
+  index("outbox_event", "outbox_event_aggregate_id_idx", "company_id", "aggregate_id"),
+]
+
+/** The company table as 0002 left it, so `statementsBetween` can write the ALTER TABLE of 0008: the same columns as src/schema/organisation.ts had before Issue #104, less the counter. */
+const companyAsOf0002 = wms.table(
+  "company",
+  {
+    ...id,
+    ...tenant,
+    ...timestamps,
+    name: text().notNull(),
+    legalName: text().notNull(),
+    registrationNumber: text().notNull(),
+    country: text().notNull(),
+    status: text().notNull(),
+  },
+  (t) => [uniqueOn(t.country, t.registrationNumber), check(tableObjectName(t.id.table, "self", "companySelf"), sql`${t.companyId} = ${t.id}`), oneOf(t.status, COMPANY_STATUSES)],
+)
+
+/** What 0008 does to `company`: the counter, as one ALTER TABLE. */
+const companyAltered = [`ALTER TABLE "wms"."company" ADD COLUMN "next_route_number" integer DEFAULT 1000 NOT NULL;`]
+
+/** What the seven tables owe their migration file, in the order migrations/README.md lays out: fence and trigger, or fence and revoke, table by table; then the sync role and the publication. */
+const handWritten = [...Object.values(tables).flatMap((table) => handWrittenStatements(table)), ...powersyncStatements()]
+
+/** Everything drizzle-kit wrote at the head of 0008: the seven tables and the altered company. */
+const generatedHead = async (): Promise<string[]> => [...(await statementsFor(tables)), ...(await statementsBetween({ company: companyAsOf0002 }, { company }))]
+
+const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
+
+describe("the Execution tables as drizzle-kit writes them", () => {
+  test("seven tables, every column, key, unique, check and partial index as the Domain model spells them, every name within 63 bytes", async () => {
+    assert.deepEqual(await statementsFor(tables), expected)
+  })
+
+  test("the company gains its route-number counter, defaulting to 1000, in one ALTER TABLE statement", async () => {
+    assert.deepEqual(await statementsBetween({ company: companyAsOf0002 }, { company }), companyAltered)
+  })
+
+  test("migration 0008 begins with exactly what drizzle-kit generates for the schema: 98 statements", async () => {
+    const statements = await fileStatements()
+    // The same statements, whatever order drizzle-kit's loader gave the tables (it sorts a module's exports).
+    const generated = (await generatedHead()).map(normalised).sort()
+    assert.equal(generated.length, 98, "seven CREATE TABLE, one ADD COLUMN, forty-seven foreign keys, forty-three indexes")
+    assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
+  })
+
+  test("and carries below them the fence and trigger, or revoke, of each table, then the sync role, its grants and the publication: 7 x 3 + 3 + 17 + 1 = 42 statements", async () => {
+    const statements = await fileStatements()
+    const generated = await generatedHead()
+    const tail = statements.slice(generated.length)
+    assert.equal(tail.length, 42)
+    assert.deepEqual(tail, handWritten.map(normalised))
+    assert.equal(tail.filter((statement) => statement.startsWith("REVOKE UPDATE, DELETE")).length, 3, "the three ledgers")
+    assert.equal(tail.filter((statement) => statement.startsWith("CREATE TRIGGER")).length, 4, "every table but the ledgers")
+    assert.equal(tail.filter((statement) => statement.startsWith("CREATE POLICY")).length, 7, "every table")
+    assert.equal(tail.filter((statement) => statement.startsWith("GRANT SELECT ON")).length, SYNCED_TABLES.length)
+    assert.equal(tail.filter((statement) => statement.startsWith("CREATE PUBLICATION")).length, 1)
+  })
+})
+
+describe("the sync role and the publication", () => {
+  test("wms_sync is created REPLICATION and BYPASSRLS and NOLOGIN, tolerating the race, granted to the owner, with USAGE on wms", () => {
+    const [role, grant, usage] = syncRoleStatements()
+    assert.equal(SYNC_ROLE, "wms_sync")
+    assert.match(role, /IF NOT EXISTS \(SELECT 1 FROM pg_roles WHERE rolname = 'wms_sync'\)/)
+    assert.match(role, /CREATE ROLE wms_sync NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE REPLICATION BYPASSRLS;/)
+    assert.match(role, /WHEN duplicate_object OR unique_violation THEN/)
+    assert.match(grant, /EXECUTE format\('GRANT wms_sync TO %I', current_user\);/)
+    assert.equal(usage, "GRANT USAGE ON SCHEMA wms TO wms_sync;")
+    for (const statement of powersyncStatements()) assert.equal(statement.includes(API_ROLE), false, "nothing here is the API role's")
+  })
+
+  test("the synced tables are the seventeen the sync rules read, each a table of the schema, each granted SELECT once, and the publication is over exactly them", () => {
+    const names = syncedTableNames()
+    assert.deepEqual(names, [
+      "user_account",
+      "waste_fraction",
+      "container_type",
+      "container",
+      "property",
+      "shared_collection_point",
+      "depot",
+      "unloading_station",
+      "unloading_station_fraction",
+      "vehicle",
+      "driver",
+      "route",
+      "pickup",
+      "session",
+      "proof_of_service",
+      "unload",
+      "driver_command",
+    ])
+    const known = new Set<unknown>(Object.values(schema as Record<string, unknown>).filter((value) => is(value, PgTable)))
+    for (const table of SYNCED_TABLES) assert.ok(known.has(table), getTableName(table))
+    assert.deepEqual(
+      syncGrantStatements(),
+      names.map((name) => `GRANT SELECT ON "wms"."${name}" TO wms_sync;`),
+    )
+    assert.equal(publicationStatement(), `CREATE PUBLICATION ${PUBLICATION} FOR TABLE ${names.map((name) => `"wms"."${name}"`).join(", ")};`)
+    assert.equal(PUBLICATION, "powersync")
+  })
+})
+
+describe("the checks of this context", () => {
+  test("the proof's CASE is built from the domain's PROOF_SHAPES, one WHEN per kind, and the pickup shape names the kinds that may stand on the route", () => {
+    const checks = checksOf(proofOfService)
+    assert.equal(`CONSTRAINT "proof_of_service_kind_shape" CHECK (${checks.get("proof_of_service_kind_shape")})`, kindShape)
+    for (const kind of PROOF_KINDS) assert.ok(checks.get("proof_of_service_kind_shape")?.includes(`when '${kind}' then`), kind)
+    const routeLevel = PROOF_KINDS.filter((kind) => PROOF_SHAPES[kind].pickup === "optional")
+    assert.deepEqual(routeLevel, ["problem", "photo", "note"])
+    assert.match(checks.get("proof_of_service_pickup_shape") ?? "", /in \('problem', 'photo', 'note'\) or .*"pickup_id" is not null/)
+  })
+
+  test("every shape check of the seven tables renders without parameters, the way every check in a migration must", () => {
+    assert.deepEqual([...checksOf(route).keys()], ["route_status_one_of", "route_actual_shape", "route_stamps_shape"])
+    assert.deepEqual([...checksOf(pickup).keys()], ["pickup_status_one_of", "pickup_reason_one_of", "pickup_position_positive", "pickup_place_exactly_one", "pickup_outcome_shape", "pickup_reason_shape"])
+    assert.deepEqual([...checksOf(unload).keys()].slice(-2), ["unload_session_shape", "unload_weights_shape"])
+    assert.deepEqual([...checksOf(driverCommand).keys()], ["driver_command_kind_one_of", "driver_command_outcome_one_of", "driver_command_problem_shape"])
+    assert.deepEqual([...checksOf(outboxEvent).keys()], ["outbox_event_kind_one_of", "outbox_event_aggregate_kind_one_of"])
+    assert.deepEqual([...checksOf(session).keys()], [], "open and ended are readings of ended_at; a session has no status to check")
+  })
+
+  test("the instants read and write as Dates, the days as strings, and the two jsonb columns as unknown", () => {
+    for (const column of [route.startedAt, session.lastSeenAt, proofOfService.occurredAt, unload.occurredAt, driverCommand.occurredAt, outboxEvent.publishedAt]) {
+      assert.deepEqual({ dataType: column.dataType, sqlType: column.getSQLType() }, { dataType: "date", sqlType: "timestamp with time zone" })
+    }
+    for (const column of [route.serviceDate, route.operatingDate]) assert.deepEqual({ dataType: column.dataType, sqlType: column.getSQLType() }, { dataType: "string", sqlType: "date" })
+    for (const column of [driverCommand.body, driverCommand.problem, outboxEvent.payload]) assert.equal(column.getSQLType(), "jsonb")
+  })
+})
