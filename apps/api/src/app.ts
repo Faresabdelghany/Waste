@@ -62,6 +62,7 @@ import { routeRoutes } from "./routes/routes"
 import { serviceAreaRoutes } from "./routes/service-areas"
 import { serviceProviderPriceRoutes } from "./routes/service-provider-prices"
 import { serviceProviderRoutes } from "./routes/service-providers"
+import { settlementRoutes } from "./routes/settlements"
 import { sharedCollectionPointRoutes } from "./routes/shared-collection-points"
 import { ticketRoutes } from "./routes/tickets"
 import { unloadRoutes } from "./routes/unloads"
@@ -71,6 +72,7 @@ import { vehicleAllocationRoutes } from "./routes/vehicle-allocations"
 import { vehicleTypeRoutes } from "./routes/vehicle-types"
 import { vehicleRoutes } from "./routes/vehicles"
 import { warehouseRoutes } from "./routes/warehouses"
+import { weightControlRoutes } from "./routes/weight-control"
 
 export type AppOptions = {
   /** The pool /readyz probes, as the API role: server.ts builds it from probePoolOptions; a test hands whatever it wants probed. */
@@ -191,6 +193,9 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   app.route("/", billableEventRoutes(guard, { now }))
   app.route("/", billingRunRoutes(guard, { now }))
   app.route("/", invoiceRoutes(guard, { now }))
+  // Finance (Issue #112, slice 5): a settlement's `calculatedAt` and `closedAt` are the request's clock and `settlement-closed` is published with it, so the module takes `now`; weight control stamps nothing of its own (a review's `recordedAt` is the database's) and takes no clock.
+  app.route("/", settlementRoutes(guard, { now }))
+  app.route("/", weightControlRoutes(guard))
 
   app.get(
     "/openapi.json",

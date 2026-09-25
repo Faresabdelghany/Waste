@@ -26,7 +26,24 @@ import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/
 import { vehicleAllocation, vehicleAllocationEvent } from "@waste/db/schema/allocations"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, unload } from "@waste/db/schema/execution"
-import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceAreaWasteFraction, serviceProviderPrice } from "@waste/db/schema/finance"
+import {
+  billableEvent,
+  billingRun,
+  billingRunExclusion,
+  invoice,
+  invoiceLine,
+  priceList,
+  priceListRow,
+  serviceArea,
+  serviceAreaAssignment,
+  serviceAreaPlanningArea,
+  serviceAreaWasteFraction,
+  serviceProviderPrice,
+  settlement,
+  settlementEvent,
+  settlementLine,
+  weightReview,
+} from "@waste/db/schema/finance"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
 import { containerTypeVehicleType, vehicleType } from "@waste/db/schema/fleet-types"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "@waste/db/schema/places"
@@ -263,19 +280,27 @@ export async function grantRole(pool: Database, companyId: string, roleId: strin
  * sessions, pickups and routes — and before Planning's and Resources', since a
  * route names a scheme, a group, vehicles, drivers, a depot and a station, and
  * a pickup names containers, properties, points and fractions. Finance's
- * billing half (Issue #112, slice 4) goes first of all: its three ledgers as
- * the owner — `invoice_line` (it names events, invoices and lines), `invoice`
- * (it names runs) and `billing_run_exclusion` — then, as `wms_api`,
- * `billing_run` and `billable_event` before `ticket`, since an event names
- * tickets, pickups, routes, agreements, products and price rows; and
- * `price_list_row` and `price_list` after `agreement` (which names the list)
- * and before `product` (which the row names).
+ * sixteen (Issue #112) go first of all, in the order their keys demand: the
+ * five ledgers as the owner — `invoice_line` (it names events, invoices and
+ * lines), `invoice` (it names runs), `billing_run_exclusion`,
+ * `settlement_event` and `weight_review` (before `unload`: a review names the
+ * unload it judged and the one it wrote) — then, as `wms_api`,
+ * `settlement_line` (it names events and provider prices), `settlement` (it
+ * names assignments), `billing_run`, `billable_event` before `ticket`,
+ * `pickup`, `route` and `agreement` (it names all four, and price rows),
+ * `service_provider_price`, `service_area_assignment`, the area's two sets and
+ * `service_area` before `planning_area` and `service_provider`, and
+ * `price_list_row` before the planning areas, products, container types,
+ * fractions and customers its conditions name; `price_list` alone goes later,
+ * after `agreement` (which names the list) and before `product`.
  */
 export async function dropTenant(pool: Database, companyId: string, owner?: Database): Promise<void> {
   if (owner !== undefined) {
     await owner.db.delete(invoiceLine).where(eq(invoiceLine.companyId, companyId))
     await owner.db.delete(invoice).where(eq(invoice.companyId, companyId))
     await owner.db.delete(billingRunExclusion).where(eq(billingRunExclusion.companyId, companyId))
+    await owner.db.delete(settlementEvent).where(eq(settlementEvent.companyId, companyId))
+    await owner.db.delete(weightReview).where(eq(weightReview.companyId, companyId))
     await owner.db.delete(ticketEvent).where(eq(ticketEvent.companyId, companyId))
     await owner.db.delete(proofOfService).where(eq(proofOfService.companyId, companyId))
     await owner.db.delete(unload).where(eq(unload.companyId, companyId))
@@ -284,8 +309,16 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await owner.db.delete(stockMovement).where(eq(stockMovement.companyId, companyId))
   }
   await withCompany(pool.db, companyId, async (tx: Tx) => {
+    await tx.delete(settlementLine).where(eq(settlementLine.companyId, companyId))
+    await tx.delete(settlement).where(eq(settlement.companyId, companyId))
     await tx.delete(billingRun).where(eq(billingRun.companyId, companyId))
     await tx.delete(billableEvent).where(eq(billableEvent.companyId, companyId))
+    await tx.delete(serviceProviderPrice).where(eq(serviceProviderPrice.companyId, companyId))
+    await tx.delete(serviceAreaAssignment).where(eq(serviceAreaAssignment.companyId, companyId))
+    await tx.delete(serviceAreaWasteFraction).where(eq(serviceAreaWasteFraction.companyId, companyId))
+    await tx.delete(serviceAreaPlanningArea).where(eq(serviceAreaPlanningArea.companyId, companyId))
+    await tx.delete(serviceArea).where(eq(serviceArea.companyId, companyId))
+    await tx.delete(priceListRow).where(eq(priceListRow.companyId, companyId))
     await tx.delete(alert).where(eq(alert.companyId, companyId))
     await tx.delete(ticket).where(eq(ticket.companyId, companyId))
     await tx.delete(outboxEvent).where(eq(outboxEvent.companyId, companyId))
@@ -310,19 +343,12 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(vehicleType).where(eq(vehicleType.companyId, companyId))
     await tx.delete(collectionCalendarHoliday).where(eq(collectionCalendarHoliday.companyId, companyId))
     await tx.delete(collectionCalendar).where(eq(collectionCalendar.companyId, companyId))
-    // Finance's awards (Issue #112): a price names its assignment and a product, an assignment its area and a provider, the two sets their area, a planning area and a fraction — so all five go before the planning areas, the products, the fractions and the providers. A price row names a planning area too, so the rows go here and their list below, after the agreements that name it.
-    await tx.delete(serviceProviderPrice).where(eq(serviceProviderPrice.companyId, companyId))
-    await tx.delete(serviceAreaAssignment).where(eq(serviceAreaAssignment.companyId, companyId))
-    await tx.delete(serviceAreaWasteFraction).where(eq(serviceAreaWasteFraction.companyId, companyId))
-    await tx.delete(serviceAreaPlanningArea).where(eq(serviceAreaPlanningArea.companyId, companyId))
-    await tx.delete(serviceArea).where(eq(serviceArea.companyId, companyId))
-    await tx.delete(priceListRow).where(eq(priceListRow.companyId, companyId))
     await tx.delete(planningAreaBoundary).where(eq(planningAreaBoundary.companyId, companyId))
     await tx.delete(planningArea).where(eq(planningArea.companyId, companyId))
     await tx.delete(containerServicePlacement).where(eq(containerServicePlacement.companyId, companyId))
     await tx.delete(subscription).where(eq(subscription.companyId, companyId))
     await tx.delete(agreement).where(eq(agreement.companyId, companyId))
-    // Finance's tariff (Issue #112): an agreement names its list, so the list goes after the agreements; its rows went above, before the planning areas they name.
+    // Finance's tariff: an agreement names its list, so the list goes after the agreements; its rows went above, before the planning areas they name.
     await tx.delete(priceList).where(eq(priceList.companyId, companyId))
     await tx.delete(container).where(eq(container.companyId, companyId))
     await tx.delete(product).where(eq(product.companyId, companyId))

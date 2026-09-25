@@ -172,8 +172,8 @@ import {
   routeWithSessions,
   sessionColumns,
   sessionOf,
-  unloadColumns,
   unloadOf,
+  unloadsFrom,
   type PickupRow,
   type ReceiptRow,
   type RouteRow,
@@ -473,7 +473,10 @@ async function resultOf(tx: Tx, companyId: string, kind: DriverCommandKind, id: 
     return row === undefined ? undefined : { resource: "proof", value: proofOf(row) }
   }
   if (kind === "record-unload") {
-    const [row] = await tx.select(unloadColumns).from(unload).where(and(eq(unload.companyId, companyId), eq(unload.id, id))).limit(1)
+    // Through the same statement every unload is read by, so a replay of a since-reviewed unload carries its reading (Issue #112).
+    const [row] = await unloadsFrom(tx, companyId)
+      .query.where(and(eq(unload.companyId, companyId), eq(unload.id, id)))
+      .limit(1)
     return row === undefined ? undefined : { resource: "unload", value: unloadOf(row) }
   }
   if (kind === "end-route" && routeId !== null) {

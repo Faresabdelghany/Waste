@@ -22,6 +22,7 @@
 // `generation_run` table and its key, and until then no route carries one.
 import type { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import { routeLabel } from "@waste/contracts/execution"
+import type { WeightReviewState } from "@waste/contracts/finance"
 import type { FlatPoint } from "@waste/contracts/geojson"
 import type { Pickup } from "@waste/contracts/pickups"
 import type { Problem } from "@waste/contracts/problem"
@@ -30,11 +31,13 @@ import type { Route, RouteDetail, RouteProgress } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
 import type { Unload } from "@waste/contracts/unloads"
 import type { Tx } from "@waste/db/client"
+import { reviewStatus, weightReviewOf } from "@waste/db/query/weight-review"
 import { driverCommand, pickup, proofOfService, route, session, unload } from "@waste/db/schema/execution"
 import { noRouteAssigned } from "@waste/domain/execution/commands"
 import { progressOf, type PickupCounts } from "@waste/domain/execution/progress"
 import type { CommandOutcome, DriverCommandKind, ExecutionSource, PickupOutcome, PickupReason, PickupStatus, ProofKind, RouteStatus } from "@waste/domain/execution/vocabulary"
-import { and, asc, count, eq, inArray, isNull, type SQL } from "drizzle-orm"
+import type { WeightReviewStatus } from "@waste/domain/finance/vocabulary"
+import { and, asc, count, eq, inArray, isNull, sql, type SQL } from "drizzle-orm"
 
 import { assignedTo, type DriverProfile } from "../auth/driver"
 import type { Principal } from "../auth/principal"
@@ -358,9 +361,46 @@ export const unloadColumns = {
   note: unload.note,
 }
 
-export type UnloadRow = Pick<typeof unload.$inferSelect, keyof typeof unloadColumns>
+// Weight control's reading beside every Unload (Issue #112, §5): the latest
+// `weight_review` of the row — its decision folded onto the status, its id,
+// and the new Unload a correction wrote — joined LATERAL through
+// `weightReviewOf` (@waste/db/query/weight-review, the `assetStateOf` shape:
+// one backward probe per row into `weight_review_unload_id_idx`, never a
+// fold of the whole ledger), so a page, a single read, the route's detail,
+// the driver door's replay and the answer to a capture all say the same thing
+// about an unload's weight. A row just appended has no review by
+// construction and reads through `NO_REVIEW` instead of a join.
 
-/** The unload on the wire. */
+/** The reading's columns beside the unload's own, as the one statement below selects them; null on a LATERAL left join that found no review, `captured` from the fold either way. */
+const reviewColumns = (review: ReturnType<typeof weightReviewOf>) => ({
+  reviewStatus: reviewStatus(review.decision),
+  reviewId: review.reviewId,
+  reviewCorrectionUnloadId: review.correctionUnloadId,
+})
+
+/** What the reading adds to a row: the fold, the latest review's id, the correction it wrote. */
+export type ReviewRead = { reviewStatus: WeightReviewStatus; reviewId: string | null; reviewCorrectionUnloadId: string | null }
+
+export type UnloadRow = Pick<typeof unload.$inferSelect, keyof typeof unloadColumns> & ReviewRead
+
+/** The reading an unload has before anybody looks: what a capture and a correction answer, since a row just made has none by construction. */
+export const NO_REVIEW: ReviewRead = { reviewStatus: "captured", reviewId: null, reviewCorrectionUnloadId: null }
+
+/**
+ * The one statement every unload is read through: the row with the review
+ * ledger's reading joined LATERAL — one probe per row for its latest review
+ * (`weightReviewOf`). The subquery is handed back beside the query for a
+ * filter over it (`GET /unloads?reviewStatus=`).
+ */
+export function unloadsFrom(tx: Tx, companyId: string) {
+  const review = weightReviewOf(tx, companyId, unload.id)
+  return { review, query: tx.select({ ...unloadColumns, ...reviewColumns(review) }).from(unload).leftJoinLateral(review, sql`true`) }
+}
+
+/** The reading as the wire spells it: `captured` with two nulls where no review exists, else the latest decision with its review and, on a correction, the new row. */
+export const weightReviewOfRow = (row: ReviewRead): WeightReviewState => ({ status: row.reviewStatus, latestReviewId: row.reviewId, correctionUnloadId: row.reviewCorrectionUnloadId })
+
+/** The unload on the wire, its review reading beside it. */
 export function unloadOf(row: UnloadRow): Unload {
   return {
     id: row.id,
@@ -381,18 +421,25 @@ export function unloadOf(row: UnloadRow): Unload {
     weighbridgeTicket: row.weighbridgeTicket,
     objectKey: row.objectKey,
     note: row.note,
+    weightReview: weightReviewOfRow(row),
   }
 }
 
 /** The unloads of this company, in the projects the caller works in. */
 export const unloadScope = (principal: Principal): SQL | undefined => and(eq(unload.companyId, principal.companyId), inProjects(unload.projectId, principal))
 
-/** One route's unloads, oldest first. */
+/** One unload of this company by id, inside the caller's projects, with its reading; undefined when it is neither. */
+export async function findUnload(tx: Tx, principal: Principal, id: string): Promise<UnloadRow | undefined> {
+  const [row] = await unloadsFrom(tx, principal.companyId)
+    .query.where(and(unloadScope(principal), eq(unload.id, id)))
+    .limit(1)
+  return row
+}
+
+/** One route's unloads, oldest first, each with its reading. */
 export async function unloadsOfRoute(tx: Tx, companyId: string, routeId: string): Promise<UnloadRow[]> {
-  return await tx
-    .select(unloadColumns)
-    .from(unload)
-    .where(and(eq(unload.companyId, companyId), eq(unload.routeId, routeId)))
+  return await unloadsFrom(tx, companyId)
+    .query.where(and(eq(unload.companyId, companyId), eq(unload.routeId, routeId)))
     .orderBy(asc(unload.id))
 }
 
