@@ -9,6 +9,7 @@ import { createDb, type Database } from "@waste/db/client"
 import { createApp } from "../app"
 import { encodeCursor } from "../pagination"
 import { callingAs, type Call } from "./calls"
+import { created } from "./created"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { dropTenant, seedTenant, testId, type Tenant } from "./tenant"
@@ -69,11 +70,8 @@ describe("the project endpoints", { skip: database.skip }, () => {
     assert.equal(response.status, 200)
     return Project.parse(await response.json())
   }
-  const create = async (call: Call, values: Record<string, unknown>) => {
-    const response = await call("/projects", { method: "POST", body: values })
-    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
-    return Project.parse(await response.json())
-  }
+  const create = async (call: Call, values: Record<string, unknown>) =>
+    created(call, "/projects", await call("/projects", { method: "POST", body: values }), Project)
 
   describe("GET /projects", () => {
     test("answers the company's projects in id order, which for a version 7 id is the order they were made", async () => {

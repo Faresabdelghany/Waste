@@ -69,7 +69,7 @@ import {
   type MemberSet,
   type Parent,
 } from "./members"
-import { describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "customers.properties"
 const PropertyPage = Page(Property)
@@ -231,7 +231,7 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Registers a service address in one project, which must be a project the caller works in. The name is unique inside the project and the registry identifier, where given, inside the company. The status defaults to `active` and the location is null until the address is geocoded; a location outside the WGS 84 range is refused before the database sees it. `parties` is the list the property starts with, each naming a customer of this company, so registering a property with its owner is one request. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The property as it was written.", Property),
+          201: describeCreated("The property as it was written.", Property),
           400: describeProblem(
             "The body is missing a field, names a member the server owns, names a project this account does not work in, holds a point outside the WGS 84 range, names the same customer and role twice, or names a party that is not a customer of this company.",
           ),
@@ -258,7 +258,7 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .returning(columns),
         )
         await writeEntries(tx, parties, parent, entries)
-        return c.json(await propertyWithParties(tx, parent.companyId, row), 201)
+        return created(c, "/properties", await propertyWithParties(tx, parent.companyId, row))
       },
     )
     .get(

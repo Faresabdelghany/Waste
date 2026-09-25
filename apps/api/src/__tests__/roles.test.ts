@@ -9,6 +9,7 @@ import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
+import { created } from "./created"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { dropTenant, seedTenant, testId, type Tenant } from "./tenant"
@@ -71,11 +72,8 @@ describe("the role endpoints", { skip: database.skip }, () => {
     assert.equal(response.status, 200)
     return Role.parse(await response.json())
   }
-  const create = async (call: Call, values: Record<string, unknown>) => {
-    const response = await call("/roles", { method: "POST", body: values })
-    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
-    return Role.parse(await response.json())
-  }
+  const create = async (call: Call, values: Record<string, unknown>) =>
+    created(call, "/roles", await call("/roles", { method: "POST", body: values }), Role)
   const setGrants = async (call: Call, id: string, grants: unknown) => {
     const response = await call(`/roles/${id}/grants`, { method: "PUT", body: { grants } })
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))

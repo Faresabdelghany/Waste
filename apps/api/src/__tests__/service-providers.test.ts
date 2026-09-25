@@ -8,6 +8,7 @@ import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
+import { created } from "./created"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { dropTenant, seedTenant, testId, type Tenant } from "./tenant"
@@ -78,11 +79,8 @@ describe("the service provider endpoints", { skip: database.skip }, () => {
     assert.equal(response.status, 200)
     return ServiceProvider.parse(await response.json())
   }
-  const create = async (call: Call, values: Record<string, unknown>) => {
-    const response = await call("/service-providers", { method: "POST", body: values })
-    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
-    return ServiceProvider.parse(await response.json())
-  }
+  const create = async (call: Call, values: Record<string, unknown>) =>
+    created(call, "/service-providers", await call("/service-providers", { method: "POST", body: values }), ServiceProvider)
 
   describe("GET /service-providers", () => {
     test("answers the company's providers in id order, with the contact to call", async () => {

@@ -35,7 +35,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "customers.contacts"
 const CustomerPage = Page(Customer)
@@ -129,7 +129,7 @@ export function customerRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Registers a person or an organisation in the caller's company. Only the kind and the name are required: a sole trader has no registration number, and a customer who gave no phone number still has to be billable. The status defaults to `active` and service messages to allowed. A registration number, where given, is one customer's inside the company. The e-mail is stored lowercase. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The customer as it was written.", Customer),
+          201: describeCreated("The customer as it was written.", Customer),
           400: describeProblem("The body is missing a field, holds a value of the wrong shape, or names one the server owns."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `customers.contacts`."),
@@ -148,7 +148,7 @@ export function customerRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .values({ ...values, id: newId(), companyId: c.get("principal").companyId })
             .returning(columns),
         )
-        return c.json(customerOf(row), 201)
+        return created(c, "/customers", customerOf(row))
       },
     )
     .get(

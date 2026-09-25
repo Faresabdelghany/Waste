@@ -11,6 +11,7 @@ import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
+import { created } from "./created"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { pointBody, setStatus } from "./registry"
@@ -129,11 +130,8 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
 
   type Schema<T> = { parse: (value: unknown) => T }
 
-  const create = async <T>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> => {
-    const response = await call(path, { method: "POST", body: values })
-    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
-    return schema.parse(await response.json())
-  }
+  const create = async <T extends { id: string }>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> =>
+    created(call, path, await call(path, { method: "POST", body: values }), schema)
   const refused = async (response: Response, status: number) => {
     assert.equal(response.status, status, JSON.stringify(await response.clone().json()))
     return await readProblem(response)

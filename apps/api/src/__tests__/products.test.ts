@@ -8,6 +8,7 @@ import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
+import { created } from "./created"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
@@ -89,11 +90,8 @@ describe("the product endpoints", { skip: database.skip }, () => {
   /** A product body a caller may send: the three fields with no default, and nothing pointed at. */
   const body = (projectId: string, name: string) => ({ projectId, name, kind: "container-collection", unit: "pickup" })
 
-  const create = async <T>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> => {
-    const response = await call(path, { method: "POST", body: values })
-    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
-    return schema.parse(await response.json())
-  }
+  const create = async <T extends { id: string }>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> =>
+    created(call, path, await call(path, { method: "POST", body: values }), schema)
   const one = async (call: Call, id: string): Promise<Product> => {
     const response = await call(`/products/${id}`)
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))

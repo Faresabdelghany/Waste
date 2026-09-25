@@ -43,7 +43,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "configure.access"
 const RolePage = Page(Role)
@@ -154,7 +154,7 @@ export function roleRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Creates a custom role in the caller's company: the server writes it with no key and `system: false`, since a key belongs to a seeded role. The grants are stored as the system spells them — `edit`, `create` and `delete` imply `view`, a module named twice is merged — and default to none. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The role as it was written.", Role),
+          201: describeCreated("The role as it was written.", Role),
           400: describeProblem("The body is missing a field, names one the server owns, or names a module or action outside the vocabulary."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.access`."),
@@ -177,7 +177,7 @@ export function roleRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .returning(columns),
         )
         if (grants.length > 0) await tx.insert(roleGrant).values(grantRowsOf(companyId, id, grants))
-        return c.json(roleOf(row, grants), 201)
+        return created(c, "/roles", roleOf(row, grants))
       },
     )
     .get(

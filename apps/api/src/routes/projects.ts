@@ -31,7 +31,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "configure.organization"
 const ProjectPage = Page(Project)
@@ -111,7 +111,7 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
         description: "Creates a project in the caller's company. The server mints the id; a body that carries one is refused.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The project as it was written.", Project),
+          201: describeCreated("The project as it was written.", Project),
           400: describeProblem("The body is missing a field, holds a value of the wrong shape, or names one the server owns."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.organization`."),
@@ -133,7 +133,7 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .values({ ...values, id: newId(), companyId: c.get("principal").companyId })
             .returning(columns),
         )
-        return c.json(projectOf(row), 201)
+        return created(c, "/projects", projectOf(row))
       },
     )
     .get(

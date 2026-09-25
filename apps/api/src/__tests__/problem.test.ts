@@ -6,7 +6,7 @@ import { Hono } from "hono"
 import { HTTPException } from "hono/http-exception"
 import * as z from "zod"
 
-import { errorHandler, exclusionConstraintOf, notFound, problem, ProblemError, problemResponse, uniqueConstraintOf, validate } from "../problem"
+import { errorHandler, exclusionConstraintOf, membersAt, notFound, problem, ProblemError, problemResponse, uniqueConstraintOf, validate } from "../problem"
 import { refuseDuplicate, refuseOverlap } from "../routes/shared"
 import { readProblem } from "./read-problem"
 
@@ -277,12 +277,43 @@ describe("validate", () => {
     projectIds: z.array(z.uuidv7()),
     contact: z.object({ email: z.email() }).optional(),
   })
+  // The shape of every write body: strict, so a member it does not know is
+  // refused by name (Issue #74), with a strict object nested in a list the
+  // way a Property's parties are, and `.refine`d the way UserInvite and
+  // SubscriptionCreate are, since a refined strict object is still an object
+  // in zod 4 and its members must still be read.
+  const Party = z.strictObject({ customerId: z.string(), role: z.string() })
+  const Strict = z
+    .strictObject({
+      name: z.string().min(1),
+      status: z.string().optional(),
+      contactEmail: z.email().optional(),
+      parties: z.array(Party).optional(),
+    })
+    .refine(() => true)
+  const StrictQuery = z.strictObject({ limit: z.string().optional(), cursor: z.string().optional() })
+  // A strict object with no members, and a record whose keys are a finite
+  // set: zod refuses a key outside either as unrecognized, and the sentence
+  // must say what each accepts — nothing, and the set.
+  const Empty = z.strictObject({})
+  const Keyed = z.strictObject({ byDay: z.record(z.enum(["mon", "tue"]), z.string()) })
+  // An issue that says "unrecognized keys" at a path that leads to no object:
+  // zod never emits one, so a check pushes it, to show the hook falls back to
+  // the plain sentence rather than throwing.
+  const Unresolvable = z.object({ nowhere: z.string() }).check((ctx) => {
+    ctx.issues.push({ code: "unrecognized_keys", keys: ["ghost"], input: ctx.value, path: ["nowhere", "deep"] })
+  })
   const hono = new Hono().onError(errorHandler(() => assert.fail("nothing here is a 500")))
   hono.post("/things", validate("json", Body), (c) => c.json(c.req.valid("json"), 201))
   hono.get("/things", validate("query", PageRequest), (c) => c.json(c.req.valid("query")))
+  hono.post("/strict", validate("json", Strict), (c) => c.json(c.req.valid("json"), 201))
+  hono.get("/strict", validate("query", StrictQuery), (c) => c.json(c.req.valid("query")))
+  hono.post("/unresolvable", validate("json", Unresolvable), (c) => c.json(c.req.valid("json"), 201))
+  hono.post("/empty", validate("json", Empty), (c) => c.json(c.req.valid("json"), 201))
+  hono.post("/keyed", validate("json", Keyed), (c) => c.json(c.req.valid("json"), 201))
 
-  const post = (body: unknown) =>
-    hono.request("/things", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } })
+  const post = (body: unknown, path = "/things") =>
+    hono.request(path, { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } })
 
   test("lets a valid body through, parsed", async () => {
     const response = await post({ name: "Copenhagen Central", projectIds: ["0192b3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"], extra: "dropped" })
@@ -317,5 +348,123 @@ describe("validate", () => {
     const body = await readProblem(bad)
     assert.equal(body.detail, "The request query is invalid")
     assert.deepEqual(body.errors?.map((error) => error.path), ["limit"])
+  })
+
+  test("refuses a member a strict body does not know by name, and names the members it does know, in schema order", async () => {
+    const response = await post({ name: "Kystbyen", colour: "red" }, "/strict")
+    assert.equal(response.status, 400)
+    const body = await readProblem(response)
+    assert.equal(body.detail, "The request body is invalid")
+    assert.deepEqual(body.errors, [
+      { path: "colour", message: 'Unrecognized key "colour"; the body\'s members are name, status, contactEmail, parties' },
+    ])
+  })
+
+  test("answers two unknown keys with two errors, each at the key's own path", async () => {
+    const response = await post({ name: "Kystbyen", colour: "red", shape: "round" }, "/strict")
+    assert.equal(response.status, 400)
+    const { errors } = await readProblem(response)
+    assert.deepEqual(errors?.map((error) => error.path), ["colour", "shape"])
+    for (const error of errors ?? []) assert.match(error.message, /the body's members are name, status, contactEmail, parties$/)
+    assert.match(errors?.[0].message ?? "", /^Unrecognized key "colour"/)
+    assert.match(errors?.[1].message ?? "", /^Unrecognized key "shape"/)
+  })
+
+  test("names the members of a nested strict object by its path, beside the other issues in issue order", async () => {
+    const response = await post({ name: "", parties: [{ customerId: "c", role: "owner", colour: "red" }] }, "/strict")
+    assert.equal(response.status, 400)
+    const { errors } = await readProblem(response)
+    assert.deepEqual(errors?.map((error) => error.path), ["name", "parties.0.colour"])
+    assert.equal(errors?.[1].message, 'Unrecognized key "colour"; the members of parties.0 are customerId, role')
+  })
+
+  test("says whose members they are by the target: a strict query names the query's", async () => {
+    const response = await hono.request("/strict?limit=5&size=5")
+    assert.equal(response.status, 400)
+    const body = await readProblem(response)
+    assert.equal(body.detail, "The request query is invalid")
+    assert.deepEqual(body.errors, [{ path: "size", message: 'Unrecognized key "size"; the query\'s members are limit, cursor' }])
+  })
+
+  test("falls back to the plain sentence where the path leads to no object, rather than throwing", async () => {
+    const response = await post({ nowhere: "here" }, "/unresolvable")
+    assert.equal(response.status, 400)
+    const { errors } = await readProblem(response)
+    assert.deepEqual(errors, [{ path: "nowhere.deep.ghost", message: 'Unrecognized key "ghost"' }])
+  })
+
+  test("says an object with no members accepts none, rather than ending on a list with nothing in it", async () => {
+    const response = await post({ colour: "red" }, "/empty")
+    assert.equal(response.status, 400)
+    const { errors } = await readProblem(response)
+    assert.deepEqual(errors, [{ path: "colour", message: 'Unrecognized key "colour"; the body accepts no members' }])
+  })
+
+  test("lists the keys a record over a finite key set accepts, since zod refuses a key outside it the same way", async () => {
+    // Such a record is exhaustive too — a key it names and the body leaves out is its own issue — so the body carries both.
+    const response = await post({ byDay: { mon: "collect", tue: "collect", wed: "collect" } }, "/keyed")
+    assert.equal(response.status, 400)
+    const { errors } = await readProblem(response)
+    assert.deepEqual(errors, [{ path: "byDay.wed", message: 'Unrecognized key "wed"; the members of byDay are mon, tue' }])
+  })
+})
+
+describe("membersAt", () => {
+  const Inner = z.strictObject({ customerId: z.string(), role: z.string() })
+  const Outer = z
+    .strictObject({
+      name: z.string(),
+      parties: z.array(Inner).optional(),
+      contact: Inner.nullable().default(null),
+      byKey: z.record(z.string(), Inner),
+      pair: z.tuple([z.string(), Inner]),
+      piped: Inner.transform((party) => party.role),
+      later: z.lazy(() => Inner),
+    })
+    .refine(() => true)
+
+  test("reads an object's members at the root and through optional, nullable, default, array, record, tuple, pipe and lazy", () => {
+    assert.deepEqual(membersAt(Outer, []), ["name", "parties", "contact", "byKey", "pair", "piped", "later"])
+    assert.deepEqual(membersAt(Outer, ["parties", 0]), ["customerId", "role"])
+    assert.deepEqual(membersAt(Outer, ["parties", { key: 3 }]), ["customerId", "role"], "a Standard Schema path segment may be wrapped")
+    assert.deepEqual(membersAt(Outer, ["contact"]), ["customerId", "role"])
+    assert.deepEqual(membersAt(Outer, ["byKey", "anything"]), ["customerId", "role"])
+    assert.deepEqual(membersAt(Outer, ["pair", 1]), ["customerId", "role"])
+    assert.deepEqual(membersAt(Outer, ["piped"]), ["customerId", "role"], "a body is validated against the input side of a pipe")
+    assert.deepEqual(membersAt(Outer, ["later"]), ["customerId", "role"])
+  })
+
+  test("is undefined where the path leads to no object: a scalar, a tuple index off the end, a member that is not there, or no schema at all", () => {
+    assert.equal(membersAt(Outer, ["name"]), undefined)
+    assert.equal(membersAt(Outer, ["pair", 0]), undefined)
+    assert.equal(membersAt(Outer, ["pair", 2]), undefined)
+    assert.equal(membersAt(Outer, ["missing"]), undefined)
+    assert.equal(membersAt(Outer, ["name", "deeper"]), undefined)
+    assert.equal(membersAt(z.string(), []), undefined)
+    assert.equal(membersAt(undefined, []), undefined)
+    assert.equal(membersAt({ not: "a schema" }, []), undefined)
+  })
+
+  test("answers an empty list for an object with no members: it accepts nothing, which is an answer", () => {
+    assert.deepEqual(membersAt(z.strictObject({}), []), [])
+    assert.deepEqual(membersAt(z.strictObject({ inner: z.strictObject({}) }), ["inner"]), [])
+  })
+
+  test("reads a record's keys where its key schema is a finite set, and nothing where it is a constraint", () => {
+    enum Weekday {
+      Mon = "mon",
+      Tue = "tue",
+    }
+    enum Ordinal {
+      First = 1,
+      Second = 2,
+    }
+    assert.deepEqual(membersAt(z.record(z.enum(["mon", "tue"]), z.string()), []), ["mon", "tue"])
+    assert.deepEqual(membersAt(z.record(z.enum(Weekday), z.string()), []), ["mon", "tue"], "a native enum's values")
+    assert.deepEqual(membersAt(z.record(z.enum(Ordinal), z.string()), []), ["1", "2"], "a numeric enum's values, its reverse mapping left out")
+    assert.deepEqual(membersAt(z.record(z.literal(["a", "b"]), z.string()), []), ["a", "b"])
+    assert.deepEqual(membersAt(z.strictObject({ byDay: z.record(z.enum(["mon", "tue"]), z.string()).optional() }), ["byDay"]), ["mon", "tue"])
+    assert.equal(membersAt(z.record(z.string(), z.string()), []), undefined, "a key that is any string names no members")
+    assert.equal(membersAt(Outer, ["byKey"]), undefined)
   })
 })

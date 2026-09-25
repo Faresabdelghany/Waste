@@ -60,7 +60,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { describeJson, IdParam, lockRow, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "configure.access"
 const UserPage = Page(User)
@@ -274,7 +274,7 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Creates an account in the caller's company with no login bound, so its status is `invited` until the person signs in; the invitation e-mail itself is Supabase's. The body names exactly one of `allProjects: true`, `projectIds` or `serviceProviderId`: a company user takes Project Access and no provider, a provider user the reverse. The e-mail is stored lowercase. The server mints the id; a body that carries one is refused.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The account as it was written.", User),
+          201: describeCreated("The account as it was written.", User),
           400: describeProblem(
             "The body is missing a field, names none or more than one way of reaching something, or names a role, project or service provider that is not this company's.",
           ),
@@ -312,7 +312,7 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .returning(columns),
         )
         await writeAccess(tx, companyId, id, shape)
-        return c.json(await userWithAccess(tx, companyId, row), 201)
+        return created(c, "/users", await userWithAccess(tx, companyId, row))
       },
     )
     .get(

@@ -17,7 +17,11 @@
 //   a reference      — an id a body names must be a row of this company
 //                      (`requireRow`), checked before the write, or the
 //                      foreign key answers 23503 and the client gets a 500
-//                      naming nothing.
+//                      naming nothing;
+//   a create         — answers 201 with the body and `Location`, the row's
+//                      own single-row GET (`created`), and every 201 in the
+//                      document declares the header (`describeCreated`),
+//                      Issue #74.
 //
 // The Registry added the same thing one SQLSTATE along (Issue #78): an
 // effective-dated table refuses a row whose period overlaps one already there
@@ -45,6 +49,7 @@ import { Id } from "@waste/contracts/ids"
 import type { Tx } from "@waste/db/client"
 import { and, eq, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
+import type { Context } from "hono"
 import { resolver } from "hono-openapi"
 import * as z from "zod"
 
@@ -58,6 +63,37 @@ type Schema = Parameters<typeof resolver>[0]
 /** What a route says about a JSON body in its OpenAPI description. */
 export function describeJson(description: string, schema: Schema) {
   return { description, content: { "application/json": { schema: resolver(schema) } } }
+}
+
+/** The one header a create answers beside its body, as the document declares it on every 201. */
+const LOCATION_HEADER = {
+  Location: {
+    description: "Where the resource is now read: the path of its own single-row GET, relative to the API's origin.",
+    schema: { type: "string" as const },
+  },
+}
+
+/** What a route says about the 201 a create answers: the body, and `Location` naming where the row is now read. */
+export function describeCreated(description: string, schema: Schema) {
+  return { ...describeJson(description, schema), headers: LOCATION_HEADER }
+}
+
+/**
+ * The 201 a create answers (Issue #74): the body, and `Location` naming the
+ * row's own single-row GET — `collection` under the id the server minted,
+ * relative to the API's origin and never with a host, since the API does not
+ * know the name it is reached by. The path is root-relative because the API
+ * is served at its origin's root and mounts under no prefix — its own host,
+ * as docs/architecture/backend-architecture.md deploys it — so `/projects/<id>`
+ * resolves against any origin it is reached by; a base path would be a
+ * change here, not in every route. `collection` is where the row is read, not
+ * where it was posted: a subscription made under `/agreements/:id/subscriptions`
+ * is at `/subscriptions/<id>`. A command (`deactivate`, `reactivate`,
+ * `make-primary-administrator`) and a set replacement answer 200 and carry
+ * no header, since nothing new is anywhere.
+ */
+export function created<Body extends { id: string }>(c: Context, collection: `/${string}`, body: Body) {
+  return c.json(body, 201, { location: `${collection}/${body.id}` })
 }
 
 /** The instants of a row, as the wire spells them. */

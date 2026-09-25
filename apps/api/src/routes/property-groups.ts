@@ -60,7 +60,7 @@ import {
   type Parent,
 } from "./members"
 import { requireCustomer } from "./references"
-import { describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "customers.groups"
 const PropertyGroupPage = Page(PropertyGroup)
@@ -191,7 +191,7 @@ export function propertyGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Gathers properties into one group inside a project the caller works in. The name is unique inside the project and the status defaults to `draft`. The customer the group answers to, where given, must be this company's, and every member must be a property of this same project. `members` is the list the group starts with, so gathering a block is one request. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The property group as it was written.", PropertyGroup),
+          201: describeCreated("The property group as it was written.", PropertyGroup),
           400: describeProblem(
             "The body is missing a field, names a member the server owns, names a project this account does not work in, names the same property twice, points at a customer that is not this company's, or gathers a property that is not of this project.",
           ),
@@ -219,7 +219,7 @@ export function propertyGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .returning(columns),
         )
         await writeEntries(tx, members, parent, entries)
-        return c.json(await groupWithMembers(tx, parent.companyId, row), 201)
+        return created(c, "/property-groups", await groupWithMembers(tx, parent.companyId, row))
       },
     )
     .get(

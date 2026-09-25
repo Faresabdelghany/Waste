@@ -8,6 +8,7 @@ import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
+import { created } from "./created"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
@@ -75,11 +76,8 @@ describe("the master data endpoints", { skip: database.skip }, () => {
 
   type Schema<T> = { parse: (value: unknown) => T }
 
-  const create = async <T>(call: Call, path: string, body: unknown, schema: Schema<T>): Promise<T> => {
-    const response = await call(path, { method: "POST", body })
-    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
-    return schema.parse(await response.json())
-  }
+  const create = async <T extends { id: string }>(call: Call, path: string, body: unknown, schema: Schema<T>): Promise<T> =>
+    created(call, path, await call(path, { method: "POST", body }), schema)
   const one = async <T>(call: Call, path: string, schema: Schema<T>): Promise<T> => {
     const response = await call(path)
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))

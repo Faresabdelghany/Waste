@@ -36,7 +36,7 @@ type Operation = {
   security?: unknown[]
   parameters?: { name: string; in: string; required?: boolean; schema?: JsonSchema }[]
   requestBody?: { content: Record<string, { schema: JsonSchema }> }
-  responses: Record<string, { content: Record<string, { schema: JsonSchema }> }>
+  responses: Record<string, { content: Record<string, { schema: JsonSchema }>; headers?: Record<string, { description?: string; schema?: JsonSchema }> }>
 }
 type Spec = {
   openapi: string
@@ -228,6 +228,34 @@ describe("GET /openapi.json", () => {
       secured,
       74,
       "/me, the ten organisation routes, the twelve access routes and the fifty-one registry routes: waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each — the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each — agreements with their subscriptions, and containers with their placements",
+    )
+  })
+
+  test("declares the Location header on every 201 and Location on nothing else: a create says where the row is now read, a command or a set replacement does not", async () => {
+    const document = await spec()
+    let creates = 0
+    for (const [path, operations] of Object.entries(document.paths)) {
+      for (const [method, operation] of Object.entries(operations)) {
+        for (const [status, response] of Object.entries(operation.responses)) {
+          const location = response.headers?.Location
+          const where = `${method.toUpperCase()} ${path} ${status}`
+          if (status === "201") {
+            creates += 1
+            assert.equal(method, "post", `${where}: only a POST creates`)
+            assert.equal(location?.schema?.type, "string", `${where} must declare Location`)
+            assert.match(location?.description ?? "", /\S/, `${where}: Location says what it names`)
+          } else {
+            // Only Location is this test's: a 401 will one day declare
+            // WWW-Authenticate, which the API already sends (RFC 6750).
+            assert.equal(location, undefined, `${where} declares no Location`)
+          }
+        }
+      }
+    }
+    assert.equal(
+      creates,
+      16,
+      "the sixteen creates: projects, service providers, users and roles; waste fractions, container types, service frequencies, products, customers, properties, property groups, shared collection points, agreements and containers; and the two nested ones, a subscription under its agreement and a placement under its container",
     )
   })
 

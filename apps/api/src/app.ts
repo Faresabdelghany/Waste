@@ -138,7 +138,8 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
         info: {
           title: "Waste API",
           version: manifest.version,
-          description: "The only web boundary to domain data (ADR-0001). Every route but the probes and this document takes a Supabase access token as a bearer token; every error is an RFC 9457 problem.",
+          description:
+            "The only web boundary to domain data (ADR-0001). Every route but the probes and this document takes a Supabase access token as a bearer token; every error is an RFC 9457 problem. A 400 lists the fields it refused by path; every write body is strict, so a member it does not know is refused by name, and the error names the members it does accept. A create answers 201 with `Location`, the path of the resource's own GET, root-relative: the API is served at its origin's root and mounts under no prefix.",
         },
         components: {
           securitySchemes: { [BEARER_AUTH]: BEARER_SECURITY_SCHEME },
