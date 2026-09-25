@@ -280,8 +280,9 @@ export async function refuseCheck<T>(sentences: Readonly<Record<string, Refusal>
 // @waste/contracts/places, which judges a half-seen pair as fine and leaves
 // it to the route to merge the stored row in), the path is always
 // `serviceProviderId`, and the sentence is the family's, since a depot's and
-// a driver's differ. routes/place-rules.ts runs the two places through it;
-// the fleet routes switch in the closing round.
+// a driver's differ. routes/place-rules.ts runs the two places through it,
+// and routes/vehicles.ts and routes/drivers.ts hold their merged row to it
+// the same way since the closing round.
 
 /** Holds a row as a write leaves it — `owner` its ownership or employment, `body` its provider — to the contracts' provider rule, refusing at `serviceProviderId` with the family's sentence. */
 export function requireProviderShape(owner: string, body: { serviceProviderId?: string | null }, sentence: string): void {

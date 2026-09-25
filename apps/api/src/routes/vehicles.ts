@@ -75,7 +75,7 @@ import {
   type VehicleCompartmentCreate,
 } from "@waste/contracts/fleet"
 import { Page } from "@waste/contracts/pagination"
-import { PROVIDER_WITH_PROVIDER_OWNERSHIP, providerShape } from "@waste/contracts/places"
+import { PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/contracts/places"
 import type { Tx } from "@waste/db/client"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
 import { wasteFraction } from "@waste/db/schema/catalogue"
@@ -95,7 +95,7 @@ import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { refuseStranded } from "./periods"
 import { requireDepot, requireServiceProvider, requireVehicleType, requireWasteFraction, type Scope } from "./references"
 import { groupsInForceNaming } from "./scheme-groups"
-import { describeJson, IdParam, lockRow, refuseDuplicate, stamp, stampsOf } from "./shared"
+import { describeJson, IdParam, lockRow, refuseDuplicate, requireProviderShape, stamp, stampsOf } from "./shared"
 import { groupsName, liveAllocationsName, liveAllocationsNaming } from "./statuses"
 
 const MODULE = "fleet.vehicles"
@@ -319,12 +319,6 @@ const groupsNameThis = groupsName("vehicle")
 const liveAllocations = (companyId: string, vehicleId: string) =>
   liveAllocationsNaming(companyId, or(eq(vehicleAllocation.vehicleId, vehicleId), eq(vehicleAllocation.trailerId, vehicleId)))
 
-/** The provider rule as the merged row must hold it, in the contracts' words: a patch carries one half and the stored row the other. */
-function requireProviderShape(merged: { ownership: string; serviceProviderId: string | null }): void {
-  if (providerShape(merged.ownership, merged)) return
-  throw invalidRequest("body", [{ path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP }])
-}
-
 /** The rows of this company, in the projects the caller works in: what every vehicle statement is bounded by. */
 const scope = (principal: Principal) => and(eq(vehicle.companyId, principal.companyId), inProjects(vehicle.projectId, principal))
 
@@ -507,7 +501,8 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const within: Scope = { companyId: principal.companyId, projectId: current.projectId }
         const merged = { ...current, ...patch }
 
-        requireProviderShape(merged)
+        // The provider rule as the merged row must hold it (routes/shared.ts): a patch carries one half and the stored row the other.
+        requireProviderShape(merged.ownership, merged, PROVIDER_WITH_PROVIDER_OWNERSHIP)
         await requireVehicleType(tx, principal.companyId, patch.vehicleTypeId)
         await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)
         await requireDepot(tx, within, patch.homeDepotId, "homeDepotId")

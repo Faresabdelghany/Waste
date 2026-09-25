@@ -44,7 +44,6 @@
 // `edit` to change.
 import { Driver, DriverCreate, DriverListQuery, DriverPatch, PROVIDER_WITH_PROVIDER_EMPLOYMENT } from "@waste/contracts/fleet"
 import { Page } from "@waste/contracts/pagination"
-import { providerShape } from "@waste/contracts/places"
 import type { Tx } from "@waste/db/client"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
 import { driver } from "@waste/db/schema/fleet"
@@ -59,11 +58,11 @@ import { inProjects, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, problem, validate } from "../problem"
 import { refuseStranded } from "./periods"
 import { requireDepot, requireServiceProvider, requireUserAccount, type Scope } from "./references"
 import { groupsInForceNaming } from "./scheme-groups"
-import { describeJson, IdParam, lockRow, refuseDuplicate, stampsOf } from "./shared"
+import { describeJson, IdParam, lockRow, refuseDuplicate, requireProviderShape, stampsOf } from "./shared"
 import { groupsName, liveAllocationsName, liveAllocationsNaming } from "./statuses"
 
 const MODULE = "fleet.drivers"
@@ -134,12 +133,6 @@ const groupsNameThis = groupsName("driver")
 
 /** The allocations the change would strand: the live ones naming the driver (routes/statuses.ts spells the rest). */
 const liveAllocations = (companyId: string, driverId: string) => liveAllocationsNaming(companyId, eq(vehicleAllocation.driverId, driverId))
-
-/** The provider rule as the merged row must hold it, in the driver's words: a patch carries one half and the stored row the other. */
-function requireProviderShape(merged: { employment: string; serviceProviderId: string | null }): void {
-  if (providerShape(merged.employment, merged)) return
-  throw invalidRequest("body", [{ path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_EMPLOYMENT }])
-}
 
 /** The rows of this company, in the projects the caller works in: what every driver statement is bounded by. */
 const scope = (principal: Principal) => and(eq(driver.companyId, principal.companyId), inProjects(driver.projectId, principal))
@@ -320,7 +313,8 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const within: Scope = { companyId: principal.companyId, projectId: current.projectId }
         const merged = { ...current, ...patch }
 
-        requireProviderShape(merged)
+        // The provider rule as the merged row must hold it (routes/shared.ts), in the driver's words: a patch carries one half and the stored row the other.
+        requireProviderShape(merged.employment, merged, PROVIDER_WITH_PROVIDER_EMPLOYMENT)
         await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)
         await requireDepot(tx, within, patch.homeDepotId, "homeDepotId")
         await requireUserAccount(tx, principal.companyId, patch.userAccountId)

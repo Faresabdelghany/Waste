@@ -15,7 +15,9 @@
 // order, ADR-0004) and the picked containers in stop order (`position`).
 //
 // A body's references are held in one statement per set, the way
-// routes/members.ts holds a membership list: a create body may name two
+// routes/members.ts holds a membership list — routes/sets.ts is the two
+// statements once, `eachPresent` for the check and `groupedBy` for the read,
+// since the closing round of the #101 review: a create body may name two
 // hundred containers across its groups and that is one `in (...)`, not two
 // hundred round trips inside the request's transaction. The refusal is the
 // lowest entry that is wrong, by the path the body spelled it at, and its
@@ -95,7 +97,8 @@ import {
   requireWasteFraction,
   type Scope,
 } from "./references"
-import { stamp, stampsOf, timeOf, type TenantTable } from "./shared"
+import { eachPresent, groupedBy, type Named } from "./sets"
+import { stamp, stampsOf, timeOf } from "./shared"
 import { refuseRetiredVehicle, refuseUnavailableDriver } from "./statuses"
 
 /** What a route module takes beside the guard: the app's clock, which "today" on a project's clock is rendered from; a test pins it. */
@@ -186,8 +189,6 @@ export function schemeOf(row: SchemeRow, groups: CollectionGroup[]): RouteScheme
 /** The three sets of one group, as read: each an ordered list of ids. */
 type GroupSets = { wasteFractionIds: string[]; containerTypeIds: string[]; containerIds: string[] }
 
-const NO_SETS: GroupSets = { wasteFractionIds: [], containerTypeIds: [], containerIds: [] }
-
 /** The row on the wire: a rule group carries its rule and no containers, a manual group its containers and no rule. */
 function groupOf(row: GroupRow, sets: GroupSets): CollectionGroup {
   const stopSource = row.stopSource as StopSource
@@ -210,43 +211,23 @@ function groupOf(row: GroupRow, sets: GroupSets): CollectionGroup {
 /** A membership table of a group: the tenant, the group it belongs to, and the id it names. */
 export type MembershipTable = PgTable & { companyId: PgColumn; collectionGroupId: PgColumn }
 
-/**
- * The entries of every group asked for, in one query, grouped by group; the
- * order is the caller's — the id (the order written) for a rule's sets, the
- * position for a picked list.
- */
-async function membersOf(tx: Tx, table: MembershipTable, entry: PgColumn, order: PgColumn, companyId: string, groupIds: readonly string[]): Promise<Map<string, string[]>> {
-  const byGroup = new Map<string, string[]>()
-  if (groupIds.length === 0) return byGroup
-  const rows = await tx
-    .select({ group: table.collectionGroupId, entry })
-    .from(table)
-    .where(and(eq(table.companyId, companyId), inArray(table.collectionGroupId, [...groupIds])))
-    .orderBy(asc(order))
-  // A bare `PgColumn` carries `data: unknown`, so the selection reads as unknown however plainly both are `uuid`.
-  for (const row of rows as { group: string; entry: string }[]) {
-    const found = byGroup.get(row.group)
-    if (found === undefined) byGroup.set(row.group, [row.entry])
-    else found.push(row.entry)
-  }
-  return byGroup
-}
+/** The ids one group's set names, in the order read; none for a group the set has no entry of. */
+const idsOf = (grouped: ReadonlyMap<string, { id: string }[]>, groupId: string): string[] => grouped.get(groupId)?.map((entry) => entry.id) ?? []
 
-/** The groups of these rows on the wire, their three sets loaded in three queries however many groups there are. */
+/**
+ * The groups of these rows on the wire, their three sets loaded in three
+ * queries however many groups there are (`groupedBy`, routes/sets.ts); the
+ * order is each set's own — the id (the order written) for a rule's two
+ * sets, the position for a picked list.
+ */
 export async function assembleGroups(tx: Tx, companyId: string, rows: readonly GroupRow[]): Promise<CollectionGroup[]> {
   const ids = rows.map((row) => row.id)
   const [fractions, types, containers] = await Promise.all([
-    membersOf(tx, collectionGroupFraction, collectionGroupFraction.wasteFractionId, collectionGroupFraction.id, companyId, ids),
-    membersOf(tx, collectionGroupContainerType, collectionGroupContainerType.containerTypeId, collectionGroupContainerType.id, companyId, ids),
-    membersOf(tx, collectionGroupContainer, collectionGroupContainer.containerId, collectionGroupContainer.position, companyId, ids),
+    groupedBy(tx, collectionGroupFraction, collectionGroupFraction.collectionGroupId, { id: collectionGroupFraction.wasteFractionId }, [collectionGroupFraction.id], companyId, ids),
+    groupedBy(tx, collectionGroupContainerType, collectionGroupContainerType.collectionGroupId, { id: collectionGroupContainerType.containerTypeId }, [collectionGroupContainerType.id], companyId, ids),
+    groupedBy(tx, collectionGroupContainer, collectionGroupContainer.collectionGroupId, { id: collectionGroupContainer.containerId }, [collectionGroupContainer.position], companyId, ids),
   ])
-  return rows.map((row) =>
-    groupOf(row, {
-      wasteFractionIds: fractions.get(row.id) ?? NO_SETS.wasteFractionIds,
-      containerTypeIds: types.get(row.id) ?? NO_SETS.containerTypeIds,
-      containerIds: containers.get(row.id) ?? NO_SETS.containerIds,
-    }),
-  )
+  return rows.map((row) => groupOf(row, { wasteFractionIds: idsOf(fractions, row.id), containerTypeIds: idsOf(types, row.id), containerIds: idsOf(containers, row.id) }))
 }
 
 /**
@@ -293,9 +274,6 @@ export async function findScheme(tx: Tx, principal: Principal, id: string): Prom
     .limit(1)
   return row
 }
-
-/** One id a body names and where it names it, for the one lookup per set below. */
-export type Named = { path: string; id: string }
 
 /** Every id a body names across its groups, by what it names: the rule's fractions, container types and vehicle type, the picked containers, the providers, the vehicles and the drivers. */
 export type GroupReferences = {
@@ -351,24 +329,6 @@ export function mergeReferences(all: readonly GroupReferences[]): GroupReference
   }
 }
 
-/**
- * The lowest entry whose id is not a row inside `within`, found in one
- * statement over every id named. The caller hands the one that is missing
- * to the singular check of routes/references.ts, which refuses it with the
- * family's sentence — so the plural and the singular refusal say the same
- * thing, and the one extra statement is spent on the failure path only.
- */
-async function firstMissing(tx: Tx, table: TenantTable, within: SQL | undefined, named: readonly Named[]): Promise<Named | undefined> {
-  const ids = [...new Set(named.map((entry) => entry.id))]
-  if (ids.length === 0) return undefined
-  const rows = await tx
-    .select({ id: table.id })
-    .from(table)
-    .where(and(within, inArray(table.id, ids)))
-  const found = new Set((rows as { id: string }[]).map((row) => row.id))
-  return named.find((entry) => !found.has(entry.id))
-}
-
 /** The fleet rows a body named, by id, as `requireGroupReferences` read them: what the licence rule reads next, so it does not read them again. */
 export type FleetRows = { vehicles: ReadonlyMap<string, VehicleRow>; drivers: ReadonlyMap<string, DriverRow> }
 
@@ -418,26 +378,23 @@ async function driversNamed(tx: Tx, scope: Scope, named: readonly Named[]): Prom
 }
 
 /**
- * Holds every id a body names to what its key allows, one statement per set:
- * a waste fraction, a container type and a vehicle type are the company's, a
- * container is the scheme's project's, a Service Provider the company's, and,
- * since Resources (Issue #101), a vehicle is a powered vehicle of the scheme's
- * project that is not retired and a driver one of its drivers who is active.
- * The first entry that is wrong, set by set in the order a body reads, is a
- * 400 at its path. The vehicles and drivers are read whole and handed back,
- * since the licence rule reads the same rows next.
+ * Holds every id a body names to what its key allows, one statement per set
+ * (`eachPresent`, routes/sets.ts, the missing entry handed to the singular
+ * check of routes/references.ts for the family's sentence): a waste fraction,
+ * a container type and a vehicle type are the company's, a container is the
+ * scheme's project's, a Service Provider the company's, and, since Resources
+ * (Issue #101), a vehicle is a powered vehicle of the scheme's project that is
+ * not retired and a driver one of its drivers who is active. The first entry
+ * that is wrong, set by set in the order a body reads, is a 400 at its path.
+ * The vehicles and drivers are read whole and handed back, since the licence
+ * rule reads the same rows next.
  */
 export async function requireGroupReferences(tx: Tx, scope: Scope, refs: GroupReferences): Promise<FleetRows> {
-  const fraction = await firstMissing(tx, wasteFraction, eq(wasteFraction.companyId, scope.companyId), refs.fractions)
-  if (fraction !== undefined) await requireWasteFraction(tx, scope.companyId, fraction.id, fraction.path)
-  const type = await firstMissing(tx, containerType, eq(containerType.companyId, scope.companyId), refs.containerTypes)
-  if (type !== undefined) await requireContainerType(tx, scope.companyId, type.id, type.path)
-  const askedFor = await firstMissing(tx, vehicleType, eq(vehicleType.companyId, scope.companyId), refs.vehicleTypes)
-  if (askedFor !== undefined) await requireVehicleType(tx, scope.companyId, askedFor.id, askedFor.path)
-  const picked = await firstMissing(tx, container, and(eq(container.companyId, scope.companyId), eq(container.projectId, scope.projectId)), refs.containers)
-  if (picked !== undefined) await requireContainer(tx, scope, picked.id, picked.path)
-  const provider = await firstMissing(tx, serviceProvider, eq(serviceProvider.companyId, scope.companyId), refs.providers)
-  if (provider !== undefined) await requireServiceProvider(tx, scope.companyId, provider.id, provider.path)
+  await eachPresent(tx, wasteFraction, wasteFraction.id, scope.companyId, refs.fractions, (entry) => requireWasteFraction(tx, scope.companyId, entry.id, entry.path))
+  await eachPresent(tx, containerType, containerType.id, scope.companyId, refs.containerTypes, (entry) => requireContainerType(tx, scope.companyId, entry.id, entry.path))
+  await eachPresent(tx, vehicleType, vehicleType.id, scope.companyId, refs.vehicleTypes, (entry) => requireVehicleType(tx, scope.companyId, entry.id, entry.path))
+  await eachPresent(tx, container, container.id, scope.companyId, refs.containers, (entry) => requireContainer(tx, scope, entry.id, entry.path), eq(container.projectId, scope.projectId))
+  await eachPresent(tx, serviceProvider, serviceProvider.id, scope.companyId, refs.providers, (entry) => requireServiceProvider(tx, scope.companyId, entry.id, entry.path))
   const vehicles = await vehiclesNamed(tx, scope, refs.vehicles)
   const drivers = await driversNamed(tx, scope, refs.drivers)
   return { vehicles, drivers }
