@@ -38,9 +38,13 @@ test("step 5 has no running-scheme edit policy and creates the scheme onto the l
   await expect(root.getByLabel("Create as", { exact: true })).toBeVisible()
   await expect(root.getByText("Changes to a running scheme")).toHaveCount(0)
   await expect(root.getByText("Danish public holidays")).toBeVisible()
-  await expect(root.getByText("Waste fraction")).toBeVisible()
-  await expect(root.getByText("Service type")).toBeVisible()
-  await expect(root.getByText("Kerbside collection", { exact: true })).toBeVisible()
+  // The Scheme & scope section lists the fraction and the service type; the
+  // What changed section below lists them too (they were blank at the
+  // start), so read the review section's own rows.
+  const scope = root.getByRole("heading", { name: "Scheme & scope" }).locator("xpath=ancestor::section[1]")
+  await expect(scope.getByText("Waste fraction")).toBeVisible()
+  await expect(scope.getByText("Service type")).toBeVisible()
+  await expect(scope.getByText("Kerbside collection", { exact: true })).toBeVisible()
   await createButton(page).click()
   await expect(root).toBeHidden()
   await expect(toasts(page)).toContainText(`Route scheme created as Validated — ${name}`)

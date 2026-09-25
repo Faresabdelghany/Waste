@@ -12,6 +12,7 @@ import {
 } from "@waste/domain/route-schemes/project-calendar"
 import {
   draftGroups,
+  draftOccurrenceInput,
   draftRecurrence,
   resolvedDraftGroups,
   validateGuidedScheme,
@@ -43,6 +44,8 @@ import {
   formatClockTime,
   occurrencePreview,
   type OccurrencePreview,
+  type OccurrencePreviewInput,
+  type SchemeCalendar,
 } from "@waste/domain/route-schemes/occurrences"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import {
@@ -89,7 +92,11 @@ export type WizardIssue = {
 export type WizardModel = {
   /** The project's calendar — holiday list (null when it has none) and weekend — the next dates are judged against. */
   calendar: ProjectCalendar
+  /** The same calendar as generateOccurrences takes it — what a step 2 simulation judges its candidate against. */
+  schemeCalendar: SchemeCalendar
   recurrence: SchemeRecurrence | null
+  /** What the draft hands generateOccurrences; null while it has no recurrence. The preview and a simulation's current side read it. */
+  occurrenceInput: OccurrencePreviewInput | null
   occurrences: OccurrencePreview
   resolution: CollectionGroupResolution
   groups: WizardGroupSummary[]
@@ -127,12 +134,10 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
   })
   const recurrence = draftRecurrence(data)
   const serviceDays = sortServiceDays(data.serviceDays)
-  const occurrences = recurrence
-    ? occurrencePreview({
-        recurrence,
-        holidayPolicy: data.holidayPolicy,
-        calendar: schemeCalendarOf(calendar),
-      })
+  const schemeCalendar = schemeCalendarOf(calendar)
+  const occurrenceInput = draftOccurrenceInput(data, schemeCalendar)
+  const occurrences = occurrenceInput
+    ? occurrencePreview(occurrenceInput)
     : { rows: [], ongoing: !data.effectiveTo, horizon: null, count: 0 }
 
   const vehicles = new Map(records.vehicleProfiles.map((profile) => [profile.id, profile]))
@@ -278,7 +283,9 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
 
   return {
     calendar,
+    schemeCalendar,
     recurrence,
+    occurrenceInput,
     occurrences,
     resolution,
     groups,

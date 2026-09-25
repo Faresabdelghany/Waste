@@ -1,7 +1,8 @@
 "use client"
 
 // Step 5 — Ready to create this scheme? Four sections with Change links
-// back to their steps, then the create option.
+// back to their steps, what changed since the last review (Issue #40), then
+// the create option.
 
 import type { ReactNode } from "react"
 
@@ -12,6 +13,7 @@ import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { recurrenceCadenceLabel, serviceDaysRangeLabel } from "@waste/domain/route-schemes/recurrence"
 
 import type { WizardRecords } from "./use-wizard-records"
+import { WhatChanged } from "./what-changed"
 import type { WizardModel } from "./wizard-model"
 import { CREATE_AS_OPTIONS, type WizardStepId } from "./wizard-options"
 import { Field, SimpleSelect } from "./wizard-fields"
@@ -57,12 +59,18 @@ export function StepReview({
   model,
   records,
   go,
+  initial,
+  reviewed,
 }: {
   data: GuidedSchemeData
   update: (patch: Partial<GuidedSchemeData>) => void
   model: WizardModel
   records: WizardRecords
   go: (step: WizardStepId) => void
+  /** The draft the wizard opened with — the What changed baseline before any review. */
+  initial: GuidedSchemeData
+  /** The draft as it stood when this step was last left; null on the first visit. */
+  reviewed: GuidedSchemeData | null
 }) {
   const { occurrences, recurrence, groups } = model
   const first = occurrences.rows.find((row) => row.n !== null)
@@ -119,6 +127,7 @@ export function StepReview({
         <ReviewRow label="Per week" value={`${model.routesPerWeek} routes`} />
         <ReviewRow label="Attention" value={attention.length > 0 ? attention.join(", ") : "None"} />
       </ReviewSection>
+      <WhatChanged data={data} initial={initial} reviewed={reviewed} model={model} records={records} />
       <div className="grid gap-6 pt-2 md:grid-cols-2">
         <Field id="scheme-create-as" label="Create as">
           <SimpleSelect

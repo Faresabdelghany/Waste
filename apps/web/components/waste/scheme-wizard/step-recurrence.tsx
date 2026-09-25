@@ -2,13 +2,13 @@
 
 // Step 2 — When does this scheme collect? Effective window, cadence, start
 // time, service days, the holiday policy beside the project's read-only
-// calendar (holiday list · working week), and the live next-dates table.
+// calendar (holiday list · working week), the live next-dates table with its
+// View all dialog, and the simulation panel (Issue #40).
 
 import { useState } from "react"
 import Link from "next/link"
 import { CalendarDays } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -26,8 +26,6 @@ import { projectCalendarLabel } from "@waste/domain/route-schemes/project-calend
 import {
   formatClockTime,
   formatOccurrenceDate,
-  shiftedNote,
-  type Occurrence,
 } from "@waste/domain/route-schemes/occurrences"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import {
@@ -40,6 +38,9 @@ import {
 } from "@waste/domain/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
 
+import { AllDatesDialog } from "./all-dates-dialog"
+import { OccurrenceStatusBadge } from "./occurrence-status-badge"
+import { SimulationPanel } from "./simulation-panel"
 import type { WizardModel } from "./wizard-model"
 import {
   HOLIDAY_POLICY_OPTIONS,
@@ -53,25 +54,6 @@ import { Field, PILL_TOGGLE_ITEM_CLASS, SimpleSelect } from "./wizard-fields"
 const PREVIEW_ROWS = 8
 const PREVIEW_ROWS_EXPANDED = 60
 
-function StatusBadge({ row }: { row: Occurrence }) {
-  if (row.status === "planned") return <Badge variant="secondary">Planned</Badge>
-  if (row.status === "shifted") {
-    return (
-      <Badge variant="secondary" className="bg-amber-50 text-amber-800">
-        Shifted {shiftedNote(row)}
-      </Badge>
-    )
-  }
-  if (row.status === "skipped") {
-    return <Badge variant="muted">Skipped · {row.note}</Badge>
-  }
-  return (
-    <Badge variant="secondary" className="bg-amber-50 text-amber-800">
-      Holiday · {row.note}
-    </Badge>
-  )
-}
-
 export function StepRecurrence({
   data,
   update,
@@ -82,6 +64,7 @@ export function StepRecurrence({
   model: WizardModel
 }) {
   const [showAll, setShowAll] = useState(false)
+  const [allDatesOpen, setAllDatesOpen] = useState(false)
   const { occurrences } = model
   const rows = occurrences.rows.slice(0, showAll ? PREVIEW_ROWS_EXPANDED : PREVIEW_ROWS)
   const startTime = formatClockTime(data.plannedStartTime)
@@ -256,28 +239,51 @@ export function StepRecurrence({
                     <TableCell className="tabular-nums">{row.week}</TableCell>
                     <TableCell className="tabular-nums">{startTime}</TableCell>
                     <TableCell className="pr-5">
-                      <StatusBadge row={row} />
+                      <OccurrenceStatusBadge row={row} />
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            {/* Show all widens the table in place to the first 60 rows; View
+                all opens every row the preview generated in its own dialog. */}
             <div className="flex h-11 items-center justify-between border-t border-border px-5 text-xs text-muted-foreground">
               <span>
                 Showing 1–{rows.length} of {occurrences.rows.length}
               </span>
-              <Button
-                variant="link"
-                size="sm"
-                className="h-auto p-0 text-xs"
-                onClick={() => setShowAll((current) => !current)}
-              >
-                {showAll ? "Show fewer" : "Show all"}
-              </Button>
+              <span className="flex items-center gap-4">
+                {occurrences.rows.length > PREVIEW_ROWS && (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 text-xs"
+                    onClick={() => setShowAll((current) => !current)}
+                  >
+                    {showAll ? "Show fewer" : "Show all"}
+                  </Button>
+                )}
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-xs"
+                  onClick={() => setAllDatesOpen(true)}
+                >
+                  View all
+                </Button>
+              </span>
             </div>
           </div>
         )}
       </div>
+
+      <SimulationPanel data={data} model={model} onApply={(candidate) => update(candidate)} />
+
+      <AllDatesDialog
+        open={allDatesOpen}
+        onOpenChange={setAllDatesOpen}
+        occurrences={occurrences}
+        startTime={startTime}
+      />
     </div>
   )
 }
