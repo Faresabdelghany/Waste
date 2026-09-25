@@ -7,6 +7,15 @@
 // table and the three exclusion constraints. The two new key helpers and the
 // two new check helpers by their text and their refusals. No database.
 //
+// Migration 0007 (Issue #101) gave `container_service_placement` a project
+// key — through the container, `(company_id, project_id, container_id, id)`,
+// since the Stock Movement ledger references the placement of the container it
+// moves — and dropped the index on its project that the key now leads with.
+// An applied file is never edited, so 0004 is held to the earlier spelling:
+// `CHANGED_IN_0007` maps the CREATE TABLE as drizzle-kit writes it now onto
+// what 0004 says, and `DROPPED_IN_0007` is what 0004 has that the schema no
+// longer generates.
+//
 // This is also what makes a change to the vocabulary a migration: the values
 // are spelled here as the file spells them, so adding one to a list in
 // @waste/domain/registry/vocabulary fails this test until a migration replaces
@@ -72,14 +81,14 @@ const tables = {
 
 const MIGRATION = "0004_registry.sql"
 
-/** container_service_placement as drizzle-kit writes it today, with the project key 0007 added, and as it wrote it as of 0004, without. */
+/** container_service_placement as drizzle-kit writes it today, with the through-the-container project key 0007 added, and as it wrote it as of 0004, without. */
 const placementTable = (resources: boolean): string =>
   createTable("container_service_placement", "dated", [
     '"container_id" uuid NOT NULL',
     '"subscription_id" uuid NOT NULL',
     '"waste_fraction_id" uuid NOT NULL',
     '"service_frequency_id" uuid',
-    ...(resources ? [uniqueKey("container_service_placement_project_key", "company_id", "project_id", "id")] : []),
+    ...(resources ? [uniqueKey("container_service_placement_container_id_project_key", "company_id", "project_id", "container_id", "id")] : []),
     validityCheck("container_service_placement"),
   ])
 

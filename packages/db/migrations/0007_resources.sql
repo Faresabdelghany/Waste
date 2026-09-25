@@ -260,10 +260,10 @@ CREATE TABLE "wms"."warehouse" (
 --> statement-breakpoint
 DROP INDEX "wms"."container_service_placement_project_id_idx";--> statement-breakpoint
 -- Moved up from where drizzle-kit wrote it, below the foreign keys: the ledger's
--- stock_movement_placement_id_fk points at this key, and Postgres needs the key
--- before the reference. The statements are drizzle-kit's, in the one order that
--- applies; the rendering test compares the head as a set.
-ALTER TABLE "wms"."container_service_placement" ADD CONSTRAINT "container_service_placement_project_key" UNIQUE("company_id","project_id","id");--> statement-breakpoint
+-- stock_movement_container_id_placement_id_fk points at this key, and Postgres
+-- needs the key before the reference. The statements are drizzle-kit's, in the
+-- one order that applies; the rendering test compares the head as a set.
+ALTER TABLE "wms"."container_service_placement" ADD CONSTRAINT "container_service_placement_container_id_project_key" UNIQUE("company_id","project_id","container_id","id");--> statement-breakpoint
 ALTER TABLE "wms"."collection_group" ADD COLUMN "rule_vehicle_type_id" uuid;--> statement-breakpoint
 ALTER TABLE "wms"."collection_group" ADD COLUMN "vehicle_id" uuid;--> statement-breakpoint
 ALTER TABLE "wms"."collection_group" ADD COLUMN "driver_id" uuid;--> statement-breakpoint
@@ -285,7 +285,7 @@ ALTER TABLE "wms"."stock_movement" ADD CONSTRAINT "stock_movement_project_id_fk"
 ALTER TABLE "wms"."stock_movement" ADD CONSTRAINT "stock_movement_container_id_fk" FOREIGN KEY ("company_id","project_id","container_id") REFERENCES "wms"."container"("company_id","project_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "wms"."stock_movement" ADD CONSTRAINT "stock_movement_from_warehouse_id_fk" FOREIGN KEY ("company_id","project_id","from_warehouse_id") REFERENCES "wms"."warehouse"("company_id","project_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "wms"."stock_movement" ADD CONSTRAINT "stock_movement_to_warehouse_id_fk" FOREIGN KEY ("company_id","project_id","to_warehouse_id") REFERENCES "wms"."warehouse"("company_id","project_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "wms"."stock_movement" ADD CONSTRAINT "stock_movement_placement_id_fk" FOREIGN KEY ("company_id","project_id","placement_id") REFERENCES "wms"."container_service_placement"("company_id","project_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "wms"."stock_movement" ADD CONSTRAINT "stock_movement_container_id_placement_id_fk" FOREIGN KEY ("company_id","project_id","container_id","placement_id") REFERENCES "wms"."container_service_placement"("company_id","project_id","container_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "wms"."stock_movement" ADD CONSTRAINT "stock_movement_recorded_by_fk" FOREIGN KEY ("company_id","recorded_by") REFERENCES "wms"."user_account"("company_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "wms"."stock_movement" ADD CONSTRAINT "stock_movement_corrects_movement_id_fk" FOREIGN KEY ("company_id","corrects_movement_id") REFERENCES "wms"."stock_movement"("company_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "wms"."unloading_station" ADD CONSTRAINT "unloading_station_company_id_fk" FOREIGN KEY ("company_id") REFERENCES "wms"."company"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -330,7 +330,7 @@ CREATE UNIQUE INDEX "driver_workforce_reference_idx" ON "wms"."driver" USING btr
 CREATE UNIQUE INDEX "driver_user_account_id_idx" ON "wms"."driver" USING btree ("company_id","user_account_id") WHERE "wms"."driver"."user_account_id" is not null;--> statement-breakpoint
 CREATE INDEX "driver_service_provider_id_idx" ON "wms"."driver" USING btree ("company_id","service_provider_id");--> statement-breakpoint
 CREATE INDEX "driver_home_depot_id_idx" ON "wms"."driver" USING btree ("company_id","home_depot_id");--> statement-breakpoint
-CREATE INDEX "stock_movement_container_id_idx" ON "wms"."stock_movement" USING btree ("company_id","container_id","id");--> statement-breakpoint
+CREATE INDEX "stock_movement_container_id_idx" ON "wms"."stock_movement" USING btree ("company_id","container_id","id" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX "stock_movement_project_id_idx" ON "wms"."stock_movement" USING btree ("company_id","project_id");--> statement-breakpoint
 CREATE INDEX "stock_movement_from_warehouse_id_idx" ON "wms"."stock_movement" USING btree ("company_id","from_warehouse_id");--> statement-breakpoint
 CREATE INDEX "stock_movement_to_warehouse_id_idx" ON "wms"."stock_movement" USING btree ("company_id","to_warehouse_id");--> statement-breakpoint
@@ -372,9 +372,18 @@ CREATE INDEX "route_scheme_depot_id_idx" ON "wms"."route_scheme" USING btree ("c
 CREATE INDEX "route_scheme_unloading_station_id_idx" ON "wms"."route_scheme" USING btree ("company_id","unloading_station_id");--> statement-breakpoint
 ALTER TABLE "wms"."collection_group" DROP CONSTRAINT "collection_group_rule_vehicle_type_one_of";--> statement-breakpoint
 ALTER TABLE "wms"."collection_group" DROP CONSTRAINT "collection_group_rule_shape";--> statement-breakpoint
+-- Hand-written guard (migrations/README.md): the token column is dropped and not
+-- backfilled, since no database held a token when this file was written. A
+-- database that does refuses to lose it; map each token onto a vehicle_type row
+-- (rule_vehicle_type_id) first.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM "wms"."collection_group" WHERE "rule_vehicle_type" IS NOT NULL) THEN
+    RAISE EXCEPTION 'collection_group.rule_vehicle_type still holds a token on some row; map each onto a vehicle_type row (rule_vehicle_type_id) before dropping the column, since 0007 does not backfill';
+  END IF;
+END $$;--> statement-breakpoint
 ALTER TABLE "wms"."collection_group" DROP COLUMN "rule_vehicle_type";--> statement-breakpoint
-ALTER TABLE "wms"."collection_group" ADD CONSTRAINT "collection_group_rule_shape" CHECK ("wms"."collection_group"."stop_source" = 'rule' or "wms"."collection_group"."rule_vehicle_type_id" is null);
---> statement-breakpoint
+ALTER TABLE "wms"."collection_group" ADD CONSTRAINT "collection_group_rule_shape" CHECK ("wms"."collection_group"."stop_source" = 'rule' or "wms"."collection_group"."rule_vehicle_type_id" is null);--> statement-breakpoint
 -- Hand-written from here on (migrations/README.md): the fence of each of the
 -- thirteen tables, then its updated_at trigger — or, for the two ledgers,
 -- stock_movement and vehicle_allocation_event, the REVOKE of UPDATE and DELETE

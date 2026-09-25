@@ -7,15 +7,16 @@
 //
 // Three of the statements follow from the columns alone, so they are derived
 // and compared statement for statement: the tenant fence (every table), the
-// updated_at trigger (a table with `updated_at`) and, for a table without
-// `updated_at` — which is a ledger, the one rule (Issue #101) — the REVOKE of
-// UPDATE and DELETE from the API role in the trigger's place. The exclusion
-// constraints depend on a business key the columns do not declare, so for an
-// effective-dated table the gate checks that a constraint of the right shape
-// is there, the shape taken from the helper itself, and names the helper that
-// writes it; a reservation table — one carrying the `_window` check — is held
-// to at least one constraint of the window helper's shape the same way, its
-// name and its predicate the table's own.
+// updated_at trigger (a table with `updated_at`) and, for a ledger — a table
+// with `recorded_at`, the mark of the `recorded` column set (Issue #101) —
+// the REVOKE of UPDATE and DELETE from the API role in the trigger's place.
+// The exclusion constraints depend on a business key the columns do not
+// declare, so for an effective-dated table the gate checks that a constraint
+// of the right shape is there, the shape taken from the helper itself, and
+// names the helper that writes it; a reservation table — one carrying the
+// `_window` check — is held to at least one constraint of the window helper's
+// shape the same way, the range read from that helper, its name and its
+// predicate the table's own.
 //
 // A file is read the way the migrator reads it: split at the breakpoints into
 // statements, wherever the marker stands (drizzle-kit writes it at the end of
@@ -25,10 +26,11 @@
 import { getTableName } from "drizzle-orm"
 import { getTableConfig, type PgTable } from "drizzle-orm/pg-core"
 
-import { columnNamed, qualifiedTable, quoted, tableObjectName } from "../names"
+import { columnNamed, qualifiedTable, tableObjectName } from "../names"
 import { WINDOW_CHECK } from "../schema/columns"
 import { appendOnly } from "./append-only"
 import { excludeOverlapping, NO_OVERLAP } from "./exclude-overlapping"
+import { WINDOW_RANGE } from "./exclude-overlapping-window"
 import { tenantFence } from "./tenant-fence"
 import { touchUpdatedAt } from "./touch-updated-at"
 
@@ -37,8 +39,8 @@ const HELPER = "handWrittenStatements"
 const BREAKPOINT = "--> statement-breakpoint"
 /** Where the constraint's key ends and its period begins, in the helper's spelling. */
 const PERIOD_STARTS = ", daterange("
-/** The range the window helper writes, in its spelling; a window constraint carries it whatever its key and predicate. */
-const WINDOW_RANGE = `tstzrange(${quoted("planned_from")}, ${quoted("planned_to")}, '[)') WITH &&)`
+/** The range the window helper writes, closing the gist list: a window constraint carries it whatever its key and predicate. */
+const WINDOW_INFIX = `${WINDOW_RANGE})`
 
 /** One spelling for comparison: whitespace runs collapsed, ends trimmed. */
 export const normalised = (statement: string): string => statement.replace(/\s+/g, " ").trim()
@@ -59,8 +61,8 @@ export function statementsOf(migration: string): string[] {
     .filter((statement) => statement.length > 0)
 }
 
-/** Whether the table is a ledger: no `updated_at`, so nothing keeps one and nothing may update a row. */
-export const isLedger = (table: PgTable): boolean => columnNamed(table, "updated_at") === undefined
+/** Whether the table is a ledger: it spread `recorded`, so it carries `recorded_at`, and nothing may update a row. */
+export const isLedger = (table: PgTable): boolean => columnNamed(table, "recorded_at") !== undefined
 
 /** The statements every migration that creates this table must carry, derived from its columns: the fence, then the trigger or, for a ledger, the revoke. */
 export function handWrittenStatements(table: PgTable): string[] {
@@ -90,7 +92,7 @@ export const isReservation = (table: PgTable): boolean => {
  */
 export function windowConstraintShape(table: PgTable): { prefix: string; infix: string } | undefined {
   if (!isReservation(table)) return undefined
-  return { prefix: `ALTER TABLE ${qualifiedTable(table, HELPER)} ADD CONSTRAINT "${getTableName(table)}_`, infix: WINDOW_RANGE }
+  return { prefix: `ALTER TABLE ${qualifiedTable(table, HELPER)} ADD CONSTRAINT "${getTableName(table)}_`, infix: WINDOW_INFIX }
 }
 
 /** The statement drizzle-kit writes to create the table, as far as its name. */
@@ -123,7 +125,7 @@ export function missingHandWritten(table: PgTable, migration: string): string[] 
     const prefix = normalised(windowShape.prefix)
     const infix = normalised(windowShape.infix)
     if (![...present].some((statement) => statement.startsWith(prefix) && statement.includes(infix) && statement.includes(`_${NO_OVERLAP}"`))) {
-      missing.push(`-- excludeOverlappingWindow(${getTableName(table)}, [...its key], where?) writes the exclusion constraint: ${windowShape.prefix}..._${NO_OVERLAP}" EXCLUDE USING gist ("company_id" WITH =, ..., ${windowShape.infix}`)
+      missing.push(`-- excludeOverlappingWindow(${getTableName(table)}, [...its key], { live? }) writes the exclusion constraint: ${windowShape.prefix}..._${NO_OVERLAP}" EXCLUDE USING gist ("company_id" WITH =, ..., ${windowShape.infix}`)
     }
   }
   return missing

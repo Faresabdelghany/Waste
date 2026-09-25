@@ -33,12 +33,18 @@
 // the domain, and a test runs every pair through both, so the API refuses a
 // nonsense command with a sentence before the check does with a code.
 //
-// The ledger references the Registry's placement, which is why
-// `container_service_placement` gained `projectKey` in 0007; it references
-// itself through `corrects_movement_id`, the adjustment's pointer at the row
-// it corrects, for which it carries `tenantKey`. The index the fold reads is
-// `(company_id, container_id, id)`, spelled inline since `tenantIndex` would
-// derive `_container_id_id_idx`.
+// The ledger references the Registry's placement through the container it
+// moves: `(company_id, project_id, container_id, placement_id) →
+// container_service_placement (company_id, project_id, container_id, id)`,
+// which is why the placement gained `projectKey(t, t.containerId)` in 0007 —
+// so container A cannot be recorded as issued into container B's placement,
+// whatever the API does. It references itself through `corrects_movement_id`,
+// the adjustment's pointer at the row it corrects, for which it carries
+// `tenantKey`. The index the fold reads is `(company_id, container_id, id
+// desc)`, spelled inline since `tenantIndex` would derive
+// `_container_id_id_idx` and knows no direction: query/asset-state.ts looks
+// the latest movement of one container up per row, `where company_id = ? and
+// container_id = ? order by id desc limit 1`, one probe into this index.
 import { STOCK_MOVEMENT_KINDS, STOCK_PLACE_KINDS } from "@waste/domain/resources/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, index, text, timestamp, uuid } from "drizzle-orm/pg-core"
@@ -85,7 +91,8 @@ export const stockMovement = wms.table(
     projectReference(t, [t.containerId], container),
     projectReference(t, [t.fromWarehouseId], warehouse),
     projectReference(t, [t.toWarehouseId], warehouse),
-    projectReference(t, [t.placementId], containerServicePlacement),
+    // The placement of this container and no other: the key carries the container on both sides.
+    projectReference(t, [t.containerId, t.placementId], containerServicePlacement, [containerServicePlacement.containerId, containerServicePlacement.id]),
     tenantReference(t, [t.recordedBy], userAccount),
     // The ledger's own key, for the pointer at the row an adjustment corrects: the same table on both sides.
     tenantReference(t, [t.correctsMovementId], t),
@@ -102,8 +109,8 @@ export const stockMovement = wms.table(
       tableObjectName(t.id.table, "kind_shape", "stockMovement"),
       sql`case ${t.kind} when 'receipt' then ${t.fromKind} = 'supplier' and ${t.toKind} = 'warehouse' when 'issue' then ${t.fromKind} in ('warehouse', 'maintenance') and ${t.toKind} = 'service' when 'return' then ${t.fromKind} = 'service' and ${t.toKind} in ('warehouse', 'maintenance') when 'transfer' then ${t.fromKind} in ('warehouse', 'maintenance') and ${t.toKind} in ('warehouse', 'maintenance') when 'decommission' then ${t.fromKind} in ('warehouse', 'maintenance', 'service') and ${t.toKind} = 'scrap' when 'adjustment' then ${t.fromKind} <> 'service' and ${t.toKind} in ('warehouse', 'maintenance', 'scrap') else false end`,
     ),
-    // The fold reads the latest row per container: `distinct on (container_id) ... order by container_id, id desc`, over this index.
-    index(tableObjectName(t.companyId.table, "container_id_idx", "stockMovement")).on(t.companyId, t.containerId, t.id),
+    // The fold reads the latest row of one container: `where company_id = ? and container_id = ? order by id desc limit 1`, one probe into this index.
+    index(tableObjectName(t.companyId.table, "container_id_idx", "stockMovement")).on(t.companyId, t.containerId, t.id.desc()),
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.fromWarehouseId),
     tenantIndex(t, t.toWarehouseId),

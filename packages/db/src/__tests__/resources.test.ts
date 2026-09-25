@@ -259,7 +259,7 @@ describe("the Resources tables against a fresh database", { skip: database.skip 
       columns.map((row) => `${row.table}.${row.column}`),
       ["collection_group.driver_id", "collection_group.rule_vehicle_type_id", "collection_group.vehicle_id", "route_scheme.depot_id", "route_scheme.unloading_station_id"],
     )
-    const [key] = await owner.sql<{ found: boolean }[]>`select exists (select 1 from pg_constraint where conname = 'container_service_placement_project_key') as found`
+    const [key] = await owner.sql<{ found: boolean }[]>`select exists (select 1 from pg_constraint where conname = 'container_service_placement_container_id_project_key') as found`
     assert.equal(key.found, true)
     const [index] = await owner.sql<{ found: boolean }[]>`select to_regclass('wms.container_service_placement_project_id_idx') is not null as found`
     assert.equal(index.found, false)
@@ -349,10 +349,11 @@ describe("the Resources tables against a fresh database", { skip: database.skip 
 
   test("nor another company's placement, vehicle type, fraction, account or station (23503): every key carries the tenant", () =>
     seeded(async (tx) => {
-      await assert.rejects(
-        tx.transaction((savepoint) => savepoint.insert(stockMovement).values(movement({ kind: "issue", fromKind: "warehouse", toKind: "service", toWarehouseId: null, placementId: b.placement }))),
-        refusedWith("23503", /stock_movement_placement_id_fk/),
-      )
+      const issue = (values: Partial<typeof stockMovement.$inferInsert>) => movement({ kind: "issue", fromKind: "warehouse", toKind: "service", toWarehouseId: null, ...values })
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(stockMovement).values(issue({ placementId: b.placement }))), refusedWith("23503", /stock_movement_container_id_placement_id_fk/))
+      // And the ledger names the placement of the container it moves: the second container cannot be issued into the first's placement, though both are this project's.
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(stockMovement).values(issue({ containerId: a.unmoved, placementId: a.placement }))), refusedWith("23503", /stock_movement_container_id_placement_id_fk/))
+      await tx.insert(stockMovement).values(issue({ id: a.fourth, placementId: a.placement }))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(stockMovement).values(movement({ recordedBy: b.account }))), refusedWith("23503", /stock_movement_recorded_by_fk/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(stockMovement).values(movement({ correctsMovementId: b.movement }))), refusedWith("23503", /stock_movement_corrects_movement_id_fk/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(vehicle).values(truck({ vehicleTypeId: b.vehicleType }))), refusedWith("23503", /vehicle_vehicle_type_id_fk/))
@@ -543,11 +544,11 @@ describe("the Resources tables against a fresh database", { skip: database.skip 
   test("the fold answers the latest movement of each container in recording order, and nothing for a container with none", () =>
     seeded(async (tx) => {
       const fold = async () => {
-        const state = assetStateOf(tx, a.company)
+        const state = assetStateOf(tx, a.company, container.id)
         const rows = await tx
           .select({ container: container.id, status: assetStatus(state.toKind), warehouseId: state.toWarehouseId, placementId: state.placementId, movementId: state.movementId, since: state.occurredAt })
           .from(container)
-          .leftJoin(state, and(eq(state.companyId, container.companyId), eq(state.containerId, container.id)))
+          .leftJoinLateral(state, sql`true`)
           .where(eq(container.companyId, a.company))
           .orderBy(container.id)
         return rows
@@ -566,11 +567,11 @@ describe("the Resources tables against a fresh database", { skip: database.skip 
       await tx.insert(stockMovement).values(movement({ id: a.third, kind: "decommission", fromKind: "maintenance", toKind: "scrap", toWarehouseId: null, occurredAt: at(10, 2) }))
       assert.equal((await fold())[0].status, "retired")
       // The other company's containers are not in this company's fold, and the filter by status runs in SQL.
-      const state = assetStateOf(tx, a.company)
+      const state = assetStateOf(tx, a.company, container.id)
       const retired = await tx
         .select({ container: container.id })
         .from(container)
-        .innerJoin(state, and(eq(state.companyId, container.companyId), eq(state.containerId, container.id)))
+        .innerJoinLateral(state, sql`true`)
         .where(and(eq(container.companyId, a.company), eq(assetStatus(state.toKind), "retired")))
       assert.deepEqual(retired, [{ container: a.container }])
     }))

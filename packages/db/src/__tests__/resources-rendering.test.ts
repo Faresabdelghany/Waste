@@ -20,22 +20,27 @@
 // asks, on a TTY, whether `rule_vehicle_type_id` is `rule_vehicle_type` renamed
 // whenever one table both gains and loses a column in one diff, so the first
 // diff adds the columns and the second drops the token, and the union is what
-// the CLI writes for "create column". The one statement the file carries out
-// of the generated order — the placement's project key, moved above the
-// foreign key that points at it — is the head compared as a set.
+// the CLI writes for "create column". Two things the file carries that
+// drizzle-kit did not write there: the placement's project key stands above
+// the foreign key that points at it (the head is compared as a set, and the
+// order pinned by itself), and a hand-written guard stands before the `DROP
+// COLUMN` — the migration fails when any row still holds a token, since 0007
+// does not backfill and a database with data must refuse to lose it.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
 import { HOLIDAY_POLICIES, RECURRENCE_FREQUENCIES, ROUTE_SCHEME_STATUSES, SCHEME_EDIT_POLICIES, SERVICE_DAYS, SERVICE_TYPES, STOP_SOURCES, WEEK_ROTATIONS } from "@waste/domain/planning/vocabulary"
-import { sql } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { boolean, check, getTableConfig, integer, PgDialect, text, time, uuid } from "drizzle-orm/pg-core"
+
+import { drizzle } from "drizzle-orm/postgres-js"
 
 import { CASING } from "../casing"
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { tableObjectName } from "../names"
-import { assetStatus } from "../query/asset-state"
+import { ASSET_STATE, assetStateOf, assetStatus } from "../query/asset-state"
 import { subscription } from "../schema/agreements"
 import { vehicleAllocation, vehicleAllocationEvent } from "../schema/allocations"
 import { serviceFrequency, wasteFraction } from "../schema/catalogue"
@@ -53,7 +58,7 @@ import { stockMovement } from "../schema/stock"
 import { wms } from "../schema/wms"
 import { excludeOverlappingWindow } from "../sql/exclude-overlapping-window"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
-import { checksOf, companyFk, createTable, geometryCheck, ID, index, lowercaseCheck, oneOfCheck, partialUniqueIndex, positiveCheck, projectFk, projectFkTo, ref, tenantFk, uniqueKey } from "./rendering"
+import { checksOf, companyFk, createTable, foreignKey, geometryCheck, ID, index, lowercaseCheck, oneOfCheck, partialUniqueIndex, positiveCheck, projectFk, projectFkTo, ref, tenantFk, uniqueKey } from "./rendering"
 import { statementsBetween, statementsFor } from "./specimen"
 
 /** The thirteen tables in the order src/schema/index.ts exports them; drizzle-kit's own loader sorts a module's exports, which the migration test allows for. */
@@ -320,7 +325,8 @@ const expected = [
   projectFkTo("stock_movement", "container_id", "container"),
   projectFkTo("stock_movement", "from_warehouse_id", "warehouse"),
   projectFkTo("stock_movement", "to_warehouse_id", "warehouse"),
-  projectFkTo("stock_movement", "placement_id", "container_service_placement"),
+  // The placement of the container it moves, by both columns: container A is never issued into container B's placement.
+  foreignKey("stock_movement", "stock_movement_container_id_placement_id_fk", ["company_id", "project_id", "container_id", "placement_id"], "container_service_placement", ["company_id", "project_id", "container_id", "id"]),
   tenantFk("stock_movement", "recorded_by", "user_account"),
   tenantFk("stock_movement", "corrects_movement_id", "stock_movement"),
   companyFk("vehicle_allocation"),
@@ -354,7 +360,8 @@ const expected = [
   partialUniqueIndex("driver", "driver_user_account_id_idx", ["company_id", "user_account_id"], `${ref("driver", "user_account_id")} is not null`),
   index("driver", "driver_service_provider_id_idx", "company_id", "service_provider_id"),
   index("driver", "driver_home_depot_id_idx", "company_id", "home_depot_id"),
-  index("stock_movement", "stock_movement_container_id_idx", "company_id", "container_id", "id"),
+  // The fold's one probe per container: the latest movement first.
+  `CREATE INDEX "stock_movement_container_id_idx" ON "wms"."stock_movement" USING btree ("company_id","container_id","id" DESC NULLS LAST);`,
   index("stock_movement", "stock_movement_project_id_idx", "company_id", "project_id"),
   index("stock_movement", "stock_movement_from_warehouse_id_idx", "company_id", "from_warehouse_id"),
   index("stock_movement", "stock_movement_to_warehouse_id_idx", "company_id", "to_warehouse_id"),
@@ -497,7 +504,7 @@ const altered = {
     index("collection_group", "collection_group_driver_id_idx", "company_id", "driver_id"),
     index("route_scheme", "route_scheme_depot_id_idx", "company_id", "depot_id"),
     index("route_scheme", "route_scheme_unloading_station_id_idx", "company_id", "unloading_station_id"),
-    'ALTER TABLE "wms"."container_service_placement" ADD CONSTRAINT "container_service_placement_project_key" UNIQUE("company_id","project_id","id");',
+    'ALTER TABLE "wms"."container_service_placement" ADD CONSTRAINT "container_service_placement_container_id_project_key" UNIQUE("company_id","project_id","container_id","id");',
   ],
   dropped: [
     'ALTER TABLE "wms"."collection_group" DROP CONSTRAINT "collection_group_rule_vehicle_type_one_of";',
@@ -507,13 +514,27 @@ const altered = {
   ],
 }
 
+/** Which allocations are live: every one not released; the window constraints ignore the rest. */
+const LIVE = { live: { column: vehicleAllocation.status, not: "released" } }
+
 /** What the thirteen tables owe their migration file, in the order migrations/README.md lays out: fence and trigger, or fence and revoke, table by table, then the window exclusion constraints. */
 const handWritten = [
   ...Object.values(tables).flatMap((table) => handWrittenStatements(table)),
-  ...excludeOverlappingWindow(vehicleAllocation, [vehicleAllocation.vehicleId], `"status" <> 'released'`),
-  ...excludeOverlappingWindow(vehicleAllocation, [vehicleAllocation.driverId], `"driver_id" is not null and "status" <> 'released'`),
-  ...excludeOverlappingWindow(vehicleAllocation, [vehicleAllocation.trailerId], `"trailer_id" is not null and "status" <> 'released'`),
+  ...excludeOverlappingWindow(vehicleAllocation, [vehicleAllocation.vehicleId], LIVE),
+  ...excludeOverlappingWindow(vehicleAllocation, [vehicleAllocation.driverId], LIVE),
+  ...excludeOverlappingWindow(vehicleAllocation, [vehicleAllocation.trailerId], LIVE),
 ]
+
+/** The hand-written guard before the DROP COLUMN: a database that still holds a token on some row refuses to lose it, since 0007 does not backfill. */
+const GUARD = `DO $$ BEGIN IF EXISTS (SELECT 1 FROM "wms"."collection_group" WHERE "rule_vehicle_type" IS NOT NULL) THEN RAISE EXCEPTION 'collection_group.rule_vehicle_type still holds a token on some row; map each onto a vehicle_type row (rule_vehicle_type_id) before dropping the column, since 0007 does not backfill'; END IF; END $$;`
+const DROP_TOKEN = 'ALTER TABLE "wms"."collection_group" DROP COLUMN "rule_vehicle_type";'
+
+/** The file's statements as the migrator runs them, and where the guard stands among them. */
+async function fileStatements(): Promise<{ all: string[]; guardAt: number; withoutGuard: string[] }> {
+  const all = statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
+  const guardAt = all.indexOf(normalised(GUARD))
+  return { all, guardAt, withoutGuard: all.filter((_, at) => at !== guardAt) }
+}
 
 /** The ALTER TABLEs as the two diffs write them: the columns and keys added on the way to the step between, the token dropped from there. */
 const generatedAlterations = async (): Promise<string[]> => [
@@ -536,26 +557,37 @@ describe("the Resources tables as drizzle-kit writes them", () => {
     assert.deepEqual(await generatedAlterations(), [...altered.added, ...altered.dropped])
   })
 
-  test("migration 0007 begins with exactly what drizzle-kit generates for the schema: 125 statements", async () => {
-    const statements = statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
+  test("migration 0007 begins with exactly what drizzle-kit generates for the schema, the guard aside: 125 statements", async () => {
+    const { withoutGuard } = await fileStatements()
     // The same statements, whatever order drizzle-kit's loader gave the tables, and wherever the placement's key was moved to.
     const generated = (await generatedHead()).map(normalised).sort()
     assert.equal(generated.length, 125, "thirteen CREATE TABLE, five ADD COLUMN, one DROP INDEX, sixty foreign keys, forty-one indexes, one unique, two DROP CONSTRAINT, one DROP COLUMN, one check")
-    assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
+    assert.deepEqual([...withoutGuard.slice(0, generated.length)].sort(), generated)
   })
 
-  test("and the placement's project key stands before the foreign key that points at it, the one statement out of drizzle-kit's order", async () => {
-    const statements = statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
-    const key = statements.findIndex((statement) => statement.includes('"container_service_placement_project_key"'))
-    const reference = statements.findIndex((statement) => statement.includes('"stock_movement_placement_id_fk"'))
+  test("and the placement's project key stands before the foreign key that points at it, the one generated statement out of drizzle-kit's order", async () => {
+    const { all } = await fileStatements()
+    const key = all.findIndex((statement) => statement.includes('"container_service_placement_container_id_project_key"'))
+    const reference = all.findIndex((statement) => statement.includes('"stock_movement_container_id_placement_id_fk"'))
     assert.ok(key >= 0 && reference >= 0)
     assert.ok(key < reference, "Postgres needs the key before the reference")
   })
 
+  test("and the guard against losing stored tokens stands once, before the DROP COLUMN, and fails the migration when a row holds one", async () => {
+    const { all, guardAt } = await fileStatements()
+    assert.ok(guardAt >= 0, "the guard is in the file, spelled as the test spells it")
+    assert.equal(all.filter((statement) => statement.startsWith("DO $$")).length, 1, "once")
+    const dropAt = all.indexOf(DROP_TOKEN)
+    assert.ok(dropAt >= 0)
+    assert.ok(guardAt < dropAt, "before the column goes")
+    assert.match(GUARD, /RAISE EXCEPTION/)
+    assert.match(GUARD, /"rule_vehicle_type" IS NOT NULL/)
+  })
+
   test("and carries below them the fence and trigger, or revoke, of each table and the three window constraints: 13 x 3 + 3 = 42 statements", async () => {
-    const statements = statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
+    const { withoutGuard } = await fileStatements()
     const generated = await generatedHead()
-    const tail = statements.slice(generated.length)
+    const tail = withoutGuard.slice(generated.length)
     assert.equal(tail.length, 42, "thirteen tables, each two fence statements and one trigger or revoke, then three exclusion constraints on the reservation")
     assert.deepEqual(tail, handWritten.map(normalised))
     assert.equal(tail.filter((statement) => statement.startsWith("REVOKE UPDATE, DELETE")).length, 2, "the two ledgers")
@@ -604,11 +636,29 @@ describe("the column sets and check of this context", () => {
   })
 })
 
-describe("assetStatus", () => {
-  test("is a CASE over the domain's fold, place by place, null otherwise", () => {
+describe("the asset-state query", () => {
+  test("assetStatus is a CASE over the domain's fold, place by place, null otherwise", () => {
     const dialect = new PgDialect({ casing: CASING })
     const query = dialect.sqlToQuery(assetStatus(stockMovement.toKind))
     assert.equal(query.sql, `case "wms"."stock_movement"."to_kind" when 'warehouse' then 'in-warehouse' when 'maintenance' then 'in-maintenance' when 'service' then 'in-service' when 'scrap' then 'retired' else null end`)
     assert.deepEqual(query.params, [])
+  })
+
+  test("assetStateOf is a LATERAL lookup of one container's latest movement — one probe per row, never a fold of the whole ledger", () => {
+    // A mock database renders the statement and connects to nothing.
+    const db = drizzle.mock({ casing: CASING })
+    const companyId = "018f7c31-a000-7000-8000-000000000001"
+    const state = assetStateOf(db, companyId, container.id)
+    const { sql: text, params } = db
+      .select({ id: container.id, status: assetStatus(state.toKind), warehouseId: state.toWarehouseId })
+      .from(container)
+      .leftJoinLateral(state, sql`true`)
+      .where(eq(container.companyId, companyId))
+      .toSQL()
+    assert.equal(
+      text,
+      `select "wms"."container"."id", case "asset_state"."to_kind" when 'warehouse' then 'in-warehouse' when 'maintenance' then 'in-maintenance' when 'service' then 'in-service' when 'scrap' then 'retired' else null end, "asset_state"."to_warehouse_id" from "wms"."container" left join lateral (select "id", "to_kind", "to_warehouse_id", "placement_id", "occurred_at" from "wms"."stock_movement" where ("wms"."stock_movement"."company_id" = $1 and "wms"."stock_movement"."container_id" = "wms"."container"."id") order by "wms"."stock_movement"."id" desc limit $2) "${ASSET_STATE}" on true where "wms"."container"."company_id" = $3`,
+    )
+    assert.deepEqual(params, [companyId, 1, companyId])
   })
 })

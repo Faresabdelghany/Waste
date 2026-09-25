@@ -13,19 +13,30 @@
 // judge nobody — the driver is still listed, disabled, with the reason beside
 // the name, so the one case that cannot be verified is seen and corrected on
 // the record rather than waved through.
+//
+// The implication itself (CE covers C covers B) is spelled once, in
+// resources/licence.ts over the vocabulary's lowercase tokens (Issue #101);
+// this module keeps the prototype's uppercase display tuple, maps a display
+// class onto its token, and asks `coversClass`. The tokens and the display
+// tuple are held together by resources/__tests__/vocabulary.test.ts.
 
 import type { BusinessRecord } from "../prototype-record"
 import { typedString } from "../record-values"
+import { coversClass } from "../resources/licence"
+import type { LicenceClass as LicenceClassToken } from "../resources/vocabulary"
 import { vehicleTypeOfRecord } from "./matching"
 import { isIsoDate } from "./recurrence"
 
 /** What the readers need of a fleet record — a fixture, a created record, or a test's stand-in. */
 export type FleetRecord = Pick<BusinessRecord, "id" | "name" | "context" | "facts" | "submittedValues">
 
-/** The licence classes a driver may hold and a vehicle may require, lowest first. */
-export const LICENCE_CLASSES = ["B", "C", "CE"] as const
+/** The licence classes a driver may hold and a vehicle may require, lowest first: the display spelling of the vocabulary's `LICENCE_CLASSES`. */
+export const LICENCE_CLASSES = ["B", "C", "CE"] as const satisfies readonly Uppercase<LicenceClassToken>[]
 
 export type LicenceClass = (typeof LICENCE_CLASSES)[number]
+
+/** The display class as the vocabulary's token: `CE` is `ce`. */
+const tokenOf = (licenceClass: LicenceClass): LicenceClassToken => licenceClass.toLowerCase() as LicenceClassToken
 
 export function isLicenceClass(value: unknown): value is LicenceClass {
   return typeof value === "string" && (LICENCE_CLASSES as readonly string[]).includes(value)
@@ -111,17 +122,10 @@ export function driverProfile(record: FleetRecord): DriverProfile {
   }
 }
 
-/** The classes whose holder may drive a vehicle of the key's class: CE implies C, C implies B. */
-const IMPLIED_BY: Record<LicenceClass, readonly LicenceClass[]> = {
-  B: ["B", "C", "CE"],
-  C: ["C", "CE"],
-  CE: ["CE"],
-}
-
-/** Whether the driver may drive a vehicle of the class; an unknown licence, or an unknown class, never may. */
+/** Whether the driver may drive a vehicle of the class; an unknown licence, or an unknown class, never may. The implication is resources/licence.ts's. */
 export function driverHoldsLicence(driver: DriverProfile, licenceClass: LicenceClass | null): boolean {
   if (driver.licenceClass === null || licenceClass === null) return false
-  return IMPLIED_BY[licenceClass].includes(driver.licenceClass)
+  return coversClass(tokenOf(driver.licenceClass), tokenOf(licenceClass))
 }
 
 export const NO_LICENCE_ON_RECORD = "No licence on record"

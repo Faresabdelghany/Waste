@@ -18,7 +18,7 @@ import { id, orderedWindow, recorded, tenant, timestamps, validity, validPeriod,
 import { wms } from "../schema/wms"
 import { appendOnly } from "../sql/append-only"
 import { excludeOverlapping } from "../sql/exclude-overlapping"
-import { excludeOverlappingWindow } from "../sql/exclude-overlapping-window"
+import { excludeOverlappingWindow, WINDOW_RANGE } from "../sql/exclude-overlapping-window"
 import {
   createsTable,
   createTableStatement,
@@ -46,6 +46,8 @@ const specimen = wms.table(
 const current = wms.table("specimen_current", { ...id, ...tenant, ...timestamps, note: text() })
 // A ledger: appended, never updated — the one stamp, no updated_at.
 const ledger = wms.table("specimen_ledger", { ...id, ...tenant, ...recorded, note: text() })
+// Neither stamp: not a ledger and not a current row, which the gate has to refuse rather than guess about.
+const unstamped = wms.table("specimen_unstamped", { ...id, ...tenant, note: text() })
 // A reservation: a window on a clock with the ordered check, keyed by a vehicle and, where there is one, a driver.
 const reservation = wms.table(
   "specimen_reservation",
@@ -56,8 +58,9 @@ const reservation = wms.table(
 const snapshot = wms.table("specimen_snapshot", { ...id, ...tenant, ...recorded, ...window, vehicleId: uuid().notNull() })
 
 const CONSTRAINT = `ALTER TABLE ${TABLE} ADD CONSTRAINT "specimen_hand_written_no_overlap" EXCLUDE USING gist ("company_id" WITH =, "container_id" WITH =, daterange("valid_from", "valid_to", '[)') WITH &&);`
-const WINDOW_RANGE = `tstzrange("planned_from", "planned_to", '[)') WITH &&)`
-const VEHICLE_CONSTRAINT = `ALTER TABLE ${RESERVATION} ADD CONSTRAINT "specimen_reservation_vehicle_no_overlap" EXCLUDE USING gist ("company_id" WITH =, "vehicle_id" WITH =, ${WINDOW_RANGE};`
+/** The range as the helper spells it, closing the gist list. */
+const RANGE = `${WINDOW_RANGE})`
+const VEHICLE_CONSTRAINT = `ALTER TABLE ${RESERVATION} ADD CONSTRAINT "specimen_reservation_vehicle_no_overlap" EXCLUDE USING gist ("company_id" WITH =, "vehicle_id" WITH =, ${RANGE};`
 
 describe("excludeOverlapping", () => {
   test("one gist exclusion over company_id, the key, and the half-open date range, named <table>_no_overlap", () => {
@@ -133,9 +136,10 @@ describe("appendOnly", () => {
     assert.deepEqual(appendOnly(ledger), [`REVOKE UPDATE, DELETE ON "wms"."specimen_ledger" FROM wms_api;`])
   })
 
-  test("refuses a table with updated_at: its rows change, and a ledger's do not", () => {
+  test("refuses a table with updated_at, whose rows change, and one without recorded_at, which is not a ledger", () => {
     assert.throws(() => appendOnly(specimen), /appendOnly: "wms"\."specimen_hand_written" has updated_at; a ledger spreads recorded, not timestamps, since its rows are never updated/)
     assert.throws(() => appendOnly(current), /appendOnly: "wms"\."specimen_current" has updated_at/)
+    assert.throws(() => appendOnly(unstamped), /appendOnly: "wms"\."specimen_unstamped" has no recorded_at; a ledger spreads the recorded column set/)
   })
 })
 
@@ -144,23 +148,28 @@ describe("excludeOverlappingWindow", () => {
     assert.deepEqual(excludeOverlappingWindow(reservation, [reservation.vehicleId]), [VEHICLE_CONSTRAINT])
   })
 
-  test("takes a predicate, so a released reservation frees its window and a null key stays out of the index", () => {
-    assert.deepEqual(excludeOverlappingWindow(reservation, [reservation.vehicleId], `"status" <> 'released'`), [
-      `${VEHICLE_CONSTRAINT.slice(0, -1)} WHERE ("status" <> 'released');`,
+  test("takes which rows are live as a structured predicate, so a released reservation frees its window, and spells the null-exclusion of a nullable key itself", () => {
+    const live = { live: { column: reservation.status, not: "released" } }
+    assert.deepEqual(excludeOverlappingWindow(reservation, [reservation.vehicleId], live), [`${VEHICLE_CONSTRAINT.slice(0, -1)} WHERE ("status" <> 'released');`])
+    // A null never equals anything in an exclusion constraint, so a nullable key column's nulls are kept out of the index by the helper, not by the caller's text.
+    assert.deepEqual(excludeOverlappingWindow(reservation, [reservation.driverId]), [
+      `ALTER TABLE ${RESERVATION} ADD CONSTRAINT "specimen_reservation_driver_no_overlap" EXCLUDE USING gist ("company_id" WITH =, "driver_id" WITH =, ${RANGE} WHERE ("driver_id" is not null);`,
     ])
-    assert.deepEqual(excludeOverlappingWindow(reservation, [reservation.driverId], `"driver_id" is not null and "status" <> 'released'`), [
-      `ALTER TABLE ${RESERVATION} ADD CONSTRAINT "specimen_reservation_driver_no_overlap" EXCLUDE USING gist ("company_id" WITH =, "driver_id" WITH =, ${WINDOW_RANGE} WHERE ("driver_id" is not null and "status" <> 'released');`,
+    assert.deepEqual(excludeOverlappingWindow(reservation, [reservation.driverId], live), [
+      `ALTER TABLE ${RESERVATION} ADD CONSTRAINT "specimen_reservation_driver_no_overlap" EXCLUDE USING gist ("company_id" WITH =, "driver_id" WITH =, ${RANGE} WHERE ("driver_id" is not null and "status" <> 'released');`,
     ])
+    // The value is a literal with its quotes doubled, like a check's.
+    assert.match(excludeOverlappingWindow(reservation, [reservation.vehicleId], { live: { column: reservation.status, not: "it's over" } })[0], /WHERE \("status" <> 'it''s over'\);$/)
     // A key of two columns is named by both.
     assert.match(excludeOverlappingWindow(reservation, [reservation.vehicleId, reservation.status])[0], /"specimen_reservation_vehicle_status_no_overlap" EXCLUDE USING gist \("company_id" WITH =, "vehicle_id" WITH =, "status" WITH =, tstzrange/)
   })
 
-  test("refuses a nullable key column without a predicate keeping its nulls out: a null never equals anything in an exclusion constraint", () => {
-    assert.throws(
-      () => excludeOverlappingWindow(reservation, [reservation.driverId]),
-      /excludeOverlappingWindow: "driver_id" is nullable; a null never equals anything in an exclusion constraint, so rows with a null there would overlap freely\. Make it NOT NULL, or keep them out of the index with a where of "driver_id" is not null\./,
-    )
-    assert.throws(() => excludeOverlappingWindow(reservation, [reservation.driverId], `"status" <> 'released'`), /"driver_id" is nullable/)
+  test("company_id leads whether or not the caller lists it, once, and a column listed twice is once — the same key resolution as the validity sibling", () => {
+    assert.deepEqual(excludeOverlappingWindow(reservation, [reservation.companyId, reservation.vehicleId]), [VEHICLE_CONSTRAINT])
+    assert.deepEqual(excludeOverlappingWindow(reservation, [reservation.vehicleId, reservation.vehicleId]), [VEHICLE_CONSTRAINT])
+    assert.deepEqual(excludeOverlapping(specimen, [specimen.containerId, specimen.containerId]), [CONSTRAINT])
+    assert.throws(() => excludeOverlappingWindow(reservation, [reservation.companyId]), /excludeOverlappingWindow: "wms"\."specimen_reservation" names no key beside company_id; a reservation is of something/)
+    assert.throws(() => excludeOverlappingWindow(reservation, [reservation.vehicleId], { live: { column: current.note, not: "x" } }), /excludeOverlappingWindow: live column "note" is not a column of "wms"\."specimen_reservation"/)
   })
 
   test("refuses a table without the window, without the orderedWindow check, or without company_id", () => {
@@ -173,10 +182,9 @@ describe("excludeOverlappingWindow", () => {
     assert.throws(() => excludeOverlappingWindow(untenanted, [untenanted.vehicleId]), /excludeOverlappingWindow: "wms"\."specimen_window_untenanted" has no company_id; spread the tenant column set/)
   })
 
-  test("refuses a column of another table, the window columns as key, and company_id named in the key, which leads it already", () => {
+  test("refuses a column of another table and the window columns as key", () => {
     assert.throws(() => excludeOverlappingWindow(reservation, [current.note]), /excludeOverlappingWindow: column "note" is not a column of "wms"\."specimen_reservation"/)
     assert.throws(() => excludeOverlappingWindow(reservation, [reservation.plannedTo]), /excludeOverlappingWindow: "planned_to" is the window, not the key/)
-    assert.throws(() => excludeOverlappingWindow(reservation, [reservation.companyId]), /excludeOverlappingWindow: "company_id" leads every key already; name the key beside it/)
   })
 
   test("refuses a constraint name Postgres would truncate", () => {
@@ -192,7 +200,8 @@ describe("what a table's migration file must carry", () => {
     assert.deepEqual(handWrittenStatements(specimen), [...tenantFence(specimen), ...touchUpdatedAt(specimen)])
     assert.deepEqual(handWrittenStatements(current), [...tenantFence(current), ...touchUpdatedAt(current)])
     assert.deepEqual(handWrittenStatements(ledger), [...tenantFence(ledger), ...appendOnly(ledger)])
-    assert.deepEqual([isLedger(specimen), isLedger(current), isLedger(ledger), isLedger(snapshot)], [false, false, true, true])
+    assert.deepEqual([isLedger(specimen), isLedger(current), isLedger(ledger), isLedger(snapshot), isLedger(unstamped)], [false, false, true, true, false], "a ledger is a table with recorded_at")
+    assert.throws(() => handWrittenStatements(unstamped), /touchUpdatedAt: "wms"\."specimen_unstamped" has no updated_at/, "neither stamp is neither kind of table, and the gate says so rather than guessing")
     assert.deepEqual(overlapConstraintShape(specimen), {
       prefix: `ALTER TABLE ${TABLE} ADD CONSTRAINT "specimen_hand_written_no_overlap" EXCLUDE USING gist ("company_id" WITH =`,
       suffix: `daterange("valid_from", "valid_to", '[)') WITH &&);`,
@@ -203,14 +212,14 @@ describe("what a table's migration file must carry", () => {
 
   test("a reservation is a table with the window check; a snapshot of one is not, and neither is anything else", () => {
     assert.deepEqual([isReservation(reservation), isReservation(snapshot), isReservation(specimen), isReservation(ledger)], [true, false, false, false])
-    assert.deepEqual(windowConstraintShape(reservation), { prefix: `ALTER TABLE ${RESERVATION} ADD CONSTRAINT "specimen_reservation_`, infix: WINDOW_RANGE })
+    assert.deepEqual(windowConstraintShape(reservation), { prefix: `ALTER TABLE ${RESERVATION} ADD CONSTRAINT "specimen_reservation_`, infix: RANGE }, "the range is the helper's own, read from it")
     assert.equal(windowConstraintShape(snapshot), undefined)
     // Every constraint the window helper writes begins with the prefix and carries the range, whatever its key and predicate.
     const { prefix, infix } = windowConstraintShape(reservation)!
     for (const [statement] of [
       excludeOverlappingWindow(reservation, [reservation.vehicleId]),
-      excludeOverlappingWindow(reservation, [reservation.driverId], `"driver_id" is not null`),
-      excludeOverlappingWindow(reservation, [reservation.vehicleId, reservation.status], `"status" <> 'released'`),
+      excludeOverlappingWindow(reservation, [reservation.driverId]),
+      excludeOverlappingWindow(reservation, [reservation.vehicleId, reservation.status], { live: { column: reservation.status, not: "released" } }),
     ]) {
       assert.ok(statement.startsWith(prefix), statement)
       assert.ok(statement.includes(infix), statement)
@@ -222,12 +231,12 @@ describe("what a table's migration file must carry", () => {
     const [trigger] = touchUpdatedAt(reservation)
     const withoutConstraint = [`CREATE TABLE ${RESERVATION} ();`, enable, policy, trigger].join("\n--> statement-breakpoint\n")
     assert.deepEqual(missingHandWritten(reservation, withoutConstraint), [
-      `-- excludeOverlappingWindow(specimen_reservation, [...its key], where?) writes the exclusion constraint: ALTER TABLE ${RESERVATION} ADD CONSTRAINT "specimen_reservation_..._no_overlap" EXCLUDE USING gist ("company_id" WITH =, ..., ${WINDOW_RANGE}`,
+      `-- excludeOverlappingWindow(specimen_reservation, [...its key], { live? }) writes the exclusion constraint: ALTER TABLE ${RESERVATION} ADD CONSTRAINT "specimen_reservation_..._no_overlap" EXCLUDE USING gist ("company_id" WITH =, ..., ${RANGE}`,
     ])
-    const [driverConstraint] = excludeOverlappingWindow(reservation, [reservation.driverId], `"driver_id" is not null and "status" <> 'released'`)
+    const [driverConstraint] = excludeOverlappingWindow(reservation, [reservation.driverId], { live: { column: reservation.status, not: "released" } })
     assert.deepEqual(missingHandWritten(reservation, `${withoutConstraint}\n--> statement-breakpoint\n${driverConstraint}`), [])
     // A constraint of another table or over another range does not count.
-    const other = `ALTER TABLE "wms"."other" ADD CONSTRAINT "other_vehicle_no_overlap" EXCLUDE USING gist ("company_id" WITH =, "vehicle_id" WITH =, ${WINDOW_RANGE};`
+    const other = `ALTER TABLE "wms"."other" ADD CONSTRAINT "other_vehicle_no_overlap" EXCLUDE USING gist ("company_id" WITH =, "vehicle_id" WITH =, ${RANGE};`
     assert.equal(missingHandWritten(reservation, `${withoutConstraint}\n--> statement-breakpoint\n${other}`).length, 1)
     // A ledger's file is complete with its fence and its revoke, and a snapshot's window asks for nothing.
     const [ledgerEnable, ledgerPolicy] = tenantFence(snapshot)

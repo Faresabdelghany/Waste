@@ -1915,12 +1915,13 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "container_service_placement_project_key": {
-          "name": "container_service_placement_project_key",
+        "container_service_placement_container_id_project_key": {
+          "name": "container_service_placement_container_id_project_key",
           "nullsNotDistinct": false,
           "columns": [
             "company_id",
             "project_id",
+            "container_id",
             "id"
           ]
         }
@@ -5799,7 +5800,7 @@
             {
               "expression": "id",
               "isExpression": false,
-              "asc": true,
+              "asc": false,
               "nulls": "last"
             }
           ],
@@ -6020,19 +6021,21 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "stock_movement_placement_id_fk": {
-          "name": "stock_movement_placement_id_fk",
+        "stock_movement_container_id_placement_id_fk": {
+          "name": "stock_movement_container_id_placement_id_fk",
           "tableFrom": "stock_movement",
           "tableTo": "container_service_placement",
           "schemaTo": "wms",
           "columnsFrom": [
             "company_id",
             "project_id",
+            "container_id",
             "placement_id"
           ],
           "columnsTo": [
             "company_id",
             "project_id",
+            "container_id",
             "id"
           ],
           "onDelete": "no action",
@@ -8860,6 +8863,6 @@
     "tables": {},
     "columns": {}
   },
-  "id": "d54fffce-5a74-4408-a43b-cd00f15eec44",
+  "id": "87d3495c-10b8-420d-a91b-64ca559d9bf3",
   "prevId": "526ba860-2b47-40e1-9b59-40b0ec29c560"
 }

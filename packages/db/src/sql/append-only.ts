@@ -8,11 +8,12 @@
 //
 // The owner keeps both — for tests, and for an erasure someone with the owner's
 // connection decides on — so a row nobody can change through the API is still
-// a row a person can remove by hand. A table that spreads `timestamps` is not
-// a ledger: its `updated_at` says rows change, and asking to revoke UPDATE on
-// it is a mistake this refuses. The gate (hand-written.ts) writes this for
-// every table without `updated_at`, in the place the trigger goes for one
-// with it.
+// a row a person can remove by hand. A ledger spreads `recorded`
+// (schema/columns.ts), so it carries `recorded_at` and no `updated_at`: a table
+// with `updated_at` says its rows change and is refused here, and a table
+// without `recorded_at` is not a ledger and is refused too. The gate
+// (hand-written.ts) writes this for every table with `recorded_at`, in the
+// place the trigger goes for one with `updated_at`.
 import type { PgTable } from "drizzle-orm/pg-core"
 
 import { columnNamed, qualifiedTable } from "../names"
@@ -25,6 +26,9 @@ export function appendOnly(table: PgTable): string[] {
   const target = qualifiedTable(table, HELPER)
   if (columnNamed(table, "updated_at")) {
     throw new Error(`${HELPER}: ${target} has updated_at; a ledger spreads recorded, not timestamps, since its rows are never updated`)
+  }
+  if (!columnNamed(table, "recorded_at")) {
+    throw new Error(`${HELPER}: ${target} has no recorded_at; a ledger spreads the recorded column set`)
   }
   return [`REVOKE UPDATE, DELETE ON ${target} FROM ${API_ROLE};`]
 }

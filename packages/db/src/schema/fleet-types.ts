@@ -8,8 +8,11 @@
 // of this company's. Its `key` is the stable slug the rest of the system
 // quotes (`rear-loader`), lowercase-checked and unique per company beside the
 // name, and set once. Planning's `STOP_MATCH_VEHICLE_TYPES` token — "a working
-// taxonomy until Resources" — retired with it: a Stop Matching Rule names a
-// row here (`collection_group.rule_vehicle_type_id`, migration 0007).
+// taxonomy until Resources" — retired with it in #101's slice 2 (the tuple in
+// @waste/domain/planning/vocabulary, the contracts' `StopMatchVehicleType` and
+// the lockstep test, all gone; the web keeps route-schemes/matching.ts's
+// display tuple until the adapter maps it): a Stop Matching Rule names a row
+// here (`collection_group.rule_vehicle_type_id`, migration 0007).
 //
 // `container_type_vehicle_type` is one pair the company allows: a rule asking
 // for vehicle type V matches a container only when `(its type, V)` is a row
