@@ -159,7 +159,7 @@ async function requireLinks(tx: Tx, scope: Scope, after: TicketLinks, named: Rea
   if (named.has("driverId")) await requireDriver(tx, scope, after.driverId, at("driverId"))
   if (named.has("parentTicketId")) {
     if (self !== undefined && after.parentTicketId === self) throw invalidRequest("body", [{ path: at("parentTicketId"), message: NOT_ITS_OWN_PARENT }])
-    await requireTicket(tx, scope, after.parentTicketId, at("parentTicketId"))
+    await requireTicket(tx, scope, after.parentTicketId, { path: at("parentTicketId") })
   }
 }
 

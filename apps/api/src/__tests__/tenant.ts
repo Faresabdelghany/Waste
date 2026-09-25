@@ -250,18 +250,18 @@ export async function grantRole(pool: Database, companyId: string, roleId: strin
  * would stop the rows they name going otherwise (#101 §6.24): Resources' two,
  * `stock_movement` and `vehicle_allocation_event`, and Execution's three,
  * `proof_of_service`, `unload` and `driver_command` (Issue #104), which name
- * sessions, pickups and routes. A suite that writes no ledger row passes
- * none, and one that does and passes none fails loudly on the key. Execution's
- * other four go next as `wms_api`, children first — the outbox, then sessions,
- * pickups and routes — and before Planning's and Resources', since a route
- * names a scheme, a group, vehicles, drivers, a depot and a station, and a
- * pickup names containers, properties, points and fractions. Resolution
- * (Issue #109) goes first of all: `ticket_event`, the fourth server-keyed
- * ledger, leads the owner's sweep, since it names tickets and accounts; then,
- * as `wms_api`, `alert` and `ticket` before the outbox — an alert names a
- * ticket, and a ticket names routes, pickups, containers, properties, points,
- * agreements, drivers and tickets (a self-key is fine in one statement, since
- * Postgres checks a `NO ACTION` key at the statement's end).
+ * sessions, pickups and routes — and, before them all, Resolution's
+ * `ticket_event` (Issue #109), the fourth server-keyed ledger, which names
+ * tickets and accounts. A suite that writes no ledger row passes none, and one
+ * that does and passes none fails loudly on the key. Resolution's other two go
+ * next as `wms_api`, `alert` before `ticket` (an alert names a ticket) and both
+ * before the outbox, since a ticket names routes, pickups, containers,
+ * properties, points, agreements, drivers and tickets (its own parent key is
+ * fine in one statement: Postgres checks a `NO ACTION` key at the statement's
+ * end). Execution's other four go next, children first — the outbox, then
+ * sessions, pickups and routes — and before Planning's and Resources', since a
+ * route names a scheme, a group, vehicles, drivers, a depot and a station, and
+ * a pickup names containers, properties, points and fractions.
  */
 export async function dropTenant(pool: Database, companyId: string, owner?: Database): Promise<void> {
   if (owner !== undefined) {

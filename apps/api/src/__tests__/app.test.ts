@@ -134,6 +134,11 @@ describe("GET /openapi.json", () => {
       "/agreements",
       "/agreements/{id}",
       "/agreements/{id}/subscriptions",
+      "/alerts",
+      "/alerts/{id}",
+      "/alerts/{id}/acknowledge",
+      "/alerts/{id}/link-ticket",
+      "/alerts/{id}/resolve",
       "/collection-calendars",
       "/collection-calendars/{id}",
       "/collection-calendars/{id}/holidays",
@@ -302,8 +307,8 @@ describe("GET /openapi.json", () => {
     }
     assert.equal(
       secured,
-      176,
-      "/me, the ten organisation routes, the twelve access routes, the fifty-one registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each, agreements with their subscriptions and containers with their placements — the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six — and the eighteen resources routes of slice 3: vehicle types with their container types, five, warehouses and depots, four each, and unloading stations with their fractions, five — and the seven of the container ledger (Issue #101, slice 5): the five commands receive, return, transfer, decommission and adjust, one container's movements, and the ledger across containers — and Resources' seven vehicle allocation routes (#101, slice 6): the list, the allocate command, the read, the three commands change, confirm and release, and the history — and the nine fleet routes of Resources' slice 4: vehicles with the compartments set, five, and drivers, four — and the eighteen office routes of Execution's slice 3 (Issue #104): routes, eight (the list, the read, assign, dispatch, reschedule, cancel, the pickup order and the command log), pickups, four (the list, the read, remove and correct-outcome), live, three (the live read, the sessions list and one session), and weights, three (the unloads list, one unload and the office's capture on a route) — and the five of the driver door (Issue #104, slice 4): the driver's start screen, their routes, one route, the command batch and the receipts — and the thirteen ticket routes of Resolution's slice 3 (Issue #109): the list and the create, the read and the patch, the seven commands assign, start, wait, hold, complete, reject and reopen, the history and the comment",
+      182,
+      "/me, the ten organisation routes, the twelve access routes, the fifty-one registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each, agreements with their subscriptions and containers with their placements — the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six — and the eighteen resources routes of slice 3: vehicle types with their container types, five, warehouses and depots, four each, and unloading stations with their fractions, five — and the seven of the container ledger (Issue #101, slice 5): the five commands receive, return, transfer, decommission and adjust, one container's movements, and the ledger across containers — and Resources' seven vehicle allocation routes (#101, slice 6): the list, the allocate command, the read, the three commands change, confirm and release, and the history — and the nine fleet routes of Resources' slice 4: vehicles with the compartments set, five, and drivers, four — and the eighteen office routes of Execution's slice 3 (Issue #104): routes, eight (the list, the read, assign, dispatch, reschedule, cancel, the pickup order and the command log), pickups, four (the list, the read, remove and correct-outcome), live, three (the live read, the sessions list and one session), and weights, three (the unloads list, one unload and the office's capture on a route) — and the five of the driver door (Issue #104, slice 4): the driver's start screen, their routes, one route, the command batch and the receipts — and Resolution's nineteen (Issue #109): the thirteen ticket routes, the list and the create, the read and the patch, the seven commands assign, start, wait, hold, complete, reject and reopen, the history and the comment, and the six alert routes, the list, the raise, the read, and the three commands acknowledge, resolve and link-ticket",
     )
   })
 
@@ -345,9 +350,79 @@ describe("GET /openapi.json", () => {
     assert.equal(appends, 6, "the ledger's five commands: receive, return, transfer, decommission and adjust — and a ticket's comment")
     assert.equal(
       creates,
-      30,
-      "the thirty creates: projects, service providers, users and roles; waste fractions, container types, service frequencies, products, customers, properties, property groups, shared collection points, agreements and containers; the two nested ones, a subscription under its agreement and a placement under its container; and Planning's five — planning areas and, under an area, boundary versions, collection calendars, route schemes and, under a scheme, collection groups; and Resources' seven (Issue #101) — vehicle types, warehouses, depots, unloading stations, vehicles, drivers and vehicle allocations; and Execution's one (Issue #104, slice 3) — the office's unload capture under its route, read at `/unloads/{id}`; and Resolution's one (Issue #109, slice 3) — the ticket",
+      31,
+      "the thirty-one creates: projects, service providers, users and roles; waste fractions, container types, service frequencies, products, customers, properties, property groups, shared collection points, agreements and containers; the two nested ones, a subscription under its agreement and a placement under its container; and Planning's five — planning areas and, under an area, boundary versions, collection calendars, route schemes and, under a scheme, collection groups; and Resources' seven (Issue #101) — vehicle types, warehouses, depots, unloading stations, vehicles, drivers and vehicle allocations; and Execution's one (Issue #104, slice 3) — the office's unload capture under its route, read at `/unloads/{id}`; and Resolution's two (Issue #109) — the ticket and the alert",
     )
+  })
+
+  test("documents each alert route with its verbs, its problems and the rules a client must know (Issue #109)", async () => {
+    const document = await spec()
+    const operations = (path: string) =>
+      Object.fromEntries(Object.entries(document.paths[path]).map(([method, operation]) => [method, operation.operationId]))
+
+    assert.deepEqual(operations("/alerts"), { get: "listAlerts", post: "raiseAlert" })
+    assert.deepEqual(operations("/alerts/{id}"), { get: "getAlert" })
+    assert.deepEqual(operations("/alerts/{id}/acknowledge"), { post: "acknowledgeAlert" })
+    assert.deepEqual(operations("/alerts/{id}/resolve"), { post: "resolveAlert" })
+    assert.deepEqual(operations("/alerts/{id}/link-ticket"), { post: "linkAlertTicket" })
+
+    // The raise collides with nothing (no key, no period), so it has no 409; a resolved alert refuses acknowledge and the link, and resolve is idempotent and refuses nothing but a bad body.
+    assert.deepEqual(Object.keys(document.paths["/alerts"].get.responses), ["200", "400", "401", "403"])
+    assert.deepEqual(Object.keys(document.paths["/alerts"].post.responses), ["201", "400", "401", "403"])
+    assert.deepEqual(Object.keys(document.paths["/alerts/{id}"].get.responses), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(Object.keys(document.paths["/alerts/{id}/acknowledge"].post.responses), ["200", "400", "401", "403", "404", "409"])
+    assert.deepEqual(Object.keys(document.paths["/alerts/{id}/resolve"].post.responses), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(Object.keys(document.paths["/alerts/{id}/link-ticket"].post.responses), ["200", "400", "401", "403", "404", "409"])
+    for (const [status, operation] of Object.entries(document.paths["/alerts/{id}/link-ticket"].post.responses)) {
+      assert.deepEqual(Object.keys(operation.content), [status === "200" ? "application/json" : "application/problem+json"], `link-ticket ${status}`)
+    }
+
+    // The list is project-scoped and takes the board's filters beside the page.
+    const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
+    assert.deepEqual(byName(document.paths["/alerts"].get).sort(), [
+      "query:containerId",
+      "query:cursor",
+      "query:driverId",
+      "query:kind",
+      "query:limit",
+      "query:projectId",
+      "query:routeId",
+      "query:severity",
+      "query:status",
+      "query:ticketId",
+      "query:vehicleId",
+    ])
+    assert.deepEqual(byName(document.paths["/alerts/{id}/acknowledge"].post), ["path:id"])
+
+    // The rules a client must know are in the prose, not only in the code.
+    assert.match(document.paths["/alerts"].get.description ?? "", /an account that works in none[^.]*reads an empty page/)
+    assert.match(document.paths["/alerts"].get.description ?? "", /`ticketId` not null and no status/)
+    const raise = document.paths["/alerts"].post.description ?? ""
+    assert.match(raise, /`source` is `manual`, `status` is `new`, `raisedBy` is the caller's account/)
+    assert.match(raise, /at least one of `routeId`, `vehicleId`, `driverId` and `containerId` \(400 at `routeId` otherwise/)
+    assert.match(raise, /the vehicle one of its vehicles of any kind, a trailer included/)
+    assert.match(raise, /There is no status gate on any of them/)
+    assert.match(raise, /at most five minutes ahead of the request's clock \(400, `Recorded after it happened`\) and has no lower bound/)
+    assert.match(raise, /Nothing here writes the outbox/)
+    assert.match(document.paths["/alerts/{id}/acknowledge"].post.description ?? "", /already acknowledged answers 200 as it stands, without a write; a resolved one is refused \(409, `This alert is resolved and does not change`\)/)
+    assert.match(document.paths["/alerts/{id}/resolve"].post.description ?? "", /resolved without being acknowledged first/)
+    assert.match(document.paths["/alerts/{id}/resolve"].post.description ?? "", /already resolved answers 200 as it stands, without a write/)
+    const link = document.paths["/alerts/{id}/link-ticket"].post.description ?? ""
+    assert.match(link, /the same ticket again answers 200 as it stands, without a write/)
+    assert.match(link, /\(409, `This alert is linked to ticket T-8831; an alert links to one ticket`/)
+    assert.match(link, /a resolved alert is refused \(409, `This alert is resolved and does not change`\)/)
+    assert.match(link, /The same rule `POST \/tickets` runs/)
+
+    // A write takes the strict body the contracts spell; the acknowledge's is empty.
+    const required = (path: string) => document.paths[path].post.requestBody?.content["application/json"].schema.required
+    assert.deepEqual(required("/alerts"), ["projectId", "title", "details", "kind", "severity"])
+    assert.equal(required("/alerts/{id}/acknowledge"), undefined)
+    assert.equal(required("/alerts/{id}/resolve"), undefined)
+    assert.deepEqual(required("/alerts/{id}/link-ticket"), ["ticketId"])
+
+    const page = document.paths["/alerts"].get.responses["200"].content["application/json"].schema
+    assert.deepEqual(page.required, ["items", "nextCursor"])
+    assert.equal(page.properties?.items.type, "array")
   })
 
   test("documents the driver door with its verbs, its problems and the rules a device must know (Issue #104, slice 4)", async () => {

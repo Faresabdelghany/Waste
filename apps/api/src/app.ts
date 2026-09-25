@@ -33,6 +33,7 @@ import type { Verifier } from "./auth/verify"
 import { errorHandler, notFound } from "./problem"
 import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS } from "./readiness"
 import { agreementRoutes } from "./routes/agreements"
+import { alertRoutes } from "./routes/alerts"
 import { catalogueRoutes } from "./routes/catalogue"
 import { collectionCalendarRoutes } from "./routes/collection-calendars"
 import { collectionGroupRoutes } from "./routes/collection-groups"
@@ -173,8 +174,9 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   app.route("/", unloadRoutes(guard, { now }))
   // The driver door (Issue #104, slice 4) goes on after the office: its commands are judged against the request's clock, so it takes `now` like the ledger routes.
   app.route("/", driverDoorRoutes(guard, { now }))
-  // Resolution (Issue #109, slice 3): a ticket's `occurredAt` defaults to the request's clock and may not run ahead of it, and every command stamps and publishes with it, so the module takes `now` too.
+  // Resolution (Issue #109): a ticket's `occurredAt` and an alert's `detectedAt` default to the request's clock and may not run ahead of it, and every command stamps and publishes with it, so both modules take `now` too.
   app.route("/", ticketRoutes(guard, { now }))
+  app.route("/", alertRoutes(guard, { now }))
 
   app.get(
     "/openapi.json",

@@ -410,13 +410,22 @@ export async function requireSession(tx: Tx, scope: RouteScope, id: string | nul
 // ticket's nine links are the Registry's, Resources' and Execution's rows and
 // read the checks above; three are new here — a parent ticket, an alert and
 // an agreement, each the project's, since every ticket, alert and agreement
-// is a Project's — and one is a rule on an account rather than a row: the
-// assignee works in the ticket's project, `all_projects` or a Project Access
-// row, since a ticket assigned to someone who cannot see it is a bug and not
-// a choice (#109 §3). No status is answered for a link: a ticket is about
-// whatever it is about — a complaint about an inactive customer's last
-// collection, a defect on a retired container — and #79's gate does not apply
-// to it (§7.13); the one gate, the re-collection route's, is the route's own.
+// is a Project's, so all three are `inProject` — and one is a rule on an
+// account rather than a row: the assignee works in the ticket's project,
+// `all_projects` or a Project Access row, since a ticket assigned to someone
+// who cannot see it is a bug and not a choice (#109 §3). No status is
+// answered for a link: a ticket is about whatever it is about — a complaint
+// about an inactive customer's last collection, a defect on a retired
+// container — and #79's gate does not apply to it (§7.13); the one gate, the
+// re-collection route's, is the route's own, and an alert about a ticket
+// names it whatever state either is in. The alert's check answers the row and
+// not only its existence, since what names an alert judges it next: the one
+// function `POST /tickets` and `POST /alerts/:id/link-ticket` share
+// (routes/alert-links.ts) reads its status and the ticket it already names
+// under the alert's lock, and one statement that says all three is better
+// than three. An id that is null or absent names nothing and is no issue, as
+// everywhere here; the overloads say so to the type checker, so a caller with
+// an id in hand reads the row without a guard.
 
 /** What a body is told when it names a ticket of another project, or none. */
 export const NOT_A_TICKET = "Not a ticket of this project"
@@ -430,8 +439,8 @@ export const NOT_AN_AGREEMENT = "Not an agreement of this project"
 /** What a body is told when the account it names is this company's but works in another project. */
 export const NOT_WORKING_IN_PROJECT = "Not a user account working in this project"
 
-/** A Ticket a body names — as a parent case, or as the ticket an alert answers: the project's, through the table's own project key. */
-export async function requireTicket(tx: Tx, scope: Scope, id: string | null | undefined, path = "ticketId"): Promise<void> {
+/** A Ticket a body names — as a parent case, or as the ticket an alert answers or is linked to: the project's, through the table's own project key. */
+export async function requireTicket(tx: Tx, scope: Scope, id: string | null | undefined, { path = "ticketId" }: { path?: string } = {}): Promise<void> {
   if (id == null) return
   await requireRow(tx, ticket, inProject(ticket, scope, id), { path, message: NOT_A_TICKET })
 }
@@ -439,13 +448,9 @@ export async function requireTicket(tx: Tx, scope: Scope, id: string | null | un
 /** The alert a check found, as the link rule reads it (routes/alert-links.ts): its status, and the one ticket it is linked to or null. */
 export type AlertRef = { id: string; status: AlertStatus; ticketId: string | null }
 
-/**
- * An Alert a body names, as the alert a ticket create answers: the project's.
- * Answers the row's status and its link, since the caller holds both under
- * the alert's lock next — a resolved alert does not change, an alert links to
- * one ticket — and one statement that says all three is better than three.
- * Undefined for an id that is null or absent, which names nothing.
- */
+/** An Alert a body names: the project's. Answers the row the link rule reads; undefined for an id that named nothing. */
+export async function requireAlert(tx: Tx, scope: Scope, id: string, options?: { path?: string }): Promise<AlertRef>
+export async function requireAlert(tx: Tx, scope: Scope, id: string | null | undefined, options?: { path?: string }): Promise<AlertRef | undefined>
 export async function requireAlert(tx: Tx, scope: Scope, id: string | null | undefined, { path = "alertId" }: { path?: string } = {}): Promise<AlertRef | undefined> {
   if (id == null) return undefined
   const [found] = await tx
