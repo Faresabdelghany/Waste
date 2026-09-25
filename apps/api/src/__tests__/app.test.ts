@@ -134,6 +134,9 @@ describe("GET /openapi.json", () => {
       "/agreements",
       "/agreements/{id}",
       "/agreements/{id}/subscriptions",
+      "/collection-groups/{id}",
+      "/collection-groups/{id}/containers",
+      "/collection-groups/{id}/stop-matching-rule",
       "/company",
       "/container-types",
       "/container-types/{id}",
@@ -160,6 +163,10 @@ describe("GET /openapi.json", () => {
       "/roles",
       "/roles/{id}",
       "/roles/{id}/grants",
+      "/route-schemes",
+      "/route-schemes/{id}",
+      "/route-schemes/{id}/collection-groups",
+      "/route-schemes/{id}/occurrences",
       "/service-frequencies",
       "/service-frequencies/{id}",
       "/service-providers",
@@ -226,8 +233,8 @@ describe("GET /openapi.json", () => {
     }
     assert.equal(
       secured,
-      74,
-      "/me, the ten organisation routes, the twelve access routes and the fifty-one registry routes: waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each — the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each — agreements with their subscriptions, and containers with their placements",
+      85,
+      "/me, the ten organisation routes, the twelve access routes, the fifty-one registry routes: waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each — the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each — agreements with their subscriptions, and containers with their placements; and the eleven planning routes of slice 4 — route schemes with the occurrence read, five, and collection groups with their two set replacements, six",
     )
   })
 
@@ -532,6 +539,68 @@ describe("GET /openapi.json", () => {
       assert.deepEqual(page.required, ["items", "nextCursor"], path)
       assert.equal(page.properties?.items.type, "array", path)
     }
+  })
+
+  test("documents each planning route of slice 4 with its verbs, its problems and the rules a client must know", async () => {
+    const document = await spec()
+    const operations = (path: string) =>
+      Object.fromEntries(Object.entries(document.paths[path]).map(([method, operation]) => [method, operation.operationId]))
+
+    assert.deepEqual(operations("/route-schemes"), { get: "listRouteSchemes", post: "createRouteScheme" })
+    assert.deepEqual(operations("/route-schemes/{id}"), { get: "getRouteScheme", patch: "patchRouteScheme" })
+    assert.deepEqual(operations("/route-schemes/{id}/occurrences"), { get: "listRouteSchemeOccurrences" })
+    assert.deepEqual(operations("/route-schemes/{id}/collection-groups"), { get: "listRouteSchemeCollectionGroups", post: "createCollectionGroup" })
+    assert.deepEqual(operations("/collection-groups/{id}"), { get: "getCollectionGroup", patch: "patchCollectionGroup" })
+    assert.deepEqual(operations("/collection-groups/{id}/stop-matching-rule"), { put: "putCollectionGroupStopMatchingRule" })
+    assert.deepEqual(operations("/collection-groups/{id}/containers"), { put: "putCollectionGroupContainers" })
+
+    // A validated scheme's structure and a scheme's period are both 409s; a group hangs off a path, so its create answers 404 too.
+    assert.deepEqual(Object.keys(document.paths["/route-schemes"].get.responses), ["200", "400", "401", "403"])
+    assert.deepEqual(Object.keys(document.paths["/route-schemes"].post.responses), ["201", "400", "401", "403", "409"])
+    assert.deepEqual(Object.keys(document.paths["/route-schemes/{id}"].patch.responses), ["200", "400", "401", "403", "404", "409"])
+    assert.deepEqual(Object.keys(document.paths["/route-schemes/{id}/occurrences"].get.responses), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(Object.keys(document.paths["/route-schemes/{id}/collection-groups"].post.responses), ["201", "400", "401", "403", "404", "409"])
+    assert.deepEqual(Object.keys(document.paths["/collection-groups/{id}"].patch.responses), ["200", "400", "401", "403", "404", "409"])
+    assert.deepEqual(Object.keys(document.paths["/collection-groups/{id}/stop-matching-rule"].put.responses), ["200", "400", "401", "403", "404", "409"])
+    assert.deepEqual(Object.keys(document.paths["/collection-groups/{id}/containers"].put.responses), ["200", "400", "401", "403", "404", "409"])
+
+    const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
+    assert.deepEqual(byName(document.paths["/route-schemes"].get).sort(), [
+      "query:cursor",
+      "query:limit",
+      "query:planAhead",
+      "query:planningAreaId",
+      "query:projectId",
+      "query:status",
+      "query:validOn",
+    ])
+    assert.deepEqual(byName(document.paths["/route-schemes/{id}/occurrences"].get).sort(), ["path:id", "query:from", "query:to"])
+    assert.deepEqual(byName(document.paths["/route-schemes/{id}/collection-groups"].get).sort(), ["path:id", "query:cursor", "query:limit"])
+
+    // The rules a client must know are in the prose, not only in the code.
+    assert.match(document.paths["/route-schemes"].post.description ?? "", /one scheme of a name is in force at a time in a project/)
+    assert.match(document.paths["/route-schemes"].post.description ?? "", /wait for Resources and are not held here/)
+    assert.match(document.paths["/route-schemes/{id}"].patch.description ?? "", /counting the groups, which have to be moved first/)
+    assert.match(document.paths["/route-schemes/{id}"].patch.description ?? "", /shortening the period is free/)
+    assert.match(document.paths["/route-schemes/{id}/occurrences"].get.description ?? "", /nothing is written, and no generation run is started/i)
+    assert.match(document.paths["/route-schemes/{id}/collection-groups"].post.description ?? "", /the first rule group wins a container on a shared day/)
+    assert.match(document.paths["/collection-groups/{id}"].patch.description ?? "", /The source, the rule and the picked list never move through a patch/)
+    assert.match(document.paths["/collection-groups/{id}/stop-matching-rule"].put.description ?? "", /A manual group has no rule to replace/)
+    assert.match(document.paths["/collection-groups/{id}/containers"].put.description ?? "", /positions are 1\.\.n in the body's order/)
+
+    const required = (path: string, method: "post" | "put" = "post") => document.paths[path][method].requestBody?.content["application/json"].schema.required
+    assert.deepEqual(required("/route-schemes"), ["projectId", "name", "serviceType", "frequency", "serviceDays", "collectionGroups", "validFrom"])
+    assert.deepEqual(required("/route-schemes/{id}/collection-groups"), ["name", "days", "stopSource"])
+    assert.deepEqual(required("/collection-groups/{id}/stop-matching-rule", "put"), ["wasteFractionIds", "containerTypeIds", "vehicleType"])
+    assert.deepEqual(required("/collection-groups/{id}/containers", "put"), ["containerIds"])
+
+    for (const path of ["/route-schemes", "/route-schemes/{id}/collection-groups"]) {
+      const page = document.paths[path].get.responses["200"].content["application/json"].schema
+      assert.deepEqual(page.required, ["items", "nextCursor"], path)
+      assert.equal(page.properties?.items.type, "array", path)
+    }
+    // The occurrence read answers rows and no cursor: a computation over a bounded window, not a table.
+    assert.equal(document.paths["/route-schemes/{id}/occurrences"].get.responses["200"].content["application/json"].schema.type, "array")
   })
 
   test("documents /me with the problem responses a token can earn", async () => {
