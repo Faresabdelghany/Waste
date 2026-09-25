@@ -12,43 +12,22 @@ import {
 
 import { createExternalStore, type ExternalStore } from "@/lib/external-store"
 
+import {
+  FIXTURE_CONTAINER_TYPES,
+  FIXTURE_CREATED_AT,
+  type ContainerType,
+  type LifecycleStatus,
+} from "@/lib/data/asset-catalogue"
 import { FIXTURE_PROJECT_IDS } from "@/lib/data/business-modules"
 import {
   ASSET_MANAGEMENT_STORAGE_KEY,
   readPersisted,
 } from "@/lib/storage-keys"
 
-export type LifecycleStatus = "Active" | "Inactive"
-export type ContainerKind = "waste-collection" | "wastewater"
-
-export type ContainerType = {
-  id: string
-  name: string
-  kind: ContainerKind
-  projectIds: string[]
-  emplacement: string
-  vehicleCoupling: string
-  emptyingTimeMinutes: number
-  customizeEmptyingTime: boolean
-  emptyingTimeSeconds: number
-  volumePreset: string
-  volume: number
-  volumeUnit: "L" | "m³"
-  cylinderShape: boolean
-  heightCm: number
-  lengthCm: number
-  widthCm: number
-  diameterCm: number
-  wasteFractionWeights: Record<string, number>
-  color: string
-  icon: string
-  lidType: string
-  loadingMethod: string
-  warrantyMonths: number
-  lifecycleStatus: LifecycleStatus
-  createdAt: string
-  updatedAt: string
-}
+// The container type and its lifecycle vocabulary live beside the fixture
+// catalogue in lib/data/asset-catalogue.ts (Issue #39) and are re-exported
+// here, where every consumer already reads them.
+export type { ContainerKind, ContainerType, LifecycleStatus } from "@/lib/data/asset-catalogue"
 
 export type WasteFraction = {
   id: string
@@ -185,7 +164,7 @@ type AssetManagementStoreValue = AssetManagementState & {
   setLocksmithEmail: (value: string) => void
 }
 
-const fixtureCreatedAt = "2026-01-01T00:00:00.000Z"
+const fixtureCreatedAt = FIXTURE_CREATED_AT
 
 const partTypeNames = [
   "Axle",
@@ -207,120 +186,7 @@ const partTypeNames = [
 ]
 
 const defaultState: AssetManagementState = {
-  containerTypes: [
-    {
-      id: "two-wheel-240",
-      name: "Two-wheel bin · 240 L",
-      kind: "waste-collection",
-      projectIds: [],
-      emplacement: "Surface",
-      vehicleCoupling: "Comb lift",
-      emptyingTimeMinutes: 2,
-      customizeEmptyingTime: false,
-      emptyingTimeSeconds: 0,
-      volumePreset: "240 L",
-      volume: 240,
-      volumeUnit: "L",
-      cylinderShape: false,
-      heightCm: 107,
-      lengthCm: 74,
-      widthCm: 58,
-      diameterCm: 0,
-      wasteFractionWeights: { residual: 18, organic: 22, paper: 12 },
-      color: "#2563eb",
-      icon: "bin",
-      lidType: "Hinged",
-      loadingMethod: "Rear loader",
-      warrantyMonths: 60,
-      lifecycleStatus: "Active",
-      createdAt: fixtureCreatedAt,
-      updatedAt: fixtureCreatedAt,
-    },
-    {
-      id: "four-wheel-660",
-      name: "Four-wheel bin · 660 L",
-      kind: "waste-collection",
-      projectIds: [],
-      emplacement: "Surface",
-      vehicleCoupling: "DIN trunnion",
-      emptyingTimeMinutes: 3,
-      customizeEmptyingTime: false,
-      emptyingTimeSeconds: 0,
-      volumePreset: "660 L",
-      volume: 660,
-      volumeUnit: "L",
-      cylinderShape: false,
-      heightCm: 122,
-      lengthCm: 137,
-      widthCm: 78,
-      diameterCm: 0,
-      wasteFractionWeights: { residual: 49, mixed: 45 },
-      color: "#0f766e",
-      icon: "dumpster",
-      lidType: "Flat",
-      loadingMethod: "Rear loader",
-      warrantyMonths: 60,
-      lifecycleStatus: "Active",
-      createdAt: fixtureCreatedAt,
-      updatedAt: fixtureCreatedAt,
-    },
-    {
-      id: "four-wheel-1100",
-      name: "Four-wheel bin · 1,100 L",
-      kind: "waste-collection",
-      projectIds: [],
-      emplacement: "Surface",
-      vehicleCoupling: "DIN trunnion",
-      emptyingTimeMinutes: 4,
-      customizeEmptyingTime: false,
-      emptyingTimeSeconds: 0,
-      volumePreset: "1,100 L",
-      volume: 1100,
-      volumeUnit: "L",
-      cylinderShape: false,
-      heightCm: 147,
-      lengthCm: 137,
-      widthCm: 107,
-      diameterCm: 0,
-      wasteFractionWeights: { residual: 75, cardboard: 58 },
-      color: "#475569",
-      icon: "dumpster",
-      lidType: "Domed",
-      loadingMethod: "Rear loader",
-      warrantyMonths: 72,
-      lifecycleStatus: "Active",
-      createdAt: fixtureCreatedAt,
-      updatedAt: fixtureCreatedAt,
-    },
-    {
-      id: "wastewater-3000",
-      name: "Wastewater tank · 3,000 L",
-      kind: "wastewater",
-      projectIds: [],
-      emplacement: "Underground",
-      vehicleCoupling: "Suction hose",
-      emptyingTimeMinutes: 18,
-      customizeEmptyingTime: false,
-      emptyingTimeSeconds: 0,
-      volumePreset: "3,000 L",
-      volume: 3000,
-      volumeUnit: "L",
-      cylinderShape: true,
-      heightCm: 220,
-      lengthCm: 0,
-      widthCm: 0,
-      diameterCm: 140,
-      wasteFractionWeights: { wastewater: 3000 },
-      color: "#0891b2",
-      icon: "tank",
-      lidType: "Inspection cover",
-      loadingMethod: "Vacuum",
-      warrantyMonths: 120,
-      lifecycleStatus: "Active",
-      createdAt: fixtureCreatedAt,
-      updatedAt: fixtureCreatedAt,
-    },
-  ],
+  containerTypes: [...FIXTURE_CONTAINER_TYPES],
   wasteFractions: [
     ["residual", "Residual", "20 03 01", "D10", "Disposal", "Municipal waste", "#64748b"],
     ["organic", "Organic", "20 01 08", "R3", "Composting", "Biowaste", "#16a34a"],
