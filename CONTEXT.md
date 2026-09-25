@@ -183,11 +183,11 @@ _Avoid_: Pickup, proof of service, tip, dump
 ## Resolution and finance
 
 **Ticket**:
-A case that owns the resolution of a request, deviation, complaint, task, or operational issue.
+A case that owns the resolution of a request, deviation, complaint, task, or operational issue. It is opened by the office, the portal or from an execution event; a re-collection is a Route the ticket names, never one it makes.
 _Avoid_: Alert, message
 
 **Alert**:
-A condition that requires attention, notification, or acknowledgement and may create or link to a ticket.
+A condition that requires attention, notification, or acknowledgement and may create or link to a ticket. It is acknowledged and resolved, and links to at most one Ticket.
 _Avoid_: Ticket, insight
 
 **Billable Event**:
