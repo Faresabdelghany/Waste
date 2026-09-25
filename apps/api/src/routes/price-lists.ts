@@ -46,7 +46,7 @@
 // area's, a container type's, a fraction's and a customer's name), read in
 // one statement per kind and only where something names one. The read looks
 // at no agreement: which list an agreement is priced under is the event's
-// question (slice 4), and here the office asks what a list would say.
+// question (routes/billable-writes.ts), and here the office asks what a list would say.
 //
 // The rest is the shape every project-scoped family has: each statement
 // carries the tenant and `inProjects` (auth/projects.ts), a create names a

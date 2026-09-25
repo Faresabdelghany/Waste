@@ -1,6 +1,6 @@
-// What the Finance suites need beyond their own routes (Issue #112, slice
-// 3): a product or two to price, a tariff with rows, an award with its
-// assignment and a provider price under it. The rows are written directly
+// What the Finance suites need beyond their own routes (Issue #112): a
+// product or two to price, a tariff with rows, an award with its assignment
+// and a provider price under it. The rows are written directly
 // through `tx` as `wms_api` inside `withCompany`, the way tenant.ts seeds its
 // company and scheme-fixtures.ts seeds Planning — a suite proves its own
 // routes and takes the neighbouring context's rows as given — and
@@ -12,9 +12,10 @@
 // caller names with its first assignment and, when asked, one provider price
 // under it; `seedFinance` lays the §6 ground once — a default list with
 // rows, a named list, NordRen's area over two Copenhagen planning areas with
-// its assignment, and one provider price — for the suites that read it
-// (provider-reach.test.ts here; the event, run and settlement suites of the
-// sibling slices). A second Copenhagen planning area is written here too,
+// its assignment, and one provider price — for the suite that reads it
+// (provider-reach.test.ts); the billing and settlement suites lay their own
+// ground through `seedPriceList` and `seedServiceArea` (billing-fixtures.ts,
+// settlement-fixtures.ts). A second Copenhagen planning area is written here too,
 // since scheme-fixtures.ts seeds one per project and an award over two is
 // what the one-award rule and the predicate are proved against.
 import type { CustomerKind } from "@waste/contracts/customers"

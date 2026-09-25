@@ -101,7 +101,7 @@ const columns = {
   billingCadence: agreement.billingCadence,
   currency: agreement.currency,
   notes: agreement.notes,
-  // The list the agreement is priced under (Issue #112): read here; the create and the patch hold it to a list of the project in the agreement's currency from slice 3 on.
+  // The list the agreement is priced under (Issue #112): read here; the create and the patch hold it to a list of the project in the agreement's currency.
   priceListId: agreement.priceListId,
   validFrom: agreement.validFrom,
   validTo: agreement.validTo,

@@ -185,15 +185,15 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   // Resolution (Issue #109): a ticket's `occurredAt` and an alert's `detectedAt` default to the request's clock and may not run ahead of it, and every command stamps and publishes with it, so both modules take `now` too.
   app.route("/", ticketRoutes(guard, { now }))
   app.route("/", alertRoutes(guard, { now }))
-  // Finance & Contracting (Issue #112, slice 3): the tariffs, the awards and what a provider is paid; every rule here is a period against a day the caller names, so none takes the clock.
+  // Finance & Contracting (Issue #112). The tariffs, the awards and what a provider is paid: every rule there is a period against a day the caller names, so none of the three takes the clock.
   app.route("/", priceListRoutes(guard))
   app.route("/", serviceAreaRoutes(guard))
   app.route("/", serviceProviderPriceRoutes(guard))
-  // Finance & Contracting's billing half (Issue #112, slice 4): a cancellation is stamped with the request's clock, a run and a credit note issue on "today" on the project's clock and publish with the request's instant, so all three take `now`. The preview goes on before the run module's `:id` read would otherwise be asked to take "preview" as an id.
+  // The billing half: a cancellation is stamped with the request's clock, a run and a credit note issue on "today" on the project's clock and publish with the request's instant, so all three take `now`. The preview goes on before the run module's `:id` read would otherwise be asked to take "preview" as an id.
   app.route("/", billableEventRoutes(guard, { now }))
   app.route("/", billingRunRoutes(guard, { now }))
   app.route("/", invoiceRoutes(guard, { now }))
-  // Finance (Issue #112, slice 5): a settlement's `calculatedAt` and `closedAt` are the request's clock and `settlement-closed` is published with it, so the module takes `now`; weight control stamps nothing of its own (a review's `recordedAt` is the database's) and takes no clock.
+  // The settlements and weight control: a settlement's `calculatedAt` and `closedAt` are the request's clock and `settlement-closed` is published with it, so the module takes `now`; weight control stamps nothing of its own (a review's `recordedAt` is the database's) and takes no clock.
   app.route("/", settlementRoutes(guard, { now }))
   app.route("/", weightControlRoutes(guard))
 

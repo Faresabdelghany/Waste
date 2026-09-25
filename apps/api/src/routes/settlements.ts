@@ -64,21 +64,21 @@
 // reaches the settlements of the projects it works in, the tenant and
 // `inProjects` like every project-scoped family. A Service Provider's account
 // — Lars, the manager at NordRen, no projects — reaches its own: every
-// statement is bounded by `reaches(principal)`, `assignment.service_provider_id
-// = <the principal's provider>` for an account with a provider and
-// `inProjects` for one with projects, never both widened, so the manager
-// reads NordRen's settlements with their lines and totals — a line carries
-// the provider price alone, never a customer's — and CityHaul's are a 404.
-// slice 3 spells this once as `reachesAssignments` in auth/provider.ts for
-// the four families a provider reads; until the integrator folds the two,
-// `reaches` below is that rule over this table's join.
+// statement is bounded by `reachesAssignments(principal)` (auth/provider.ts,
+// the one spelling for the four families a provider reads) over the
+// assignment every settlement statement joins: `service_provider_id = <the
+// principal's provider>` for an account with a provider and `inProjects` over
+// the assignment's project for one with projects, never both widened, so the
+// manager reads NordRen's settlements with their lines and totals — a line
+// carries the provider price alone, never a customer's — and CityHaul's are a
+// 404.
 import { Page } from "@waste/contracts/pagination"
 import { SettlementCalculate, SettlementClose, SettlementCreate, SettlementDetail, SettlementEvent, SettlementEventListQuery, SettlementListQuery, SettlementReopen, type Settlement, type SettlementLine } from "@waste/contracts/settlements"
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { route } from "@waste/db/schema/execution"
 import { billableEvent, serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceProviderPrice, settlement, settlementEvent, settlementLine } from "@waste/db/schema/finance"
-import { project, serviceProvider } from "@waste/db/schema/organisation"
+import { serviceProvider } from "@waste/db/schema/organisation"
 import { routeScheme } from "@waste/db/schema/route-schemes"
 import { settlementTransition, type SettlementCommand } from "@waste/domain/finance/transitions"
 import type { SettlementEventKind, SettlementStatus } from "@waste/domain/finance/vocabulary"
@@ -89,12 +89,14 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
-import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
+import { projectIdsOf, requireProject } from "../auth/projects"
+import { reachesAssignments } from "../auth/provider"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
+import { projectCurrency } from "./fleet-lookups"
 import { refuseStranded } from "./periods"
 import { requireServiceAreaAssignment } from "./references"
 import type { ClockOptions } from "./scheme-groups"
@@ -166,15 +168,8 @@ function settlementOf(row: Row): Settlement {
   }
 }
 
-/**
- * What an account reaches (#112 §3): an account with a provider its own
- * assignments' settlements, an account with projects its projects', never
- * both widened. `inProjects` is `false` for an account with neither.
- */
-const reaches = (principal: Principal): SQL => (principal.serviceProvider === null ? inProjects(settlement.projectId, principal) : eq(serviceAreaAssignment.serviceProviderId, principal.serviceProvider.id))
-
-/** The settlements of this company the caller reaches: what every settlement statement is bounded by. */
-const settlementScope = (principal: Principal): SQL | undefined => and(eq(settlement.companyId, principal.companyId), reaches(principal))
+/** The settlements of this company the caller reaches: what every settlement statement is bounded by, over the assignment `settlementsFrom` joins (auth/provider.ts). */
+const settlementScope = (principal: Principal): SQL | undefined => and(eq(settlement.companyId, principal.companyId), reachesAssignments(principal))
 
 /** The one statement every settlement is read through: the row with its assignment's provider joined, for the scope and the sentences. */
 function settlementsFrom(tx: Tx) {
@@ -493,12 +488,7 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const tx = c.get("tx")
         const principal = c.get("principal")
         const assignment = await requireServiceAreaAssignment(tx, { companyId: principal.companyId, projectId: projectIdsOf(principal) }, serviceAreaAssignmentId)
-        const [owner] = await tx
-          .select({ currency: project.currency })
-          .from(project)
-          .where(and(eq(project.companyId, principal.companyId), eq(project.id, assignment.projectId)))
-          .limit(1)
-        if (owner === undefined) throw new Error(`assignment ${assignment.id} is in project ${assignment.projectId}, which is not there`)
+        const currency = await projectCurrency(tx, principal.companyId, assignment.projectId)
         const [row] = await refuseOverlap({ settlement_no_overlap: ONE_SETTLEMENT_AT_A_TIME }, () =>
           tx
             .insert(settlement)
@@ -508,7 +498,7 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
               projectId: assignment.projectId,
               serviceAreaAssignmentId: assignment.id,
               status: "open",
-              currency: owner.currency,
+              currency,
               validFrom,
               validTo,
             })

@@ -253,7 +253,6 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
         // 400 the check below spells.
         await lockRow(tx, serviceAreaAssignment, { companyId: principal.companyId, id: values.serviceAreaAssignmentId })
         const assignment = await requireServiceAreaAssignment(tx, { companyId: principal.companyId, projectId: projectIdsOf(principal) }, values.serviceAreaAssignmentId)
-        if (assignment === undefined) throw new Error("requireServiceAreaAssignment answers the row for an id that is there")
         const within = { companyId: principal.companyId, projectId: assignment.projectId }
         const productStatus = await requireProduct(tx, within, values.productId)
         requireWithin(assignment, periodOf(values), OUTSIDE_ASSIGNMENT)

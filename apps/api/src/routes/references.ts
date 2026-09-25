@@ -594,11 +594,21 @@ export type AssignmentRef = { id: string; projectId: string; serviceAreaId: stri
  * A Service Area Assignment a body names — the award a provider price or a
  * settlement is made under: one of the caller's projects, handed in as their
  * ids the way `requireRoute` takes them, since neither body names a project
- * and the assignment's is where theirs comes from. Answers the row, so the
- * route holds the child's period inside it (routes/periods.ts) and reads the
- * project's currency, without a second statement; undefined for an id that is
- * null or absent.
+ * and the assignment's is where theirs comes from. An account that works in
+ * no project reaches none, whatever its role grants, so a provider's account
+ * cannot price or settle its own award. Answers the row, so the route holds
+ * the child's period inside it (routes/periods.ts) and reads the project's
+ * currency, without a second statement; undefined for an id that is null or
+ * absent, which the overload on a required id rules out for the two creates
+ * that always name one.
  */
+export async function requireServiceAreaAssignment(tx: Tx, scope: { companyId: string; projectId: string | readonly string[] }, id: string, path?: string): Promise<AssignmentRef>
+export async function requireServiceAreaAssignment(
+  tx: Tx,
+  scope: { companyId: string; projectId: string | readonly string[] },
+  id: string | null | undefined,
+  path?: string,
+): Promise<AssignmentRef | undefined>
 export async function requireServiceAreaAssignment(
   tx: Tx,
   scope: { companyId: string; projectId: string | readonly string[] },

@@ -1,5 +1,5 @@
 // What the billing half of Finance & Contracting's route modules share
-// (Issue #112, slice 4): the rows of `billable_event`, `billing_run`,
+// (Issue #112): the rows of `billable_event`, `billing_run`,
 // `billing_run_exclusion`, `invoice` and `invoice_line` on the wire, the
 // office's scope every statement is bounded by — the tenant and `inProjects`
 // — the one statement a billable event is read through, and the family's

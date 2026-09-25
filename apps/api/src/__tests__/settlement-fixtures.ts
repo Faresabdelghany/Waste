@@ -1,13 +1,13 @@
 // What the settlements suite needs of Finance beyond its own routes (Issue
-// #112, slice 5): an award with its assignment and its prices, and the
-// billable events served under it, written directly through `tx` as
-// `wms_api` inside `withCompany`, the way execution-fixtures.ts seeds the
-// routes generation would have written — the suite proves the calculation
-// and the three commands, not the price lists, the areas or the consumer,
-// whose routes are slices 3 and 4 — and dropped with the rest of the company
-// by `dropTenant`. Minimal on purpose: slice 3 owns `finance-fixtures.ts`,
-// the ground the nine Finance suites share, and the integrator folds this
-// into it.
+// #112): two awards with their assignments and NordRen's prices, the tariff
+// the events were billed under — through finance-fixtures.ts's
+// `seedServiceArea` and `seedPriceList`, the one way a suite lays an award
+// and a tariff — and the billable events served under the award, written
+// directly through `tx` as `wms_api` inside `withCompany`, the way
+// execution-fixtures.ts seeds the routes generation would have written: the
+// suite proves the calculation and the three commands, not the price lists,
+// the areas or the consumer, whose routes have suites of their own. Dropped
+// with the rest of the company by `dropTenant`.
 //
 // The ground, on the tenant's Copenhagen Central over `seedExecution`'s
 // scheme: the scheme is given Centrum (OP-CEN-01) as its planning area, so
@@ -38,13 +38,14 @@ import type { Database, Tx } from "@waste/db/client"
 import { agreement } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
 import { customer } from "@waste/db/schema/customers"
-import { billableEvent, priceList, priceListRow, serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceAreaWasteFraction, serviceProviderPrice } from "@waste/db/schema/finance"
+import { billableEvent, serviceProviderPrice } from "@waste/db/schema/finance"
 import { planningArea } from "@waste/db/schema/planning-areas"
 import { routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import { and, eq } from "drizzle-orm"
 
 import { at, seedRoute, type ExecutionFixtures, type SchemeFixture, type SeededRoute } from "./execution-fixtures"
+import { seedPriceList, seedServiceArea } from "./finance-fixtures"
 import type { FleetFixtures, PlanningFixtures } from "./scheme-fixtures"
 import { testId, type Tenant } from "./tenant"
 
@@ -111,20 +112,21 @@ async function completedRoute(pool: Database, tenant: Tenant, fleet: FleetFixtur
   )
 }
 
+/** What a seeder answered as optional and this ground always asks for. */
+function made<T>(value: T | null, what: string): T {
+  if (value === null) throw new Error(`settlement fixtures: ${what} was not made`)
+  return value
+}
+
 /** Seeds the ground above and answers its ids; `seedPlanning`, `seedFleet` and `seedExecution` must have run. */
 export async function seedSettlementFixtures(pool: Database, tenant: Tenant, planning: PlanningFixtures, fleet: FleetFixtures, ex: ExecutionFixtures): Promise<SettlementFixtures> {
   const { companyId } = tenant
   const copenhagen = tenant.projects.copenhagen.id
-  const ground = {
+  const registry = {
     second: { planningArea: { id: testId() }, scheme: { id: testId() } },
     customer: { id: testId() },
     agreement: { id: testId() },
     products: { collection: { id: testId() }, unpriced: { id: testId() } },
-    priceList: { id: testId() },
-    rows: { collection: { id: testId() }, unpriced: { id: testId() } },
-    areas: { nordren: { id: testId(), code: "CA-Ø-2" }, cityhaul: { id: testId(), code: "CA-Ø-3" } },
-    assignments: { nordren: { id: testId() }, cityhaul: { id: testId() } },
-    prices: { early: { id: testId(), unitPriceMinor: 5000 }, indexed: { id: testId(), unitPriceMinor: 5500 } },
   }
 
   await withCompany(pool.db, companyId, async (tx: Tx) => {
@@ -133,9 +135,9 @@ export async function seedSettlementFixtures(pool: Database, tenant: Tenant, pla
       .update(routeScheme)
       .set({ planningAreaId: planning.areas.centrum.id })
       .where(and(eq(routeScheme.companyId, companyId), eq(routeScheme.id, ex.schemes.copenhagen.id)))
-    await tx.insert(planningArea).values({ id: ground.second.planningArea.id, companyId, projectId: copenhagen, code: "OP-CEN-02", name: "Centrum Vest", purpose: "route-planning" })
+    await tx.insert(planningArea).values({ id: registry.second.planningArea.id, companyId, projectId: copenhagen, code: "OP-CEN-02", name: "Centrum Vest", purpose: "route-planning" })
     await tx.insert(routeScheme).values({
-      id: ground.second.scheme.id,
+      id: registry.second.scheme.id,
       companyId,
       projectId: copenhagen,
       name: "Centrum Vest Mondays",
@@ -144,77 +146,87 @@ export async function seedSettlementFixtures(pool: Database, tenant: Tenant, pla
       serviceDays: ["monday"],
       validFrom: "2026-01-01",
       status: "validated",
-      planningAreaId: ground.second.planningArea.id,
+      planningAreaId: registry.second.planningArea.id,
       depotId: fleet.depots.nordhavn.id,
       unloadingStationId: fleet.stations.amager.id,
     })
-    await tx.insert(customer).values({ id: ground.customer.id, companyId, kind: "organisation", name: "Østerbro Boligforening", status: "active" })
+    await tx.insert(customer).values({ id: registry.customer.id, companyId, kind: "organisation", name: "Østerbro Boligforening", status: "active" })
     await tx.insert(product).values([
-      { id: ground.products.collection.id, companyId, projectId: copenhagen, name: "Residual collection · 240 L", kind: "container-collection", status: "active", unit: "pickup", vatPercent: 25 },
-      { id: ground.products.unpriced.id, companyId, projectId: copenhagen, name: "Bulky waste collection", kind: "additional-service", status: "active", unit: "job", vatPercent: 25 },
+      { id: registry.products.collection.id, companyId, projectId: copenhagen, name: "Residual collection · 240 L", kind: "container-collection", status: "active", unit: "pickup", vatPercent: 25 },
+      { id: registry.products.unpriced.id, companyId, projectId: copenhagen, name: "Bulky waste collection", kind: "additional-service", status: "active", unit: "job", vatPercent: 25 },
     ])
     await tx.insert(agreement).values({
-      id: ground.agreement.id,
+      id: registry.agreement.id,
       companyId,
       projectId: copenhagen,
       number: "AGR-2408",
-      customerId: ground.customer.id,
-      payerCustomerId: ground.customer.id,
+      customerId: registry.customer.id,
+      payerCustomerId: registry.customer.id,
       status: "active",
       billingCadence: "monthly",
       currency: "DKK",
       validFrom: "2026-01-01",
     })
-    await tx.insert(priceList).values({ id: ground.priceList.id, companyId, projectId: copenhagen, code: "PL-CPH-2026", name: "Copenhagen tariff 2026", currency: "DKK", isDefault: true, validFrom: "2026-01-01" })
-    await tx.insert(priceListRow).values([
-      { id: ground.rows.collection.id, companyId, projectId: copenhagen, priceListId: ground.priceList.id, productId: ground.products.collection.id, unitPriceMinor: CUSTOMER_PRICE.unitPriceMinor, validFrom: "2026-01-01" },
-      { id: ground.rows.unpriced.id, companyId, projectId: copenhagen, priceListId: ground.priceList.id, productId: ground.products.unpriced.id, unitPriceMinor: CUSTOMER_PRICE.unitPriceMinor, validFrom: "2026-01-01" },
-    ])
-    await tx.insert(serviceArea).values([
-      { id: ground.areas.nordren.id, companyId, projectId: copenhagen, code: ground.areas.nordren.code, name: "Østerbro 2", boundaryText: "Østerbro east of Østerbrogade, the harbour side excluded", validFrom: "2026-01-01" },
-      { id: ground.areas.cityhaul.id, companyId, projectId: copenhagen, code: ground.areas.cityhaul.code, name: "Centrum Vest", boundaryText: "The inner city west of Nørreport", validFrom: "2026-01-01" },
-    ])
-    await tx.insert(serviceAreaPlanningArea).values([
-      { id: testId(), companyId, projectId: copenhagen, serviceAreaId: ground.areas.nordren.id, planningAreaId: planning.areas.centrum.id },
-      { id: testId(), companyId, projectId: copenhagen, serviceAreaId: ground.areas.cityhaul.id, planningAreaId: ground.second.planningArea.id },
-    ])
-    await tx.insert(serviceAreaWasteFraction).values([
-      { id: testId(), companyId, projectId: copenhagen, serviceAreaId: ground.areas.nordren.id, wasteFractionId: ex.fractions.residual.id },
-      { id: testId(), companyId, projectId: copenhagen, serviceAreaId: ground.areas.cityhaul.id, wasteFractionId: ex.fractions.residual.id },
-    ])
-    await tx.insert(serviceAreaAssignment).values([
-      { id: ground.assignments.nordren.id, companyId, projectId: copenhagen, serviceAreaId: ground.areas.nordren.id, serviceProviderId: tenant.serviceProviders.nordren.id, validFrom: "2026-07-01" },
-      { id: ground.assignments.cityhaul.id, companyId, projectId: copenhagen, serviceAreaId: ground.areas.cityhaul.id, serviceProviderId: tenant.serviceProviders.cityhaul.id, validFrom: "2026-01-01" },
-    ])
-    await tx.insert(serviceProviderPrice).values([
-      {
-        id: ground.prices.early.id,
-        companyId,
-        projectId: copenhagen,
-        serviceAreaAssignmentId: ground.assignments.nordren.id,
-        productId: ground.products.collection.id,
-        bidMinor: 5000,
-        unitPriceMinor: ground.prices.early.unitPriceMinor,
-        currency: "DKK",
-        validFrom: "2026-07-01",
-        validTo: "2026-10-01",
-      },
-      {
-        id: ground.prices.indexed.id,
-        companyId,
-        projectId: copenhagen,
-        serviceAreaAssignmentId: ground.assignments.nordren.id,
-        productId: ground.products.collection.id,
-        bidMinor: 5000,
-        unitPriceMinor: ground.prices.indexed.unitPriceMinor,
-        currency: "DKK",
-        indexedFromId: ground.prices.early.id,
-        indexLabel: "CPI",
-        indexBasisPoints: 1000,
-        indexBase: "current-fee",
-        validFrom: "2026-10-01",
-      },
-    ])
+  })
+
+  // The tariff the events were billed under: the project's default list, open-ended, a row per product.
+  const list = await seedPriceList(pool, tenant, {
+    code: "PL-CPH-2026",
+    name: "Copenhagen tariff 2026",
+    isDefault: true,
+    validFrom: "2026-01-01",
+    rows: [
+      { productId: registry.products.collection.id, unitPriceMinor: CUSTOMER_PRICE.unitPriceMinor },
+      { productId: registry.products.unpriced.id, unitPriceMinor: CUSTOMER_PRICE.unitPriceMinor },
+    ],
+  })
+  const [collectionRowId, unpricedRowId] = list.rowIds
+  if (collectionRowId === undefined || unpricedRowId === undefined) throw new Error("settlement fixtures: the tariff has two rows")
+
+  // The two awards, open-ended from January: NordRen's over Centrum, assigned from July with its first fee for the first product until October; CityHaul's over OP-CEN-02, assigned from January, paid for nothing here.
+  const nordren = await seedServiceArea(pool, tenant, {
+    code: "CA-Ø-2",
+    name: "Østerbro 2",
+    planningAreaIds: [planning.areas.centrum.id],
+    wasteFractionIds: [ex.fractions.residual.id],
+    validFrom: "2026-01-01",
+    assignment: { serviceProviderId: tenant.serviceProviders.nordren.id, validFrom: "2026-07-01" },
+    price: { productId: registry.products.collection.id, bidMinor: 5000, validTo: "2026-10-01" },
+  })
+  const cityhaul = await seedServiceArea(pool, tenant, {
+    code: "CA-Ø-3",
+    name: "Centrum Vest",
+    planningAreaIds: [registry.second.planningArea.id],
+    wasteFractionIds: [ex.fractions.residual.id],
+    validFrom: "2026-01-01",
+    assignment: { serviceProviderId: tenant.serviceProviders.cityhaul.id, validFrom: "2026-01-01" },
+  })
+  const ground = {
+    ...registry,
+    priceList: { id: list.id },
+    rows: { collection: { id: collectionRowId }, unpriced: { id: unpricedRowId } },
+    areas: { nordren: { id: nordren.id, code: nordren.code }, cityhaul: { id: cityhaul.id, code: cityhaul.code } },
+    assignments: { nordren: { id: made(nordren.assignmentId, "NordRen's assignment") }, cityhaul: { id: made(cityhaul.assignmentId, "CityHaul's assignment") } },
+    prices: { early: { id: made(nordren.priceId, "NordRen's first fee"), unitPriceMinor: 5000 }, indexed: { id: testId(), unitPriceMinor: 5500 } },
+  }
+
+  // The indexed fee, the row the index command writes: 10 % on the current fee from October, the chain naming the first row.
+  await withCompany(pool.db, companyId, async (tx: Tx) => {
+    await tx.insert(serviceProviderPrice).values({
+      id: ground.prices.indexed.id,
+      companyId,
+      projectId: copenhagen,
+      serviceAreaAssignmentId: ground.assignments.nordren.id,
+      productId: ground.products.collection.id,
+      bidMinor: 5000,
+      unitPriceMinor: ground.prices.indexed.unitPriceMinor,
+      currency: "DKK",
+      indexedFromId: ground.prices.early.id,
+      indexLabel: "CPI",
+      indexBasisPoints: 1000,
+      indexBase: "current-fee",
+      validFrom: "2026-10-01",
+    })
   })
 
   const routes = {
@@ -354,7 +366,7 @@ export async function recordServedEvent(pool: Database, tenant: Tenant, fleet: F
   return fixture
 }
 
-/** NordRen's fee for the second product, added the way slice 3's route would write it: 20.00 kr a job from the assignment's start. */
+/** NordRen's fee for the second product, added the way the provider price create writes it: 20.00 kr a job from the assignment's start. */
 export async function priceTheUnpricedProduct(pool: Database, tenant: Tenant, fixtures: SettlementFixtures): Promise<{ id: string; unitPriceMinor: number }> {
   const price = { id: testId(), unitPriceMinor: 2000 }
   await withCompany(pool.db, tenant.companyId, async (tx: Tx) => {

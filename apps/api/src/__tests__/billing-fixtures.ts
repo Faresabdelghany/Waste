@@ -1,11 +1,12 @@
 // What the billing suites need of Finance beyond their own routes (Issue
-// #112, slice 4): the rows slice 3's routes write — a project's default price
-// list with its rows, a named list in another currency, the products the
-// rows price with their invoicing fields, the customers and the agreements
-// the events run under — written directly through `tx` as `wms_api` inside
-// `withCompany`, the way tenant.ts seeds its company and execution-fixtures.ts
-// seeds the routes a pickup event names, and dropped with the rest of the
-// company by `dropTenant`. The consumer's door is here too: `consumerEvent`
+// #112): a project's default price list with its rows and a named list in
+// another currency — through finance-fixtures.ts's `seedPriceList`, the one
+// way a suite lays a tariff — the products the rows price with their
+// invoicing fields, and the customers and the agreements the events run
+// under, written directly through `tx` as `wms_api` inside `withCompany`,
+// the way tenant.ts seeds its company and execution-fixtures.ts seeds the
+// routes a pickup event names, and dropped with the rest of the company by
+// `dropTenant`. The consumer's door is here too: `consumerEvent`
 // records a domain draft the way part B's handler will, through
 // `recordBillableEvent` with no person and an outbox event's id, so the
 // suites can put a `pickup` event, a `ticket` event and a `reversal` on the
@@ -29,7 +30,6 @@ import type { Database, Tx } from "@waste/db/client"
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
 import { customer } from "@waste/db/schema/customers"
-import { priceList, priceListRow } from "@waste/db/schema/finance"
 import { ticket } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
 import { reversalOf, type BillableEventDraft } from "@waste/domain/finance/from-event"
@@ -39,6 +39,7 @@ import { newId } from "../ids"
 import { priceDraft, recordBillableEvent } from "../routes/billable-writes"
 import { nextTicketNumber } from "../routes/ticket-writes"
 import type { ExecutionFixtures } from "./execution-fixtures"
+import { seedPriceList, type SeededPriceList } from "./finance-fixtures"
 import { testId, type Tenant } from "./tenant"
 
 export type BillingFixtures = {
@@ -96,44 +97,37 @@ export type BillingFixtures = {
   }
 }
 
+/** The id of one seeded row by its position in the seed, which is the order `seedPriceList` minted them in. */
+function rowId(list: SeededPriceList, index: number): string {
+  const id = list.rowIds[index]
+  if (id === undefined) throw new Error(`price list ${list.code} has no row ${index}`)
+  return id
+}
+
 /** Seeds the billing ground on a tenant whose execution fixtures are laid; drop it with the company through `dropTenant`. */
 export async function seedBilling(pool: Database, tenant: Tenant, ex: ExecutionFixtures): Promise<BillingFixtures> {
   const { companyId } = tenant
   const copenhagen = tenant.projects.copenhagen.id
   const harbor = tenant.projects.harbor.id
-  const fixtures: BillingFixtures = {
-    day: ex.day,
-    customers: {
-      housing: { id: testId(), name: "Østerbro Housing Association" },
-      anna: { id: testId(), name: "Anna Andersen" },
-      bo: { id: testId(), name: "Bo Berg" },
-    },
-    products: {
-      residual: { id: testId(), name: "Residual collection", invoiceName: "Restaffald 240 L", vatPercent: 25 },
-      bulky: { id: testId(), name: "Bulky pickup" },
-      inactive: { id: testId(), name: "Retired service" },
-      harborBulky: { id: testId(), name: "Bulky pickup" },
-    },
-    priceLists: {
-      default: { id: testId(), code: "PL-CPH-2026", currency: "DKK" },
-      euro: { id: testId(), code: "PL-CPH-EUR", currency: "EUR" },
-    },
-    rows: {
-      residual: { id: testId(), unitPriceMinor: 12_000 },
-      residualHousing: { id: testId(), unitPriceMinor: 10_000 },
-      bulky: { id: testId(), unitPriceMinor: 35_000 },
-      residualEuro: { id: testId(), unitPriceMinor: 1_600 },
-    },
-    agreements: {
-      housingDkk: { id: testId(), number: "AGR-100" },
-      housingEur: { id: testId(), number: "AGR-101" },
-      anna: { id: testId(), number: "AGR-102" },
-      draft: { id: testId(), number: "AGR-103" },
-      harbor: { id: testId(), number: "AGR-104" },
-    },
-    subscriptions: { housingResidual: { id: testId() } },
+  const customers: BillingFixtures["customers"] = {
+    housing: { id: testId(), name: "Østerbro Housing Association" },
+    anna: { id: testId(), name: "Anna Andersen" },
+    bo: { id: testId(), name: "Bo Berg" },
   }
-  const { customers, products, priceLists, rows, agreements } = fixtures
+  const products: BillingFixtures["products"] = {
+    residual: { id: testId(), name: "Residual collection", invoiceName: "Restaffald 240 L", vatPercent: 25 },
+    bulky: { id: testId(), name: "Bulky pickup" },
+    inactive: { id: testId(), name: "Retired service" },
+    harborBulky: { id: testId(), name: "Bulky pickup" },
+  }
+  const agreements: BillingFixtures["agreements"] = {
+    housingDkk: { id: testId(), number: "AGR-100" },
+    housingEur: { id: testId(), number: "AGR-101" },
+    anna: { id: testId(), number: "AGR-102" },
+    draft: { id: testId(), number: "AGR-103" },
+    harbor: { id: testId(), number: "AGR-104" },
+  }
+  const subscriptions: BillingFixtures["subscriptions"] = { housingResidual: { id: testId() } }
 
   await withCompany(pool.db, companyId, async (tx: Tx) => {
     await tx.insert(customer).values([
@@ -160,26 +154,47 @@ export async function seedBilling(pool: Database, tenant: Tenant, ex: ExecutionF
       { id: products.inactive.id, companyId, projectId: copenhagen, name: products.inactive.name, kind: "additional-service", status: "inactive", unit: "job" },
       { id: products.harborBulky.id, companyId, projectId: harbor, name: products.harborBulky.name, kind: "additional-service", status: "active", unit: "job" },
     ])
-    await tx.insert(priceList).values([
-      { id: priceLists.default.id, companyId, projectId: copenhagen, code: priceLists.default.code, name: "Copenhagen tariff 2026", currency: "DKK", isDefault: true, validFrom: "2026-01-01" },
-      { id: priceLists.euro.id, companyId, projectId: copenhagen, code: priceLists.euro.code, name: "Copenhagen EUR list", currency: "EUR", isDefault: false, validFrom: "2026-01-01" },
-    ])
-    const row = (fixture: { id: string; unitPriceMinor: number }, listId: string, productId: string, conditions: { customerId?: string } = {}) => ({
-      id: fixture.id,
-      companyId,
-      projectId: copenhagen,
-      priceListId: listId,
-      productId,
-      unitPriceMinor: fixture.unitPriceMinor,
-      customerId: conditions.customerId ?? null,
-      validFrom: "2026-01-01",
-    })
-    await tx.insert(priceListRow).values([
-      row(rows.residual, priceLists.default.id, products.residual.id),
-      row(rows.residualHousing, priceLists.default.id, products.residual.id, { customerId: customers.housing.id }),
-      row(rows.bulky, priceLists.default.id, products.bulky.id),
-      row(rows.residualEuro, priceLists.euro.id, products.residual.id),
-    ])
+  })
+
+  // The two lists, open-ended from 2026-01-01, each row's period the list's: the default list prices residual collection at 120.00 kr, at 100.00 kr for the housing association by a negotiated row, and the bulky pickup at 350.00 kr; the EUR list prices residual collection at 16.00 EUR and nothing else.
+  const defaultList = await seedPriceList(pool, tenant, {
+    code: "PL-CPH-2026",
+    name: "Copenhagen tariff 2026",
+    isDefault: true,
+    validFrom: "2026-01-01",
+    rows: [
+      { productId: products.residual.id, unitPriceMinor: 12_000 },
+      { productId: products.residual.id, unitPriceMinor: 10_000, customerId: customers.housing.id },
+      { productId: products.bulky.id, unitPriceMinor: 35_000 },
+    ],
+  })
+  const euroList = await seedPriceList(pool, tenant, {
+    code: "PL-CPH-EUR",
+    name: "Copenhagen EUR list",
+    currency: "EUR",
+    validFrom: "2026-01-01",
+    rows: [{ productId: products.residual.id, unitPriceMinor: 1_600 }],
+  })
+  const fixtures: BillingFixtures = {
+    day: ex.day,
+    customers,
+    products,
+    priceLists: {
+      default: { id: defaultList.id, code: defaultList.code, currency: "DKK" },
+      euro: { id: euroList.id, code: euroList.code, currency: "EUR" },
+    },
+    rows: {
+      residual: { id: rowId(defaultList, 0), unitPriceMinor: 12_000 },
+      residualHousing: { id: rowId(defaultList, 1), unitPriceMinor: 10_000 },
+      bulky: { id: rowId(defaultList, 2), unitPriceMinor: 35_000 },
+      residualEuro: { id: rowId(euroList, 0), unitPriceMinor: 1_600 },
+    },
+    agreements,
+    subscriptions,
+  }
+  const { priceLists } = fixtures
+
+  await withCompany(pool.db, companyId, async (tx: Tx) => {
     const signed = (fixture: { id: string; number: string }, customerId: string, options: { projectId?: string; status?: string; currency?: string; priceListId?: string | null } = {}) => ({
       id: fixture.id,
       companyId,

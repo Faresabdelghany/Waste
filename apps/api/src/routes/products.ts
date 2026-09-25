@@ -57,7 +57,7 @@ const columns = {
   containerTypeId: product.containerTypeId,
   wasteFractionId: product.wasteFractionId,
   serviceFrequencyId: product.serviceFrequencyId,
-  // The invoicing fields Finance gave the product (Issue #112): read here; the create and the patch hold them from slice 3 on.
+  // The invoicing fields Finance gave the product (Issue #112): read here, held by the create and the patch.
   invoiceName: product.invoiceName,
   invoiceCode: product.invoiceCode,
   vatPercent: product.vatPercent,
