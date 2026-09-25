@@ -39,7 +39,7 @@ import { container } from "@waste/db/schema/containers"
 import { customer, property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { vehicleType } from "@waste/db/schema/fleet-types"
 import { serviceProvider } from "@waste/db/schema/organisation"
-import { warehouse } from "@waste/db/schema/places"
+import { depot, unloadingStation, warehouse } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
 import { and, eq, inArray } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
@@ -226,4 +226,29 @@ export async function requireWarehouse(
     .where(and(eq(warehouse.companyId, scope.companyId), inArray(warehouse.projectId, projects), eq(warehouse.id, id)))
     .limit(1)
   if (found === undefined) throw refusal()
+}
+
+// Resources, slice 3 (Issue #101): the other two places. A depot is a
+// project's — a warehouse names the depot it shares a yard with, a vehicle and
+// a driver their home depot, a scheme the one its routes leave from — so its
+// check is `inProject`; an unloading station is the company's, since ARC
+// Amager is where every Copenhagen project unloads, so a scheme that names one
+// names one of the company's. A warehouse's check is the slice 2 round's above.
+
+/** What a body is told when it reaches for a depot of another project; the fence the composite key already holds it to. */
+export const NOT_A_DEPOT = "Not a depot of this project"
+
+/** What a body is told when it names an unloading station this company does not have. */
+export const NOT_AN_UNLOADING_STATION = "Not an unloading station of this company"
+
+/** A Depot a body names: the project's, since a route leaves from its project's yard. */
+export async function requireDepot(tx: Tx, scope: Scope, id: string | null | undefined, path = "depotId"): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, depot, inProject(depot, scope, id), { path, message: NOT_A_DEPOT })
+}
+
+/** An Unloading Station a body names: the company's, since every project of the company unloads at the same plants. */
+export async function requireUnloadingStation(tx: Tx, companyId: string, id: string | null | undefined, path = "unloadingStationId"): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, unloadingStation, inCompany(companyId, id), { path, message: NOT_AN_UNLOADING_STATION })
 }

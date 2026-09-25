@@ -39,6 +39,7 @@ import { collectionGroupRoutes } from "./routes/collection-groups"
 import { companyRoutes } from "./routes/company"
 import { containerRoutes } from "./routes/containers"
 import { customerRoutes } from "./routes/customers"
+import { depotRoutes } from "./routes/depots"
 import { meRoutes } from "./routes/me"
 import { planningAreaRoutes } from "./routes/planning-areas"
 import { productRoutes } from "./routes/products"
@@ -49,7 +50,10 @@ import { roleRoutes } from "./routes/roles"
 import { routeSchemeRoutes } from "./routes/route-schemes"
 import { serviceProviderRoutes } from "./routes/service-providers"
 import { sharedCollectionPointRoutes } from "./routes/shared-collection-points"
+import { unloadingStationRoutes } from "./routes/unloading-stations"
 import { userRoutes } from "./routes/users"
+import { vehicleTypeRoutes } from "./routes/vehicle-types"
+import { warehouseRoutes } from "./routes/warehouses"
 
 export type AppOptions = {
   /** The pool /readyz probes, as the API role: server.ts builds it from probePoolOptions; a test hands whatever it wants probed. */
@@ -138,6 +142,10 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   app.route("/", collectionCalendarRoutes(guard))
   app.route("/", routeSchemeRoutes(guard))
   app.route("/", collectionGroupRoutes(guard))
+  app.route("/", vehicleTypeRoutes(guard))
+  app.route("/", warehouseRoutes(guard))
+  app.route("/", depotRoutes(guard))
+  app.route("/", unloadingStationRoutes(guard))
 
   app.get(
     "/openapi.json",
