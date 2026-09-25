@@ -10,6 +10,7 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:e2e": "turbo run test:e2e",
+    "typecheck:e2e": "pnpm --filter @waste/web typecheck:e2e",
     "db:start": "supabase db start",
     "db:stop": "supabase stop",
     "db:generate": "pnpm --filter @waste/db generate",
