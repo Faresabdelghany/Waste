@@ -7,8 +7,9 @@ import { Id } from "@waste/contracts/ids"
 import { Page } from "@waste/contracts/pagination"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
+import { driver, vehicle } from "@waste/db/schema/fleet"
 import { withCompany } from "@waste/db/tenant"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
@@ -190,7 +191,7 @@ describe("the vehicle allocation endpoints", { skip: database.skip || owner.skip
       assert.deepEqual(released.errors?.map((error) => error.path), ["status"], "released is a command, not a status a body may ask for")
     })
 
-    test("holds the vehicle to a powered vehicle of the project that is not retired, the trailer to a trailer, and the rest to its scope", async () => {
+    test("holds the vehicle to a powered vehicle of the project that is not retired, the trailer to a trailer that is not retired, the driver to an active one, and the rest to its scope", async () => {
       const day = "2026-10-06"
       const asVehicle = await refused(await post(body(day, "06:00", "10:00", { vehicleId: fleet.vehicles.trailer.id })), 400)
       assert.deepEqual(asVehicle.errors, [{ path: "vehicleId", message: "Not a powered vehicle of this project" }])
@@ -200,6 +201,12 @@ describe("the vehicle allocation endpoints", { skip: database.skip || owner.skip
       assert.deepEqual(theirsToo.errors, [{ path: "vehicleId", message: "Not a powered vehicle of this project" }])
       const retired = await refused(await post(body(day, "06:00", "10:00", { vehicleId: fleet.vehicles.retired.id })), 400)
       assert.deepEqual(retired.errors, [{ path: "vehicleId", message: "WH-99 is retired" }])
+      const retiredTrailer = await refused(await post(body(day, "06:00", "10:00", { trailerId: fleet.vehicles.retiredTrailer.id })), 400)
+      assert.deepEqual(retiredTrailer.errors, [{ path: "trailerId", message: "WH-T99 is retired" }], "a retired trailer is refused like a retired vehicle")
+      const inactive = await refused(await post(body(day, "06:00", "10:00", { driverId: fleet.drivers.karen.id })), 400)
+      assert.deepEqual(inactive.errors, [{ path: "driverId", message: "Karen Holt is inactive" }], "the status is refused before the licence, which Karen holds")
+      const suspended = await refused(await post(body(day, "06:00", "10:00", { driverId: fleet.drivers.peter.id })), 400)
+      assert.deepEqual(suspended.errors, [{ path: "driverId", message: "Peter Lund is suspended" }])
       const asTrailer = await refused(await post(body(day, "06:00", "10:00", { trailerId: fleet.vehicles.wh25.id })), 400)
       assert.deepEqual(asTrailer.errors, [{ path: "trailerId", message: "Not a trailer of this project" }])
       const noTrailer = await refused(await post(body(day, "06:00", "10:00", { trailerId: testId() })), 400)
@@ -233,27 +240,24 @@ describe("the vehicle allocation endpoints", { skip: database.skip || owner.skip
       assert.equal(higher.driverId, fleet.drivers.mads.id, "CE covers C")
     })
 
-    test("judges the licence on the day the window ends in the project's timezone: 23:30 in Copenhagen is the last valid day, 00:30 is the day after", async () => {
-      // Sofie's licence holds through 2026-09-05. Both windows end on the 5th in UTC; in Copenhagen (CEST, +02:00) the second ends on the 6th.
-      const holds = await allocate({
+    test("judges the licence on the window's last day in the project's timezone: a window ending at midnight in Copenhagen is judged on the day before, one reaching past it on the day after", async () => {
+      // Sofie's licence holds through 2026-09-05. Every window here ends on the 5th in UTC; in Copenhagen (CEST, +02:00) 22:00Z is midnight, the first instant of the 6th.
+      const sofieUntil = (plannedFrom: string, plannedTo: string) => ({
         projectId: a.projects.copenhagen.id,
         vehicleId: fleet.vehicles.wh24.id,
         driverId: fleet.drivers.sofie.id,
-        plannedFrom: `${SOFIE_LICENCE_EXPIRY}T20:00:00Z`,
-        plannedTo: `${SOFIE_LICENCE_EXPIRY}T21:30:00Z`,
+        plannedFrom: `${SOFIE_LICENCE_EXPIRY}T${plannedFrom}Z`,
+        plannedTo: `${SOFIE_LICENCE_EXPIRY}T${plannedTo}Z`,
       })
-      assert.equal(holds.driverId, fleet.drivers.sofie.id, "23:30 on the 5th, on the project's clock")
-      const ranOut = await refused(
-        await post({
-          projectId: a.projects.copenhagen.id,
-          vehicleId: fleet.vehicles.wh24.id,
-          driverId: fleet.drivers.sofie.id,
-          plannedFrom: `${SOFIE_LICENCE_EXPIRY}T21:30:00Z`,
-          plannedTo: `${SOFIE_LICENCE_EXPIRY}T22:30:00Z`,
-        }),
-        400,
-      )
-      assert.deepEqual(ranOut.errors, [{ path: "driverId", message: `Sofie Nielsen's licence expires on ${SOFIE_LICENCE_EXPIRY}, before the window ends` }], "00:30 on the 6th in Copenhagen, though still the 5th in UTC")
+      const expired = [{ path: "driverId", message: `Sofie Nielsen's licence expires on ${SOFIE_LICENCE_EXPIRY}, before the window ends` }]
+      const holds = await allocate(sofieUntil("20:00:00", "21:30:00"))
+      assert.equal(holds.driverId, fleet.drivers.sofie.id, "ends 23:30 on the 5th, on the project's clock")
+      const midnight = await allocate(sofieUntil("21:30:00", "22:00:00"))
+      assert.equal(midnight.driverId, fleet.drivers.sofie.id, "ends at midnight: the window is half-open, so its last instant is 23:59:59.999 on the 5th and the licence holds")
+      const pastMidnight = await refused(await post(sofieUntil("22:00:00", "22:00:01")), 400)
+      assert.deepEqual(pastMidnight.errors, expired, "one second past midnight, the window reaches into the 6th")
+      const ranOut = await refused(await post(sofieUntil("22:00:00", "22:30:00")), 400)
+      assert.deepEqual(ranOut.errors, expired, "00:30 on the 6th in Copenhagen, though still the 5th in UTC")
     })
 
     test("refuses a window touching another live allocation's, saying whose, and takes one starting when the other ends or once it is released", async () => {
@@ -426,6 +430,42 @@ describe("the vehicle allocation endpoints", { skip: database.skip || owner.skip
       assert.ok(status.errors?.some((error) => /status/.test(error.message)), "the status moves through confirm and release, never a change")
       assert.equal((await one(olivia, created.id)).driverId, fleet.drivers.mads.id, "a refused change writes nothing")
       assert.deepEqual((await events(created.id)).items.map((event) => event.action), ["allocate", "change", "change"], "the two changes that went through appended an event each; no refused one did")
+    })
+
+    test("holds only what the body moved: a stored vehicle or driver is not asked its status, a new one is, and the licence is judged again only when the driver, the vehicle or the window moved", async () => {
+      const day = "2026-10-19"
+      // A driver of this test's own, so drifting the licence touches nobody else's fixture.
+      const worn = { id: testId(), name: "Worn Licence" }
+      await withCompany(pool.db, a.companyId, async (tx: Tx) => {
+        await tx.insert(driver).values({ id: worn.id, companyId: a.companyId, projectId: a.projects.copenhagen.id, name: worn.name, employment: "employee", licenceClass: "ce", licenceExpiry: "2030-12-31", status: "active" })
+      })
+      const created = await allocate(body(day, "06:00", "10:00", { vehicleId: fleet.vehicles.drifting.id, driverId: worn.id, trailerId: fleet.vehicles.trailer.id }))
+      // The row drifts under the allocation — the vehicle retires, the licence runs out — as the fleet routes would refuse under a live allocation and an import or a correction would not.
+      await withCompany(pool.db, a.companyId, async (tx: Tx) => {
+        await tx.update(vehicle).set({ status: "retired" }).where(and(eq(vehicle.companyId, a.companyId), eq(vehicle.id, fleet.vehicles.drifting.id)))
+        await tx.update(driver).set({ licenceExpiry: "2026-01-01" }).where(and(eq(driver.companyId, a.companyId), eq(driver.id, worn.id)))
+      })
+      const wornOut = [{ path: "driverId", message: `${worn.name}'s licence expires on 2026-01-01, before the window ends` }]
+
+      const noted = await commanded(created.id, "change", { note: "Still going", reason: "A note" })
+      assert.deepEqual([noted.note, noted.vehicleId, noted.driverId], ["Still going", fleet.vehicles.drifting.id, worn.id], "a note-only change asks nothing of the retired vehicle or the worn licence")
+      const based = await commanded(created.id, "change", { depotId: fleet.depots.nordhavn.id, reason: "From Nordhavn" })
+      assert.equal(based.depotId, fleet.depots.nordhavn.id, "nor does a depot")
+      const longer = await refused(await command(created.id, "change", { plannedTo: at(day, "12:00"), reason: "Longer" }), 400)
+      assert.deepEqual(longer.errors, wornOut, "moving the window judges the stored driver's licence again, on the new last day")
+      const otherTruck = await refused(await command(created.id, "change", { vehicleId: fleet.vehicles.wh25.id, reason: "Swap" }), 400)
+      assert.deepEqual(otherTruck.errors, wornOut, "moving the vehicle judges the stored driver against it")
+      const backToRetired = await refused(await command(created.id, "change", { vehicleId: fleet.vehicles.retired.id, driverId: fleet.drivers.mads.id, reason: "Back" }), 400)
+      assert.deepEqual(backToRetired.errors, [{ path: "vehicleId", message: "WH-99 is retired" }], "named afresh, a retired vehicle is refused")
+      const retiredTrailer = await refused(await command(created.id, "change", { trailerId: fleet.vehicles.retiredTrailer.id, reason: "Tow" }), 400)
+      assert.deepEqual(retiredTrailer.errors, [{ path: "trailerId", message: "WH-T99 is retired" }])
+      const inactive = await refused(await command(created.id, "change", { driverId: fleet.drivers.karen.id, reason: "Swap" }), 400)
+      assert.deepEqual(inactive.errors, [{ path: "driverId", message: "Karen Holt is inactive" }])
+      const swapped = await commanded(created.id, "change", { vehicleId: fleet.vehicles.wh25.id, driverId: fleet.drivers.mads.id, reason: "New crew" })
+      assert.deepEqual([swapped.vehicleId, swapped.driverId, swapped.trailerId], [fleet.vehicles.wh25.id, fleet.drivers.mads.id, fleet.vehicles.trailer.id], "a new vehicle and a new driver are held and taken; the stored trailer is not asked")
+      const solo = await commanded(created.id, "change", { driverId: null, reason: "Solo" })
+      assert.equal(solo.driverId, null, "a driver cleared is judged on nothing")
+      assert.deepEqual((await events(created.id)).items.map((event) => event.action), ["allocate", "change", "change", "change", "change"], "the four changes that went through appended an event each; no refused one did")
     })
 
     test("refuses a new window touching another live allocation's, and any change to a released allocation", async () => {

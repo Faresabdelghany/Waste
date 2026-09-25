@@ -28,13 +28,27 @@
 // so the database's `driver_provider_shape` check is the backstop and never
 // the answer.
 //
+// Taking a driver out of service — `inactive` or `suspended`, the two statuses
+// nothing may be planned or allocated under — has the vehicle's retirement
+// rule (routes/vehicles.ts): a driver a live allocation still names, or a
+// collection group of a route scheme in force today, is not set either under
+// it, and the patch is refused (409) counting them, since the rows in the way
+// are not in the body and have to be released, or reassigned, first. The
+// counts run under the driver's row lock, and a driver already out of service
+// is not asked again when moved between the two. The other half is the doors
+// that name a driver afresh, which refuse one who is not active
+// (routes/statuses.ts; #79: a status gates a new reference and never an
+// existing one).
+//
 // The grant is `fleet.drivers` throughout: `view` to read, `create` to add,
 // `edit` to change.
 import { Driver, DriverCreate, DriverListQuery, DriverPatch, PROVIDER_WITH_PROVIDER_EMPLOYMENT } from "@waste/contracts/fleet"
 import { Page } from "@waste/contracts/pagination"
 import { providerShape } from "@waste/contracts/places"
 import type { Tx } from "@waste/db/client"
+import { vehicleAllocation } from "@waste/db/schema/allocations"
 import { driver } from "@waste/db/schema/fleet"
+import { collectionGroup } from "@waste/db/schema/route-schemes"
 import type { DriverStatus, EmploymentType, LicenceClass } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -46,8 +60,11 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { requireDepot, requireServiceProvider, requireUserAccount } from "./references"
+import { refuseStranded } from "./periods"
+import { requireDepot, requireServiceProvider, requireUserAccount, type Scope } from "./references"
+import { groupsInForceNaming } from "./scheme-groups"
 import { describeJson, IdParam, lockRow, refuseDuplicate, stampsOf } from "./shared"
+import { groupsName, liveAllocationsName, liveAllocationsNaming } from "./statuses"
 
 const MODULE = "fleet.drivers"
 const DriverPage = Page(Driver)
@@ -71,9 +88,6 @@ const columns = {
 }
 
 type Row = Pick<typeof driver.$inferSelect, keyof typeof columns>
-
-/** What a body's checks are bounded by: the caller's company, and the project the driver is in. */
-type Scope = { companyId: string; projectId: string }
 
 /** The row on the wire. The coded fields are text with a CHECK in the database and an enum here; the vocabulary holds the two in lockstep. */
 function driverOf(row: Row): Driver {
@@ -110,6 +124,16 @@ const collisions = (values: { workforceReference?: string | null; userAccountId?
 })
 
 const noSuchDriver = (id: string) => problem(404, { detail: `No driver ${id} in the projects this account works in` })
+
+/** The two statuses a driver is taken out of service with: nothing may be planned or allocated under either, so both have the same rule. */
+const OUT_OF_SERVICE: readonly string[] = ["inactive", "suspended"]
+
+/** What taking a driver out of service under live allocations, or under the collection groups of schemes in force, is refused with, counting them. */
+const liveAllocationsNameThis = liveAllocationsName("driver")
+const groupsNameThis = groupsName("driver")
+
+/** The allocations the change would strand: the live ones naming the driver (routes/statuses.ts spells the rest). */
+const liveAllocations = (companyId: string, driverId: string) => liveAllocationsNaming(companyId, eq(vehicleAllocation.driverId, driverId))
 
 /** The provider rule as the merged row must hold it, in the driver's words: a patch carries one half and the stored row the other. */
 function requireProviderShape(merged: { employment: string; serviceProviderId: string | null }): void {
@@ -262,7 +286,7 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchDriver",
         summary: "Change a driver",
         description:
-          "Changes one driver of a project the caller works in; every field is optional and at least one must be given. The project is not patchable, since a record does not move between projects. A null clears the workforce reference, the provider, the home depot, the licence class, number or expiry, the login or the notes. The provider rule is held against the row the patch leaves behind: a `service-provider` driver names the employing provider and no other does. A new provider is this company's, a new home depot this project's, a new login a user account of this company that is not deactivated and not already another driver's. A licence renewal is an edit here — the class and the expiry move — and the audit log is its history.",
+          "Changes one driver of a project the caller works in; every field is optional and at least one must be given. The project is not patchable, since a record does not move between projects. A null clears the workforce reference, the provider, the home depot, the licence class, number or expiry, the login or the notes. The provider rule is held against the row the patch leaves behind: a `service-provider` driver names the employing provider and no other does. A new provider is this company's, a new home depot this project's, a new login a user account of this company that is not deactivated and not already another driver's. A licence renewal is an edit here — the class and the expiry move — and the audit log is its history. A status change is a plain patch except taking the driver out of service: `inactive` or `suspended` under a live allocation — planned or confirmed and not yet over — or under a collection group of a route scheme in force today, whatever that scheme's status, is refused (409) counting them — release the allocations, reassign the groups, and set it then. Both counts run under the driver's row lock, and a driver already inactive or suspended is not asked again when moved to the other.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The driver as it now stands.", Driver),
@@ -272,7 +296,9 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>) {
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `fleet.drivers`."),
           404: describeProblem("No driver with that id in the projects this account works in."),
-          409: describeProblem("The company already has another driver with that workforce reference, or that login already has a driver profile."),
+          409: describeProblem(
+            "The company already has another driver with that workforce reference, that login already has a driver profile, or the driver is being set inactive or suspended under live allocations or under collection groups of schemes in force: the detail counts them.",
+          ),
         },
       }),
       guard,
@@ -298,6 +324,10 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>) {
         await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)
         await requireDepot(tx, within, patch.homeDepotId, "homeDepotId")
         await requireUserAccount(tx, principal.companyId, patch.userAccountId)
+        if (patch.status !== undefined && OUT_OF_SERVICE.includes(patch.status) && !OUT_OF_SERVICE.includes(current.status)) {
+          await refuseStranded(tx, vehicleAllocation, liveAllocations(principal.companyId, id), liveAllocationsNameThis)
+          await refuseStranded(tx, collectionGroup, groupsInForceNaming(tx, collectionGroup.driverId, principal.companyId, id), groupsNameThis)
+        }
 
         const [row] = await refuseDuplicate(collisions(patch), () =>
           tx

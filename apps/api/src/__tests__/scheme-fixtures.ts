@@ -20,7 +20,11 @@
 // the allocation events as the owner. The fleet says one thing per driver
 // about the licence rule: Mads holds CE until 2030 and may take anything,
 // Jonas has no class on record and may take nothing, Freja holds B and may not
-// take a C truck, and Sofie holds C but it ran out on 2026-09-05.
+// take a C truck, and Sofie holds C but it ran out on 2026-09-05. The status
+// rule (#79, review round B) has its own rows: a retired truck and a retired
+// trailer nothing new may name, Karen and Peter who hold CE and are inactive
+// and suspended, and WH-77, an active truck a suite takes out of service
+// itself to prove that a reference already made stands.
 import type { Database, Tx } from "@waste/db/client"
 import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { driver, vehicle } from "@waste/db/schema/fleet"
@@ -130,6 +134,10 @@ export type FleetFixtures = {
     trailer: FixtureVehicle
     /** A retired rear loader of Copenhagen Central. */
     retired: FixtureVehicle
+    /** A retired trailer of Copenhagen Central, which a body may not name afresh either. */
+    retiredTrailer: FixtureVehicle
+    /** An active rear loader requiring C that a suite retires itself through `tx`, to prove a stored reference stands. */
+    drifting: FixtureVehicle
     /** Harbor Commercial's rear loader, requiring B. */
     harborTruck: FixtureVehicle
   }
@@ -144,6 +152,10 @@ export type FleetFixtures = {
     sofie: FixtureDriver
     /** Harbor Commercial's driver, CE. */
     henrik: FixtureDriver
+    /** CE, inactive: nothing new may name her, whatever the licence says. */
+    karen: FixtureDriver
+    /** CE, suspended: likewise, told the other status. */
+    peter: FixtureDriver
   }
 }
 
@@ -163,6 +175,8 @@ export async function seedFleet(pool: Database, tenant: Tenant, planning: Planni
       wh25: { id: testId(), label: "WH-25" },
       trailer: { id: testId(), label: "WH-T12" },
       retired: { id: testId(), label: "WH-99" },
+      retiredTrailer: { id: testId(), label: "WH-T99" },
+      drifting: { id: testId(), label: "WH-77" },
       harborTruck: { id: testId(), label: "HB-1" },
     },
     drivers: {
@@ -171,6 +185,8 @@ export async function seedFleet(pool: Database, tenant: Tenant, planning: Planni
       freja: { id: testId(), name: "Freja Holm" },
       sofie: { id: testId(), name: "Sofie Nielsen" },
       henrik: { id: testId(), name: "Henrik Havn" },
+      karen: { id: testId(), name: "Karen Holt" },
+      peter: { id: testId(), name: "Peter Lund" },
     },
   }
   const { depots, stations, vehicles, drivers } = fixtures
@@ -220,6 +236,8 @@ export async function seedFleet(pool: Database, tenant: Tenant, planning: Planni
       truck(vehicles.wh25, "CN 42 019", "ce"),
       { ...truck(vehicles.trailer, "CN 90 112", "b"), kind: "trailer" },
       truck(vehicles.retired, "CN 11 999", "c", copenhagen, "retired"),
+      { ...truck(vehicles.retiredTrailer, "CN 90 999", "b", copenhagen, "retired"), kind: "trailer" },
+      truck(vehicles.drifting, "CN 42 077", "c"),
       truck(vehicles.harborTruck, "HB 10 001", "b", harbor),
     ])
     await tx.insert(driver).values([
@@ -228,6 +246,8 @@ export async function seedFleet(pool: Database, tenant: Tenant, planning: Planni
       person(drivers.freja, "b", null),
       person(drivers.sofie, "c", SOFIE_LICENCE_EXPIRY),
       person(drivers.henrik, "ce", "2031-06-30", harbor),
+      { ...person(drivers.karen, "ce", "2030-12-31"), status: "inactive" },
+      { ...person(drivers.peter, "ce", "2030-12-31"), status: "suspended" },
     ])
   })
   return fixtures

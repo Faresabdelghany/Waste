@@ -4,13 +4,19 @@
 // scheme adds for a vehicle or a driver on two groups a shared day. The
 // scheme and group routes themselves are route-schemes.test.ts's and
 // collection-groups.test.ts's; this suite proves the four fields and nothing
-// those two already prove.
+// those two already prove. The review round added the status rule (#79: a
+// status gates a new reference and never an existing one), the app's clock as
+// "today" — pinned here through `createApp`'s `now` — and the start of a
+// scheme moving under its groups.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { WasteFraction } from "@waste/contracts/catalogue"
 import { CollectionGroup, RouteScheme } from "@waste/contracts/route-schemes"
-import { createDb, type Database } from "@waste/db/client"
+import { createDb, type Database, type Tx } from "@waste/db/client"
+import { vehicle } from "@waste/db/schema/fleet"
+import { withCompany } from "@waste/db/tenant"
+import { and, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
@@ -215,6 +221,87 @@ describe("the fleet and place fields of the scheme and group endpoints", { skip:
       assert.deepEqual(thenTruck.errors, [{ path: "driverId", message: "Freja Holm needs a C licence for WH-24" }], "the merged pair is judged: the stored driver against the new vehicle")
       const smallTruck = await refused(await patchGroup(group.id, { vehicleId: fleet.vehicles.harborTruck.id }), 400)
       assert.deepEqual(smallTruck.errors, [{ path: "vehicleId", message: "Not a powered vehicle of this project" }], "Harbor's B truck is another project's and is refused before any licence is looked at")
+    })
+
+    test("a vehicle or a driver named afresh is in service: a retired vehicle, an inactive or a suspended driver is refused at the entry, on every door", async () => {
+      const inScheme = await refused(await post(body("Retired crew", { collectionGroups: [ruleGroup("A", ["monday", "thursday"]), ruleGroup("B", ["monday"], { vehicleId: fleet.vehicles.retired.id })] })), 400)
+      assert.deepEqual(inScheme.errors, [{ path: "collectionGroups.1.vehicleId", message: "WH-99 is retired" }])
+      const inSchemeDriver = await refused(await post(body("Suspended crew", { collectionGroups: [ruleGroup("A", ["monday", "thursday"], { vehicleId: fleet.vehicles.wh24.id, driverId: fleet.drivers.peter.id })] })), 400)
+      assert.deepEqual(inSchemeDriver.errors, [{ path: "collectionGroups.0.driverId", message: "Peter Lund is suspended" }], "the status is refused before the licence, which Peter holds")
+      const created = await scheme("In service")
+      const retired = await refused(await addGroup(created.id, ruleGroup("Retired", ["monday"], { vehicleId: fleet.vehicles.retired.id })), 400)
+      assert.deepEqual(retired.errors, [{ path: "vehicleId", message: "WH-99 is retired" }])
+      const inactive = await refused(await addGroup(created.id, ruleGroup("Karen", ["monday"], { driverId: fleet.drivers.karen.id })), 400)
+      assert.deepEqual(inactive.errors, [{ path: "driverId", message: "Karen Holt is inactive" }], "a driver alone is asked no licence, and still has to be active")
+      const [group] = created.collectionGroups
+      const patchedVehicle = await refused(await patchGroup(group.id, { vehicleId: fleet.vehicles.retired.id }), 400)
+      assert.deepEqual(patchedVehicle.errors, [{ path: "vehicleId", message: "WH-99 is retired" }])
+      const patchedDriver = await refused(await patchGroup(group.id, { driverId: fleet.drivers.peter.id }), 400)
+      assert.deepEqual(patchedDriver.errors, [{ path: "driverId", message: "Peter Lund is suspended" }])
+      assert.deepEqual(await oneGroup(group.id), group, "nothing written")
+    })
+
+    test("a stored vehicle stands once it retires: the group is renamed, moved and recrewed like any other, and only naming the vehicle afresh is refused", async () => {
+      const created = await scheme("Drifting crew", { collectionGroups: [ruleGroup("Residual", ["monday", "thursday"], { vehicleId: fleet.vehicles.drifting.id, driverId: fleet.drivers.mads.id })] })
+      const [group] = created.collectionGroups
+      // WH-77 retires under the group, as the vehicle route would refuse and an import would not.
+      await withCompany(pool.db, a.companyId, async (tx: Tx) => {
+        await tx.update(vehicle).set({ status: "retired" }).where(and(eq(vehicle.companyId, a.companyId), eq(vehicle.id, fleet.vehicles.drifting.id)))
+      })
+      const renamed = await patchedGroup(group.id, { name: "Residual north", position: 2 })
+      assert.deepEqual([renamed.name, renamed.position, renamed.vehicleId], ["Residual north", 2, fleet.vehicles.drifting.id], "an unrelated patch asks nothing of the stored vehicle")
+      const tooLow = await refused(await patchGroup(group.id, { driverId: fleet.drivers.freja.id }), 400)
+      assert.deepEqual(tooLow.errors, [{ path: "driverId", message: "Freja Holm needs a C licence for WH-77" }], "a new driver is still judged against the stored vehicle's class; the vehicle's status is not asked")
+      const recrewed = await patchedGroup(group.id, { driverId: fleet.drivers.jonas.id, vehicleId: null })
+      assert.deepEqual([recrewed.vehicleId, recrewed.driverId], [null, fleet.drivers.jonas.id], "and the group is taken off the retired truck")
+      const other = await added(created.id, ruleGroup("Glass", ["thursday"]))
+      const afresh = await refused(await patchGroup(other.id, { vehicleId: fleet.vehicles.drifting.id }), 400)
+      assert.deepEqual(afresh.errors, [{ path: "vehicleId", message: "WH-77 is retired" }], "named afresh, the same vehicle is refused")
+    })
+  })
+
+  describe("today on the project's clock", () => {
+    /** An app whose clock a test pins, calling as Olivia; the token is verified against real time, which the clock does not touch. */
+    const frozenAt = (instant: string): Call => callingAs(createApp({ probe: pool, pool, verifier: keys.verifier, now: () => new Date(instant) }), keys, a.users.olivia, a.companyId)
+    /** A scheme body whose one group puts Sofie — licence through 2026-09-05 — on WH-24. */
+    const sofieRun = (name: string, values: Record<string, unknown> = {}) =>
+      body(name, { collectionGroups: [ruleGroup("Sofie", ["monday", "thursday"], { vehicleId: fleet.vehicles.wh24.id, driverId: fleet.drivers.sofie.id })], ...values })
+    const beforeTheSchemeStarts = [{ path: "collectionGroups.0.driverId", message: `Sofie Nielsen's licence expires on ${SOFIE_LICENCE_EXPIRY}, before the scheme starts` }]
+    const beforeToday = [{ path: "collectionGroups.0.driverId", message: `Sofie Nielsen's licence expires on ${SOFIE_LICENCE_EXPIRY}, before today` }]
+
+    test("a scheme starting today is judged on the day it starts, one that started is judged on today, and today is the project's day, not UTC's", async () => {
+      const noon = frozenAt(`${SOFIE_LICENCE_EXPIRY}T10:00:00Z`)
+      const startsToday = await noon("/route-schemes", { method: "POST", body: sofieRun("Clock: starts today", { validFrom: SOFIE_LICENCE_EXPIRY }) })
+      assert.equal(startsToday.status, 201, JSON.stringify(await startsToday.clone().json()))
+      assert.equal(RouteScheme.parse(await startsToday.json()).collectionGroups[0].driverId, fleet.drivers.sofie.id, "validFrom equal to today is judged as the scheme's start, the licence's last day")
+      const startsTomorrow = await refused(await noon("/route-schemes", { method: "POST", body: sofieRun("Clock: starts tomorrow", { validFrom: "2026-09-06" }) }), 400)
+      assert.deepEqual(startsTomorrow.errors, beforeTheSchemeStarts)
+      const started = await noon("/route-schemes", { method: "POST", body: sofieRun("Clock: started", { validFrom: "2026-09-01" }) })
+      assert.equal(started.status, 201, "a scheme that started is judged on today, the licence's last day")
+
+      const pastMidnight = frozenAt(`${SOFIE_LICENCE_EXPIRY}T22:30:00Z`)
+      const inCopenhagen = await refused(await pastMidnight("/route-schemes", { method: "POST", body: sofieRun("Clock: past midnight", { validFrom: SOFIE_LICENCE_EXPIRY }) }), 400)
+      assert.deepEqual(inCopenhagen.errors, beforeToday, "00:30 on the 6th in Copenhagen, though still the 5th in UTC: today is the 6th and the licence has run out")
+      const nextDay = frozenAt("2026-09-06T10:00:00Z")
+      const tooLate = await refused(await nextDay("/route-schemes", { method: "POST", body: sofieRun("Clock: the day after", { validFrom: SOFIE_LICENCE_EXPIRY }) }), 400)
+      assert.deepEqual(tooLate.errors, beforeToday)
+    })
+
+    test("moving a scheme's start later judges the groups' drivers again on the new start, refused at validFrom; an earlier start or an end moves nothing", async () => {
+      const early = frozenAt("2026-09-01T10:00:00Z")
+      const create = await early("/route-schemes", { method: "POST", body: sofieRun("Clock: start moves", { validFrom: "2026-09-01" }) })
+      assert.equal(create.status, 201, JSON.stringify(await create.clone().json()))
+      const created = RouteScheme.parse(await create.json())
+      const later = await refused(await early(`/route-schemes/${created.id}`, { method: "PATCH", body: { validFrom: "2026-09-10" } }), 400)
+      assert.deepEqual(later.errors, [{ path: "validFrom", message: `Sofie Nielsen's licence expires on ${SOFIE_LICENCE_EXPIRY}, before the scheme starts` }], "the groups are not in the body, so the bound that moved is refused")
+      assert.equal((await oneScheme(created.id)).validFrom, "2026-09-01", "nothing written")
+      const lastDay = await early(`/route-schemes/${created.id}`, { method: "PATCH", body: { validFrom: SOFIE_LICENCE_EXPIRY } })
+      assert.equal(lastDay.status, 200, JSON.stringify(await lastDay.clone().json()))
+      const earlier = await early(`/route-schemes/${created.id}`, { method: "PATCH", body: { validFrom: "2026-08-20" } })
+      assert.equal(earlier.status, 200, "an earlier start is judged on nothing new")
+      const ended = await early(`/route-schemes/${created.id}`, { method: "PATCH", body: { validTo: "2027-01-01" } })
+      assert.equal(ended.status, 200, "an end moves nothing a licence is judged on")
+      assert.deepEqual([(await oneScheme(created.id)).validFrom, (await oneScheme(created.id)).validTo], ["2026-08-20", "2027-01-01"])
     })
   })
 

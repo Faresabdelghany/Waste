@@ -5,7 +5,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { dayInTimezone } from "../routes/days"
+import { dayInTimezone, lastDayInside } from "../routes/days"
 
 describe("dayInTimezone", () => {
   test("renders the instant as the calendar day of the timezone, so the same instant is one day in London and the next in Copenhagen", () => {
@@ -25,5 +25,18 @@ describe("dayInTimezone", () => {
 
   test("a timezone that is not one is a bug in the row, not a client's, and is thrown", () => {
     assert.throws(() => dayInTimezone(new Date(), "Europe/Nowhere"), RangeError)
+  })
+})
+
+describe("lastDayInside", () => {
+  test("renders the last instant inside a half-open window, so a window ending at midnight ends on the day before and one a millisecond past it reaches the day after", () => {
+    // 22:00Z is midnight in Copenhagen (CEST, +02:00): the first instant of the 6th, and the first instant out of a window ending then.
+    const midnight = new Date("2026-09-05T22:00:00Z")
+    assert.equal(dayInTimezone(midnight, "Europe/Copenhagen"), "2026-09-06", "the end itself falls on the 6th")
+    assert.equal(lastDayInside(midnight, "Europe/Copenhagen"), "2026-09-05", "the window's last instant is 23:59:59.999 on the 5th")
+    assert.equal(lastDayInside(new Date("2026-09-05T22:00:00.001Z"), "Europe/Copenhagen"), "2026-09-06", "a millisecond later the window reaches into the 6th")
+    assert.equal(lastDayInside(new Date("2026-09-05T21:30:00Z"), "Europe/Copenhagen"), "2026-09-05", "an end inside a day is on that day either way")
+    assert.equal(lastDayInside(new Date("2026-09-06T00:00:00Z"), "UTC"), "2026-09-05")
+    assert.equal(lastDayInside(new Date("2026-09-06T07:00:00Z"), "America/Los_Angeles"), "2026-09-05", "midnight PDT, on the 5th there")
   })
 })

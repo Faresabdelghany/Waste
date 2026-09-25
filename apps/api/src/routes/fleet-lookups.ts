@@ -17,11 +17,15 @@
 // `vehicleId` and a group's is a `powered-vehicle`, an allocation's
 // `trailerId` a `trailer`, and a row of the other kind is refused in that
 // kind's words, since the two columns of an allocation must never hold the
-// same vehicle and the kind is what keeps them apart.
+// same vehicle and the kind is what keeps them apart. Both rows carry their
+// status, since a route naming one afresh holds it (routes/statuses.ts) and a
+// second read for one column would be the same statement over again; the
+// column sets are exported so routes/scheme-groups.ts reads a body's whole
+// fleet in one statement per table and gets the same rows.
 import type { Tx } from "@waste/db/client"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { project } from "@waste/db/schema/organisation"
-import type { LicenceClass, VehicleKind, VehicleStatus } from "@waste/domain/resources/vocabulary"
+import type { DriverStatus, LicenceClass, VehicleKind, VehicleStatus } from "@waste/domain/resources/vocabulary"
 import { and, eq } from "drizzle-orm"
 
 import { invalidRequest } from "../problem"
@@ -40,7 +44,8 @@ export type VehicleRow = {
 /** How a person names a vehicle: the yard's callsign (`WH-24`) where it has one, the plate otherwise. */
 export const vehicleLabel = (row: Pick<VehicleRow, "registration" | "callsign">): string => row.callsign ?? row.registration
 
-const vehicleColumns = {
+/** The columns a `VehicleRow` is read from. */
+export const vehicleColumns = {
   id: vehicle.id,
   registration: vehicle.registration,
   callsign: vehicle.callsign,
@@ -66,19 +71,23 @@ export async function findVehicle(tx: Tx, scope: Scope, id: string, kind: Vehicl
   return row as VehicleRow
 }
 
-/** What a licence check reads of a driver, and the name a sentence calls them by. */
+/** What a licence check reads of a driver, the name a sentence calls them by, and the status a new reference is held to. */
 export type DriverRow = {
   id: string
   name: string
+  status: DriverStatus
   licenceClass: LicenceClass | null
   /** `YYYY-MM-DD`, the last day the licence holds; null for none on record. */
   licenceExpiry: string | null
 }
 
+/** The columns a `DriverRow` is read from. */
+export const driverColumns = { id: driver.id, name: driver.name, status: driver.status, licenceClass: driver.licenceClass, licenceExpiry: driver.licenceExpiry }
+
 /** One driver of the project, read for the licence rule, or a 400 at `path`. */
 export async function findDriver(tx: Tx, scope: Scope, id: string, path = "driverId"): Promise<DriverRow> {
   const [row] = await tx
-    .select({ id: driver.id, name: driver.name, licenceClass: driver.licenceClass, licenceExpiry: driver.licenceExpiry })
+    .select(driverColumns)
     .from(driver)
     .where(and(eq(driver.companyId, scope.companyId), eq(driver.projectId, scope.projectId), eq(driver.id, id)))
     .limit(1)

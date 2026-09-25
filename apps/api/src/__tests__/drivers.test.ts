@@ -1,11 +1,16 @@
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
-import { Driver, PROVIDER_WITH_PROVIDER_EMPLOYMENT } from "@waste/contracts/fleet"
+import { WasteFraction } from "@waste/contracts/catalogue"
+import { Driver, PROVIDER_WITH_PROVIDER_EMPLOYMENT, Vehicle } from "@waste/contracts/fleet"
 import { Id } from "@waste/contracts/ids"
 import { Page } from "@waste/contracts/pagination"
+import { RouteScheme } from "@waste/contracts/route-schemes"
 import { createDb, type Database } from "@waste/db/client"
+import { vehicleAllocation } from "@waste/db/schema/allocations"
+import { collectionGroup } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
+import { and, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { ProblemError } from "../problem"
@@ -328,6 +333,60 @@ describe("the driver endpoints", { skip: database.skip }, () => {
       assert.equal(bound.userAccountId, a.users.lars.id, "free again once the other profile let it go")
     })
 
+    test("refuses inactive or suspended under live allocations or under collection groups of schemes in force, counting them, and takes either once they are released or reassigned", async () => {
+      const held = await driver("Held Back", { licenceClass: "ce", licenceExpiry: "2031-12-31" })
+      const residual = await create(olivia, "/waste-fractions", { key: "residual", name: "Residual waste" }, WasteFraction)
+      const scheme = await create(
+        olivia,
+        "/route-schemes",
+        {
+          projectId: a.projects.copenhagen.id,
+          name: "Held's run",
+          serviceType: "container-collection",
+          frequency: "weekly",
+          serviceDays: ["monday"],
+          validFrom: "2026-01-01",
+          collectionGroups: [{ name: "North", days: ["monday"], stopSource: "rule", rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: null }, driverId: held.id }],
+        },
+        RouteScheme,
+      )
+      const [group] = scheme.collectionGroups
+      const setStatus = (status: string) => olivia(`/drivers/${held.id}`, { method: "PATCH", body: { status } })
+      const inactive = await refused(await setStatus("inactive"), 409)
+      assert.equal(inactive.detail, "1 collection group names this driver; reassign it first", "a draft scheme in force counts")
+      const suspended = await refused(await setStatus("suspended"), 409)
+      assert.equal(suspended.detail, "1 collection group names this driver; reassign it first", "the same rule for both statuses")
+
+      // A live allocation is counted first, in its own sentence; a vehicle of this test's own to hang it on.
+      const truck = await create(
+        olivia,
+        "/vehicles",
+        { projectId: a.projects.copenhagen.id, registration: "CN 77 001", kind: "powered-vehicle", vehicleTypeId: fleet.vehicleTypes.rearLoader.id, requiredLicenceClass: "c", compartments: [{ wasteFractionIds: [residual.id] }] },
+        Vehicle,
+      )
+      const allocation = testId()
+      const hour = 3_600_000
+      await withCompany(pool.db, a.companyId, async (tx) => {
+        await tx.insert(vehicleAllocation).values({ id: allocation, companyId: a.companyId, projectId: a.projects.copenhagen.id, vehicleId: truck.id, driverId: held.id, plannedFrom: new Date(Date.now() + hour), plannedTo: new Date(Date.now() + 2 * hour), status: "confirmed" })
+      })
+      assert.equal((await refused(await setStatus("inactive"), 409)).detail, "1 live allocation names this driver; release it first", "the allocations are counted before the groups")
+      assert.equal((await one(olivia, held.id)).status, "active", "and the refused patches wrote nothing")
+      await withCompany(pool.db, a.companyId, async (tx) => {
+        await tx.update(vehicleAllocation).set({ status: "released" }).where(and(eq(vehicleAllocation.companyId, a.companyId), eq(vehicleAllocation.id, allocation)))
+      })
+      const reassigned = await olivia(`/collection-groups/${group.id}`, { method: "PATCH", body: { driverId: null } })
+      assert.equal(reassigned.status, 200, JSON.stringify(await reassigned.clone().json()))
+      const left = await patch(olivia, held.id, { status: "inactive" })
+      assert.equal(left.status, "inactive", "released and reassigned, the driver leaves")
+
+      // A driver already out of service is not asked again when moved between the two statuses, whatever names them by then.
+      await withCompany(pool.db, a.companyId, async (tx) => {
+        await tx.update(collectionGroup).set({ driverId: held.id }).where(and(eq(collectionGroup.companyId, a.companyId), eq(collectionGroup.id, group.id)))
+      })
+      assert.equal((await patch(olivia, held.id, { status: "suspended" })).status, "suspended")
+      assert.equal((await patch(olivia, held.id, { status: "active" })).status, "active", "and coming back into service is a plain patch")
+    })
+
     test("refuses a workforce reference another driver holds", async () => {
       const held = reference()
       await driver("Holding", { workforceReference: held })
@@ -352,9 +411,10 @@ describe("the driver endpoints", { skip: database.skip }, () => {
   })
 
   describe("requireDriver", () => {
-    test("holds a driver to the project, with its sentence, at the path given", async () => {
+    test("holds a driver to the project, with its sentence, at the path given, and answers the row's status", async () => {
       const here = await driver("Here")
       const elsewhere = await driver("Elsewhere", { projectId: a.projects.harbor.id })
+      const gone = await driver("Gone", { status: "inactive" })
       const scope = { companyId: a.companyId, projectId: a.projects.copenhagen.id }
       const refusal = (path: string) => (error: unknown) => {
         assert.ok(error instanceof ProblemError, String(error))
@@ -363,8 +423,9 @@ describe("the driver endpoints", { skip: database.skip }, () => {
         return true
       }
       await withCompany(pool.db, a.companyId, async (tx) => {
-        await requireDriver(tx, scope, here.id)
-        await requireDriver(tx, scope, null)
+        assert.equal(await requireDriver(tx, scope, here.id), "active", "the status, for the doors that gate a new reference on it")
+        assert.equal(await requireDriver(tx, scope, gone.id), "inactive", "found, and inactive: whether that will do is the caller's rule")
+        assert.equal(await requireDriver(tx, scope, null), undefined, "nothing named, nothing to answer")
         await assert.rejects(requireDriver(tx, scope, elsewhere.id), refusal("driverId"), "another project's")
         await assert.rejects(requireDriver(tx, scope, theirDriver.id), refusal("driverId"), "another company's")
         await assert.rejects(requireDriver(tx, scope, testId(), "collectionGroups.0.driverId"), refusal("collectionGroups.0.driverId"), "nobody's, at the path given")

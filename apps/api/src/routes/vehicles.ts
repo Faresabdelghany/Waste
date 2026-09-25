@@ -41,14 +41,19 @@
 //
 // Retiring is the one status change with a rule: a vehicle with a live
 // allocation — `planned` or `confirmed` and not yet over — is not retired
-// under it; the patch is refused (409) counting them, since the rows in the
-// way are not in the body and have to be released first (the `refuseStranded`
-// shape of routes/periods.ts). An allocation names a vehicle as its vehicle
-// or as its trailer, and a trailer is a vehicle of this table, so both
-// columns are counted. The count runs under the vehicle's row lock, taken
-// before the current row is read, so a retirement and an allocation being
-// made serialise on the vehicle (the allocation routes are slice 6's; the
-// count is the ledger's shape as the schema already spells it).
+// under it, and nor is one a collection group of a route scheme in force
+// today names, whatever the scheme's status; the patch is refused (409)
+// counting them, since the rows in the way are not in the body and have to
+// be released, or reassigned, first (the `refuseStranded` shape of
+// routes/periods.ts, the pieces spelled once in routes/statuses.ts and
+// routes/scheme-groups.ts, since a driver is taken out of service the same
+// way). An allocation names a vehicle as its vehicle or as its trailer, and a
+// trailer is a vehicle of this table, so both columns are counted. The counts
+// run under the vehicle's row lock, taken before the current row is read, so
+// a retirement and an allocation being made serialise on the vehicle. The
+// other half of the rule is the doors that name a vehicle afresh, which
+// refuse a retired one (#79: a status gates a new reference and never an
+// existing one).
 //
 // The provider rule — a `service-provider` vehicle names its provider and no
 // other does — is the contracts' on a body that carries both halves and the
@@ -75,9 +80,9 @@ import type { Tx } from "@waste/db/client"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
+import { collectionGroup } from "@waste/db/schema/route-schemes"
 import type { FuelType, LicenceClass, VehicleKind, VehicleOwnership, VehicleStatus } from "@waste/domain/resources/vocabulary"
-import { count } from "@waste/domain/text"
-import { and, asc, eq, gt, inArray, ne, or, sql } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -88,8 +93,10 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { refuseStranded } from "./periods"
-import { requireDepot, requireServiceProvider, requireVehicleType, requireWasteFraction } from "./references"
+import { requireDepot, requireServiceProvider, requireVehicleType, requireWasteFraction, type Scope } from "./references"
+import { groupsInForceNaming } from "./scheme-groups"
 import { describeJson, IdParam, lockRow, refuseDuplicate, stamp, stampsOf } from "./shared"
+import { groupsName, liveAllocationsName, liveAllocationsNaming } from "./statuses"
 
 const MODULE = "fleet.vehicles"
 const VehiclePage = Page(Vehicle)
@@ -115,9 +122,6 @@ const columns = {
 }
 
 type Row = Pick<typeof vehicle.$inferSelect, keyof typeof columns>
-
-/** What a body's checks are bounded by: the caller's company, and the project the vehicle is in. */
-type Scope = { companyId: string; projectId: string }
 
 /** The row on the wire, with the compartments read for it. The coded fields are text with a CHECK in the database and an enum here; the vocabulary holds the two in lockstep. */
 function vehicleOf(row: Row, compartments: VehicleCompartment[]): Vehicle {
@@ -307,25 +311,13 @@ const collisions = (values: { registration?: string; callsign?: string | null })
 
 const noSuchVehicle = (id: string) => problem(404, { detail: `No vehicle ${id} in the projects this account works in` })
 
-/** What a retirement under live allocations is refused with, counting them; they have to be released first. */
-const liveAllocationsNameThis = (rows: number): string =>
-  `${count(rows, "live allocation")} ${rows === 1 ? "names" : "name"} this vehicle; release ${rows === 1 ? "it" : "them"} first`
+/** What a retirement under live allocations, or under the collection groups of schemes in force, is refused with, counting them. */
+const liveAllocationsNameThis = liveAllocationsName("vehicle")
+const groupsNameThis = groupsName("vehicle")
 
-/**
- * The allocations a retirement would strand: this company's, naming the
- * vehicle as the vehicle or as the trailer, not released and not yet over.
- * `company_id` and the vehicle's id and never `inProjects`: the vehicle was
- * read under the caller's scope and an allocation's project is the vehicle's
- * by the composite key, and a count that refuses a write must not be the one
- * statement that could miss a row.
- */
+/** The allocations a retirement would strand: the live ones naming the vehicle as the vehicle or as the trailer (routes/statuses.ts spells the rest). */
 const liveAllocations = (companyId: string, vehicleId: string) =>
-  and(
-    eq(vehicleAllocation.companyId, companyId),
-    or(eq(vehicleAllocation.vehicleId, vehicleId), eq(vehicleAllocation.trailerId, vehicleId)),
-    ne(vehicleAllocation.status, "released"),
-    gt(vehicleAllocation.plannedTo, sql`now()`),
-  )
+  liveAllocationsNaming(companyId, or(eq(vehicleAllocation.vehicleId, vehicleId), eq(vehicleAllocation.trailerId, vehicleId)))
 
 /** The provider rule as the merged row must hold it, in the contracts' words: a patch carries one half and the stored row the other. */
 function requireProviderShape(merged: { ownership: string; serviceProviderId: string | null }): void {
@@ -483,7 +475,7 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchVehicle",
         summary: "Change a vehicle",
         description:
-          "Changes one vehicle of a project the caller works in; every field is optional and at least one must be given. The project and the kind do not change — a record does not move between projects, and a powered vehicle does not become a trailer — and the compartments are a set, so they are `PUT /vehicles/{id}/compartments`. A null clears the callsign, the provider, the payload, the home depot, the fuel, the telematics device or the notes. The provider rule is held against the row the patch leaves behind: a `service-provider` vehicle names its provider and no other does. A new vehicle type is this company's, a new home depot this project's, a new provider this company's. A status change is a plain patch except retiring: a vehicle with a live allocation — planned or confirmed and not yet over, naming it as the vehicle or as the trailer — is not retired under it, and the patch is refused (409) counting them; release them first. That count runs under the vehicle's row lock.",
+          "Changes one vehicle of a project the caller works in; every field is optional and at least one must be given. The project and the kind do not change — a record does not move between projects, and a powered vehicle does not become a trailer — and the compartments are a set, so they are `PUT /vehicles/{id}/compartments`. A null clears the callsign, the provider, the payload, the home depot, the fuel, the telematics device or the notes. The provider rule is held against the row the patch leaves behind: a `service-provider` vehicle names its provider and no other does. A new vehicle type is this company's, a new home depot this project's, a new provider this company's. A status change is a plain patch except retiring: a vehicle with a live allocation — planned or confirmed and not yet over, naming it as the vehicle or as the trailer — is not retired under it, nor is one a collection group of a route scheme in force today names, whatever that scheme's status; the patch is refused (409) counting them — release the allocations, reassign the groups, and retire it then. Both counts run under the vehicle's row lock, and a vehicle already retired is not asked again.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The vehicle as it now stands, with its compartments.", Vehicle),
@@ -493,7 +485,7 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>) {
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `fleet.vehicles`."),
           404: describeProblem("No vehicle with that id in the projects this account works in."),
-          409: describeProblem("The company already has another vehicle with that registration or that callsign, or the vehicle is being retired under live allocations: the detail counts them."),
+          409: describeProblem("The company already has another vehicle with that registration or that callsign, or the vehicle is being retired under live allocations or under collection groups of schemes in force: the detail counts them."),
         },
       }),
       guard,
@@ -521,6 +513,7 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         await requireDepot(tx, within, patch.homeDepotId, "homeDepotId")
         if (patch.status === "retired" && current.status !== "retired") {
           await refuseStranded(tx, vehicleAllocation, liveAllocations(principal.companyId, id), liveAllocationsNameThis)
+          await refuseStranded(tx, collectionGroup, groupsInForceNaming(tx, collectionGroup.vehicleId, principal.companyId, id), groupsNameThis)
         }
 
         const [row] = await refuseDuplicate(collisions(patch), () =>

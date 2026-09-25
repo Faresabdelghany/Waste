@@ -19,11 +19,15 @@
 // unloading station and the group a vehicle and a default driver, and #101's
 // slice 6 the rules that hold them: the depot is one of the project's and the
 // station one of the company's (400 at the field, routes/references.ts);
-// a group's vehicle is a powered vehicle of the project and its driver one who
-// may take it on the day the scheme starts or today, whichever is later, and
-// on a validated scheme no vehicle or driver is on two groups a shared day
+// a group's vehicle is a powered vehicle of the project, not retired when
+// named afresh, and its driver one who is active when named afresh and may
+// take the vehicle on the day the scheme starts or today, whichever is later
+// — so a patch that moves the start later judges the groups' drivers again on
+// the new start, since that day moved, refused at `validFrom` — and on a
+// validated scheme no vehicle or driver is on two groups a shared day
 // (routes/scheme-groups.ts, with the other structural rules). A rule's vehicle
-// type is one of the company's rows since the same migration.
+// type is one of the company's rows since the same migration. Today is the
+// app's clock rendered on the project's, handed in as `now`.
 //
 // The recurrence has three rules the contracts spell and the database cannot
 // all hold: the week rotation belongs to `every-2-weeks` and to nothing else,
@@ -85,7 +89,7 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
-import { requireDepot, requirePlanningArea, requireUnloadingStation } from "./references"
+import { requireDepot, requirePlanningArea, requireUnloadingStation, type Scope } from "./references"
 import {
   findScheme,
   groupsOf,
@@ -93,6 +97,7 @@ import {
   mergeReferences,
   noSuchScheme,
   pickOf,
+  projectToday,
   referencesOf,
   requireGroupDriver,
   requireGroupReferences,
@@ -105,7 +110,7 @@ import {
   schemeScope,
   schemeWithGroups,
   writeGroupSets,
-  type Scope,
+  type ClockOptions,
 } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, timeOf } from "./shared"
 
@@ -130,7 +135,7 @@ function requireRecurrence(merged: { frequency: string; weekRotation: string | n
   if (errors.length > 0) throw invalidRequest("body", errors)
 }
 
-export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>) {
+export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
   return new Hono<AuthEnv>()
     .get(
       "/route-schemes",
@@ -186,12 +191,12 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>) {
         description:
           "Writes a route scheme in one project, which must be a project the caller works in, with the collection groups it starts with — " +
           GROUPS_BOUND +
-          ". The planning area, where given, is one of that project's; so is the depot the routes depart from, and the unloading station they empty at is one of this company's. Every group finds its stops one way: a rule group carries a rule naming one or more waste fractions of this company, none or more container types of this company and, optionally, a vehicle type of this company, and picks no containers; a manual group picks one or more containers of this project in stop order and carries no rule. A group's service provider is this company's. A group's vehicle, where given, is a powered vehicle of that project, and its driver one of that project's drivers; a group naming both names a driver who holds the licence class the vehicle requires on the day the scheme's period starts or today, whichever is later — refused at the group's `driverId` with the reason. A group's days lie within the scheme's service days, and no container is picked by two groups that run on a shared day — the entry is refused naming the group and the day. Groups take positions 1..n in the body's order where a position is absent. The period is half-open, `validFrom` the first day in force and `validTo` the first day out of it, absent meaning the scheme runs on; one scheme of a name is in force at a time in a project, so a new version of a name starts when the old ends and an overlapping one is refused. The week rotation is given with `every-2-weeks` and with nothing else, and a daily scheme serves every weekday. `status` defaults to `draft`, which accepts partial configuration; a scheme created `validated` is held to the structural rules — every service day has a collection group, a rule group names a waste fraction, a manual group picks a container, a rule group has a planning area to match inside, and no vehicle or driver is on two collection groups that run on a shared day — and refused with every sentence that fails. The server mints every id.",
+          ". The planning area, where given, is one of that project's; so is the depot the routes depart from, and the unloading station they empty at is one of this company's. Every group finds its stops one way: a rule group carries a rule naming one or more waste fractions of this company, none or more container types of this company and, optionally, a vehicle type of this company, and picks no containers; a manual group picks one or more containers of this project in stop order and carries no rule. A group's service provider is this company's. A group's vehicle, where given, is a powered vehicle of that project that is not retired, and its driver one of that project's drivers who is active — an inactive or a suspended one is refused naming the status, since a status gates a new reference and never an existing one; a group naming both names a driver who holds the licence class the vehicle requires on the day the scheme's period starts or today, whichever is later — refused at the group's `driverId` with the reason. A group's days lie within the scheme's service days, and no container is picked by two groups that run on a shared day — the entry is refused naming the group and the day. Groups take positions 1..n in the body's order where a position is absent. The period is half-open, `validFrom` the first day in force and `validTo` the first day out of it, absent meaning the scheme runs on; one scheme of a name is in force at a time in a project, so a new version of a name starts when the old ends and an overlapping one is refused. The week rotation is given with `every-2-weeks` and with nothing else, and a daily scheme serves every weekday. `status` defaults to `draft`, which accepts partial configuration; a scheme created `validated` is held to the structural rules — every service day has a collection group, a rule group names a waste fraction, a manual group picks a container, a rule group has a planning area to match inside, and no vehicle or driver is on two collection groups that run on a shared day — and refused with every sentence that fails. The server mints every id.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The route scheme as it was written, with its collection groups.", RouteScheme),
           400: describeProblem(
-            `The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, gives the week rotation with the wrong cadence, leaves a weekday out of a daily scheme, carries no group or more than ${GROUPS_MAX}, names a group twice, runs a group on a day the scheme does not serve, gives a group both a rule and containers or neither, picks a container two groups run on the same day, names a group's driver who may not take the group's vehicle, or names a planning area, depot, unloading station, waste fraction, container type, vehicle type, container, service provider, vehicle or driver outside the scope its key allows — each at the entry that is wrong.`,
+            `The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, gives the week rotation with the wrong cadence, leaves a weekday out of a daily scheme, carries no group or more than ${GROUPS_MAX}, names a group twice, runs a group on a day the scheme does not serve, gives a group both a rule and containers or neither, picks a container two groups run on the same day, names a group's vehicle that is retired or a driver who is inactive or suspended, names a group's driver who may not take the group's vehicle, or names a planning area, depot, unloading station, waste fraction, container type, vehicle type, container, service provider, vehicle or driver outside the scope its key allows — each at the entry that is wrong.`,
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `route-studio.schemes`."),
@@ -214,9 +219,10 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>) {
         await requirePlanningArea(tx, scope, values.planningAreaId)
         await requireDepot(tx, scope, values.depotId)
         await requireUnloadingStation(tx, principal.companyId, values.unloadingStationId)
-        await requireGroupReferences(tx, scope, mergeReferences(asked.map((group, n) => referencesOf(group, { prefix: `collectionGroups.${n}.` }))))
+        const rows = await requireGroupReferences(tx, scope, mergeReferences(asked.map((group, n) => referencesOf(group, { prefix: `collectionGroups.${n}.` }))))
+        const today = projectToday(tx, scope, now)
         for (const [n, group] of asked.entries()) {
-          await requireGroupDriver(tx, scope, values, group, `collectionGroups.${n}.driverId`)
+          await requireGroupDriver(tx, scope, values, group, { path: `collectionGroups.${n}.driverId`, rows, today })
           requireNotPickedTwice(asked.slice(0, n).map(pickOf), pickOf(group), (m) => `collectionGroups.${n}.containerIds.${m}`)
         }
         await requireStructure(tx, principal.companyId, { status: values.status, serviceDays: values.serviceDays, planningAreaId: values.planningAreaId ?? null }, asked)
@@ -297,12 +303,12 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchRouteScheme",
         summary: "Amend a route scheme",
         description:
-          "Amends one route scheme of a project the caller works in; every field is optional and at least one must be given. The project and the collection groups are not patchable: a record does not move between projects, and a group is `PATCH /collection-groups/{id}` or the routes under it. The patch takes the scheme's row lock and holds the row it leaves behind to the recurrence rules in the contracts' words: the end still comes after the start, the week rotation is given with `every-2-weeks` and with nothing else, and a daily scheme serves every weekday. New service days must still cover every collection group's days — a narrowing under a group that runs on a dropped day is refused (409) counting the groups, which have to be moved first. A planning area and a depot are one of the scheme's project's, an unloading station one of this company's; a null clears the depot or the station. The structural rules are re-run when the scheme is or becomes `validated` — no vehicle or driver on two groups a shared day among them — and every sentence that fails is listed (409); a scheme going back to `draft` is held to none of them. A period that overlaps another scheme of the same name is refused; shortening the period is free, since the next generation run cancels the planned routes it leaves outside.",
+          "Amends one route scheme of a project the caller works in; every field is optional and at least one must be given. The project and the collection groups are not patchable: a record does not move between projects, and a group is `PATCH /collection-groups/{id}` or the routes under it. The patch takes the scheme's row lock and holds the row it leaves behind to the recurrence rules in the contracts' words: the end still comes after the start, the week rotation is given with `every-2-weeks` and with nothing else, and a daily scheme serves every weekday. New service days must still cover every collection group's days — a narrowing under a group that runs on a dropped day is refused (409) counting the groups, which have to be moved first. A later `validFrom` moves the day a group's driver is judged on — the day the scheme starts or today, whichever is later — so every group naming both a vehicle and a driver is judged again on the new start, and a driver who may not take the vehicle then is refused at `validFrom` with the licence sentence; an earlier start, or an end, moves nothing a licence is judged on. A planning area and a depot are one of the scheme's project's, an unloading station one of this company's; a null clears the depot or the station. The structural rules are re-run when the scheme is or becomes `validated` — no vehicle or driver on two groups a shared day among them — and every sentence that fails is listed (409); a scheme going back to `draft` is held to none of them. A period that overlaps another scheme of the same name is refused; shortening the period is free, since the next generation run cancels the planned routes it leaves outside.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The route scheme as it now stands, with its collection groups.", RouteScheme),
           400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project and the groups included), ends on or before the day it starts, gives the week rotation with the wrong cadence, leaves a weekday out of a daily scheme, or names a planning area or a depot that is not this project's or an unloading station that is not this company's.",
+            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project and the groups included), ends on or before the day it starts, gives the week rotation with the wrong cadence, leaves a weekday out of a daily scheme, moves the start to a day a collection group's driver may not take its vehicle on, or names a planning area or a depot that is not this project's or an unloading station that is not this company's.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `route-studio.schemes`."),
@@ -337,6 +343,11 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>) {
         requireRecurrence(merged)
 
         const groups = (await groupsOf(tx, principal.companyId, [id])).get(id) ?? []
+        if (patch.validFrom !== undefined && patch.validFrom > current.validFrom) {
+          // A later start moves the day the groups' drivers are judged on (#101 §6.18). The groups are not in the body, so the refusal sits at the bound that moved; the stored rows are not new references, so their statuses are not asked.
+          const today = projectToday(tx, scope, now)
+          for (const group of groups) await requireGroupDriver(tx, scope, merged, group, { path: "validFrom", today })
+        }
         if (patch.serviceDays !== undefined) {
           const outside = groups.filter((group) => !withinServiceDays(merged.serviceDays, group.days)).length
           if (outside > 0) throw problem(409, { detail: groupsLeftOutside(outside) })

@@ -145,8 +145,9 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   app.route("/", lifecycleRoutes(guard, { now }))
   app.route("/", planningAreaRoutes(guard))
   app.route("/", collectionCalendarRoutes(guard))
-  app.route("/", routeSchemeRoutes(guard))
-  app.route("/", collectionGroupRoutes(guard))
+  // Planning's group rules judge a driver on "today" on the project's clock, so the two take the app's `now` as the ledger routes do.
+  app.route("/", routeSchemeRoutes(guard, { now }))
+  app.route("/", collectionGroupRoutes(guard, { now }))
   app.route("/", vehicleTypeRoutes(guard))
   app.route("/", warehouseRoutes(guard))
   app.route("/", depotRoutes(guard))

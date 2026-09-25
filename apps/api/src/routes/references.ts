@@ -43,7 +43,7 @@ import { vehicleType } from "@waste/db/schema/fleet-types"
 import { serviceProvider } from "@waste/db/schema/organisation"
 import { depot, unloadingStation, warehouse } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
-import type { VehicleKind, WarehouseStatus } from "@waste/domain/resources/vocabulary"
+import type { DriverStatus, VehicleKind, VehicleStatus, WarehouseStatus } from "@waste/domain/resources/vocabulary"
 import { and, eq, inArray, isNull } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 
@@ -280,6 +280,13 @@ export async function requireUnloadingStation(tx: Tx, companyId: string, id: str
 // the driver profile's. Where a caller needs the row and not only its
 // existence — the class a vehicle requires, the licence a driver holds —
 // routes/fleet-lookups.ts reads it, refusing in the sentences spelled here.
+// Both checks answer the row's status (round B of the #101 review, #79's
+// rule: a status gates a new reference and never an existing one) through
+// `requireStatus` in routes/shared.ts — `requireRow`'s statement with one
+// column more, the same 400 at the field when there is no such row — so a
+// route naming a vehicle or a driver afresh can refuse a retired or an
+// unavailable one through routes/statuses.ts without a second statement, and
+// a route that only touches a row already naming them asks nothing.
 
 /** What a body is told when the vehicle it names is not one of the project's, or not of the kind asked for. */
 export const NOT_A_VEHICLE = "Not a vehicle of this project"
@@ -295,16 +302,18 @@ export const notAVehicleOf = (kind: VehicleKind | undefined): string => (kind ==
  * project, so a row of the wrong kind and a row that is not there are told
  * the same thing — which names what the field wanted. The kind and the path
  * travel in one options object, since a caller that names the one usually
- * names the other (`trailerId` is a trailer).
+ * names the other (`trailerId` is a trailer). Answers the row's status, or
+ * undefined for an id that named nothing, so the caller can hold a new
+ * reference to it (routes/statuses.ts) with no second read.
  */
 export async function requireVehicle(
   tx: Tx,
   scope: Scope,
   id: string | null | undefined,
   { kind, path = "vehicleId" }: { kind?: VehicleKind; path?: string } = {},
-): Promise<void> {
-  if (id == null) return
-  await requireRow(
+): Promise<VehicleStatus | undefined> {
+  if (id == null) return undefined
+  return await requireStatus<VehicleStatus>(
     tx,
     vehicle,
     { companyId: scope.companyId, id, also: and(eq(vehicle.projectId, scope.projectId), kind === undefined ? undefined : eq(vehicle.kind, kind)) },
@@ -315,10 +324,10 @@ export async function requireVehicle(
 /** What a body is told when it names a driver of another project. */
 export const NOT_A_DRIVER = "Not a driver of this project"
 
-/** A Driver a body names: the project's, since a workforce profile is based in one project like the vehicle it takes out. */
-export async function requireDriver(tx: Tx, scope: Scope, id: string | null | undefined, path = "driverId"): Promise<void> {
-  if (id == null) return
-  await requireRow(tx, driver, inProject(driver, scope, id), { path, message: NOT_A_DRIVER })
+/** A Driver a body names: the project's, since a workforce profile is based in one project like the vehicle it takes out; answers the status like `requireVehicle`. */
+export async function requireDriver(tx: Tx, scope: Scope, id: string | null | undefined, path = "driverId"): Promise<DriverStatus | undefined> {
+  if (id == null) return undefined
+  return await requireStatus<DriverStatus>(tx, driver, inProject(driver, scope, id), { path, message: NOT_A_DRIVER })
 }
 
 /** What a driver body is told when the login it names is not an account here, or is a deactivated one. */

@@ -897,7 +897,11 @@ describe("GET /openapi.json", () => {
 
     // The rules a client must know are in the prose, not only in the code.
     assert.match(document.paths["/vehicle-allocations"].get.description ?? "", /a reservation ending exactly when the window starts does not touch it/)
-    assert.match(document.paths["/vehicle-allocations"].post.description ?? "", /holds the licence class the vehicle requires on the day the window ends, rendered in the project's timezone/)
+    assert.match(document.paths["/vehicle-allocations"].post.description ?? "", /holds the licence class the vehicle requires on the window's last day, the last instant inside it rendered in the project's timezone/)
+    assert.match(document.paths["/vehicle-allocations/{id}/change"].post.description ?? "", /A status gates a new reference and never an existing one/)
+    assert.match(document.paths["/vehicles/{id}"].patch.description ?? "", /nor is one a collection group of a route scheme in force today names/)
+    assert.match(document.paths["/drivers/{id}"].patch.description ?? "", /`inactive` or `suspended` under a live allocation/)
+    assert.match(document.paths["/route-schemes/{id}"].patch.description ?? "", /judged again on the new start, and a driver who may not take the vehicle then is refused at `validFrom`/)
     assert.match(document.paths["/vehicle-allocations"].post.description ?? "", /one live reservation of a vehicle, of a driver and of a trailer at a time/)
     assert.match(document.paths["/vehicle-allocations/{id}/change"].post.description ?? "", /A released allocation does not change \(409\)/)
     assert.match(document.paths["/vehicle-allocations/{id}/confirm"].post.description ?? "", /without a write and without an event/)
@@ -956,7 +960,7 @@ describe("GET /openapi.json", () => {
     assert.match(document.paths["/vehicles"].post.description ?? "", /an unknown class passes nobody/)
     assert.match(document.paths["/vehicles"].get.description ?? "", /an account that works in none[^.]*reads an empty page/)
     assert.match(document.paths["/vehicles/{id}"].patch.description ?? "", /a powered vehicle does not become a trailer/)
-    assert.match(document.paths["/vehicles/{id}"].patch.description ?? "", /refused \(409\) counting them; release them first/)
+    assert.match(document.paths["/vehicles/{id}"].patch.description ?? "", /refused \(409\) counting them — release the allocations, reassign the groups, and retire it then/)
     assert.match(document.paths["/vehicles/{id}/compartments"].put.description ?? "", /Replaces the whole list/)
     assert.match(document.paths["/vehicles/{id}/compartments"].put.description ?? "", /positions are 1\.\.n in the body's order/)
     assert.match(document.paths["/vehicles/{id}/compartments"].put.description ?? "", /the stored kind decides/)

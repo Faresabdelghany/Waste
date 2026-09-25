@@ -47,11 +47,25 @@
 // set-shaped references (a Property's parties, a Group's or a Point's members)
 // and the customer a Group or a Point answers to are not gated in this issue
 // either.
+//
+// Resources (Issue #101, its review rounds) applies the same rule to its own
+// rows — a warehouse that takes no stock, a retired vehicle or trailer, an
+// inactive or suspended driver — below the Registry's gates. The lookup that
+// proves a Resources row is there answers its status too (`requireStatus` in
+// routes/shared.ts, the fleet checks of routes/references.ts, the
+// `WarehouseRef` `requireWarehouse` answers), so a gate costs no second
+// statement; the statuses are the vocabulary's
+// (@waste/domain/resources/vocabulary), the sentences are spelled here once
+// and read by every door, and each review round appends its gates under its
+// own heading.
 import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
-import type { WarehouseStatus } from "@waste/domain/resources/vocabulary"
+import { vehicleAllocation } from "@waste/db/schema/allocations"
+import type { AllocationStatus, DriverStatus, VehicleStatus, WarehouseStatus } from "@waste/domain/resources/vocabulary"
+import { count } from "@waste/domain/text"
+import { and, eq, gt, inArray, sql, type SQL } from "drizzle-orm"
 
-import { problem } from "../problem"
+import { invalidRequest, problem } from "../problem"
 import type { WarehouseRef } from "./references"
 
 /** The two fields an agreement names a customer in: as its holder, and as the customer it is billed to. */
@@ -110,27 +124,16 @@ export function refuseUnservedPlace(place: Place, reference: PlaceReference): vo
   }
 }
 
-// Resources (Issue #101, its review rounds) applies the same rule to its own
-// rows: a record that is closed, a draft or inactive takes no new row pointing
-// at it, and every row already pointing at it stands. The refusal is the same
-// 409 naming the status — the row the caller named is really there, so it is
-// not the 400 a missing id earns, and no better body would do while the record
-// stands as it does — with the family's own sentence, since what "closed"
-// forbids differs from a warehouse to a product. `requireStatus` is the one
-// mechanism; each round appends its gates below it, under its own heading.
-
-/** Refuses a status a new reference may not point at, with the family's sentence; any other status passes. */
-export function requireStatus<Status extends string>(status: Status, closedTo: readonly Status[], sentence: (status: Status) => string): void {
-  if (closedTo.includes(status)) throw problem(409, { detail: sentence(status) })
-}
-
 // Resources, round A (Issue #101 review): the warehouse a movement arrives at.
 // A closed or draft warehouse takes no new stock — nothing is received,
 // returned, transferred or adjusted into it — and what stands there stands:
 // the ledger's rows are never rewritten, the projection goes on reading them,
 // and a transfer out of it is a movement into somewhere else, which is the
 // way to empty it. `active` and `restricted` take stock; what `restricted`
-// restricts is inventory's question, not the ledger's.
+// restricts is inventory's question, not the ledger's. The refusal is a 409
+// naming the warehouse and its status — the row the caller named is really
+// there, so it is not the 400 a missing id earns, and no better body would do
+// while the warehouse stands as it does.
 
 /** The warehouse statuses a movement may not arrive at. */
 export const WAREHOUSE_TAKES_NO_STOCK: readonly WarehouseStatus[] = ["draft", "closed"]
@@ -140,5 +143,62 @@ export const takesNoStock = (name: string, status: WarehouseStatus): string => `
 
 /** Holds the warehouse a movement arrives at open for stock: the #79 rule as the ledger applies it, a 409 naming the status. */
 export function requireWarehouseTakesStock(found: WarehouseRef): void {
-  requireStatus(found.status, WAREHOUSE_TAKES_NO_STOCK, (status) => takesNoStock(found.name, status))
+  if (WAREHOUSE_TAKES_NO_STOCK.includes(found.status)) throw problem(409, { detail: takesNoStock(found.name, found.status) })
 }
+
+// Resources, round B: the fleet. An allocation's `vehicleId`, `trailerId` and
+// `driverId`, a collection group's `vehicleId` and `driverId` — on a create,
+// on a patch that moves the field, and on the scheme create's groups — are
+// held here; a group whose vehicle later retires is not refused on an
+// unrelated patch, and a note-only change to an allocation asks nothing of
+// its vehicle. Each refusal is a 400 at the field the body carried the id in,
+// the shape every reference refusal takes (routes/references.ts), because the
+// caller chose the row and can choose another. The other half of the rule is
+// the fleet's own: a vehicle is not retired, and a driver not set inactive or
+// suspended, while a live allocation or a collection group of a scheme in
+// force still names them (routes/vehicles.ts, routes/drivers.ts, counting
+// through `refuseStranded` with the pieces below).
+
+/** What a body naming a retired vehicle — as the vehicle or as the trailer — is told: "WH-99 is retired". */
+export const isRetired = (label: string): string => `${label} is retired`
+
+/** A vehicle named afresh is not retired; `unavailable` and `maintenance` pass, since a vehicle in the workshop today is planned with for next month. */
+export function refuseRetiredVehicle(status: VehicleStatus, label: string, path: string): void {
+  if (status !== "retired") return
+  throw invalidRequest("body", [{ path, message: isRetired(label) }])
+}
+
+/** What a body naming a driver who is not active is told, the status spelled since the two are corrected differently: "Karen Holt is inactive", "Peter Lund is suspended". */
+export const isUnavailable = (name: string, status: Exclude<DriverStatus, "active">): string => `${name} is ${status}`
+
+/** A driver named afresh is active: an inactive or a suspended one is refused naming the status. */
+export function refuseUnavailableDriver(status: DriverStatus, name: string, path: string): void {
+  if (status === "active") return
+  throw invalidRequest("body", [{ path, message: isUnavailable(name, status) }])
+}
+
+/** The allocation statuses that reserve: `released` reserves nothing, and the exclusion constraints ignore it the same way. */
+export const LIVE_ALLOCATION_STATUSES = ["planned", "confirmed"] as const satisfies readonly AllocationStatus[]
+
+/**
+ * The live allocations still naming a row — `naming` says how: as the vehicle
+ * or as the trailer, or as the driver — not yet over on the database's clock.
+ * `company_id` and the row's id and never `inProjects`: the row was read under
+ * the caller's scope and an allocation's project is the row's by the composite
+ * key, and a count that refuses a write must not be the one statement that
+ * could miss a row.
+ */
+export const liveAllocationsNaming = (companyId: string, naming: SQL | undefined): SQL | undefined =>
+  and(eq(vehicleAllocation.companyId, companyId), naming, inArray(vehicleAllocation.status, [...LIVE_ALLOCATION_STATUSES]), gt(vehicleAllocation.plannedTo, sql`now()`))
+
+/** What taking a row out of service under live allocations is refused with: "2 live allocations name this vehicle; release them first". */
+export const liveAllocationsName =
+  (what: "vehicle" | "driver") =>
+  (rows: number): string =>
+    `${count(rows, "live allocation")} ${rows === 1 ? "names" : "name"} this ${what}; release ${rows === 1 ? "it" : "them"} first`
+
+/** The same under the collection groups of schemes in force today: "1 collection group names this driver; reassign it first". */
+export const groupsName =
+  (what: "vehicle" | "driver") =>
+  (rows: number): string =>
+    `${count(rows, "collection group")} ${rows === 1 ? "names" : "name"} this ${what}; reassign ${rows === 1 ? "it" : "them"} first`

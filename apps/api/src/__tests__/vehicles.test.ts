@@ -6,6 +6,7 @@ import { A_POWERED_VEHICLE_HAS_A_COMPARTMENT, Vehicle } from "@waste/contracts/f
 import { Id } from "@waste/contracts/ids"
 import { Page } from "@waste/contracts/pagination"
 import { PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/contracts/places"
+import { RouteScheme } from "@waste/contracts/route-schemes"
 import { createDb, type Database } from "@waste/db/client"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
 import { withCompany } from "@waste/db/tenant"
@@ -410,6 +411,47 @@ describe("the vehicle endpoints", { skip: database.skip }, () => {
       assert.deepEqual([again.status, again.notes], ["retired", "Sold"], "a vehicle already retired is not asked again")
     })
 
+    test("refuses retiring under collection groups of schemes in force today, counting them whatever the scheme's status, after the allocations; an ended or a future scheme counts for nothing", async () => {
+      const truck = await vehicle()
+      /** A draft scheme whose one rule group runs with the truck, over the period given. */
+      const naming = (name: string, validFrom: string, validTo?: string) => ({
+        projectId: a.projects.copenhagen.id,
+        name,
+        serviceType: "container-collection",
+        frequency: "weekly",
+        serviceDays: ["monday"],
+        validFrom,
+        ...(validTo === undefined ? {} : { validTo }),
+        collectionGroups: [{ name: "North", days: ["monday"], stopSource: "rule", rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: null }, vehicleId: truck.id }],
+      })
+      const retire = () => olivia(`/vehicles/${truck.id}`, { method: "PATCH", body: { status: "retired" } })
+      const running = await create(olivia, "/route-schemes", naming("Running", "2026-01-01"), RouteScheme)
+      await create(olivia, "/route-schemes", naming("Ended", "2025-01-01", "2025-07-01"), RouteScheme)
+      await create(olivia, "/route-schemes", naming("Not yet", "2030-01-05"), RouteScheme)
+      const one_ = await refused(await retire(), 409)
+      assert.equal(one_.detail, "1 collection group names this vehicle; reassign it first", "a draft scheme in force counts; the ended one and the future one do not")
+      const alsoRunning = await create(olivia, "/route-schemes", naming("Running too", "2026-06-01"), RouteScheme)
+      const two = await refused(await retire(), 409)
+      assert.equal(two.detail, "2 collection groups name this vehicle; reassign them first")
+      assert.equal((await one(olivia, truck.id)).status, "active", "and the refused patches wrote nothing")
+
+      // A live allocation is counted first, in its own sentence.
+      const allocation = testId()
+      await withCompany(pool.db, a.companyId, async (tx) => {
+        await tx.insert(vehicleAllocation).values({ id: allocation, companyId: a.companyId, projectId: a.projects.copenhagen.id, vehicleId: truck.id, plannedFrom: new Date(Date.now() + HOUR), plannedTo: new Date(Date.now() + 2 * HOUR), status: "planned" })
+      })
+      assert.equal((await refused(await retire(), 409)).detail, "1 live allocation names this vehicle; release it first", "the allocations are counted before the groups")
+      await withCompany(pool.db, a.companyId, async (tx) => {
+        await tx.update(vehicleAllocation).set({ status: "released" }).where(and(eq(vehicleAllocation.companyId, a.companyId), eq(vehicleAllocation.id, allocation)))
+      })
+      for (const scheme of [running, alsoRunning]) {
+        const reassigned = await olivia(`/collection-groups/${scheme.collectionGroups[0].id}`, { method: "PATCH", body: { vehicleId: null } })
+        assert.equal(reassigned.status, 200, JSON.stringify(await reassigned.clone().json()))
+      }
+      const retired = await patch(olivia, truck.id, { status: "retired" })
+      assert.equal(retired.status, "retired", "released and reassigned, the vehicle retires")
+    })
+
     test("refuses a registration or a callsign another vehicle holds", async () => {
       const held = await vehicle({ callsign: "WH-7" })
       const created = await vehicle()
@@ -535,18 +577,20 @@ describe("the vehicle endpoints", { skip: database.skip }, () => {
       return true
     }
 
-    test("holds a vehicle to the project and, when one is demanded, to the kind, each with its own sentence", async () => {
+    test("holds a vehicle to the project and, when one is demanded, to the kind, each with its own sentence, and answers the row's status", async () => {
       const truck = await vehicle()
       const trailer = await vehicle({ kind: "trailer", requiredLicenceClass: "ce", compartments: [] })
       const elsewhere = await vehicle({ projectId: a.projects.harbor.id })
+      const retired = await vehicle({ status: "retired" })
       const scope = { companyId: a.companyId, projectId: a.projects.copenhagen.id }
       await withCompany(pool.db, a.companyId, async (tx) => {
-        await requireVehicle(tx, scope, truck.id)
+        assert.equal(await requireVehicle(tx, scope, truck.id), "active", "the status, for the doors that gate a new reference on it")
+        assert.equal(await requireVehicle(tx, scope, retired.id), "retired", "found, and retired: whether that will do is the caller's rule")
         await requireVehicle(tx, scope, truck.id, { kind: "powered-vehicle" })
         await requireVehicle(tx, scope, trailer.id, { path: "trailerId" })
-        await requireVehicle(tx, scope, trailer.id, { kind: "trailer", path: "trailerId" })
-        await requireVehicle(tx, scope, null, { kind: "trailer" })
-        await requireVehicle(tx, scope, undefined)
+        assert.equal(await requireVehicle(tx, scope, trailer.id, { kind: "trailer", path: "trailerId" }), "active")
+        assert.equal(await requireVehicle(tx, scope, null, { kind: "trailer" }), undefined, "nothing named, nothing to answer")
+        assert.equal(await requireVehicle(tx, scope, undefined), undefined)
 
         await assert.rejects(requireVehicle(tx, scope, trailer.id, { kind: "powered-vehicle" }), refusal("vehicleId", NOT_A_POWERED_VEHICLE), "a trailer offered where a powered vehicle is required")
         await assert.rejects(requireVehicle(tx, scope, truck.id, { kind: "trailer", path: "trailerId" }), refusal("trailerId", NOT_A_TRAILER), "a powered vehicle offered as a trailer")
