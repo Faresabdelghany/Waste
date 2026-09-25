@@ -93,6 +93,7 @@ import { periodAfter, requireOrdered } from "./periods"
 import { requireDepot, requirePlanningArea, requireUnloadingStation, type Scope } from "./references"
 import {
   findScheme,
+  fleetOf,
   groupsOf,
   MODULE,
   mergeReferences,
@@ -348,9 +349,10 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
 
         const groups = (await groupsOf(tx, principal.companyId, [id])).get(id) ?? []
         if (patch.validFrom !== undefined && patch.validFrom > current.validFrom) {
-          // A later start moves the day the groups' drivers are judged on (#101 §6.18). The groups are not in the body, so the refusal sits at the bound that moved; the stored rows are not new references, so their statuses are not asked.
+          // A later start moves the day the groups' drivers are judged on (#101 §6.18). The groups are not in the body, so the refusal sits at the bound that moved; their vehicles and drivers are read once, in one statement each (`fleetOf`), and are not new references, so their statuses are not asked.
           const today = projectToday(tx, scope, now)
-          for (const group of groups) await requireGroupDriver(tx, scope, merged, group, { path: "validFrom", today })
+          const rows = await fleetOf(tx, scope, groups)
+          for (const group of groups) await requireGroupDriver(tx, scope, merged, group, { path: "validFrom", rows, today })
         }
         if (patch.serviceDays !== undefined) {
           const outside = groups.filter((group) => !withinServiceDays(merged.serviceDays, group.days)).length

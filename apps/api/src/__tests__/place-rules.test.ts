@@ -53,8 +53,9 @@ describe("requirePlaceShape, the patch held against the stored row (database-fre
     assert.deepEqual(refusal(() => requirePlaceShape(providers, { closesAt: null })), [hoursIssue])
   })
 
-  test("judges the provider first when a patch breaks both rules", () => {
-    assert.deepEqual(refusal(() => requirePlaceShape(company, { ownership: "service-provider", opensAt: "06:00" })), [providerIssue])
+  test("lists both rules in the one 400 when a patch breaks both, the provider first", () => {
+    assert.deepEqual(refusal(() => requirePlaceShape(company, { ownership: "service-provider", opensAt: "06:00" })), [providerIssue, hoursIssue])
+    assert.deepEqual(refusal(() => requirePlaceShape(providers, { serviceProviderId: null, closesAt: null })), [providerIssue, hoursIssue], "taking the provider and one time off")
   })
 })
 

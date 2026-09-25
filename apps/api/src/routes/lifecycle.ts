@@ -165,6 +165,18 @@ const notInService = (label: string) => `Container ${label} is not in service`
 const alreadyRetired = (label: string) => `Container ${label} is already retired`
 const noAdjustmentInService = (label: string) =>
   `Container ${label} is in service; return or decommission it, an adjustment does not touch a placement`
+/**
+ * A return or a decommission of a container the ledger has in service at a
+ * placement the Registry says already ended: a row from before the ledger, or
+ * an import, since a create carries no end and the patch sets none on an open
+ * placement. The two disagree, and no command settles it from here — an
+ * adjustment does not leave service (the domain's shape table and the
+ * database's check both say so) and the patch does not reopen a placement —
+ * so the sentence names the disagreement and promises no door; it is the
+ * import's to correct. A 409 like the other states, not a 500: the body is
+ * fine and the container is really there.
+ */
+export const placementAlreadyEnded = (label: string, day: string) => `Container ${label}'s placement already ended on ${day}; the ledger disagrees`
 
 // The 400s: a body that says something the ledger cannot take.
 
@@ -304,10 +316,12 @@ async function departure(tx: Tx, principal: Principal, subject: ContainerRef, re
  * held inside the subscription's period (400 on `validTo`, naming the bound;
  * the ordering rule with it, routes/periods.ts) and may not run the placement
  * into the next one (the exclusion constraint, a 409). A placement the
- * reading names and the table does not have, or one that already has an end
- * — a create carries none and the patch refuses to set one on an open
- * placement, so a container in service is at an open placement by
- * construction — is a broken invariant, not a client's doing.
+ * reading names and the table does not have is a broken invariant, not a
+ * client's doing, and is thrown. One that already has an end is a row from
+ * before the ledger or an import — a create carries none and the patch sets
+ * none on an open placement — and is a 409 naming the day and the
+ * disagreement (`placementAlreadyEnded`), like every other state a command
+ * is refused by, since the body is fine and the container is really there.
  */
 async function endPlacement(tx: Tx, principal: Principal, subject: ContainerRef, placementId: string, validTo: string): Promise<void> {
   const { companyId } = principal
@@ -336,7 +350,7 @@ async function endPlacement(tx: Tx, principal: Principal, subject: ContainerRef,
   await lockRow(tx, subscription, { companyId, id: before.subscriptionId })
   const [current] = await held()
   if (current === undefined) throw missing()
-  if (current.validTo !== null) throw new Error(`container ${subject.id} is in service at placement ${placementId}, which already ended on ${current.validTo}`)
+  if (current.validTo !== null) throw problem(409, { detail: placementAlreadyEnded(subject.label, current.validTo) })
   requireWithin({ validFrom: current.subscriptionValidFrom, validTo: current.subscriptionValidTo }, { validFrom: current.validFrom, validTo }, OUTSIDE_SUBSCRIPTION)
   await refuseOverlap({ [ALREADY_PLACED]: alreadyPlaced(subject.label) }, () =>
     tx
@@ -574,7 +588,7 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         operationId: "returnContainer",
         summary: "Take a container out of service into stock",
         description:
-          "Ends the placement the container is in service at on `validTo` — the first day it no longer serves, held inside the subscription's period (400 naming the bound) and off the next placement (409) — and appends the return in the same transaction: from that placement into a warehouse of its project, or into maintenance at one when `toKind` says so. Either both change or neither. A container that is not in service is refused (409), and so is a warehouse that is closed or a draft (409 naming the status). `occurredAt` and `reference` are the movement's, the instant at most five minutes ahead of the request's clock; `reason` says why it came back.",
+          "Ends the placement the container is in service at on `validTo` — the first day it no longer serves, held inside the subscription's period (400 naming the bound) and off the next placement (409) — and appends the return in the same transaction: from that placement into a warehouse of its project, or into maintenance at one when `toKind` says so. Either both change or neither. A container that is not in service is refused (409), and so is a warehouse that is closed or a draft (409 naming the status). A placement the ledger has the container in service at but which already carries an end — a row from before the ledger, or an import — is refused too (409 naming the day): the two disagree, and that is the import's to correct. `occurredAt` and `reference` are the movement's, the instant at most five minutes ahead of the request's clock; `reason` says why it came back.",
         security: BEARER_SECURITY,
         responses: {
           201: describeJson("The return as it was appended; the placement now ends on `validTo`.", StockMovement),
@@ -582,7 +596,7 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
             "The path does not hold an id, or the body is missing the warehouse or `validTo`, names a member the ledger owns, names a warehouse that is not this container's project's, ends the placement on or before the day it started or outside the subscription's period, or dates the return more than five minutes after the request.",
           ),
           ...commandProblems("create"),
-          409: describeProblem("The container is not in service, the warehouse is closed or a draft and takes no stock, or the new end would run its placement into the next one."),
+          409: describeProblem("The container is not in service, the warehouse is closed or a draft and takes no stock, the placement it is in service at already ended (the ledger disagrees), or the new end would run its placement into the next one."),
         },
       }),
       guard,
@@ -634,7 +648,7 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         operationId: "decommissionContainer",
         summary: "Scrap a container",
         description:
-          "Appends the decommission: from wherever the container stands to scrap, with the reason. In service, `validTo` is required (400) and ends the placement in the same transaction, as a return does; out of service, `validTo` is refused (400), since there is no placement to end. A container with no stock record (409) or already retired (409) is refused. A retired container never comes back through `receive`; a wrong decommission is corrected through `adjust`.",
+          "Appends the decommission: from wherever the container stands to scrap, with the reason. In service, `validTo` is required (400) and ends the placement in the same transaction, as a return does — a placement that already carries an end, a row from before the ledger or an import, is refused (409 naming the day), since the ledger and the Registry disagree; out of service, `validTo` is refused (400), since there is no placement to end. A container with no stock record (409) or already retired (409) is refused. A retired container never comes back through `receive`; a wrong decommission is corrected through `adjust`.",
         security: BEARER_SECURITY,
         responses: {
           201: describeJson("The decommission as it was appended; a placement it ended now ends on `validTo`.", StockMovement),
@@ -642,7 +656,7 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
             "The path does not hold an id, or the body is missing the reason, names a member the ledger owns, gives `validTo` out of service or withholds it in service, ends the placement on or before the day it started or outside the subscription's period, or dates the decommission more than five minutes after the request.",
           ),
           ...commandProblems("create"),
-          409: describeProblem("The container has no stock record, is already retired, or the placement's new end would run it into the next one."),
+          409: describeProblem("The container has no stock record, is already retired, is in service at a placement that already ended (the ledger disagrees), or the placement's new end would run it into the next one."),
         },
       }),
       guard,

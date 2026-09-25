@@ -39,8 +39,9 @@
 // ending the placement and appending the movement together. So a placement's
 // end is the ledger's: a create carries none (the contracts refuse `validTo`
 // by name), and `PATCH /placements/:id` corrects the end of a placement
-// already ended, refusing to set one on an open placement or to take one off
-// (409 each), since the ledger says when the container left. The issue route
+// already ended, refusing to set one on an open placement (409) — and a null,
+// which would take the end off, is refused by the contracts before the route
+// sees it, since the ledger says when the container left. The issue route
 // holds what the body names before the ledger is consulted — a subscription
 // of another project, a fraction of another company, a start outside the
 // subscription's period — so a body that names nothing real is a 400
@@ -267,12 +268,11 @@ function requireStartsWithin(served: Period, validFrom: string): void {
 
 // The patch's rule since the ledger (Issue #101): a placement is ended by a
 // command, never by a form, and the ledger's word on when the container left
-// is not taken back by one either.
+// is not taken back by one either — the contracts' `validTo` takes no null,
+// so that half is the schema's 400 and the route holds only the other.
 
 /** What a patch setting an end on an open placement is told. */
 export const END_BY_COMMAND = "End this placement by returning or decommissioning the container"
-/** What a patch taking the end off an ended placement is told. */
-export const leftOn = (day: string) => `The container left this placement on ${day}; the ledger says so`
 
 const noSuchPlacement = (id: string) =>
   problem(404, { detail: `No container service placement ${id} in the projects this account works in` })
@@ -690,17 +690,17 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         operationId: "patchPlacement",
         summary: "Correct a placement",
         description:
-          "Corrects the fraction a placement takes, changes the cadence override (a null takes the override off again), or corrects the end of a placement that already has one. `validFrom` and the subscription do not change: a placement that starts on another day or serves another subscription is another placement. Nor does the patch end an open placement or reopen an ended one: the container leaves service through `POST /containers/{id}/return` or `/decommission`, which end the placement and append the movement together, so a `validTo` on an open placement is refused (409), and taking the end off is refused too (409), since the ledger says when the container left. A corrected end is held to three rules — it still comes after the start, it still lies inside the subscription's period (400 naming the bound), and it may not run the placement into the next one, since a container serves in one place at a time.",
+          "Corrects the fraction a placement takes, changes the cadence override (a null takes the override off again), or corrects the end of a placement that already has one. `validFrom` and the subscription do not change: a placement that starts on another day or serves another subscription is another placement. Nor does the patch end an open placement or reopen an ended one: the container leaves service through `POST /containers/{id}/return` or `/decommission`, which end the placement and append the movement together, so a `validTo` on an open placement is refused (409), and `validTo` takes no null (400): the ledger says when the container left, and a form does not take that back. A corrected end is held to three rules — it still comes after the start, it still lies inside the subscription's period (400 naming the bound), and it may not run the placement into the next one, since a container serves in one place at a time.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The placement as it now stands, with the cadence in force.", ContainerServicePlacement),
           400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (`validFrom` and the subscription included), ends on or before the day it starts, falls outside the subscription's period, or names a waste fraction or service frequency outside the scope its key allows.",
+            "The path does not hold an id, or the patch is empty, names a field the caller does not own (`validFrom` and the subscription included), gives `validTo` as null, ends on or before the day it starts, falls outside the subscription's period, or names a waste fraction or service frequency outside the scope its key allows.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `resources.containers`."),
           404: describeProblem("No placement with that id in the projects this account works in."),
-          409: describeProblem("The patch would end an open placement or reopen an ended one, which the ledger's commands do, or the container is already placed over part of that period."),
+          409: describeProblem("The patch would end an open placement, which the ledger's commands do, or the container is already placed over part of that period."),
         },
       }),
       guard,
@@ -727,9 +727,10 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
           current = await findPlacement(tx, principal, id)
           if (current === undefined) throw noSuchPlacement(id)
           // The end is the ledger's to set and to keep: a form corrects a
-          // day the container already left on, and nothing else.
-          if (current.validTo === null && patch.validTo !== null) throw problem(409, { detail: END_BY_COMMAND })
-          if (current.validTo !== null && patch.validTo === null) throw problem(409, { detail: leftOn(current.validTo) })
+          // day the container already left on, and nothing else (a null,
+          // which would take the end off, never reaches here: the contracts
+          // refuse it).
+          if (current.validTo === null) throw problem(409, { detail: END_BY_COMMAND })
           requireWithin(servedPeriod(current), periodAfter(current, patch), OUTSIDE_SUBSCRIPTION)
         }
 

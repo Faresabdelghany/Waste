@@ -10,6 +10,7 @@ import { Page } from "@waste/contracts/pagination"
 import { StockMovement } from "@waste/contracts/stock"
 import { ENDS_AFTER_IT_STARTS } from "@waste/contracts/validity"
 import { createDb, type Database } from "@waste/db/client"
+import { containerServicePlacement } from "@waste/db/schema/containers"
 import { stockMovement } from "@waste/db/schema/stock"
 import { withCompany } from "@waste/db/tenant"
 import { eq } from "drizzle-orm"
@@ -21,6 +22,7 @@ import {
   NOT_A_MOVEMENT_OF_THIS_CONTAINER,
   OCCURRED_AT_SKEW_MS,
   OUTSIDE_SUBSCRIPTION,
+  placementAlreadyEnded,
   RECORDED_AFTER_IT_HAPPENED,
   VALID_TO_SAYS_NOTHING,
 } from "../routes/lifecycle"
@@ -666,6 +668,53 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
       const out = await transfer(standing, west)
       assert.deepEqual([out.fromWarehouseId, out.toWarehouseId], [yard, west], "out of the closed warehouse is a movement into an open one")
       assert.deepEqual((await containers(`?warehouseId=${yard}`)).items, [], "emptied")
+    })
+  })
+
+  describe("a placement that already ended under a container the ledger has in service (a row from before the ledger, or an import)", () => {
+    test("is a 409 naming the day on a return and on a decommission, and nothing is written", async () => {
+      const into = await stocked("BIN-5120")
+      const placementId = testId()
+      // The Registry says the placement ended in April; the ledger's issue
+      // row says the container is still in service at it. Both written
+      // through `tx` as `wms_api`, the way an import would, since no command
+      // produces the pair: a create carries no end and the patch sets none on
+      // an open placement.
+      await withCompany(pool.db, a.companyId, async (tx) => {
+        await tx.insert(containerServicePlacement).values({
+          id: placementId,
+          companyId: a.companyId,
+          projectId: a.projects.copenhagen.id,
+          containerId: into.id,
+          subscriptionId: subscribed.id,
+          wasteFractionId: residual.id,
+          validFrom: JANUARY,
+          validTo: APRIL,
+        })
+        await tx.insert(stockMovement).values({
+          id: testId(),
+          companyId: a.companyId,
+          projectId: a.projects.copenhagen.id,
+          containerId: into.id,
+          kind: "issue",
+          fromKind: "warehouse",
+          fromWarehouseId: west,
+          toKind: "service",
+          placementId,
+          occurredAt: new Date("2026-01-05T07:00:00Z"),
+          recordedBy: a.users.olivia.id,
+        })
+      })
+      assert.equal((await one(into.id)).assetState?.status, "in-service", "the ledger reads the import's issue")
+
+      const returned = await refusedCommand(into, "return", { warehouseId: west, validTo: JULY }, 409)
+      assert.equal(returned.detail, placementAlreadyEnded("BIN-5120", APRIL))
+      assert.equal(returned.detail, "Container BIN-5120's placement already ended on 2026-04-01; the ledger disagrees", "a 409 like every other state a command is refused by, not a 500")
+      const scrapped = await refusedCommand(into, "decommission", { reason: "Crushed", validTo: JULY }, 409)
+      assert.equal(scrapped.detail, placementAlreadyEnded("BIN-5120", APRIL))
+      assert.equal((await onePlacement(placementId)).validTo, APRIL, "the Registry's end stands")
+      assert.deepEqual((await movements(into)).items.map((movement) => movement.kind), ["receipt", "issue"], "nothing appended")
+      assert.equal((await one(into.id)).assetState?.status, "in-service", "and the ledger's reading stands")
     })
   })
 

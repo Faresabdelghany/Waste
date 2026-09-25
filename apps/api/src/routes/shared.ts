@@ -47,6 +47,7 @@
 // module stays in the one that owns it.
 import { Id } from "@waste/contracts/ids"
 import { providerShape } from "@waste/contracts/places"
+import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
 import { and, eq, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
@@ -280,12 +281,22 @@ export async function refuseCheck<T>(sentences: Readonly<Record<string, Refusal>
 // @waste/contracts/places, which judges a half-seen pair as fine and leaves
 // it to the route to merge the stored row in), the path is always
 // `serviceProviderId`, and the sentence is the family's, since a depot's and
-// a driver's differ. routes/place-rules.ts runs the two places through it,
-// and routes/vehicles.ts and routes/drivers.ts hold their merged row to it
-// the same way since the closing round.
+// a driver's differ. It comes in two doors: `providerShapeIssue` answers the
+// field error or nothing, for a caller that holds a row to more than one
+// rule and lists every refusal in one 400 (routes/place-rules.ts, the two
+// places), and `requireProviderShape` throws it, for a caller with one rule
+// to hold (routes/vehicles.ts and routes/drivers.ts, since the closing
+// round). Both take the row as the write leaves it — the provider merged onto
+// the stored row, `string | null` and never absent — so a raw patch, whose
+// provider may be undefined, does not compile.
 
-/** Holds a row as a write leaves it — `owner` its ownership or employment, `body` its provider — to the contracts' provider rule, refusing at `serviceProviderId` with the family's sentence. */
-export function requireProviderShape(owner: string, body: { serviceProviderId?: string | null }, sentence: string): void {
-  if (providerShape(owner, body)) return
-  throw invalidRequest("body", [{ path: "serviceProviderId", message: sentence }])
+/** The provider rule's answer for a row as a write leaves it — `owner` its ownership or employment, `body` its provider — at `serviceProviderId` with the family's sentence; undefined where the row holds. */
+export function providerShapeIssue(owner: string, body: { serviceProviderId: string | null }, sentence: string): ProblemFieldError | undefined {
+  return providerShape(owner, body) ? undefined : { path: "serviceProviderId", message: sentence }
+}
+
+/** Holds a row as a write leaves it to the contracts' provider rule, refusing at `serviceProviderId` with the family's sentence: `providerShapeIssue`, thrown. */
+export function requireProviderShape(owner: string, body: { serviceProviderId: string | null }, sentence: string): void {
+  const issue = providerShapeIssue(owner, body, sentence)
+  if (issue !== undefined) throw invalidRequest("body", [issue])
 }

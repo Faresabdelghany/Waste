@@ -19,6 +19,16 @@
 // statements is a row that is there, the singular lets it through, and the
 // set is asked again until nothing is missing, so no entry is written that no
 // statement proved. The second statement is spent on the failure path only.
+// The loop remembers every path the singular let through (a `Set`, since the
+// last round of the #101 review): an entry the set finds missing again after
+// that is a row flickering under the request and is thrown, so two entries
+// taking turns cannot keep the loop going.
+//
+// `rowsPresent` is the loop and then the rows: where a caller does something
+// with the rows a body named next — a status gate, a licence rule — every row
+// has to be read, the one the singular let through included, so the loop runs
+// to nothing missing and then one statement reads them all. routes/scheme-
+// groups.ts reads a body's vehicles and drivers this way.
 //
 // `groupedBy` is the read: a page's entries in one query, grouped by parent
 // and in the order a set reads back in, the same for a page, a single read
@@ -35,6 +45,9 @@ export type Named = { id: string; path: string }
 /** The singular check a missing entry is handed to: routes/references.ts's, refusing at the entry's path with the family's sentence. */
 export type Singular = (entry: Named) => Promise<unknown>
 
+/** Every id the entries name, each once however often a body named it, in the order first named. */
+export const idsNamed = (entries: readonly Named[]): string[] => [...new Set(entries.map((entry) => entry.id))]
+
 /**
  * The lowest entry whose id is not a row of `table` in this company (and
  * under `also`), found in one statement over every id the body named, each
@@ -49,7 +62,7 @@ export async function firstMissing(
   entries: readonly Named[],
   also?: SQL,
 ): Promise<Named | undefined> {
-  const ids = [...new Set(entries.map((entry) => entry.id))]
+  const ids = idsNamed(entries)
   if (ids.length === 0) return undefined
   const rows = await tx
     .select({ id: column })
@@ -67,7 +80,9 @@ export async function firstMissing(
  * is missing. A row the singular let through is one that arrived between the
  * two statements and is there now; one it did not let through is the 400 the
  * family spells. An entry the singular passed and the set finds missing again
- * is a row flickering under the request, which is not a client's doing.
+ * is a row flickering under the request, which is not a client's doing: it is
+ * thrown, whichever of the passed entries it is, so no two entries can take
+ * turns at the loop.
  */
 export async function eachPresent(
   tx: Tx,
@@ -78,14 +93,37 @@ export async function eachPresent(
   singular: Singular,
   also?: SQL,
 ): Promise<void> {
-  let passed: string | undefined
+  const passed = new Set<string>()
   for (;;) {
     const missing = await firstMissing(tx, table, column, companyId, entries, also)
     if (missing === undefined) return
-    if (missing.path === passed) throw new Error(`${missing.path} names ${missing.id}, which the singular check found and the set did not`)
+    if (passed.has(missing.path)) throw new Error(`${missing.path} names ${missing.id}, which the singular check found and the set did not`)
     await singular(missing)
-    passed = missing.path
+    passed.add(missing.path)
   }
+}
+
+/**
+ * `eachPresent`, and then the rows themselves: once nothing is missing, one
+ * statement (`read`, the caller's select over the ids, since only it knows the
+ * columns) reads every row the body named, by id. A caller that gates or
+ * judges the rows next — a status, a licence — gets every one of them, the
+ * row the singular let through included, and reads nothing twice. No entries
+ * is no statement and an empty map.
+ */
+export async function rowsPresent<Row extends { id: string }>(
+  tx: Tx,
+  table: TenantTable,
+  column: PgColumn,
+  companyId: string,
+  entries: readonly Named[],
+  singular: Singular,
+  read: (ids: readonly string[]) => Promise<Row[]>,
+  also?: SQL,
+): Promise<ReadonlyMap<string, Row>> {
+  if (entries.length === 0) return new Map()
+  await eachPresent(tx, table, column, companyId, entries, singular, also)
+  return new Map((await read(idsNamed(entries))).map((row) => [row.id, row] as const))
 }
 
 /**

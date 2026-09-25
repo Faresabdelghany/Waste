@@ -435,6 +435,11 @@ describe("the vehicle endpoints", { skip: database.skip }, () => {
       assert.equal(two.detail, "2 collection groups name this vehicle; reassign them first")
       assert.equal((await one(olivia, truck.id)).status, "active", "and the refused patches wrote nothing")
 
+      // A parked group — one with no days — runs on nothing and plans nothing with the truck, so it counts for nothing.
+      const parked = await olivia(`/collection-groups/${alsoRunning.collectionGroups[0].id}`, { method: "PATCH", body: { days: [] } })
+      assert.equal(parked.status, 200, JSON.stringify(await parked.clone().json()))
+      assert.equal((await refused(await retire(), 409)).detail, "1 collection group names this vehicle; reassign it first", "the parked group still names the truck and does not count; the running one does")
+
       // A live allocation is counted first, in its own sentence.
       const allocation = testId()
       await withCompany(pool.db, a.companyId, async (tx) => {

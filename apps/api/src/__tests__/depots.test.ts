@@ -280,6 +280,21 @@ describe("the depot endpoints", { skip: database.skip }, () => {
       assert.deepEqual(foreign.errors, [{ path: "serviceProviderId", message: "Not a service provider of this company" }])
     })
 
+    test("lists both shape rules a patch breaks in one 400, the provider first", async () => {
+      const created = await depot("DEP-37", { opensAt: "06:00", closesAt: "16:00" })
+      const both = await refused(await olivia(`/depots/${created.id}`, { method: "PATCH", body: { ownership: "service-provider", opensAt: null } }), 400)
+      assert.deepEqual(
+        both.errors,
+        [
+          { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP },
+          { path: "closesAt", message: BOTH_HOURS_OR_NEITHER },
+        ],
+        "a client mending one is told about the other now, not on its next try",
+      )
+      const unchanged = await one(olivia, created.id)
+      assert.deepEqual([unchanged.ownership, unchanged.opensAt, unchanged.closesAt], ["company", "06:00", "16:00"], "nothing written")
+    })
+
     test("refuses clearing the place, the code, the project, an empty patch, and a point off the globe", async () => {
       const created = await depot("DEP-33")
       const unplaced = await refused(await olivia(`/depots/${created.id}`, { method: "PATCH", body: { location: null } }), 400)

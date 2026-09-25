@@ -12,14 +12,16 @@
 // holds the patch against the stored row before the update goes out and
 // refuses in the contracts' own words at the contracts' own paths, so one rule
 // has one sentence wherever it was noticed: the provider through
-// `requireProviderShape` (routes/shared.ts, the one refusal shape the fleet
-// shares), then the hours. The route takes the row's lock before it reads the
-// row (`lockRow`), since two patches of one depot each read and then write
-// and would otherwise both pass; and the table's `<table>_provider_shape` and
-// `<table>_hours_shape` checks stand behind that through `refuseCheck`
-// (`placeShapeInvalid`), in the same words at the same paths, so a check the
-// pre-check somehow did not foresee is a 400 and never a 500 with a constraint
-// name in the log.
+// `providerShapeIssue` (routes/shared.ts, the one refusal shape the fleet
+// shares), and the hours, both collected into one 400 listing every rule the
+// patch breaks, the way the validator lists a body's issues, so a client
+// mending one is not told about the other on its next try. The route takes
+// the row's lock before it reads the row (`lockRow`), since two patches of
+// one depot each read and then write and would otherwise both pass; and the
+// table's `<table>_provider_shape` and `<table>_hours_shape` checks stand
+// behind that through `refuseCheck` (`placeShapeInvalid`), in the same words
+// at the same paths, so a check the pre-check somehow did not foresee is a
+// 400 and never a 500 with a constraint name in the log.
 //
 // The point goes in and comes back as GeoJSON through the column type, the
 // way a property's does, and `refuseCheck` (routes/shared.ts) stands behind
@@ -33,9 +35,10 @@
 // the API did not foresee is a sentence and not a 500 with a constraint name
 // in the log.
 import { BOTH_HOURS_OR_NEITHER, hoursShape, PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/contracts/places"
+import type { ProblemFieldError } from "@waste/contracts/problem"
 
 import { invalidRequest } from "../problem"
-import { requireProviderShape, timeOf, type Refusal } from "./shared"
+import { providerShapeIssue, timeOf, type Refusal } from "./shared"
 
 /** The four columns the two shape rules read, as a stored depot or station carries them. */
 export type PlaceShape = {
@@ -57,8 +60,8 @@ export type PlaceShapePatch = {
  * Holds the row a patch leaves behind to the two shape rules, in the
  * contracts' words and at their paths — `serviceProviderId` for the owner,
  * `closesAt` for the hours — so a client reads one answer whichever noticed.
- * The provider is judged first, through the one refusal shape the fleet
- * shares, then the hours.
+ * Both rules are judged and every refusal listed in the one 400, the provider
+ * first, through the one refusal shape the fleet shares, then the hours.
  */
 export function requirePlaceShape(current: PlaceShape, patch: PlaceShapePatch): void {
   const merged: PlaceShape = {
@@ -67,8 +70,11 @@ export function requirePlaceShape(current: PlaceShape, patch: PlaceShapePatch): 
     opensAt: patch.opensAt === undefined ? current.opensAt : patch.opensAt,
     closesAt: patch.closesAt === undefined ? current.closesAt : patch.closesAt,
   }
-  requireProviderShape(merged.ownership, merged, PROVIDER_WITH_PROVIDER_OWNERSHIP)
-  if (!hoursShape(merged)) throw invalidRequest("body", [{ path: "closesAt", message: BOTH_HOURS_OR_NEITHER }])
+  const errors: ProblemFieldError[] = []
+  const provider = providerShapeIssue(merged.ownership, merged, PROVIDER_WITH_PROVIDER_OWNERSHIP)
+  if (provider !== undefined) errors.push(provider)
+  if (!hoursShape(merged)) errors.push({ path: "closesAt", message: BOTH_HOURS_OR_NEITHER })
+  if (errors.length > 0) throw invalidRequest("body", errors)
 }
 
 /** The tables that carry the two shape checks, as their constraint names are spelled. */

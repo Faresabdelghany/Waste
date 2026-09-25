@@ -135,8 +135,8 @@ export type ContainerServicePlacementCreate = z.infer<typeof ContainerServicePla
 /** Corrects a placement the ledger has already ended, its fraction or its override; a placement that starts on another day or serves another subscription is another placement. */
 export const ContainerServicePlacementPatch = z
   .strictObject({
-    /** A corrected end for a placement that already has one. The route refuses an end on an open placement and null on an ended one (409 each): the container's `return` or `decommission` sets the end, and the ledger's word on when it left is not taken back by a form. */
-    validTo: IsoDate.nullable().optional(),
+    /** A corrected end for a placement that already has one: a day, never null. The container's `return` or `decommission` sets the end, and the ledger's word on when it left is not taken back by a form, so a null — reopening the placement — is a member the API can never take and is refused here at the boundary; an end on an open placement is the route's 409, since only it can see the stored row. */
+    validTo: IsoDate.optional(),
     wasteFractionId: Id.optional(),
     serviceFrequencyId: Id.nullable().optional(),
   })

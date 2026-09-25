@@ -13,7 +13,7 @@ import { stockMovement } from "@waste/db/schema/stock"
 import { withCompany } from "@waste/db/tenant"
 
 import { createApp } from "../app"
-import { END_BY_COMMAND, leftOn } from "../routes/containers"
+import { END_BY_COMMAND } from "../routes/containers"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -724,9 +724,9 @@ describe("the container and placement endpoints", { skip: database.skip || owner
       assert.equal((await patchPlacement(placed.id, { serviceFrequencyId: fortnightly.id })).serviceFrequencyId, fortnightly.id, "the rest of the patch is untouched by the rule")
 
       await returned(into, JULY)
-      const reopening = await refused(await olivia(`/placements/${placed.id}`, { method: "PATCH", body: { validTo: null } }), 409)
-      assert.equal(reopening.detail, leftOn(JULY))
-      assert.equal(reopening.detail, "The container left this placement on 2026-07-01; the ledger says so")
+      const reopening = await refused(await olivia(`/placements/${placed.id}`, { method: "PATCH", body: { validTo: null } }), 400)
+      assert.deepEqual(reopening.errors?.map((error) => error.path), ["validTo"], "a null would take the end off, which the ledger's word forbids: the contracts refuse the member before the route sees it")
+      assert.equal((await onePlacement(olivia, placed.id)).validTo, JULY, "still ended on the day the container left")
       assert.equal((await patchPlacement(placed.id, { validTo: OCTOBER })).validTo, OCTOBER, "a day it already left on may be corrected")
       assert.equal((await one(olivia, into.id)).assetState?.status, "in-warehouse", "the ledger is untouched by the patch")
     })

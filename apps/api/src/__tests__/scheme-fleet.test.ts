@@ -19,6 +19,7 @@ import { withCompany } from "@waste/db/tenant"
 import { and, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
+import { fleetOf } from "../routes/scheme-groups"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
@@ -233,6 +234,20 @@ describe("the fleet and place fields of the scheme and group endpoints", { skip:
         400,
       )
       assert.deepEqual(elsewhereFirst.errors, [{ path: "collectionGroups.1.driverId", message: "Not a driver of this project" }], "every 400 comes before the status 409: a driver who is not here is told first, retired vehicle or not")
+      const secondGroup = await refused(
+        await post(
+          body("Retired on the second group", {
+            collectionGroups: [
+              ruleGroup("A", ["monday", "thursday"], { vehicleId: fleet.vehicles.wh24.id, driverId: fleet.drivers.mads.id }),
+              ruleGroup("B", ["monday"], { vehicleId: fleet.vehicles.retired.id }),
+            ],
+          }),
+        ),
+        409,
+      )
+      assert.equal(secondGroup.detail, "WH-99 is retired; a collection group needs a vehicle in service", "every vehicle the body names is read and gated, not only the first: a sound crew on the first group does not hide a retired truck on the second")
+      const twice = await refused(await post(body("Retired twice", { collectionGroups: [ruleGroup("A", ["monday", "thursday"], { vehicleId: fleet.vehicles.retired.id }), ruleGroup("B", ["monday"], { vehicleId: fleet.vehicles.retired.id })] })), 409)
+      assert.equal(twice.detail, "WH-99 is retired; a collection group needs a vehicle in service", "named twice, read once, refused once")
       const created = await scheme("In service")
       const retired = await refused(await addGroup(created.id, ruleGroup("Retired", ["monday"], { vehicleId: fleet.vehicles.retired.id })), 409)
       assert.equal(retired.detail, "WH-99 is retired; a collection group needs a vehicle in service")
@@ -294,12 +309,31 @@ describe("the fleet and place fields of the scheme and group endpoints", { skip:
 
     test("moving a scheme's start later judges the groups' drivers again on the new start, refused at validFrom; an earlier start or an end moves nothing", async () => {
       const early = frozenAt("2026-09-01T10:00:00Z")
-      const create = await early("/route-schemes", { method: "POST", body: sofieRun("Clock: start moves", { validFrom: "2026-09-01" }) })
+      // Three groups: Sofie on WH-24, whose licence runs out; Mads on WH-25, who may take anything; and Jonas alone, who is asked nothing without a vehicle.
+      const create = await early("/route-schemes", {
+        method: "POST",
+        body: sofieRun("Clock: start moves", {
+          validFrom: "2026-09-01",
+          collectionGroups: [
+            ruleGroup("Sofie", ["monday", "thursday"], { vehicleId: fleet.vehicles.wh24.id, driverId: fleet.drivers.sofie.id }),
+            ruleGroup("Mads", ["thursday"], { vehicleId: fleet.vehicles.wh25.id, driverId: fleet.drivers.mads.id }),
+            ruleGroup("Jonas", ["monday"], { driverId: fleet.drivers.jonas.id }),
+          ],
+        }),
+      })
       assert.equal(create.status, 201, JSON.stringify(await create.clone().json()))
       const created = RouteScheme.parse(await create.json())
       const later = await refused(await early(`/route-schemes/${created.id}`, { method: "PATCH", body: { validFrom: "2026-09-10" } }), 400)
-      assert.deepEqual(later.errors, [{ path: "validFrom", message: `Sofie Nielsen's licence expires on ${SOFIE_LICENCE_EXPIRY}, before the scheme starts` }], "the groups are not in the body, so the bound that moved is refused")
+      assert.deepEqual(later.errors, [{ path: "validFrom", message: `Sofie Nielsen's licence expires on ${SOFIE_LICENCE_EXPIRY}, before the scheme starts` }], "the groups are not in the body, so the bound that moved is refused; every crewed group is judged, and Mads passes")
       assert.equal((await oneScheme(created.id)).validFrom, "2026-09-01", "nothing written")
+      // The rows the re-judgement reads: the vehicles and drivers of the groups naming both, in one statement each, and nothing of a group naming one.
+      await withCompany(pool.db, a.companyId, async (tx: Tx) => {
+        const rows = await fleetOf(tx, { companyId: a.companyId, projectId: a.projects.copenhagen.id }, created.collectionGroups)
+        assert.deepEqual([...rows.vehicles.keys()].sort(), [fleet.vehicles.wh24.id, fleet.vehicles.wh25.id].sort())
+        assert.deepEqual([...rows.drivers.keys()].sort(), [fleet.drivers.sofie.id, fleet.drivers.mads.id].sort(), "Jonas, on no vehicle, is not read")
+        assert.deepEqual([rows.vehicles.get(fleet.vehicles.wh24.id)?.requiredLicenceClass, rows.drivers.get(fleet.drivers.sofie.id)?.licenceExpiry], ["c", SOFIE_LICENCE_EXPIRY], "read for the licence rule")
+        assert.deepEqual(await fleetOf(tx, { companyId: a.companyId, projectId: a.projects.copenhagen.id }, [created.collectionGroups[2]]), { vehicles: new Map(), drivers: new Map() }, "no crewed group is no statement")
+      })
       const lastDay = await early(`/route-schemes/${created.id}`, { method: "PATCH", body: { validFrom: SOFIE_LICENCE_EXPIRY } })
       assert.equal(lastDay.status, 200, JSON.stringify(await lastDay.clone().json()))
       const earlier = await early(`/route-schemes/${created.id}`, { method: "PATCH", body: { validFrom: "2026-08-20" } })
@@ -366,6 +400,25 @@ describe("the fleet and place fields of the scheme and group endpoints", { skip:
       assert.equal(draft.status, "draft", "a draft is held to none of the structural rules")
       const validating = await refused(await patchScheme(draft.id, { status: "validated" }), 409)
       assert.equal(validating.detail, "Vehicle WH-24 is on two collection groups that run on monday: North, South", "and is refused the moment it would become validated")
+    })
+
+    test("spells every structural sentence with the fleet's labels when the scheme names a fleet, and as it stands when it names none", async () => {
+      const mixed = await refused(
+        await post(
+          body("Uncovered and shared", {
+            status: "validated",
+            collectionGroups: [ruleGroup("North", ["monday"], { vehicleId: fleet.vehicles.wh24.id }), ruleGroup("South", ["monday"], { vehicleId: fleet.vehicles.wh24.id })],
+          }),
+        ),
+        409,
+      )
+      assert.equal(
+        mixed.detail,
+        ["Service days without a collection group: thursday", "Vehicle WH-24 is on two collection groups that run on monday: North, South"].join(". "),
+        "the id-first pass found the issues and the labelled pass spelled them, the rules' own sentences among them",
+      )
+      const unlabelled = await refused(await post(body("Uncovered", { status: "validated", collectionGroups: [ruleGroup("North", ["monday"])] })), 409)
+      assert.equal(unlabelled.detail, "Service days without a collection group: thursday", "no fleet named: the id-first result is the answer, and no label is read")
     })
 
     test("re-runs the rule when a group's days, vehicle or driver move, and when a group is added", async () => {

@@ -37,9 +37,10 @@
 //
 // A create and a PUT answer the set they were given, `asRead`, rather than
 // reading the rows they just wrote back: the body was held to what its key
-// allows and each id named once, so what was written is known, and the order
-// is the order Postgres gives a uuid, which for the lowercase spelling the
-// contracts' `Id` normalises to is the string order.
+// allows and the contracts already hold each id to being named once
+// (`eachOnce`), so what was written is known and sorting is the whole job —
+// the order is the order Postgres gives a uuid, which for the lowercase
+// spelling the contracts' `Id` normalises to is the string order.
 import type { Tx } from "@waste/db/client"
 import { and, eq, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
@@ -103,8 +104,8 @@ export async function idsOf(tx: Tx, set: IdSetColumns, companyId: string, parent
   return new Map([...grouped].map(([parent, entries]) => [parent, entries.map((entry) => entry.id)]))
 }
 
-/** A body's set as the next read answers it: each id once, in the order Postgres gives a uuid, which is the string order of its lowercase spelling. */
-export const asRead = (ids: readonly string[]): string[] => [...new Set(ids)].sort()
+/** A body's set as the next read answers it: in the order Postgres gives a uuid, which is the string order of its lowercase spelling. The contracts' `eachOnce` already refused a repeated id, so sorting is the whole job. */
+export const asRead = (ids: readonly string[]): string[] => [...ids].sort()
 
 /** One record's set, read the way a page reads it, so what a write answers is what the next read says. */
 export async function idsFor(tx: Tx, set: IdSetColumns, companyId: string, parentId: string): Promise<string[]> {

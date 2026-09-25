@@ -167,8 +167,16 @@ describe("ContainerServicePlacementPatch", () => {
     assert.deepEqual(ContainerServicePlacementPatch.parse({ wasteFractionId: THIRD }), { wasteFractionId: THIRD })
     refusesAnEmptyPatch(ContainerServicePlacementPatch)
     for (const key of ["validFrom", "subscriptionId", "containerId"]) {
-      assert.match(refusal(ContainerServicePlacementPatch.safeParse({ validTo: null, [key]: "2026-01-01" }))[0].message, new RegExp(key))
+      assert.match(refusal(ContainerServicePlacementPatch.safeParse({ validTo: "2026-07-01", [key]: "2026-01-01" }))[0].message, new RegExp(key))
     }
+  })
+
+  test("takes no null end: reopening a placement is a member the API can never take, since the ledger says when the container left (Issue #101)", () => {
+    assert.deepEqual(
+      refusal(ContainerServicePlacementPatch.safeParse({ validTo: null })).map((issue) => issue.path),
+      ["validTo"],
+      "refused at the boundary, not by a route's 409",
+    )
   })
 })
 
