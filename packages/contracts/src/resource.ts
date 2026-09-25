@@ -56,6 +56,16 @@ export const changesSomething = (patch: object) => Object.keys(patch).length > 0
 export const PositiveInt = z.int().positive()
 
 /**
+ * Money in minor units (Issue #112): a whole number of øre or cents, never a
+ * decimal, so nothing is re-rounded downstream. `Minor` takes either sign,
+ * since a reversal's and a credit line's amounts are negative;
+ * `NonNegativeMinor` is a price, zero being a free service and not a missing
+ * one. The column is `_minor` in the database and an integer there too.
+ */
+export const Minor = z.int()
+export const NonNegativeMinor = z.int().min(0)
+
+/**
  * Each entry of a set names its thing once, as the database's key insists:
  * the one rule behind every distinct-entries refine (a set of days, a rule's
  * fractions, a group's containers, a calendar's holidays by day, a vehicle

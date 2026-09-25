@@ -101,6 +101,8 @@ const columns = {
   billingCadence: agreement.billingCadence,
   currency: agreement.currency,
   notes: agreement.notes,
+  // The list the agreement is priced under (Issue #112): read here; the create and the patch hold it to a list of the project in the agreement's currency from slice 3 on.
+  priceListId: agreement.priceListId,
   validFrom: agreement.validFrom,
   validTo: agreement.validTo,
   createdAt: agreement.createdAt,
@@ -121,6 +123,7 @@ function agreementOf(row: Row): Agreement {
     billingCadence: row.billingCadence as BillingCadence,
     currency: row.currency,
     notes: row.notes,
+    priceListId: row.priceListId,
     validFrom: row.validFrom,
     validTo: row.validTo,
     ...stampsOf(row),

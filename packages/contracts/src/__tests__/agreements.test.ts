@@ -33,6 +33,7 @@ const agreement = {
   billingCadence: "quarterly",
   currency: "DKK",
   notes: "Signed at the housing association's annual meeting.",
+  priceListId: null,
   validFrom: "2026-01-01",
   validTo: null,
   ...STAMPS,
@@ -75,6 +76,12 @@ describe("Agreement", () => {
   test("takes the currency as ISO 4217, the same shape the project's takes", () => {
     assert.equal(Agreement.safeParse({ ...agreement, currency: "dkk" }).success, false)
     assert.equal(Agreement.safeParse({ ...agreement, currency: "kroner" }).success, false)
+  })
+
+  test("names the price list it is priced under, or null for the project's default (Issue #112)", () => {
+    const listed = { ...agreement, priceListId: OTHER }
+    assert.deepEqual(Agreement.parse(listed), listed)
+    assert.deepEqual(refusal(Agreement.safeParse({ ...agreement, priceListId: "pl-cph-2026" })).map((issue) => issue.path), ["priceListId"], "an id, not the list's code")
   })
 })
 
@@ -119,6 +126,14 @@ describe("AgreementCreate and AgreementPatch", () => {
   test("hold the two days against each other when a patch gives both, and leave the stored row to the route", () => {
     assert.deepEqual(refusal(AgreementPatch.safeParse({ validFrom: "2026-02-01", validTo: "2026-01-01" })), [{ path: "validTo", message: BACKWARDS }])
     assert.deepEqual(AgreementPatch.parse({ validTo: "2020-01-01" }), { validTo: "2020-01-01" })
+  })
+
+  test("take the price list on the way in and on a patch, and clear it with null for the project's default (Issue #112)", () => {
+    assert.deepEqual(AgreementCreate.parse({ ...body, priceListId: OTHER }), { ...body, status: "draft", priceListId: OTHER })
+    assert.deepEqual(AgreementCreate.parse({ ...body, priceListId: null }), { ...body, status: "draft", priceListId: null })
+    assert.deepEqual(AgreementPatch.parse({ priceListId: OTHER }), { priceListId: OTHER })
+    assert.deepEqual(AgreementPatch.parse({ priceListId: null }), { priceListId: null })
+    assert.deepEqual(refusal(AgreementPatch.safeParse({ priceListId: "default" })).map((issue) => issue.path), ["priceListId"])
   })
 })
 

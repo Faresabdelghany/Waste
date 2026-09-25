@@ -57,6 +57,10 @@ const columns = {
   containerTypeId: product.containerTypeId,
   wasteFractionId: product.wasteFractionId,
   serviceFrequencyId: product.serviceFrequencyId,
+  // The invoicing fields Finance gave the product (Issue #112): read here; the create and the patch hold them from slice 3 on.
+  invoiceName: product.invoiceName,
+  invoiceCode: product.invoiceCode,
+  vatPercent: product.vatPercent,
   createdAt: product.createdAt,
   updatedAt: product.updatedAt,
 }
@@ -75,6 +79,9 @@ function productOf(row: Row): Product {
     containerTypeId: row.containerTypeId,
     wasteFractionId: row.wasteFractionId,
     serviceFrequencyId: row.serviceFrequencyId,
+    invoiceName: row.invoiceName,
+    invoiceCode: row.invoiceCode,
+    vatPercent: row.vatPercent,
     ...stampsOf(row),
   }
 }

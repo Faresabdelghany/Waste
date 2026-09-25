@@ -64,6 +64,8 @@ export const Agreement = z
     currency: Currency,
     /** Internal, never the portal's. */
     notes: Paragraph.nullable(),
+    /** The Price List the agreement is priced under (Issue #112), a list of the project in the agreement's currency; null is the project's default list. */
+    priceListId: Id.nullable(),
     ...Validity.shape,
   })
   .refine(validityOrdered, endsAfterItStarts)
@@ -79,6 +81,8 @@ export const AgreementCreate = z
     billingCadence: BillingCadence,
     currency: Currency,
     notes: Paragraph.nullable().optional(),
+    /** A list of the project in the agreement's currency; absent or null is the project's default list. */
+    priceListId: Id.nullable().optional(),
     ...ValidityCreate,
   })
   .refine(validityOrdered, endsAfterItStarts)
@@ -94,6 +98,8 @@ export const AgreementPatch = z
     billingCadence: BillingCadence.optional(),
     currency: Currency.optional(),
     notes: Paragraph.nullable().optional(),
+    /** Null clears the list back to the project's default. */
+    priceListId: Id.nullable().optional(),
     validFrom: IsoDate.optional(),
     /** Null reopens the period; a day ends it. */
     validTo: IsoDate.nullable().optional(),
