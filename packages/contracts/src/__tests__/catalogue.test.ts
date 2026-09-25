@@ -49,6 +49,9 @@ const product = {
   containerTypeId: OTHER,
   wasteFractionId: OTHER,
   serviceFrequencyId: OTHER,
+  invoiceName: null,
+  invoiceCode: null,
+  vatPercent: 25,
   ...STAMPS,
 }
 
@@ -200,6 +203,14 @@ describe("Product", () => {
     assert.equal(Product.safeParse({ ...product, status: "retired" }).success, false)
     assert.equal(Product.safeParse({ ...product, unit: "litre" }).success, false)
   })
+
+  test("carries its invoice fields (Issue #112): the line's name and the ledger's code, null where the name and nothing serve, and a VAT rate in whole percent or null, which blocks its events", () => {
+    const invoiced = { ...product, invoiceName: "Restaffald 240 L", invoiceCode: "4010", vatPercent: 0 }
+    assert.deepEqual(Product.parse(invoiced), invoiced)
+    assert.equal(Product.parse({ ...product, vatPercent: null }).vatPercent, null)
+    for (const vatPercent of [-1, 101, 25.5, "25"]) assert.deepEqual(refusal(Product.safeParse({ ...product, vatPercent })).map((issue) => issue.path), ["vatPercent"], String(vatPercent))
+    assert.deepEqual(refusal(Product.safeParse({ ...product, invoiceCode: "  " })).map((issue) => issue.path), ["invoiceCode"])
+  })
 })
 
 describe("ProductCreate and ProductPatch", () => {
@@ -225,5 +236,15 @@ describe("ProductCreate and ProductPatch", () => {
     assert.deepEqual(ProductPatch.parse({ status: "inactive" }), { status: "inactive" })
     refusesAnEmptyPatch(ProductPatch)
     assert.match(refusal(ProductPatch.safeParse({ name: "x", projectId: OTHER }))[0].message, /projectId/)
+  })
+
+  test("take the invoice fields on the way in and on a patch, each clearable with null, the rate held to whole percent (Issue #112)", () => {
+    const invoiced = { ...body, invoiceName: "Restaffald 240 L", invoiceCode: "4010", vatPercent: 25 }
+    assert.deepEqual(ProductCreate.parse(invoiced), { ...invoiced, status: "draft" })
+    assert.deepEqual(ProductCreate.parse({ ...body, vatPercent: null }), { ...body, status: "draft", vatPercent: null })
+    assert.deepEqual(refusal(ProductCreate.safeParse({ ...body, vatPercent: 101 })).map((issue) => issue.path), ["vatPercent"])
+    assert.deepEqual(ProductPatch.parse({ vatPercent: 0 }), { vatPercent: 0 })
+    assert.deepEqual(ProductPatch.parse({ invoiceName: null, invoiceCode: null, vatPercent: null }), { invoiceName: null, invoiceCode: null, vatPercent: null })
+    assert.deepEqual(refusal(ProductPatch.safeParse({ vatPercent: -1 })).map((issue) => issue.path), ["vatPercent"])
   })
 })

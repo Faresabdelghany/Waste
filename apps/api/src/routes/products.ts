@@ -57,6 +57,10 @@ const columns = {
   containerTypeId: product.containerTypeId,
   wasteFractionId: product.wasteFractionId,
   serviceFrequencyId: product.serviceFrequencyId,
+  // The invoicing fields Finance gave the product (Issue #112): read here, held by the create and the patch.
+  invoiceName: product.invoiceName,
+  invoiceCode: product.invoiceCode,
+  vatPercent: product.vatPercent,
   createdAt: product.createdAt,
   updatedAt: product.updatedAt,
 }
@@ -75,6 +79,9 @@ function productOf(row: Row): Product {
     containerTypeId: row.containerTypeId,
     wasteFractionId: row.wasteFractionId,
     serviceFrequencyId: row.serviceFrequencyId,
+    invoiceName: row.invoiceName,
+    invoiceCode: row.invoiceCode,
+    vatPercent: row.vatPercent,
     ...stampsOf(row),
   }
 }
@@ -82,6 +89,16 @@ function productOf(row: Row): Product {
 /** `unique (company_id, project_id, name)`: a product's name is one product's inside a project, and free in the next. */
 const NAME_TAKEN = "product_project_id_name_key"
 const nameTaken = (name: string) => `This project already has a product called ${JSON.stringify(name)}`
+
+/** `unique (company_id, project_id, invoice_code) where invoice_code is not null` (Issue #112): the code an external ledger books the product under is one product's inside a project. */
+const INVOICE_CODE_TAKEN = "product_invoice_code_idx"
+export const invoiceCodeTaken = (code: string) => `This project already has a product with invoice code ${code}`
+
+/** The unique constraints a write can meet, each with its sentence; the invoice code's only when the body carries one. */
+const collisions = (values: { name?: string; invoiceCode?: string | null }): Record<string, string> => ({
+  ...(values.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(values.name) }),
+  ...(values.invoiceCode == null ? {} : { [INVOICE_CODE_TAKEN]: invoiceCodeTaken(values.invoiceCode) }),
+})
 
 const noSuchProduct = (id: string) => problem(404, { detail: `No product ${id} in the projects this account works in` })
 
@@ -155,16 +172,16 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createProduct",
         summary: "Add a product",
         description:
-          "Adds a product to one project, which must be a project the caller works in. The name is unique inside the project and the status defaults to `draft`. The container type and the waste fraction, where given, must be this company's, and the service frequency must be one of the named project's; all three are optional, since only a container collection has a container and a fraction and the cadence is a default a placement may override. The server mints the id.",
+          "Adds a product to one project, which must be a project the caller works in. The name is unique inside the project and the status defaults to `draft`. The container type and the waste fraction, where given, must be this company's, and the service frequency must be one of the named project's; all three are optional, since only a container collection has a container and a fraction and the cadence is a default a placement may override. The three invoicing fields are Finance's (Issue #112) and optional: `invoiceName` is what an invoice line calls the product (its name when null), `invoiceCode` the code an external ledger books it under, one product's inside the project (409, `This project already has a product with invoice code 4010`), and `vatPercent` the rate a billable event is priced at, a whole percent from 0 (exempt) to 100 — a product without one blocks its events with `no-vat-rate`. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The product as it was written.", Product),
           400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project this account does not work in, or points at a container type, waste fraction or service frequency that is not this company's or this project's.",
+            "The body is missing a field, names a member the server owns, names a project this account does not work in, gives a VAT rate outside 0..100, or points at a container type, waste fraction or service frequency that is not this company's or this project's.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `commercial.products`."),
-          409: describeProblem("The project already has a product with that name."),
+          409: describeProblem("The project already has a product with that name, or one with that invoice code."),
         },
       }),
       guard,
@@ -176,7 +193,7 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const principal = c.get("principal")
         requireProject(principal, values.projectId)
         await requireReferences(tx, { companyId: principal.companyId, projectId: values.projectId }, values)
-        const [row] = await refuseDuplicate({ [NAME_TAKEN]: nameTaken(values.name) }, () =>
+        const [row] = await refuseDuplicate(collisions(values), () =>
           tx
             .insert(product)
             .values({ ...values, id: newId(), companyId: principal.companyId })
@@ -217,17 +234,17 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchProduct",
         summary: "Change a product",
         description:
-          "Changes one product of a project the caller works in; every field is optional and at least one must be given. What the patch points at is held to the stored row's project, not to a project the body names: the project is not patchable, since a record does not move between projects. A null clears a reference.",
+          "Changes one product of a project the caller works in; every field is optional and at least one must be given. What the patch points at is held to the stored row's project, not to a project the body names: the project is not patchable, since a record does not move between projects. A null clears a reference, and clears an invoice name, an invoice code or a VAT rate too (Issue #112); the invoice code stays one product's inside the project (409, `This project already has a product with invoice code 4010`). A VAT rate changed here prices the events recorded from then on and moves none already priced.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The product as it now stands.", Product),
           400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project included), or points at a container type, waste fraction or service frequency that is not this company's or this product's project's.",
+            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project included), gives a VAT rate outside 0..100, or points at a container type, waste fraction or service frequency that is not this company's or this product's project's.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `commercial.products`."),
           404: describeProblem("No product with that id in the projects this account works in."),
-          409: describeProblem("The project already has another product with that name."),
+          409: describeProblem("The project already has another product with that name, or another with that invoice code."),
         },
       }),
       guard,
@@ -244,8 +261,7 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
         if (current === undefined) throw noSuchProduct(id)
         await requireReferences(tx, { companyId: principal.companyId, projectId: current.projectId }, patch)
 
-        const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
-        const [row] = await refuseDuplicate(sentences, () =>
+        const [row] = await refuseDuplicate(collisions(patch), () =>
           tx
             .update(product)
             .set(patch)

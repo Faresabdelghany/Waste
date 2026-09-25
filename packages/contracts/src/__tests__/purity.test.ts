@@ -15,10 +15,13 @@
 // is a rule the client must hold too and a second spelling here would drift —
 // and resolution.ts turns @waste/domain/resolution/vocabulary into
 // Resolution's (Issue #109) while tickets.ts runs
-// @waste/domain/resolution/event-shapes as its refine for the same reason.
-// The direction is sound — the innermost ring depends on nothing — and
-// listing the subpath, not the package, keeps every further reach into the
-// domain a deliberate line here.
+// @waste/domain/resolution/event-shapes as its refine for the same reason,
+// and finance.ts turns @waste/domain/finance/vocabulary into Finance &
+// Contracting's (Issue #112), the sixth `vocabulary` subpath and the ninth
+// domain line of the allowlist. The direction is sound — the innermost ring
+// depends on nothing — and listing the subpath,
+// not the package, keeps every further reach into the domain a deliberate
+// line here.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -30,6 +33,7 @@ definePurityTests({
     "@waste/domain/access/modules",
     "@waste/domain/execution/proof-shapes",
     "@waste/domain/execution/vocabulary",
+    "@waste/domain/finance/vocabulary",
     "@waste/domain/planning/vocabulary",
     "@waste/domain/registry/vocabulary",
     "@waste/domain/resolution/event-shapes",

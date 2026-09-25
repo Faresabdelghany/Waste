@@ -26,11 +26,18 @@
 // `coalesce` on read, never copied (the Registry's rule from
 // docs/architecture/backend-architecture.md).
 //
-// Prices are not here: a Price List and its rows are Finance & Contracting's,
-// and a product's invoice name, code and VAT go with them.
+// Prices are not here: a Price List and its rows are Finance & Contracting's
+// (schema/finance.ts). A product's invoice name, code and VAT rate did go
+// with them, as columns on this table (Issue #112, migration 0010): what an
+// invoice line calls the product, the code an external ledger books it
+// under — a partial unique index per project over the rows that have one,
+// `product_invoice_code_idx` — and the whole-percent rate a billable event is
+// priced at, held to 0..100 by `product_vat_percent_range`. All three are
+// nullable, so no guard: a product without a rate makes a `no-vat-rate`
+// event, which is the actionable reason.
 import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS } from "@waste/domain/registry/vocabulary"
 import { sql } from "drizzle-orm"
-import { check, integer, text, uuid } from "drizzle-orm/pg-core"
+import { check, integer, text, uniqueIndex, uuid } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
 import { lowercase, oneOf, positive } from "./checks"
@@ -114,6 +121,12 @@ export const product = wms.table(
     wasteFractionId: uuid(),
     /** The default cadence; a placement may override it, and the effective one is read, never written. */
     serviceFrequencyId: uuid(),
+    /** What an invoice line calls the product (Issue #112); the name when null. */
+    invoiceName: text(),
+    /** The code an external ledger books the product under; unique per project where given. */
+    invoiceCode: text(),
+    /** The VAT rate a billable event is priced at, whole percent, zero being exempt; a product without one blocks its events with `no-vat-rate`. */
+    vatPercent: integer(),
   },
   (t) => [
     companyReference(t, company),
@@ -126,8 +139,12 @@ export const product = wms.table(
     oneOf(t.kind, PRODUCT_KINDS),
     oneOf(t.status, PRODUCT_STATUSES),
     oneOf(t.unit, PRODUCT_UNITS),
+    // A rate is a percent: zero is exempt, and nothing is taxed at more than the whole (Issue #112). No helper spells it, since no other table has it.
+    check(tableObjectName(t.id.table, "vat_percent_range", "product"), sql`${t.vatPercent} between 0 and 100`),
     tenantIndex(t, t.containerTypeId),
     tenantIndex(t, t.wasteFractionId),
     tenantIndex(t, t.serviceFrequencyId),
+    // Most products have no invoice code, and a null is not a duplicate of another null, so the key is a partial index (Issue #112).
+    uniqueIndex(tableObjectName(t.companyId.table, "invoice_code_idx", "product")).on(t.companyId, t.projectId, t.invoiceCode).where(sql`${t.invoiceCode} is not null`),
   ],
 )

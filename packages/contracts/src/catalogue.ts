@@ -30,7 +30,12 @@
 // only a container collection has a container and a fraction, and the
 // frequency is a default a placement may override — the effective one is read
 // through a coalesce and never copied. Prices are not here: a Price List and
-// its rows are Finance & Contracting's.
+// its rows are Finance & Contracting's (price-lists.ts). A product's invoice
+// name, invoice code and VAT rate did come here with them (Issue #112), each
+// nullable: what an invoice line calls the product, the code an external
+// ledger books it under, and the whole-percent rate a billable event is
+// priced at — zero being exempt, and a product without one blocking its
+// events with `no-vat-rate`, which is the actionable reason.
 import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS } from "@waste/domain/registry/vocabulary"
 import * as z from "zod"
 
@@ -181,6 +186,9 @@ export const ServiceFrequencyPatch = z
   .refine(serviceFrequencyShape, oneCadence)
 export type ServiceFrequencyPatch = z.infer<typeof ServiceFrequencyPatch>
 
+/** A VAT rate in whole percent: zero is exempt, and nothing is taxed at more than the whole (Issue #112). */
+const VatPercent = z.int().min(0).max(100)
+
 export const Product = z.object({
   ...stamped,
   projectId: Id,
@@ -194,6 +202,12 @@ export const Product = z.object({
   wasteFractionId: Id.nullable(),
   /** The default cadence a placement may override; null where the Product has none. */
   serviceFrequencyId: Id.nullable(),
+  /** What an invoice line calls the product (Issue #112); the name when null. */
+  invoiceName: Label.nullable(),
+  /** The code an external ledger books the product under; unique per project where given. */
+  invoiceCode: Label.nullable(),
+  /** The rate a billable event is priced at; a product without one blocks its events with `no-vat-rate`. */
+  vatPercent: VatPercent.nullable(),
 })
 export type Product = z.infer<typeof Product>
 
@@ -206,6 +220,9 @@ export const ProductCreate = z.strictObject({
   containerTypeId: Id.nullable().optional(),
   wasteFractionId: Id.nullable().optional(),
   serviceFrequencyId: Id.nullable().optional(),
+  invoiceName: Label.nullable().optional(),
+  invoiceCode: Label.nullable().optional(),
+  vatPercent: VatPercent.nullable().optional(),
 })
 export type ProductCreate = z.infer<typeof ProductCreate>
 
@@ -218,6 +235,9 @@ export const ProductPatch = z
     containerTypeId: Id.nullable().optional(),
     wasteFractionId: Id.nullable().optional(),
     serviceFrequencyId: Id.nullable().optional(),
+    invoiceName: Label.nullable().optional(),
+    invoiceCode: Label.nullable().optional(),
+    vatPercent: VatPercent.nullable().optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type ProductPatch = z.infer<typeof ProductPatch>

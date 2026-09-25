@@ -41,7 +41,14 @@
 // block, since a ticket is one create and generation's block was for a run of
 // hundreds; the company's row lock is held for the rest of the request, which
 // tens of tickets a day do not notice. It arrived with migration 0009, the
-// second `ALTER TABLE company`.
+// second `ALTER TABLE company`. The invoice-number counter (Issue #112) is the
+// third, on the same rule: `next_invoice_number`, one number per document —
+// an invoice or a credit note, one series with two prefixes on the wire —
+// taken one at a time under the company's row lock, which a billing run holds
+// for the rest of its transaction, so a run of a thousand invoices numbers
+// them unbroken and a run that fails rolls its numbers back with its rows.
+// The series is the company's because the legal entity's is; it arrived with
+// migration 0010.
 import { DEFAULT_WEEKEND, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, integer, text } from "drizzle-orm/pg-core"
@@ -74,6 +81,8 @@ export const company = wms.table(
     nextRouteNumber: integer().notNull().default(1000),
     /** The ticket-number counter (Issue #109): the next `T-<n>` this company mints, one per ticket in one `update … returning` under the same row lock. */
     nextTicketNumber: integer().notNull().default(1000),
+    /** The invoice-number counter (Issue #112): the next document number this company mints, `INV-<n>` or `CN-<n>` on the wire, one per invoice or credit note under the same row lock, held for the rest of the transaction so a run that fails leaves no gap. */
+    nextInvoiceNumber: integer().notNull().default(1000),
   },
   (t) => [
     // The registration is the one identity a registry gives a company: once per country.

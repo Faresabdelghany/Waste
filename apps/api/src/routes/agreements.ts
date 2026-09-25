@@ -81,9 +81,9 @@ import { inProjects, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { notWithin, periodAfter, periodOf, refuseStranded, requireOrdered, requireWithin, type Period } from "./periods"
-import { requireCustomer, requireProduct, requireProperty, requireSharedCollectionPoint } from "./references"
+import { requireCustomer, requirePriceList, requireProduct, requireProperty, requireSharedCollectionPoint, type Scope } from "./references"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
 import { placeOf, refuseInactiveCustomer, refuseUnofferedProduct, refuseUnservedPlace, type Party } from "./statuses"
 
@@ -101,6 +101,8 @@ const columns = {
   billingCadence: agreement.billingCadence,
   currency: agreement.currency,
   notes: agreement.notes,
+  // The list the agreement is priced under (Issue #112): read here; the create and the patch hold it to a list of the project in the agreement's currency.
+  priceListId: agreement.priceListId,
   validFrom: agreement.validFrom,
   validTo: agreement.validTo,
   createdAt: agreement.createdAt,
@@ -121,6 +123,7 @@ function agreementOf(row: Row): Agreement {
     billingCadence: row.billingCadence as BillingCadence,
     currency: row.currency,
     notes: row.notes,
+    priceListId: row.priceListId,
     validFrom: row.validFrom,
     validTo: row.validTo,
     ...stampsOf(row),
@@ -265,6 +268,23 @@ function refuseInactiveParties(parties: Parties): void {
  */
 const changed = (named: string | undefined, stored: string): string | undefined => (named === stored ? undefined : named)
 
+/** What an agreement naming a list in another currency is refused with, at `priceListId` (Issue #112 §3). */
+export const listCurrencyDiffers = (list: string, agreement: string): string => `The price list is in ${list}; the agreement is billed in ${agreement}`
+
+/**
+ * The Price List an agreement is priced under (Issue #112): a list of the
+ * agreement's project (routes/references.ts, 400 on `priceListId`) in the
+ * agreement's currency — "The price list is in EUR; the agreement is billed
+ * in DKK" — so every event under the agreement is in its currency by
+ * construction and a billing run never converts. Null or absent is the
+ * project's default list, whose currency is the project's, and names nothing
+ * to check.
+ */
+async function requireAgreementList(tx: Tx, within: Scope, priceListId: string | null | undefined, currency: string): Promise<void> {
+  const list = await requirePriceList(tx, within, priceListId)
+  if (list !== undefined && list.currency !== currency) throw invalidRequest("body", [{ path: "priceListId", message: listCurrencyDiffers(list.currency, currency) }])
+}
+
 export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
   return new Hono<AuthEnv>()
     .get(
@@ -315,12 +335,12 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createAgreement",
         summary: "Write an agreement",
         description:
-          "Writes an agreement in one project, which must be a project the caller works in. The customer and the payer are customers of this company — the same one in the common case, a housing administrator in the interesting one — and must be active in both fields: an inactive one is refused (409) in a sentence saying whether as holder or as payer, while the agreements a customer already holds stand when it goes inactive, since a status gates a new reference and never an existing one. The status defaults to `draft`, since an agreement is written before it is signed, and the period is half-open: `validFrom` is the first day in force and `validTo` the first day out of it, absent meaning the agreement is still running. The number is not unique: one agreement of a number may be valid at a time, so a number may name a later agreement once the earlier one has ended, and an overlapping one is refused. The server mints the id.",
+          "Writes an agreement in one project, which must be a project the caller works in. The customer and the payer are customers of this company — the same one in the common case, a housing administrator in the interesting one — and must be active in both fields: an inactive one is refused (409) in a sentence saying whether as holder or as payer, while the agreements a customer already holds stand when it goes inactive, since a status gates a new reference and never an existing one. The status defaults to `draft`, since an agreement is written before it is signed, and the period is half-open: `validFrom` is the first day in force and `validTo` the first day out of it, absent meaning the agreement is still running. The number is not unique: one agreement of a number may be valid at a time, so a number may name a later agreement once the earlier one has ended, and an overlapping one is refused. `priceListId` is the price list the agreement is priced under — a list of the project, in the agreement's currency (400 on `priceListId`, `The price list is in EUR; the agreement is billed in DKK`); absent or null, the agreement is priced under the project's default list. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The agreement as it was written.", Agreement),
           400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, or names a customer or payer that is not this company's.",
+            "The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, names a customer or payer that is not this company's, or names a price list that is not the project's or is in another currency than the agreement's.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `customers.agreements`."),
@@ -336,6 +356,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const principal = c.get("principal")
         requireProject(principal, values.projectId)
         const parties = await partyStatuses(tx, principal.companyId, values.customerId, values.payerCustomerId)
+        await requireAgreementList(tx, { companyId: principal.companyId, projectId: values.projectId }, values.priceListId, values.currency)
         refuseInactiveParties(parties)
         const [row] = await refuseOverlap({ [NUMBER_RUNNING]: numberRunning(values.number) }, () =>
           tx
@@ -378,12 +399,12 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchAgreement",
         summary: "Amend an agreement",
         description:
-          "Amends one agreement of a project the caller works in; every field is optional and at least one must be given. Amending changes the row and the audit log is the history. The project is not patchable, since a record does not move between projects. A customer the patch newly names, as holder or as payer, must be active (409, saying which); re-stating the customer the agreement already carries names nothing new, so a patch sending the record whole is taken after its customer has gone inactive. Moving the period is held to two rules: the end still comes after the start, which a body naming one bound cannot see by itself, and the new period still contains every subscription of the agreement — a shortening that would strand one is refused (409) and the subscriptions have to be ended first. A period that overlaps another agreement of the same number is refused too.",
+          "Amends one agreement of a project the caller works in; every field is optional and at least one must be given. Amending changes the row and the audit log is the history. The project is not patchable, since a record does not move between projects. A customer the patch newly names, as holder or as payer, must be active (409, saying which); re-stating the customer the agreement already carries names nothing new, so a patch sending the record whole is taken after its customer has gone inactive. Moving the period is held to two rules: the end still comes after the start, which a body naming one bound cannot see by itself, and the new period still contains every subscription of the agreement — a shortening that would strand one is refused (409) and the subscriptions have to be ended first. A period that overlaps another agreement of the same number is refused too. `priceListId` moves the agreement onto a price list of the project in the agreement's currency, or back to the project's default list with null; a list or a currency the patch changes is held to the other (400 on `priceListId`).",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The agreement as it now stands.", Agreement),
           400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project included), ends on or before the day it starts, or names a customer or payer that is not this company's.",
+            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project included), ends on or before the day it starts, names a customer or payer that is not this company's, or names a price list that is not the project's or is in another currency than the agreement's.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.agreements`."),
@@ -415,6 +436,10 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
         )
         const period = patch.validFrom !== undefined || patch.validTo !== undefined ? periodAfter(current, patch) : undefined
         if (period !== undefined) requireOrdered(period)
+        // The list the patch leaves the agreement priced under, in the currency it leaves it billed in: judged when either moved, so a currency changed under a stored list is refused too.
+        if (patch.priceListId !== undefined || patch.currency !== undefined) {
+          await requireAgreementList(tx, { companyId: principal.companyId, projectId: current.projectId }, patch.priceListId === undefined ? current.priceListId : patch.priceListId, patch.currency ?? current.currency)
+        }
 
         // Every 400 above, every 409 below (routes/statuses.ts).
         refuseInactiveParties(parties)

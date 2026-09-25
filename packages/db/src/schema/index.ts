@@ -11,8 +11,13 @@
 // migration 0008), one file of seven tables that reference all four contexts
 // before it — then Resolution (Issue #109, migration 0009), one file of three
 // tables that reference Execution's routes and pickups, Resources' fleet, the
-// Registry's records and Organisation & Access's accounts. What is exported
-// here is what `pnpm db:generate` sees and what the hand-written gate
+// Registry's records and Organisation & Access's accounts — then Finance &
+// Contracting (Issue #112, migration 0010), one file of sixteen tables that
+// reference every context before it, and which the Registry's agreements.ts
+// imports back for the list an agreement is priced under, a cycle drizzle
+// tolerates since every reference is read inside a table's extra-config
+// callback and never at a module's top level. What is exported here is what
+// `pnpm db:generate` sees and what the hand-written gate
 // (__tests__/hand-written.test.ts) holds to its fence and trigger, or to its
 // fence and revoke for a ledger.
 export * from "./wms"
@@ -32,3 +37,4 @@ export * from "./stock"
 export * from "./allocations"
 export * from "./execution"
 export * from "./resolution"
+export * from "./finance"

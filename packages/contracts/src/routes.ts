@@ -27,13 +27,13 @@ import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { Pickup } from "./pickups"
 import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
-import { changesSomething, eachOnce, eachOnceSentence, PositiveInt, somethingToChange, stamped } from "./resource"
+import { changesSomething, eachOnce, eachOnceSentence, NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Session } from "./sessions"
 import { Paragraph } from "./text"
 import { Unload } from "./unloads"
 
 /** A count of pickups: whole, zero or more. */
-const Count = z.int().min(0)
+const Count = NonNegativeInt
 
 /** A route's progress: how many pickups stand in each status, how many there are, and the fraction with an outcome. Derived, never stored. */
 export const RouteProgress = z.object({

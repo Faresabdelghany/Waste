@@ -13,6 +13,8 @@ const LATER = "2026-10-05T14:00:00+02:00"
 const POINT = { type: "Point", coordinates: [12.6193, 55.6602] }
 const pair = { path: "tareKg", message: BOTH_GROSS_AND_TARE }
 const sum = { path: "netKg", message: NET_IS_GROSS_LESS_TARE }
+/** The reading every unload starts with: nobody has looked. */
+const CAPTURED = { status: "captured", latestReviewId: null, correctionUnloadId: null }
 
 const unload = {
   id: ID,
@@ -33,6 +35,7 @@ const unload = {
   weighbridgeTicket: "WB-2026-3901",
   objectKey: `${OTHER}/${THIRD}/${ID}.jpg`,
   note: null,
+  weightReview: CAPTURED,
 }
 
 describe("the weights rule", () => {
@@ -61,6 +64,17 @@ describe("Unload", () => {
     assert.deepEqual(refusal(Unload.safeParse({ ...unload, netKg: 4_000 })), [sum])
     // Zero is refused as a count and, beside gross and tare, as the sum: both at netKg.
     assert.deepEqual(new Set(refusal(Unload.safeParse({ ...unload, netKg: 0 })).map((issue) => issue.path)), new Set(["netKg"]), "nothing tipped is not an unload")
+  })
+
+  test("carries weight control's reading, never null: captured with two nulls, or the latest decision with its review and, on a correction, the new unload (Issue #112)", () => {
+    const corrected = { ...unload, weightReview: { status: "corrected", latestReviewId: OTHER, correctionUnloadId: THIRD } }
+    assert.deepEqual(Unload.parse(corrected), corrected)
+    const approved = { ...unload, weightReview: { status: "approved", latestReviewId: OTHER, correctionUnloadId: null } }
+    assert.deepEqual(Unload.parse(approved), approved)
+    const { weightReview: _reading, ...without } = unload
+    assert.deepEqual(refusal(Unload.safeParse(without)).map((issue) => issue.path), ["weightReview"], "every unload has a reading")
+    assert.deepEqual(refusal(Unload.safeParse({ ...unload, weightReview: null })).map((issue) => issue.path), ["weightReview"])
+    assert.deepEqual(refusal(Unload.safeParse({ ...unload, weightReview: { ...CAPTURED, status: "needs-review" } })).map((issue) => issue.path), ["weightReview.status"], "the prototype's name is not a token")
   })
 })
 
@@ -92,9 +106,11 @@ describe("UnloadCreate", () => {
 })
 
 describe("UnloadListQuery", () => {
-  test("pages by project, route, station and fraction, and by a window over occurredAt, ordered", () => {
+  test("pages by project, route, station, fraction and review status, and by a window over occurredAt, ordered", () => {
     assert.deepEqual(UnloadListQuery.parse({}), { limit: 50 })
     assert.deepEqual(UnloadListQuery.parse({ routeId: THIRD, unloadingStationId: OTHER, wasteFractionId: ID, from: WHEN, to: LATER }), { routeId: THIRD, unloadingStationId: OTHER, wasteFractionId: ID, from: WHEN, to: LATER, limit: 50 })
+    assert.deepEqual(UnloadListQuery.parse({ reviewStatus: "captured" }), { reviewStatus: "captured", limit: 50 }, "the weights desk's queue")
+    assert.deepEqual(refusal(UnloadListQuery.safeParse({ reviewStatus: "needs-review" })).map((issue) => issue.path), ["reviewStatus"])
     assert.deepEqual(refusal(UnloadListQuery.safeParse({ from: LATER, to: WHEN })), [{ path: "to", message: OCCURRED_WINDOW_ORDERED }])
     assert.equal(UnloadListQuery.safeParse({ from: WHEN, to: WHEN }).success, true, "one instant is a window")
   })

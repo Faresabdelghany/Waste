@@ -13,10 +13,20 @@
 // recorder and the id are the server's, and a device records an unload
 // through its `record-unload` command instead (driver-commands.ts), whose
 // body carries the same rule.
+//
+// Weight control (Issue #112) reads beside every Unload: `weightReview` is
+// the reading of the review ledger over the row — the latest decision or
+// `captured`, the latest review's id and the new Unload a correction wrote
+// (`WeightReviewState`, finance.ts, since weight-control.ts imports the
+// weights rule from here and could not be imported back) — never null,
+// since every unload has a reading, and never written: the three review
+// commands append rows the reading folds. The list takes `reviewStatus`,
+// the prototype's Weight Control queue ("Needs review" is `captured`).
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
 import { ExecutionSource, ObjectKey } from "./execution"
+import { WeightReviewState, WeightReviewStatus } from "./finance"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
@@ -68,6 +78,8 @@ export const Unload = z
     /** A photo of the ticket. */
     objectKey: ObjectKey.nullable(),
     note: Paragraph.nullable(),
+    /** Weight control's reading over the row: the latest review's decision, or `captured` where nobody has looked (Issue #112). */
+    weightReview: WeightReviewState,
   })
   .refine(weightsPaired, bothGrossAndTare)
   .refine(weightsAddUp, netIsGrossLessTare)
@@ -90,11 +102,13 @@ export const UnloadCreate = z
   .refine(weightsAddUp, netIsGrossLessTare)
 export type UnloadCreate = z.infer<typeof UnloadCreate>
 
-/** A page of unloads: one project's, one route's, at one station, of one fraction, over a window of `occurredAt`, oldest first. */
+/** A page of unloads: one project's, one route's, at one station, of one fraction, of one review status, over a window of `occurredAt`, oldest first. */
 export const UnloadListQuery = ProjectScopedListQuery.extend({
   routeId: Id.optional(),
   unloadingStationId: Id.optional(),
   wasteFractionId: Id.optional(),
+  /** The reading to page by: `captured` is the weights desk's queue. */
+  reviewStatus: WeightReviewStatus.optional(),
   /** The first instant of the window over `occurredAt`, inclusive. */
   from: IsoDateTime.optional(),
   /** The last instant, inclusive. */

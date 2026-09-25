@@ -34,6 +34,8 @@ import { errorHandler, notFound } from "./problem"
 import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS } from "./readiness"
 import { agreementRoutes } from "./routes/agreements"
 import { alertRoutes } from "./routes/alerts"
+import { billableEventRoutes } from "./routes/billable-events"
+import { billingRunRoutes } from "./routes/billing-runs"
 import { catalogueRoutes } from "./routes/catalogue"
 import { collectionCalendarRoutes } from "./routes/collection-calendars"
 import { collectionGroupRoutes } from "./routes/collection-groups"
@@ -43,11 +45,13 @@ import { customerRoutes } from "./routes/customers"
 import { depotRoutes } from "./routes/depots"
 import { driverDoorRoutes } from "./routes/driver"
 import { driverRoutes } from "./routes/drivers"
+import { invoiceRoutes } from "./routes/invoices"
 import { lifecycleRoutes } from "./routes/lifecycle"
 import { liveRoutes } from "./routes/live"
 import { meRoutes } from "./routes/me"
 import { pickupRoutes } from "./routes/pickups"
 import { planningAreaRoutes } from "./routes/planning-areas"
+import { priceListRoutes } from "./routes/price-lists"
 import { productRoutes } from "./routes/products"
 import { projectRoutes } from "./routes/projects"
 import { propertyRoutes } from "./routes/properties"
@@ -55,7 +59,10 @@ import { propertyGroupRoutes } from "./routes/property-groups"
 import { roleRoutes } from "./routes/roles"
 import { routeSchemeRoutes } from "./routes/route-schemes"
 import { routeRoutes } from "./routes/routes"
+import { serviceAreaRoutes } from "./routes/service-areas"
+import { serviceProviderPriceRoutes } from "./routes/service-provider-prices"
 import { serviceProviderRoutes } from "./routes/service-providers"
+import { settlementRoutes } from "./routes/settlements"
 import { sharedCollectionPointRoutes } from "./routes/shared-collection-points"
 import { ticketRoutes } from "./routes/tickets"
 import { unloadRoutes } from "./routes/unloads"
@@ -65,6 +72,7 @@ import { vehicleAllocationRoutes } from "./routes/vehicle-allocations"
 import { vehicleTypeRoutes } from "./routes/vehicle-types"
 import { vehicleRoutes } from "./routes/vehicles"
 import { warehouseRoutes } from "./routes/warehouses"
+import { weightControlRoutes } from "./routes/weight-control"
 
 export type AppOptions = {
   /** The pool /readyz probes, as the API role: server.ts builds it from probePoolOptions; a test hands whatever it wants probed. */
@@ -177,6 +185,17 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   // Resolution (Issue #109): a ticket's `occurredAt` and an alert's `detectedAt` default to the request's clock and may not run ahead of it, and every command stamps and publishes with it, so both modules take `now` too.
   app.route("/", ticketRoutes(guard, { now }))
   app.route("/", alertRoutes(guard, { now }))
+  // Finance & Contracting (Issue #112). The tariffs, the awards and what a provider is paid: every rule there is a period against a day the caller names, so none of the three takes the clock.
+  app.route("/", priceListRoutes(guard))
+  app.route("/", serviceAreaRoutes(guard))
+  app.route("/", serviceProviderPriceRoutes(guard))
+  // The billing half: a cancellation is stamped with the request's clock, a run and a credit note issue on "today" on the project's clock and publish with the request's instant, so all three take `now`.
+  app.route("/", billableEventRoutes(guard, { now }))
+  app.route("/", billingRunRoutes(guard, { now }))
+  app.route("/", invoiceRoutes(guard, { now }))
+  // The settlements and weight control: a settlement's `calculatedAt` and `closedAt` are the request's clock and `settlement-closed` is published with it, so the module takes `now`; weight control stamps nothing of its own (a review's `recordedAt` is the database's) and takes no clock.
+  app.route("/", settlementRoutes(guard, { now }))
+  app.route("/", weightControlRoutes(guard))
 
   app.get(
     "/openapi.json",

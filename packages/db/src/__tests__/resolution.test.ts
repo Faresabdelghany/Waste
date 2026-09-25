@@ -262,6 +262,8 @@ describe("the Resolution tables against a fresh database", { skip: database.skip
     assert.deepEqual(
       [...counters],
       [
+        // 0010 (Issue #112) added the third counter; a fresh database migrated to the head carries all three.
+        { column: "next_invoice_number", default: "1000", nullable: "NO" },
         { column: "next_route_number", default: "1000", nullable: "NO" },
         { column: "next_ticket_number", default: "1000", nullable: "NO" },
       ],

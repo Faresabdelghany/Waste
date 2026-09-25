@@ -51,7 +51,7 @@
 // judged on the day the scheme's period starts or today on the project's
 // clock, whichever is later (#101 §6.18) — today being the app's injected
 // `now` rendered in `project.timezone`, read once per request through
-// `projectToday` and only when a group asks — a 400 at `driverId` in the
+// `projectToday` (routes/fleet-lookups.ts) and only when a group asks — a 400 at `driverId` in the
 // words an allocation refuses with, whatever the scheme's status; a scheme
 // patch that moves the start later judges its stored groups the same way,
 // over rows `fleetOf` reads in one statement each. And on a `validated`
@@ -97,8 +97,7 @@ import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { newId } from "../ids"
 import { invalidRequest, problem } from "../problem"
-import { dayInTimezone } from "./days"
-import { driverColumns, findDriver, findVehicle, projectTimezone, vehicleColumns, vehicleLabel, type DriverRow, type VehicleRow } from "./fleet-lookups"
+import { driverColumns, findDriver, findVehicle, vehicleColumns, vehicleLabel, type DriverRow, type Today, type VehicleRow } from "./fleet-lookups"
 import {
   requireContainer,
   requireContainerType,
@@ -479,20 +478,6 @@ export function requireFleetInService(refs: GroupReferences, rows: FleetRows): v
     const row = rows.drivers.get(id)
     if (row !== undefined) refuseUnavailableDriver(row.status, row.name, "a collection group")
   }
-}
-
-/** Today on a project's clock, asked for at most once per request. */
-export type Today = () => Promise<string>
-
-/**
- * Today on the project's clock — the app's `now` rendered as a day in
- * `project.timezone` (routes/days.ts) — read once per request, however many
- * groups ask, and not at all when none does. The clock is the app's and never
- * `new Date()` here, so a test pins the day a driver is judged on.
- */
-export function projectToday(tx: Tx, scope: Scope, now: () => Date): Today {
-  let today: Promise<string> | undefined
-  return () => (today ??= projectTimezone(tx, scope.companyId, scope.projectId).then((timezone) => dayInTimezone(now(), timezone)))
 }
 
 /**

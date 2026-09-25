@@ -22,6 +22,11 @@
 // second read for one column would be the same statement over again; the
 // column sets are exported so routes/scheme-groups.ts reads a body's whole
 // fleet in one statement per table and gets the same rows.
+//
+// The project's clock is read here too — `projectTimezone`, `projectCurrency`
+// and `projectToday`, the app's `now` rendered as a day on it — since a
+// Collection Group's licence day, a billing run's `issuedOn` and a credit
+// note's are one question asked by three contexts (Issue #112, its review).
 import type { Tx } from "@waste/db/client"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { project } from "@waste/db/schema/organisation"
@@ -29,6 +34,7 @@ import type { DriverStatus, LicenceClass, VehicleKind, VehicleStatus } from "@wa
 import { and, eq } from "drizzle-orm"
 
 import { invalidRequest } from "../problem"
+import { dayInTimezone } from "./days"
 import { NOT_A_DRIVER, notAVehicleOf, type Scope } from "./references"
 
 /** What a sentence and a licence check read of a vehicle. */
@@ -109,4 +115,37 @@ export async function projectTimezone(tx: Tx, companyId: string, projectId: stri
     .limit(1)
   if (row === undefined) throw new Error(`projectTimezone: no project ${projectId} in company ${companyId}`)
   return row.timezone
+}
+
+/**
+ * The project's currency, ISO 4217 as the contracts checked it: what a price
+ * list defaults to and a default list must be in, and what a provider price
+ * is quoted in (Issue #112). The same rule as the timezone's: the project is
+ * the caller's, proved a moment ago, so its absence here is a bug and is
+ * thrown.
+ */
+export async function projectCurrency(tx: Tx, companyId: string, projectId: string): Promise<string> {
+  const [row] = await tx
+    .select({ currency: project.currency })
+    .from(project)
+    .where(and(eq(project.companyId, companyId), eq(project.id, projectId)))
+    .limit(1)
+  if (row === undefined) throw new Error(`projectCurrency: no project ${projectId} in company ${companyId}`)
+  return row.currency
+}
+
+/** Today on a project's clock, asked for at most once per request. */
+export type Today = () => Promise<string>
+
+/**
+ * Today on the project's clock — the app's `now` rendered as a day in
+ * `project.timezone` (routes/days.ts) — read once per request, however many
+ * times it is asked, and not at all when nobody asks: a Collection Group's
+ * licence day (routes/scheme-groups.ts), a billing run's `issuedOn`
+ * (routes/billing-runs.ts), a credit note's (routes/invoices.ts). The clock
+ * is the app's and never `new Date()` here, so a test pins the day.
+ */
+export function projectToday(tx: Tx, scope: Scope, now: () => Date): Today {
+  let today: Promise<string> | undefined
+  return () => (today ??= projectTimezone(tx, scope.companyId, scope.projectId).then((timezone) => dayInTimezone(now(), timezone)))
 }

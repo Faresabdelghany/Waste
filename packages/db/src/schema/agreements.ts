@@ -12,7 +12,11 @@
 // termination is `valid_to`; "pending", "expiring", "expired" and "terminated"
 // are readings of the period and never columns. `payer_customer_id` is the
 // same Customer as `customer_id` in the common case and a housing
-// administrator in the interesting one.
+// administrator in the interesting one. `price_list_id` (Issue #112,
+// migration 0010) is the Price List the agreement is priced under, a list of
+// the project in the agreement's currency, which the Registry's own patch
+// takes; null is the project's default list, and an agreement reaching
+// neither blocks its events with `no-price-list`.
 //
 // `subscription` is one Product delivered at one place under one Agreement.
 // The place is a Property or a Shared Collection Point, exactly one of the two
@@ -36,6 +40,12 @@ import { exactlyOne, oneOf, positive } from "./checks"
 import { id, projectScoped, timestamps, validity, validPeriod } from "./columns"
 import { product } from "./catalogue"
 import { customer, property, sharedCollectionPoint } from "./customers"
+// Finance's list (Issue #112) is what an agreement is priced under. finance.ts
+// imports this module back for the agreement a billable event runs under; the
+// cycle is safe because every reference is read inside a table's extra-config
+// callback, which drizzle runs after both modules have loaded, never at the
+// top level.
+import { priceList } from "./finance"
 import { company, project } from "./organisation"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference } from "./references"
 import { wms } from "./wms"
@@ -58,12 +68,15 @@ export const agreement = wms.table(
     currency: text().notNull(),
     /** Internal, never the portal's. */
     notes: text(),
+    /** The Price List the agreement is priced under (Issue #112), in the agreement's currency; null is the project's default list. */
+    priceListId: uuid(),
   },
   (t) => [
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
     tenantReference(t, [t.customerId], customer),
     tenantReference(t, [t.payerCustomerId], customer),
+    projectReference(t, [t.priceListId], priceList),
     projectKey(t),
     validPeriod(t),
     oneOf(t.status, AGREEMENT_STATUSES),
@@ -72,6 +85,7 @@ export const agreement = wms.table(
     tenantIndex(t, t.number),
     tenantIndex(t, t.customerId),
     tenantIndex(t, t.payerCustomerId),
+    tenantIndex(t, t.priceListId),
   ],
 )
 

@@ -40,6 +40,7 @@ import { containerType, product, serviceFrequency, wasteFraction } from "@waste/
 import { container } from "@waste/db/schema/containers"
 import { customer, property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup, route, session } from "@waste/db/schema/execution"
+import { priceList, serviceAreaAssignment } from "@waste/db/schema/finance"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
 import { serviceProvider } from "@waste/db/schema/organisation"
@@ -120,6 +121,9 @@ export async function requireServiceFrequency(
   await requireRow(tx, serviceFrequency, inProject(serviceFrequency, scope, id), { path, message: "Not a service frequency of this project" })
 }
 
+/** What a body or a query is told when it reaches for a product of another project. */
+export const NOT_A_PRODUCT = "Not a product of this project"
+
 /** A Product a body names: the project's, since a catalogue is a project's offer. Answers the status. */
 export async function requireProduct(
   tx: Tx,
@@ -128,7 +132,7 @@ export async function requireProduct(
   path = "productId",
 ): Promise<ProductStatus | undefined> {
   if (id == null) return undefined
-  return await requireStatus<ProductStatus>(tx, product, inProject(product, scope, id), { path, message: "Not a product of this project" })
+  return await requireStatus<ProductStatus>(tx, product, inProject(product, scope, id), { path, message: NOT_A_PRODUCT })
 }
 
 /** A Property a body names: the project's, since a service address is served under one project. Answers the status. */
@@ -500,4 +504,99 @@ export async function requireAccountInProject(tx: Tx, scope: Scope, id: string |
     )
     .limit(1)
   if (found === undefined) throw invalidRequest("body", [{ path, message: NOT_WORKING_IN_PROJECT }])
+}
+
+// Finance & Contracting (Issue #112): what a money row names. Every Finance
+// table is a Project's, and two of its rows are named by other bodies — a
+// Price List by an Agreement (the list it is priced under, held to the
+// agreement's project and, by the route, to its currency), and a Service
+// Area Assignment by a provider price and a settlement (the award they are
+// made under). Both answer the row and not only its existence, since what
+// names them judges them next: the list's currency (the agreement's rule),
+// and the assignment's project and period (containment, routes/periods.ts) —
+// a provider price and a settlement name an assignment and no project, so
+// the assignment's project is where theirs comes from, and the check takes
+// the caller's projects the way `requireRoute` does. Finance's other rows —
+// a price row, an area, a provider price, a billable event, an invoice and
+// its lines, a settlement, an unload — are named by their own routes' paths
+// and by nothing a body carries, so no check is spelled for them; one is
+// added when a body names the row, and never before (the review of #112
+// removed eight that nothing called). No status is answered: a Finance row
+// carries none, its Draft, Upcoming, Active and Expired being readings of its
+// period.
+
+/** What a body is told when it names a price list of another project, or none. */
+export const NOT_A_PRICE_LIST = "Not a price list of this project"
+
+/** What a body is told when it names an assignment outside the projects it may see, or none. */
+export const NOT_AN_ASSIGNMENT = "Not an assignment of this project"
+
+/** The price list a check found, as the agreement's rule reads it: the currency every row of it is quoted in. */
+export type PriceListRef = { id: string; currency: string }
+
+/**
+ * A Price List a body names — the list an Agreement is priced under: the
+ * project's. Answers the row's currency, since the route holds the agreement's
+ * to it next ("The price list is in EUR; the agreement is billed in DKK"), and
+ * one statement that says both is better than two; undefined for an id that
+ * is null or absent, which is the project's default list and names nothing.
+ */
+export async function requirePriceList(tx: Tx, scope: Scope, id: string | null | undefined, path = "priceListId"): Promise<PriceListRef | undefined> {
+  if (id == null) return undefined
+  const [found] = await tx
+    .select({ id: priceList.id, currency: priceList.currency })
+    .from(priceList)
+    .where(and(eq(priceList.companyId, scope.companyId), eq(priceList.projectId, scope.projectId), eq(priceList.id, id)))
+    .limit(1)
+  if (found === undefined) throw invalidRequest("body", [{ path, message: NOT_A_PRICE_LIST }])
+  return found
+}
+
+/** The assignment a check found, as containment and the provider's own reads use it: its project, its area, its provider and its period. */
+export type AssignmentRef = { id: string; projectId: string; serviceAreaId: string; serviceProviderId: string; validFrom: string; validTo: string | null }
+
+/**
+ * A Service Area Assignment a body names — the award a provider price or a
+ * settlement is made under: one of the caller's projects, handed in as their
+ * ids the way `requireRoute` takes them, since neither body names a project
+ * and the assignment's is where theirs comes from. An account that works in
+ * no project reaches none, whatever its role grants, so a provider's account
+ * cannot price or settle its own award. Answers the row, so the route holds
+ * the child's period inside it (routes/periods.ts) and reads the project's
+ * currency, without a second statement; undefined for an id that is null or
+ * absent, which the overload on a required id rules out for the two creates
+ * that always name one.
+ */
+export async function requireServiceAreaAssignment(tx: Tx, scope: { companyId: string; projectId: string | readonly string[] }, id: string, path?: string): Promise<AssignmentRef>
+export async function requireServiceAreaAssignment(
+  tx: Tx,
+  scope: { companyId: string; projectId: string | readonly string[] },
+  id: string | null | undefined,
+  path?: string,
+): Promise<AssignmentRef | undefined>
+export async function requireServiceAreaAssignment(
+  tx: Tx,
+  scope: { companyId: string; projectId: string | readonly string[] },
+  id: string | null | undefined,
+  path = "serviceAreaAssignmentId",
+): Promise<AssignmentRef | undefined> {
+  if (id == null) return undefined
+  const refusal = () => invalidRequest("body", [{ path, message: NOT_AN_ASSIGNMENT }])
+  const projects = typeof scope.projectId === "string" ? [scope.projectId] : [...scope.projectId]
+  // An account that works in no project names no assignment; `in ()` is not SQL.
+  if (projects.length === 0) throw refusal()
+  const [found] = await tx
+    .select({
+      id: serviceAreaAssignment.id,
+      projectId: serviceAreaAssignment.projectId,
+      serviceAreaId: serviceAreaAssignment.serviceAreaId,
+      serviceProviderId: serviceAreaAssignment.serviceProviderId,
+      validFrom: serviceAreaAssignment.validFrom,
+      validTo: serviceAreaAssignment.validTo,
+    })
+    .from(serviceAreaAssignment)
+    .where(and(eq(serviceAreaAssignment.companyId, scope.companyId), inArray(serviceAreaAssignment.projectId, projects), eq(serviceAreaAssignment.id, id)))
+    .limit(1)
+  if (found === undefined) throw refusal()
+  return found
 }

@@ -3,33 +3,41 @@
 // row, and `POST /routes/:id/unloads` is the office's capture of a
 // weighbridge ticket the device did not record — a forgotten one, a ticket
 // that came by post. The row is a ledger's (`recorded`, `appendOnly`): it is
-// never updated here, and weight control — approve, reject, correct,
-// release for billing — is Finance's review over these rows (step 7), a
+// never updated here, and weight control — approve, reject, correct — is
+// Finance's review over these rows (Issue #112, routes/weight-control.ts), a
 // wrong unload corrected there by a new row naming the old.
 //
 // The office's capture is `source = dispatch`, `recordedBy` the caller,
 // `sessionId` null (a session is named by every driver-recorded row and by
-// no office row, `unload_session_shape`), the id server-minted. It is made on
-// a route that ran, `active` or `completed` (#104 §7.21: the office may
-// capture on a completed route where the device may not after `end-route`) —
-// a route that has not is refused (409), and a cancelled one does not change.
-// The station is one of the company's — any station, since a full truck
-// unloads where it can and the route's planned one is a default the device
-// offers, not a rule — and the fraction one of the company's, each a 400 at
-// its field; the weights hold the table's own sentence at the boundary
-// (contracts/unloads.ts: net given, gross and tare together or not at all,
-// and net gross less tare where both are); and `occurredAt` may run ahead of
-// the request's clock by the ledger's skew (`OCCURRED_AT_SKEW_MS`,
+// no office row, `unload_session_shape`), the id server-minted — the
+// statements of routes/unload-writes.ts, which the correction writes through
+// too. It is made on a route that ran, `active` or `completed` (#104 §7.21:
+// the office may capture on a completed route where the device may not after
+// `end-route`) — a route that has not is refused (409), and a cancelled one
+// does not change. The station is one of the company's — any station, since
+// a full truck unloads where it can and the route's planned one is a default
+// the device offers, not a rule — and the fraction one of the company's, each
+// a 400 at its field; the weights hold the table's own sentence at the
+// boundary (contracts/unloads.ts: net given, gross and tare together or not
+// at all, and net gross less tare where both are); and `occurredAt` may run
+// ahead of the request's clock by the ledger's skew (`OCCURRED_AT_SKEW_MS`,
 // routes/shared.ts, the one constant the ledger, the driver door and this
 // capture read, and `requireNotAhead` the one check over it) and no further,
-// in the domain's words. The
-// `unload-recorded` event is written in the same transaction, carrying the
-// unload as answered.
+// in the domain's words. The `unload-recorded` event is written in the same
+// transaction, carrying the unload as answered.
+//
+// Every Unload answered here carries `weightReview`, the review ledger's
+// reading (Issue #112 §5): the list, the read and the capture go through
+// `unloadsFrom` (routes/execution-shapes.ts), one LATERAL probe per row for
+// the latest review, and the list takes `?reviewStatus=` over the same fold,
+// so the queue the weights desk works ("Needs review" is `captured`) is a
+// filter and never a column.
 //
 // Every statement carries the tenant and `inProjects`; the grant is
 // `route-studio.weights`, `view` to read and `create` to capture.
 import { Page } from "@waste/contracts/pagination"
 import { Unload, UnloadCreate, UnloadListQuery } from "@waste/contracts/unloads"
+import { reviewStatus } from "@waste/db/query/weight-review"
 import { route, unload } from "@waste/db/schema/execution"
 import { and, asc, eq, gt, gte, lte } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -38,15 +46,15 @@ import { describeRoute } from "hono-openapi"
 import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { projectIdsOf, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
 import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, validate } from "../problem"
-import { findRoute, noSuchRoute, noSuchUnload, unloadColumns, unloadOf, unloadScope } from "./execution-shapes"
+import { findRoute, findUnload, noSuchRoute, noSuchUnload, unloadOf, unloadScope, unloadsFrom } from "./execution-shapes"
 import { requireRoute, requireUnloadingStation, requireWasteFraction } from "./references"
 import { requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow, requireNotAhead } from "./shared"
+import { appendUnload } from "./unload-writes"
 
 const MODULE = "route-studio.weights"
 
@@ -60,7 +68,7 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "listUnloads",
         summary: "The unloads of the caller's projects",
         description:
-          "One page of unloads, oldest first (ids are time-ordered, so a cursor over them is a cursor over recording order), from the projects the caller works in — an account that works in none reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `routeId` is one route's unloads, and must be a route of a project this account works in (400 on the query); `unloadingStationId` what was tipped at one station, `wasteFractionId` one fraction, and `from` and `to` the window over `occurredAt` (both inclusive, `to` on or after `from`). Weight control over these rows is Finance's, step 7. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of unloads, oldest first (ids are time-ordered, so a cursor over them is a cursor over recording order), from the projects the caller works in — an account that works in none reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `routeId` is one route's unloads, and must be a route of a project this account works in (400 on the query); `unloadingStationId` what was tipped at one station, `wasteFractionId` one fraction, and `from` and `to` the window over `occurredAt` (both inclusive, `to` on or after `from`). Every unload carries `weightReview`, weight control's reading over it — the latest review's decision as its status, or `captured` where nobody has looked, with that review's id and, after a correction, the new unload the correction wrote — and `reviewStatus` narrows the page to one reading: `captured` is the weights desk's queue. Reviewing is `POST /unloads/{id}/approve`, `/reject` and `/correct`. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of unloads.", UnloadPage),
@@ -73,15 +81,14 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       requireGrant(MODULE, "view"),
       validate("query", UnloadListQuery),
       async (c) => {
-        const { limit, cursor, projectId, routeId, unloadingStationId, wasteFractionId, from, to } = c.req.valid("query")
+        const { limit, cursor, projectId, routeId, unloadingStationId, wasteFractionId, reviewStatus: status, from, to } = c.req.valid("query")
         const after = afterCursor(cursor)
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         if (routeId !== undefined) await requireRoute(tx, { companyId: principal.companyId, projectId: projectId ?? projectIdsOf(principal) }, routeId, "routeId", "query")
-        const rows = await tx
-          .select(unloadColumns)
-          .from(unload)
+        const { review, query } = unloadsFrom(tx, principal.companyId)
+        const rows = await query
           .where(
             and(
               unloadScope(principal),
@@ -89,6 +96,8 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
               routeId === undefined ? undefined : eq(unload.routeId, routeId),
               unloadingStationId === undefined ? undefined : eq(unload.unloadingStationId, unloadingStationId),
               wasteFractionId === undefined ? undefined : eq(unload.wasteFractionId, wasteFractionId),
+              // The fold in SQL, so the filter and the reading cannot disagree.
+              status === undefined ? undefined : eq(reviewStatus(review.decision), status),
               from === undefined ? undefined : gte(unload.occurredAt, new Date(from)),
               to === undefined ? undefined : lte(unload.occurredAt, new Date(to)),
               after === undefined ? undefined : gt(unload.id, after),
@@ -105,7 +114,7 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "getUnload",
         summary: "One unload",
         description:
-          "One unload of a project the caller works in: the route and session it was recorded on, the station and the fraction, the weights, the station's ticket and who recorded it. An unload of another company, or of a project this account does not work in, is an unload that does not exist here.",
+          "One unload of a project the caller works in: the route and session it was recorded on, the station and the fraction, the weights, the station's ticket, who recorded it, and `weightReview` — weight control's reading, the latest review's decision or `captured`, with that review's id and the new unload a correction wrote. An unload of another company, or of a project this account does not work in, is an unload that does not exist here.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The unload.", Unload),
@@ -122,11 +131,7 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const [row] = await tx
-          .select(unloadColumns)
-          .from(unload)
-          .where(and(unloadScope(principal), eq(unload.id, id)))
-          .limit(1)
+        const row = await findUnload(tx, principal, id)
         if (row === undefined) throw noSuchUnload(id)
         return c.json(unloadOf(row))
       },
@@ -170,26 +175,19 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const tipped = new Date(occurredAt)
         requireNotAhead(tipped, at)
         requireRan(current)
-        const [row] = await tx
-          .insert(unload)
-          .values({
-            id: newId(),
-            companyId: principal.companyId,
-            projectId: current.projectId,
-            routeId: current.id,
-            sessionId: null,
-            unloadingStationId,
-            wasteFractionId,
-            source: "dispatch",
-            occurredAt: tipped,
-            recordedBy: principal.user.id,
-            grossKg: grossKg ?? null,
-            tareKg: tareKg ?? null,
-            netKg,
-            weighbridgeTicket: weighbridgeTicket ?? null,
-            note: note ?? null,
-          })
-          .returning(unloadColumns)
+        const row = await appendUnload(tx, principal.companyId, {
+          projectId: current.projectId,
+          routeId: current.id,
+          unloadingStationId,
+          wasteFractionId,
+          occurredAt: tipped,
+          recordedBy: principal.user.id,
+          grossKg: grossKg ?? null,
+          tareKg: tareKg ?? null,
+          netKg,
+          weighbridgeTicket: weighbridgeTicket ?? null,
+          note: note ?? null,
+        })
         const answered = unloadOf(row)
         await emit(tx, principal, { aggregate: "unload", aggregateId: row.id, kind: "unload-recorded", payload: answered, projectId: row.projectId, occurredAt: tipped })
         return created(c, "/unloads", answered)

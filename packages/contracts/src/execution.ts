@@ -70,11 +70,11 @@ export type DriverCommandKind = z.infer<typeof DriverCommandKind>
 export const CommandOutcome = z.enum(COMMAND_OUTCOMES)
 export type CommandOutcome = z.infer<typeof CommandOutcome>
 
-/** What the outbox tells the other contexts: Execution's twelve kinds and Resolution's three (Issue #109), the tuple being the union of every context's news. */
+/** What the outbox tells the other contexts: Execution's twelve kinds, Resolution's three (Issue #109) and Finance's two (Issue #112), the tuple being the union of every context's news. */
 export const OutboxKind = z.enum(OUTBOX_KINDS)
 export type OutboxKind = z.infer<typeof OutboxKind>
 
-/** What an outbox event is about: a route, a pickup, an unload, a command, or a ticket. */
+/** What an outbox event is about: a route, a pickup, an unload, a command, a ticket, an invoice or a settlement. */
 export const OutboxAggregate = z.enum(OUTBOX_AGGREGATES)
 export type OutboxAggregate = z.infer<typeof OutboxAggregate>
 

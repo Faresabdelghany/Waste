@@ -128,7 +128,7 @@ describe("GET /openapi.json", () => {
     assert.deepEqual([...documented].sort(), [...registered].sort())
   })
 
-  test("documents the probes and every route of the organisation, access, registry, planning, resources, execution and resolution contexts and the driver door, and no other path", async () => {
+  test("documents the probes and every route of the organisation, access, registry, planning, resources, execution, resolution and finance contexts and the driver door, and no other path", async () => {
     const document = await spec()
     assert.deepEqual(Object.keys(document.paths).sort(), [
       "/agreements",
@@ -139,6 +139,13 @@ describe("GET /openapi.json", () => {
       "/alerts/{id}/acknowledge",
       "/alerts/{id}/link-ticket",
       "/alerts/{id}/resolve",
+      "/billable-events",
+      "/billable-events/{id}",
+      "/billable-events/{id}/cancel",
+      "/billable-events/{id}/reprice",
+      "/billing-runs",
+      "/billing-runs/preview",
+      "/billing-runs/{id}",
       "/collection-calendars",
       "/collection-calendars/{id}",
       "/collection-calendars/{id}/holidays",
@@ -168,6 +175,9 @@ describe("GET /openapi.json", () => {
       "/drivers",
       "/drivers/{id}",
       "/healthz",
+      "/invoices",
+      "/invoices/{id}",
+      "/invoices/{id}/credit-notes",
       "/me",
       "/pickups",
       "/pickups/{id}",
@@ -180,6 +190,11 @@ describe("GET /openapi.json", () => {
       "/planning-areas",
       "/planning-areas/{id}",
       "/planning-areas/{id}/boundaries",
+      "/price-list-rows/{id}",
+      "/price-lists",
+      "/price-lists/{id}",
+      "/price-lists/{id}/resolve",
+      "/price-lists/{id}/rows",
       "/products",
       "/products/{id}",
       "/projects",
@@ -208,12 +223,28 @@ describe("GET /openapi.json", () => {
       "/routes/{id}/pickup-order",
       "/routes/{id}/reschedule",
       "/routes/{id}/unloads",
+      "/service-area-assignments",
+      "/service-area-assignments/{id}",
+      "/service-areas",
+      "/service-areas/{id}",
+      "/service-areas/{id}/assignments",
+      "/service-areas/{id}/planning-areas",
+      "/service-areas/{id}/waste-fractions",
       "/service-frequencies",
       "/service-frequencies/{id}",
+      "/service-provider-prices",
+      "/service-provider-prices/{id}",
+      "/service-provider-prices/{id}/index",
       "/service-providers",
       "/service-providers/{id}",
       "/sessions",
       "/sessions/{id}",
+      "/settlements",
+      "/settlements/{id}",
+      "/settlements/{id}/calculate",
+      "/settlements/{id}/close",
+      "/settlements/{id}/events",
+      "/settlements/{id}/reopen",
       "/shared-collection-points",
       "/shared-collection-points/{id}",
       "/shared-collection-points/{id}/members",
@@ -235,6 +266,10 @@ describe("GET /openapi.json", () => {
       "/unloading-stations/{id}/fractions",
       "/unloads",
       "/unloads/{id}",
+      "/unloads/{id}/approve",
+      "/unloads/{id}/correct",
+      "/unloads/{id}/reject",
+      "/unloads/{id}/reviews",
       "/users",
       "/users/{id}",
       "/users/{id}/deactivate",
@@ -307,8 +342,8 @@ describe("GET /openapi.json", () => {
     }
     assert.equal(
       secured,
-      182,
-      "/me, the ten organisation routes, the twelve access routes, the fifty-one registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each, agreements with their subscriptions and containers with their placements — the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six — and the eighteen resources routes of slice 3: vehicle types with their container types, five, warehouses and depots, four each, and unloading stations with their fractions, five — and the seven of the container ledger (Issue #101, slice 5): the five commands receive, return, transfer, decommission and adjust, one container's movements, and the ledger across containers — and Resources' seven vehicle allocation routes (#101, slice 6): the list, the allocate command, the read, the three commands change, confirm and release, and the history — and the nine fleet routes of Resources' slice 4: vehicles with the compartments set, five, and drivers, four — and the eighteen office routes of Execution's slice 3 (Issue #104): routes, eight (the list, the read, assign, dispatch, reschedule, cancel, the pickup order and the command log), pickups, four (the list, the read, remove and correct-outcome), live, three (the live read, the sessions list and one session), and weights, three (the unloads list, one unload and the office's capture on a route) — and the five of the driver door (Issue #104, slice 4): the driver's start screen, their routes, one route, the command batch and the receipts — and Resolution's nineteen (Issue #109): the thirteen ticket routes, the list and the create, the read and the patch, the seven commands assign, start, wait, hold, complete, reject and reopen, the history and the comment, and the six alert routes, the list, the raise, the read, and the three commands acknowledge, resolve and link-ticket",
+      230,
+      "/me, the ten organisation routes, the twelve access routes, the fifty-one registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each, agreements with their subscriptions and containers with their placements — the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six — and the eighteen resources routes of slice 3: vehicle types with their container types, five, warehouses and depots, four each, and unloading stations with their fractions, five — and the seven of the container ledger (Issue #101, slice 5): the five commands receive, return, transfer, decommission and adjust, one container's movements, and the ledger across containers — and Resources' seven vehicle allocation routes (#101, slice 6): the list, the allocate command, the read, the three commands change, confirm and release, and the history — and the nine fleet routes of Resources' slice 4: vehicles with the compartments set, five, and drivers, four — and the eighteen office routes of Execution's slice 3 (Issue #104): routes, eight (the list, the read, assign, dispatch, reschedule, cancel, the pickup order and the command log), pickups, four (the list, the read, remove and correct-outcome), live, three (the live read, the sessions list and one session), and weights, three (the unloads list, one unload and the office's capture on a route) — and the five of the driver door (Issue #104, slice 4): the driver's start screen, their routes, one route, the command batch and the receipts — and Resolution's nineteen (Issue #109): the thirteen ticket routes, the list and the create, the read and the patch, the seven commands assign, start, wait, hold, complete, reject and reopen, the history and the comment, and the six alert routes, the list, the raise, the read, and the three commands acknowledge, resolve and link-ticket — and Finance's forty-eight (Issue #112): price lists, nine (the list, the create, the read and the patch, a list's rows and the row added under it, one row and its patch, and the resolve read), service areas, eleven (the list, the create, the read and the patch, the two set replacements, an area's assignments and the assignment added under it, the assignments across the caller's reach, one assignment and its patch), and service provider prices, five (the list, the create, the read, the patch and the index command, which writes the next row of the chain), billable events, five (the list, the manual create, the read, and the two commands reprice and cancel), billing runs, four (the list, the run, the preview and the read), and invoices, three (the list, the read and the credit note), settlements, seven (the list, the create, the read, the three commands calculate, close and reopen, and the history), and weight control's four (the three decisions approve, reject and correct on an unload, and its reviews)",
     )
   })
 
@@ -321,9 +356,11 @@ describe("GET /openapi.json", () => {
     // nothing for the header to name. They were the one exception, counted;
     // a ticket's comment (Issue #109, §7.22) joined them: a history row is
     // read on `GET /tickets/{id}/events`, a list, and has no address of its
-    // own either.
+    // own either. Weight control's three decisions (Issue #112, §5) are the
+    // same: a review is read on `GET /unloads/{id}/reviews`.
     const ledgerCommands = new Set(["receive", "return", "transfer", "decommission", "adjust"].map((verb) => `POST /containers/{id}/${verb}`))
-    const appendsWithoutAddress = new Set([...ledgerCommands, "POST /tickets/{id}/comments"])
+    const reviewCommands = new Set(["approve", "reject", "correct"].map((verb) => `POST /unloads/{id}/${verb}`))
+    const appendsWithoutAddress = new Set([...ledgerCommands, "POST /tickets/{id}/comments", ...reviewCommands])
     let creates = 0
     let appends = 0
     for (const [path, operations] of Object.entries(document.paths)) {
@@ -347,11 +384,11 @@ describe("GET /openapi.json", () => {
         }
       }
     }
-    assert.equal(appends, 6, "the ledger's five commands: receive, return, transfer, decommission and adjust — and a ticket's comment")
+    assert.equal(appends, 9, "the ledger's five commands: receive, return, transfer, decommission and adjust — a ticket's comment — and weight control's three decisions, approve, reject and correct")
     assert.equal(
       creates,
-      31,
-      "the thirty-one creates: projects, service providers, users and roles; waste fractions, container types, service frequencies, products, customers, properties, property groups, shared collection points, agreements and containers; the two nested ones, a subscription under its agreement and a placement under its container; and Planning's five — planning areas and, under an area, boundary versions, collection calendars, route schemes and, under a scheme, collection groups; and Resources' seven (Issue #101) — vehicle types, warehouses, depots, unloading stations, vehicles, drivers and vehicle allocations; and Execution's one (Issue #104, slice 3) — the office's unload capture under its route, read at `/unloads/{id}`; and Resolution's two (Issue #109) — the ticket and the alert",
+      41,
+      "the forty-one creates: projects, service providers, users and roles; waste fractions, container types, service frequencies, products, customers, properties, property groups, shared collection points, agreements and containers; the two nested ones, a subscription under its agreement and a placement under its container; and Planning's five — planning areas and, under an area, boundary versions, collection calendars, route schemes and, under a scheme, collection groups; and Resources' seven (Issue #101) — vehicle types, warehouses, depots, unloading stations, vehicles, drivers and vehicle allocations; and Execution's one (Issue #104, slice 3) — the office's unload capture under its route, read at `/unloads/{id}`; and Resolution's two (Issue #109) — the ticket and the alert; and Finance's ten (Issue #112) — a price list and, under a list, a row read at `/price-list-rows/{id}`, a service area and, under an area, an assignment read at `/service-area-assignments/{id}`, a service provider price, and the index command on one, which makes the next row of the chain and so answers 201 with its address; the manual billable event, the billing run, and the credit note under its invoice, read at `/invoices/{id}`; and the settlement",
     )
   })
 

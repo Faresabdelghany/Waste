@@ -16,6 +16,15 @@
 // what 0004 says, and `DROPPED_IN_0007` is what 0004 has that the schema no
 // longer generates.
 //
+// Migration 0010 (Issue #112) changed two more of the fifteen: `product`
+// gained its invoice name, invoice code and VAT rate with the rate's range
+// check and a partial unique on the code, and `agreement` gained the price
+// list it is priced under with its key and index. `CHANGED_IN_0010` maps the
+// two CREATE TABLEs as drizzle-kit writes them now onto what 0004 says, and
+// `ADDED_IN_0010` is left out of the comparison, the way
+// planning-rendering.test.ts holds 0006 to its own day;
+// finance-rendering.test.ts pins the ALTER TABLE statements themselves.
+//
 // This is also what makes a change to the vocabulary a migration: the values
 // are spelled here as the file spells them, so adding one to a list in
 // @waste/domain/registry/vocabulary fails this test until a migration replaces
@@ -98,6 +107,55 @@ const CHANGED_IN_0007 = new Map([[placementTable(true), placementTable(false)]])
 /** What 0004 created and 0007 dropped: the index on the placement's project, which its key now leads with. */
 const DROPPED_IN_0007 = [index("container_service_placement", "container_service_placement_project_id_idx", "company_id", "project_id")]
 
+/** product as drizzle-kit writes it today, with the invoice name, code and VAT rate 0010 added (Issue #112), and as it wrote it as of 0004, without. */
+const productTable = (finance: boolean): string =>
+  createTable("product", "project", [
+    '"name" text NOT NULL',
+    '"kind" text NOT NULL',
+    '"status" text NOT NULL',
+    '"unit" text NOT NULL',
+    '"container_type_id" uuid',
+    '"waste_fraction_id" uuid',
+    '"service_frequency_id" uuid',
+    ...(finance ? ['"invoice_name" text', '"invoice_code" text', '"vat_percent" integer'] : []),
+    uniqueKey("product_project_id_name_key", "company_id", "project_id", "name"),
+    uniqueKey("product_project_key", "company_id", "project_id", "id"),
+    oneOfCheck("product", "kind", "container-collection", "recurring-service", "additional-service"),
+    oneOfCheck("product", "status", "draft", "active", "inactive"),
+    oneOfCheck("product", "unit", "pickup", "month", "job"),
+    ...(finance ? [`CONSTRAINT "product_vat_percent_range" CHECK (${ref("product", "vat_percent")} between 0 and 100)`] : []),
+  ])
+
+/** agreement as drizzle-kit writes it today, with the price list 0010 added (Issue #112), and as of 0004, without. */
+const agreementTable = (finance: boolean): string =>
+  createTable("agreement", "dated", [
+    '"number" text NOT NULL',
+    '"customer_id" uuid NOT NULL',
+    '"payer_customer_id" uuid NOT NULL',
+    '"status" text NOT NULL',
+    '"billing_cadence" text NOT NULL',
+    '"currency" text NOT NULL',
+    '"notes" text',
+    ...(finance ? ['"price_list_id" uuid'] : []),
+    uniqueKey("agreement_project_key", "company_id", "project_id", "id"),
+    validityCheck("agreement"),
+    oneOfCheck("agreement", "status", "draft", "active", "cancelled"),
+    oneOfCheck("agreement", "billing_cadence", "monthly", "quarterly", "annual", "manual"),
+  ])
+
+/** What 0010 changed on two tables 0004 created (Issue #112): the statement as drizzle-kit generates it now, and as it generated it as of 0004. */
+const CHANGED_IN_0010 = new Map([
+  [productTable(true), productTable(false)],
+  [agreementTable(true), agreementTable(false)],
+])
+
+/** What 0010 added to the two tables beside the columns: the agreement's key into Finance and its index, and the product's partial unique on the invoice code. 0004 begins with the generated statements less these. */
+const ADDED_IN_0010 = [
+  projectFkTo("agreement", "price_list_id", "price_list"),
+  partialUniqueIndex("product", "product_invoice_code_idx", ["company_id", "project_id", "invoice_code"], `${ref("product", "invoice_code")} is not null`),
+  index("agreement", "agreement_price_list_id_idx", "company_id", "price_list_id"),
+]
+
 const expected = [
   createTable("waste_fraction", "tenant", [
     '"key" text NOT NULL',
@@ -127,20 +185,7 @@ const expected = [
     positiveCheck("service_frequency", "days_between"),
     `CONSTRAINT "service_frequency_shape" CHECK ((${ref("service_frequency", "collections_per_week")} is not null or (${ref("service_frequency", "weeks_between")} is null and ${ref("service_frequency", "days_between")} is null)) and (${ref("service_frequency", "weeks_between")} is null or ${ref("service_frequency", "days_between")} is null))`,
   ]),
-  createTable("product", "project", [
-    '"name" text NOT NULL',
-    '"kind" text NOT NULL',
-    '"status" text NOT NULL',
-    '"unit" text NOT NULL',
-    '"container_type_id" uuid',
-    '"waste_fraction_id" uuid',
-    '"service_frequency_id" uuid',
-    uniqueKey("product_project_id_name_key", "company_id", "project_id", "name"),
-    uniqueKey("product_project_key", "company_id", "project_id", "id"),
-    oneOfCheck("product", "kind", "container-collection", "recurring-service", "additional-service"),
-    oneOfCheck("product", "status", "draft", "active", "inactive"),
-    oneOfCheck("product", "unit", "pickup", "month", "job"),
-  ]),
+  productTable(true),
   createTable("customer", "tenant", [
     '"kind" text NOT NULL',
     '"name" text NOT NULL',
@@ -223,19 +268,7 @@ const expected = [
     uniqueKey("shared_collection_point_member_membership_key", "company_id", "shared_collection_point_id", "property_id"),
     oneOfCheck("shared_collection_point_member", "role", "service-member", "administrator", "payer", "notification-contact"),
   ]),
-  createTable("agreement", "dated", [
-    '"number" text NOT NULL',
-    '"customer_id" uuid NOT NULL',
-    '"payer_customer_id" uuid NOT NULL',
-    '"status" text NOT NULL',
-    '"billing_cadence" text NOT NULL',
-    '"currency" text NOT NULL',
-    '"notes" text',
-    uniqueKey("agreement_project_key", "company_id", "project_id", "id"),
-    validityCheck("agreement"),
-    oneOfCheck("agreement", "status", "draft", "active", "cancelled"),
-    oneOfCheck("agreement", "billing_cadence", "monthly", "quarterly", "annual", "manual"),
-  ]),
+  agreementTable(true),
   createTable("subscription", "dated", [
     '"agreement_id" uuid NOT NULL',
     '"product_id" uuid NOT NULL',
@@ -295,6 +328,7 @@ const expected = [
   projectFk("agreement"),
   tenantFk("agreement", "customer_id", "customer"),
   tenantFk("agreement", "payer_customer_id", "customer"),
+  projectFkTo("agreement", "price_list_id", "price_list"),
   companyFk("subscription"),
   projectFk("subscription"),
   projectFkTo("subscription", "agreement_id", "agreement"),
@@ -313,6 +347,7 @@ const expected = [
   index("product", "product_container_type_id_idx", "company_id", "container_type_id"),
   index("product", "product_waste_fraction_id_idx", "company_id", "waste_fraction_id"),
   index("product", "product_service_frequency_id_idx", "company_id", "service_frequency_id"),
+  partialUniqueIndex("product", "product_invoice_code_idx", ["company_id", "project_id", "invoice_code"], `${ref("product", "invoice_code")} is not null`),
   partialUniqueIndex("customer", "customer_registration_number_idx", ["company_id", "registration_number"], `${ref("customer", "registration_number")} is not null`),
   partialUniqueIndex("property", "property_registry_id_idx", ["company_id", "registry_id"], `${ref("property", "registry_id")} is not null`),
   index("property_party", "property_party_project_id_idx", "company_id", "project_id"),
@@ -326,6 +361,7 @@ const expected = [
   index("agreement", "agreement_number_idx", "company_id", "number"),
   index("agreement", "agreement_customer_id_idx", "company_id", "customer_id"),
   index("agreement", "agreement_payer_customer_id_idx", "company_id", "payer_customer_id"),
+  index("agreement", "agreement_price_list_id_idx", "company_id", "price_list_id"),
   index("subscription", "subscription_product_id_idx", "company_id", "product_id"),
   index("subscription", "subscription_property_id_idx", "company_id", "property_id"),
   index("subscription", "subscription_shared_collection_point_id_idx", "company_id", "shared_collection_point_id"),
@@ -348,8 +384,13 @@ describe("the Registry tables as drizzle-kit writes them", () => {
     assert.deepEqual(await statementsFor(tables), expected)
   })
 
-  /** Everything drizzle-kit wrote at the head of 0004, as it was generated as of 0004: the placement in its earlier spelling, and the index 0007 dropped back in. */
-  const generatedHead = async (): Promise<string[]> => [...(await statementsFor(tables)).map((statement) => CHANGED_IN_0007.get(statement) ?? statement), ...DROPPED_IN_0007]
+  /** Everything drizzle-kit wrote at the head of 0004, as it was generated as of 0004: the placement, the product and the agreement in their earlier spelling, what 0010 added left out, and the index 0007 dropped back in. */
+  const generatedHead = async (): Promise<string[]> => [
+    ...(await statementsFor(tables))
+      .filter((statement) => !ADDED_IN_0010.includes(statement))
+      .map((statement) => CHANGED_IN_0007.get(statement) ?? CHANGED_IN_0010.get(statement) ?? statement),
+    ...DROPPED_IN_0007,
+  ]
 
   test("migration 0004 begins with exactly what drizzle-kit generated for the schema as of 0004", async () => {
     const statements = statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
@@ -358,6 +399,8 @@ describe("the Registry tables as drizzle-kit writes them", () => {
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
     const today = await statementsFor(tables)
     for (const statement of CHANGED_IN_0007.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0010.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of ADDED_IN_0010) assert.ok(today.includes(statement), statement)
     for (const statement of DROPPED_IN_0007) assert.equal(today.includes(statement), false, statement)
   })
 

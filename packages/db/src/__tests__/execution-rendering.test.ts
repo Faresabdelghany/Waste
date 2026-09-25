@@ -18,12 +18,17 @@
 //
 // Migration 0009 (Issue #109) changed one of the seven and the company once
 // more: `outbox_event`'s two checks grew by Resolution's three kinds and its
-// `ticket` aggregate, and `company` gained `next_ticket_number`. An applied
-// file is never edited, so 0008 is held to the earlier spelling:
-// `CHANGED_IN_0009` maps the outbox's CREATE TABLE as drizzle-kit writes it
-// now onto what 0008 says, and the company's ALTER TABLE is diffed from 0002's
-// spelling to 0008's rather than to today's, the way planning-rendering.test.ts
-// holds 0006 to its own day. resolution-rendering.test.ts pins the
+// `ticket` aggregate, and `company` gained `next_ticket_number`; 0010 (Issue
+// #112) grew the two checks again, by Finance's two kinds and its `invoice`
+// and `settlement`, gave `unload` the project key the weight review points
+// at, and gave `company` `next_invoice_number`. An applied file is never
+// edited, so 0008 is held to the earlier spelling: `CHANGED_IN_0010` maps the
+// outbox's CREATE TABLE as drizzle-kit writes it now onto what it wrote as of
+// 0009 and the unload's onto what 0008 says, `CHANGED_IN_0009` maps the
+// outbox's 0009 spelling onto 0008's, and the
+// company's ALTER TABLE is diffed from 0002's spelling to 0008's rather than
+// to today's, the way planning-rendering.test.ts holds 0006 to its own day.
+// resolution-rendering.test.ts and finance-rendering.test.ts pin the
 // replacements themselves.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
@@ -108,8 +113,14 @@ const stampsShape = (() => {
   return `CONSTRAINT "route_stamps_shape" CHECK (case ${column("status")} when 'planned' then ${stamps(false, false, false, false)} when 'ready' then ${stamps(true, false, false, false)} when 'active' then ${stamps(true, true, false, false)} when 'completed' then ${stamps(true, true, true, false)} when 'cancelled' then ${column("cancelled_at")} is not null and ${column("completed_at")} is null and (${column("started_at")} is null or ${column("dispatched_at")} is not null) else false end)`
 })()
 
-/** outbox_event as drizzle-kit writes it today — the outbox's vocabulary being the union of every context's news — and as it wrote it as of 0008, before 0009 grew the two checks by Resolution's three kinds and its aggregate (Issue #109). */
-const outboxEventTable = (resolution: boolean): string =>
+/**
+ * outbox_event as drizzle-kit writes it at each of its spellings — the
+ * outbox's vocabulary being the union of every context's news: as of 0008,
+ * Execution's twelve kinds about four aggregates; as of 0009, Resolution's
+ * three kinds and its ticket beside them (Issue #109); today, Finance's two
+ * and its invoice and settlement after those (Issue #112).
+ */
+const outboxEventTable = (asOf: "0008" | "0009" | "0010"): string =>
   createTable("outbox_event", "project", [
     '"kind" text NOT NULL',
     '"aggregate_kind" text NOT NULL',
@@ -132,13 +143,48 @@ const outboxEventTable = (resolution: boolean): string =>
       "pickup-corrected",
       "unload-recorded",
       "command-rejected",
-      ...(resolution ? ["ticket-opened", "ticket-completed", "ticket-rejected"] : []),
+      ...(asOf >= "0009" ? ["ticket-opened", "ticket-completed", "ticket-rejected"] : []),
+      ...(asOf >= "0010" ? ["invoice-issued", "settlement-closed"] : []),
     ),
-    oneOfCheck("outbox_event", "aggregate_kind", "route", "pickup", "unload", "command", ...(resolution ? ["ticket"] : [])),
+    oneOfCheck("outbox_event", "aggregate_kind", "route", "pickup", "unload", "command", ...(asOf >= "0009" ? ["ticket"] : []), ...(asOf >= "0010" ? ["invoice", "settlement"] : [])),
   ])
 
-/** What 0009 changed on a table 0008 created: the outbox's CREATE TABLE as drizzle-kit generates it now, and as it generated it as of 0008. */
-const CHANGED_IN_0009 = new Map([[outboxEventTable(true), outboxEventTable(false)]])
+/** What 0009 changed on a table 0008 created: the outbox's CREATE TABLE as drizzle-kit generated it as of 0009, and as it generated it as of 0008. */
+const CHANGED_IN_0009 = new Map([[outboxEventTable("0009"), outboxEventTable("0008")]])
+
+/** unload as drizzle-kit writes it today — with the project key 0010 added for the weight review to point at (Issue #112), the day something pointed at it — and as it wrote it as of 0008, without. */
+const unloadTable = (finance: boolean): string =>
+  createLedger("unload", [
+    '"route_id" uuid NOT NULL',
+    '"session_id" uuid',
+    '"unloading_station_id" uuid NOT NULL',
+    '"waste_fraction_id" uuid NOT NULL',
+    '"source" text NOT NULL',
+    `"occurred_at" ${INSTANT} NOT NULL`,
+    '"recorded_by" uuid NOT NULL',
+    '"device_id" text',
+    '"location" geometry(Point, 4326)',
+    '"gross_kg" integer',
+    '"tare_kg" integer',
+    '"net_kg" integer NOT NULL',
+    '"weighbridge_ticket" text',
+    '"object_key" text',
+    '"note" text',
+    ...(finance ? [uniqueKey("unload_project_key", "company_id", "project_id", "id")] : []),
+    oneOfCheck("unload", "source", ...SOURCES),
+    geometryCheck("unload", "location"),
+    positiveCheck("unload", "gross_kg"),
+    positiveCheck("unload", "tare_kg"),
+    positiveCheck("unload", "net_kg"),
+    sessionShape("unload"),
+    `CONSTRAINT "unload_weights_shape" CHECK ((${ref("unload", "gross_kg")} is null) = (${ref("unload", "tare_kg")} is null) and (${ref("unload", "gross_kg")} is null or ${ref("unload", "net_kg")} = ${ref("unload", "gross_kg")} - ${ref("unload", "tare_kg")}))`,
+  ])
+
+/** What 0010 changed on two of the seven (Issue #112): the outbox's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0009, and the unload's onto what 0008 says. Applied before `CHANGED_IN_0009`, so today's spelling is mapped back one file at a time. */
+const CHANGED_IN_0010 = new Map([
+  [outboxEventTable("0010"), outboxEventTable("0009")],
+  [unloadTable(true), unloadTable(false)],
+])
 
 const expected = [
   createTable("route", "project", [
@@ -233,30 +279,7 @@ const expected = [
     sessionShape("proof_of_service"),
     kindShape,
   ]),
-  createLedger("unload", [
-    '"route_id" uuid NOT NULL',
-    '"session_id" uuid',
-    '"unloading_station_id" uuid NOT NULL',
-    '"waste_fraction_id" uuid NOT NULL',
-    '"source" text NOT NULL',
-    `"occurred_at" ${INSTANT} NOT NULL`,
-    '"recorded_by" uuid NOT NULL',
-    '"device_id" text',
-    '"location" geometry(Point, 4326)',
-    '"gross_kg" integer',
-    '"tare_kg" integer',
-    '"net_kg" integer NOT NULL',
-    '"weighbridge_ticket" text',
-    '"object_key" text',
-    '"note" text',
-    oneOfCheck("unload", "source", ...SOURCES),
-    geometryCheck("unload", "location"),
-    positiveCheck("unload", "gross_kg"),
-    positiveCheck("unload", "tare_kg"),
-    positiveCheck("unload", "net_kg"),
-    sessionShape("unload"),
-    `CONSTRAINT "unload_weights_shape" CHECK ((${ref("unload", "gross_kg")} is null) = (${ref("unload", "tare_kg")} is null) and (${ref("unload", "gross_kg")} is null or ${ref("unload", "net_kg")} = ${ref("unload", "gross_kg")} - ${ref("unload", "tare_kg")}))`,
-  ]),
+  unloadTable(true),
   createLedger("driver_command", [
     // Nullable: a command rejected because no such route is assigned to the driver has no route the key could check, and is still a receipt.
     '"route_id" uuid',
@@ -274,7 +297,7 @@ const expected = [
     `CONSTRAINT "driver_command_problem_shape" CHECK ((${ref("driver_command", "outcome")} = 'rejected') = (${ref("driver_command", "problem")} is not null))`,
     `CONSTRAINT "driver_command_route_shape" CHECK (${ref("driver_command", "route_id")} is not null or (${ref("driver_command", "outcome")} = 'rejected' and ${ref("driver_command", "session_id")} is null and ${ref("driver_command", "pickup_id")} is null))`,
   ]),
-  outboxEventTable(true),
+  outboxEventTable("0010"),
   companyFk("route"),
   projectFk("route"),
   projectFkTo("route", "route_scheme_id", "route_scheme"),
@@ -413,7 +436,7 @@ const handWritten = [...Object.values(tables).flatMap((table) => handWrittenStat
 
 /** Everything drizzle-kit wrote at the head of 0008: the seven tables as they were generated as of 0008 — the outbox in its earlier spelling — and the company altered from 0002's spelling to 0008's. */
 const generatedHead = async (): Promise<string[]> => [
-  ...(await statementsFor(tables)).map((statement) => CHANGED_IN_0009.get(statement) ?? statement),
+  ...(await statementsFor(tables)).map((statement) => CHANGED_IN_0010.get(statement) ?? statement).map((statement) => CHANGED_IN_0009.get(statement) ?? statement),
   ...(await statementsBetween({ company: companyAsOf0002 }, { company: companyAsOf0008 })),
 ]
 
@@ -434,9 +457,11 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     const generated = (await generatedHead()).map(normalised).sort()
     assert.equal(generated.length, 98, "seven CREATE TABLE, one ADD COLUMN, forty-seven foreign keys, forty-three indexes")
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
-    // The statement 0009 changed is one the schema generates today, so the mapping maps something.
+    // The statement 0010 changed is one the schema generates today, and the one 0009 changed is what 0010 maps back to, so each mapping maps something.
     const today = await statementsFor(tables)
-    for (const statement of CHANGED_IN_0009.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0010.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0009.keys()) assert.ok([...CHANGED_IN_0010.values()].includes(statement), statement.split("\n")[0])
+    assert.equal(CHANGED_IN_0010.size, 2, "the outbox's vocabulary and the unload's key")
   })
 
   test("and carries below them the fence and trigger, or revoke, of each table, then the sync role, its grants and the publication: 7 x 3 + 3 + 17 + 1 = 42 statements", async () => {
