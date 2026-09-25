@@ -15,6 +15,12 @@
 // TICKET_EVENT_SHAPES a migration: the values and the CASE are spelled here
 // as the file spells them, so adding a kind or moving a column in the domain
 // fails this test until a migration replaces the check.
+//
+// Migration 0010 (Issue #112) changed the two altered tables once more: the
+// outbox's checks grew by Finance's two kinds and its two aggregates, and
+// `company` gained `next_invoice_number`. An applied file is never edited, so
+// 0009's ALTER TABLEs are diffed from 0008's spelling to 0009's, both spelled
+// here, and finance-rendering.test.ts pins 0010's own.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -29,7 +35,6 @@ import { MIGRATIONS_FOLDER } from "../migrate"
 import { tableObjectName } from "../names"
 import { oneOf } from "../schema/checks"
 import { id, projectScoped, tenant, timestamps } from "../schema/columns"
-import { outboxEvent } from "../schema/execution"
 import { company, COMPANY_STATUSES, project } from "../schema/organisation"
 import { companyReference, indexOn, tenantIndex, tenantReference, uniqueOn } from "../schema/references"
 import { alert, ticket, ticketEvent } from "../schema/resolution"
@@ -223,66 +228,74 @@ const expected = [
   index("alert", "alert_resolved_by_idx", "company_id", "resolved_by"),
 ]
 
-/** The company table as 0008 left it, so `statementsBetween` can write the ALTER TABLE of 0009: the route-number counter and not yet the ticket-number counter. Another table object of the same name is fine here, since nothing connects to a database. */
-const companyAsOf0008 = wms.table(
-  "company",
-  {
-    ...id,
-    ...tenant,
-    ...timestamps,
-    name: text().notNull(),
-    legalName: text().notNull(),
-    registrationNumber: text().notNull(),
-    country: text().notNull(),
-    status: text().notNull(),
-    nextRouteNumber: integer().notNull().default(1000),
-  },
-  (t) => [uniqueOn(t.country, t.registrationNumber), check(tableObjectName(t.id.table, "self", "companySelf"), sql`${t.companyId} = ${t.id}`), oneOf(t.status, COMPANY_STATUSES)],
-)
+/** The company table's columns as every file has left them but for the counters, and its keys, so `statementsBetween` can write the ALTER TABLE of 0009 from 0008's spelling to 0009's. Another table object of the same name is fine here, since nothing connects to a database. */
+const companyColumns = {
+  ...id,
+  ...tenant,
+  ...timestamps,
+  name: text().notNull(),
+  legalName: text().notNull(),
+  registrationNumber: text().notNull(),
+  country: text().notNull(),
+  status: text().notNull(),
+  nextRouteNumber: integer().notNull().default(1000),
+}
+const companyKeys = (t: typeof company._.columns) => [uniqueOn(t.country, t.registrationNumber), check(tableObjectName(t.id.table, "self", "companySelf"), sql`${t.companyId} = ${t.id}`), oneOf(t.status, COMPANY_STATUSES)]
+/** The company as 0008 left it: the route-number counter and not yet the ticket-number counter. */
+const companyAsOf0008 = wms.table("company", companyColumns, (t) => companyKeys(t as unknown as typeof company._.columns))
+/** The company as 0009 left it: both counters, and not yet 0010's invoice-number counter (Issue #112), so the ALTER TABLE of 0009 diffs to its own day and not to today's. */
+const companyAsOf0009 = wms.table("company", { ...companyColumns, nextTicketNumber: integer().notNull().default(1000) }, (t) => companyKeys(t as unknown as typeof company._.columns))
 
 /** The outbox's vocabulary as of 0008: Execution's twelve kinds about four aggregates, before Resolution's three and its ticket. */
 const EXECUTION_KINDS = ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-corrected", "unload-recorded", "command-rejected"]
 const EXECUTION_AGGREGATES = ["route", "pickup", "unload", "command"]
+/** What 0009 added: Resolution's three kinds and its ticket. */
+const RESOLUTION_KINDS = ["ticket-opened", "ticket-completed", "ticket-rejected"]
+const RESOLUTION_AGGREGATES = ["ticket"]
 
-/** The outbox table as 0008 left it: the same columns, keys and indexes as src/schema/execution.ts, the two checks over the earlier lists. */
-const outboxEventAsOf0008 = wms.table(
-  "outbox_event",
-  {
-    ...id,
-    ...projectScoped,
-    ...timestamps,
-    kind: text().notNull(),
-    aggregateKind: text().notNull(),
-    aggregateId: uuid().notNull(),
-    occurredAt: timestamp({ withTimezone: true }).notNull(),
-    payload: jsonb().notNull(),
-    publishedAt: timestamp({ withTimezone: true }),
-  },
-  (t) => [
-    companyReference(t, company),
-    tenantReference(t, [t.projectId], project),
-    oneOf(t.kind, EXECUTION_KINDS),
-    oneOf(t.aggregateKind, EXECUTION_AGGREGATES),
-    indexOn(t.id).where(sql`${t.publishedAt} is null`),
-    tenantIndex(t, t.projectId),
-    tenantIndex(t, t.aggregateId),
-  ],
-)
+/** The outbox table as a file left it: the same columns, keys and indexes as src/schema/execution.ts, the two checks over the lists as they stood then. */
+const outboxEventAsOf = (kinds: string[], aggregates: string[]) =>
+  wms.table(
+    "outbox_event",
+    {
+      ...id,
+      ...projectScoped,
+      ...timestamps,
+      kind: text().notNull(),
+      aggregateKind: text().notNull(),
+      aggregateId: uuid().notNull(),
+      occurredAt: timestamp({ withTimezone: true }).notNull(),
+      payload: jsonb().notNull(),
+      publishedAt: timestamp({ withTimezone: true }),
+    },
+    (t) => [
+      companyReference(t, company),
+      tenantReference(t, [t.projectId], project),
+      oneOf(t.kind, kinds),
+      oneOf(t.aggregateKind, aggregates),
+      indexOn(t.id).where(sql`${t.publishedAt} is null`),
+      tenantIndex(t, t.projectId),
+      tenantIndex(t, t.aggregateId),
+    ],
+  )
+/** The outbox as 0008 left it, and as 0009 left it — before 0010 grew the lists again by Finance's two kinds and its invoice and settlement (Issue #112), which finance-rendering.test.ts pins. */
+const outboxEventAsOf0008 = outboxEventAsOf(EXECUTION_KINDS, EXECUTION_AGGREGATES)
+const outboxEventAsOf0009 = outboxEventAsOf([...EXECUTION_KINDS, ...RESOLUTION_KINDS], [...EXECUTION_AGGREGATES, ...RESOLUTION_AGGREGATES])
 
 /** What 0009 does beside the three tables: the counter, and the outbox's two checks dropped and added in their grown spelling. */
 const altered = [
   'ALTER TABLE "wms"."outbox_event" DROP CONSTRAINT "outbox_event_kind_one_of";',
   'ALTER TABLE "wms"."outbox_event" DROP CONSTRAINT "outbox_event_aggregate_kind_one_of";',
   'ALTER TABLE "wms"."company" ADD COLUMN "next_ticket_number" integer DEFAULT 1000 NOT NULL;',
-  `ALTER TABLE "wms"."outbox_event" ADD CONSTRAINT "outbox_event_kind_one_of" CHECK (${ref("outbox_event", "kind")} in (${list(...EXECUTION_KINDS, "ticket-opened", "ticket-completed", "ticket-rejected")}));`,
-  `ALTER TABLE "wms"."outbox_event" ADD CONSTRAINT "outbox_event_aggregate_kind_one_of" CHECK (${ref("outbox_event", "aggregate_kind")} in (${list(...EXECUTION_AGGREGATES, "ticket")}));`,
+  `ALTER TABLE "wms"."outbox_event" ADD CONSTRAINT "outbox_event_kind_one_of" CHECK (${ref("outbox_event", "kind")} in (${list(...EXECUTION_KINDS, ...RESOLUTION_KINDS)}));`,
+  `ALTER TABLE "wms"."outbox_event" ADD CONSTRAINT "outbox_event_aggregate_kind_one_of" CHECK (${ref("outbox_event", "aggregate_kind")} in (${list(...EXECUTION_AGGREGATES, ...RESOLUTION_AGGREGATES)}));`,
 ]
 
 /** What the three tables owe their migration file, in the order migrations/README.md lays out: fence and trigger, or fence and revoke, table by table. */
 const handWritten = Object.values(tables).flatMap((table) => handWrittenStatements(table))
 
-/** The ALTER TABLEs as drizzle-kit writes them: the company and the outbox from 0008's spelling to today's. */
-const generatedAlterations = (): Promise<string[]> => statementsBetween({ company: companyAsOf0008, outboxEvent: outboxEventAsOf0008 }, { company, outboxEvent })
+/** The ALTER TABLEs as drizzle-kit wrote them: the company and the outbox from 0008's spelling to 0009's — not to today's, since 0010 changed both again (Issue #112) and an applied file is never edited. */
+const generatedAlterations = (): Promise<string[]> => statementsBetween({ company: companyAsOf0008, outboxEvent: outboxEventAsOf0008 }, { company: companyAsOf0009, outboxEvent: outboxEventAsOf0009 })
 
 /** Everything drizzle-kit wrote at the head of 0009: the three tables and the two altered ones. */
 const generatedHead = async (): Promise<string[]> => [...(await statementsFor(tables)), ...(await generatedAlterations())]
