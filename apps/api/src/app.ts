@@ -40,9 +40,12 @@ import { companyRoutes } from "./routes/company"
 import { containerRoutes } from "./routes/containers"
 import { customerRoutes } from "./routes/customers"
 import { depotRoutes } from "./routes/depots"
+import { driverDoorRoutes } from "./routes/driver"
 import { driverRoutes } from "./routes/drivers"
 import { lifecycleRoutes } from "./routes/lifecycle"
+import { liveRoutes } from "./routes/live"
 import { meRoutes } from "./routes/me"
+import { pickupRoutes } from "./routes/pickups"
 import { planningAreaRoutes } from "./routes/planning-areas"
 import { productRoutes } from "./routes/products"
 import { projectRoutes } from "./routes/projects"
@@ -50,8 +53,10 @@ import { propertyRoutes } from "./routes/properties"
 import { propertyGroupRoutes } from "./routes/property-groups"
 import { roleRoutes } from "./routes/roles"
 import { routeSchemeRoutes } from "./routes/route-schemes"
+import { routeRoutes } from "./routes/routes"
 import { serviceProviderRoutes } from "./routes/service-providers"
 import { sharedCollectionPointRoutes } from "./routes/shared-collection-points"
+import { unloadRoutes } from "./routes/unloads"
 import { unloadingStationRoutes } from "./routes/unloading-stations"
 import { userRoutes } from "./routes/users"
 import { vehicleAllocationRoutes } from "./routes/vehicle-allocations"
@@ -155,6 +160,18 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   app.route("/", vehicleAllocationRoutes(guard))
   app.route("/", vehicleRoutes(guard))
   app.route("/", driverRoutes(guard))
+  // Execution's office (Issue #104, slice 3). The live read goes on before the
+  // route module: Hono runs handlers in registration order, and `/routes/live`
+  // would otherwise be caught by `/routes/:id`, whose path validator refuses
+  // "live" as an id. All four take the app's `now`: "today" on a project's
+  // clock, the instant a command is stamped with, and the skew an office
+  // unload's `occurredAt` may run ahead of it.
+  app.route("/", liveRoutes(guard, { now }))
+  app.route("/", routeRoutes(guard, { now }))
+  app.route("/", pickupRoutes(guard, { now }))
+  app.route("/", unloadRoutes(guard, { now }))
+  // The driver door (Issue #104, slice 4) goes on after the office: its commands are judged against the request's clock, so it takes `now` like the ledger routes.
+  app.route("/", driverDoorRoutes(guard, { now }))
 
   app.get(
     "/openapi.json",

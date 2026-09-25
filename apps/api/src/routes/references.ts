@@ -38,6 +38,7 @@ import { userAccount } from "@waste/db/schema/access"
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
 import { customer, property, sharedCollectionPoint } from "@waste/db/schema/customers"
+import { pickup, route, session } from "@waste/db/schema/execution"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
 import { serviceProvider } from "@waste/db/schema/organisation"
@@ -343,4 +344,58 @@ export const NOT_A_USER_ACCOUNT = "Not a user account of this company"
 export async function requireUserAccount(tx: Tx, companyId: string, id: string | null | undefined, path = "userAccountId"): Promise<void> {
   if (id == null) return
   await requireRow(tx, userAccount, { companyId, id, also: isNull(userAccount.deactivatedAt) }, { path, message: NOT_A_USER_ACCOUNT })
+}
+
+// Execution (Issue #104): a route, a pickup and a session are named
+// by the office's list filters (`?routeId=` on the pickups, sessions and
+// unloads lists) and by the driver door's commands, so their checks are here
+// like every other family's. A route is the project's — or, for a list that
+// names no project, one of the caller's projects, handed in as their ids, the
+// way `requireWarehouse` takes them — and a pickup and a session are a
+// route's: their keys carry the route (`pickup_route_id_project_key`,
+// `session_route_id_project_key`), so a pickup of another route is a pickup
+// this one may not name, whatever project it is in.
+
+/** What a body or a query is told when it names a route outside the project, or the projects, it may see. */
+export const NOT_A_ROUTE = "Not a route of this project"
+
+/** What a body is told when it names a pickup that is not the route's. */
+export const NOT_A_PICKUP = "Not a pickup of this route"
+
+/** What a body is told when it names a session that is not the route's. */
+export const NOT_A_SESSION = "Not a session of this route"
+
+/** What a route's children are bounded by: the caller's company and the route they hang off. */
+export type RouteScope = { companyId: string; routeId: string }
+
+/**
+ * A Route a body or a query names: the project's — or, for a list that names
+ * no project, one of the caller's projects, handed in as their ids. A `query`
+ * target is refused on the query string; a body on the body. An id that is
+ * null or absent names nothing and is no issue.
+ */
+export async function requireRoute(
+  tx: Tx,
+  scope: { companyId: string; projectId: string | readonly string[] },
+  id: string | null | undefined,
+  path = "routeId",
+  target: Target = "body",
+): Promise<void> {
+  if (id == null) return
+  const projects = typeof scope.projectId === "string" ? [scope.projectId] : [...scope.projectId]
+  // An account that works in no project reaches no route; `in ()` is not SQL.
+  if (projects.length === 0) throw invalidRequest(target, [{ path, message: NOT_A_ROUTE }])
+  await requireRow(tx, route, { companyId: scope.companyId, id, also: inArray(route.projectId, projects) }, { path, message: NOT_A_ROUTE }, target)
+}
+
+/** A Pickup a body names: the route's, since a proof or a receipt names a stop of the route it names and no other. */
+export async function requirePickup(tx: Tx, scope: RouteScope, id: string | null | undefined, path = "pickupId", target: Target = "body"): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, pickup, { companyId: scope.companyId, id, also: eq(pickup.routeId, scope.routeId) }, { path, message: NOT_A_PICKUP }, target)
+}
+
+/** A Session a body names: the route's, for the same reason. */
+export async function requireSession(tx: Tx, scope: RouteScope, id: string | null | undefined, path = "sessionId", target: Target = "body"): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, session, { companyId: scope.companyId, id, also: eq(session.routeId, scope.routeId) }, { path, message: NOT_A_SESSION }, target)
 }

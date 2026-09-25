@@ -128,7 +128,7 @@ describe("GET /openapi.json", () => {
     assert.deepEqual([...documented].sort(), [...registered].sort())
   })
 
-  test("documents the probes and every route of the organisation, access, registry, planning and resources contexts, and no other path", async () => {
+  test("documents the probes and every route of the organisation, access, registry, planning, resources and execution contexts and the driver door, and no other path", async () => {
     const document = await spec()
     assert.deepEqual(Object.keys(document.paths).sort(), [
       "/agreements",
@@ -156,10 +156,18 @@ describe("GET /openapi.json", () => {
       "/customers/{id}",
       "/depots",
       "/depots/{id}",
+      "/driver/commands",
+      "/driver/me",
+      "/driver/routes",
+      "/driver/routes/{id}",
       "/drivers",
       "/drivers/{id}",
       "/healthz",
       "/me",
+      "/pickups",
+      "/pickups/{id}",
+      "/pickups/{id}/correct-outcome",
+      "/pickups/{id}/remove",
       "/placements",
       "/placements/{id}",
       "/planning-area-boundaries",
@@ -185,10 +193,22 @@ describe("GET /openapi.json", () => {
       "/route-schemes/{id}",
       "/route-schemes/{id}/collection-groups",
       "/route-schemes/{id}/occurrences",
+      "/routes",
+      "/routes/live",
+      "/routes/{id}",
+      "/routes/{id}/assign",
+      "/routes/{id}/cancel",
+      "/routes/{id}/commands",
+      "/routes/{id}/dispatch",
+      "/routes/{id}/pickup-order",
+      "/routes/{id}/reschedule",
+      "/routes/{id}/unloads",
       "/service-frequencies",
       "/service-frequencies/{id}",
       "/service-providers",
       "/service-providers/{id}",
+      "/sessions",
+      "/sessions/{id}",
       "/shared-collection-points",
       "/shared-collection-points/{id}",
       "/shared-collection-points/{id}/members",
@@ -197,6 +217,8 @@ describe("GET /openapi.json", () => {
       "/unloading-stations",
       "/unloading-stations/{id}",
       "/unloading-stations/{id}/fractions",
+      "/unloads",
+      "/unloads/{id}",
       "/users",
       "/users/{id}",
       "/users/{id}/deactivate",
@@ -269,8 +291,8 @@ describe("GET /openapi.json", () => {
     }
     assert.equal(
       secured,
-      140,
-      "/me, the ten organisation routes, the twelve access routes, the fifty-one registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each, agreements with their subscriptions and containers with their placements — the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six — and the eighteen resources routes of slice 3: vehicle types with their container types, five, warehouses and depots, four each, and unloading stations with their fractions, five — and the seven of the container ledger (Issue #101, slice 5): the five commands receive, return, transfer, decommission and adjust, one container's movements, and the ledger across containers — and Resources' seven vehicle allocation routes (#101, slice 6): the list, the allocate command, the read, the three commands change, confirm and release, and the history — and the nine fleet routes of Resources' slice 4: vehicles with the compartments set, five, and drivers, four",
+      163,
+      "/me, the ten organisation routes, the twelve access routes, the fifty-one registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each, agreements with their subscriptions and containers with their placements — the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six — and the eighteen resources routes of slice 3: vehicle types with their container types, five, warehouses and depots, four each, and unloading stations with their fractions, five — and the seven of the container ledger (Issue #101, slice 5): the five commands receive, return, transfer, decommission and adjust, one container's movements, and the ledger across containers — and Resources' seven vehicle allocation routes (#101, slice 6): the list, the allocate command, the read, the three commands change, confirm and release, and the history — and the nine fleet routes of Resources' slice 4: vehicles with the compartments set, five, and drivers, four — and the eighteen office routes of Execution's slice 3 (Issue #104): routes, eight (the list, the read, assign, dispatch, reschedule, cancel, the pickup order and the command log), pickups, four (the list, the read, remove and correct-outcome), live, three (the live read, the sessions list and one session), and weights, three (the unloads list, one unload and the office's capture on a route) — and the five of the driver door (Issue #104, slice 4): the driver's start screen, their routes, one route, the command batch and the receipts",
     )
   })
 
@@ -308,9 +330,77 @@ describe("GET /openapi.json", () => {
     assert.equal(appends, 5, "the ledger's five commands: receive, return, transfer, decommission and adjust")
     assert.equal(
       creates,
-      28,
-      "the twenty-eight creates: projects, service providers, users and roles; waste fractions, container types, service frequencies, products, customers, properties, property groups, shared collection points, agreements and containers; the two nested ones, a subscription under its agreement and a placement under its container; and Planning's five — planning areas and, under an area, boundary versions, collection calendars, route schemes and, under a scheme, collection groups; and Resources' seven (Issue #101) — vehicle types, warehouses, depots, unloading stations, vehicles, drivers and vehicle allocations",
+      29,
+      "the twenty-nine creates: projects, service providers, users and roles; waste fractions, container types, service frequencies, products, customers, properties, property groups, shared collection points, agreements and containers; the two nested ones, a subscription under its agreement and a placement under its container; and Planning's five — planning areas and, under an area, boundary versions, collection calendars, route schemes and, under a scheme, collection groups; and Resources' seven (Issue #101) — vehicle types, warehouses, depots, unloading stations, vehicles, drivers and vehicle allocations; and Execution's one (Issue #104, slice 3) — the office's unload capture under its route, read at `/unloads/{id}`",
     )
+  })
+
+  test("documents the driver door with its verbs, its problems and the rules a device must know (Issue #104, slice 4)", async () => {
+    const document = await spec()
+    const operations = (path: string) =>
+      Object.fromEntries(Object.entries(document.paths[path]).map(([method, operation]) => [method, operation.operationId]))
+
+    assert.deepEqual(operations("/driver/me"), { get: "getDriverMe" })
+    assert.deepEqual(operations("/driver/routes"), { get: "listDriverRoutes" })
+    assert.deepEqual(operations("/driver/routes/{id}"), { get: "getDriverRoute" })
+    assert.deepEqual(operations("/driver/commands"), { get: "listDriverCommands", post: "applyDriverCommands" })
+
+    // The door answers 200 whenever the envelopes parse: a rejection is a per-command outcome, never the batch's status.
+    assert.deepEqual(Object.keys(document.paths["/driver/commands"].post.responses), ["200", "400", "401", "403"])
+    assert.deepEqual(Object.keys(document.paths["/driver/me"].get.responses), ["200", "401", "403"])
+    assert.deepEqual(Object.keys(document.paths["/driver/routes"].get.responses), ["200", "400", "401", "403"])
+    assert.deepEqual(Object.keys(document.paths["/driver/routes/{id}"].get.responses), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(Object.keys(document.paths["/driver/commands"].get.responses), ["200", "400", "401", "403"])
+    for (const [status, operation] of Object.entries(document.paths["/driver/commands"].post.responses)) {
+      assert.deepEqual(Object.keys(operation.content), [status === "200" ? "application/json" : "application/problem+json"], `POST /driver/commands ${status}`)
+    }
+
+    const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
+    assert.deepEqual(byName(document.paths["/driver/routes"].get).sort(), ["query:cursor", "query:limit", "query:status"])
+    assert.deepEqual(byName(document.paths["/driver/commands"].get).sort(), ["query:cursor", "query:limit", "query:routeId"])
+    assert.deepEqual(byName(document.paths["/driver/routes/{id}"].get), ["path:id"])
+
+    // The batch is the strict body the contracts spell, and the outcome one row per command.
+    const batch = document.paths["/driver/commands"].post.requestBody?.content["application/json"].schema
+    assert.deepEqual(batch?.required, ["commands"])
+    assert.equal(batch?.properties?.commands.type, "array")
+    const outcome = document.paths["/driver/commands"].post.responses["200"].content["application/json"].schema
+    assert.deepEqual(outcome.required, ["outcomes"])
+    assert.equal(outcome.properties?.outcomes.type, "array")
+
+    // The rules a device must know are in the prose, not only in the code: the fence, the replay, the clock, the sentences.
+    assert.match(document.paths["/driver/me"].get.description ?? "", /the assignment, never Project Access/)
+    assert.match(document.paths["/driver/routes"].get.description ?? "", /never by Project Access/)
+    assert.match(document.paths["/driver/routes/{id}"].get.description ?? "", /No route <id> assigned to this driver/)
+    // The driver's route read is the joined one: the places travel with the pickups.
+    assert.match(document.paths["/driver/routes/{id}"].get.description ?? "", /each with its place joined — the `address` and `location`/)
+    assert.match(document.paths["/driver/routes/{id}"].get.description ?? "", /the container's `label` and the waste fraction's `name`/)
+    const door = document.paths["/driver/commands"].post.description ?? ""
+    assert.match(door, /applied in body order, each in its own savepoint/)
+    assert.match(door, /`replayed` with the first outcome for an id this driver's devices already sent \(nothing written/)
+    assert.match(door, /An id that another device's command already holds .* is refused \(409, `That command id belongs to another device's command`\) and never replayed/)
+    assert.match(door, /two of the driver's routes started at once, each batch under its own route's lock, meet on the one-live-session-per-driver index/)
+    assert.match(door, /a route-level `report-problem`'s `pickup-problem-reported` the route with its problem proof as `proofs`/)
+    assert.match(door, /assigned to another driver names that route — which `GET \/driver\/routes\/:id` still answers 404 for — and no session and no pickup/)
+    assert.match(door, /A body that fails its kind's schema is one command's rejection, never the batch's/)
+    assert.match(door, /at most five minutes ahead of the request's clock \(400, `Recorded after it happened`\)/)
+    assert.match(door, /at most forty-eight hours behind it \(400, `Recorded more than 48 hours after it happened`\)/)
+    assert.match(door, /Route RC-1042 is not dispatched; a driver starts a ready route/)
+    assert.match(door, /Mads Jensen is already on route RC-1039; end it first/)
+    assert.match(door, /Pickup 12 is already completed/)
+    assert.match(door, /The object key names another route or another command/)
+    assert.match(door, /a rejection for a route of another project, another company or none is recorded without a route, in the driver's project, the claimed route id kept beside the body/)
+    // The receipts page states the receipt's `routeId` rule the same way: named for a route of the driver's project, another driver's included, null otherwise.
+    const receipts = document.paths["/driver/commands"].get.description ?? ""
+    assert.match(receipts, /oldest first/)
+    assert.match(receipts, /`routeId` names the route the command claimed when that route is of this driver's project — one assigned to another driver included, which `GET \/driver\/routes\/:id` still answers 404 for, so a receipt may name a route the device cannot read/)
+    assert.match(receipts, /is null for a route of another project, another company or none, the claimed id then kept in the body as `\{ routeId, body \}`/)
+
+    for (const path of ["/driver/routes", "/driver/commands"]) {
+      const page = document.paths[path].get.responses["200"].content["application/json"].schema
+      assert.deepEqual(page.required, ["items", "nextCursor"], path)
+      assert.equal(page.properties?.items.type, "array", path)
+    }
   })
 
   test("documents each organisation route with its verbs, its problems and its page of items", async () => {

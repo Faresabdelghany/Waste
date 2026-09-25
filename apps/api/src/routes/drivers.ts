@@ -335,3 +335,6 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>) {
       },
     )
 }
+
+// Execution, slice 4 (Issue #104): the driver door's `GET /driver/me` answers the caller's own profile in this same shape, so the columns and the mapper are read from here rather than spelled again.
+export { columns as driverColumns, driverOf }

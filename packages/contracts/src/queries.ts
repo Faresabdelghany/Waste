@@ -17,3 +17,15 @@ export const ProjectScopedListQuery = PageRequest.extend({
   projectId: Id.optional(),
 })
 export type ProjectScopedListQuery = z.infer<typeof ProjectScopedListQuery>
+
+/**
+ * A window of calendar days a list is asked over — `from` and `to`, both
+ * `YYYY-MM-DD`, both inclusive — as Execution's route and pickup lists take
+ * it over the operating date (Issue #104). The end comes on or after the
+ * start; comparing two such strings compares the days, so nothing is parsed,
+ * and a half-given window is not judged. `DAY_WINDOW_ORDERED` is the one
+ * sentence, at `to`, the bound a caller can move.
+ */
+export const DAY_WINDOW_ORDERED = "to is the last day of the window, so it comes on or after from"
+export const dayWindowOrdered = (window: { from?: string; to?: string }): boolean => window.from === undefined || window.to === undefined || window.to >= window.from
+export const dayWindowIsOrdered = { message: DAY_WINDOW_ORDERED, path: ["to"] }

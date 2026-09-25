@@ -103,6 +103,7 @@ import { subscription } from "@waste/db/schema/agreements"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { warehouse } from "@waste/db/schema/places"
 import { stockMovement } from "@waste/db/schema/stock"
+import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
 import { assetStateOf as stateAfter, movementShape } from "@waste/domain/resources/asset-state"
 import type { AssetStatus, StockMovementKind, StockPlaceKind } from "@waste/domain/resources/vocabulary"
 import { and, asc, desc, eq, gt, gte, lte, or } from "drizzle-orm"
@@ -117,7 +118,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { requireWithin } from "./periods"
 import { requireWarehouse, type Scope } from "./references"
-import { describeJson, IdParam, lockRow, refuseOverlap } from "./shared"
+import { describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS, refuseOverlap } from "./shared"
 import { requireWarehouseTakesStock } from "./statuses"
 
 const MODULE = "resources.containers"
@@ -180,15 +181,6 @@ export const placementAlreadyEnded = (label: string, day: string) => `Container 
 
 // The 400s: a body that says something the ledger cannot take.
 
-/**
- * How far ahead of the request's clock `occurredAt` may run: a driver's
- * device keeps its own time, and a scan stamped a minute or two ahead of the
- * server is a scan, not a prophecy. Beyond it the instant is refused as
- * recorded before it happened.
- */
-export const OCCURRED_AT_SKEW_MS = 5 * 60_000
-/** `occurredAt` further ahead of the request's clock than a device's clock accounts for. */
-export const RECORDED_AFTER_IT_HAPPENED = "A movement is recorded after it happened"
 /** A transfer to the place the container already stands in. */
 export const ALREADY_THERE = "Already there"
 /** A decommission of a container in service that names no end for its placement. */

@@ -49,7 +49,7 @@ import { Id } from "@waste/contracts/ids"
 import { providerShape } from "@waste/contracts/places"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
-import { and, eq, sql, type SQL } from "drizzle-orm"
+import { and, eq, getTableName, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import type { Context } from "hono"
 import { resolver } from "hono-openapi"
@@ -309,4 +309,64 @@ export function providerShapeIssue(owner: string, body: { serviceProviderId: str
 export function requireProviderShape(owner: string, body: { serviceProviderId: string | null }, sentence: string): void {
   const issue = providerShapeIssue(owner, body, sentence)
   if (issue !== undefined) throw invalidRequest("body", [issue])
+}
+
+// Execution (Issue #104, ADR-0004): the clock bounds every recorded instant
+// is held within, and the fourth door. `OCCURRED_AT_SKEW_MS` was the Stock
+// Movement ledger's constant in routes/lifecycle.ts and moved here so the
+// ledger, the driver door and the office's unload capture read one;
+// `COMMAND_BACKDATE_MS` is the lower bound only a device's queue needs, since
+// an office command's instant defaults to the request's clock and a device's
+// may be two days old.
+
+/**
+ * How far ahead of the request's clock `occurredAt` may run: a driver's
+ * device keeps its own time, and a scan stamped a minute or two ahead of the
+ * server is a scan, not a prophecy. Beyond it the instant is refused as
+ * recorded before it happened.
+ */
+export const OCCURRED_AT_SKEW_MS = 5 * 60_000
+
+/**
+ * How far behind the request's clock a driver command's `occurredAt` may lie:
+ * forty-eight hours. A device that was offline for two days is a device whose
+ * day is over, and its queue is answered as rejections Resolution reads rather
+ * than as facts (#104 §7.8). The receipts are still written, so nothing the
+ * device said is dropped.
+ */
+export const COMMAND_BACKDATE_MS = 48 * 3_600_000
+
+/** The primary key constraint Postgres names when a row with the table's id is already there: `<table>_pkey`, its own default. */
+export const primaryKeyOf = (table: PgTable): string => `${getTableName(table)}_pkey`
+
+/**
+ * The fourth door beside `refuseDuplicate`, `refuseOverlap` and `refuseCheck`,
+ * and the one that answers a key already taken with a 200 rather than a 409
+ * (#104 §3): a client-minted id already present is answered as the first
+ * application, never as a conflict, because here the key is the command and
+ * the command has already happened. Runs the write; when it fails with 23505
+ * on one of the primary keys named — the receipt's, or the key of the row the
+ * command makes with the same id, whichever the race meets first — `first`
+ * reads what was recorded for the id and its answer is returned in the
+ * write's place. The savepoint the caller ran the write in has rolled the
+ * loser's rows back by then; the read is a fresh statement and sees the
+ * winner's committed row. A 23505 on any other constraint rethrows the
+ * write's own error, since it is not a replay; so does a named key that
+ * `first` finds nothing recorded under — unless the caller gives `taken`,
+ * whose answer stands in for the write then: the key is held by a row the
+ * caller cannot see, which for the driver door (routes/driver.ts) is a
+ * command id another driver's device minted, and that is neither a replay
+ * nor a conflict of the caller's own making.
+ */
+export async function replayed<T>(keys: readonly string[], write: () => Promise<T>, first: () => Promise<T | undefined>, taken?: () => Promise<T>): Promise<T> {
+  try {
+    return await write()
+  } catch (error) {
+    const constraint = uniqueConstraintOf(error)
+    if (constraint === undefined || !keys.includes(constraint)) throw error
+    const recorded = await first()
+    if (recorded !== undefined) return recorded
+    if (taken === undefined) throw error
+    return await taken()
+  }
 }
