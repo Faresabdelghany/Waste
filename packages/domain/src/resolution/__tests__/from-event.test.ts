@@ -1,8 +1,21 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { OUTBOX_KINDS, PICKUP_REASONS, type OutboxKind, type PickupReason } from "../../execution/vocabulary"
-import { describe as described, missedCollectionSubject, PICKUP_EVENT_KINDS, rejectedCommandSubject, reportedProblemSubject, ticketFor, type CommandRejectedFacts, type EventFacts, type PickupEventFacts, type PickupEventKind } from "../from-event"
+import { CLOSING_REASONS, OUTBOX_KINDS, PICKUP_REASONS, type OutboxKind, type PickupReason } from "../../execution/vocabulary"
+import {
+  boundedSubject,
+  describe as described,
+  missedCollectionSubject,
+  PICKUP_EVENT_KINDS,
+  rejectedCommandSubject,
+  reportedProblemSubject,
+  TICKET_SUBJECT_MAX,
+  ticketFor,
+  type CommandRejectedFacts,
+  type EventFacts,
+  type PickupEventFacts,
+  type PickupEventKind,
+} from "../from-event"
 
 const ROUTE = "route"
 const PICKUP = "pickup"
@@ -51,12 +64,17 @@ describe("ticketFor", () => {
     }
   })
 
-  test("a skipped pickup is a medium missed collection when the route ended or was cancelled under it, and nothing for any other reason", () => {
+  test("a skipped pickup is a medium missed collection under each of Execution's closing reasons, and nothing for a reason outside them", () => {
     let tickets = 0
     for (const reason of PICKUP_REASONS) {
       const draft = ticketFor(pickupEvent("pickup-skipped", { reason }))
-      if (reason === "route-ended") {
+      if ((CLOSING_REASONS as readonly string[]).includes(reason)) {
         tickets += 1
+        assert.deepEqual([draft?.kind, draft?.priority], ["missed-collection", "medium"], `${reason} closes the stop with nobody having looked at it`)
+      } else {
+        assert.equal(draft, undefined, `${reason} is a decision the proof or the note records`)
+      }
+      if (reason === "route-ended") {
         assert.deepEqual(draft, {
           kind: "missed-collection",
           priority: "medium",
@@ -66,7 +84,6 @@ describe("ticketFor", () => {
           links: stopLinks(MADS),
         })
       } else if (reason === "route-cancelled") {
-        tickets += 1
         // The dispatcher's word, and the driver the planned one: nobody started the route.
         assert.deepEqual(draft, {
           kind: "missed-collection",
@@ -76,12 +93,12 @@ describe("ticketFor", () => {
           description: "The route was cancelled before this stop was collected. Reason: route-cancelled.",
           links: stopLinks(KAREN),
         })
-      } else {
-        assert.equal(draft, undefined, `${reason} is a decision the proof or the note records`)
       }
     }
-    assert.equal(tickets, 2)
+    assert.equal(tickets, CLOSING_REASONS.length, "every closing reason makes a ticket, and only those")
+    assert.deepEqual([...CLOSING_REASONS], ["route-ended", "route-cancelled"], "the two the sentences above are spelled for")
     assert.equal(ticketFor(pickupEvent("pickup-skipped", { reason: null })), undefined, "a skip without a reason is not one the route closed")
+    assert.equal(ticketFor(pickupEvent("pickup-skipped", { reason: "toString" as PickupReason })), undefined, "a reason outside the vocabulary finds nothing: the lookup is the list's, not the table's prototype's")
     // A cancelled route somebody had started keeps the planned driver on the ticket, since the source is the dispatcher's.
     assert.equal(ticketFor(pickupEvent("pickup-skipped", { reason: "route-cancelled", actualDriverId: MADS }))?.links.driverId, KAREN)
     assert.equal(ticketFor(pickupEvent("pickup-skipped", { reason: "route-ended", plannedDriverId: KAREN }))?.links.driverId, MADS)
@@ -98,10 +115,12 @@ describe("ticketFor", () => {
         links: stopLinks(MADS),
       })
     }
-    // On the route alone: no stop, no container, no place, and the subject says where only if the worker found an address.
-    const onRoute = ticketFor(pickupEvent("pickup-problem-reported", { pickupId: null, containerId: null, propertyId: null, containerLabel: null, address: null, reason: "safety", note: "Road closed" }))
+    // On the route alone: no stop, so no container and no place either — §3's "container and place then" — even where the facts carry them, and the subject says where only if the worker found an address.
+    const onRoute = ticketFor(pickupEvent("pickup-problem-reported", { pickupId: null, containerId: CONTAINER, propertyId: PROPERTY, sharedCollectionPointId: "point", containerLabel: null, address: null, reason: "safety", note: "Road closed" }))
     assert.deepEqual(onRoute?.links, { routeId: ROUTE, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, driverId: MADS })
     assert.equal(onRoute?.subject, "Problem reported: safety")
+    // Named a stop, the three travel with it.
+    assert.deepEqual(ticketFor(pickupEvent("pickup-problem-reported", { sharedCollectionPointId: "point" }))?.links, { ...stopLinks(MADS), sharedCollectionPointId: "point" })
   })
 
   test("a rejected command is a low rejected-command of the driver's, naming the route and the pickup where the receipt has them", () => {
@@ -149,5 +168,29 @@ describe("ticketFor", () => {
     assert.equal(described("The driver could not collect this stop", "inaccessible", "Gate locked"), "The driver could not collect this stop. Reason: inaccessible. Note: Gate locked")
     assert.equal(described("The driver could not collect this stop", "inaccessible", null), "The driver could not collect this stop. Reason: inaccessible.")
     assert.equal(described("The driver could not collect this stop", null, null), "The driver could not collect this stop.")
+  })
+
+  test("a subject is cut to the wire's Label bound — at the last space with an ellipsis where a word would otherwise be cut in half — and a short one is left alone", () => {
+    // The contracts' LABEL_MAX, which this package cannot import; packages/db's ticket-subject.test.ts holds the two equal.
+    assert.equal(TICKET_SUBJECT_MAX, 200)
+    const words = Array.from({ length: 100 }, (_, i) => `word${i}`).join(" ")
+    assert.equal(words.length > 500, true)
+    const cut = rejectedCommandSubject(words)
+    assert.equal(cut.length <= TICKET_SUBJECT_MAX, true)
+    assert.equal(cut.endsWith("…"), true)
+    assert.match(cut, /^Rejected command: word0 word1 .*\S…$/, "cut at a space, so the ellipsis follows a whole word")
+    assert.equal(words.startsWith(cut.slice("Rejected command: ".length, -1)), true, "what stands before the ellipsis is the detail's own head")
+    // A detail that is one long token: the only space is the prefix's, in the head's first half, so the head is kept to a character before the bound rather than cut back to "Rejected command:".
+    const token = rejectedCommandSubject("x".repeat(500))
+    assert.equal(token, `Rejected command: ${"x".repeat(TICKET_SUBJECT_MAX - 1 - "Rejected command: ".length)}…`)
+    assert.equal(token.length, TICKET_SUBJECT_MAX)
+    // Exactly the bound is whole; one over is cut.
+    assert.equal(boundedSubject("z".repeat(TICKET_SUBJECT_MAX)), "z".repeat(TICKET_SUBJECT_MAX))
+    assert.equal(boundedSubject("z".repeat(TICKET_SUBJECT_MAX + 1)), `${"z".repeat(TICKET_SUBJECT_MAX - 1)}…`)
+    // Every door is bounded: the three builders and the draft.
+    assert.equal(missedCollectionSubject("B".repeat(300), "Parkvej 18").length, TICKET_SUBJECT_MAX)
+    assert.equal(reportedProblemSubject("other", null, "A".repeat(300)).length, TICKET_SUBJECT_MAX)
+    assert.equal(ticketFor(rejection({ detail: words }))?.subject, cut)
+    assert.equal(ticketFor(rejection({ detail: words }))?.description, `The driver's device sent a command the server refused. Note: ${words}`, "the description keeps the whole detail")
   })
 })

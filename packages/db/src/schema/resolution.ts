@@ -6,9 +6,10 @@
 // Project's (a Company resolves nothing outside one), all fenced; `ticket` and
 // `alert` spread `timestamps` and carry the trigger, `ticket_event` spreads
 // `recorded` and its file revokes UPDATE and DELETE from the API role
-// (sql/append-only.ts), the fourth ledger keyed by the server after Resources'
-// two and Execution's three. Every enum column is text under `oneOf` over a
-// tuple of @waste/domain/resolution/vocabulary.
+// (sql/append-only.ts), the fifth ledger keyed by the server after Resources'
+// two and Execution's `proof_of_service` and `unload`, and the sixth in all,
+// `driver_command` being keyed by the client. Every enum column is text under
+// `oneOf` over a tuple of @waste/domain/resolution/vocabulary.
 //
 // `ticket` is the case. Its display `number` comes from the company's counter
 // (`organisation.ts`, `next_ticket_number`; `T-8831` is presentation, the

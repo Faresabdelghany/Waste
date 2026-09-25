@@ -28,12 +28,18 @@
 // `driver-app` for what the device said and `dispatch` for a stop the
 // dispatcher's cancellation closed, whose driver is then the planned one,
 // since nobody started the route. The subject is spelled from what the worker
-// read beside the payload — "Missed collection: BIN-82014 at Parkvej 18" — and
-// the description carries the sentence, the reason and the note. What the
-// draft does not carry is the API's: `occurredAt` is the event's, `dueAt`
-// null (no SLA yet), `createdBy` null and `sourceEventId` the event's id,
-// which `ticket_origin_shape` ties together.
-import type { OutboxKind, PickupReason } from "../execution/vocabulary"
+// read beside the payload — "Missed collection: BIN-82014 at Parkvej 18" —
+// and cut to `TICKET_SUBJECT_MAX`, the bound the wire holds `Ticket.subject`
+// to as a `Label`, so a rejection's long detail cannot make a subject the
+// API's create refuses; the description carries the sentence, the reason and
+// the note. What a ticket links to is what the event named: a problem on the
+// route alone names no stop, so it links no container and no place either,
+// whatever the worker read (§3: "container and place then", then being when
+// a pickup was named). What the draft does not carry is the API's:
+// `occurredAt` is the event's, `dueAt` null (no SLA yet), `createdBy` null
+// and `sourceEventId` the event's id, which `ticket_origin_shape` ties
+// together.
+import { CLOSING_REASONS, type ClosingReason, type OutboxKind, type PickupReason } from "../execution/vocabulary"
 import type { TicketKind, TicketPriority, TicketSource } from "./vocabulary"
 
 /** The events about a pickup, whose payload is the Pickup (or, for a problem on the route alone, the Route). */
@@ -98,37 +104,67 @@ export type TicketDraft = {
   links: TicketDraftLinks
 }
 
-/** The two closing reasons that make a ticket: the route ended, or the dispatcher cancelled it. Every other skip is a decision. */
-const CLOSED_BY_ROUTE: Readonly<Partial<Record<PickupReason, { priority: TicketPriority; source: TicketSource; sentence: string }>>> = {
+/**
+ * What a skip under each closing reason makes: the route ended, or the
+ * dispatcher cancelled it. Keyed by Execution's `ClosingReason` and not
+ * hand-listed over `PickupReason`, so a reason added to `CLOSING_REASONS` is a
+ * compile error here until this table says what it makes. Every other skip is
+ * a decision.
+ */
+const CLOSED_BY_ROUTE: Readonly<Record<ClosingReason, { priority: TicketPriority; source: TicketSource; sentence: string }>> = {
   "route-ended": { priority: "medium", source: "driver-app", sentence: "The route ended before this stop was collected" },
   "route-cancelled": { priority: "medium", source: "dispatch", sentence: "The route was cancelled before this stop was collected" },
 }
 
+/** Whether a reason is one the route's end or cancellation wrote: the list's membership, never the table's keys, so a stray string finds nothing on the object's prototype. */
+const isClosingReason = (reason: PickupReason): reason is ClosingReason => (CLOSING_REASONS as readonly string[]).includes(reason)
+
+/** The longest a subject may be: the contracts' `Label` bound (`LABEL_MAX`), which `Ticket.subject` is held to on the wire. The domain cannot import it, so `packages/db`'s `ticket-subject.test.ts`, which sees both, holds the two equal. */
+export const TICKET_SUBJECT_MAX = 200
+
+/**
+ * A subject cut to the bound: whole where it fits, else its head to the last
+ * space before the bound with an ellipsis, so a rejection's long detail reads
+ * as a sentence cut short and not a word cut in half. The head is kept whole
+ * where the last space falls in its first half, since a subject that is one
+ * long token is better cut than emptied.
+ */
+export const boundedSubject = (subject: string): string => {
+  if (subject.length <= TICKET_SUBJECT_MAX) return subject
+  const head = subject.slice(0, TICKET_SUBJECT_MAX - 1)
+  const space = head.lastIndexOf(" ")
+  return `${space > TICKET_SUBJECT_MAX / 2 ? head.slice(0, space) : head}…`
+}
+
 /** "Missed collection: BIN-82014 at Parkvej 18", with whichever of the two the worker found. */
 export const missedCollectionSubject = (containerLabel: string | null, address: string | null): string =>
-  `Missed collection${containerLabel === null ? "" : `: ${containerLabel}`}${address === null ? "" : ` at ${address}`}`
+  boundedSubject(`Missed collection${containerLabel === null ? "" : `: ${containerLabel}`}${address === null ? "" : ` at ${address}`}`)
 
 /** "Problem reported: inaccessible at BIN-82014", the place after the reason where the worker found one. */
 export const reportedProblemSubject = (reason: PickupReason | null, containerLabel: string | null, address: string | null): string => {
   const where = containerLabel ?? address
-  return `Problem reported${reason === null ? "" : `: ${reason}`}${where === null ? "" : ` at ${where}`}`
+  return boundedSubject(`Problem reported${reason === null ? "" : `: ${reason}`}${where === null ? "" : ` at ${where}`}`)
 }
 
-/** "Rejected command: Pickup 12 is already completed". */
-export const rejectedCommandSubject = (detail: string): string => `Rejected command: ${detail}`
+/** "Rejected command: Pickup 12 is already completed", cut to the bound where the detail runs long. */
+export const rejectedCommandSubject = (detail: string): string => boundedSubject(`Rejected command: ${detail}`)
 
 /** The description: the sentence, then the reason and the note where there are any, each its own sentence. */
 export const describe = (sentence: string, reason: string | null, note: string | null): string =>
   [`${sentence}.`, reason === null ? undefined : `Reason: ${reason}.`, note === null ? undefined : `Note: ${note}`].filter((part) => part !== undefined).join(" ")
 
-const pickupLinks = (facts: PickupEventFacts, driverId: string | null): TicketDraftLinks => ({
-  routeId: facts.routeId,
-  pickupId: facts.pickupId,
-  containerId: facts.containerId,
-  propertyId: facts.propertyId,
-  sharedCollectionPointId: facts.sharedCollectionPointId,
-  driverId,
-})
+/** The stop's links, with the driver given. An event on the route alone names no stop, so it names no container and no place either, whatever the worker read. */
+const pickupLinks = (facts: PickupEventFacts, driverId: string | null): TicketDraftLinks => {
+  const onStop = facts.pickupId !== null
+  return {
+    routeId: facts.routeId,
+    pickupId: facts.pickupId,
+    containerId: onStop ? facts.containerId : null,
+    propertyId: onStop ? facts.propertyId : null,
+    sharedCollectionPointId: onStop ? facts.sharedCollectionPointId : null,
+    driverId,
+  }
+}
 
 /** The ticket an event is worth, or undefined for an event that is news and not a case. */
 export function ticketFor(event: EventFacts): TicketDraft | undefined {
@@ -143,8 +179,8 @@ export function ticketFor(event: EventFacts): TicketDraft | undefined {
         links: pickupLinks(event, event.actualDriverId),
       }
     case "pickup-skipped": {
-      const closing = event.reason === null ? undefined : CLOSED_BY_ROUTE[event.reason]
-      if (closing === undefined) return undefined
+      if (event.reason === null || !isClosingReason(event.reason)) return undefined
+      const closing = CLOSED_BY_ROUTE[event.reason]
       return {
         kind: "missed-collection",
         priority: closing.priority,

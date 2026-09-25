@@ -88,5 +88,9 @@ describe("TicketObjectKey", () => {
     const pdf = `${COMPANY}/${TICKET}/${EVENT}.pdf`
     assert.equal(TicketObjectKey.safeParse(pdf).success, true)
     assert.equal(ObjectKey.safeParse(pdf).success, false)
+    // The path is the one shape (execution.ts's objectKeyPattern); the formats are what tell the two apart.
+    const jpg = `${COMPANY}/${TICKET}/${EVENT}.jpg`
+    assert.equal(TicketObjectKey.safeParse(jpg).success, true)
+    assert.equal(ObjectKey.safeParse(jpg).success, true)
   })
 })

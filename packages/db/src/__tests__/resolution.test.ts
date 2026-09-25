@@ -16,6 +16,7 @@
 // is rolled back, so nothing needs cleaning up; the counter's commits, and the
 // database is dropped after.
 import assert from "node:assert/strict"
+import { performance } from "node:perf_hooks"
 import { after, before, describe, test } from "node:test"
 
 import type { Point } from "@waste/contracts/geojson"
@@ -506,26 +507,70 @@ describe("the Resolution tables against a fresh database", { skip: database.skip
       await tx.insert(ticket).values(opened({ companyId: b.company, projectId: b.project, createdBy: b.account, number: 8831 }))
     }))
 
-  test("the counter answers disjoint numbers under two concurrent transactions: the row lock is the serialisation", async () => {
+  test("the counter answers disjoint numbers under two concurrent transactions: the second's update waits on the first's row lock and returns only once the first has committed", async () => {
+    // Two creates that merely run together would pass on their numbers even if they took turns by accident, so the first is hand-held — its transaction, and with it the row lock, kept open until the test lets go — and the second is watched: Postgres reports its backend blocked behind the first's (`pg_blocking_pids`) before the first is released, and its update is timed to have returned only after.
     const companyId = a.spare
     await owner.db.insert(company).values({ id: companyId, companyId, name: "Counter", legalName: "Counter A/S", registrationNumber: "99999999", country: "DK", status: "active" })
     try {
       const [{ nextTicketNumber }] = await owner.db.select({ nextTicketNumber: company.nextTicketNumber }).from(company).where(eq(company.id, companyId))
       assert.equal(nextTicketNumber, 1000, "the default")
       /** One create taking its number: what the counter said before the update. */
-      const take = (): Promise<number> =>
-        owner.db.transaction(async (tx) => {
-          const [row] = await tx
-            .update(company)
-            .set({ nextTicketNumber: sql`${company.nextTicketNumber} + 1` })
-            .where(and(eq(company.id, companyId), eq(company.companyId, companyId)))
-            .returning({ next: company.nextTicketNumber })
-          // Hold the lock a moment, so the second create waits on this one rather than slipping in between.
-          await tx.execute(sql`select pg_sleep(0.05)`)
-          return row.next - 1
+      const take = async (tx: Tx): Promise<number> => {
+        const [row] = await tx
+          .update(company)
+          .set({ nextTicketNumber: sql`${company.nextTicketNumber} + 1` })
+          .where(and(eq(company.id, companyId), eq(company.companyId, companyId)))
+          .returning({ next: company.nextTicketNumber })
+        return row.next - 1
+      }
+      const backendOf = async (tx: Tx): Promise<number> => (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))[0].pid
+      const released = Promise.withResolvers<void>()
+      const firstLocked = Promise.withResolvers<number>()
+      const first = owner.db
+        .transaction(async (tx) => {
+          const pid = await backendOf(tx)
+          const number = await take(tx)
+          firstLocked.resolve(pid)
+          await released.promise
+          return number
         })
-      const numbers = (await Promise.all([take(), take()])).sort((x, y) => x - y)
-      assert.deepEqual(numbers, [1000, 1001], "nothing shared, nothing skipped")
+        .catch((error: unknown) => {
+          firstLocked.reject(error)
+          throw error
+        })
+      const secondStarted = Promise.withResolvers<number>()
+      let secondUpdated = Number.NaN
+      const second = owner.db
+        .transaction(async (tx) => {
+          secondStarted.resolve(await backendOf(tx))
+          const number = await take(tx)
+          secondUpdated = performance.now()
+          return number
+        })
+        .catch((error: unknown) => {
+          secondStarted.reject(error)
+          throw error
+        })
+      /** Rejects if the second's update returns while the first still holds the row. */
+      const slippedThrough = second.then(() => Promise.reject(new Error("the second's update returned while the first still held the row: the lock did not hold it")))
+      void slippedThrough.catch(() => undefined)
+      let releasedAt = Number.NaN
+      try {
+        const [firstPid, secondPid] = await Promise.all([firstLocked.promise, secondStarted.promise])
+        // Postgres names the backends a process blocks: the second's update is waiting on the first's transaction once this answers a row, and not before.
+        const blocked = async (): Promise<boolean> => (await owner.sql`select pid from pg_stat_activity where pid = ${secondPid} and ${firstPid} = any(pg_blocking_pids(pid))`).length > 0
+        const deadline = Date.now() + 10_000
+        while (!(await Promise.race([blocked(), slippedThrough]))) {
+          assert.ok(Date.now() < deadline, "the second's update never waited on the first: the row lock did not hold it")
+          await new Promise((resolve) => setTimeout(resolve, 20))
+        }
+        releasedAt = performance.now()
+      } finally {
+        released.resolve()
+        await Promise.allSettled([first, second])
+      }
+      assert.deepEqual(await Promise.all([first, second]), [1000, 1001], "the first took the first number and the second the next: nothing shared, nothing skipped")
+      assert.ok(secondUpdated > releasedAt, "the second's update returned only after the first's hold ended")
       const [{ after }] = await owner.db.select({ after: company.nextTicketNumber }).from(company).where(eq(company.id, companyId))
       assert.equal(after, 1002)
     } finally {

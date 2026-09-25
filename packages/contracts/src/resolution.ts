@@ -16,12 +16,15 @@
 // (#109 §7.23): `TicketObjectKey` holds a key to that shape here, where a
 // wrong shape is a 400 naming the field, and the API holds it to the row's
 // own ids, since only it knows which company, ticket and event the key must
-// name. It is `ObjectKey`'s shape with one format more — `pdf`, since a
-// customer's letter is a document and not a photo — and spelled separately
-// because a ticket's object is not a proof's: the two buckets have two
-// policies, and a key of the one must not parse as a key of the other.
+// name. It is `ObjectKey`'s path — `execution.ts`'s `objectKeyPattern`, the
+// one spelling of three UUIDs and a format — over one format more, `pdf`,
+// since a customer's letter is a document and not a photo, and a schema of
+// its own because a ticket's object is not a proof's: the two buckets have
+// two policies, and a key of the one must not parse as a key of the other.
 import { ALERT_KINDS, ALERT_SEVERITIES, ALERT_SOURCES, ALERT_STATUSES, TICKET_EVENT_KINDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_STATUSES, TICKET_VISIBILITIES } from "@waste/domain/resolution/vocabulary"
 import * as z from "zod"
+
+import { objectKeyPattern } from "./execution"
 
 /** Where a Ticket stands. */
 export const TicketStatus = z.enum(TICKET_STATUSES)
@@ -76,10 +79,8 @@ export const ticketLabel = (number: number): string => `${TICKET_NUMBER_PREFIX}$
 /** The formats a ticket's attachment may be: the four image formats a proof's object may be, and a document. */
 export const TICKET_OBJECT_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "pdf"] as const
 
-const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
-
-/** The shape of an attachment's key: `<companyId>/<ticketId>/<eventId>.<ext>`, three lowercase UUIDs and one of the five formats. */
-export const TICKET_OBJECT_KEY = new RegExp(`^${UUID}/${UUID}/${UUID}\\.(${TICKET_OBJECT_EXTENSIONS.join("|")})$`)
+/** The shape of an attachment's key: `<companyId>/<ticketId>/<eventId>.<ext>`, three lowercase UUIDs and one of the five formats — a proof's path over a ticket's formats. */
+export const TICKET_OBJECT_KEY = objectKeyPattern(TICKET_OBJECT_EXTENSIONS)
 
 /** What a key of another shape is told. */
 export const TICKET_OBJECT_KEY_SHAPE = "An attachment key is <companyId>/<ticketId>/<eventId>.<jpg|jpeg|png|webp|pdf>"
