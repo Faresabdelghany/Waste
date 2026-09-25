@@ -41,6 +41,7 @@ import {
 } from "@waste/db/schema/customers"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
+import { alert, ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import { normaliseGrants, type Grant } from "@waste/domain/access/grants"
@@ -254,10 +255,17 @@ export async function grantRole(pool: Database, companyId: string, roleId: strin
  * other four go next as `wms_api`, children first — the outbox, then sessions,
  * pickups and routes — and before Planning's and Resources', since a route
  * names a scheme, a group, vehicles, drivers, a depot and a station, and a
- * pickup names containers, properties, points and fractions.
+ * pickup names containers, properties, points and fractions. Resolution
+ * (Issue #109) goes first of all: `ticket_event`, the fourth server-keyed
+ * ledger, leads the owner's sweep, since it names tickets and accounts; then,
+ * as `wms_api`, `alert` and `ticket` before the outbox — an alert names a
+ * ticket, and a ticket names routes, pickups, containers, properties, points,
+ * agreements, drivers and tickets (a self-key is fine in one statement, since
+ * Postgres checks a `NO ACTION` key at the statement's end).
  */
 export async function dropTenant(pool: Database, companyId: string, owner?: Database): Promise<void> {
   if (owner !== undefined) {
+    await owner.db.delete(ticketEvent).where(eq(ticketEvent.companyId, companyId))
     await owner.db.delete(proofOfService).where(eq(proofOfService.companyId, companyId))
     await owner.db.delete(unload).where(eq(unload.companyId, companyId))
     await owner.db.delete(driverCommand).where(eq(driverCommand.companyId, companyId))
@@ -265,6 +273,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await owner.db.delete(stockMovement).where(eq(stockMovement.companyId, companyId))
   }
   await withCompany(pool.db, companyId, async (tx: Tx) => {
+    await tx.delete(alert).where(eq(alert.companyId, companyId))
+    await tx.delete(ticket).where(eq(ticket.companyId, companyId))
     await tx.delete(outboxEvent).where(eq(outboxEvent.companyId, companyId))
     await tx.delete(session).where(eq(session.companyId, companyId))
     await tx.delete(pickup).where(eq(pickup.companyId, companyId))

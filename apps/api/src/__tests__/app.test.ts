@@ -128,7 +128,7 @@ describe("GET /openapi.json", () => {
     assert.deepEqual([...documented].sort(), [...registered].sort())
   })
 
-  test("documents the probes and every route of the organisation, access, registry, planning, resources and execution contexts and the driver door, and no other path", async () => {
+  test("documents the probes and every route of the organisation, access, registry, planning, resources, execution and resolution contexts and the driver door, and no other path", async () => {
     const document = await spec()
     assert.deepEqual(Object.keys(document.paths).sort(), [
       "/agreements",
@@ -214,6 +214,17 @@ describe("GET /openapi.json", () => {
       "/shared-collection-points/{id}/members",
       "/stock-movements",
       "/subscriptions/{id}",
+      "/tickets",
+      "/tickets/{id}",
+      "/tickets/{id}/assign",
+      "/tickets/{id}/comments",
+      "/tickets/{id}/complete",
+      "/tickets/{id}/events",
+      "/tickets/{id}/hold",
+      "/tickets/{id}/reject",
+      "/tickets/{id}/reopen",
+      "/tickets/{id}/start",
+      "/tickets/{id}/wait",
       "/unloading-stations",
       "/unloading-stations/{id}",
       "/unloading-stations/{id}/fractions",
@@ -291,8 +302,8 @@ describe("GET /openapi.json", () => {
     }
     assert.equal(
       secured,
-      163,
-      "/me, the ten organisation routes, the twelve access routes, the fifty-one registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each, agreements with their subscriptions and containers with their placements — the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six — and the eighteen resources routes of slice 3: vehicle types with their container types, five, warehouses and depots, four each, and unloading stations with their fractions, five — and the seven of the container ledger (Issue #101, slice 5): the five commands receive, return, transfer, decommission and adjust, one container's movements, and the ledger across containers — and Resources' seven vehicle allocation routes (#101, slice 6): the list, the allocate command, the read, the three commands change, confirm and release, and the history — and the nine fleet routes of Resources' slice 4: vehicles with the compartments set, five, and drivers, four — and the eighteen office routes of Execution's slice 3 (Issue #104): routes, eight (the list, the read, assign, dispatch, reschedule, cancel, the pickup order and the command log), pickups, four (the list, the read, remove and correct-outcome), live, three (the live read, the sessions list and one session), and weights, three (the unloads list, one unload and the office's capture on a route) — and the five of the driver door (Issue #104, slice 4): the driver's start screen, their routes, one route, the command batch and the receipts",
+      176,
+      "/me, the ten organisation routes, the twelve access routes, the fifty-one registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each, agreements with their subscriptions and containers with their placements — the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six — and the eighteen resources routes of slice 3: vehicle types with their container types, five, warehouses and depots, four each, and unloading stations with their fractions, five — and the seven of the container ledger (Issue #101, slice 5): the five commands receive, return, transfer, decommission and adjust, one container's movements, and the ledger across containers — and Resources' seven vehicle allocation routes (#101, slice 6): the list, the allocate command, the read, the three commands change, confirm and release, and the history — and the nine fleet routes of Resources' slice 4: vehicles with the compartments set, five, and drivers, four — and the eighteen office routes of Execution's slice 3 (Issue #104): routes, eight (the list, the read, assign, dispatch, reschedule, cancel, the pickup order and the command log), pickups, four (the list, the read, remove and correct-outcome), live, three (the live read, the sessions list and one session), and weights, three (the unloads list, one unload and the office's capture on a route) — and the five of the driver door (Issue #104, slice 4): the driver's start screen, their routes, one route, the command batch and the receipts — and the thirteen ticket routes of Resolution's slice 3 (Issue #109): the list and the create, the read and the patch, the seven commands assign, start, wait, hold, complete, reject and reopen, the history and the comment",
     )
   })
 
@@ -302,8 +313,12 @@ describe("GET /openapi.json", () => {
     // Movement is appended — and declare no Location: a movement is read on
     // its container's ledger (`GET /containers/{id}/movements`) and on the
     // ledger across containers, never at an address of its own, so there is
-    // nothing for the header to name. They are the one exception, counted.
+    // nothing for the header to name. They were the one exception, counted;
+    // a ticket's comment (Issue #109, §7.22) joined them: a history row is
+    // read on `GET /tickets/{id}/events`, a list, and has no address of its
+    // own either.
     const ledgerCommands = new Set(["receive", "return", "transfer", "decommission", "adjust"].map((verb) => `POST /containers/{id}/${verb}`))
+    const appendsWithoutAddress = new Set([...ledgerCommands, "POST /tickets/{id}/comments"])
     let creates = 0
     let appends = 0
     for (const [path, operations] of Object.entries(document.paths)) {
@@ -311,9 +326,9 @@ describe("GET /openapi.json", () => {
         for (const [status, response] of Object.entries(operation.responses)) {
           const location = response.headers?.Location
           const where = `${method.toUpperCase()} ${path} ${status}`
-          if (status === "201" && ledgerCommands.has(`${method.toUpperCase()} ${path}`)) {
+          if (status === "201" && appendsWithoutAddress.has(`${method.toUpperCase()} ${path}`)) {
             appends += 1
-            assert.equal(location, undefined, `${where}: a movement has no address of its own to name`)
+            assert.equal(location, undefined, `${where}: an appended row has no address of its own to name`)
           } else if (status === "201") {
             creates += 1
             assert.equal(method, "post", `${where}: only a POST creates`)
@@ -327,11 +342,11 @@ describe("GET /openapi.json", () => {
         }
       }
     }
-    assert.equal(appends, 5, "the ledger's five commands: receive, return, transfer, decommission and adjust")
+    assert.equal(appends, 6, "the ledger's five commands: receive, return, transfer, decommission and adjust — and a ticket's comment")
     assert.equal(
       creates,
-      29,
-      "the twenty-nine creates: projects, service providers, users and roles; waste fractions, container types, service frequencies, products, customers, properties, property groups, shared collection points, agreements and containers; the two nested ones, a subscription under its agreement and a placement under its container; and Planning's five — planning areas and, under an area, boundary versions, collection calendars, route schemes and, under a scheme, collection groups; and Resources' seven (Issue #101) — vehicle types, warehouses, depots, unloading stations, vehicles, drivers and vehicle allocations; and Execution's one (Issue #104, slice 3) — the office's unload capture under its route, read at `/unloads/{id}`",
+      30,
+      "the thirty creates: projects, service providers, users and roles; waste fractions, container types, service frequencies, products, customers, properties, property groups, shared collection points, agreements and containers; the two nested ones, a subscription under its agreement and a placement under its container; and Planning's five — planning areas and, under an area, boundary versions, collection calendars, route schemes and, under a scheme, collection groups; and Resources' seven (Issue #101) — vehicle types, warehouses, depots, unloading stations, vehicles, drivers and vehicle allocations; and Execution's one (Issue #104, slice 3) — the office's unload capture under its route, read at `/unloads/{id}`; and Resolution's one (Issue #109, slice 3) — the ticket",
     )
   })
 

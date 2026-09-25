@@ -201,11 +201,13 @@ export async function rowIssue(tx: Tx, table: TenantTable, row: NamedRow, refusa
  * statement proves the row is there and says what state it is in, so a route
  * that gates a new reference on that state (routes/statuses.ts) asks once,
  * and a row that is not there is still the 400 above, before any 409. The
- * caller names the vocabulary the column's check holds the value to.
+ * caller names the vocabulary the column's check holds the value to. A
+ * `query` target refuses on the query string, for a list filter that names a
+ * row (`GET /tickets?customerId=`, Issue #109); a body on the body.
  */
-export async function requireStatus<Status extends string>(tx: Tx, table: StatusTable, row: NamedRow, refusal: Refusal): Promise<Status> {
+export async function requireStatus<Status extends string>(tx: Tx, table: StatusTable, row: NamedRow, refusal: Refusal, target: Target = "body"): Promise<Status> {
   const found = await answering(tx, table, table.status, row)
-  if (found === undefined) throw invalidRequest("body", [refusal])
+  if (found === undefined) throw invalidRequest(target, [refusal])
   return found.answer as Status
 }
 
