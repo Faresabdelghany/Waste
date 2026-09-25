@@ -36,7 +36,7 @@ const noon = NOON.toISOString()
 /** So many minutes and seconds after noon, as the wire spells it. */
 const afterNoon = (minutes: number, seconds = 0) => new Date(NOON.getTime() + minutes * 60_000 + seconds * 1_000).toISOString()
 
-/** A ticket seeded through `tx` for the link to point at: the tickets API is slice 3's, and an alert needs only the row. */
+/** A ticket seeded through `tx` for the link to point at: an alert needs only the row, and the tickets API is proved in its own suite. */
 type SeededTicket = { id: string; number: number; label: string }
 
 describe("the alert endpoints", { skip: database.skip || owner.skip }, () => {
@@ -154,7 +154,7 @@ describe("the alert endpoints", { skip: database.skip || owner.skip }, () => {
         kind: "other",
         source: "office",
         subject: `Ticket ${number}`,
-        description: "Seeded through tx: the tickets API is slice 3's.",
+        description: "Seeded through tx: an alert needs only the row.",
         occurredAt: NOON,
         createdBy,
       })

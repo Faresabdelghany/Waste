@@ -27,7 +27,7 @@ import { refusal } from "./expect"
 
 const COMPANY = "01a0d3a5-e5e0-7000-8000-000000000001"
 const TICKET = "01a0d3a5-e5e0-7000-8000-000000000002"
-const EVENT = "01a0d3a5-e5e0-7000-8000-000000000003"
+const OBJECT = "01a0d3a5-e5e0-7000-8000-000000000003"
 
 describe("the Resolution enums", () => {
   test("are the vocabulary the database checks against, value for value and in the same order", () => {
@@ -66,30 +66,30 @@ describe("the ticket label", () => {
 })
 
 describe("TicketObjectKey", () => {
-  test("is <companyId>/<ticketId>/<eventId>.<ext> over the four image formats and pdf, lowercase UUIDs, and nothing else", () => {
-    for (const extension of TICKET_OBJECT_EXTENSIONS) assert.equal(TicketObjectKey.safeParse(`${COMPANY}/${TICKET}/${EVENT}.${extension}`).success, true, extension)
+  test("is <companyId>/<ticketId>/<objectId>.<ext> over the four image formats and pdf, lowercase UUIDs, and nothing else", () => {
+    for (const extension of TICKET_OBJECT_EXTENSIONS) assert.equal(TicketObjectKey.safeParse(`${COMPANY}/${TICKET}/${OBJECT}.${extension}`).success, true, extension)
     assert.deepEqual([...TICKET_OBJECT_EXTENSIONS], [...OBJECT_EXTENSIONS, "pdf"], "a proof's formats and one more")
     for (const wrong of [
-      `${COMPANY}/${TICKET}/${EVENT}.gif`,
-      `${COMPANY}/${TICKET}/${EVENT}.PDF`,
-      `${COMPANY}/${TICKET}/${EVENT}`,
-      `${COMPANY}/${EVENT}.pdf`,
-      `${COMPANY.toUpperCase()}/${TICKET}/${EVENT}.jpg`,
-      `../${TICKET}/${EVENT}.jpg`,
-      `${COMPANY}/${TICKET}/${EVENT}.pdf/extra`,
-      `${COMPANY}/${TICKET}/${EVENT}/${EVENT}.pdf`,
+      `${COMPANY}/${TICKET}/${OBJECT}.gif`,
+      `${COMPANY}/${TICKET}/${OBJECT}.PDF`,
+      `${COMPANY}/${TICKET}/${OBJECT}`,
+      `${COMPANY}/${OBJECT}.pdf`,
+      `${COMPANY.toUpperCase()}/${TICKET}/${OBJECT}.jpg`,
+      `../${TICKET}/${OBJECT}.jpg`,
+      `${COMPANY}/${TICKET}/${OBJECT}.pdf/extra`,
+      `${COMPANY}/${TICKET}/${OBJECT}/${OBJECT}.pdf`,
     ]) {
       assert.deepEqual(refusal(TicketObjectKey.safeParse(wrong)), [{ path: "", message: TICKET_OBJECT_KEY_SHAPE }], wrong)
     }
-    assert.equal(TICKET_OBJECT_KEY.test(`${COMPANY}/${TICKET}/${EVENT}.png`), true)
+    assert.equal(TICKET_OBJECT_KEY.test(`${COMPANY}/${TICKET}/${OBJECT}.png`), true)
   })
 
   test("is spelled apart from a proof's key: a pdf is a ticket's attachment and never a proof's object", () => {
-    const pdf = `${COMPANY}/${TICKET}/${EVENT}.pdf`
+    const pdf = `${COMPANY}/${TICKET}/${OBJECT}.pdf`
     assert.equal(TicketObjectKey.safeParse(pdf).success, true)
     assert.equal(ObjectKey.safeParse(pdf).success, false)
     // The path is the one shape (execution.ts's objectKeyPattern); the formats are what tell the two apart.
-    const jpg = `${COMPANY}/${TICKET}/${EVENT}.jpg`
+    const jpg = `${COMPANY}/${TICKET}/${OBJECT}.jpg`
     assert.equal(TicketObjectKey.safeParse(jpg).success, true)
     assert.equal(ObjectKey.safeParse(jpg).success, true)
   })

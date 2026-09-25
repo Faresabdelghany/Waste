@@ -71,7 +71,7 @@ export type TicketRef = { companyId: string; projectId: string; id: string }
 
 /** One history row as a command hands it in: the kind, the snapshot after the event, and what the kind carries. */
 export type TicketEventDraft = {
-  /** Minted by the caller where the key of an attachment must name it (a comment); the minter's otherwise. */
+  /** The row's id where the caller minted it; the minter's otherwise. */
   id?: string
   kind: TicketEventKind
   /** The ticket's status after the event. */

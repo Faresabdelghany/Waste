@@ -93,7 +93,7 @@ const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
  * The shape of a Storage object's key over the formats a bucket takes: three
  * lowercase UUIDs, a slash between each, and one of the formats after a dot —
  * `<companyId>/<routeId>/<commandId>.<ext>` for a proof's object and
- * `<companyId>/<ticketId>/<eventId>.<ext>` for a ticket's attachment
+ * `<companyId>/<ticketId>/<objectId>.<ext>` for a ticket's attachment
  * (`resolution.ts`). The path is spelled once here; the formats are each
  * bucket's, and are what keep a key of the one from parsing as a key of the
  * other.

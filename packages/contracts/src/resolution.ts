@@ -12,11 +12,14 @@
 // `ticketLabel` is the one way a number becomes the label a `Ticket` carries
 // and every sentence names ("Ticket T-8831 is completed; reopen it first").
 // And a comment's attachment is a Storage object under an agreed key,
-// `<companyId>/<ticketId>/<eventId>.<ext>` in the bucket `ticket-attachments`
-// (#109 §7.23): `TicketObjectKey` holds a key to that shape here, where a
-// wrong shape is a 400 naming the field, and the API holds it to the row's
-// own ids, since only it knows which company, ticket and event the key must
-// name. It is `ObjectKey`'s path — `execution.ts`'s `objectKeyPattern`, the
+// `<companyId>/<ticketId>/<objectId>.<ext>` in the bucket `ticket-attachments`
+// (#109 §7.23, as corrected at integration): `<objectId>` is a UUID the
+// client mints for the object before uploading it — as specified, the key had
+// to name the comment's event id, which the server mints, so no client could
+// ever have posted a matching key — and `TicketObjectKey` holds a key to that
+// shape here, where a wrong shape is a 400 naming the field, while the API
+// holds the first two segments to the row's own company and ticket, since
+// only it knows which the key must name. It is `ObjectKey`'s path — `execution.ts`'s `objectKeyPattern`, the
 // one spelling of three UUIDs and a format — over one format more, `pdf`,
 // since a customer's letter is a document and not a photo, and a schema of
 // its own because a ticket's object is not a proof's: the two buckets have
@@ -79,12 +82,12 @@ export const ticketLabel = (number: number): string => `${TICKET_NUMBER_PREFIX}$
 /** The formats a ticket's attachment may be: the four image formats a proof's object may be, and a document. */
 export const TICKET_OBJECT_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "pdf"] as const
 
-/** The shape of an attachment's key: `<companyId>/<ticketId>/<eventId>.<ext>`, three lowercase UUIDs and one of the five formats — a proof's path over a ticket's formats. */
+/** The shape of an attachment's key: `<companyId>/<ticketId>/<objectId>.<ext>`, three lowercase UUIDs and one of the five formats — a proof's path over a ticket's formats. */
 export const TICKET_OBJECT_KEY = objectKeyPattern(TICKET_OBJECT_EXTENSIONS)
 
 /** What a key of another shape is told. */
-export const TICKET_OBJECT_KEY_SHAPE = "An attachment key is <companyId>/<ticketId>/<eventId>.<jpg|jpeg|png|webp|pdf>"
+export const TICKET_OBJECT_KEY_SHAPE = "An attachment key is <companyId>/<ticketId>/<objectId>.<jpg|jpeg|png|webp|pdf>"
 
-/** An attachment's Storage key, held to its shape; which ids it must name is the comment route's rule. */
+/** An attachment's Storage key, held to its shape; which company and ticket it must name is the comment route's rule, and the object's id is the client's. */
 export const TicketObjectKey = z.string().regex(TICKET_OBJECT_KEY, TICKET_OBJECT_KEY_SHAPE)
 export type TicketObjectKey = z.infer<typeof TicketObjectKey>

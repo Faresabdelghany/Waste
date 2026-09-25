@@ -32,7 +32,9 @@
 // and cut to `TICKET_SUBJECT_MAX`, the bound the wire holds `Ticket.subject`
 // to as a `Label`, so a rejection's long detail cannot make a subject the
 // API's create refuses; the description carries the sentence, the reason and
-// the note. What a ticket links to is what the event named: a problem on the
+// the note, cut the same way to `TICKET_DESCRIPTION_MAX`, the `Paragraph`
+// bound `Ticket.description` is held to, since a device's note has no bound
+// of its own. What a ticket links to is what the event named: a problem on the
 // route alone names no stop, so it links no container and no place either,
 // whatever the worker read (§3: "container and place then", then being when
 // a pickup was named). What the draft does not carry is the API's:
@@ -119,22 +121,31 @@ const CLOSED_BY_ROUTE: Readonly<Record<ClosingReason, { priority: TicketPriority
 /** Whether a reason is one the route's end or cancellation wrote: the list's membership, never the table's keys, so a stray string finds nothing on the object's prototype. */
 const isClosingReason = (reason: PickupReason): reason is ClosingReason => (CLOSING_REASONS as readonly string[]).includes(reason)
 
-/** The longest a subject may be: the contracts' `Label` bound (`LABEL_MAX`), which `Ticket.subject` is held to on the wire. The domain cannot import it, so `packages/db`'s `ticket-subject.test.ts`, which sees both, holds the two equal. */
+/** The longest a subject may be: the contracts' `Label` bound (`LABEL_MAX`), which `Ticket.subject` is held to on the wire. The domain cannot import it, so `packages/db`'s `ticket-text.test.ts`, which sees both, holds the two equal. */
 export const TICKET_SUBJECT_MAX = 200
 
+/** The longest a description may be: the contracts' `Paragraph` bound (`PARAGRAPH_MAX`), which `Ticket.description` is held to; the same test holds these two equal. */
+export const TICKET_DESCRIPTION_MAX = 2000
+
 /**
- * A subject cut to the bound: whole where it fits, else its head to the last
- * space before the bound with an ellipsis, so a rejection's long detail reads
- * as a sentence cut short and not a word cut in half. The head is kept whole
- * where the last space falls in its first half, since a subject that is one
- * long token is better cut than emptied.
+ * Text cut to a bound: whole where it fits, else its head to the last space
+ * before the bound with an ellipsis, so a rejection's long detail reads as a
+ * sentence cut short and not a word cut in half. The head is kept whole where
+ * the last space falls in its first half, since text that is one long token
+ * is better cut than emptied.
  */
-export const boundedSubject = (subject: string): string => {
-  if (subject.length <= TICKET_SUBJECT_MAX) return subject
-  const head = subject.slice(0, TICKET_SUBJECT_MAX - 1)
+const bounded = (text: string, max: number): string => {
+  if (text.length <= max) return text
+  const head = text.slice(0, max - 1)
   const space = head.lastIndexOf(" ")
-  return `${space > TICKET_SUBJECT_MAX / 2 ? head.slice(0, space) : head}…`
+  return `${space > max / 2 ? head.slice(0, space) : head}…`
 }
+
+/** A subject cut to `TICKET_SUBJECT_MAX`. */
+export const boundedSubject = (subject: string): string => bounded(subject, TICKET_SUBJECT_MAX)
+
+/** A description cut to `TICKET_DESCRIPTION_MAX` the same way: a 5000-character note from a device is a note cut short, not a ticket the API's create refuses. */
+export const boundedDescription = (description: string): string => bounded(description, TICKET_DESCRIPTION_MAX)
 
 /** "Missed collection: BIN-82014 at Parkvej 18", with whichever of the two the worker found. */
 export const missedCollectionSubject = (containerLabel: string | null, address: string | null): string =>
@@ -149,9 +160,9 @@ export const reportedProblemSubject = (reason: PickupReason | null, containerLab
 /** "Rejected command: Pickup 12 is already completed", cut to the bound where the detail runs long. */
 export const rejectedCommandSubject = (detail: string): string => boundedSubject(`Rejected command: ${detail}`)
 
-/** The description: the sentence, then the reason and the note where there are any, each its own sentence. */
+/** The description: the sentence, then the reason and the note where there are any, each its own sentence, cut to the bound. */
 export const describe = (sentence: string, reason: string | null, note: string | null): string =>
-  [`${sentence}.`, reason === null ? undefined : `Reason: ${reason}.`, note === null ? undefined : `Note: ${note}`].filter((part) => part !== undefined).join(" ")
+  boundedDescription([`${sentence}.`, reason === null ? undefined : `Reason: ${reason}.`, note === null ? undefined : `Note: ${note}`].filter((part) => part !== undefined).join(" "))
 
 /** The stop's links, with the driver given. An event on the route alone names no stop, so it names no container and no place either, whatever the worker read. */
 const pickupLinks = (facts: PickupEventFacts, driverId: string | null): TicketDraftLinks => {

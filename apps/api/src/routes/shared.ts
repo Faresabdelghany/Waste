@@ -49,7 +49,7 @@ import { Id } from "@waste/contracts/ids"
 import { providerShape } from "@waste/contracts/places"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
-import { and, eq, getTableName, sql, type SQL } from "drizzle-orm"
+import { and, eq, getTableName, gte, lt, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import type { Context } from "hono"
 import { resolver } from "hono-openapi"
@@ -101,6 +101,32 @@ export function created<Body extends { id: string }>(c: Context, collection: `/$
 /** The instants of a row, as the wire spells them. */
 export function stampsOf(row: { createdAt: Date; updatedAt: Date }): { createdAt: string; updatedAt: string } {
   return { createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() }
+}
+
+/** The instant of a row's nullable column, as the wire spells it; null stays null. `stampsOf` is the same over the two stamps every record carries. */
+export const instantOf = (value: Date | null): string | null => (value === null ? null : value.toISOString())
+
+/** The first instant of a `YYYY-MM-DD` day on the UTC calendar. */
+const startOfUtcDay = (day: string): Date => new Date(`${day}T00:00:00Z`)
+
+/** The first instant after a `YYYY-MM-DD` day on the UTC calendar: the exclusive end of a window that takes the whole of that day. */
+export const endOfDayExclusive = (day: string): Date => new Date(startOfUtcDay(day).getTime() + 86_400_000)
+
+/**
+ * The `where` fragment a list filter's `from`/`to` pair of `IsoDate` days
+ * makes over an instant column (Issue #109, at integration): both ends
+ * inclusive, on the UTC calendar day — `from` at its first instant, `to` up
+ * to but not including the midnight after it, so a row at 23:59 on the `to`
+ * day is inside the window and one at 00:00 the day after is not. Spelled
+ * once, because `lte(column, new Date(to))` reads a day as its first midnight
+ * and lists nothing of the day itself. A filter whose bounds are
+ * `IsoDateTime` instants (`GET /unloads`, `GET /stock-movements`) compares
+ * them as instants and does not come here, and one over a `date` column (a
+ * route's operating day) compares days and needs no window. Undefined when
+ * neither end was given, as `and` of nothing is.
+ */
+export function dayWindow(column: PgColumn, from: string | undefined, to: string | undefined): SQL | undefined {
+  return and(from === undefined ? undefined : gte(column, startOfUtcDay(from)), to === undefined ? undefined : lt(column, endOfDayExclusive(to)))
 }
 
 /**

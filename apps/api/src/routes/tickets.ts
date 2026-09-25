@@ -1,4 +1,4 @@
-// The Ticket as the office reads, opens and moves it (Issue #109, slice 3;
+// The Ticket as the office reads, opens and moves it (Issue #109;
 // ADR-0001, ADR-0004, ADR-0005): "a case that owns the resolution of a
 // request, deviation, complaint, task, or operational issue" (CONTEXT.md).
 // `GET /tickets` lists them — with `?customerId=`, the citizen portal's read
@@ -69,7 +69,7 @@ import { ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
 import { closedTicket, ticketTransition, type TicketCommand } from "@waste/domain/resolution/transitions"
 import { CLOSED_TICKET_STATUSES, isClosedTicketStatus, OPEN_TICKET_STATUSES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
-import { and, asc, eq, exists, gt, gte, inArray, lt, or } from "drizzle-orm"
+import { and, asc, eq, exists, gt, inArray, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -98,7 +98,7 @@ import {
 } from "./references"
 import { alertOf, alertsNamingTicket, eventColumns, eventOf, eventsOfTicket, findTicket, labelOf, linksOf, noSuchTicket, ticketColumns, ticketOf, ticketScope, type TicketRow } from "./resolution-shapes"
 import type { ClockOptions } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS } from "./shared"
+import { created, dayWindow, describeCreated, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS } from "./shared"
 import { appendTicketEvent, openTicket, type TicketEventDraft } from "./ticket-writes"
 
 const MODULE = "operate.tickets"
@@ -112,8 +112,8 @@ export const NOT_ITS_OWN_PARENT = "A ticket is not its own parent"
 /** What a completion naming a route that has ended is told: the #79 gate on the one reference a ticket makes that asks its row to run. */
 export const routeHasEnded = (label: string, status: "completed" | "cancelled"): string => `Route ${label} is ${status}; a re-collection rides on a route that has not ended`
 
-/** What a comment's attachment key naming the wrong ids is told, at `objectKey`. */
-export const KEY_NAMES_ANOTHER = "The attachment key names another ticket or another comment"
+/** What a comment's attachment key naming another company's or another ticket's prefix is told, at `objectKey`. */
+export const KEY_NAMES_ANOTHER = "The attachment key names another company or another ticket"
 
 /** The nine links a body may name, each null where the body cleared or never named it. */
 const NO_LINKS: TicketLinks = { routeId: null, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null }
@@ -217,9 +217,6 @@ const visibleTo = (tx: Tx, companyId: string, customerId: string) =>
     ),
   )
 
-/** The UTC midnight after a `YYYY-MM-DD` day: what `to`, inclusive, is compared against. */
-const dayAfter = (day: string): Date => new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000)
-
 /** The columns a machine command writes beside the status. */
 type Closing = { resolution: string | null; recollectionRouteId: string | null; closedAt: Date | null }
 
@@ -283,7 +280,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "listTickets",
         summary: "The tickets of the caller's projects",
         description:
-          "One page of tickets, oldest first (ids are time-ordered, so a cursor over them is a cursor over time), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `status` is one of the six, `open=true` the four open statuses and `open=false` the two closed (the two combine with `status`), `kind`, `priority` and `source` one each, `assigneeUserAccountId` one account's tickets, `propertyId`, `routeId`, `pickupId`, `containerId` and `driverId` the tickets naming that row, and `from` and `to` the tickets whose `occurredAt` falls on a window of UTC days (both inclusive, `to` on or after `from`). `customerId` is the citizen portal's read model: the tickets naming the customer, or naming a property a party row names them on in any role — one row per ticket however many roles they hold — held to a customer of this company (400 on the query); its fence on the portal's own login is the portal issue's. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of tickets, oldest first (ids are time-ordered, so a cursor over them is a cursor over time), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `status` is one of the six, `open=true` the four open statuses and `open=false` the two closed (the two combine with `status`), `kind`, `priority` and `source` one each, `assigneeUserAccountId` one account's tickets, `propertyId`, `routeId`, `pickupId`, `containerId` and `driverId` the tickets naming that row, and `from` and `to` the tickets whose `occurredAt` falls in a window of days — both ends inclusive, on the UTC calendar day, so `to=2026-10-05` takes the whole of the 5th (`to` on or after `from`). `customerId` is the citizen portal's read model: the tickets naming the customer, or naming a property a party row names them on in any role — one row per ticket however many roles they hold — held to a customer of this company (400 on the query); its fence on the portal's own login is the portal issue's. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of tickets.", TicketPage),
@@ -321,8 +318,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
               pickupId === undefined ? undefined : eq(ticket.pickupId, pickupId),
               containerId === undefined ? undefined : eq(ticket.containerId, containerId),
               driverId === undefined ? undefined : eq(ticket.driverId, driverId),
-              from === undefined ? undefined : gte(ticket.occurredAt, new Date(`${from}T00:00:00Z`)),
-              to === undefined ? undefined : lt(ticket.occurredAt, dayAfter(to)),
+              dayWindow(ticket.occurredAt, from, to),
               after === undefined ? undefined : gt(ticket.id, after),
             ),
           )
@@ -723,11 +719,11 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "commentTicket",
         summary: "Comment on a ticket",
         description:
-          "Appends a `comment` to the ticket's history: the `body`, who may read it (`internal`, the office's, unless `customer` is said — the row the portal then reads), and the Storage key of an attachment if one was uploaded. The row's id is minted first and the key must name it: `<companyId>/<ticketId>/<eventId>.<jpg|jpeg|png|webp|pdf>` in the bucket `ticket-attachments`, so a caller cannot name another tenant's object, another ticket's or another comment's (400 at `objectKey`, `The attachment key names another ticket or another comment`). Taken on a closed ticket too — a note after the fact is a note — and touches the ticket's row not at all: nothing of the case moves, and `updatedAt` stays. Answers 201 with the event and no `Location`, the one create without one: a history row has no single-row read (`GET /tickets/{id}/events` is a list), and `Location` names where a row is read.",
+          "Appends a `comment` to the ticket's history: the `body`, who may read it (`internal`, the office's, unless `customer` is said — the row the portal then reads), and the Storage key of an attachment if one was uploaded. The key is `<companyId>/<ticketId>/<objectId>.<jpg|jpeg|png|webp|pdf>` in the bucket `ticket-attachments`: `<objectId>` is a UUID the client minted for the object before uploading it, and the first two segments are held to this ticket's company and id, so a caller cannot name another tenant's object or another ticket's (400 at `objectKey`, `The attachment key names another company or another ticket`). Taken on a closed ticket too — a note after the fact is a note — and touches the ticket's row not at all: nothing of the case moves, and `updatedAt` stays. Answers 201 with the event and no `Location`, the one create without one: a history row has no single-row read (`GET /tickets/{id}/events` is a list), and `Location` names where a row is read.",
         security: BEARER_SECURITY,
         responses: {
           201: describeJson("The comment as it was appended.", TicketEvent),
-          400: describeProblem("The path does not hold an id, or the body has no `body`, names a member the command does not take, gives an attachment key of the wrong shape, or gives one naming another ticket or another comment."),
+          400: describeProblem("The path does not hold an id, or the body has no `body`, names a member the command does not take, gives an attachment key of the wrong shape, or gives one naming another company or another ticket."),
           ...commandProblems("create"),
         },
       }),
@@ -742,16 +738,14 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const principal = c.get("principal")
         const current = await findTicket(tx, principal, id)
         if (current === undefined) throw noSuchTicket(id)
-        // The event's id first, so the key can be held to the row it will name.
-        const eventId = newId()
-        if (objectKey !== undefined && !objectKey.startsWith(`${principal.companyId}/${current.id}/${eventId}.`)) {
+        // The key's first two segments are this row's company and ticket; its third is the object's id, a UUID the client minted before the upload, held to its shape by the contracts and to nothing else here. As specified (#109 §7.23) the third segment was the comment's event id, which the server mints, so no client could ever have posted a matching key and only the 400 was reachable; the rule was corrected at integration.
+        if (objectKey !== undefined && !objectKey.startsWith(`${principal.companyId}/${current.id}/`)) {
           throw invalidRequest("body", [{ path: "objectKey", message: KEY_NAMES_ANOTHER }])
         }
         const row = await appendTicketEvent(
           tx,
           { companyId: principal.companyId, projectId: current.projectId, id: current.id },
           {
-            id: eventId,
             kind: "comment",
             status: current.status as TicketStatus,
             assigneeUserAccountId: current.assigneeUserAccountId,

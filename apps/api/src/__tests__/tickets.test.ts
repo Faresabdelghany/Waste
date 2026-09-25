@@ -202,7 +202,7 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
         return await commanded(fresh.id, "reject", bodyFor.reject)
     }
   }
-  /** An alert of the project, seeded through `tx` the way the alerts API (slice 4) will write it: manual, about the ready route, in the status asked for. */
+  /** An alert of the project, seeded through `tx` the way the alerts API writes it: manual, about the ready route, in the status asked for. */
   async function seedAlert(status: "new" | "acknowledged" | "resolved", projectId = a.projects.copenhagen.id): Promise<string> {
     const id = testId()
     const stamps = status === "new" ? {} : status === "acknowledged" ? { acknowledgedAt: NOON, acknowledgedBy: a.users.olivia.id } : { resolvedAt: NOON, resolvedBy: a.users.olivia.id }
@@ -662,17 +662,23 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
       assert.equal(viewers.status, 201, "create is the grant, as it is for opening a ticket")
     })
 
-    test("holds the attachment key to its shape and to the row's own ids, and answers 404 and 403 like every route here", async () => {
+    test("holds the attachment key to its shape and to the row's own company and ticket, stores a matching one, and answers 404 and 403 like every route here", async () => {
       const fresh = await opened()
       const shape = await refused(await comment(fresh.id, { body: "See attached", objectKey: "photos/bin.jpg" }), 400)
       assert.deepEqual(shape.errors, [{ path: "objectKey", message: TICKET_OBJECT_KEY_SHAPE }])
-      const another = await refused(await comment(fresh.id, { body: "See attached", objectKey: `${a.companyId}/${harbors.id}/${testId()}.pdf` }), 400)
-      assert.deepEqual(another.errors, [{ path: "objectKey", message: "The attachment key names another ticket or another comment" }])
-      const anotherComment = await refused(await comment(fresh.id, { body: "See attached", objectKey: `${a.companyId}/${fresh.id}/${testId()}.jpg` }), 400)
-      assert.deepEqual(anotherComment.errors, [{ path: "objectKey", message: "The attachment key names another ticket or another comment" }])
+      const anotherTicket = await refused(await comment(fresh.id, { body: "See attached", objectKey: `${a.companyId}/${harbors.id}/${testId()}.pdf` }), 400)
+      assert.deepEqual(anotherTicket.errors, [{ path: "objectKey", message: "The attachment key names another company or another ticket" }])
+      const anotherCompany = await refused(await comment(fresh.id, { body: "See attached", objectKey: `${testId()}/${fresh.id}/${testId()}.jpg` }), 400)
+      assert.deepEqual(anotherCompany.errors, [{ path: "objectKey", message: "The attachment key names another company or another ticket" }])
       assert.deepEqual((await refused(await comment(fresh.id, {}), 400)).errors?.map((error) => error.path), ["body"])
       assert.deepEqual((await refused(await comment(fresh.id, { body: "x", kind: "created" }), 400)).errors?.map((error) => error.path), ["kind"], "the kind is the server's")
       assert.equal((await history(fresh.id)).length, 1, "no refused comment was appended")
+      // The object's id is the client's, minted before the upload (#109 §7.23 as corrected at integration): a key under this company and ticket is stored as sent.
+      const objectKey = `${a.companyId}/${fresh.id}/${testId()}.pdf`
+      const attached = await comment(fresh.id, { body: "See attached", objectKey })
+      assert.equal(attached.status, 201, JSON.stringify(await attached.clone().json()))
+      assert.equal(TicketEvent.parse(await attached.json()).objectKey, objectKey)
+      assert.equal((await history(fresh.id)).at(-1)?.objectKey, objectKey, "the key is what the history reads back")
       await refused(await comment(theirs.id, { body: "Mine" }), 404)
       await refused(await comment(harbors.id, { body: "Mine" }, viewer), 404)
       assert.match((await refused(await comment(harbors.id, { body: "Mine" }, ungranted), 403)).detail ?? "", /create on operate\.tickets/)

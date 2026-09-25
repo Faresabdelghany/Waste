@@ -1,5 +1,5 @@
 // The Alert as the office raises, acknowledges, resolves and links it (Issue
-// #109, slice 4; ADR-0005): "a condition that requires attention,
+// #109; ADR-0005): "a condition that requires attention,
 // notification, or acknowledgement and may create or link to a ticket"
 // (CONTEXT.md). `GET /alerts` lists them, `POST /alerts` raises one by hand —
 // the one source this issue writes, `source = manual` — `GET /alerts/:id`
@@ -10,7 +10,7 @@
 // history here and no number: current state, named by its title (#109 §7.18).
 //
 // The stamps follow the status. `acknowledged_at`/`_by` and `resolved_at`/`_by`
-// are columns the table's `alert_stamps_shape` holds to the status, the
+// are alertColumns the table's `alert_stamps_shape` holds to the status, the
 // `route` stamps precedent, so every command runs the domain's
 // `alertTransition` (@waste/domain/resolution/transitions) under the alert's
 // row lock and does one of three things: writes the next status with its
@@ -46,91 +46,32 @@ import type { Tx } from "@waste/db/client"
 import { alert } from "@waste/db/schema/resolution"
 import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
 import { alertTransition, type AlertCommand } from "@waste/domain/resolution/transitions"
-import type { AlertKind, AlertSeverity, AlertSource, AlertStatus } from "@waste/domain/resolution/vocabulary"
-import { and, asc, eq, gt, type SQL } from "drizzle-orm"
+import type { AlertStatus } from "@waste/domain/resolution/vocabulary"
+import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { linkAlert } from "./alert-links"
-import { instantOf } from "./execution-shapes"
 import { requireContainer, requireDriver, requireRoute, requireTicket, requireVehicle, type Scope } from "./references"
+import { alertColumns, alertOf, alertScope, noSuchAlert, type AlertRow } from "./resolution-shapes"
 import type { ClockOptions } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS } from "./shared"
 
 /** The grant every route here runs under: the exceptions board's. */
 const MODULE = "operate.exceptions"
 
 const AlertPage = Page(Alert)
 
-const noSuchAlert = (id: string) => problem(404, { detail: `No alert ${id} in the projects this account works in` })
-
-const columns = {
-  id: alert.id,
-  projectId: alert.projectId,
-  kind: alert.kind,
-  severity: alert.severity,
-  source: alert.source,
-  status: alert.status,
-  title: alert.title,
-  details: alert.details,
-  detectedAt: alert.detectedAt,
-  routeId: alert.routeId,
-  vehicleId: alert.vehicleId,
-  driverId: alert.driverId,
-  containerId: alert.containerId,
-  ticketId: alert.ticketId,
-  raisedBy: alert.raisedBy,
-  acknowledgedAt: alert.acknowledgedAt,
-  acknowledgedBy: alert.acknowledgedBy,
-  resolvedAt: alert.resolvedAt,
-  resolvedBy: alert.resolvedBy,
-  resolutionNote: alert.resolutionNote,
-  createdAt: alert.createdAt,
-  updatedAt: alert.updatedAt,
-}
-
-type Row = Pick<typeof alert.$inferSelect, keyof typeof columns>
-
-/** The row on the wire: the instants as ISO strings, the enums as theirs, since each column is text with a CHECK. */
-function alertOf(row: Row): Alert {
-  return {
-    id: row.id,
-    projectId: row.projectId,
-    kind: row.kind as AlertKind,
-    severity: row.severity as AlertSeverity,
-    source: row.source as AlertSource,
-    status: row.status as AlertStatus,
-    title: row.title,
-    details: row.details,
-    detectedAt: row.detectedAt.toISOString(),
-    routeId: row.routeId,
-    vehicleId: row.vehicleId,
-    driverId: row.driverId,
-    containerId: row.containerId,
-    ticketId: row.ticketId,
-    raisedBy: row.raisedBy,
-    acknowledgedAt: instantOf(row.acknowledgedAt),
-    acknowledgedBy: row.acknowledgedBy,
-    resolvedAt: instantOf(row.resolvedAt),
-    resolvedBy: row.resolvedBy,
-    resolutionNote: row.resolutionNote,
-    ...stampsOf(row),
-  }
-}
-
-/** The rows of this company, in the projects the caller works in: what every alert statement is bounded by. */
-const alertScope = (principal: Principal): SQL | undefined => and(eq(alert.companyId, principal.companyId), inProjects(alert.projectId, principal))
-
 /** One alert of this company by id, inside the caller's projects; undefined when it is neither. */
-async function findAlert(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
+async function findAlert(tx: Tx, principal: Principal, id: string): Promise<AlertRow | undefined> {
   const [row] = await tx
-    .select(columns)
+    .select(alertColumns)
     .from(alert)
     .where(and(alertScope(principal), eq(alert.id, id)))
     .limit(1)
@@ -143,7 +84,7 @@ async function findAlert(tx: Tx, principal: Principal, id: string): Promise<Row 
  * takes the row lock first and reads afterwards (routes/shared.ts), and two
  * commands on one alert take turns.
  */
-async function lockedAlert(tx: Tx, principal: Principal, id: string): Promise<Row> {
+async function lockedAlert(tx: Tx, principal: Principal, id: string): Promise<AlertRow> {
   await lockRow(tx, alert, { companyId: principal.companyId, id })
   const current = await findAlert(tx, principal, id)
   if (current === undefined) throw noSuchAlert(id)
@@ -151,19 +92,19 @@ async function lockedAlert(tx: Tx, principal: Principal, id: string): Promise<Ro
 }
 
 /** What the machine says of a command on this alert: the next status, undefined when the command is already done, or the 409 thrown. */
-function judged(current: Row, command: AlertCommand): AlertStatus | undefined {
+function judged(current: AlertRow, command: AlertCommand): AlertStatus | undefined {
   const transition = alertTransition(current.status as AlertStatus, command)
   if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
   return transition.kind === "stay" ? undefined : transition.to
 }
 
 /** Moves the row — the status and the stamps a command sets — and answers it as written. */
-async function moved(tx: Tx, principal: Principal, id: string, values: Partial<typeof alert.$inferInsert>): Promise<Row> {
+async function moved(tx: Tx, principal: Principal, id: string, values: Partial<typeof alert.$inferInsert>): Promise<AlertRow> {
   const [row] = await tx
     .update(alert)
     .set(values)
     .where(and(alertScope(principal), eq(alert.id, id)))
-    .returning(columns)
+    .returning(alertColumns)
   if (row === undefined) throw noSuchAlert(id)
   return row
 }
@@ -201,7 +142,7 @@ export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         const rows = await tx
-          .select(columns)
+          .select(alertColumns)
           .from(alert)
           .where(
             and(
@@ -280,7 +221,7 @@ export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
             ticketId: values.ticketId ?? null,
             raisedBy: principal.user.id,
           })
-          .returning(columns)
+          .returning(alertColumns)
         return created(c, "/alerts", alertOf(row))
       },
     )

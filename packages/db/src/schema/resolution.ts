@@ -50,8 +50,9 @@
 // `assigned` or `status-changed` row may carry the command's note, a
 // `status-changed` row carries a resolution exactly when its status is
 // `completed`, and a `comment` carries a body, may carry an attachment's
-// Storage key (`<company_id>/<ticket_id>/<event_id>.<ext>` in
-// `ticket-attachments`, held to the row's own ids by the API) and may be the
+// Storage key (`<company_id>/<ticket_id>/<object_id>.<ext>` in
+// `ticket-attachments`, the company and the ticket held to the row's own by
+// the API and the object's id the client's) and may be the
 // customer's to read (`visibility`); every other kind is `internal`. A
 // consumer's comment — a `command-rejected` folded into the driver's open
 // case — carries the event's id as its own `source_event_id`, the second

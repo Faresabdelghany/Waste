@@ -3,12 +3,14 @@ import { describe, test } from "node:test"
 
 import { CLOSING_REASONS, OUTBOX_KINDS, PICKUP_REASONS, type OutboxKind, type PickupReason } from "../../execution/vocabulary"
 import {
+  boundedDescription,
   boundedSubject,
   describe as described,
   missedCollectionSubject,
   PICKUP_EVENT_KINDS,
   rejectedCommandSubject,
   reportedProblemSubject,
+  TICKET_DESCRIPTION_MAX,
   TICKET_SUBJECT_MAX,
   ticketFor,
   type CommandRejectedFacts,
@@ -171,7 +173,7 @@ describe("ticketFor", () => {
   })
 
   test("a subject is cut to the wire's Label bound — at the last space with an ellipsis where a word would otherwise be cut in half — and a short one is left alone", () => {
-    // The contracts' LABEL_MAX, which this package cannot import; packages/db's ticket-subject.test.ts holds the two equal.
+    // The contracts' LABEL_MAX, which this package cannot import; packages/db's ticket-text.test.ts holds the two equal.
     assert.equal(TICKET_SUBJECT_MAX, 200)
     const words = Array.from({ length: 100 }, (_, i) => `word${i}`).join(" ")
     assert.equal(words.length > 500, true)
@@ -191,6 +193,19 @@ describe("ticketFor", () => {
     assert.equal(missedCollectionSubject("B".repeat(300), "Parkvej 18").length, TICKET_SUBJECT_MAX)
     assert.equal(reportedProblemSubject("other", null, "A".repeat(300)).length, TICKET_SUBJECT_MAX)
     assert.equal(ticketFor(rejection({ detail: words }))?.subject, cut)
-    assert.equal(ticketFor(rejection({ detail: words }))?.description, `The driver's device sent a command the server refused. Note: ${words}`, "the description keeps the whole detail")
+    assert.equal(ticketFor(rejection({ detail: words }))?.description, `The driver's device sent a command the server refused. Note: ${words}`, "the description keeps a detail that fits its own bound")
+  })
+
+  test("a description is cut to the wire's Paragraph bound the same way, and a short one is left alone", () => {
+    // The contracts' PARAGRAPH_MAX, which this package cannot import; packages/db's ticket-text.test.ts holds the two equal.
+    assert.equal(TICKET_DESCRIPTION_MAX, 2000)
+    assert.equal(boundedDescription("z".repeat(TICKET_DESCRIPTION_MAX)), "z".repeat(TICKET_DESCRIPTION_MAX))
+    assert.equal(boundedDescription("z".repeat(TICKET_DESCRIPTION_MAX + 1)), `${"z".repeat(TICKET_DESCRIPTION_MAX - 1)}…`)
+    const words = Array.from({ length: 800 }, (_, i) => `word${i}`).join(" ")
+    assert.equal(words.length > 5000, true)
+    const cut = ticketFor(rejection({ detail: words }))?.description ?? ""
+    assert.equal(cut.length <= TICKET_DESCRIPTION_MAX, true)
+    assert.match(cut, /^The driver's device sent a command the server refused\. Note: word0 word1 .*\S…$/, "cut at a space, so the ellipsis follows a whole word")
+    assert.equal(ticketFor(rejection({ detail: "Pickup 12 is already completed" }))?.description, "The driver's device sent a command the server refused. Note: Pickup 12 is already completed")
   })
 })

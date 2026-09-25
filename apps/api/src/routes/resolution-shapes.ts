@@ -24,10 +24,10 @@ import { and, asc, eq, type SQL } from "drizzle-orm"
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { problem } from "../problem"
-import { instantOf } from "./execution-shapes"
-import { stampsOf } from "./shared"
+import { instantOf, stampsOf } from "./shared"
 
 export const noSuchTicket = (id: string) => problem(404, { detail: `No ticket ${id} in the projects this account works in` })
+export const noSuchAlert = (id: string) => problem(404, { detail: `No alert ${id} in the projects this account works in` })
 
 export const ticketColumns = {
   id: ticket.id,
@@ -216,6 +216,9 @@ export function alertOf(row: AlertRow): Alert {
     ...stampsOf(row),
   }
 }
+
+/** The alerts of this company, in the projects the caller works in: what every alert statement is bounded by. */
+export const alertScope = (principal: Principal): SQL | undefined => and(eq(alert.companyId, principal.companyId), inProjects(alert.projectId, principal))
 
 /** The alerts linked to one ticket, oldest first: what "linked to ticket" reads as from the ticket's side. */
 export async function alertsNamingTicket(tx: Tx, companyId: string, ticketId: string): Promise<AlertRow[]> {

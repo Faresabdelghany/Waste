@@ -251,7 +251,7 @@ export type TicketReopen = z.infer<typeof TicketReopen>
 export const TicketComment = z.strictObject({
   body: Paragraph,
   visibility: TicketVisibility.default("internal").describe("Defaults to internal when absent: the office's to read, not the customer's."),
-  /** `<companyId>/<ticketId>/<eventId>.<ext>`, held to the row's own ids by the route. */
+  /** `<companyId>/<ticketId>/<objectId>.<ext>`: the route holds the company and the ticket to the row's own, the object's id is the client's (#109 §7.23 as corrected). */
   objectKey: TicketObjectKey.optional(),
 })
 export type TicketComment = z.infer<typeof TicketComment>
