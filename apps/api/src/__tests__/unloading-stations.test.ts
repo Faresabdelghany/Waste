@@ -317,6 +317,15 @@ describe("the unloading station endpoints", { skip: database.skip }, () => {
       assert.deepEqual([handedOver.ownership, handedOver.serviceProviderId], ["service-provider", a.serviceProviders.nordren.id], "both halves together are taken")
       const foreign = await refused(await olivia(`/unloading-stations/${created.id}`, { method: "PATCH", body: { serviceProviderId: b.serviceProviders.nordren.id } }), 400)
       assert.deepEqual(foreign.errors, [{ path: "serviceProviderId", message: "Not a service provider of this company" }])
+      const foreignAndHalf = await refused(await olivia(`/unloading-stations/${created.id}`, { method: "PATCH", body: { serviceProviderId: b.serviceProviders.nordren.id, opensAt: null } }), 400)
+      assert.deepEqual(
+        foreignAndHalf.errors,
+        [
+          { path: "serviceProviderId", message: "Not a service provider of this company" },
+          { path: "closesAt", message: BOTH_HOURS_OR_NEITHER },
+        ],
+        "a foreign provider and broken hours are one round trip: every refusal in the one 400",
+      )
       assert.equal((await patch(olivia, created.id, { ownership: "company", serviceProviderId: null })).ownership, "company")
     })
 

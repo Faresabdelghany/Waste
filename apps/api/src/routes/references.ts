@@ -48,10 +48,7 @@ import { and, eq, inArray, isNull } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 
 import { invalidRequest } from "../problem"
-import { requireRow, requireStatus, type NamedRow, type TenantTable } from "./shared"
-
-/** Where a refused id is answered: on the body it came in, or on the query string a list filter named it in. */
-type Target = "body" | "query"
+import { requireRow, requireStatus, rowIssue, type NamedRow, type Refusal, type Target, type TenantTable } from "./shared"
 
 /** What a body is told when it names a customer this company does not have; one sentence, wherever the id sat. */
 export const NOT_A_CUSTOMER = "Not a customer of this company"
@@ -185,10 +182,19 @@ export async function requireContainer(tx: Tx, scope: Scope, id: string | null |
   await requireRow(tx, container, inProject(container, scope, id), { path, message: "Not a container of this project" })
 }
 
+/** What a body is told when it names a service provider this company does not have. */
+export const NOT_A_SERVICE_PROVIDER = "Not a service provider of this company"
+
 /** A Service Provider a body names: the company's, since the provider is the company's counterparty and no project's. */
 export async function requireServiceProvider(tx: Tx, companyId: string, id: string | null | undefined, path = "serviceProviderId"): Promise<void> {
   if (id == null) return
-  await requireRow(tx, serviceProvider, inCompany(companyId, id), { path, message: "Not a service provider of this company" })
+  await requireRow(tx, serviceProvider, inCompany(companyId, id), { path, message: NOT_A_SERVICE_PROVIDER })
+}
+
+/** The same check as the field error or nothing (`rowIssue`, routes/shared.ts), for a route listing it beside other refusals in one 400 (a place patch, routes/place-rules.ts); an id that is null or absent names nothing and is no issue. */
+export async function serviceProviderIssue(tx: Tx, companyId: string, id: string | null | undefined, path = "serviceProviderId"): Promise<Refusal | undefined> {
+  if (id == null) return undefined
+  return await rowIssue(tx, serviceProvider, inCompany(companyId, id), { path, message: NOT_A_SERVICE_PROVIDER })
 }
 
 // Resources (Issue #101): a vehicle type is the company's vocabulary, a row

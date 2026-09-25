@@ -321,7 +321,8 @@ async function departure(tx: Tx, principal: Principal, subject: ContainerRef, re
  * before the ledger or an import — a create carries none and the patch sets
  * none on an open placement — and is a 409 naming the day and the
  * disagreement (`placementAlreadyEnded`), like every other state a command
- * is refused by, since the body is fine and the container is really there.
+ * is refused by, since the body is fine and the container is really there;
+ * the body's own 400s come before it, as they do on every route.
  */
 async function endPlacement(tx: Tx, principal: Principal, subject: ContainerRef, placementId: string, validTo: string): Promise<void> {
   const { companyId } = principal
@@ -350,8 +351,9 @@ async function endPlacement(tx: Tx, principal: Principal, subject: ContainerRef,
   await lockRow(tx, subscription, { companyId, id: before.subscriptionId })
   const [current] = await held()
   if (current === undefined) throw missing()
-  if (current.validTo !== null) throw problem(409, { detail: placementAlreadyEnded(subject.label, current.validTo) })
+  // The body's 400s first — the end after the start, and inside the subscription's period — then the state's 409, the order every route keeps.
   requireWithin({ validFrom: current.subscriptionValidFrom, validTo: current.subscriptionValidTo }, { validFrom: current.validFrom, validTo }, OUTSIDE_SUBSCRIPTION)
+  if (current.validTo !== null) throw problem(409, { detail: placementAlreadyEnded(subject.label, current.validTo) })
   await refuseOverlap({ [ALREADY_PLACED]: alreadyPlaced(subject.label) }, () =>
     tx
       .update(containerServicePlacement)

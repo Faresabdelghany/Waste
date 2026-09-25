@@ -15,7 +15,12 @@
 // `providerShapeIssue` (routes/shared.ts, the one refusal shape the fleet
 // shares), and the hours, both collected into one 400 listing every rule the
 // patch breaks, the way the validator lists a body's issues, so a client
-// mending one is not told about the other on its next try. The route takes
+// mending one is not told about the other on its next try. `requirePlacePatch`
+// is the door the two routes call: it puts the provider's existence in the
+// same list (`serviceProviderIssue`, routes/references.ts — a provider of
+// another company is not ours, whatever the ownership says), so a foreign
+// provider and broken hours are one round trip, not two; `requirePlaceShape`
+// under it is the two shape rules alone, without a database. The route takes
 // the row's lock before it reads the row (`lockRow`), since two patches of
 // one depot each read and then write and would otherwise both pass; and the
 // table's `<table>_provider_shape` and `<table>_hours_shape` checks stand
@@ -36,8 +41,10 @@
 // in the log.
 import { BOTH_HOURS_OR_NEITHER, hoursShape, PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/contracts/places"
 import type { ProblemFieldError } from "@waste/contracts/problem"
+import type { Tx } from "@waste/db/client"
 
 import { invalidRequest } from "../problem"
+import { serviceProviderIssue } from "./references"
 import { providerShapeIssue, timeOf, type Refusal } from "./shared"
 
 /** The four columns the two shape rules read, as a stored depot or station carries them. */
@@ -57,13 +64,13 @@ export type PlaceShapePatch = {
 }
 
 /**
- * Holds the row a patch leaves behind to the two shape rules, in the
- * contracts' words and at their paths — `serviceProviderId` for the owner,
- * `closesAt` for the hours — so a client reads one answer whichever noticed.
- * Both rules are judged and every refusal listed in the one 400, the provider
- * first, through the one refusal shape the fleet shares, then the hours.
+ * The two shape rules over the row a patch leaves behind, as field errors in
+ * the contracts' words and at their paths — `serviceProviderId` for the
+ * owner, `closesAt` for the hours — so a client reads one answer whichever
+ * noticed: the provider first, through the one refusal shape the fleet
+ * shares, then the hours; empty where the row holds.
  */
-export function requirePlaceShape(current: PlaceShape, patch: PlaceShapePatch): void {
+export function placeShapeIssues(current: PlaceShape, patch: PlaceShapePatch): ProblemFieldError[] {
   const merged: PlaceShape = {
     ownership: patch.ownership ?? current.ownership,
     serviceProviderId: patch.serviceProviderId === undefined ? current.serviceProviderId : patch.serviceProviderId,
@@ -74,6 +81,27 @@ export function requirePlaceShape(current: PlaceShape, patch: PlaceShapePatch): 
   const provider = providerShapeIssue(merged.ownership, merged, PROVIDER_WITH_PROVIDER_OWNERSHIP)
   if (provider !== undefined) errors.push(provider)
   if (!hoursShape(merged)) errors.push({ path: "closesAt", message: BOTH_HOURS_OR_NEITHER })
+  return errors
+}
+
+/** Holds the row a patch leaves behind to the two shape rules: `placeShapeIssues`, thrown as one 400 listing every rule the patch breaks. */
+export function requirePlaceShape(current: PlaceShape, patch: PlaceShapePatch): void {
+  const errors = placeShapeIssues(current, patch)
+  if (errors.length > 0) throw invalidRequest("body", errors)
+}
+
+/**
+ * What a depot's and a station's patch hold their body to, in one 400: the
+ * provider it names is this company's (`serviceProviderIssue`, first, since
+ * a row that is not ours is refused before what is said about it), then the
+ * two shape rules over the merged row. Every refusal is listed together, so a
+ * foreign provider and one opening time without the other are one round trip.
+ */
+export async function requirePlacePatch(tx: Tx, companyId: string, current: PlaceShape, patch: PlaceShapePatch): Promise<void> {
+  const errors: ProblemFieldError[] = []
+  const provider = await serviceProviderIssue(tx, companyId, patch.serviceProviderId)
+  if (provider !== undefined) errors.push(provider)
+  errors.push(...placeShapeIssues(current, patch))
   if (errors.length > 0) throw invalidRequest("body", errors)
 }
 

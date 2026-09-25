@@ -40,7 +40,9 @@
 // allows and the contracts already hold each id to being named once
 // (`eachOnce`), so what was written is known and sorting is the whole job —
 // the order is the order Postgres gives a uuid, which for the lowercase
-// spelling the contracts' `Id` normalises to is the string order.
+// spelling the contracts' `Id` normalises to is the string order. `writeIds`
+// is the one guard behind that: a repeated id is thrown there, since a body
+// schema that lost `eachOnce` would otherwise write two rows and answer one.
 import type { Tx } from "@waste/db/client"
 import { and, eq, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
@@ -112,9 +114,17 @@ export async function idsFor(tx: Tx, set: IdSetColumns, companyId: string, paren
   return (await idsOf(tx, set, companyId, [parentId])).get(parentId) ?? []
 }
 
-/** Writes the set a record starts with. Nothing to write is no statement. */
+/** A set naming one id twice: the contracts' `eachOnce` refuses it at the boundary, and `asRead` answers the body as given, so a body that reached here with a repeat is a schema that lost the rule, not a client's doing. */
+const namedTwice = (owner: Owner, id: string) => new Error(`writeIds: ${id} is named twice in the set of ${owner.id}; the contracts' eachOnce should have refused it`)
+
+/** Writes the set a record starts with. Nothing to write is no statement; an id named twice is thrown, the one guard behind `asRead`. */
 export async function writeIds<Table extends IdSetTable>(tx: Tx, set: IdSet<Table>, owner: Owner, ids: readonly string[]): Promise<void> {
   if (ids.length === 0) return
+  const seen = new Set<string>()
+  for (const id of ids) {
+    if (seen.has(id)) throw namedTwice(owner, id)
+    seen.add(id)
+  }
   await tx.insert(set.table).values(ids.map((id) => set.rowOf(id, owner)))
 }
 

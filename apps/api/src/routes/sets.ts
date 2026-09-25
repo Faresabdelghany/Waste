@@ -9,26 +9,32 @@
 // module keeps only what is its own: which table, which columns, and what a
 // row of it is called.
 //
-// `firstMissing` is the plural check's first statement: every id a row of the
-// table in this company, under whatever else the key demands (`also`, the
-// project a project-scoped row belongs to), and the lowest entry that is not,
-// by the path the body spelled it at. The caller hands that entry to the
-// singular check of routes/references.ts, which refuses it with the family's
-// own sentence — so one bad id and one among two hundred are told the same
-// thing — and `eachPresent` is that loop: a row that arrived between the two
-// statements is a row that is there, the singular lets it through, and the
-// set is asked again until nothing is missing, so no entry is written that no
-// statement proved. The second statement is spent on the failure path only.
-// The loop remembers every path the singular let through (a `Set`, since the
-// last round of the #101 review): an entry the set finds missing again after
-// that is a row flickering under the request and is thrown, so two entries
-// taking turns cannot keep the loop going.
+// `whereNamed` is the one filter every presence statement runs: the ids a
+// body named, in this company, under whatever else the key demands (`also`,
+// the project a project-scoped row belongs to). `firstMissing` runs it for the
+// ids alone and answers the lowest entry that is not there, by the path the
+// body spelled it at. The caller hands that entry to the singular check of
+// routes/references.ts, which refuses it with the family's own sentence — so
+// one bad id and one among two hundred are told the same thing — and
+// `eachPresent` is that loop: a row that arrived between the two statements
+// is a row that is there, the singular lets it through, and the set is asked
+// again until nothing is missing, so no entry is written that no statement
+// proved. The second statement is spent on the failure path only. The loop
+// remembers every path the singular let through (a `Set`, since the last
+// round of the #101 review): an entry the set finds missing again after that
+// is a row flickering under the request and is thrown, so two entries taking
+// turns cannot keep the loop going.
 //
-// `rowsPresent` is the loop and then the rows: where a caller does something
-// with the rows a body named next — a status gate, a licence rule — every row
-// has to be read, the one the singular let through included, so the loop runs
-// to nothing missing and then one statement reads them all. routes/scheme-
-// groups.ts reads a body's vehicles and drivers this way.
+// `rowsPresent` is the same loop for a caller that does something with the
+// rows a body named next — a status gate, a licence rule — and so needs every
+// one of them. It reads the rows first, through the caller's `read` over the
+// very same filter (only the caller knows the columns), derives the missing
+// entry from what came back, and only on a miss runs the singular and reads
+// again: presence and read are one statement and one filter on the happy
+// path, and the map it answers holds every id the body named — a row the
+// singular let through is read like the rest, and one the read still lacks
+// after the singular passed it is the flicker, thrown. routes/scheme-groups.ts
+// reads a body's vehicles and drivers this way.
 //
 // `groupedBy` is the read: a page's entries in one query, grouped by parent
 // and in the order a set reads back in, the same for a page, a single read
@@ -49,6 +55,19 @@ export type Singular = (entry: Named) => Promise<unknown>
 export const idsNamed = (entries: readonly Named[]): string[] => [...new Set(entries.map((entry) => entry.id))]
 
 /**
+ * The one filter a presence statement runs: rows of `table` whose `column`
+ * is one of `ids`, in this company, and under `also` — the project a
+ * project-scoped row belongs to, the kind a vehicle is asked for. The check
+ * and the read of a set run it alike, so what proves a row is there is what
+ * reads it.
+ */
+export const whereNamed = (table: TenantTable, column: PgColumn, companyId: string, ids: readonly string[], also?: SQL): SQL | undefined =>
+  and(eq(table.companyId, companyId), inArray(column, [...ids]), also)
+
+/** The flicker: an entry the singular let through and the set finds missing again is a row that comes and goes under the request, which is not a client's doing. */
+const flickering = (entry: Named) => new Error(`${entry.path} names ${entry.id}, which the singular check found and the set did not`)
+
+/**
  * The lowest entry whose id is not a row of `table` in this company (and
  * under `also`), found in one statement over every id the body named, each
  * once however often it named it; undefined when every id is there. `column`
@@ -67,7 +86,7 @@ export async function firstMissing(
   const rows = await tx
     .select({ id: column })
     .from(table)
-    .where(and(eq(table.companyId, companyId), inArray(column, ids), also))
+    .where(whereNamed(table, column, companyId, ids, also))
   // A bare `PgColumn` carries `data: unknown`, so the selection reads as
   // unknown however plainly the column is `uuid`.
   const found = new Set((rows as { id: string }[]).map((row) => row.id))
@@ -97,33 +116,42 @@ export async function eachPresent(
   for (;;) {
     const missing = await firstMissing(tx, table, column, companyId, entries, also)
     if (missing === undefined) return
-    if (passed.has(missing.path)) throw new Error(`${missing.path} names ${missing.id}, which the singular check found and the set did not`)
+    if (passed.has(missing.path)) throw flickering(missing)
     await singular(missing)
     passed.add(missing.path)
   }
 }
 
 /**
- * `eachPresent`, and then the rows themselves: once nothing is missing, one
- * statement (`read`, the caller's select over the ids, since only it knows the
- * columns) reads every row the body named, by id. A caller that gates or
- * judges the rows next — a status, a licence — gets every one of them, the
- * row the singular let through included, and reads nothing twice. No entries
- * is no statement and an empty map.
+ * Every entry a row under the key, and the rows themselves, by id: `read` —
+ * the caller's select over the filter handed to it, since only the caller
+ * knows the columns — runs first, the lowest entry it did not bring back is
+ * handed to the singular, and the read runs again until every id is there,
+ * so the happy path is one statement and one filter and the map holds every
+ * row the body named, a row that arrived between two statements included. An
+ * entry the singular passed and the read still lacks is the flicker, thrown.
+ * No entries is no statement and an empty map.
  */
 export async function rowsPresent<Row extends { id: string }>(
-  tx: Tx,
   table: TenantTable,
   column: PgColumn,
   companyId: string,
   entries: readonly Named[],
   singular: Singular,
-  read: (ids: readonly string[]) => Promise<Row[]>,
+  read: (where: SQL | undefined) => Promise<Row[]>,
   also?: SQL,
 ): Promise<ReadonlyMap<string, Row>> {
-  if (entries.length === 0) return new Map()
-  await eachPresent(tx, table, column, companyId, entries, singular, also)
-  return new Map((await read(idsNamed(entries))).map((row) => [row.id, row] as const))
+  const ids = idsNamed(entries)
+  if (ids.length === 0) return new Map()
+  const passed = new Set<string>()
+  for (;;) {
+    const rows = new Map((await read(whereNamed(table, column, companyId, ids, also))).map((row) => [row.id, row] as const))
+    const missing = entries.find((entry) => !rows.has(entry.id))
+    if (missing === undefined) return rows
+    if (passed.has(missing.path)) throw flickering(missing)
+    await singular(missing)
+    passed.add(missing.path)
+  }
 }
 
 /**

@@ -37,12 +37,15 @@
 // is not retired and a driver named afresh is active — a 409 naming the row
 // and its status, run after every 400 through `requireFleetInService`
 // (routes/statuses.ts) — where a group whose vehicle later retires is not
-// refused on an unrelated patch. Those two sets are held like the others,
-// through the loop, and then read whole in one statement each
-// (`rowsPresent`, routes/sets.ts, since the last round of the #101 review):
-// every vehicle and every driver a body named comes back, a row that arrived
-// between two statements included, so the status gate sees each of them and
-// what a body names is what the next rule reads. A group naming both names a
+// refused on an unrelated patch. Those two sets are read and held present in
+// one statement each (`rowsPresent`, routes/sets.ts, since the last rounds of
+// the #101 review — the read first, the missing entry derived from it, the
+// singular and a second read only on a miss): every vehicle and every driver
+// a body named comes back, a row that arrived between two statements
+// included, so the status gate sees each of them and what a body names is
+// what the next rule reads; un-parking a group (`days` from `[]` to running,
+// routes/collection-groups.ts) names its stored fleet afresh and runs the
+// same gate over it. A group naming both names a
 // driver who may take that vehicle, and `requireGroupDriver` is
 // the licence rule of @waste/domain/resources/licence over those rows,
 // judged on the day the scheme's period starts or today on the project's
@@ -55,7 +58,8 @@
 // scheme no vehicle or driver is on two groups that run on a shared day,
 // which joined the domain's structural rules and so `requireStructure`,
 // which runs the rules over ids and reads the callsigns and names the
-// sentences spell only once an issue exists. The scheme's depot and station
+// sentences spell (`fleetOf` again, over every group's fleet) only once an
+// issue exists. The scheme's depot and station
 // are held by routes/route-schemes.ts, and the fleet's own routes count what
 // still names a vehicle or a driver through `groupsInForceNaming` before
 // taking it out of service, a parked group (one with no days) counting for
@@ -105,7 +109,7 @@ import {
   requireWasteFraction,
   type Scope,
 } from "./references"
-import { eachPresent, groupedBy, rowsPresent, type Named } from "./sets"
+import { eachPresent, groupedBy, rowsPresent, whereNamed, type Named } from "./sets"
 import { stamp, stampsOf, timeOf } from "./shared"
 import { refuseRetiredVehicle, refuseUnavailableDriver } from "./statuses"
 
@@ -343,51 +347,50 @@ export type FleetRows = { vehicles: ReadonlyMap<string, VehicleRow>; drivers: Re
 /** No fleet read: what a caller hands in when the body named none, and the rule reads the stored rows itself. */
 export const NO_FLEET: FleetRows = { vehicles: new Map(), drivers: new Map() }
 
-/** What a group's vehicle is: a powered vehicle of the scheme's project — the `also` of its plural check and the `where` of its read, spelled once. */
+/** What a group's vehicle is: a powered vehicle of the scheme's project — the `also` of its presence statement, whether a body named it or a group stores it. */
 const poweredVehicleOf = (scope: Scope): SQL | undefined => and(eq(vehicle.projectId, scope.projectId), eq(vehicle.kind, "powered-vehicle"))
 
-/** The rows of these vehicles as the licence rule and the status gate read them, in one statement; a row outside the scope is left out. */
-async function readVehicles(tx: Tx, scope: Scope, ids: readonly string[]): Promise<VehicleRow[]> {
-  if (ids.length === 0) return []
-  const rows = await tx
-    .select(vehicleColumns)
-    .from(vehicle)
-    .where(and(eq(vehicle.companyId, scope.companyId), poweredVehicleOf(scope), inArray(vehicle.id, [...ids])))
+/** What a group's driver is: a driver of the scheme's project. */
+const driverOf = (scope: Scope): SQL => eq(driver.projectId, scope.projectId)
+
+/**
+ * The vehicles `where` names, as the licence rule and the status gate read
+ * them. The filter is handed in — `whereNamed` (routes/sets.ts) under
+ * `poweredVehicleOf`, from `rowsPresent` for a body's references and from
+ * `fleetOf` for stored ones — so presence and read are one statement and one
+ * filter, and a stored row is read the way a named one is.
+ */
+async function readVehicles(tx: Tx, where: SQL | undefined): Promise<VehicleRow[]> {
+  const rows = await tx.select(vehicleColumns).from(vehicle).where(where)
   // The coded columns are text with a CHECK in the database and a vocabulary here.
   return rows as VehicleRow[]
 }
 
-/** The same for the drivers of the project. */
-async function readDrivers(tx: Tx, scope: Scope, ids: readonly string[]): Promise<DriverRow[]> {
-  if (ids.length === 0) return []
-  const rows = await tx
-    .select(driverColumns)
-    .from(driver)
-    .where(and(eq(driver.companyId, scope.companyId), eq(driver.projectId, scope.projectId), inArray(driver.id, [...ids])))
+/** The same for the drivers `where` names. */
+async function readDrivers(tx: Tx, where: SQL | undefined): Promise<DriverRow[]> {
+  const rows = await tx.select(driverColumns).from(driver).where(where)
   return rows as DriverRow[]
 }
 
 /**
- * Every powered vehicle of the project a body names: held present through
- * the loop (`rowsPresent`, routes/sets.ts — an entry naming none is handed
- * to the singular check for a 400 in its words, and one that arrived between
- * two statements is asked again), and then read whole in one statement, so
- * every row the body named comes back for the licence rule and for
- * `requireFleetInService`, which holds each of them to its status once every
- * 400 has passed.
+ * Every powered vehicle of the project a body names, read and held present
+ * in one statement (`rowsPresent`, routes/sets.ts): the rows come back for
+ * the licence rule and for `requireFleetInService`, which holds each of them
+ * to its status once every 400 has passed; an entry the read did not bring
+ * back is handed to the singular check for a 400 in its words, and one that
+ * arrived between two statements is read again and comes back like the rest.
  */
 async function vehiclesNamed(tx: Tx, scope: Scope, named: readonly Named[]): Promise<ReadonlyMap<string, VehicleRow>> {
   return await rowsPresent(
-    tx,
     vehicle,
     vehicle.id,
     scope.companyId,
     named,
-    // The singular answers the status too (routes/references.ts); the batched read below is what this door reads it from.
+    // The singular answers the status too (routes/references.ts); the read is what this door reads it from.
     async (entry) => {
       await requireVehicle(tx, scope, entry.id, { kind: "powered-vehicle", path: entry.path })
     },
-    (ids) => readVehicles(tx, scope, ids),
+    (where) => readVehicles(tx, where),
     poweredVehicleOf(scope),
   )
 }
@@ -395,7 +398,6 @@ async function vehiclesNamed(tx: Tx, scope: Scope, named: readonly Named[]): Pro
 /** The same for the drivers a body names: the project's. */
 async function driversNamed(tx: Tx, scope: Scope, named: readonly Named[]): Promise<ReadonlyMap<string, DriverRow>> {
   return await rowsPresent(
-    tx,
     driver,
     driver.id,
     scope.companyId,
@@ -403,26 +405,34 @@ async function driversNamed(tx: Tx, scope: Scope, named: readonly Named[]): Prom
     async (entry) => {
       await requireDriver(tx, scope, entry.id, entry.path)
     },
-    (ids) => readDrivers(tx, scope, ids),
-    eq(driver.projectId, scope.projectId),
+    (where) => readDrivers(tx, where),
+    driverOf(scope),
   )
 }
 
+/** Which groups' fleet `fleetOf` reads: the groups naming both a vehicle and a driver (the licence rule's), or every vehicle and every driver any group names (the structural sentences' labels). */
+export type FleetNaming = "both" | "either"
+
 /**
- * The stored fleet of these groups, read for the licence rule in one
- * statement per table: the vehicles and the drivers of every group naming
- * both, since a group naming one or neither is asked nothing. A scheme patch
- * that moves the start later hands these to `requireGroupDriver` as `rows`,
- * so a scheme of twenty groups costs two reads and not forty; the rows are
- * not new references, so their status is not asked. The project is the
- * scheme's, which is every stored group's.
+ * The stored fleet of these groups, read in one statement per table over the
+ * filter a body's references pass (`whereNamed` under `poweredVehicleOf` and
+ * `driverOf`), so a stored row is read the way a named one is. `"both"`, the
+ * default, is the licence rule's: the vehicles and the drivers of every group
+ * naming both, since a group naming one or neither is asked nothing — a
+ * scheme patch that moves the start later hands these to `requireGroupDriver`
+ * as `rows`, so a scheme of twenty groups costs two reads and not forty, and
+ * the rows are not new references, so their status is not asked. `"either"`
+ * is the structural sentences': every vehicle and every driver any group
+ * names, read for the callsign and the name a sentence spells. Nothing named
+ * is no statement.
  */
-export async function fleetOf(tx: Tx, scope: Scope, groups: readonly { vehicleId: string | null; driverId: string | null }[]): Promise<FleetRows> {
-  const crewed = groups.filter((group) => group.vehicleId !== null && group.driverId !== null)
-  if (crewed.length === 0) return NO_FLEET
+export async function fleetOf(tx: Tx, scope: Scope, groups: readonly { vehicleId?: string | null; driverId?: string | null }[], naming: FleetNaming = "both"): Promise<FleetRows> {
+  const counted = naming === "both" ? groups.filter((group) => group.vehicleId != null && group.driverId != null) : groups
+  const vehicleIds = [...new Set(counted.flatMap((group) => (group.vehicleId == null ? [] : [group.vehicleId])))]
+  const driverIds = [...new Set(counted.flatMap((group) => (group.driverId == null ? [] : [group.driverId])))]
   const [vehicles, drivers] = await Promise.all([
-    readVehicles(tx, scope, [...new Set(crewed.map((group) => group.vehicleId as string))]),
-    readDrivers(tx, scope, [...new Set(crewed.map((group) => group.driverId as string))]),
+    vehicleIds.length === 0 ? [] : readVehicles(tx, whereNamed(vehicle, vehicle.id, scope.companyId, vehicleIds, poweredVehicleOf(scope))),
+    driverIds.length === 0 ? [] : readDrivers(tx, whereNamed(driver, driver.id, scope.companyId, driverIds, driverOf(scope))),
   ])
   return { vehicles: new Map(vehicles.map((row) => [row.id, row] as const)), drivers: new Map(drivers.map((row) => [row.id, row] as const)) }
 }
@@ -521,10 +531,14 @@ export async function requireGroupDriver(
  * statement (`now() at time zone project.timezone`), whatever the scheme's
  * status: a draft naming the vehicle is a plan that names it. A scheme that
  * has ended or has not begun counts for nothing, and nor does a parked group
- * — one with no days (`days: '{}'`), which runs on nothing and so plans
- * nothing with the row; ending the scheme, parking the group or moving its
- * vehicle is the way to retire one. `company_id` and the row's id and never
- * `inProjects`, since a count that refuses a write must not be the one
+ * — one with no days, which runs on nothing and so plans nothing with the
+ * row (`isParked` / `groupRuns`, @waste/domain/planning/checks, spelled here
+ * as SQL); ending the scheme, parking the group or moving its vehicle is the
+ * way to retire one. The other half of that exemption is the group patch's:
+ * un-parking a group is a new reference to the fleet it stores, gated then
+ * (routes/collection-groups.ts), so a truck that retired under a parked group
+ * does not come back on a running one. `company_id` and the row's id and
+ * never `inProjects`, since a count that refuses a write must not be the one
  * statement that could miss a row.
  */
 export function groupsInForceNaming(tx: Tx, column: typeof collectionGroup.vehicleId | typeof collectionGroup.driverId, companyId: string, id: string): SQL | undefined {
@@ -534,6 +548,7 @@ export function groupsInForceNaming(tx: Tx, column: typeof collectionGroup.vehic
     .from(routeScheme)
     .innerJoin(project, and(eq(project.companyId, routeScheme.companyId), eq(project.id, routeScheme.projectId)))
     .where(and(eq(routeScheme.companyId, collectionGroup.companyId), eq(routeScheme.id, collectionGroup.routeSchemeId), validOn(routeScheme, today)))
+  // The domain's `groupRuns(group)` — `!isParked(days)`, days.length > 0 — as Postgres says it of the row.
   const runs = sql`cardinality(${collectionGroup.days}) > 0`
   return and(eq(collectionGroup.companyId, companyId), eq(column, id), runs, exists(inForce))
 }
@@ -609,41 +624,21 @@ export type GroupShape = {
   driverId?: string | null
 }
 
-/** The labels the two-groups sentences spell a vehicle and a driver by, keyed by id. */
-type FleetLabels = { vehicles: Map<string, string>; drivers: Map<string, string> }
-
-const NO_LABELS: FleetLabels = { vehicles: new Map(), drivers: new Map() }
-
-/** The callsign or plate of every vehicle and the name of every driver the groups name, in one query each; none when they name none. */
-async function fleetLabelsOf(tx: Tx, companyId: string, groups: readonly GroupShape[]): Promise<FleetLabels> {
-  const vehicleIds = [...new Set(groups.flatMap((group) => (group.vehicleId == null ? [] : [group.vehicleId])))]
-  const driverIds = [...new Set(groups.flatMap((group) => (group.driverId == null ? [] : [group.driverId])))]
-  const [vehicles, drivers] = await Promise.all([
-    vehicleIds.length === 0
-      ? []
-      : tx
-          .select({ id: vehicle.id, registration: vehicle.registration, callsign: vehicle.callsign })
-          .from(vehicle)
-          .where(and(eq(vehicle.companyId, companyId), inArray(vehicle.id, vehicleIds))),
-    driverIds.length === 0 ? [] : tx.select({ id: driver.id, name: driver.name }).from(driver).where(and(eq(driver.companyId, companyId), inArray(driver.id, driverIds))),
-  ])
-  return {
-    vehicles: new Map(vehicles.map((row) => [row.id, vehicleLabel(row)])),
-    drivers: new Map(drivers.map((row) => [row.id, row.name])),
-  }
+/** The resource as a structural sentence names it: the row's label where `fleetOf` read the row, the id where it did not (it cannot happen: the key holds it) rather than dropped. */
+function named<Row>(id: string | null | undefined, rows: ReadonlyMap<string, Row>, label: (row: Row) => string): NamedResource | null {
+  if (id == null) return null
+  const row = rows.get(id)
+  return { id, label: row === undefined ? id : label(row) }
 }
 
-/** The resource as the sentence names it; a row nobody labelled (it cannot happen: the key holds it) is named by its id rather than dropped. */
-const named = (id: string | null | undefined, labels: Map<string, string>): NamedResource | null => (id == null ? null : { id, label: labels.get(id) ?? id })
-
-const structureOf = (group: GroupShape, labels: FleetLabels): GroupStructure => ({
+const structureOf = (group: GroupShape, fleet: FleetRows): GroupStructure => ({
   name: group.name,
   days: group.days,
   stopSource: group.stopSource,
   fractionCount: group.rule?.wasteFractionIds.length ?? 0,
   containerCount: group.containerIds?.length ?? 0,
-  vehicle: named(group.vehicleId, labels.vehicles),
-  driver: named(group.driverId, labels.drivers),
+  vehicle: named(group.vehicleId, fleet.vehicles, vehicleLabel),
+  driver: named(group.driverId, fleet.drivers, (row) => row.name),
 })
 
 /** A group's picks as the two-groups-one-day rule reads them. */
@@ -655,28 +650,29 @@ export const pickOf = (group: GroupShape): ContainerPick => ({ group: group.name
  * 409 listing every sentence, one after the other; a draft is not asked. The
  * rules compare ids, and the labels — a callsign, a person's name (Issue
  * #101) — only spell the sentences, so the rules run over the ids first and
- * the labels are read, two queries at most, only once an issue exists: a
- * scheme that stands costs no read, and a scheme that does not is told the
- * same sentences it would have been.
+ * the fleet is read (`fleetOf` with `"either"`, two statements at most) only
+ * once an issue exists and a group names one: a scheme that stands costs no
+ * read, and a scheme that does not is told the same sentences it would have
+ * been.
  */
 export async function requireStructure(
   tx: Tx,
-  companyId: string,
+  scope: Scope,
   scheme: { status: string; serviceDays: readonly string[]; planningAreaId: string | null },
   groups: readonly GroupShape[],
 ): Promise<void> {
   if (scheme.status !== "validated") return
-  const structure = (labels: FleetLabels) => ({
+  const structure = (fleet: FleetRows) => ({
     serviceDays: scheme.serviceDays,
     hasPlanningArea: scheme.planningAreaId !== null,
-    collectionGroups: groups.map((group) => structureOf(group, labels)),
+    collectionGroups: groups.map((group) => structureOf(group, fleet)),
   })
-  const issues = schemeStructureIssues(structure(NO_LABELS))
+  const issues = schemeStructureIssues(structure(NO_FLEET))
   if (issues.length === 0) return
   // The labels only spell the sentences: a scheme naming no fleet has nothing to label, and the id-first result is the answer as it stands.
   const fleetNamed = groups.some((group) => group.vehicleId != null || group.driverId != null)
   if (!fleetNamed) throw problem(409, { detail: issues.join(". ") })
-  const spelled = schemeStructureIssues(structure(await fleetLabelsOf(tx, companyId, groups)))
+  const spelled = schemeStructureIssues(structure(await fleetOf(tx, scope, groups, "either")))
   throw problem(409, { detail: spelled.join(". ") })
 }
 

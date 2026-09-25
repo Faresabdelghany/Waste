@@ -68,7 +68,7 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet } from "./id-sets"
-import { hourOf, placeShapeInvalid, pointInvalid, requirePlaceShape } from "./place-rules"
+import { hourOf, placeShapeInvalid, pointInvalid, requirePlacePatch } from "./place-rules"
 import { requireServiceProvider, requireWasteFraction } from "./references"
 import { describeJson, IdParam, lockRow, refuseCheck, refuseDuplicate, stampsOf } from "./shared"
 
@@ -325,8 +325,8 @@ export function unloadingStationRoutes(guard: MiddlewareHandler<AuthEnv>) {
         await lockRow(tx, unloadingStation, { companyId: principal.companyId, id })
         const current = await findStation(tx, principal, id)
         if (current === undefined) throw noSuchStation(id)
-        await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)
-        requirePlaceShape(current, patch)
+        // The provider's existence and the two shape rules, every refusal in one 400 (routes/place-rules.ts).
+        await requirePlacePatch(tx, principal.companyId, current, patch)
 
         const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
         const [row] = await refuseCheck(CHECKS, () =>

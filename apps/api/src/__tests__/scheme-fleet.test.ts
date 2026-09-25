@@ -261,13 +261,25 @@ describe("the fleet and place fields of the scheme and group endpoints", { skip:
       assert.deepEqual(await oneGroup(group.id), group, "nothing written")
     })
 
-    test("a stored vehicle stands once it retires: the group is renamed, moved and recrewed like any other, and only naming the vehicle afresh is refused", async () => {
+    test("a stored vehicle stands once it retires: the group is renamed, moved and recrewed like any other, and only naming the vehicle afresh is refused — un-parking a group included", async () => {
       const created = await scheme("Drifting crew", { collectionGroups: [ruleGroup("Residual", ["monday", "thursday"], { vehicleId: fleet.vehicles.drifting.id, driverId: fleet.drivers.mads.id })] })
       const [group] = created.collectionGroups
-      // WH-77 retires under the group, as the vehicle route would refuse and an import would not.
+      // A second scheme's group on WH-77, parked before the truck retires: parked, it counts for nothing toward the retirement (vehicles.test.ts), so un-parking it is naming the truck afresh.
+      const parkedScheme = await scheme("Parked crew", { collectionGroups: [ruleGroup("Residual", ["monday"], { vehicleId: fleet.vehicles.drifting.id, driverId: fleet.drivers.mads.id })] })
+      const [parked] = parkedScheme.collectionGroups
+      assert.deepEqual((await patchedGroup(parked.id, { days: [] })).days, [], "parked")
+      // WH-77 retires under both groups, as the vehicle route would refuse for the running one and an import would not.
       await withCompany(pool.db, a.companyId, async (tx: Tx) => {
         await tx.update(vehicle).set({ status: "retired" }).where(and(eq(vehicle.companyId, a.companyId), eq(vehicle.id, fleet.vehicles.drifting.id)))
       })
+      const unparked = await refused(await patchGroup(parked.id, { days: ["monday"] }), 409)
+      assert.equal(unparked.detail, "WH-77 is retired; a collection group needs a vehicle in service", "un-parking names the stored truck afresh: a retired one is refused, since the parked group never stood in the retirement's way")
+      assert.deepEqual((await oneGroup(parked.id)).days, [], "still parked, nothing written")
+      const stillParked = await patchedGroup(parked.id, { name: "Residual, parked" })
+      assert.equal(stillParked.vehicleId, fleet.vehicles.drifting.id, "a patch that leaves the group parked asks nothing of the stored truck")
+      assert.equal((await patchedGroup(parked.id, { vehicleId: null })).vehicleId, null, "reassigned")
+      const running = await patchedGroup(parked.id, { days: ["monday"] })
+      assert.deepEqual([running.days, running.vehicleId, running.driverId], [["monday"], null, fleet.drivers.mads.id], "and un-parked: the stored driver is named afresh too, and Mads is active")
       const renamed = await patchedGroup(group.id, { name: "Residual north", position: 2 })
       assert.deepEqual([renamed.name, renamed.position, renamed.vehicleId], ["Residual north", 2, fleet.vehicles.drifting.id], "an unrelated patch asks nothing of the stored vehicle")
       const tooLow = await refused(await patchGroup(group.id, { driverId: fleet.drivers.freja.id }), 400)

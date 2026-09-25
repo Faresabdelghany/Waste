@@ -55,7 +55,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { hourOf, placeShapeInvalid, pointInvalid, requirePlaceShape } from "./place-rules"
+import { hourOf, placeShapeInvalid, pointInvalid, requirePlacePatch } from "./place-rules"
 import { requireServiceProvider } from "./references"
 import { describeJson, IdParam, lockRow, refuseCheck, refuseDuplicate, stampsOf } from "./shared"
 
@@ -241,7 +241,7 @@ export function depotRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchDepot",
         summary: "Change a depot",
         description:
-          "Changes one depot of a project the caller works in; every field is optional and at least one must be given. The location may move but not be cleared, since a route departs from a point; a null clears the provider, the hours, the capacity or the notes. The patch is held against the stored row, so a change that would leave the depot naming a provider with company ownership, or none with service-provider ownership, or with one opening time and not the other, is refused in the same words as on a create. The code does not change: it is the reference the schemes and the vehicles quote, and a depot that needs another code is another depot. The project is not patchable, since a record does not move between projects.",
+          "Changes one depot of a project the caller works in; every field is optional and at least one must be given. The location may move but not be cleared, since a route departs from a point; a null clears the provider, the hours, the capacity or the notes. The patch is held against the stored row, so a change that would leave the depot naming a provider with company ownership, or none with service-provider ownership, or with one opening time and not the other, is refused in the same words as on a create — and a provider that is not this company's beside them, every refusal listed in the one 400. The code does not change: it is the reference the schemes and the vehicles quote, and a depot that needs another code is another depot. The project is not patchable, since a record does not move between projects.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The depot as it now stands.", Depot),
@@ -273,8 +273,8 @@ export function depotRoutes(guard: MiddlewareHandler<AuthEnv>) {
         await lockRow(tx, depot, { companyId: principal.companyId, id })
         const current = await findDepot(tx, principal, id)
         if (current === undefined) throw noSuchDepot(id)
-        await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)
-        requirePlaceShape(current, patch)
+        // The provider's existence and the two shape rules, every refusal in one 400 (routes/place-rules.ts).
+        await requirePlacePatch(tx, principal.companyId, current, patch)
 
         const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
         const [row] = await refuseCheck(CHECKS, () =>

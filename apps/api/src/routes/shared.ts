@@ -159,6 +159,9 @@ export type NamedRow = { companyId: string; id: string; also?: SQL }
 /** What a body is told about a value it carried — a row that is not there, a check the database refused: a 400 at the field that named it. */
 export type Refusal = { path: string; message: string }
 
+/** Where a refused id is answered: on the body it came in, or on the query string a list filter named it in. */
+export type Target = "body" | "query"
+
 /**
  * Holds an id a body named to a row that is really there — in this company,
  * and under whatever else its key demands, which `also` carries: the project
@@ -177,8 +180,20 @@ export type Refusal = { path: string; message: string }
  * of its product and an agreement of its customer. A `query` target refuses
  * on the query string, for a list filter that names a row; a body on the body.
  */
-export async function requireRow(tx: Tx, table: TenantTable, row: NamedRow, refusal: Refusal, target: "body" | "query" = "body"): Promise<void> {
-  await answering(tx, table, table.id, row, refusal, target)
+export async function requireRow(tx: Tx, table: TenantTable, row: NamedRow, refusal: Refusal, target: Target = "body"): Promise<void> {
+  const issue = await rowIssue(tx, table, row, refusal)
+  if (issue !== undefined) throw invalidRequest(target, [issue])
+}
+
+/**
+ * The same lookup as an answer rather than a throw: the refusal where there
+ * is no such row, undefined where there is. For a route that holds a body to
+ * several rules at once and lists every refusal in one 400 — a place patch's
+ * provider beside its two shape rules (routes/place-rules.ts) — so a client
+ * mending one is not told about the other on its next try.
+ */
+export async function rowIssue(tx: Tx, table: TenantTable, row: NamedRow, refusal: Refusal): Promise<Refusal | undefined> {
+  return (await answering(tx, table, table.id, row)) === undefined ? refusal : undefined
 }
 
 /**
@@ -188,25 +203,20 @@ export async function requireRow(tx: Tx, table: TenantTable, row: NamedRow, refu
  * and a row that is not there is still the 400 above, before any 409. The
  * caller names the vocabulary the column's check holds the value to.
  */
-export async function requireStatus<Status extends string>(
-  tx: Tx,
-  table: StatusTable,
-  row: NamedRow,
-  refusal: Refusal,
-  target: "body" | "query" = "body",
-): Promise<Status> {
-  return (await answering(tx, table, table.status, row, refusal, target)) as Status
+export async function requireStatus<Status extends string>(tx: Tx, table: StatusTable, row: NamedRow, refusal: Refusal): Promise<Status> {
+  const found = await answering(tx, table, table.status, row)
+  if (found === undefined) throw invalidRequest("body", [refusal])
+  return found.answer as Status
 }
 
-/** One column of the row a body named, or the refusal when there is no such row. */
-async function answering(tx: Tx, table: TenantTable, column: PgColumn, row: NamedRow, refusal: Refusal, target: "body" | "query"): Promise<unknown> {
+/** One column of the row a body named, or undefined when there is no such row: the statement behind the three doors above. */
+async function answering(tx: Tx, table: TenantTable, column: PgColumn, row: NamedRow): Promise<{ answer: unknown } | undefined> {
   const [found] = await tx
     .select({ answer: column })
     .from(table)
     .where(and(eq(table.companyId, row.companyId), eq(table.id, row.id), row.also))
     .limit(1)
-  if (found === undefined) throw invalidRequest(target, [refusal])
-  return found.answer
+  return found
 }
 
 /**

@@ -280,7 +280,7 @@ describe("the depot endpoints", { skip: database.skip }, () => {
       assert.deepEqual(foreign.errors, [{ path: "serviceProviderId", message: "Not a service provider of this company" }])
     })
 
-    test("lists both shape rules a patch breaks in one 400, the provider first", async () => {
+    test("lists every rule a patch breaks in one 400: the provider's existence, then the two shape rules", async () => {
       const created = await depot("DEP-37", { opensAt: "06:00", closesAt: "16:00" })
       const both = await refused(await olivia(`/depots/${created.id}`, { method: "PATCH", body: { ownership: "service-provider", opensAt: null } }), 400)
       assert.deepEqual(
@@ -291,8 +291,20 @@ describe("the depot endpoints", { skip: database.skip }, () => {
         ],
         "a client mending one is told about the other now, not on its next try",
       )
+      const foreignAndHalf = await refused(
+        await olivia(`/depots/${created.id}`, { method: "PATCH", body: { ownership: "service-provider", serviceProviderId: b.serviceProviders.nordren.id, opensAt: null } }),
+        400,
+      )
+      assert.deepEqual(
+        foreignAndHalf.errors,
+        [
+          { path: "serviceProviderId", message: "Not a service provider of this company" },
+          { path: "closesAt", message: BOTH_HOURS_OR_NEITHER },
+        ],
+        "a foreign provider and broken hours are one round trip: the existence check is listed with the shape rules",
+      )
       const unchanged = await one(olivia, created.id)
-      assert.deepEqual([unchanged.ownership, unchanged.opensAt, unchanged.closesAt], ["company", "06:00", "16:00"], "nothing written")
+      assert.deepEqual([unchanged.ownership, unchanged.serviceProviderId, unchanged.opensAt, unchanged.closesAt], ["company", null, "06:00", "16:00"], "nothing written")
     })
 
     test("refuses clearing the place, the code, the project, an empty patch, and a point off the globe", async () => {

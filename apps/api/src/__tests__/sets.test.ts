@@ -1,16 +1,18 @@
 // The plural check's loop and its guards, without a database (Issue #101,
-// last review round): a scripted `tx` answers each `select` with the ids it
-// "finds", so the suite can say what the set sees on every pass — a row that
-// arrived between two statements, a row flickering under the request, two
-// rows taking turns — which no real database would do on cue. The statements
-// themselves run against Postgres in every route suite that names a set.
+// last review rounds): a scripted `tx` answers each `select` with the ids it
+// "finds" — and, for `rowsPresent`, a scripted `read` answers the rows — so
+// the suite can say what the set sees on every pass: a row that arrived
+// between two statements, a row flickering under the request, two rows taking
+// turns — which no real database would do on cue. The statements themselves
+// run against Postgres in every route suite that names a set.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { Tx } from "@waste/db/client"
 import { wasteFraction } from "@waste/db/schema/catalogue"
+import type { SQL } from "drizzle-orm"
 
-import { eachPresent, firstMissing, idsNamed, rowsPresent, type Named } from "../routes/sets"
+import { eachPresent, firstMissing, idsNamed, rowsPresent, whereNamed, type Named } from "../routes/sets"
 
 const COMPANY = "01a0d3a5-e5e0-7000-8000-000000000000"
 const A: Named = { id: "01a0d3a5-e5e0-7000-8000-00000000000a", path: "ids.0" }
@@ -104,52 +106,69 @@ describe("eachPresent", () => {
 })
 
 describe("rowsPresent", () => {
-  test("runs the loop and then reads every row named, once each, by id", async () => {
-    // A is named twice and B arrives late: the loop asks twice, the read is asked once, for the two ids.
-    const { tx, asked } = scripted((statement) => (statement === 0 ? [A.id] : [A.id, B.id]))
+  type Row = { id: string; status: string }
+  /** A scripted `read`: the n-th call brings back the rows of the ids `found(n)` says, and every filter it was handed is kept. */
+  const reader = (found: (call: number) => readonly string[]) => {
+    const filters: (SQL | undefined)[] = []
+    const read = async (where: SQL | undefined): Promise<Row[]> => {
+      filters.push(where)
+      return found(filters.length - 1).map((id) => ({ id, status: id === A.id ? "active" : "retired" }))
+    }
+    return { read, filters }
+  }
+  const present = (entries: readonly Named[], singular: (entry: Named) => Promise<void>, read: (where: SQL | undefined) => Promise<Row[]>) =>
+    rowsPresent(wasteFraction, wasteFraction.id, COMPANY, entries, singular, read)
+
+  test("reads first and answers every row named in one statement when every id is there: presence and read are one filter", async () => {
+    const { read, filters } = reader(() => [A.id, B.id])
     const { singular, handed } = passing()
-    const asks: (readonly string[])[] = []
-    const rows = await rowsPresent(tx, wasteFraction, wasteFraction.id, COMPANY, [A, B, { ...A, path: "ids.2" }], singular, async (ids) => {
-      asks.push(ids)
-      return ids.map((id) => ({ id, status: id === A.id ? "active" : "retired" }))
-    })
-    assert.deepEqual(handed, [B])
-    assert.deepEqual(asks, [[A.id, B.id]], "one read, every id once")
+    // A is named twice: the filter carries each id once.
+    const rows = await present([A, B, { ...A, path: "ids.2" }], singular, read)
+    assert.deepEqual([filters.length, handed], [1, []], "one read, no singular")
+    assert.deepEqual(filters[0], whereNamed(wasteFraction, wasteFraction.id, COMPANY, [A.id, B.id]), "the one filter every presence statement runs, over the ids each once")
     assert.deepEqual([...rows.keys()], [A.id, B.id])
-    assert.equal(rows.get(B.id)?.status, "retired", "the row that arrived between the statements is read like the rest, so a gate over the rows sees it")
-    assert.equal(asked(), 2, "the loop's two statements; the read is the caller's")
+    assert.equal(rows.get(A.id)?.status, "active", "the rows themselves, for the gate that reads them next")
   })
 
-  test("names nothing: no statement, no read, an empty map", async () => {
-    const { tx, asked } = scripted(() => [])
-    let reads = 0
-    const rows = await rowsPresent(tx, wasteFraction, wasteFraction.id, COMPANY, [], passing().singular, async () => {
-      reads += 1
-      return []
-    })
-    assert.deepEqual([asked(), reads, rows.size], [0, 0, 0])
+  test("hands the entry the read did not bring back to the singular and reads again: a row that arrived between the statements comes back like the rest", async () => {
+    const { read, filters } = reader((call) => (call === 0 ? [A.id] : [A.id, B.id]))
+    const { singular, handed } = passing()
+    const rows = await present([A, B], singular, read)
+    assert.deepEqual(handed, [B], "the singular saw B and let it through")
+    assert.equal(filters.length, 2, "and the read ran again, so no entry is answered that no statement brought back")
+    assert.equal(rows.get(B.id)?.status, "retired", "the late row is in the map with its columns, so a gate over the rows sees it")
   })
 
-  test("is refused at the singular's word before any row is read", async () => {
-    const { tx } = scripted(() => [])
-    let reads = 0
+  test("names nothing: no read, an empty map", async () => {
+    const { read, filters } = reader(() => [])
+    const rows = await present([], passing().singular, read)
+    assert.deepEqual([filters.length, rows.size], [0, 0])
+  })
+
+  test("is refused at the singular's word after the one read that missed", async () => {
+    const { read, filters } = reader(() => [])
     await assert.rejects(
-      rowsPresent(
-        tx,
-        wasteFraction,
-        wasteFraction.id,
-        COMPANY,
+      present(
         [A],
         async () => {
           throw new Error("refused")
         },
-        async () => {
-          reads += 1
-          return []
-        },
+        read,
       ),
       /refused/,
     )
-    assert.equal(reads, 0)
+    assert.equal(filters.length, 1)
+  })
+
+  test("throws on the flicker: an entry the singular let through and the read still lacks, whichever passed entry it is", async () => {
+    const { read, filters } = reader(() => [A.id])
+    const { singular, handed } = passing()
+    await assert.rejects(present([A, B], singular, read), /ids\.1 names .* which the singular check found and the set did not/)
+    assert.deepEqual([filters.length, handed], [2, [B]])
+    // Two entries taking turns: A, then B, then A again — remembered both, so the third read throws instead of looping.
+    const turns = reader((call) => (call % 2 === 0 ? [A.id] : [B.id]))
+    const again = passing()
+    await assert.rejects(present([A, B], again.singular, turns.read), /ids\.1 names .* which the singular check found and the set did not/)
+    assert.deepEqual([turns.filters.length, again.handed], [3, [B, A]])
   })
 })

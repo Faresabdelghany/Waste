@@ -42,6 +42,16 @@
 // sentence ends "before the scheme starts" or "before today", and
 // `groupDriverIssue` is the sentence or nothing; the route answers it as a
 // 400 on `driverId`, the same words an allocation refuses with.
+//
+// Whether a group runs at all is a predicate of its own (Issue #101, last
+// review round): `days: []` is a parked group — no delete exists, a group that
+// no longer runs is parked — and a parked group plans nothing, so it neither
+// covers a service day nor conflicts with anything (both rules above already
+// read it that way) nor holds its vehicle or driver in service: the API's
+// count of the groups that stand in the way of a retirement leaves it out,
+// spelling `groupRuns` as `cardinality(days) > 0`, and un-parking a group is
+// naming its stored fleet afresh. `isParked` and `groupRuns` give the rule its
+// name, so the SQL and the route read the same predicate.
 import { licenceRefusal, licenceSentence, type Licence } from "../resources/licence"
 import type { LicenceClass } from "../resources/vocabulary"
 import { SERVICE_DAYS } from "./vocabulary"
@@ -84,6 +94,12 @@ export const manualWithoutContainer = (group: string): string => `Collection gro
 
 /** The sentence for a rule group with nowhere to match inside; said once, however many rule groups the scheme has. */
 export const NO_PLANNING_AREA_FOR_RULE = "The scheme has no planning area and a collection group matches by rule"
+
+/** A group with no days is parked: it no longer runs, plans nothing, and holds nothing in service. */
+export const isParked = (days: readonly string[]): boolean => days.length === 0
+
+/** The group runs on at least one day — the predicate the API spells as `cardinality(days) > 0` when it counts the groups standing in a retirement's way. */
+export const groupRuns = (group: { days: readonly string[] }): boolean => !isParked(group.days)
 
 /** The days of `days` in weekday order, Monday first, each once; a day outside the seven keeps its place at the end. */
 function inWeekdayOrder(days: readonly string[]): string[] {

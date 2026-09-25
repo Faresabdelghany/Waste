@@ -9,6 +9,8 @@ import {
   alreadyPicked,
   containerPickedTwice,
   groupDriverIssue,
+  groupRuns,
+  isParked,
   manualWithoutContainer,
   NO_PLANNING_AREA_FOR_RULE,
   onTwoGroups,
@@ -96,6 +98,23 @@ describe("schemeStructureIssues", () => {
 const wh24 = { id: "vehicle-24", label: "WH-24" }
 const wh25 = { id: "vehicle-25", label: "WH-25" }
 const mads = { id: "driver-mads", label: "Mads Jensen" }
+
+describe("isParked and groupRuns", () => {
+  test("a group with no days is parked and does not run; one with a day runs — the predicate the API spells as cardinality(days) > 0", () => {
+    assert.equal(isParked([]), true)
+    assert.equal(isParked(["monday"]), false)
+    assert.equal(groupRuns(rule("North", [])), false)
+    assert.equal(groupRuns(rule("North", ["monday"])), true)
+    assert.equal(groupRuns({ days: ["monday", "thursday"] }), true, "any shape with days will do: a stored group, a body")
+  })
+
+  test("a parked group is what the structural rules already read it as: it covers no day and conflicts with nothing", () => {
+    const parked = { ...rule("North", []), vehicle: { id: "v1", label: "WH-24" } }
+    const running = { ...rule("South", ["monday"]), vehicle: { id: "v1", label: "WH-24" } }
+    assert.deepEqual(schemeStructureIssues({ serviceDays: ["monday"], hasPlanningArea: true, collectionGroups: [parked, running] }), [])
+    assert.deepEqual(schemeStructureIssues({ serviceDays: ["monday"], hasPlanningArea: true, collectionGroups: [parked] }), [serviceDaysWithoutGroup(["monday"])])
+  })
+})
 
 describe("resourcesOnTwoGroups", () => {
   test("names a vehicle two groups run with on a shared day, once per day in weekday order, the groups in group order", () => {

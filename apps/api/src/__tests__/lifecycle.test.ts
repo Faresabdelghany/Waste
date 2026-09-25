@@ -672,7 +672,7 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
   })
 
   describe("a placement that already ended under a container the ledger has in service (a row from before the ledger, or an import)", () => {
-    test("is a 409 naming the day on a return and on a decommission, and nothing is written", async () => {
+    test("is a 409 naming the day on a return and on a decommission, after the body's own 400s, and nothing is written", async () => {
       const into = await stocked("BIN-5120")
       const placementId = testId()
       // The Registry says the placement ended in April; the ledger's issue
@@ -706,6 +706,11 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
         })
       })
       assert.equal((await one(into.id)).assetState?.status, "in-service", "the ledger reads the import's issue")
+
+      // The body's 400s come first, as on every route: an end on or before the start is refused at validTo before the ledger's disagreement is.
+      const backwards = await refusedCommand(into, "return", { warehouseId: west, validTo: JANUARY }, 400)
+      assert.deepEqual(backwards.errors, [{ path: "validTo", message: ENDS_AFTER_IT_STARTS }], "the body's 400 before the state's 409")
+      assert.deepEqual((await refusedCommand(into, "decommission", { reason: "Crushed", validTo: JANUARY }, 400)).errors, [{ path: "validTo", message: ENDS_AFTER_IT_STARTS }])
 
       const returned = await refusedCommand(into, "return", { warehouseId: west, validTo: JULY }, 409)
       assert.equal(returned.detail, placementAlreadyEnded("BIN-5120", APRIL))

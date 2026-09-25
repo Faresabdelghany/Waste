@@ -68,7 +68,7 @@ import {
 } from "@waste/contracts/route-schemes"
 import type { Tx } from "@waste/db/client"
 import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
-import { alreadyPicked, containerPickedTwice } from "@waste/domain/planning/checks"
+import { alreadyPicked, containerPickedTwice, groupRuns, isParked } from "@waste/domain/planning/checks"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -251,7 +251,7 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
         requireNotPickedTwice(others.map(pickOf), pickOf(values), (m) => `containerIds.${m}`)
         // Then the 409s: the fleet's statuses, the structure, and the name the database holds unique.
         requireFleetInService(refs, rows)
-        await requireStructure(tx, principal.companyId, scheme, [...others, values])
+        await requireStructure(tx, within, scheme, [...others, values])
 
         const [row] = await refuseDuplicate({ [GROUP_NAME_TAKEN]: groupNameTaken(values.name) }, () =>
           tx
@@ -310,7 +310,7 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
         operationId: "patchCollectionGroup",
         summary: "Change a collection group",
         description:
-          "Changes the name, the position, the days, the service provider, the vehicle or the driver of one collection group; every field is optional and at least one must be given. The source, the rule and the picked list never move through a patch: the rule is `PUT /collection-groups/{id}/stop-matching-rule`, the list `PUT /collection-groups/{id}/containers`, and a group that should find its stops the other way is another group. A null clears the provider, the vehicle or the driver. A new vehicle is a powered vehicle of the scheme's project and a new driver one of its drivers; named afresh, the vehicle is not retired and the driver is active — refused (409) naming the row and its status, after every 400, since a status gates a new reference and never an existing one, so a group whose vehicle has since retired is renamed, moved and given a new driver like any other; a group left naming both names a driver who holds the licence class the vehicle requires on the day the scheme's period starts or today, whichever is later — refused at `driverId` with the reason. New days lie within the scheme's service days, and may not put one of this group's containers on a day another group already picks it — refused at `days`, naming the container, the group and the day. `days: []` is a group that no longer runs. On a `validated` scheme a change of days, vehicle or driver re-runs the structural rules — every service day still has a group, and no vehicle or driver is on two groups that run on a shared day — and every sentence that fails is listed (409); the name, the position and the provider change nothing those rules read.",
+          "Changes the name, the position, the days, the service provider, the vehicle or the driver of one collection group; every field is optional and at least one must be given. The source, the rule and the picked list never move through a patch: the rule is `PUT /collection-groups/{id}/stop-matching-rule`, the list `PUT /collection-groups/{id}/containers`, and a group that should find its stops the other way is another group. A null clears the provider, the vehicle or the driver. A new vehicle is a powered vehicle of the scheme's project and a new driver one of its drivers; named afresh, the vehicle is not retired and the driver is active — refused (409) naming the row and its status, after every 400, since a status gates a new reference and never an existing one, so a group whose vehicle has since retired is renamed, moved and given a new driver like any other; a group left naming both names a driver who holds the licence class the vehicle requires on the day the scheme's period starts or today, whichever is later — refused at `driverId` with the reason. New days lie within the scheme's service days, and may not put one of this group's containers on a day another group already picks it — refused at `days`, naming the container, the group and the day. `days: []` is a group that no longer runs — parked, it counts for nothing toward retiring its vehicle or setting its driver inactive, so un-parking it (days from `[]` to one or more) names the vehicle and the driver it stores afresh and holds them to the same status rule: a truck that retired under the parked group is refused (409) until the group is reassigned. On a `validated` scheme a change of days, vehicle or driver re-runs the structural rules — every service day still has a group, and no vehicle or driver is on two groups that run on a shared day — and every sentence that fails is listed (409); the name, the position and the provider change nothing those rules read.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The collection group as it now stands.", CollectionGroup),
@@ -320,7 +320,7 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `route-studio.schemes`."),
           404: describeProblem("No collection group with that id in the projects this account works in."),
-          409: describeProblem("A vehicle named afresh is retired or a driver named afresh is inactive or suspended, the scheme already has another collection group with that name, or the scheme is `validated` and would not hold together: the detail lists every structural sentence that fails."),
+          409: describeProblem("A vehicle named afresh — in the body, or stored on a group the patch un-parks — is retired or a driver so named is inactive or suspended, the scheme already has another collection group with that name, or the scheme is `validated` and would not hold together: the detail lists every structural sentence that fails."),
         },
       }),
       guard,
@@ -336,15 +336,22 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
         const current = await lockedGroup(tx, principal, id)
         const within: Scope = { companyId: principal.companyId, projectId: current.projectId }
         await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)
-        // Only what the body names is a new reference: a stored vehicle or driver is read by the licence rule and its status is not asked.
-        const refs = referencesOf({ vehicleId: patch.vehicleId, driverId: patch.driverId })
-        const rows = await requireGroupReferences(tx, within, refs)
 
         // The fleet the group is left with: the body's where given, the stored where not; a null clears.
         const fleet = {
           vehicleId: patch.vehicleId === undefined ? current.vehicleId : patch.vehicleId,
           driverId: patch.driverId === undefined ? current.driverId : patch.driverId,
         }
+        // What the body names is a new reference, and so is the fleet a group
+        // un-parked here is left with: a parked group counted for nothing
+        // toward a retirement (`groupsInForceNaming`), so the truck may have
+        // retired under it, and running again is naming it afresh. A stored
+        // vehicle or driver of a group that stays as it is, or stays parked, is
+        // read by the licence rule and its status is not asked.
+        const unparking = patch.days !== undefined && isParked(current.days) && groupRuns({ days: patch.days })
+        const refs = referencesOf(unparking ? fleet : { vehicleId: patch.vehicleId, driverId: patch.driverId })
+        const rows = await requireGroupReferences(tx, within, refs)
+
         const fleetMoved = patch.vehicleId !== undefined || patch.driverId !== undefined
         if (fleetMoved) await requireGroupDriver(tx, within, current.scheme, fleet, { rows, today: projectToday(tx, within, now) })
 
@@ -359,9 +366,9 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
             const found = containerPickedTwice(moved.filter((group) => group.id !== id).map(pickOf), pickOf(mine))
             if (found !== undefined) throw invalidRequest("body", [{ path: "days", message: pickedOnNewDay(mine.containerIds[found.index], found) }])
           }
-          // Then the 409s: the fleet's statuses, then the structure.
+          // Then the 409s: the fleet's statuses — the body's, and the stored fleet's when the group is un-parked — then the structure.
           requireFleetInService(refs, rows)
-          await requireStructure(tx, principal.companyId, current.scheme, moved)
+          await requireStructure(tx, within, current.scheme, moved)
         }
 
         const sentences: Record<string, string> = patch.name === undefined ? {} : { [GROUP_NAME_TAKEN]: groupNameTaken(patch.name) }
@@ -413,7 +420,7 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
         const groups = (await groupsOf(tx, principal.companyId, [current.routeSchemeId])).get(current.routeSchemeId) ?? []
         await requireStructure(
           tx,
-          principal.companyId,
+          within,
           current.scheme,
           groups.map((group) => (group.id === id ? { ...group, rule } : group)),
         )
@@ -460,7 +467,7 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
         requireNotPickedTwice(groups.filter((group) => group.id !== id).map(pickOf), { days: current.days, containerIds }, (m) => `containerIds.${m}`)
         await requireStructure(
           tx,
-          principal.companyId,
+          within,
           current.scheme,
           groups.map((group) => (group.id === id ? { ...group, containerIds } : group)),
         )

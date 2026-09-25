@@ -230,7 +230,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
           requireNotPickedTwice(asked.slice(0, n).map(pickOf), pickOf(group), (m) => `collectionGroups.${n}.containerIds.${m}`)
         }
         requireFleetInService(refs, rows)
-        await requireStructure(tx, principal.companyId, { status: values.status, serviceDays: values.serviceDays, planningAreaId: values.planningAreaId ?? null }, asked)
+        await requireStructure(tx, scope, { status: values.status, serviceDays: values.serviceDays, planningAreaId: values.planningAreaId ?? null }, asked)
 
         const schemeId = newId()
         const [row] = await refuseOverlap({ [SCHEME_NAME_IN_FORCE]: SCHEME_NAME_IN_FORCE_SENTENCE }, () =>
@@ -358,7 +358,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
           const outside = groups.filter((group) => !withinServiceDays(merged.serviceDays, group.days)).length
           if (outside > 0) throw problem(409, { detail: groupsLeftOutside(outside) })
         }
-        await requireStructure(tx, principal.companyId, merged, groups)
+        await requireStructure(tx, scope, merged, groups)
 
         const [row] = await refuseOverlap({ [SCHEME_NAME_IN_FORCE]: SCHEME_NAME_IN_FORCE_SENTENCE }, () =>
           tx
