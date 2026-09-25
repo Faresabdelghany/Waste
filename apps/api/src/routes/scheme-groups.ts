@@ -54,7 +54,7 @@ import { inProjects } from "../auth/projects"
 import { newId } from "../ids"
 import { invalidRequest, problem } from "../problem"
 import { requireContainer, requireContainerType, requireServiceProvider, requireWasteFraction } from "./references"
-import { stampsOf, timeOf, type TenantTable } from "./shared"
+import { stamp, stampsOf, timeOf, type TenantTable } from "./shared"
 
 /** The grant every scheme and group route runs under: a group is a part of its scheme and not a surface of its own. */
 export const MODULE = "route-studio.schemes"
@@ -158,7 +158,7 @@ function groupOf(row: GroupRow, sets: GroupSets): CollectionGroup {
 }
 
 /** A membership table of a group: the tenant, the group it belongs to, and the id it names. */
-type MembershipTable = PgTable & { companyId: PgColumn; collectionGroupId: PgColumn }
+export type MembershipTable = PgTable & { companyId: PgColumn; collectionGroupId: PgColumn }
 
 /**
  * The entries of every group asked for, in one query, grouped by group; the
@@ -230,6 +230,10 @@ export async function schemeWithGroups(tx: Tx, companyId: string, row: SchemeRow
 export const schemeScope = (principal: Principal): SQL | undefined =>
   and(eq(routeScheme.companyId, principal.companyId), inProjects(routeScheme.projectId, principal))
 
+/** The same for a group, which carries the project its scheme is in. */
+export const groupScope = (principal: Principal): SQL | undefined =>
+  and(eq(collectionGroup.companyId, principal.companyId), inProjects(collectionGroup.projectId, principal))
+
 /** One scheme of this company by id, inside the caller's projects; undefined when it is neither. */
 export async function findScheme(tx: Tx, principal: Principal, id: string): Promise<SchemeRow | undefined> {
   const [row] = await tx
@@ -254,14 +258,22 @@ export type GroupReferences = {
 /** What a body's checks are bounded by: the caller's company, and the project the scheme is in. */
 export type Scope = { companyId: string; projectId: string }
 
+/** Where a body spells its references: `prefix` in front of every path, and `rulePrefix` in front of the rule's two sets — `${prefix}rule.` unless the body is the rule itself. */
+export type ReferencePaths = { prefix?: string; rulePrefix?: string }
+
 /**
- * The references of one group's create body, at the paths that body spells
- * them; `prefix` puts a scheme create's group at `collectionGroups.N.`.
+ * The references of a group body, at the paths that body spells them: a
+ * group create as it stands, a scheme create's group under
+ * `collectionGroups.N.`, the rule PUT's body with `rulePrefix: ""` since the
+ * body is the rule, and the containers PUT's with only `containerIds`.
  */
-export function referencesOf(group: { rule?: StopMatchingRule | null; containerIds?: readonly string[] | null; serviceProviderId?: string | null }, prefix = ""): GroupReferences {
+export function referencesOf(
+  group: { rule?: StopMatchingRule | null; containerIds?: readonly string[] | null; serviceProviderId?: string | null },
+  { prefix = "", rulePrefix = `${prefix}rule.` }: ReferencePaths = {},
+): GroupReferences {
   return {
-    fractions: (group.rule?.wasteFractionIds ?? []).map((id, m) => ({ path: `${prefix}rule.wasteFractionIds.${m}`, id })),
-    containerTypes: (group.rule?.containerTypeIds ?? []).map((id, m) => ({ path: `${prefix}rule.containerTypeIds.${m}`, id })),
+    fractions: (group.rule?.wasteFractionIds ?? []).map((id, m) => ({ path: `${rulePrefix}wasteFractionIds.${m}`, id })),
+    containerTypes: (group.rule?.containerTypeIds ?? []).map((id, m) => ({ path: `${rulePrefix}containerTypeIds.${m}`, id })),
     containers: (group.containerIds ?? []).map((id, m) => ({ path: `${prefix}containerIds.${m}`, id })),
     providers: group.serviceProviderId == null ? [] : [{ path: `${prefix}serviceProviderId`, id: group.serviceProviderId }],
   }
@@ -331,6 +343,45 @@ export async function writeGroupSets(tx: Tx, scope: Scope, groups: readonly Grou
   if (fractions.length > 0) await tx.insert(collectionGroupFraction).values(fractions)
   if (types.length > 0) await tx.insert(collectionGroupContainerType).values(types)
   if (containers.length > 0) await tx.insert(collectionGroupContainer).values(containers)
+}
+
+/** A group's own rows of one membership table, gone: the first half of replacing a set whole. */
+async function clearSet(tx: Tx, table: MembershipTable, group: { companyId: string; id: string }): Promise<void> {
+  await tx.delete(table).where(and(eq(table.companyId, group.companyId), eq(table.collectionGroupId, group.id)))
+}
+
+/** What a group's set replacement carries: the whole rule, or the whole picked list in stop order. */
+export type GroupSet = { rule: StopMatchingRule } | { containerIds: readonly string[] }
+
+/**
+ * `PUT …/stop-matching-rule` and `PUT …/containers`, once — the way
+ * routes/members.ts replaces a membership, through a sibling because a rule
+ * is three things over two tables and a column, and a list is positioned.
+ * The group's own row goes first: the stamp, and for a rule the vehicle type,
+ * under the caller's scope, so a group of another company or of a project
+ * the account does not work in comes back as nothing and the route raises
+ * its 404. Then the set's rows are deleted and the body's written, all in
+ * the request's one transaction and under the scheme's row lock the route
+ * has already taken, so a refused body leaves the group exactly as it was.
+ */
+export async function replaceGroupSet(tx: Tx, principal: Principal, id: string, set: GroupSet): Promise<GroupRow | undefined> {
+  const [row] = await tx
+    .update(collectionGroup)
+    .set("rule" in set ? { ruleVehicleType: set.rule.vehicleType, ...stamp() } : stamp())
+    .where(and(groupScope(principal), eq(collectionGroup.id, id)))
+    .returning(groupColumns)
+  if (row === undefined) return undefined
+  const group = { companyId: principal.companyId, id }
+  const scope: Scope = { companyId: principal.companyId, projectId: row.projectId }
+  if ("rule" in set) {
+    await clearSet(tx, collectionGroupFraction, group)
+    await clearSet(tx, collectionGroupContainerType, group)
+    await writeGroupSets(tx, scope, [{ id, rule: set.rule, containerIds: [] }])
+  } else {
+    await clearSet(tx, collectionGroupContainer, group)
+    await writeGroupSets(tx, scope, [{ id, rule: null, containerIds: set.containerIds }])
+  }
+  return row
 }
 
 /** A group as the two domain rules see it, whether it is a stored group on the wire or a body about to be written. */

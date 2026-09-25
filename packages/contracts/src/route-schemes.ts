@@ -56,6 +56,16 @@ import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./
  */
 export const CONTAINERS_MAX = 200
 
+/**
+ * The most collection groups a scheme may be created with. Each group may
+ * pick two hundred containers, so a body of fifty is ten thousand rows across
+ * one statement per set; a scheme with more groups than that is an import,
+ * not a form, and a body past it would run into Postgres's bind-parameter
+ * ceiling before it ran into anything of ours.
+ */
+export const GROUPS_MAX = 50
+export const AT_MOST_GROUPS = `A scheme has at most ${GROUPS_MAX} collection groups`
+
 /** An order among siblings: whole and positive, since the first is number one. */
 const Ordinal = z.int().positive()
 
@@ -236,8 +246,8 @@ export const RouteSchemeCreate = z
     editPolicy: SchemeEditPolicy.default("ask").describe("Defaults to ask when absent; stored, consumed by nothing yet."),
     planAhead: z.boolean().default(true).describe("Defaults to true when absent: the nightly job keeps the coming week planned."),
     status: RouteSchemeStatus.default("draft").describe("Defaults to draft when absent: a draft accepts partial configuration, a validated scheme is held to the structural rules."),
-    /** At least one: a scheme without explicit groups has one implicit group, which the server writes as a row. */
-    collectionGroups: z.array(CollectionGroupCreate).min(1),
+    /** At least one: a scheme without explicit groups has one implicit group, which the server writes as a row. At most `GROUPS_MAX`. */
+    collectionGroups: z.array(CollectionGroupCreate).min(1).max(GROUPS_MAX, AT_MOST_GROUPS),
     ...ValidityCreate,
   })
   .refine(validityOrdered, endsAfterItStarts)

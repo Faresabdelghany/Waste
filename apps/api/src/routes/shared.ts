@@ -47,7 +47,7 @@
 // module stays in the one that owns it.
 import { Id } from "@waste/contracts/ids"
 import type { Tx } from "@waste/db/client"
-import { and, eq, type SQL } from "drizzle-orm"
+import { and, eq, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import type { Context } from "hono"
 import { resolver } from "hono-openapi"
@@ -100,6 +100,16 @@ export function created<Body extends { id: string }>(c: Context, collection: `/$
 export function stampsOf(row: { createdAt: Date; updatedAt: Date }): { createdAt: string; updatedAt: string } {
   return { createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() }
 }
+
+/**
+ * What a record's own row is set to when a set that travels with it is
+ * replaced (a Property's parties, a Collection Group's rule): nothing but the
+ * stamp, since the set is what changed. The trigger would move `updated_at`
+ * whatever the update said; naming it is naming what changed, and the update
+ * is also what answers "there is no such record here" under the caller's
+ * scope. One spelling for a Registry set and a Planning set alike.
+ */
+export const stamp = (): { updatedAt: SQL } => ({ updatedAt: sql`now()` })
 
 /** A `time` column as postgres.js hands it over: `HH:MM:SS`, with fractional seconds where the value carried them. */
 const TIME_OF_DAY = /^(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?$/

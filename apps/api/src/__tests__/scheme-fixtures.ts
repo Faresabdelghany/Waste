@@ -1,13 +1,10 @@
-// What the route-scheme and collection-group suites need of Planning that has
-// no route on this slice (Issue #97, slice 4): a planning area per project,
-// each project's working week and holiday list, and a collection calendar
-// with the holidays the occurrence read is proved against. Planning areas and
-// calendars get their routes with slice 3; until the two slices meet, these
-// rows are written directly through `tx` as `wms_api` inside `withCompany`,
-// the way tenant.ts seeds its company, and dropped the same way — children
-// first — before `dropTenant` runs, since `dropTenant` learns the nine
-// Planning tables in slice 3 as well. Deleting nothing is fine, so this stays
-// harmless once it does.
+// What the route-scheme and collection-group suites need of Planning beyond
+// their own routes (Issue #97, slice 4): a planning area per project, each
+// project's working week and holiday list, and a collection calendar with the
+// holidays the occurrence read is proved against. The rows are written
+// directly through `tx` as `wms_api` inside `withCompany`, the way tenant.ts
+// seeds its company — the suites prove the scheme routes, not the area and
+// calendar ones — and `dropTenant` drops them with the rest of the company.
 //
 // The three projects say three different things about a working week:
 // Copenhagen Central rests Saturday–Sunday on the Danish list, Harbor
@@ -17,8 +14,7 @@
 import type { Database, Tx } from "@waste/db/client"
 import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { project } from "@waste/db/schema/organisation"
-import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
-import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
+import { planningArea } from "@waste/db/schema/planning-areas"
 import { withCompany } from "@waste/db/tenant"
 import { and, eq } from "drizzle-orm"
 
@@ -85,19 +81,4 @@ export async function seedPlanning(pool: Database, tenant: Tenant): Promise<Plan
     ])
   })
   return fixtures
-}
-
-/** Every Planning row of the company, children first, as `wms_api` under the fence; run before `dropTenant`. */
-export async function dropPlanning(pool: Database, companyId: string): Promise<void> {
-  await withCompany(pool.db, companyId, async (tx: Tx) => {
-    await tx.delete(collectionGroupContainer).where(eq(collectionGroupContainer.companyId, companyId))
-    await tx.delete(collectionGroupContainerType).where(eq(collectionGroupContainerType.companyId, companyId))
-    await tx.delete(collectionGroupFraction).where(eq(collectionGroupFraction.companyId, companyId))
-    await tx.delete(collectionGroup).where(eq(collectionGroup.companyId, companyId))
-    await tx.delete(routeScheme).where(eq(routeScheme.companyId, companyId))
-    await tx.delete(collectionCalendarHoliday).where(eq(collectionCalendarHoliday.companyId, companyId))
-    await tx.delete(collectionCalendar).where(eq(collectionCalendar.companyId, companyId))
-    await tx.delete(planningAreaBoundary).where(eq(planningAreaBoundary.companyId, companyId))
-    await tx.delete(planningArea).where(eq(planningArea.companyId, companyId))
-  })
 }

@@ -12,7 +12,7 @@ import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
-import { dropPlanning, seedPlanning, type PlanningFixtures } from "./scheme-fixtures"
+import { seedPlanning, type PlanningFixtures } from "./scheme-fixtures"
 import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
 import { signingKeys, type SigningKeys } from "./tokens"
 
@@ -95,8 +95,6 @@ describe("the collection group endpoints", { skip: database.skip }, () => {
     )
   })
   after(async () => {
-    if (a) await dropPlanning(pool, a.companyId)
-    if (b) await dropPlanning(pool, b.companyId)
     if (a) await dropTenant(pool, a.companyId)
     if (b) await dropTenant(pool, b.companyId)
     await pool?.close()

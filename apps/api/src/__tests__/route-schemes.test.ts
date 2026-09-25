@@ -13,7 +13,7 @@ import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
-import { CAIRO_HOLIDAYS, COPENHAGEN_HOLIDAYS, dropPlanning, seedPlanning, type PlanningFixtures } from "./scheme-fixtures"
+import { CAIRO_HOLIDAYS, COPENHAGEN_HOLIDAYS, seedPlanning, type PlanningFixtures } from "./scheme-fixtures"
 import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
 import { signingKeys, type SigningKeys } from "./tokens"
 
@@ -102,8 +102,6 @@ describe("the route scheme endpoints", { skip: database.skip }, () => {
     )
   })
   after(async () => {
-    if (a) await dropPlanning(pool, a.companyId)
-    if (b) await dropPlanning(pool, b.companyId)
     if (a) await dropTenant(pool, a.companyId)
     if (b) await dropTenant(pool, b.companyId)
     await pool?.close()
@@ -276,7 +274,9 @@ describe("the route scheme endpoints", { skip: database.skip }, () => {
       assert.equal(draft.status, "draft")
       const validated = await scheme("Validated", { status: "validated", collectionGroups: [ruleGroup("Residual", ["monday"]), manualGroup("Bank", ["thursday"], [bin3.id])] })
       assert.equal(validated.status, "validated", "every day covered, the rule group has a fraction, the manual group a container, and there is a planning area")
-      assert.deepEqual((await page(olivia, "?limit=200&status=validated")).items.map((row) => row.id), [validated.id])
+      const validatedIds = (await page(olivia, "?limit=200&status=validated")).items.map((row) => row.id)
+      assert.ok(validatedIds.includes(validated.id))
+      assert.ok(!validatedIds.includes(draft.id))
     })
 
     test("lets one name name a later scheme once the earlier one has ended, refuses an overlap, and frees the name in another project", async () => {
@@ -323,8 +323,12 @@ describe("the route scheme endpoints", { skip: database.skip }, () => {
       const byArea = (await page(olivia, `?limit=200&planningAreaId=${planning.areas.harbor.id}`)).items
       assert.ok(byArea.some((row) => row.id === harbor.id))
       for (const row of byArea) assert.equal(row.planningAreaId, planning.areas.harbor.id)
-      assert.deepEqual((await page(olivia, "?limit=200&planAhead=false")).items.map((row) => row.id), [harbor.id])
-      assert.ok((await page(olivia, "?limit=200&planAhead=true")).items.some((row) => row.id === ended.id))
+      const notPlanned = (await page(olivia, "?limit=200&planAhead=false")).items
+      assert.ok(notPlanned.some((row) => row.id === harbor.id))
+      for (const row of notPlanned) assert.equal(row.planAhead, false)
+      const planned = (await page(olivia, "?limit=200&planAhead=true")).items
+      assert.ok(planned.some((row) => row.id === ended.id))
+      assert.ok(!planned.some((row) => row.id === harbor.id))
       const drafts = (await page(olivia, "?limit=200&status=draft")).items
       assert.ok(drafts.some((row) => row.id === ended.id))
       for (const row of drafts) assert.equal(row.status, "draft")
@@ -357,11 +361,18 @@ describe("the route scheme endpoints", { skip: database.skip }, () => {
     })
 
     test("pages by cursor without repeating or skipping a scheme", async () => {
-      const first = await page(olivia, "?limit=2")
-      assert.equal(first.items.length, 2)
-      assert.ok(first.nextCursor !== null)
-      const second = await page(olivia, `?limit=2&cursor=${first.nextCursor}`)
-      assert.ok(second.items.every((row) => row.id > first.items[1].id))
+      const made = [await scheme("Paged 1"), await scheme("Paged 2"), await scheme("Paged 3")].map((row) => row.id)
+      const all = (await page(olivia, "?limit=200")).items.map((row) => row.id)
+      const seen: string[] = []
+      let cursor: string | null = null
+      do {
+        const current: Awaited<ReturnType<typeof page>> = await page(olivia, `?limit=2${cursor === null ? "" : `&cursor=${cursor}`}`)
+        assert.ok(current.items.length <= 2)
+        seen.push(...current.items.map((row) => row.id))
+        cursor = current.nextCursor
+      } while (cursor !== null)
+      assert.deepEqual(seen, all, "walking the pages visits every scheme once, in id order")
+      for (const id of made) assert.ok(seen.includes(id))
     })
 
     test("refuses a role without route-studio.schemes view, and a caller with no token", async () => {

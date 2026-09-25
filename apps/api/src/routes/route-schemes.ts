@@ -57,18 +57,16 @@ import {
   weekRotationShape,
   withinServiceDays,
 } from "@waste/contracts/route-schemes"
-import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { project } from "@waste/db/schema/organisation"
-import { planningArea } from "@waste/db/schema/planning-areas"
 import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import type { HolidayPolicy, RecurrenceFrequency, ServiceDay, WeekRotation } from "@waste/domain/planning/vocabulary"
 import { holidayLabel, holidayNamesFor, withCarriedNames } from "@waste/domain/route-schemes/holiday-names"
 import { generateOccurrences, NO_HOLIDAYS, type HolidayList } from "@waste/domain/route-schemes/occurrences"
 import { addDays, type SchemeRecurrence } from "@waste/domain/route-schemes/recurrence"
 import { count } from "@waste/domain/text"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, asc, eq, gt, gte, lte } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import * as z from "zod"
@@ -80,6 +78,7 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
+import { requirePlanningArea } from "./references"
 import {
   findScheme,
   groupsOf,
@@ -100,22 +99,21 @@ import {
   writeGroupSets,
   type Scope,
 } from "./scheme-groups"
-import { describeJson, IdParam, lockRow, refuseOverlap, requireRow, timeOf } from "./shared"
+import { describeJson, IdParam, lockRow, refuseOverlap, timeOf } from "./shared"
 
 const RouteSchemePage = Page(RouteScheme)
 const Occurrences = z.array(Occurrence)
 
-/** What a body is told when it names a planning area of another project, or of nobody; the composite key holds it to the same thing. */
-const NOT_A_PLANNING_AREA = "Not a planning area of this project"
-
 /** What a narrowing of the service days is refused with when groups run on the days it drops; they have to be moved first. */
 const groupsLeftOutside = (rows: number): string => `${count(rows, "collection group")} ${rows === 1 ? "runs" : "run"} on days the scheme would no longer serve`
 
-/** A planning area a body names, held to the scheme's project: a scheme matches inside one of its own project's areas. */
-async function requirePlanningAreaOf(tx: Tx, scope: Scope, id: string | null | undefined): Promise<void> {
-  if (id == null) return
-  await requireRow(tx, planningArea, { companyId: scope.companyId, id, also: eq(planningArea.projectId, scope.projectId) }, { path: "planningAreaId", message: NOT_A_PLANNING_AREA })
-}
+/**
+ * How far a shift can carry a collection from its recurrence date: the bound
+ * of the domain's `shiftToWorkingDay` walk (@waste/domain/route-schemes/occurrences,
+ * a literal there, not exported). No holiday further from the window than
+ * this can bear on an occurrence in it, so the holiday read stops there.
+ */
+const SHIFT_SEARCH_DAYS = 60
 
 /**
  * The two recurrence rules a patch escapes: the contracts hold a body that
@@ -208,8 +206,8 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>) {
         // The 400s first, each at its entry: what the body points at, and
         // the picks across its groups. Then the 409s: the structure, and the
         // period the database refuses.
-        await requirePlanningAreaOf(tx, scope, values.planningAreaId)
-        await requireGroupReferences(tx, scope, mergeReferences(asked.map((group, n) => referencesOf(group, `collectionGroups.${n}.`))))
+        await requirePlanningArea(tx, scope, values.planningAreaId)
+        await requireGroupReferences(tx, scope, mergeReferences(asked.map((group, n) => referencesOf(group, { prefix: `collectionGroups.${n}.` }))))
         asked.forEach((group, n) => {
           requireNotPickedTwice(asked.slice(0, n).map(pickOf), pickOf(group), (m) => `collectionGroups.${n}.containerIds.${m}`)
         })
@@ -320,7 +318,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const scope: Scope = { companyId: principal.companyId, projectId: current.projectId }
         const merged = { ...current, ...patch }
 
-        await requirePlanningAreaOf(tx, scope, patch.planningAreaId)
+        await requirePlanningArea(tx, scope, patch.planningAreaId)
         if (patch.validFrom !== undefined || patch.validTo !== undefined) requireOrdered(periodAfter(current, patch))
         requireRecurrence(merged)
 
@@ -379,14 +377,24 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>) {
 
         let holidays: HolidayList = NO_HOLIDAYS
         if (calendar.holidayList !== null) {
+          // The project's holidays near enough to the window to bear on it: a
+          // recurrence date lies inside it and a shift walks at most
+          // SHIFT_SEARCH_DAYS from one, so nothing further out is read.
           const rows = await tx
             .select({ day: collectionCalendarHoliday.day, name: collectionCalendarHoliday.name })
             .from(collectionCalendarHoliday)
-            .where(and(eq(collectionCalendarHoliday.companyId, principal.companyId), eq(collectionCalendarHoliday.projectId, scheme.projectId)))
+            .where(
+              and(
+                eq(collectionCalendarHoliday.companyId, principal.companyId),
+                eq(collectionCalendarHoliday.projectId, scheme.projectId),
+                gte(collectionCalendarHoliday.day, addDays(window.from, -SHIFT_SEARCH_DAYS)),
+                lte(collectionCalendarHoliday.day, addDays(window.to, SHIFT_SEARCH_DAYS)),
+              ),
+            )
           // A name the calendar carries wins; the list's lookup names the days it does not.
           const carried = new Map(rows.flatMap((row) => (row.name === null ? [] : [[row.day, row.name] as const])))
           const names = withCarriedNames(carried, holidayNamesFor(calendar.holidayList))
-          holidays = new Map([...new Set(rows.map((row) => row.day))].sort().map((day) => [day, holidayLabel(day, names)]))
+          holidays = new Map(rows.map((row) => [row.day, holidayLabel(row.day, names)]))
         }
 
         const recurrence: SchemeRecurrence = {

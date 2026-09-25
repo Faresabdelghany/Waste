@@ -4,6 +4,7 @@ import { describe, test } from "node:test"
 import { OCCURRENCE_STATUSES } from "@waste/domain/planning/vocabulary"
 
 import {
+  AT_MOST_GROUPS,
   CollectionGroup,
   CollectionGroupContainersSet,
   CollectionGroupCreate,
@@ -13,6 +14,7 @@ import {
   EACH_CONTAINER_ONCE,
   EACH_FRACTION_ONCE,
   EACH_GROUP_NAME_ONCE,
+  GROUPS_MAX,
   Occurrence,
   OccurrenceQuery,
   OccurrenceStatus,
@@ -190,6 +192,13 @@ describe("RouteSchemeCreate", () => {
     for (const key of ["holidayPolicy", "editPolicy", "planAhead", "status"] as const) assert.ok(RouteSchemeCreate.shape[key].description, key)
     assert.match(RouteSchemeCreate.shape.status.description ?? "", /draft/)
     refusesWhatTheServerOwns(RouteSchemeCreate, body)
+  })
+
+  test("takes at most GROUPS_MAX groups, each of which may pick two hundred containers, and says so at the list", () => {
+    const groups = (n: number) => Array.from({ length: n }, (_, i) => ({ ...group, name: `Group ${i + 1}` }))
+    assert.equal(RouteSchemeCreate.safeParse({ ...body, collectionGroups: groups(GROUPS_MAX) }).success, true)
+    assert.deepEqual(refusal(RouteSchemeCreate.safeParse({ ...body, collectionGroups: groups(GROUPS_MAX + 1) })), [{ path: "collectionGroups", message: AT_MOST_GROUPS }])
+    assert.equal(GROUPS_MAX * CONTAINERS_MAX, 10_000, "the most rows one create body can ask for")
   })
 
   test("needs the project, a name, a service type, a cadence, a day, a group and a first day", () => {

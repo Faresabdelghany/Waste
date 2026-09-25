@@ -50,15 +50,13 @@ import {
   withinServiceDays,
 } from "@waste/contracts/route-schemes"
 import type { Tx } from "@waste/db/client"
-import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
+import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import { alreadyPicked, containerPickedTwice } from "@waste/domain/planning/checks"
-import { and, asc, eq, gt, sql, type SQL } from "drizzle-orm"
-import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
+import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
-import { inProjects } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
@@ -70,12 +68,14 @@ import {
   GROUP_NAME_TAKEN,
   groupColumns,
   groupNameTaken,
+  groupScope,
   groupsOf,
   MODULE,
   noSuchGroup,
   noSuchScheme,
   pickOf,
   referencesOf,
+  replaceGroupSet,
   requireGroupReferences,
   requireNotPickedTwice,
   requireStructure,
@@ -96,12 +96,6 @@ const RULE_PICKS_NOTHING = "This collection group matches by rule; its container
 /** What a `days` patch is told when a day it adds is one another group already picks one of this group's containers on. */
 const pickedOnNewDay = (containerId: string, found: Parameters<typeof alreadyPicked>[0]): string => `Container ${containerId} is already picked by ${found.group} on ${found.day}`
 
-/** What a write on the group stamps besides its own fields: the set is part of the group on the wire, so replacing it changes the group. */
-const stamp = (): { updatedAt: SQL } => ({ updatedAt: sql`now()` })
-
-/** The rows of this company, in the projects the caller works in: what every group statement is bounded by. */
-const scope = (principal: Principal) => and(eq(collectionGroup.companyId, principal.companyId), inProjects(collectionGroup.projectId, principal))
-
 /** What a write of a group is held against: the state of the scheme it belongs to. */
 type SchemeState = { status: string; serviceDays: string[]; planningAreaId: string | null }
 
@@ -115,7 +109,7 @@ async function findGroup(tx: Tx, principal: Principal, id: string): Promise<(Gro
     .select({ ...groupColumns, schemeStatus: routeScheme.status, schemeServiceDays: routeScheme.serviceDays, schemePlanningAreaId: routeScheme.planningAreaId })
     .from(collectionGroup)
     .innerJoin(routeScheme, and(eq(routeScheme.companyId, collectionGroup.companyId), eq(routeScheme.id, collectionGroup.routeSchemeId)))
-    .where(and(scope(principal), eq(collectionGroup.id, id)))
+    .where(and(groupScope(principal), eq(collectionGroup.id, id)))
     .limit(1)
   if (row === undefined) return undefined
   const { schemeStatus, schemeServiceDays, schemePlanningAreaId, ...group } = row
@@ -127,7 +121,11 @@ async function findGroup(tx: Tx, principal: Principal, id: string): Promise<(Gro
  * lock: the first read only says which scheme to lock, and the rules below
  * are held against what the lock protects. Locks go top-down, the scheme
  * before anything of its groups, so no two requests hold half of each other's
- * pair.
+ * pair. Not one joined `select … for update of route_scheme`: that locks the
+ * scheme and re-checks the scheme's row on a conflict, but the group's row
+ * would be the statement's snapshot — a `days` patch that committed while
+ * this waited for the lock would go unseen, which is exactly what the second
+ * read is for.
  */
 async function lockedGroup(tx: Tx, principal: Principal, id: string): Promise<GroupRow & { scheme: SchemeState }> {
   const found = await findGroup(tx, principal, id)
@@ -142,14 +140,6 @@ async function lockedGroup(tx: Tx, principal: Principal, id: string): Promise<Gr
 async function groupWithSets(tx: Tx, companyId: string, row: GroupRow): Promise<CollectionGroup> {
   const [group] = await assembleGroups(tx, companyId, [row])
   return group
-}
-
-/** A membership table of a group: the tenant, and the group the row belongs to. */
-type MembershipTable = PgTable & { companyId: PgColumn; collectionGroupId: PgColumn }
-
-/** A group's own rows of one membership table, gone: the first half of replacing the set whole. */
-async function clearSet(tx: Tx, table: MembershipTable, group: { companyId: string; id: string }): Promise<void> {
-  await tx.delete(table).where(and(eq(table.companyId, group.companyId), eq(table.collectionGroupId, group.id)))
 }
 
 export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
@@ -184,7 +174,7 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const rows = await tx
           .select(groupColumns)
           .from(collectionGroup)
-          .where(and(scope(principal), eq(collectionGroup.routeSchemeId, id), after === undefined ? undefined : gt(collectionGroup.id, after)))
+          .where(and(groupScope(principal), eq(collectionGroup.routeSchemeId, id), after === undefined ? undefined : gt(collectionGroup.id, after)))
           .orderBy(asc(collectionGroup.id))
           .limit(fetchLimit(limit))
         const { items, nextCursor } = pageOf(rows, limit)
@@ -331,7 +321,7 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
           tx
             .update(collectionGroup)
             .set(patch)
-            .where(and(scope(principal), eq(collectionGroup.id, id)))
+            .where(and(groupScope(principal), eq(collectionGroup.id, id)))
             .returning(groupColumns),
         )
         if (row === undefined) throw noSuchGroup(id)
@@ -370,28 +360,16 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const current = await lockedGroup(tx, principal, id)
         if (current.stopSource !== "rule") throw problem(409, { detail: MANUAL_HAS_NO_RULE })
         const within: Scope = { companyId: principal.companyId, projectId: current.projectId }
-        await requireGroupReferences(tx, within, {
-          fractions: rule.wasteFractionIds.map((fractionId, m) => ({ path: `wasteFractionIds.${m}`, id: fractionId })),
-          containerTypes: rule.containerTypeIds.map((typeId, m) => ({ path: `containerTypeIds.${m}`, id: typeId })),
-          containers: [],
-          providers: [],
-        })
+        // The body is the rule, so its sets sit at the top of it.
+        await requireGroupReferences(tx, within, referencesOf({ rule }, { rulePrefix: "" }))
         const groups = (await groupsOf(tx, principal.companyId, [current.routeSchemeId])).get(current.routeSchemeId) ?? []
         requireStructure(
           current.scheme,
           groups.map((group) => (group.id === id ? { ...group, rule } : group)),
         )
 
-        const [row] = await tx
-          .update(collectionGroup)
-          .set({ ruleVehicleType: rule.vehicleType, ...stamp() })
-          .where(and(scope(principal), eq(collectionGroup.id, id)))
-          .returning(groupColumns)
+        const row = await replaceGroupSet(tx, principal, id, { rule })
         if (row === undefined) throw noSuchGroup(id)
-        const group = { companyId: principal.companyId, id }
-        await clearSet(tx, collectionGroupFraction, group)
-        await clearSet(tx, collectionGroupContainerType, group)
-        await writeGroupSets(tx, within, [{ id, rule, containerIds: [] }])
         return c.json(await groupWithSets(tx, principal.companyId, row))
       },
     )
@@ -427,12 +405,7 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const current = await lockedGroup(tx, principal, id)
         if (current.stopSource !== "manual") throw problem(409, { detail: RULE_PICKS_NOTHING })
         const within: Scope = { companyId: principal.companyId, projectId: current.projectId }
-        await requireGroupReferences(tx, within, {
-          fractions: [],
-          containerTypes: [],
-          containers: containerIds.map((containerId, m) => ({ path: `containerIds.${m}`, id: containerId })),
-          providers: [],
-        })
+        await requireGroupReferences(tx, within, referencesOf({ containerIds }))
         const groups = (await groupsOf(tx, principal.companyId, [current.routeSchemeId])).get(current.routeSchemeId) ?? []
         requireNotPickedTwice(groups.filter((group) => group.id !== id).map(pickOf), { days: current.days, containerIds }, (m) => `containerIds.${m}`)
         requireStructure(
@@ -440,14 +413,8 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
           groups.map((group) => (group.id === id ? { ...group, containerIds } : group)),
         )
 
-        const [row] = await tx
-          .update(collectionGroup)
-          .set(stamp())
-          .where(and(scope(principal), eq(collectionGroup.id, id)))
-          .returning(groupColumns)
+        const row = await replaceGroupSet(tx, principal, id, { containerIds })
         if (row === undefined) throw noSuchGroup(id)
-        await clearSet(tx, collectionGroupContainer, { companyId: principal.companyId, id })
-        await writeGroupSets(tx, within, [{ id, rule: null, containerIds }])
         return c.json(await groupWithSets(tx, principal.companyId, row))
       },
     )

@@ -40,7 +40,6 @@ import { container } from "@waste/db/schema/containers"
 import { customer, property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { serviceProvider } from "@waste/db/schema/organisation"
 import { planningArea } from "@waste/db/schema/planning-areas"
-import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import { eq } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 
@@ -178,31 +177,18 @@ export async function requireCollectionCalendar(
   await requireRow(tx, collectionCalendar, inProject(collectionCalendar, scope, id), { path, message: NOT_A_COLLECTION_CALENDAR })
 }
 
-// Planning's route schemes and collection groups (Issue #97, slice 4). A
-// scheme and a group are the project's, like everything Planning writes; a
-// container is the project's too, and the plural check over a picked list
-// (routes/scheme-groups.ts) reads its sentence from here; a Service Provider
-// is the company's, since Organisation & Access has the table.
-
-/** What a body is told when it picks a container of another project; the composite key already holds it to the same thing. */
-export const NOT_A_CONTAINER = "Not a container of this project"
-
-/** A Route Scheme a body names: the project's, since a scheme plans one project's work. */
-export async function requireRouteScheme(tx: Tx, scope: Scope, id: string | null | undefined, path = "routeSchemeId"): Promise<void> {
-  if (id == null) return
-  await requireRow(tx, routeScheme, inProject(routeScheme, scope, id), { path, message: "Not a route scheme of this project" })
-}
-
-/** A Collection Group a body names: the project's, like the scheme it belongs to. */
-export async function requireCollectionGroup(tx: Tx, scope: Scope, id: string | null | undefined, path = "collectionGroupId"): Promise<void> {
-  if (id == null) return
-  await requireRow(tx, collectionGroup, inProject(collectionGroup, scope, id), { path, message: "Not a collection group of this project" })
-}
+// What a Collection Group names (Issue #97, slice 4): a container is the
+// project's, like the group that picks it, and the plural check over a picked
+// list (routes/scheme-groups.ts) hands the one entry it found missing to the
+// singular here, so both say the same thing; a Service Provider is the
+// company's, since Organisation & Access has the table. A scheme and a group
+// are named by no body yet — the path names them — so their checks arrive
+// with part B, the day a body does.
 
 /** A Container a body names: the project's, since a group cannot pick another project's bin. */
 export async function requireContainer(tx: Tx, scope: Scope, id: string | null | undefined, path = "containerId"): Promise<void> {
   if (id == null) return
-  await requireRow(tx, container, inProject(container, scope, id), { path, message: NOT_A_CONTAINER })
+  await requireRow(tx, container, inProject(container, scope, id), { path, message: "Not a container of this project" })
 }
 
 /** A Service Provider a body names: the company's, since the provider is the company's counterparty and no project's. */
