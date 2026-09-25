@@ -34,9 +34,11 @@
 // `requireGroupReferences`, held like the others, their sentences spelled in
 // routes/references.ts — and, since the review round (#79's rule: a status
 // gates a new reference and never an existing one), a vehicle named afresh
-// is not retired and a driver named afresh is active (routes/statuses.ts),
-// where a group whose vehicle later retires is not refused on an unrelated
-// patch. The plural lookup reads those two sets as whole rows and hands them
+// is not retired and a driver named afresh is active — a 409 naming the row
+// and its status, run after every 400 through `requireFleetInService`
+// (routes/statuses.ts) — where a group whose vehicle later retires is not
+// refused on an unrelated patch. The plural lookup reads those two sets as
+// whole rows and hands them
 // back, since what a body names is what the next rule reads: a group naming
 // both names a driver who may take that vehicle, and `requireGroupDriver` is
 // the licence rule of @waste/domain/resources/licence over those rows,
@@ -338,9 +340,9 @@ export const NO_FLEET: FleetRows = { vehicles: new Map(), drivers: new Map() }
 /**
  * Every powered vehicle of the project a body names, read whole in one
  * statement: the first entry naming none is handed to the singular check
- * (a 400 in its words), and then, in body order, a vehicle named afresh is
- * held to its status — a retired one is refused at its entry
- * (routes/statuses.ts). The rows come back for the licence rule.
+ * (a 400 in its words). The rows come back for the licence rule and for
+ * `requireFleetInService`, which holds them to their status once every 400
+ * has passed.
  */
 async function vehiclesNamed(tx: Tx, scope: Scope, named: readonly Named[]): Promise<ReadonlyMap<string, VehicleRow>> {
   const ids = [...new Set(named.map((entry) => entry.id))]
@@ -352,14 +354,10 @@ async function vehiclesNamed(tx: Tx, scope: Scope, named: readonly Named[]): Pro
   const found = new Map(rows.map((row) => [row.id, row as VehicleRow] as const))
   const missing = named.find((entry) => !found.has(entry.id))
   if (missing !== undefined) await requireVehicle(tx, scope, missing.id, { kind: "powered-vehicle", path: missing.path })
-  for (const entry of named) {
-    const row = found.get(entry.id)
-    if (row !== undefined) refuseRetiredVehicle(row.status, vehicleLabel(row), entry.path)
-  }
   return found
 }
 
-/** The same for the drivers a body names: the project's, and, named afresh, active. */
+/** The same for the drivers a body names: the project's. */
 async function driversNamed(tx: Tx, scope: Scope, named: readonly Named[]): Promise<ReadonlyMap<string, DriverRow>> {
   const ids = [...new Set(named.map((entry) => entry.id))]
   if (ids.length === 0) return NO_FLEET.drivers
@@ -370,10 +368,6 @@ async function driversNamed(tx: Tx, scope: Scope, named: readonly Named[]): Prom
   const found = new Map(rows.map((row) => [row.id, row as DriverRow] as const))
   const missing = named.find((entry) => !found.has(entry.id))
   if (missing !== undefined) await requireDriver(tx, scope, missing.id, missing.path)
-  for (const entry of named) {
-    const row = found.get(entry.id)
-    if (row !== undefined) refuseUnavailableDriver(row.status, row.name, entry.path)
-  }
   return found
 }
 
@@ -383,11 +377,11 @@ async function driversNamed(tx: Tx, scope: Scope, named: readonly Named[]): Prom
  * check of routes/references.ts for the family's sentence): a waste fraction,
  * a container type and a vehicle type are the company's, a container is the
  * scheme's project's, a Service Provider the company's, and, since Resources
- * (Issue #101), a vehicle is a powered vehicle of the scheme's project that is
- * not retired and a driver one of its drivers who is active. The first entry
- * that is wrong, set by set in the order a body reads, is a 400 at its path.
- * The vehicles and drivers are read whole and handed back, since the licence
- * rule reads the same rows next.
+ * (Issue #101), a vehicle is a powered vehicle of the scheme's project and a
+ * driver one of its drivers. The first entry that is wrong, set by set in the
+ * order a body reads, is a 400 at its path. The vehicles and drivers are read
+ * whole and handed back, since the licence rule reads the same rows next and
+ * `requireFleetInService` holds them to their status after every 400.
  */
 export async function requireGroupReferences(tx: Tx, scope: Scope, refs: GroupReferences): Promise<FleetRows> {
   await eachPresent(tx, wasteFraction, wasteFraction.id, scope.companyId, refs.fractions, (entry) => requireWasteFraction(tx, scope.companyId, entry.id, entry.path))
@@ -398,6 +392,26 @@ export async function requireGroupReferences(tx: Tx, scope: Scope, refs: GroupRe
   const vehicles = await vehiclesNamed(tx, scope, refs.vehicles)
   const drivers = await driversNamed(tx, scope, refs.drivers)
   return { vehicles, drivers }
+}
+
+/**
+ * The fleet a body named afresh is in service (#79's rule, routes/statuses.ts):
+ * a retired vehicle, an inactive or a suspended driver is a 409 naming the
+ * row, its status and what a collection group needs, the vehicles before the
+ * drivers in body order — `refs` as `requireGroupReferences` was handed them
+ * and `rows` as it answered, so nothing is read again. A door runs it after
+ * every 400 the body can earn and before any other 409, since the id is right
+ * and the row is there, and what refuses is the state it is in.
+ */
+export function requireFleetInService(refs: GroupReferences, rows: FleetRows): void {
+  for (const { id } of refs.vehicles) {
+    const row = rows.vehicles.get(id)
+    if (row !== undefined) refuseRetiredVehicle(row.status, vehicleLabel(row), "a collection group")
+  }
+  for (const { id } of refs.drivers) {
+    const row = rows.drivers.get(id)
+    if (row !== undefined) refuseUnavailableDriver(row.status, row.name, "a collection group")
+  }
 }
 
 /** Today on a project's clock, asked for at most once per request. */

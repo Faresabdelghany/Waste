@@ -223,21 +223,26 @@ describe("the fleet and place fields of the scheme and group endpoints", { skip:
       assert.deepEqual(smallTruck.errors, [{ path: "vehicleId", message: "Not a powered vehicle of this project" }], "Harbor's B truck is another project's and is refused before any licence is looked at")
     })
 
-    test("a vehicle or a driver named afresh is in service: a retired vehicle, an inactive or a suspended driver is refused at the entry, on every door", async () => {
-      const inScheme = await refused(await post(body("Retired crew", { collectionGroups: [ruleGroup("A", ["monday", "thursday"]), ruleGroup("B", ["monday"], { vehicleId: fleet.vehicles.retired.id })] })), 400)
-      assert.deepEqual(inScheme.errors, [{ path: "collectionGroups.1.vehicleId", message: "WH-99 is retired" }])
-      const inSchemeDriver = await refused(await post(body("Suspended crew", { collectionGroups: [ruleGroup("A", ["monday", "thursday"], { vehicleId: fleet.vehicles.wh24.id, driverId: fleet.drivers.peter.id })] })), 400)
-      assert.deepEqual(inSchemeDriver.errors, [{ path: "collectionGroups.0.driverId", message: "Peter Lund is suspended" }], "the status is refused before the licence, which Peter holds")
+    test("a vehicle or a driver named afresh is in service: a retired vehicle, an inactive or a suspended driver is a 409 naming its status, on every door, after every 400", async () => {
+      const inScheme = await refused(await post(body("Retired crew", { collectionGroups: [ruleGroup("A", ["monday", "thursday"]), ruleGroup("B", ["monday"], { vehicleId: fleet.vehicles.retired.id })] })), 409)
+      assert.equal(inScheme.detail, "WH-99 is retired; a collection group needs a vehicle in service", "the row is there and its status refuses: a 409 naming it, not the 400 a missing id earns")
+      const inSchemeDriver = await refused(await post(body("Suspended crew", { collectionGroups: [ruleGroup("A", ["monday", "thursday"], { vehicleId: fleet.vehicles.wh24.id, driverId: fleet.drivers.peter.id })] })), 409)
+      assert.equal(inSchemeDriver.detail, "Peter Lund is suspended; a collection group needs an active driver", "the licence, which Peter holds, passes, and the status refuses")
+      const elsewhereFirst = await refused(
+        await post(body("Retired and elsewhere", { collectionGroups: [ruleGroup("A", ["monday", "thursday"], { vehicleId: fleet.vehicles.retired.id }), ruleGroup("B", ["monday"], { driverId: fleet.drivers.henrik.id })] })),
+        400,
+      )
+      assert.deepEqual(elsewhereFirst.errors, [{ path: "collectionGroups.1.driverId", message: "Not a driver of this project" }], "every 400 comes before the status 409: a driver who is not here is told first, retired vehicle or not")
       const created = await scheme("In service")
-      const retired = await refused(await addGroup(created.id, ruleGroup("Retired", ["monday"], { vehicleId: fleet.vehicles.retired.id })), 400)
-      assert.deepEqual(retired.errors, [{ path: "vehicleId", message: "WH-99 is retired" }])
-      const inactive = await refused(await addGroup(created.id, ruleGroup("Karen", ["monday"], { driverId: fleet.drivers.karen.id })), 400)
-      assert.deepEqual(inactive.errors, [{ path: "driverId", message: "Karen Holt is inactive" }], "a driver alone is asked no licence, and still has to be active")
+      const retired = await refused(await addGroup(created.id, ruleGroup("Retired", ["monday"], { vehicleId: fleet.vehicles.retired.id })), 409)
+      assert.equal(retired.detail, "WH-99 is retired; a collection group needs a vehicle in service")
+      const inactive = await refused(await addGroup(created.id, ruleGroup("Karen", ["monday"], { driverId: fleet.drivers.karen.id })), 409)
+      assert.equal(inactive.detail, "Karen Holt is inactive; a collection group needs an active driver", "a driver alone is asked no licence, and still has to be active")
       const [group] = created.collectionGroups
-      const patchedVehicle = await refused(await patchGroup(group.id, { vehicleId: fleet.vehicles.retired.id }), 400)
-      assert.deepEqual(patchedVehicle.errors, [{ path: "vehicleId", message: "WH-99 is retired" }])
-      const patchedDriver = await refused(await patchGroup(group.id, { driverId: fleet.drivers.peter.id }), 400)
-      assert.deepEqual(patchedDriver.errors, [{ path: "driverId", message: "Peter Lund is suspended" }])
+      const patchedVehicle = await refused(await patchGroup(group.id, { vehicleId: fleet.vehicles.retired.id }), 409)
+      assert.equal(patchedVehicle.detail, "WH-99 is retired; a collection group needs a vehicle in service")
+      const patchedDriver = await refused(await patchGroup(group.id, { driverId: fleet.drivers.peter.id }), 409)
+      assert.equal(patchedDriver.detail, "Peter Lund is suspended; a collection group needs an active driver")
       assert.deepEqual(await oneGroup(group.id), group, "nothing written")
     })
 
@@ -255,8 +260,8 @@ describe("the fleet and place fields of the scheme and group endpoints", { skip:
       const recrewed = await patchedGroup(group.id, { driverId: fleet.drivers.jonas.id, vehicleId: null })
       assert.deepEqual([recrewed.vehicleId, recrewed.driverId], [null, fleet.drivers.jonas.id], "and the group is taken off the retired truck")
       const other = await added(created.id, ruleGroup("Glass", ["thursday"]))
-      const afresh = await refused(await patchGroup(other.id, { vehicleId: fleet.vehicles.drifting.id }), 400)
-      assert.deepEqual(afresh.errors, [{ path: "vehicleId", message: "WH-77 is retired" }], "named afresh, the same vehicle is refused")
+      const afresh = await refused(await patchGroup(other.id, { vehicleId: fleet.vehicles.drifting.id }), 409)
+      assert.equal(afresh.detail, "WH-77 is retired; a collection group needs a vehicle in service", "named afresh, the same vehicle is refused")
     })
   })
 

@@ -19,12 +19,13 @@
 // unloading station and the group a vehicle and a default driver, and #101's
 // slice 6 the rules that hold them: the depot is one of the project's and the
 // station one of the company's (400 at the field, routes/references.ts);
-// a group's vehicle is a powered vehicle of the project, not retired when
-// named afresh, and its driver one who is active when named afresh and may
-// take the vehicle on the day the scheme starts or today, whichever is later
-// — so a patch that moves the start later judges the groups' drivers again on
-// the new start, since that day moved, refused at `validFrom` — and on a
-// validated scheme no vehicle or driver is on two groups a shared day
+// a group's vehicle is a powered vehicle of the project and its driver one
+// who may take the vehicle on the day the scheme starts or today, whichever
+// is later — so a patch that moves the start later judges the groups' drivers
+// again on the new start, since that day moved, refused at `validFrom` —
+// named afresh, the vehicle is not retired and the driver is active (a 409
+// naming the row and its status, after every 400, routes/statuses.ts), and on
+// a validated scheme no vehicle or driver is on two groups a shared day
 // (routes/scheme-groups.ts, with the other structural rules). A rule's vehicle
 // type is one of the company's rows since the same migration. Today is the
 // app's clock rendered on the project's, handed in as `now`.
@@ -99,6 +100,7 @@ import {
   pickOf,
   projectToday,
   referencesOf,
+  requireFleetInService,
   requireGroupDriver,
   requireGroupReferences,
   requireNotPickedTwice,
@@ -191,16 +193,16 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         description:
           "Writes a route scheme in one project, which must be a project the caller works in, with the collection groups it starts with — " +
           GROUPS_BOUND +
-          ". The planning area, where given, is one of that project's; so is the depot the routes depart from, and the unloading station they empty at is one of this company's. Every group finds its stops one way: a rule group carries a rule naming one or more waste fractions of this company, none or more container types of this company and, optionally, a vehicle type of this company, and picks no containers; a manual group picks one or more containers of this project in stop order and carries no rule. A group's service provider is this company's. A group's vehicle, where given, is a powered vehicle of that project that is not retired, and its driver one of that project's drivers who is active — an inactive or a suspended one is refused naming the status, since a status gates a new reference and never an existing one; a group naming both names a driver who holds the licence class the vehicle requires on the day the scheme's period starts or today, whichever is later — refused at the group's `driverId` with the reason. A group's days lie within the scheme's service days, and no container is picked by two groups that run on a shared day — the entry is refused naming the group and the day. Groups take positions 1..n in the body's order where a position is absent. The period is half-open, `validFrom` the first day in force and `validTo` the first day out of it, absent meaning the scheme runs on; one scheme of a name is in force at a time in a project, so a new version of a name starts when the old ends and an overlapping one is refused. The week rotation is given with `every-2-weeks` and with nothing else, and a daily scheme serves every weekday. `status` defaults to `draft`, which accepts partial configuration; a scheme created `validated` is held to the structural rules — every service day has a collection group, a rule group names a waste fraction, a manual group picks a container, a rule group has a planning area to match inside, and no vehicle or driver is on two collection groups that run on a shared day — and refused with every sentence that fails. The server mints every id.",
+          ". The planning area, where given, is one of that project's; so is the depot the routes depart from, and the unloading station they empty at is one of this company's. Every group finds its stops one way: a rule group carries a rule naming one or more waste fractions of this company, none or more container types of this company and, optionally, a vehicle type of this company, and picks no containers; a manual group picks one or more containers of this project in stop order and carries no rule. A group's service provider is this company's. A group's vehicle, where given, is a powered vehicle of that project, and its driver one of that project's drivers; named afresh, the vehicle is not retired and the driver is active — a retired vehicle, an inactive or a suspended driver is refused (409) naming the row and its status, after every 400, since a status gates a new reference and never an existing one; a group naming both names a driver who holds the licence class the vehicle requires on the day the scheme's period starts or today, whichever is later — refused at the group's `driverId` with the reason. A group's days lie within the scheme's service days, and no container is picked by two groups that run on a shared day — the entry is refused naming the group and the day. Groups take positions 1..n in the body's order where a position is absent. The period is half-open, `validFrom` the first day in force and `validTo` the first day out of it, absent meaning the scheme runs on; one scheme of a name is in force at a time in a project, so a new version of a name starts when the old ends and an overlapping one is refused. The week rotation is given with `every-2-weeks` and with nothing else, and a daily scheme serves every weekday. `status` defaults to `draft`, which accepts partial configuration; a scheme created `validated` is held to the structural rules — every service day has a collection group, a rule group names a waste fraction, a manual group picks a container, a rule group has a planning area to match inside, and no vehicle or driver is on two collection groups that run on a shared day — and refused with every sentence that fails. The server mints every id.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The route scheme as it was written, with its collection groups.", RouteScheme),
           400: describeProblem(
-            `The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, gives the week rotation with the wrong cadence, leaves a weekday out of a daily scheme, carries no group or more than ${GROUPS_MAX}, names a group twice, runs a group on a day the scheme does not serve, gives a group both a rule and containers or neither, picks a container two groups run on the same day, names a group's vehicle that is retired or a driver who is inactive or suspended, names a group's driver who may not take the group's vehicle, or names a planning area, depot, unloading station, waste fraction, container type, vehicle type, container, service provider, vehicle or driver outside the scope its key allows — each at the entry that is wrong.`,
+            `The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, gives the week rotation with the wrong cadence, leaves a weekday out of a daily scheme, carries no group or more than ${GROUPS_MAX}, names a group twice, runs a group on a day the scheme does not serve, gives a group both a rule and containers or neither, picks a container two groups run on the same day, names a group's driver who may not take the group's vehicle, or names a planning area, depot, unloading station, waste fraction, container type, vehicle type, container, service provider, vehicle or driver outside the scope its key allows — each at the entry that is wrong.`,
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `route-studio.schemes`."),
-          409: describeProblem("A route scheme of this name is already in force over part of that period, or the scheme is created `validated` and does not hold together: the detail lists every structural sentence that fails."),
+          409: describeProblem("A group's vehicle is retired or its driver is inactive or suspended, a route scheme of this name is already in force over part of that period, or the scheme is created `validated` and does not hold together: the detail lists every structural sentence that fails."),
         },
       }),
       guard,
@@ -214,17 +216,19 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         const scope: Scope = { companyId: principal.companyId, projectId: values.projectId }
 
         // The 400s first, each at its entry: what the body points at, and
-        // the picks across its groups. Then the 409s: the structure, and the
-        // period the database refuses.
+        // the picks across its groups. Then the 409s: the fleet's statuses,
+        // the structure, and the period the database refuses.
         await requirePlanningArea(tx, scope, values.planningAreaId)
         await requireDepot(tx, scope, values.depotId)
         await requireUnloadingStation(tx, principal.companyId, values.unloadingStationId)
-        const rows = await requireGroupReferences(tx, scope, mergeReferences(asked.map((group, n) => referencesOf(group, { prefix: `collectionGroups.${n}.` }))))
+        const refs = mergeReferences(asked.map((group, n) => referencesOf(group, { prefix: `collectionGroups.${n}.` })))
+        const rows = await requireGroupReferences(tx, scope, refs)
         const today = projectToday(tx, scope, now)
         for (const [n, group] of asked.entries()) {
           await requireGroupDriver(tx, scope, values, group, { path: `collectionGroups.${n}.driverId`, rows, today })
           requireNotPickedTwice(asked.slice(0, n).map(pickOf), pickOf(group), (m) => `collectionGroups.${n}.containerIds.${m}`)
         }
+        requireFleetInService(refs, rows)
         await requireStructure(tx, principal.companyId, { status: values.status, serviceDays: values.serviceDays, planningAreaId: values.planningAreaId ?? null }, asked)
 
         const schemeId = newId()

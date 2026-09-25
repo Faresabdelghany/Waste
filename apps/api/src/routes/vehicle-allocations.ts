@@ -24,20 +24,24 @@
 // the create and the change alike, since a change composes the row it leaves
 // behind from the body and the stored row: the window is ordered (the
 // contracts hold a body carrying both bounds, this the merged pair, in the
-// contracts' words); the vehicle is a `powered-vehicle` of the project and
-// not retired; the trailer, where named, a `trailer` of it and not retired —
-// the kind is what keeps an allocation's two vehicle columns apart, and the
-// one case the kinds cannot see, a trailer standing as another live
-// allocation's `vehicle_id` over the window (a row an import wrote, since the
-// API never writes one), is a 400 on `trailerId` here (#101 §6.21); the
-// driver, where named, one of the project's who is active and holds the class
-// the vehicle requires on the window's last day — the last instant inside the
-// half-open window, a millisecond before `plannedTo`, rendered as a day in
-// the project's timezone (routes/days.ts), so a window ending at midnight is
-// judged on the day before, the day the driver is still meant to be driving —
-// refused on `driverId` with the domain's sentence; the depot the project's
-// and the fraction the company's. Then the write, under `refuseOverlap` with
-// one sentence per constraint saying whose window it was.
+// contracts' words); the vehicle is a `powered-vehicle` of the project; the
+// trailer, where named, a `trailer` of it — the kind is what keeps an
+// allocation's two vehicle columns apart, and the one case the kinds cannot
+// see, a trailer standing as another live allocation's `vehicle_id` over the
+// window (a row an import wrote, since the API never writes one), is a 400 on
+// `trailerId` here (#101 §6.21); the driver, where named, one of the
+// project's who holds the class the vehicle requires on the window's last day
+// — the last instant inside the half-open window, a millisecond before
+// `plannedTo`, rendered as a day in the project's timezone (routes/days.ts),
+// so a window ending at midnight is judged on the day before, the day the
+// driver is still meant to be driving — refused on `driverId` with the
+// domain's sentence; the depot the project's and the fraction the company's.
+// Then, after every one of those 400s, the statuses (routes/statuses.ts): a
+// vehicle or a trailer named afresh is in service and a driver named afresh
+// is active, and a retired, an inactive or a suspended one is a 409 naming
+// the row and its status, like every status gate — the id is right and the
+// row is there. Then the write, under `refuseOverlap` with one sentence per
+// constraint saying whose window it was.
 //
 // What is held is what the body moved (#79's rule: a status gates a new
 // reference and never an existing one). The create moves everything. A change
@@ -243,16 +247,17 @@ const movedBy = (body: Omit<VehicleAllocationChange, "reason">): Moved => ({
 /**
  * Every rule of §4 over one reservation, over the parts of it that `moved`,
  * in the order a body reads: the window ordered; the vehicle a powered
- * vehicle of the project and, named afresh, not retired; the trailer a
- * trailer of it, named afresh not retired, and not the vehicle of another
- * live allocation over the window (`except` the row being changed); the
- * driver one of the project's, named afresh active, who holds the vehicle's
- * class on the window's last day on the project's clock — judged again
- * whenever the driver, the vehicle or the window moved; the depot the
- * project's; the fraction the company's. Each refusal is a 400 at the field
- * that carried it. A stored row is read only where a rule or an overlap
- * sentence needs it, and its status is never asked; the rows read are handed
- * back for the sentences.
+ * vehicle of the project; the trailer a trailer of it and not the vehicle of
+ * another live allocation over the window (`except` the row being changed);
+ * the driver one of the project's who holds the vehicle's class on the
+ * window's last day on the project's clock — judged again whenever the
+ * driver, the vehicle or the window moved; the depot the project's; the
+ * fraction the company's. Each of those refusals is a 400 at the field that
+ * carried it. Then the statuses, after every 400 and each a 409 naming the
+ * row and its status (routes/statuses.ts): a vehicle or a trailer named
+ * afresh is not retired, a driver named afresh is active. A stored row is
+ * read only where a rule or an overlap sentence needs it, and its status is
+ * never asked; the rows read are handed back for the sentences.
  */
 async function holdReservation(tx: Tx, scope: Scope, reservation: Reservation, moved: Moved, except?: string): Promise<Reserved> {
   if (moved.window && !windowOrdered(reservation)) throw invalidRequest("body", [{ path: "plannedTo", message: WINDOW_ENDS_AFTER_IT_STARTS }])
@@ -261,11 +266,9 @@ async function holdReservation(tx: Tx, scope: Scope, reservation: Reservation, m
   const judgeDriver = reservation.driverId !== null && (moved.driverId || moved.vehicleId || moved.window)
   // The vehicle is read when named afresh, when the window moved (its overlap sentence), and whenever the driver is judged (its class).
   const vehicle = moved.vehicleId || moved.window || judgeDriver ? await findVehicle(tx, scope, reservation.vehicleId, "powered-vehicle", "vehicleId") : null
-  if (vehicle !== null && moved.vehicleId) refuseRetiredVehicle(vehicle.status, vehicleLabel(vehicle), "vehicleId")
 
   const trailer = reservation.trailerId === null || !(moved.trailerId || moved.window) ? null : await findVehicle(tx, scope, reservation.trailerId, "trailer", "trailerId")
   if (trailer !== null) {
-    if (moved.trailerId) refuseRetiredVehicle(trailer.status, vehicleLabel(trailer), "trailerId")
     const [clash] = await tx
       .select({ id: vehicleAllocation.id })
       .from(vehicleAllocation)
@@ -284,7 +287,6 @@ async function holdReservation(tx: Tx, scope: Scope, reservation: Reservation, m
 
   const driver = reservation.driverId === null || !judgeDriver ? null : await findDriver(tx, scope, reservation.driverId)
   if (driver !== null && vehicle !== null) {
-    if (moved.driverId) refuseUnavailableDriver(driver.status, driver.name, "driverId")
     // The window's last day, where the driver is: the licence rule takes a day and refuses an instant, and the end itself is outside the window.
     const timezone = await projectTimezone(tx, scope.companyId, scope.projectId)
     const refusal = licenceRefusal(driver, vehicle.requiredLicenceClass, lastDayInside(new Date(reservation.plannedTo), timezone))
@@ -295,6 +297,11 @@ async function holdReservation(tx: Tx, scope: Scope, reservation: Reservation, m
 
   if (moved.depotId) await requireDepot(tx, scope, reservation.depotId)
   if (moved.wasteFractionId) await requireWasteFraction(tx, scope.companyId, reservation.wasteFractionId)
+
+  // The statuses last, 409s after every 400: what the body named afresh is in service.
+  if (vehicle !== null && moved.vehicleId) refuseRetiredVehicle(vehicle.status, vehicleLabel(vehicle), "an allocation")
+  if (trailer !== null && moved.trailerId) refuseRetiredVehicle(trailer.status, vehicleLabel(trailer), "an allocation", "trailer")
+  if (driver !== null && moved.driverId) refuseUnavailableDriver(driver.status, driver.name, "an allocation")
   return { vehicle, driver, trailer }
 }
 
@@ -358,7 +365,7 @@ async function setStatus(tx: Tx, principal: Principal, id: string, status: Alloc
 }
 
 const RESERVATION_RULES =
-  "The vehicle is a powered vehicle of that project and not retired; the trailer, where given, a trailer of it, not retired, and not the vehicle of another live allocation over the window; the driver, where given, a driver of that project who is active — an inactive or a suspended one is refused naming the status — and holds the licence class the vehicle requires on the window's last day, the last instant inside it rendered in the project's timezone, so a window ending at midnight is judged on the day before — refused at `driverId` with the reason (no class on record, a class too low, a licence expiring before the window ends); the depot one of that project's, the waste fraction this company's. The window is two instants and the end comes after the start."
+  "The vehicle is a powered vehicle of that project; the trailer, where given, a trailer of it and not the vehicle of another live allocation over the window; the driver, where given, a driver of that project who holds the licence class the vehicle requires on the window's last day, the last instant inside it rendered in the project's timezone, so a window ending at midnight is judged on the day before — refused at `driverId` with the reason (no class on record, a class too low, a licence expiring before the window ends); the depot one of that project's, the waste fraction this company's. The window is two instants and the end comes after the start. Then, after every such 400, the statuses: a vehicle or a trailer named afresh is in service and a driver named afresh is active — a retired, an inactive or a suspended one is refused (409) naming the row, its status and what the allocation needs, since the id is right and the row is there."
 
 export function vehicleAllocationRoutes(guard: MiddlewareHandler<AuthEnv>) {
   return new Hono<AuthEnv>()
@@ -422,11 +429,11 @@ export function vehicleAllocationRoutes(guard: MiddlewareHandler<AuthEnv>) {
         responses: {
           201: describeJson("The allocation as it was written.", VehicleAllocation),
           400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the instant it starts, asks to be created `released`, names a vehicle that is not a powered vehicle of that project or is retired, a trailer that is not a trailer of it or is retired or is another live allocation's vehicle over the window, a driver who is not that project's, is inactive or suspended, or may not take the vehicle on the window's last day, a depot that is not that project's, or a waste fraction that is not this company's — each at the field that is wrong.",
+            "The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the instant it starts, asks to be created `released`, names a vehicle that is not a powered vehicle of that project, a trailer that is not a trailer of it or is another live allocation's vehicle over the window, a driver who is not that project's or may not take the vehicle on the window's last day, a depot that is not that project's, or a waste fraction that is not this company's — each at the field that is wrong.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `fleet.vehicle-planning`."),
-          409: describeProblem("The vehicle, the driver or the trailer is already allocated over part of that window; the detail says which."),
+          409: describeProblem("The vehicle or the trailer named is retired, the driver named is inactive or suspended, or the vehicle, the driver or the trailer is already allocated over part of that window; the detail says which."),
         },
       }),
       guard,
@@ -494,17 +501,17 @@ export function vehicleAllocationRoutes(guard: MiddlewareHandler<AuthEnv>) {
         description:
           "The `change` command: moves the vehicle, the driver, the trailer, the depot, the fraction, the capacity, the window or the note of one allocation, with a reason; at least one field beside the reason must be given, and a null clears a nullable one. The fields the body moves are held to the create's rules over the row the change leaves behind — the body's fields over the stored ones — and so is what depends on them: " +
           RESERVATION_RULES +
-          " A status gates a new reference and never an existing one: a new vehicle, trailer or driver is held to its status and a stored one is not, so a note-only change to an allocation whose vehicle has since retired or whose driver's licence has since run out is taken as it stands; moving the vehicle or the window judges the driver's licence again, against the new vehicle or on the new last day; moving the window judges the trailer's other role again; and the window is held ordered when either bound moves. A window touching another live allocation's is refused (409) saying whose it was. A released allocation does not change (409): the window is freed, and what is wanted is a new allocation. Runs under the allocation's row lock, and appends the `change` event with the snapshot and the reason in the same transaction; the status does not move.",
+          " A status gates a new reference and never an existing one: a new vehicle, trailer or driver is held to its status (409, naming the row and its status, after every 400) and a stored one is not, so a note-only change to an allocation whose vehicle has since retired or whose driver's licence has since run out is taken as it stands; moving the vehicle or the window judges the driver's licence again, against the new vehicle or on the new last day; moving the window judges the trailer's other role again; and the window is held ordered when either bound moves. A window touching another live allocation's is refused (409) saying whose it was. A released allocation does not change (409): the window is freed, and what is wanted is a new allocation. Runs under the allocation's row lock, and appends the `change` event with the snapshot and the reason in the same transaction; the status does not move.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The allocation as it now stands.", VehicleAllocation),
           400: describeProblem(
-            "The path does not hold an id, or the body changes nothing beside the reason, has no reason, names a member the caller does not own (the project and the status included), leaves the window ending on or before its start, or names a vehicle, trailer, driver, depot or fraction the create would refuse — each at the field that is wrong.",
+            "The path does not hold an id, or the body changes nothing beside the reason, has no reason, names a member the caller does not own (the project and the status included), leaves the window ending on or before its start, or names a vehicle, trailer, driver, depot or fraction the create would refuse at its field — each at the field that is wrong.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `fleet.vehicle-planning`."),
           404: describeProblem("No vehicle allocation with that id in the projects this account works in."),
-          409: describeProblem("The allocation is released, or the vehicle, the driver or the trailer is already allocated over part of the new window; the detail says which."),
+          409: describeProblem("The allocation is released, a vehicle or a trailer named afresh is retired, a driver named afresh is inactive or suspended, or the vehicle, the driver or the trailer is already allocated over part of the new window; the detail says which."),
         },
       }),
       guard,
