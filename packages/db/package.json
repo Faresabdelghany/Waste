@@ -16,7 +16,8 @@
     "generate": "drizzle-kit generate",
     "migrate": "node --env-file-if-exists=../../.env --import tsx scripts/migrate.ts",
     "bootstrap": "node --env-file-if-exists=../../.env --import tsx scripts/bootstrap-local.ts",
-    "seed": "node --env-file-if-exists=../../.env --import tsx scripts/seed-demo.ts"
+    "seed": "node --env-file-if-exists=../../.env --import tsx scripts/seed-demo.ts",
+    "pgboss-plan": "node --import tsx scripts/pgboss-plan.ts"
   },
   "dependencies": {
     "@waste/contracts": "workspace:*",
@@ -30,6 +31,7 @@
     "@typescript/native": "npm:typescript@^7.0.2",
     "@waste/tooling": "workspace:*",
     "drizzle-kit": "^0.31.10",
+    "pg-boss": "^12.34.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2"
   }
 }

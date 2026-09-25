@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { planLocalBootstrap, planSyncBootstrap } from "../bootstrap"
-import { API_ROLE, SYNC_ROLE } from "../roles"
+import { planLocalBootstrap, planSyncBootstrap, planWorkerBootstrap } from "../bootstrap"
+import { API_ROLE, SYNC_ROLE, WORKER_ROLE } from "../roles"
 
 const adminUrl = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
 
@@ -47,5 +47,20 @@ describe("planSyncBootstrap", () => {
     )
     assert.throws(() => planSyncBootstrap({ adminUrl, syncUrl: `postgresql://${API_ROLE}:pw@127.0.0.1:54322/postgres` }), /SYNC_DATABASE_URL logs in as "wms_api", not "wms_sync"/)
     assert.throws(() => planSyncBootstrap({ adminUrl, syncUrl: `postgresql://${SYNC_ROLE}@127.0.0.1:54322/postgres` }), /SYNC_DATABASE_URL carries no password for the wms_sync role/)
+  })
+})
+
+describe("planWorkerBootstrap", () => {
+  test("takes the worker role's password from WORKER_DATABASE_URL, the same rules under the third name (Issue #97 part B)", () => {
+    assert.deepEqual(planWorkerBootstrap({ adminUrl, workerUrl: `postgresql://${WORKER_ROLE}:w%40rker@127.0.0.1:54322/postgres` }), { adminUrl, role: WORKER_ROLE, password: "w@rker" })
+  })
+
+  test("refuses a hosted admin URL, a WORKER_DATABASE_URL logging in as anyone else, and an empty password, naming the variable", () => {
+    assert.throws(
+      () => planWorkerBootstrap({ adminUrl: "postgresql://postgres.ref:secret@aws-0-eu-north-1.pooler.supabase.com:5432/postgres", workerUrl: `postgresql://${WORKER_ROLE}:w@127.0.0.1:54322/postgres` }),
+      /local stack.*ALTER ROLE wms_worker WITH LOGIN PASSWORD/,
+    )
+    assert.throws(() => planWorkerBootstrap({ adminUrl, workerUrl: `postgresql://${API_ROLE}:w@127.0.0.1:54322/postgres` }), /WORKER_DATABASE_URL logs in as "wms_api", not "wms_worker"/)
+    assert.throws(() => planWorkerBootstrap({ adminUrl, workerUrl: `postgresql://${WORKER_ROLE}@127.0.0.1:54322/postgres` }), /WORKER_DATABASE_URL carries no password for the wms_worker role/)
   })
 })
