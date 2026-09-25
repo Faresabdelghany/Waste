@@ -47,6 +47,7 @@ import type { ProblemFieldError } from "@waste/contracts/problem"
 import {
   DAILY_SERVES_EVERY_DAY,
   dailyServesEveryDay,
+  GROUPS_MAX,
   Occurrence,
   OccurrenceQuery,
   RouteScheme,
@@ -63,7 +64,7 @@ import { project } from "@waste/db/schema/organisation"
 import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import type { HolidayPolicy, RecurrenceFrequency, ServiceDay, WeekRotation } from "@waste/domain/planning/vocabulary"
 import { holidayLabel, holidayNamesFor, withCarriedNames } from "@waste/domain/route-schemes/holiday-names"
-import { generateOccurrences, NO_HOLIDAYS, type HolidayList } from "@waste/domain/route-schemes/occurrences"
+import { generateOccurrences, NO_HOLIDAYS, SHIFT_SEARCH_DAYS, type HolidayList } from "@waste/domain/route-schemes/occurrences"
 import { addDays, type SchemeRecurrence } from "@waste/domain/route-schemes/recurrence"
 import { count } from "@waste/domain/text"
 import { and, asc, eq, gt, gte, lte } from "drizzle-orm"
@@ -107,13 +108,8 @@ const Occurrences = z.array(Occurrence)
 /** What a narrowing of the service days is refused with when groups run on the days it drops; they have to be moved first. */
 const groupsLeftOutside = (rows: number): string => `${count(rows, "collection group")} ${rows === 1 ? "runs" : "run"} on days the scheme would no longer serve`
 
-/**
- * How far a shift can carry a collection from its recurrence date: the bound
- * of the domain's `shiftToWorkingDay` walk (@waste/domain/route-schemes/occurrences,
- * a literal there, not exported). No holiday further from the window than
- * this can bear on an occurrence in it, so the holiday read stops there.
- */
-const SHIFT_SEARCH_DAYS = 60
+/** The bounds a create body's group list is held to, stated in prose the way every bound in this API is. */
+const GROUPS_BOUND = `at least one, since a scheme without explicit groups has one implicit group and the server writes it as a row, and at most ${GROUPS_MAX}, since each may pick two hundred containers and a body past that is an import rather than a form`
 
 /**
  * The two recurrence rules a patch escapes: the contracts hold a body that
@@ -181,12 +177,14 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createRouteScheme",
         summary: "Write a route scheme with its collection groups",
         description:
-          "Writes a route scheme in one project, which must be a project the caller works in, with the collection groups it starts with — at least one, since a scheme without explicit groups has one implicit group and the server writes it as a row. The planning area, where given, is one of that project's. Every group finds its stops one way: a rule group carries a rule naming one or more waste fractions of this company, none or more container types of this company and, optionally, a vehicle type, and picks no containers; a manual group picks one or more containers of this project in stop order and carries no rule. A group's service provider is this company's. A group's days lie within the scheme's service days, and no container is picked by two groups that run on a shared day — the entry is refused naming the group and the day. Groups take positions 1..n in the body's order where a position is absent. The period is half-open, `validFrom` the first day in force and `validTo` the first day out of it, absent meaning the scheme runs on; one scheme of a name is in force at a time in a project, so a new version of a name starts when the old ends and an overlapping one is refused. The week rotation is given with `every-2-weeks` and with nothing else, and a daily scheme serves every weekday. `status` defaults to `draft`, which accepts partial configuration; a scheme created `validated` is held to the structural rules — every service day has a collection group, a rule group names a waste fraction, a manual group picks a container, and a rule group has a planning area to match inside — and refused with every sentence that fails. A vehicle and a driver per group, and their licence eligibility, wait for Resources and are not held here. The server mints every id.",
+          "Writes a route scheme in one project, which must be a project the caller works in, with the collection groups it starts with — " +
+          GROUPS_BOUND +
+          ". The planning area, where given, is one of that project's. Every group finds its stops one way: a rule group carries a rule naming one or more waste fractions of this company, none or more container types of this company and, optionally, a vehicle type, and picks no containers; a manual group picks one or more containers of this project in stop order and carries no rule. A group's service provider is this company's. A group's days lie within the scheme's service days, and no container is picked by two groups that run on a shared day — the entry is refused naming the group and the day. Groups take positions 1..n in the body's order where a position is absent. The period is half-open, `validFrom` the first day in force and `validTo` the first day out of it, absent meaning the scheme runs on; one scheme of a name is in force at a time in a project, so a new version of a name starts when the old ends and an overlapping one is refused. The week rotation is given with `every-2-weeks` and with nothing else, and a daily scheme serves every weekday. `status` defaults to `draft`, which accepts partial configuration; a scheme created `validated` is held to the structural rules — every service day has a collection group, a rule group names a waste fraction, a manual group picks a container, and a rule group has a planning area to match inside — and refused with every sentence that fails. A vehicle and a driver per group, and their licence eligibility, wait for Resources and are not held here. The server mints every id.",
         security: BEARER_SECURITY,
         responses: {
           201: describeJson("The route scheme as it was written, with its collection groups.", RouteScheme),
           400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, gives the week rotation with the wrong cadence, leaves a weekday out of a daily scheme, names a group twice, runs a group on a day the scheme does not serve, gives a group both a rule and containers or neither, picks a container two groups run on the same day, or names a planning area, waste fraction, container type, container or service provider outside the scope its key allows — each at the entry that is wrong.",
+            `The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, gives the week rotation with the wrong cadence, leaves a weekday out of a daily scheme, carries no group or more than ${GROUPS_MAX}, names a group twice, runs a group on a day the scheme does not serve, gives a group both a rule and containers or neither, picks a container two groups run on the same day, or names a planning area, waste fraction, container type, container or service provider outside the scope its key allows — each at the entry that is wrong.`,
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `route-studio.schemes`."),
@@ -379,7 +377,8 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>) {
         if (calendar.holidayList !== null) {
           // The project's holidays near enough to the window to bear on it: a
           // recurrence date lies inside it and a shift walks at most
-          // SHIFT_SEARCH_DAYS from one, so nothing further out is read.
+          // SHIFT_SEARCH_DAYS from one (the domain's own bound), so nothing
+          // further out is read and the two cannot diverge.
           const rows = await tx
             .select({ day: collectionCalendarHoliday.day, name: collectionCalendarHoliday.name })
             .from(collectionCalendarHoliday)

@@ -12,9 +12,11 @@ import {
   generateOccurrences,
   isWorkingDay,
   occurrencePreview,
+  SHIFT_SEARCH_DAYS,
   shiftedNote,
   shiftToWorkingDay,
 } from "../occurrences"
+import { addDays } from "../recurrence"
 import {
   DANISH_WEEKEND,
   EGYPT_WEEKEND,
@@ -250,6 +252,14 @@ describe("date helpers", () => {
     assert.equal(shiftToWorkingDay(calendar, "2026-12-25", 1), "2026-12-28")
     assert.equal(shiftToWorkingDay(noHolidays, "2026-09-18", 1), "2026-09-21")
     assert.equal(shiftToWorkingDay(noHolidays, "2026-09-21", -1), "2026-09-18")
+  })
+
+  test("a shift walks at most SHIFT_SEARCH_DAYS out, the bound the API's holiday window reads too", () => {
+    assert.equal(SHIFT_SEARCH_DAYS, 60)
+    // A calendar closed for two hundred days: the walk gives up exactly the bound away, in either direction.
+    const closed = calendarOf(holidayListFromDates(Array.from({ length: 200 }, (_, i) => addDays("2026-01-01", i)), () => "Closed"), DANISH_WEEKEND)
+    assert.equal(shiftToWorkingDay(closed, "2026-03-01", 1), addDays("2026-03-01", SHIFT_SEARCH_DAYS))
+    assert.equal(shiftToWorkingDay(closed, "2026-05-01", -1), addDays("2026-05-01", -SHIFT_SEARCH_DAYS))
   })
 
   test("the weekend is the project's, not Saturday/Sunday: Sunday works and Friday rests in Egypt", () => {

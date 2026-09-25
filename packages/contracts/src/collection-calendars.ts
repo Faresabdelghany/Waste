@@ -75,19 +75,23 @@ type Dated = { validFrom?: unknown; validTo?: unknown; holidays?: unknown }
 
 /**
  * Every holiday of a create body lies inside the period the same body gives.
- * zod 4 runs a check on a body whose fields failed, so a half-seen body — no
- * start, no list, an entry without a day — is not judged here.
+ * zod 4 runs a check on a body whose fields failed without aborting — a day
+ * that is not a calendar day, a list with a day twice — so a half-seen body
+ * (no start, no list) is not judged here, and an entry whose day zod itself
+ * refused is skipped by itself: its issue is zod's, and the well-formed
+ * entries beside it are still held to the period, each at its own position,
+ * so one malformed entry does not hide the judgement of the rest. A day of
+ * the wrong type aborts the parse before any check runs, so it never gets here.
  */
 const holidaysWithinPeriod = (body: Dated, ctx: z.RefinementCtx) => {
   const { validFrom, validTo, holidays } = body
   if (typeof validFrom !== "string" || !Array.isArray(holidays) || (validTo != null && typeof validTo !== "string")) return
-  const dated: { day: string }[] = []
-  for (const holiday of holidays as { day?: unknown }[]) {
-    if (typeof holiday?.day !== "string") return
-    dated.push({ day: holiday.day })
-  }
-  for (const n of holidaysOutside({ validFrom, validTo: validTo as string | null | undefined }, dated)) {
-    ctx.addIssue({ code: "custom", message: OUTSIDE_CALENDAR_PERIOD, path: ["holidays", n, "day"] })
+  const dated = (holidays as { day?: unknown }[]).flatMap((holiday, n) => {
+    const day = IsoDate.safeParse(holiday?.day)
+    return day.success ? [{ n, day: day.data }] : []
+  })
+  for (const i of holidaysOutside({ validFrom, validTo: validTo as string | null | undefined }, dated)) {
+    ctx.addIssue({ code: "custom", message: OUTSIDE_CALENDAR_PERIOD, path: ["holidays", dated[i].n, "day"] })
   }
 }
 

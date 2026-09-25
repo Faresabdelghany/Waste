@@ -133,16 +133,23 @@ export function isWorkingDay(calendar: SchemeCalendar, iso: string): boolean {
   return !calendar.weekend.includes(serviceDayOf(iso)) && !calendar.holidays.has(iso)
 }
 
-/** The nearest working day from the date in the given direction (exclusive). */
+/**
+ * How far a shift may carry a collection from its recurrence date, in days.
+ * Holidays and weekend days cannot block more than a couple of weeks in a
+ * row; the bound only guards against a degenerate list or a 7-day weekend.
+ * Exported because a reader of holidays for a window (the API's occurrence
+ * preview) needs to reach exactly this far past it and no further.
+ */
+export const SHIFT_SEARCH_DAYS = 60
+
+/** The nearest working day from the date in the given direction (exclusive); `SHIFT_SEARCH_DAYS` out at most. */
 export function shiftToWorkingDay(
   calendar: SchemeCalendar,
   iso: string,
   direction: 1 | -1,
 ): string {
   let cursor = iso
-  // Holidays and weekend days cannot block more than a couple of weeks in a
-  // row; the bound only guards against a degenerate list or a 7-day weekend.
-  for (let step = 0; step < 60; step += 1) {
+  for (let step = 0; step < SHIFT_SEARCH_DAYS; step += 1) {
     cursor = addDays(cursor, direction)
     if (isWorkingDay(calendar, cursor)) return cursor
   }

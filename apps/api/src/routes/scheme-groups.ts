@@ -334,11 +334,11 @@ export type GroupSetsToWrite = { id: string; rule: StopMatchingRule | null | und
  * statement.
  */
 export async function writeGroupSets(tx: Tx, scope: Scope, groups: readonly GroupSetsToWrite[]): Promise<void> {
-  const stamp = { companyId: scope.companyId, projectId: scope.projectId }
-  const fractions = groups.flatMap((group) => (group.rule?.wasteFractionIds ?? []).map((wasteFractionId) => ({ id: newId(), ...stamp, collectionGroupId: group.id, wasteFractionId })))
-  const types = groups.flatMap((group) => (group.rule?.containerTypeIds ?? []).map((containerTypeId) => ({ id: newId(), ...stamp, collectionGroupId: group.id, containerTypeId })))
+  const tenant = { companyId: scope.companyId, projectId: scope.projectId }
+  const fractions = groups.flatMap((group) => (group.rule?.wasteFractionIds ?? []).map((wasteFractionId) => ({ id: newId(), ...tenant, collectionGroupId: group.id, wasteFractionId })))
+  const types = groups.flatMap((group) => (group.rule?.containerTypeIds ?? []).map((containerTypeId) => ({ id: newId(), ...tenant, collectionGroupId: group.id, containerTypeId })))
   const containers = groups.flatMap((group) =>
-    (group.containerIds ?? []).map((containerId, index) => ({ id: newId(), ...stamp, collectionGroupId: group.id, containerId, position: index + 1 })),
+    (group.containerIds ?? []).map((containerId, index) => ({ id: newId(), ...tenant, collectionGroupId: group.id, containerId, position: index + 1 })),
   )
   if (fractions.length > 0) await tx.insert(collectionGroupFraction).values(fractions)
   if (types.length > 0) await tx.insert(collectionGroupContainerType).values(types)

@@ -9,6 +9,7 @@ import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
+import { nextMillisecond } from "./clock"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
@@ -70,14 +71,6 @@ const BOW_TIE: Polygon = {
 /** One sentence for whatever PostGIS refuses: the constraint cannot say which of its reasons it was. */
 const NOT_A_VALID_POLYGON = "Not a valid polygon"
 const BOUNDARY_RUNNING = "This planning area already has a boundary in force over that period; end it first"
-
-/**
- * The stamp is the transaction's `now()`, at millisecond precision on the
- * wire, so two requests in one millisecond read the same instant. A claim
- * that the stamp moved waits the millisecond out first; a claim that is not
- * about the stamp compares with `>=`.
- */
-const later = () => new Promise<void>((resolve) => setTimeout(resolve, 5))
 
 describe("the planning area and boundary endpoints", { skip: database.skip }, () => {
   let pool: Database
@@ -317,7 +310,7 @@ describe("the planning area and boundary endpoints", { skip: database.skip }, ()
   describe("PATCH /planning-areas/:id", () => {
     test("changes the name and the purpose and leaves the code, which is not a field of the patch", async () => {
       const created = await area("OP-CEN-30")
-      await later()
+      await nextMillisecond()
       const changed = await patch(olivia, created.id, { name: "Nørrebro", purpose: "notification" })
       assert.deepEqual([changed.code, changed.name, changed.purpose], ["OP-CEN-30", "Nørrebro", "notification"])
       assert.ok(changed.updatedAt > created.updatedAt)
@@ -486,7 +479,7 @@ describe("the planning area and boundary endpoints", { skip: database.skip }, ()
     test("ends a version, reopens it, and redraws it, moving the stamp each time", async () => {
       const created = await area("OP-CEN-71")
       const written = await addBoundary(created.id)
-      await later()
+      await nextMillisecond()
       const ended = await patchBoundary(olivia, written.id, { validTo: JULY })
       assert.equal(ended.validTo, JULY)
       assert.equal(ended.validFrom, JANUARY, "the start does not move")

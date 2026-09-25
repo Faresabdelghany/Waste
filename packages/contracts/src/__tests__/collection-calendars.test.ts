@@ -90,6 +90,18 @@ describe("CollectionCalendarCreate and CollectionCalendarPatch", () => {
     assert.deepEqual(holidaysOutside({ validFrom: "2026-01-01" }, []), [])
   })
 
+  test("judge each holiday by itself: a malformed day has zod's own issue and hides nothing about the entries beside it", () => {
+    // A thirteenth month is a string zod refuses without aborting the parse, so the checks still run — and judge the other entries.
+    const issues = refusal(CollectionCalendarCreate.safeParse({ ...body, holidays: [{ day: "2026-13-01", name: "No such month" }, { day: "2025-12-31", name: "The day before" }, holidays[0]] }))
+    assert.deepEqual(issues.map((issue) => issue.path).sort(), ["holidays.0.day", "holidays.1.day"])
+    assert.deepEqual(issues.filter((issue) => issue.path === "holidays.1.day"), [{ path: "holidays.1.day", message: OUTSIDE_CALENDAR_PERIOD }])
+    const malformed = issues.filter((issue) => issue.path === "holidays.0.day")
+    assert.equal(malformed.length, 1, "the malformed day is refused once, for its shape, and is not also judged against the period")
+    assert.notEqual(malformed[0].message, OUTSIDE_CALENDAR_PERIOD)
+    // A day of the wrong type aborts the parse before any check runs: zod's issue alone, and nothing hidden that could have been said.
+    assert.deepEqual(refusal(CollectionCalendarCreate.safeParse({ ...body, holidays: [{ day: 5, name: null }, { day: "2025-12-31", name: "The day before" }] })).map((issue) => issue.path), ["holidays.0.day"])
+  })
+
   test("refuse a backwards period, two holidays on one day, and more than 400 of them", () => {
     assert.deepEqual(refusal(CollectionCalendarCreate.safeParse({ ...body, validTo: "2026-01-01" })), [{ path: "validTo", message: BACKWARDS }])
     assert.deepEqual(refusal(CollectionCalendarCreate.safeParse({ ...body, holidays: [holidays[0], { day: "2026-01-01", name: "Twice" }] })), [
