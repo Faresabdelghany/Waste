@@ -1,0 +1,91 @@
+# The worker on Fly.io (docs/adr/0007-hosting-api-worker-valhalla.md): one
+# Machine in Stockholm, beside the database in Supabase's eu-north-1 and the
+# API's Machine, on the organisation's private network.
+#
+# Deploy from the repository root, not from this directory:
+#
+#     fly deploy --config apps/worker/fly.toml
+#
+# The working directory is the build context, and the Dockerfile copies the
+# workspace manifests and the packages the worker runs from the root: the
+# context CI builds with (docker build -f apps/worker/Dockerfile .), so the
+# root .dockerignore applies unchanged and there is no apps/worker/.dockerignore.
+# The path under [build] is relative to this file (to verify on the first
+# deploy, as the API's says; if flyctl reports the Dockerfile missing, pass
+# --dockerfile apps/worker/Dockerfile, which wins over the file).
+#
+# WORKER_DATABASE_URL and DATABASE_URL are secrets, set with `fly secrets set`
+# and never written here: both the Supabase session pooler URL, port 5432 on
+# the pooler host, as wms_worker.<project-ref> and wms_api.<project-ref>
+# respectively (env.ts refuses the transaction pooler's 6543). The worker
+# role's hosted login is given by hand, ALTER ROLE wms_worker WITH LOGIN
+# PASSWORD ..., never by bootstrap, whose plan refuses a non-loopback host.
+#
+#     fly secrets set --app waste-worker-dev \
+#       WORKER_DATABASE_URL='postgresql://wms_worker.<project-ref>:...@aws-0-eu-north-1.pooler.supabase.com:5432/postgres' \
+#       DATABASE_URL='postgresql://wms_api.<project-ref>:...@aws-0-eu-north-1.pooler.supabase.com:5432/postgres'
+
+# Global on fly.dev; `fly launch --copy-config` creates the app under it. If
+# the name is taken, change it here and in the secrets command.
+app = "waste-worker-dev"
+# Fly's Stockholm, beside Supabase's eu-north-1 and the API.
+primary_region = "arn"
+
+# What the host sends to stop the process, and how long it waits before
+# SIGKILL. src/main.ts handles SIGTERM (and SIGINT): pg-boss stops taking jobs
+# and a handler in flight gets 10 s to finish (STOP_TIMEOUT_MS in src/boss.ts)
+# while the probe listener drains, then the two application pools close with
+# their own 5 s end timeout. 20 s covers both ceilings in sequence; Fly's
+# default of 5 s would fail a handler mid-write.
+kill_signal = "SIGTERM"
+kill_timeout = "20s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# HOST and PORT are the image's own defaults (Dockerfile, ENV). Restated so
+# the file says what the check below probes, and so a change to the image
+# cannot move the port away from it unnoticed. Every [env] value is a string,
+# PORT included.
+[env]
+  HOST = "0.0.0.0"
+  PORT = "3002"
+
+# No [http_service] and no [[services]]: the worker takes its work from
+# pg-boss and exposes no public address (ADR-0007). Its two probes answer on
+# the internal port for the check below and for an operator on the private
+# network (`waste-worker-dev.internal:3002/readyz`, with the count of failed
+# jobs).
+#
+# A worker that polls must be running to poll, so there is nothing to stop
+# when idle, unlike the API: one Machine, always on, is what a scheduled job
+# needs. Restarts follow the process: the worker exits when its database does
+# not answer at boot or lacks pg-boss's schema (src/main.ts says why), and Fly
+# starts it again after a pause, which is the retry.
+[[restart]]
+  policy = "always"
+
+# Liveness, and deliberately not /readyz, the split the API's file makes:
+# Fly's check decides whether a deploy is judged healthy, and /readyz answers
+# 503 while the database is unreachable — the worker's own answer for an
+# operator to read, and pg-boss reconnects on its next poll. /healthz answers
+# 200 as long as the process answers, which is what a host's check asks. A
+# top-level check, since there is no service to hang it on. The Dockerfile's
+# HEALTHCHECK makes the same split.
+[checks]
+  [checks.healthz]
+    type = "http"
+    port = 3002
+    method = "GET"
+    path = "/healthz"
+    interval = "30s"
+    timeout = "3s"
+    # Time for tsx to load the modules and pg-boss to start before the first check counts.
+    grace_period = "15s"
+
+# The smallest Machine; Node with tsx's loader and three small pools sits
+# well under it. Raise it when the Machine's memory graph says so, or when
+# generation's stop matching over a project's containers wants the room.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

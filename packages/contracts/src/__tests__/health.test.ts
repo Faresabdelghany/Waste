@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { HealthResponse, ReadinessResponse, ReadyResponse, UnavailableResponse } from "../health"
+import { HealthResponse, ReadinessResponse, ReadyResponse, UnavailableResponse, WorkerReadinessResponse, WorkerReadyResponse, WorkerUnavailableResponse } from "../health"
 
 describe("HealthResponse", () => {
   test("is the status and the server's clock as an instant with offset", () => {
@@ -40,5 +40,42 @@ describe("ReadinessResponse", () => {
     assert.equal(ReadinessResponse.safeParse({ status: "ok", checks: { database: "slow" } }).success, false)
     assert.equal(ReadinessResponse.safeParse({ status: "ok", checks: {} }).success, false)
     assert.equal(ReadinessResponse.safeParse({ status: "ok" }).success, false)
+  })
+})
+
+describe("WorkerReadinessResponse", () => {
+  test("is ready when both checks pass, and carries the count of failed jobs", () => {
+    const body = { status: "ok", checks: { database: "ok", boss: "ok" }, failedJobs: 0 }
+    assert.deepEqual(WorkerReadinessResponse.parse(body), body)
+    assert.deepEqual(WorkerReadyResponse.parse({ ...body, failedJobs: 12 }).failedJobs, 12)
+  })
+
+  test("is unavailable when a check did not pass, naming which", () => {
+    for (const checks of [
+      { database: "unreachable", boss: "ok" },
+      { database: "ok", boss: "stopped" },
+      { database: "ok", boss: "unreachable" },
+      { database: "unreachable", boss: "stopped" },
+    ]) {
+      const body = { status: "unavailable", checks }
+      assert.deepEqual(WorkerReadinessResponse.parse(body), body)
+      assert.deepEqual(WorkerUnavailableResponse.parse(body), body)
+    }
+  })
+
+  test("ties the status to the checks: ready with a failed check is no answer, nor unavailable with both passing, nor ready without the count or with a negative or fractional one", () => {
+    assert.equal(WorkerReadinessResponse.safeParse({ status: "ok", checks: { database: "unreachable", boss: "ok" }, failedJobs: 0 }).success, false)
+    assert.equal(WorkerReadinessResponse.safeParse({ status: "ok", checks: { database: "ok", boss: "stopped" }, failedJobs: 0 }).success, false)
+    assert.equal(WorkerReadinessResponse.safeParse({ status: "unavailable", checks: { database: "ok", boss: "ok" } }).success, false)
+    assert.equal(WorkerReadinessResponse.safeParse({ status: "ok", checks: { database: "ok", boss: "ok" } }).success, false)
+    assert.equal(WorkerReadinessResponse.safeParse({ status: "ok", checks: { database: "ok", boss: "ok" }, failedJobs: -1 }).success, false)
+    assert.equal(WorkerReadinessResponse.safeParse({ status: "ok", checks: { database: "ok", boss: "ok" }, failedJobs: 1.5 }).success, false)
+  })
+
+  test("knows no other status and no other check result", () => {
+    assert.equal(WorkerReadinessResponse.safeParse({ status: "degraded", checks: { database: "ok", boss: "ok" }, failedJobs: 0 }).success, false)
+    assert.equal(WorkerReadinessResponse.safeParse({ status: "unavailable", checks: { database: "slow", boss: "ok" } }).success, false)
+    assert.equal(WorkerReadinessResponse.safeParse({ status: "unavailable", checks: { database: "ok", boss: "starting" } }).success, false)
+    assert.equal(WorkerReadinessResponse.safeParse({ status: "unavailable", checks: { database: "ok" } }).success, false)
   })
 })
