@@ -8,6 +8,12 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import {
+  DEFAULT_SCHEME_EDIT_POLICY,
+  SCHEME_EDIT_POLICIES,
+  SCHEME_EDIT_POLICY_LABELS,
+  type SchemeEditPolicy,
+} from "@waste/domain/route-schemes/creation"
 import { CONTAINER_TYPE_VOCABULARY } from "@waste/domain/route-schemes/matching"
 import {
   GROUP_OWNED_SCHEME_FIELD_IDS,
@@ -76,10 +82,23 @@ describe("route-studio.schemes is in step with Guided Setup step 1", () => {
     const defaulted = new Set(["holidayPolicy", "createAs"])
     for (const id of QUICK_SCHEME_DRAFT_FIELD_IDS) {
       if (defaulted.has(id)) continue
-      assert.ok(fieldById.has(id), ` is consumed by the draft but is not on the form`)
+      assert.ok(fieldById.has(id), `${id} is consumed by the draft but is not on the form`)
     }
     for (const id of GROUP_OWNED_SCHEME_FIELD_IDS) {
-      assert.ok(fieldById.has(id), ` is hidden for a multi-group scheme but is not on the form`)
+      assert.ok(fieldById.has(id), `${id} is hidden for a multi-group scheme but is not on the form`)
     }
+  })
+
+  test("Changes to a running scheme is a required select over the domain's edit policies, asking by default (issue #38)", () => {
+    const editPolicy = field("editPolicy")
+    assert.equal(editPolicy.type, "select")
+    assert.equal(editPolicy.required, true)
+    assert.equal(editPolicy.defaultValue, DEFAULT_SCHEME_EDIT_POLICY)
+    assert.deepEqual(values(editPolicy.options), [...SCHEME_EDIT_POLICIES])
+    for (const option of editPolicy.options ?? []) {
+      assert.equal(option.label, SCHEME_EDIT_POLICY_LABELS[option.value as SchemeEditPolicy])
+    }
+    // The scheme's, not a group's: the edit dialog of a multi-group scheme keeps it.
+    assert.equal(GROUP_OWNED_SCHEME_FIELD_IDS.has("editPolicy"), false)
   })
 })

@@ -27,6 +27,7 @@ const draft = (wasteFraction: string, groups: CollectionGroup[]): GuidedSchemeDa
   plannedStartTime: "06:30",
   holidayPolicy: "shift-next",
   createAs: "validated",
+  editPolicy: "ask",
   groups,
 })
 
@@ -94,6 +95,14 @@ describe("scheme-level waste fraction", () => {
     assert.equal(manual.wasteFraction, "Glass")
     assert.deepEqual(manual.groups[0].fractions, [])
     assert.deepEqual(draftGroups(manual)[0].fractions, ["Glass"])
+  })
+
+  test("quick create carries the form's edit policy and asks when the form picked none (issue #38)", () => {
+    const base = { schemeName: "Quick", stopSelection: "rule", frequency: "weekly", serviceDays: "monday", effectiveFrom: "2026-09-14" }
+    assert.equal(quickSchemeDraftFromValues({ ...base, editPolicy: "single" }).editPolicy, "single")
+    assert.equal(quickSchemeDraftFromValues({ ...base, editPolicy: "future" }).editPolicy, "future")
+    assert.equal(quickSchemeDraftFromValues(base).editPolicy, "ask")
+    assert.equal(quickSchemeDraftFromValues({ ...base, editPolicy: "always" }).editPolicy, "ask")
   })
 })
 

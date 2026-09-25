@@ -3,6 +3,8 @@ import {
   buildBaselineScheme,
   createButton,
   nextStep,
+  optionTexts,
+  pickOption,
   schemeRow,
   stepHeading,
   toasts,
@@ -26,7 +28,7 @@ test("step 4 has no edited-route switch, labels the numbers as an estimate, and 
   await expect(root.getByRole("button", { name: "Next", exact: true })).toBeEnabled()
 })
 
-test("step 5 has no running-scheme edit policy and creates the scheme onto the list", async ({
+test("step 5 offers the running-scheme edit policy, asking by default, and creates the scheme onto the list", async ({
   page,
 }) => {
   const name = `Guided create ${Date.now().toString(36)}`
@@ -36,7 +38,18 @@ test("step 5 has no running-scheme edit policy and creates the scheme onto the l
   await expect(stepHeading(page)).toHaveText("Ready to create this scheme?")
   const root = wizard(page)
   await expect(root.getByLabel("Create as", { exact: true })).toBeVisible()
-  await expect(root.getByText("Changes to a running scheme")).toHaveCount(0)
+  // "Changes to a running scheme" (issue #38): the three policies in the
+  // vocabulary's order, "Ask each time" the default; picking another one
+  // changes what the field says it does.
+  const editPolicy = root.getByLabel("Changes to a running scheme", { exact: true })
+  await expect(editPolicy).toContainText("Ask each time")
+  expect(await optionTexts(page, root, "Changes to a running scheme")).toEqual([
+    "Ask each time",
+    "Apply to future collections",
+    "This collection only",
+  ])
+  await pickOption(page, root, "Changes to a running scheme", "This collection only")
+  await expect(root.getByText("Every edit applies to the next collection only", { exact: false })).toBeVisible()
   await expect(root.getByText("Danish public holidays")).toBeVisible()
   await expect(root.getByText("Waste fraction")).toBeVisible()
   await expect(root.getByText("Service type")).toBeVisible()

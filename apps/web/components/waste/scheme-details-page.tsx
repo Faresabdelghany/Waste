@@ -65,6 +65,8 @@ import {
   type ProjectCalendar,
 } from "@waste/domain/route-schemes/project-calendar"
 import { holidaySettingsHref } from "@/lib/data/business-links"
+import { SCHEME_EDIT_POLICY_LABELS } from "@waste/domain/route-schemes/creation"
+import { schemeEditPolicy } from "@waste/domain/route-schemes/edit"
 import { HOLIDAY_POLICY_LABELS, type HolidayPolicy } from "@waste/domain/route-schemes/occurrences"
 import { stopRuleSummary } from "@waste/domain/route-schemes/matching"
 import { isPlanAheadEnabled, setPlanAhead } from "@waste/domain/route-schemes/plan-ahead"
@@ -648,6 +650,11 @@ function SchemeDetailsTab({
           />
           <StatRow label="Owner" value={record.owner} />
           <StatRow label="Plan Ahead" value={planAheadOn ? "On" : "Off"} />
+          {/* How an edit of the running scheme applies (issue #38), read the way the edit-save planner reads it. */}
+          <StatRow
+            label="Changes to a running scheme"
+            value={SCHEME_EDIT_POLICY_LABELS[schemeEditPolicy(values)]}
+          />
         </DetailCard>
 
         <DetailCard title="Holidays">
