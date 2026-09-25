@@ -359,10 +359,10 @@ describe("the migrations carry every table's hand-written statements", () => {
     }
   })
 
-  test("the schema has exactly five ledgers and one reservation, and no ledger carries a trigger anywhere", async () => {
+  test("the schema has exactly six ledgers and one reservation, and no ledger carries a trigger anywhere", async () => {
     const all = await tables()
     const ledgers = all.filter(isLedger).map((table) => createTableStatement(table))
-    const LEDGERS = ["driver_command", "proof_of_service", "stock_movement", "unload", "vehicle_allocation_event"]
+    const LEDGERS = ["driver_command", "proof_of_service", "stock_movement", "ticket_event", "unload", "vehicle_allocation_event"]
     assert.deepEqual(
       ledgers.sort(),
       LEDGERS.map((name) => `CREATE TABLE "wms"."${name}" (`),

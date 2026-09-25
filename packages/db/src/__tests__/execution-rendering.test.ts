@@ -15,6 +15,16 @@
 // migration: the values and the CASE are spelled here as the file spells
 // them, so adding a kind or moving a column in the domain fails this test
 // until a migration replaces the check.
+//
+// Migration 0009 (Issue #109) changed one of the seven and the company once
+// more: `outbox_event`'s two checks grew by Resolution's three kinds and its
+// `ticket` aggregate, and `company` gained `next_ticket_number`. An applied
+// file is never edited, so 0008 is held to the earlier spelling:
+// `CHANGED_IN_0009` maps the outbox's CREATE TABLE as drizzle-kit writes it
+// now onto what 0008 says, and the company's ALTER TABLE is diffed from 0002's
+// spelling to 0008's rather than to today's, the way planning-rendering.test.ts
+// holds 0006 to its own day. resolution-rendering.test.ts pins the
+// replacements themselves.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -23,7 +33,7 @@ import { describe, test } from "node:test"
 import { PROOF_SHAPES } from "@waste/domain/execution/proof-shapes"
 import { PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_STATUSES, PROOF_KINDS } from "@waste/domain/execution/vocabulary"
 import { getTableName, is, sql } from "drizzle-orm"
-import { check, PgTable, text } from "drizzle-orm/pg-core"
+import { check, integer, PgTable, text } from "drizzle-orm/pg-core"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { tableObjectName } from "../names"
@@ -32,7 +42,7 @@ import * as schema from "../schema"
 import { oneOf } from "../schema/checks"
 import { id, tenant, timestamps } from "../schema/columns"
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, unload } from "../schema/execution"
-import { company, COMPANY_STATUSES } from "../schema/organisation"
+import { COMPANY_STATUSES } from "../schema/organisation"
 import { uniqueOn } from "../schema/references"
 import { wms } from "../schema/wms"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
@@ -97,6 +107,38 @@ const stampsShape = (() => {
     ].join(" and ")
   return `CONSTRAINT "route_stamps_shape" CHECK (case ${column("status")} when 'planned' then ${stamps(false, false, false, false)} when 'ready' then ${stamps(true, false, false, false)} when 'active' then ${stamps(true, true, false, false)} when 'completed' then ${stamps(true, true, true, false)} when 'cancelled' then ${column("cancelled_at")} is not null and ${column("completed_at")} is null and (${column("started_at")} is null or ${column("dispatched_at")} is not null) else false end)`
 })()
+
+/** outbox_event as drizzle-kit writes it today — the outbox's vocabulary being the union of every context's news — and as it wrote it as of 0008, before 0009 grew the two checks by Resolution's three kinds and its aggregate (Issue #109). */
+const outboxEventTable = (resolution: boolean): string =>
+  createTable("outbox_event", "project", [
+    '"kind" text NOT NULL',
+    '"aggregate_kind" text NOT NULL',
+    '"aggregate_id" uuid NOT NULL',
+    `"occurred_at" ${INSTANT} NOT NULL`,
+    '"payload" jsonb NOT NULL',
+    `"published_at" ${INSTANT}`,
+    oneOfCheck(
+      "outbox_event",
+      "kind",
+      "route-dispatched",
+      "route-started",
+      "route-completed",
+      "route-cancelled",
+      "route-reassigned",
+      "pickup-completed",
+      "pickup-failed",
+      "pickup-skipped",
+      "pickup-problem-reported",
+      "pickup-corrected",
+      "unload-recorded",
+      "command-rejected",
+      ...(resolution ? ["ticket-opened", "ticket-completed", "ticket-rejected"] : []),
+    ),
+    oneOfCheck("outbox_event", "aggregate_kind", "route", "pickup", "unload", "command", ...(resolution ? ["ticket"] : [])),
+  ])
+
+/** What 0009 changed on a table 0008 created: the outbox's CREATE TABLE as drizzle-kit generates it now, and as it generated it as of 0008. */
+const CHANGED_IN_0009 = new Map([[outboxEventTable(true), outboxEventTable(false)]])
 
 const expected = [
   createTable("route", "project", [
@@ -232,16 +274,7 @@ const expected = [
     `CONSTRAINT "driver_command_problem_shape" CHECK ((${ref("driver_command", "outcome")} = 'rejected') = (${ref("driver_command", "problem")} is not null))`,
     `CONSTRAINT "driver_command_route_shape" CHECK (${ref("driver_command", "route_id")} is not null or (${ref("driver_command", "outcome")} = 'rejected' and ${ref("driver_command", "session_id")} is null and ${ref("driver_command", "pickup_id")} is null))`,
   ]),
-  createTable("outbox_event", "project", [
-    '"kind" text NOT NULL',
-    '"aggregate_kind" text NOT NULL',
-    '"aggregate_id" uuid NOT NULL',
-    `"occurred_at" ${INSTANT} NOT NULL`,
-    '"payload" jsonb NOT NULL',
-    `"published_at" ${INSTANT}`,
-    oneOfCheck("outbox_event", "kind", "route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-corrected", "unload-recorded", "command-rejected"),
-    oneOfCheck("outbox_event", "aggregate_kind", "route", "pickup", "unload", "command"),
-  ]),
+  outboxEventTable(true),
   companyFk("route"),
   projectFk("route"),
   projectFkTo("route", "route_scheme_id", "route_scheme"),
@@ -355,14 +388,34 @@ const companyAsOf0002 = wms.table(
   (t) => [uniqueOn(t.country, t.registrationNumber), check(tableObjectName(t.id.table, "self", "companySelf"), sql`${t.companyId} = ${t.id}`), oneOf(t.status, COMPANY_STATUSES)],
 )
 
+/** The company table as 0008 left it — the route-number counter and not yet the ticket-number counter 0009 added (Issue #109) — so the ALTER TABLE of 0008 diffs to its own day and not to today's. */
+const companyAsOf0008 = wms.table(
+  "company",
+  {
+    ...id,
+    ...tenant,
+    ...timestamps,
+    name: text().notNull(),
+    legalName: text().notNull(),
+    registrationNumber: text().notNull(),
+    country: text().notNull(),
+    status: text().notNull(),
+    nextRouteNumber: integer().notNull().default(1000),
+  },
+  (t) => [uniqueOn(t.country, t.registrationNumber), check(tableObjectName(t.id.table, "self", "companySelf"), sql`${t.companyId} = ${t.id}`), oneOf(t.status, COMPANY_STATUSES)],
+)
+
 /** What 0008 does to `company`: the counter, as one ALTER TABLE. */
 const companyAltered = [`ALTER TABLE "wms"."company" ADD COLUMN "next_route_number" integer DEFAULT 1000 NOT NULL;`]
 
 /** What the seven tables owe their migration file, in the order migrations/README.md lays out: fence and trigger, or fence and revoke, table by table; then the sync role and the publication. */
 const handWritten = [...Object.values(tables).flatMap((table) => handWrittenStatements(table)), ...powersyncStatements()]
 
-/** Everything drizzle-kit wrote at the head of 0008: the seven tables and the altered company. */
-const generatedHead = async (): Promise<string[]> => [...(await statementsFor(tables)), ...(await statementsBetween({ company: companyAsOf0002 }, { company }))]
+/** Everything drizzle-kit wrote at the head of 0008: the seven tables as they were generated as of 0008 — the outbox in its earlier spelling — and the company altered from 0002's spelling to 0008's. */
+const generatedHead = async (): Promise<string[]> => [
+  ...(await statementsFor(tables)).map((statement) => CHANGED_IN_0009.get(statement) ?? statement),
+  ...(await statementsBetween({ company: companyAsOf0002 }, { company: companyAsOf0008 })),
+]
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
 
@@ -372,15 +425,18 @@ describe("the Execution tables as drizzle-kit writes them", () => {
   })
 
   test("the company gains its route-number counter, defaulting to 1000, in one ALTER TABLE statement", async () => {
-    assert.deepEqual(await statementsBetween({ company: companyAsOf0002 }, { company }), companyAltered)
+    assert.deepEqual(await statementsBetween({ company: companyAsOf0002 }, { company: companyAsOf0008 }), companyAltered)
   })
 
-  test("migration 0008 begins with exactly what drizzle-kit generates for the schema: 98 statements", async () => {
+  test("migration 0008 begins with exactly what drizzle-kit generated for the schema as of 0008: 98 statements", async () => {
     const statements = await fileStatements()
-    // The same statements, whatever order drizzle-kit's loader gave the tables (it sorts a module's exports).
+    // The same statements, whatever order drizzle-kit's loader gave the tables (it sorts a module's exports), with the outbox spelled as it was then: an applied file is never edited.
     const generated = (await generatedHead()).map(normalised).sort()
     assert.equal(generated.length, 98, "seven CREATE TABLE, one ADD COLUMN, forty-seven foreign keys, forty-three indexes")
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
+    // The statement 0009 changed is one the schema generates today, so the mapping maps something.
+    const today = await statementsFor(tables)
+    for (const statement of CHANGED_IN_0009.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
   })
 
   test("and carries below them the fence and trigger, or revoke, of each table, then the sync role, its grants and the publication: 7 x 3 + 3 + 17 + 1 = 42 statements", async () => {

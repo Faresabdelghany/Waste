@@ -37,7 +37,10 @@
 // `pause`/`resume` in place of breaks. `COMMAND_OUTCOMES` is what the receipt
 // stores; `replayed` is the wire's word for the first outcome answered again
 // and is never stored. `OUTBOX_KINDS` and `OUTBOX_AGGREGATES` are the events
-// the outbox carries and what each is about.
+// the outbox carries and what each is about: the table is Execution's and its
+// vocabulary is the union of every context's news (#109 §7.20), so
+// Resolution's three kinds and its `ticket` aggregate grew here in place, and
+// a fourth context's will too.
 //
 // A value is a kebab-case token: it goes into a migration as a SQL literal
 // and onto the wire as an enum member, and those are the same string. A list
@@ -60,10 +63,10 @@ export const EXECUTION_SOURCES = ["driver-app", "dispatch", "integration"] as co
 export const DRIVER_COMMAND_KINDS = ["start-route", "arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-unload", "pause", "resume", "end-route"] as const
 /** What the receipt stores of a command; a replay answers the stored one again and stores nothing. */
 export const COMMAND_OUTCOMES = ["applied", "rejected"] as const
-/** What the outbox tells the other contexts. */
-export const OUTBOX_KINDS = ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-corrected", "unload-recorded", "command-rejected"] as const
+/** What the outbox tells the other contexts: Execution's twelve, then Resolution's three (Issue #109), which Finance reads. */
+export const OUTBOX_KINDS = ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-corrected", "unload-recorded", "command-rejected", "ticket-opened", "ticket-completed", "ticket-rejected"] as const
 /** What an outbox event is about; the payload is that resource on the wire. */
-export const OUTBOX_AGGREGATES = ["route", "pickup", "unload", "command"] as const
+export const OUTBOX_AGGREGATES = ["route", "pickup", "unload", "command", "ticket"] as const
 
 export type RouteStatus = (typeof ROUTE_STATUSES)[number]
 export type PickupStatus = (typeof PICKUP_STATUSES)[number]

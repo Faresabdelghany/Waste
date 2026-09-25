@@ -71,15 +71,15 @@ const projectTable = (planning: boolean): string =>
       : []),
   ])
 
-/** The company table as drizzle-kit writes it today, and as it wrote it as of 0002, before 0008 gave it the route-number counter (Issue #104). */
-const companyTable = (execution: boolean): string =>
+/** The company table as drizzle-kit writes it today, and as it wrote it as of 0002, before 0008 gave it the route-number counter (Issue #104) and 0009 the ticket-number counter (Issue #109). */
+const companyTable = (counters: boolean): string =>
   createTable("company", [
     '\t"name" text NOT NULL,',
     '\t"legal_name" text NOT NULL,',
     '\t"registration_number" text NOT NULL,',
     '\t"country" text NOT NULL,',
     '\t"status" text NOT NULL,',
-    ...(execution ? ['\t"next_route_number" integer DEFAULT 1000 NOT NULL,'] : []),
+    ...(counters ? ['\t"next_route_number" integer DEFAULT 1000 NOT NULL,', '\t"next_ticket_number" integer DEFAULT 1000 NOT NULL,'] : []),
     '\tCONSTRAINT "company_country_registration_number_key" UNIQUE("country","registration_number"),',
     `\tCONSTRAINT "company_self" CHECK (${ref("company", "company_id")} = ${ref("company", "id")}),`,
     `\tCONSTRAINT "company_status_one_of" CHECK (${ref("company", "status")} ${STATUS})`,
@@ -89,7 +89,9 @@ const companyTable = (execution: boolean): string =>
  * What later files changed on tables 0002 created (Issue #97: `project` gained
  * `weekend` and `holiday_list` in 0006, which planning-rendering.test.ts pins;
  * Issue #104: `company` gained `next_route_number` in 0008, which
- * execution-rendering.test.ts pins), each through an `ALTER TABLE`: the
+ * execution-rendering.test.ts pins; Issue #109: `company` gained
+ * `next_ticket_number` in 0009, which resolution-rendering.test.ts pins), each
+ * through an `ALTER TABLE`: the
  * statement as drizzle-kit generates it now, and as it generated it as of
  * 0002. An applied file is never edited, so 0002 is held to the earlier
  * spelling.
