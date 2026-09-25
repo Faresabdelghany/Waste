@@ -42,15 +42,20 @@
 //                    proves it is there answers it too (`requireStatus`), so
 //                    the gate a new reference passes (routes/statuses.ts,
 //                    Issue #79) costs no second statement.
+//   a number       — a document numbered from one of the company's series
+//                    (a ticket, an invoice, a credit note) takes it one way
+//                    (`nextNumber`), under the company's row lock.
 //
-// Nothing here knows a table or a resource: what is not shared by every route
-// module stays in the one that owns it.
+// Nothing here knows a table or a resource but the company's row, which every
+// series lives on: what is not shared by every route module stays in the one
+// that owns it.
 import { Id } from "@waste/contracts/ids"
 import { providerShape } from "@waste/contracts/places"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
+import { company } from "@waste/db/schema/organisation"
 import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
-import { and, eq, getTableName, gte, lt, sql, type SQL } from "drizzle-orm"
+import { and, asc, eq, getTableName, gte, inArray, lt, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import type { Context } from "hono"
 import { resolver } from "hono-openapi"
@@ -273,6 +278,27 @@ export async function lockRow(tx: Tx, table: TenantTable, row: { companyId: stri
     .for("update")
 }
 
+/**
+ * The same for several rows of one table, taken in id order in one statement
+ * (`order by id for update`: Postgres sorts first and locks as it returns the
+ * rows, so two transactions naming overlapping sets take them in the same
+ * order and neither waits on the other's second row). For a rule held across
+ * rows a body names rather than under one parent — the one-award rule of
+ * routes/service-areas.ts, which every planning area a body names is a party
+ * to — where locking the rows the check finds would leave a check that finds
+ * nothing holding nothing. An id that is not there locks nothing; the check
+ * that follows answers for it. Nothing to lock is nothing to do.
+ */
+export async function lockRows(tx: Tx, table: TenantTable, companyId: string, ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return
+  await tx
+    .select({ id: table.id })
+    .from(table)
+    .where(and(eq(table.companyId, companyId), inArray(table.id, [...ids])))
+    .orderBy(asc(table.id))
+    .for("update")
+}
+
 /** What the two above share: run the write, and answer the sentence the route wrote for the constraint it hit. */
 async function refused<T>(
   constraintOf: (error: unknown) => string | undefined,
@@ -414,4 +440,29 @@ export async function replayed<T>(keys: readonly string[], write: () => Promise<
     if (taken === undefined) throw error
     return await taken()
   }
+}
+
+// Finance (Issue #112, its review): the company's document series, once. A
+// route's, a ticket's and an invoice's number each come off a counter on the
+// company's row (`next_route_number`, `next_ticket_number`,
+// `next_invoice_number`; packages/db's organisation schema), and the ticket
+// and the invoice took theirs in two spellings of one statement. This is the
+// one: `update … returning` under the company's row lock, so two documents
+// numbered at once take turns, and a transaction that fails rolls its number
+// back with its rows, the series unbroken. The route's counter is the
+// generation worker's to take (#97 part B), in blocks, and is not taken here.
+
+/** The counters a company's row carries, one per document series. */
+export type Series = "nextInvoiceNumber" | "nextTicketNumber" | "nextRouteNumber"
+
+/** The next number of a company's series, never renumbered: the one the counter had, the counter stepped past it in the database as an expression over its own column. */
+export async function nextNumber(tx: Tx, companyId: string, series: Series): Promise<number> {
+  const column = company[series]
+  const [row] = await tx
+    .update(company)
+    .set({ [series]: sql`${column} + 1` } as Partial<Record<Series, SQL>>)
+    .where(eq(company.id, companyId))
+    .returning({ next: column })
+  if (row === undefined) throw new Error(`no company ${companyId} to number a document in`)
+  return row.next - 1
 }

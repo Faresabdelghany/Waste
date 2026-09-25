@@ -78,6 +78,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { projectToday } from "./fleet-lookups"
 import { requireServiceProvider, type Scope } from "./references"
 import {
   assembleGroups,
@@ -91,7 +92,6 @@ import {
   noSuchGroup,
   noSuchScheme,
   pickOf,
-  projectToday,
   referencesOf,
   replaceGroupSet,
   requireFleetInService,

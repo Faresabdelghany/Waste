@@ -246,11 +246,15 @@ export async function seedCompanyWithoutProjects(pool: Database): Promise<BareTe
  * charters say nothing about — the Registry's master data, its products, its
  * customers — grants the role it calls as exactly the actions that test needs,
  * so what a call may do is spelled in the file that makes the call and no
- * charter here has to grow for a test's sake.
+ * charter here has to grow for a test's sake. A grant the role already holds
+ * is left as it is (`on conflict do nothing`): `edit` implies `view`
+ * (@waste/domain/access/grants), and a charter that grants `view` already
+ * makes the normalised row a repeat, which a company editing its matrix would
+ * not write twice either.
  */
 export async function grantRole(pool: Database, companyId: string, roleId: string, grants: readonly Grant[]): Promise<void> {
   await withCompany(pool.db, companyId, async (tx: Tx) => {
-    await tx.insert(roleGrant).values(grantRows(companyId, roleId, normaliseGrants(grants)))
+    await tx.insert(roleGrant).values(grantRows(companyId, roleId, normaliseGrants(grants))).onConflictDoNothing()
   })
 }
 

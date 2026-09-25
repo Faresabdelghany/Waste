@@ -12,7 +12,7 @@ import { closedSettlement, notCalculated } from "@waste/domain/finance/transitio
 import { and, asc, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
-import { eventsMissed, ONE_SETTLEMENT_AT_A_TIME, unpricedLines } from "../routes/settlements"
+import { eventsMissed, linesStale, ONE_SETTLEMENT_AT_A_TIME, unpricedLines } from "../routes/settlements"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -240,6 +240,27 @@ describe("the settlement endpoints", { skip: database.skip || owner.skip }, () =
       await recordServedEvent(pool, a, fleet, ex, fx, "2026-10-26")
       assert.deepEqual((await detail(s.id)).lines, closed.lines, "an event recorded after the close moves nothing on the closed settlement")
     })
+
+    test("refuses a close whose lines name an event no longer served — one cancelled since the calculation — counting them, and takes it once recalculated", async () => {
+      // November's settlement, opened above and empty: one event served under the assignment, calculated onto a line, then cancelled by the office. Without the gate the line would stand and the provider be paid for a collection the office says did not happen.
+      const served = await recordServedEvent(pool, a, fleet, ex, fx, "2026-11-09")
+      const calculated = await ok(await command(next.id, "calculate"))
+      assert.deepEqual([calculated.lineCount, calculated.netMinor], [1, 5500], "the one November event, at the indexed fee")
+      assert.deepEqual(lineFor(calculated, served.id), { serviceProviderPriceId: fx.prices.indexed.id, quantity: 1, unitPriceMinor: 5500, netMinor: 5500 })
+      const cancelled = await olivia(`/billable-events/${served.id}/cancel`, { method: "POST", body: { reason: "not-delivered" } })
+      assert.equal(cancelled.status, 200, JSON.stringify(await cancelled.clone().json()))
+      assert.equal((await refused(await command(next.id, "close"), 409)).detail, linesStale(1))
+      assert.equal(linesStale(1), "1 line names an event no longer served in the period; calculate again")
+      assert.equal(linesStale(2), "2 lines name events no longer served in the period; calculate again")
+      assert.deepEqual((await detail(next.id)).lines, calculated.lines, "a refused close leaves the lines as calculated")
+      const recalculated = await ok(await command(next.id, "calculate"))
+      assert.deepEqual([recalculated.lineCount, recalculated.netMinor, recalculated.lines], [0, 0, []], "the cancelled event leaves the calculation")
+      const closed = await ok(await command(next.id, "close"))
+      assert.deepEqual([closed.status, closed.lineCount, closed.netMinor], ["closed", 0, 0], "nothing served, nothing owed, and the period closes")
+      // Reopened, so the list below reads November's settlement open, as it was opened.
+      assert.equal((await ok(await command(next.id, "reopen", { reason: "Kept open for the reads below" }))).status, "open")
+      assert.deepEqual(await kindsOf(next.id), ["calculated", "calculated", "closed", "reopened"])
+    })
   })
 
   describe("POST /settlements/:id/reopen", () => {
@@ -332,6 +353,24 @@ describe("the settlement endpoints", { skip: database.skip || owner.skip }, () =
       assert.match((await refused(await ungranted("/settlements"), 403)).detail ?? "", /view on commercial\.settlements/)
       assert.match((await refused(await ungranted(`/settlements/${s.id}`), 403)).detail ?? "", /view on commercial\.settlements/)
       await refused(await other(`/settlements/${s.id}/close`, { method: "POST", body: {} }), 404)
+    })
+  })
+
+  describe("a provider's account and the commands", () => {
+    test("commands nothing even once its role is granted edit: calculate, close and reopen on its own settlement are the family's 404, nothing is written, and it goes on reading it", async () => {
+      // The settlement is what the company tells the provider: a provider that could close its own settlement would be settling with itself. The commands read through the office's scope alone, so Lars finds no row — a 404 and not a 403, since which settlements exist beyond his reach is not his to learn.
+      await grantRole(pool, a.companyId, a.roles.providerManager.id, [{ moduleKey: MODULE, actions: ["edit"] }])
+      const before = await kindsOf(s.id)
+      for (const [verb, body] of [
+        ["calculate", {}],
+        ["close", {}],
+        ["reopen", { reason: "Lars's" }],
+      ] as const) {
+        assert.equal((await refused(await command(s.id, verb, body, lars), 404)).detail, `No settlement ${s.id} this account reaches`, verb)
+      }
+      assert.deepEqual(await kindsOf(s.id), before, "no command left a row of history")
+      assert.deepEqual(await detail(s.id, lars), await detail(s.id), "and he still reads NordRen's own")
+      assert.equal((await events(s.id, "?limit=200", lars)).items.length, before.length)
     })
   })
 })

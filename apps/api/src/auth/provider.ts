@@ -34,9 +34,13 @@
 // `service_provider_id = <the provider>`; for one with projects it is
 // `inProjects` over the assignment's project; never both widened — an account
 // with a provider is bounded to it whatever else it holds, since the
-// provider's rows are what the account is for. A provider account never
-// reaches a price list, a billable event, a billing run or an invoice: those
-// families carry `inProjects` alone, and a provider works in no project.
+// provider's rows are what the account is for. `reachesThroughAssignments` is
+// the same reach for the three families whose rows hang off an assignment,
+// spelled once for them: the office's `inProjects` over the row's own
+// project, a provider's `exists` over the assignment that names the row. A
+// provider account never reaches a price list, a billable event, a billing
+// run or an invoice: those families carry `inProjects` alone, and a provider
+// works in no project.
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { route } from "@waste/db/schema/execution"
@@ -96,15 +100,38 @@ export type AssignmentColumns = { projectId: PgColumn; serviceProviderId: PgColu
  * to the assignments the caller reaches: the rows naming its provider for an
  * account with one, the rows of its projects for one with projects, and
  * `false` for an account with neither. A family whose rows hang off an
- * assignment — an area through the assignments naming it, a provider price
- * and a settlement through the assignment they are made under — carries this
- * inside an `exists` over the assignment for a provider account, and
- * `inProjects` over its own project column for an office account
- * (`providerIdOf` says which), so an area nobody has assigned yet is still
- * the office's to see.
+ * assignment reads through `reachesThroughAssignments` below, which carries
+ * this inside its `exists`.
  */
 export function reachesAssignments(principal: Principal, on: AssignmentColumns = serviceAreaAssignment): SQL {
   const providerId = providerIdOf(principal)
   if (providerId !== null) return eq(on.serviceProviderId, providerId)
   return inProjects(on.projectId, principal)
+}
+
+/** The columns of a row that hangs off an assignment, as the reach reads them: its own project, for the office. */
+export type AssignmentChildColumns = { projectId: PgColumn }
+
+/**
+ * The `where` fragment that keeps a statement over a family whose rows hang
+ * off an assignment — an area through the assignments naming it, a provider
+ * price and a settlement through the assignment they are made under — to the
+ * rows the caller reaches (§7.22), spelled once for the three: `inProjects`
+ * over the row's own project for an office account, so an area nobody has
+ * assigned yet is still the office's to see, and for a provider's account
+ * `exists` one assignment the caller reaches (`reachesAssignments`) that
+ * `named` ties to the row — `eq(serviceAreaAssignment.serviceAreaId,
+ * serviceArea.id)` for an area, `eq(serviceAreaAssignment.id,
+ * serviceProviderPrice.serviceAreaAssignmentId)` for a price, the same for
+ * a settlement. `providerIdOf` says which; `tx` is what the subquery is
+ * built on, so it is one statement with the caller's.
+ */
+export function reachesThroughAssignments(tx: Tx, principal: Principal, on: AssignmentChildColumns, named: SQL): SQL {
+  if (providerIdOf(principal) === null) return inProjects(on.projectId, principal)
+  return exists(
+    tx
+      .select({ one: sql`1` })
+      .from(serviceAreaAssignment)
+      .where(and(eq(serviceAreaAssignment.companyId, principal.companyId), named, reachesAssignments(principal))),
+  )
 }

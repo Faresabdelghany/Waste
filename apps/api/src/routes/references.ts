@@ -39,8 +39,8 @@ import { agreement } from "@waste/db/schema/agreements"
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
 import { customer, property, sharedCollectionPoint } from "@waste/db/schema/customers"
-import { pickup, route, session, unload } from "@waste/db/schema/execution"
-import { billableEvent, invoice, invoiceLine, priceList, priceListRow, serviceArea, serviceAreaAssignment, serviceProviderPrice, settlement } from "@waste/db/schema/finance"
+import { pickup, route, session } from "@waste/db/schema/execution"
+import { priceList, serviceAreaAssignment } from "@waste/db/schema/finance"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
 import { serviceProvider } from "@waste/db/schema/organisation"
@@ -506,53 +506,30 @@ export async function requireAccountInProject(tx: Tx, scope: Scope, id: string |
   if (found === undefined) throw invalidRequest("body", [{ path, message: NOT_WORKING_IN_PROJECT }])
 }
 
-// Finance & Contracting (Issue #112): what a money row names, and what names
-// one. Every Finance table is a Project's, so every check here is
-// `inProject` — a Price List is named by an Agreement (the list it is priced
-// under, held to the agreement's project and, by the route, to its
-// currency), an Assignment by a provider price and a settlement, a Billable
-// Event by nothing in part A but the run's selection, an Invoice by the
-// credit note that corrects it and a line of it by the partial credit. Two
-// answer the row and not only its existence, since what names them judges
-// them next: a Price List's currency (the agreement's rule), and an
-// Assignment's project and period (containment, routes/periods.ts) — a
-// provider price and a settlement name an assignment and no project, so the
-// assignment's project is where theirs comes from, and the check takes the
-// caller's projects the way `requireRoute` does. An Unload is named by the
-// weight review's path and by nothing else, and takes the caller's projects
-// too, since the unloads list names no project. No status is answered: a
-// Finance row carries none, its Draft, Upcoming, Active and Expired being
-// readings of its period.
+// Finance & Contracting (Issue #112): what a money row names. Every Finance
+// table is a Project's, and two of its rows are named by other bodies — a
+// Price List by an Agreement (the list it is priced under, held to the
+// agreement's project and, by the route, to its currency), and a Service
+// Area Assignment by a provider price and a settlement (the award they are
+// made under). Both answer the row and not only its existence, since what
+// names them judges them next: the list's currency (the agreement's rule),
+// and the assignment's project and period (containment, routes/periods.ts) —
+// a provider price and a settlement name an assignment and no project, so
+// the assignment's project is where theirs comes from, and the check takes
+// the caller's projects the way `requireRoute` does. Finance's other rows —
+// a price row, an area, a provider price, a billable event, an invoice and
+// its lines, a settlement, an unload — are named by their own routes' paths
+// and by nothing a body carries, so no check is spelled for them; one is
+// added when a body names the row, and never before (the review of #112
+// removed eight that nothing called). No status is answered: a Finance row
+// carries none, its Draft, Upcoming, Active and Expired being readings of its
+// period.
 
 /** What a body is told when it names a price list of another project, or none. */
 export const NOT_A_PRICE_LIST = "Not a price list of this project"
 
-/** What a body is told when it names a price row of another project, or none. */
-export const NOT_A_PRICE_LIST_ROW = "Not a price row of this project"
-
-/** What a body is told when it names a service area of another project, or none. */
-export const NOT_A_SERVICE_AREA = "Not a service area of this project"
-
 /** What a body is told when it names an assignment outside the projects it may see, or none. */
 export const NOT_AN_ASSIGNMENT = "Not an assignment of this project"
-
-/** What a body is told when it names a service provider price of another project, or none. */
-export const NOT_A_SERVICE_PROVIDER_PRICE = "Not a service provider price of this project"
-
-/** What a body is told when it names a billable event of another project, or none. */
-export const NOT_A_BILLABLE_EVENT = "Not a billable event of this project"
-
-/** What a body is told when it names an invoice of another project, or none. */
-export const NOT_AN_INVOICE = "Not an invoice of this project"
-
-/** What a body is told when it names a line that is not the invoice's. */
-export const NOT_AN_INVOICE_LINE = "Not a line of this invoice"
-
-/** What a body is told when it names a settlement of another project, or none. */
-export const NOT_A_SETTLEMENT = "Not a settlement of this project"
-
-/** What a body or a path is told when it names an unload outside the projects it may see, or none. */
-export const NOT_AN_UNLOAD = "Not an unload of this project"
 
 /** The price list a check found, as the agreement's rule reads it: the currency every row of it is quoted in. */
 export type PriceListRef = { id: string; currency: string }
@@ -573,18 +550,6 @@ export async function requirePriceList(tx: Tx, scope: Scope, id: string | null |
     .limit(1)
   if (found === undefined) throw invalidRequest("body", [{ path, message: NOT_A_PRICE_LIST }])
   return found
-}
-
-/** A price row a body names: the project's, through the table's own project key. */
-export async function requirePriceListRow(tx: Tx, scope: Scope, id: string | null | undefined, path = "priceListRowId"): Promise<void> {
-  if (id == null) return
-  await requireRow(tx, priceListRow, inProject(priceListRow, scope, id), { path, message: NOT_A_PRICE_LIST_ROW })
-}
-
-/** A Service Area a body names: the project's, since an award is made inside one project. */
-export async function requireServiceArea(tx: Tx, scope: Scope, id: string | null | undefined, path = "serviceAreaId"): Promise<void> {
-  if (id == null) return
-  await requireRow(tx, serviceArea, inProject(serviceArea, scope, id), { path, message: NOT_A_SERVICE_AREA })
 }
 
 /** The assignment a check found, as containment and the provider's own reads use it: its project, its area, its provider and its period. */
@@ -634,57 +599,4 @@ export async function requireServiceAreaAssignment(
     .limit(1)
   if (found === undefined) throw refusal()
   return found
-}
-
-/** A service provider price a body names: the project's, through the table's own project key. */
-export async function requireServiceProviderPrice(tx: Tx, scope: Scope, id: string | null | undefined, path = "serviceProviderPriceId"): Promise<void> {
-  if (id == null) return
-  await requireRow(tx, serviceProviderPrice, inProject(serviceProviderPrice, scope, id), { path, message: NOT_A_SERVICE_PROVIDER_PRICE })
-}
-
-/** A Billable Event a body names: the project's. */
-export async function requireBillableEvent(tx: Tx, scope: Scope, id: string | null | undefined, path = "billableEventId"): Promise<void> {
-  if (id == null) return
-  await requireRow(tx, billableEvent, inProject(billableEvent, scope, id), { path, message: NOT_A_BILLABLE_EVENT })
-}
-
-/** An Invoice a body names — the one a credit note corrects: the project's. */
-export async function requireInvoice(tx: Tx, scope: Scope, id: string | null | undefined, path = "invoiceId"): Promise<void> {
-  if (id == null) return
-  await requireRow(tx, invoice, inProject(invoice, scope, id), { path, message: NOT_AN_INVOICE })
-}
-
-/** What an invoice's lines are bounded by: the caller's company and the invoice they are lines of. */
-export type InvoiceScope = { companyId: string; invoiceId: string }
-
-/** An invoice line a body names — the line a partial credit credits: the invoice's, since a credit names a line of the document it corrects and no other. */
-export async function requireInvoiceLine(tx: Tx, scope: InvoiceScope, id: string | null | undefined, path = "lineId"): Promise<void> {
-  if (id == null) return
-  await requireRow(tx, invoiceLine, { companyId: scope.companyId, id, also: eq(invoiceLine.invoiceId, scope.invoiceId) }, { path, message: NOT_AN_INVOICE_LINE })
-}
-
-/** A Settlement a body names: the project's. */
-export async function requireSettlement(tx: Tx, scope: Scope, id: string | null | undefined, path = "settlementId"): Promise<void> {
-  if (id == null) return
-  await requireRow(tx, settlement, inProject(settlement, scope, id), { path, message: NOT_A_SETTLEMENT })
-}
-
-/**
- * An Unload a body or a path names — the one a weight review judges: the
- * project's, or, for a caller whose request names no project, one of the
- * caller's projects handed in as their ids, the way `requireRoute` takes them.
- * A `query` target is refused on the query string; a body on the body.
- */
-export async function requireUnload(
-  tx: Tx,
-  scope: { companyId: string; projectId: string | readonly string[] },
-  id: string | null | undefined,
-  path = "unloadId",
-  target: Target = "body",
-): Promise<void> {
-  if (id == null) return
-  const projects = typeof scope.projectId === "string" ? [scope.projectId] : [...scope.projectId]
-  // An account that works in no project reaches no unload; `in ()` is not SQL.
-  if (projects.length === 0) throw invalidRequest(target, [{ path, message: NOT_AN_UNLOAD }])
-  await requireRow(tx, unload, { companyId: scope.companyId, id, also: inArray(unload.projectId, projects) }, { path, message: NOT_AN_UNLOAD }, target)
 }

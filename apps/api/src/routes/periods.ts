@@ -47,6 +47,7 @@
 import { ENDS_AFTER_IT_STARTS, validityOrdered } from "@waste/contracts/validity"
 import type { Tx } from "@waste/db/client"
 import type { ValidityColumns } from "@waste/db/schema/columns"
+import { count } from "@waste/domain/text"
 import { count as countRows, sql, type SQL } from "drizzle-orm"
 import type { PgTable } from "drizzle-orm/pg-core"
 
@@ -131,3 +132,17 @@ export async function refuseStranded(tx: Tx, table: PgTable, where: SQL | undefi
   const strays = row?.rows ?? 0
   if (strays > 0) throw problem(409, { detail: sentence(strays) })
 }
+
+/**
+ * The sentence most parents refuse with, spelled once: "1 price row falls
+ * outside the new period; end it first", "2 holidays fall outside the new
+ * period; remove them first" — the count through the domain's `count`, the
+ * verb and the pronoun following it, `remedy` what the caller does with the
+ * rows in the way (`end` a dated child, `remove` a day). A parent whose
+ * children are ended another way — a placement through the ledger's commands
+ * (routes/agreements.ts) — spells its own.
+ */
+export const strandedSentence =
+  (noun: string, remedy: "end" | "remove", plural?: string) =>
+  (rows: number): string =>
+    `${count(rows, noun, plural)} ${rows === 1 ? "falls" : "fall"} outside the new period; ${remedy} ${rows === 1 ? "it" : "them"} first`

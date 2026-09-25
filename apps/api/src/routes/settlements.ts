@@ -37,10 +37,13 @@
 // amount is (`billable_event_amounts_shape`). `close` (`edit`), on
 // `calculated`, is refused while any line is unpriced (409, "3 lines have no
 // service provider price for their product; add the prices and calculate
-// again", `refuseStranded` over them) and while any event of the period
-// served under the assignment is not on a line (409, "2 events of the period
-// are not in this calculation; calculate again" — an event recorded after the
-// last calculation), then stamps `closed_at` and `closed_by`, appends a
+// again", `refuseStranded` over them), while any event of the period served
+// under the assignment is not on a line (409, "2 events of the period are
+// not in this calculation; calculate again" — an event recorded after the
+// last calculation) and while any line names an event no longer served —
+// one cancelled since the last calculation, which would otherwise stay on
+// its line and be paid (409, "1 line names an event no longer served in the
+// period; calculate again") — then stamps `closed_at` and `closed_by`, appends a
 // `closed` event with the snapshot, and emits `settlement-closed` with the
 // `SettlementDetail` — the e-conomic export's door for a provider's
 // accounting; the lines stand still from here, since nothing writes them on a
@@ -60,18 +63,21 @@
 // commands on one settlement take turns and a calculation and a close never
 // interleave.
 //
-// Who reaches what (#112 §3 "Who a provider is", §7.22). An office account
-// reaches the settlements of the projects it works in, the tenant and
-// `inProjects` like every project-scoped family. A Service Provider's account
-// — Lars, the manager at NordRen, no projects — reaches its own: every
-// statement is bounded by `reachesAssignments(principal)` (auth/provider.ts,
-// the one spelling for the four families a provider reads) over the
-// assignment every settlement statement joins: `service_provider_id = <the
-// principal's provider>` for an account with a provider and `inProjects` over
-// the assignment's project for one with projects, never both widened, so the
-// manager reads NordRen's settlements with their lines and totals — a line
+// Who reaches what (#112 §3 "Who a provider is", §7.22). Two scopes, as
+// routes/service-areas.ts has them. An office account reads and commands the
+// settlements of the projects it works in, the tenant and `inProjects` like
+// every project-scoped family. A Service Provider's account — Lars, the
+// manager at NordRen, no projects — reads its own: every read is bounded by
+// `reachesThroughAssignments` (auth/provider.ts, the one spelling for the
+// three families whose rows hang off an assignment), `exists` one assignment
+// naming its provider that the settlement is made under, so the manager
+// reads NordRen's settlements with their lines, totals and history — a line
 // carries the provider price alone, never a customer's — and CityHaul's are a
-// 404.
+// 404. It commands nothing: the settlement is what the company tells the
+// provider, so `calculate`, `close` and `reopen` read through the office's
+// scope alone (`writable`), and a provider's account with `edit` granted
+// finds no row — the family's 404, not a 403, since which settlements exist
+// outside its reach is not its to learn.
 import { Page } from "@waste/contracts/pagination"
 import { SettlementCalculate, SettlementClose, SettlementCreate, SettlementDetail, SettlementEvent, SettlementEventListQuery, SettlementListQuery, SettlementReopen, type Settlement, type SettlementLine } from "@waste/contracts/settlements"
 import type { Tx } from "@waste/db/client"
@@ -83,14 +89,15 @@ import { routeScheme } from "@waste/db/schema/route-schemes"
 import { settlementTransition, type SettlementCommand } from "@waste/domain/finance/transitions"
 import type { SettlementEventKind, SettlementStatus } from "@waste/domain/finance/vocabulary"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
-import { and, asc, eq, gt, gte, isNull, lt, sql, type SQL } from "drizzle-orm"
+import { count } from "@waste/domain/text"
+import { and, asc, eq, gt, gte, inArray, isNull, lt, sql, type SQL } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
-import { projectIdsOf, requireProject } from "../auth/projects"
-import { reachesAssignments } from "../auth/provider"
+import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
+import { reachesThroughAssignments } from "../auth/provider"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { emit } from "../outbox"
@@ -107,15 +114,19 @@ const MODULE = "commercial.settlements"
 const SettlementPage = Page(SettlementDetail)
 const EventPage = Page(SettlementEvent)
 
-/** The sentence `settlement_no_overlap` answers with: one settlement of an assignment over a period. */
+/** `EXCLUDE USING gist (company_id, service_area_assignment_id, daterange)`: one settlement of an assignment is in force at a time. */
+const SETTLEMENT_RUNNING = "settlement_no_overlap"
 export const ONE_SETTLEMENT_AT_A_TIME = "This assignment already has a settlement over part of that period"
 
 /** A close over a calculation with lines no provider price covers. */
 export const unpricedLines = (rows: number): string =>
-  rows === 1 ? "1 line has no service provider price for its product; add the price and calculate again" : `${rows} lines have no service provider price for their product; add the prices and calculate again`
+  `${count(rows, "line")} ${rows === 1 ? "has" : "have"} no service provider price for ${rows === 1 ? "its" : "their"} product; add the ${rows === 1 ? "price" : "prices"} and calculate again`
 
 /** A close over a calculation the period has outgrown: events served under the assignment that are on no line. */
-export const eventsMissed = (rows: number): string => (rows === 1 ? "1 event of the period is not in this calculation; calculate again" : `${rows} events of the period are not in this calculation; calculate again`)
+export const eventsMissed = (rows: number): string => `${count(rows, "event")} of the period ${rows === 1 ? "is" : "are"} not in this calculation; calculate again`
+
+/** The other way the calculation goes stale: lines whose event is no longer served — cancelled since the calculation — which would otherwise be paid. */
+export const linesStale = (rows: number): string => `${count(rows, "line")} ${rows === 1 ? "names an event" : "name events"} no longer served in the period; calculate again`
 
 /** A settlement outside what the account reaches, or none: one sentence for the office's projects and the provider's own assignments alike. */
 const noSuchSettlement = (id: string) => problem(404, { detail: `No settlement ${id} this account reaches` })
@@ -168,8 +179,12 @@ function settlementOf(row: Row): Settlement {
   }
 }
 
-/** The settlements of this company the caller reaches: what every settlement statement is bounded by, over the assignment `settlementsFrom` joins (auth/provider.ts). */
-const settlementScope = (principal: Principal): SQL | undefined => and(eq(settlement.companyId, principal.companyId), reachesAssignments(principal))
+/** The settlements the caller reads: the office's projects', or a provider account's own through the assignment they are made under (auth/provider.ts). */
+const readable = (tx: Tx, principal: Principal): SQL | undefined =>
+  and(eq(settlement.companyId, principal.companyId), reachesThroughAssignments(tx, principal, settlement, eq(serviceAreaAssignment.id, settlement.serviceAreaAssignmentId)))
+
+/** The settlements the caller commands: the office's projects' and no other, since the settlement is what the company tells the provider; a provider's command finds no row. */
+const writable = (principal: Principal): SQL | undefined => and(eq(settlement.companyId, principal.companyId), inProjects(settlement.projectId, principal))
 
 /** The one statement every settlement is read through: the row with its assignment's provider joined, for the scope and the sentences. */
 function settlementsFrom(tx: Tx) {
@@ -180,18 +195,18 @@ function settlementsFrom(tx: Tx) {
     .innerJoin(serviceProvider, and(eq(serviceProvider.companyId, settlement.companyId), eq(serviceProvider.id, serviceAreaAssignment.serviceProviderId)))
 }
 
-/** One settlement of this company by id, inside what the caller reaches; undefined when it is neither. */
-async function findSettlement(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
+/** One settlement of this company by id under a scope; undefined when it is not there. */
+async function findSettlement(tx: Tx, where: SQL | undefined, id: string): Promise<Row | undefined> {
   const [row] = await settlementsFrom(tx)
-    .where(and(settlementScope(principal), eq(settlement.id, id)))
+    .where(and(where, eq(settlement.id, id)))
     .limit(1)
   return row
 }
 
-/** The settlement the path names, locked and read: the three commands hold rules the API holds — the machine, the two counts of `close` — so they take the row lock first and read afterwards (routes/shared.ts). */
+/** The settlement the path names, locked and read under the office's scope: the three commands hold rules the API holds — the machine, the three counts of `close` — so they take the row lock first and read afterwards (routes/shared.ts), and a provider's account, which commands nothing, finds no row. */
 async function lockedSettlement(tx: Tx, principal: Principal, id: string): Promise<Row> {
   await lockRow(tx, settlement, { companyId: principal.companyId, id })
-  const current = await findSettlement(tx, principal, id)
+  const current = await findSettlement(tx, writable(principal), id)
   if (current === undefined) throw noSuchSettlement(id)
   return current
 }
@@ -243,7 +258,7 @@ async function linesBySettlement(tx: Tx, companyId: string, ids: readonly string
   const rows = await tx
     .select(lineColumns)
     .from(settlementLine)
-    .where(and(eq(settlementLine.companyId, companyId), sql`${settlementLine.settlementId} in ${sql`(${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`}`))
+    .where(and(eq(settlementLine.companyId, companyId), inArray(settlementLine.settlementId, [...ids])))
     .orderBy(asc(settlementLine.billableEventId))
   for (const row of rows) grouped.get(row.settlementId)?.push(row)
   return grouped
@@ -444,7 +459,7 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const rows = await settlementsFrom(tx)
           .where(
             and(
-              settlementScope(principal),
+              readable(tx, principal),
               projectId === undefined ? undefined : eq(settlement.projectId, projectId),
               serviceAreaAssignmentId === undefined ? undefined : eq(settlement.serviceAreaAssignmentId, serviceAreaAssignmentId),
               serviceProviderId === undefined ? undefined : eq(serviceAreaAssignment.serviceProviderId, serviceProviderId),
@@ -489,7 +504,7 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const principal = c.get("principal")
         const assignment = await requireServiceAreaAssignment(tx, { companyId: principal.companyId, projectId: projectIdsOf(principal) }, serviceAreaAssignmentId)
         const currency = await projectCurrency(tx, principal.companyId, assignment.projectId)
-        const [row] = await refuseOverlap({ settlement_no_overlap: ONE_SETTLEMENT_AT_A_TIME }, () =>
+        const [row] = await refuseOverlap({ [SETTLEMENT_RUNNING]: ONE_SETTLEMENT_AT_A_TIME }, () =>
           tx
             .insert(settlement)
             .values({
@@ -504,7 +519,7 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
             })
             .returning(columns),
         )
-        const written = await findSettlement(tx, principal, row.id)
+        const written = await findSettlement(tx, readable(tx, principal), row.id)
         if (written === undefined) throw new Error(`settlement ${row.id} was written and cannot be read back`)
         return created(c, "/settlements", { ...settlementOf(written), lines: [] })
       },
@@ -533,7 +548,7 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findSettlement(tx, principal, id)
+        const row = await findSettlement(tx, readable(tx, principal), id)
         if (row === undefined) throw noSuchSettlement(id)
         return c.json(await detailOf(tx, principal.companyId, row))
       },
@@ -576,14 +591,14 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         operationId: "closeSettlement",
         summary: "Close a settlement",
         description:
-          "The `close` command, on a calculated settlement: refused while any line has no provider price (409, `3 lines have no service provider price for their product; add the prices and calculate again`) and while any event of the period served under the assignment is on no line — one recorded after the last calculation (409, `2 events of the period are not in this calculation; calculate again`); then `closedAt` and `closedBy` are stamped, a `closed` event appended with the snapshot, and `settlement-closed` written to the outbox in the same transaction, carrying the settlement with its lines as answered. The lines stand still from here: nothing writes them on a closed settlement, and its totals are what the provider is told. An open settlement is refused (409, `Settlement NordRen ApS · 2026-07-01–2026-07-31 has not been calculated; calculate it first`); a closed one answers 200 as it stands, without a write, an event or an outbox row. The body is empty; a member in it is refused. Runs under the settlement's row lock. " +
+          "The `close` command, on a calculated settlement: refused while any line has no provider price (409, `3 lines have no service provider price for their product; add the prices and calculate again`), while any event of the period served under the assignment is on no line — one recorded after the last calculation (409, `2 events of the period are not in this calculation; calculate again`) — and while any line names an event no longer served in the period — one cancelled since the last calculation, which would otherwise be paid (409, `1 line names an event no longer served in the period; calculate again`); then `closedAt` and `closedBy` are stamped, a `closed` event appended with the snapshot, and `settlement-closed` written to the outbox in the same transaction, carrying the settlement with its lines as answered. The lines stand still from here: nothing writes them on a closed settlement, and its totals are what the provider is told. An open settlement is refused (409, `Settlement NordRen ApS · 2026-07-01–2026-07-31 has not been calculated; calculate it first`); a closed one answers 200 as it stands, without a write, an event or an outbox row. The body is empty; a member in it is refused. Runs under the settlement's row lock. " +
           LABEL,
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The settlement, closed, with its lines.", SettlementDetail),
           400: describeProblem("The path does not hold an id, or the body carries a member."),
           ...commandProblems,
-          409: describeProblem("The settlement has not been calculated, a line has no provider price, or an event of the period is not in the calculation; the detail says which."),
+          409: describeProblem("The settlement has not been calculated, a line has no provider price, an event of the period is not in the calculation, or a line names an event no longer served; the detail says which."),
         },
       }),
       guard,
@@ -597,12 +612,15 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const current = await lockedSettlement(tx, principal, id)
         const transition = transitionOf(current, "close")
         if (transition.kind === "stay") return c.json(await detailOf(tx, principal.companyId, current))
-        // The calculation's two gaps, the unpriced first: a price is what the office adds, a recalculation what it then runs.
+        // The calculation's three gaps, the unpriced first: a price is what the office adds, a recalculation what it then runs. Then the served events against the lines, both ways — an event on no line, and a line whose event is no longer served.
         await refuseStranded(tx, settlementLine, and(eq(settlementLine.companyId, principal.companyId), eq(settlementLine.settlementId, current.id), isNull(settlementLine.serviceProviderPriceId)), unpricedLines)
         const [served, lines] = await Promise.all([servedEvents(tx, principal.companyId, current), linesOf(tx, principal.companyId, current.id)])
+        const servedIds = new Set(served.map((event) => event.eventId))
         const onALine = new Set(lines.map((line) => line.billableEventId))
         const missed = served.filter((event) => !onALine.has(event.eventId)).length
         if (missed > 0) throw problem(409, { detail: eventsMissed(missed) })
+        const stale = lines.filter((line) => !servedIds.has(line.billableEventId)).length
+        if (stale > 0) throw problem(409, { detail: linesStale(stale) })
         const at = now()
         const row = await setStatus(tx, principal, current, "closed", { closedAt: at, closedBy: principal.user.id })
         await appendEvent(tx, principal, row, "closed", null)
@@ -671,7 +689,7 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const after = afterCursor(cursor)
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findSettlement(tx, principal, id)) === undefined) throw noSuchSettlement(id)
+        if ((await findSettlement(tx, readable(tx, principal), id)) === undefined) throw noSuchSettlement(id)
         const rows = await tx
           .select(eventColumns)
           .from(settlementEvent)

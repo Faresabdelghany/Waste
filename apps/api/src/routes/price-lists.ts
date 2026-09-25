@@ -74,7 +74,6 @@ import { customer } from "@waste/db/schema/customers"
 import { priceList, priceListRow } from "@waste/db/schema/finance"
 import { planningArea } from "@waste/db/schema/planning-areas"
 import { resolvePrice, type PriceInput, type PriceLabels } from "@waste/domain/finance/pricing"
-import { count } from "@waste/domain/text"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -86,7 +85,7 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { projectCurrency } from "./fleet-lookups"
-import { notWithin, periodAfter, periodOf, refuseStranded, requireOrdered, requireWithin, type Period } from "./periods"
+import { notWithin, periodAfter, periodOf, refuseStranded, requireOrdered, requireWithin, strandedSentence, type Period } from "./periods"
 import { NOT_A_PRODUCT, requireContainerType, requireCustomer, requirePlanningArea, requireProduct, requireWasteFraction, type Scope } from "./references"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stampsOf } from "./shared"
 import { refuseUnofferedProduct } from "./statuses"
@@ -186,7 +185,7 @@ const ROW_RUNNING_SENTENCE = "A row of this product with these conditions is alr
 export const OUTSIDE_PRICE_LIST = "Outside the price list's period"
 
 /** What a list shortened under its rows is refused with; the rows in the way are not in the body, so the caller ends them first. */
-const strandedRows = (rows: number) => `${count(rows, "price row")} ${rows === 1 ? "falls" : "fall"} outside the new period; end ${rows === 1 ? "it" : "them"} first`
+const strandedRows = strandedSentence("price row", "end")
 
 const noSuchList = (id: string) => problem(404, { detail: `No price list ${id} in the projects this account works in` })
 const noSuchRow = (id: string) => problem(404, { detail: `No price row ${id} in the projects this account works in` })

@@ -31,11 +31,17 @@
 // The create, the planning-area PUT and a patch that widens the period refuse
 // a planning area that another area of the project names while the two
 // periods overlap — a 409 at the entry, "Planning area OP-CEN-01 is already
-// in service area CA-Ø-2 over part of that period" — held under both areas'
-// locks: `lockRow` on this area, then `select … for update` of the areas the
-// check found, in id order, so two areas claiming each other's planning area
-// take turns. The database does not hold this one, since the constraint
-// would put a period on the membership row; that is why the lock is spelled.
+// in service area CA-Ø-2 over part of that period" — held under the planning
+// areas' own row locks: every planning area the body names is locked in id
+// order (`lockRows`, routes/shared.ts) before the conflict is looked for, so
+// two awards claiming the same ground take turns on it and the second reads
+// the membership the first wrote. The rows the check finds are not what is
+// locked, since a check that finds nothing would then hold nothing and two
+// creates naming one planning area over overlapping periods would both pass;
+// and the planning area is one lock class taken in one order, so a PUT on one
+// area and a PUT on another cannot deadlock over each other's ground. The
+// database does not hold this one, since the constraint would put a period on
+// the membership row; that is why the lock is spelled.
 //
 // The assignment is the effective-dated relationship: who holds the area
 // when. One provider holds an area at a time (`service_area_assignment_no_overlap`),
@@ -77,25 +83,24 @@ import { validOn } from "@waste/db/query/valid-on"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceAreaWasteFraction, serviceProviderPrice } from "@waste/db/schema/finance"
 import { planningArea } from "@waste/db/schema/planning-areas"
-import { count } from "@waste/domain/text"
 import { and, asc, eq, exists, gt, inArray, ne, sql, type SQL } from "drizzle-orm"
-import { alias, type PgColumn } from "drizzle-orm/pg-core"
+import type { PgColumn } from "drizzle-orm/pg-core"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import * as z from "zod"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { providerIdOf, reachesAssignments } from "../auth/provider"
+import { reachesAssignments, reachesThroughAssignments } from "../auth/provider"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet, type IdSetColumns } from "./id-sets"
-import { notWithin, periodAfter, periodOf, refuseStranded, requireOrdered, requireWithin, type Period } from "./periods"
+import { notWithin, periodAfter, periodOf, refuseStranded, requireOrdered, requireWithin, strandedSentence, type Period } from "./periods"
 import { requirePlanningArea, requireServiceProvider, requireWasteFraction } from "./references"
 import { eachPresent } from "./sets"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stamp, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, lockRows, refuseOverlap, stamp, stampsOf } from "./shared"
 
 const MODULE = "service-providers.service-areas"
 const ServiceAreaPage = Page(ServiceArea)
@@ -181,10 +186,10 @@ const ASSIGNMENT_RUNNING_SENTENCE = "This service area is already assigned over 
 export const OUTSIDE_SERVICE_AREA = "Outside the service area's period"
 
 /** What an area shortened under its assignments is refused with; the rows in the way are not in the body, so the caller ends them first. */
-const strandedAssignments = (rows: number) => `${count(rows, "assignment")} ${rows === 1 ? "falls" : "fall"} outside the new period; end ${rows === 1 ? "it" : "them"} first`
+const strandedAssignments = strandedSentence("assignment", "end")
 
 /** The same for an assignment shortened under its provider prices. */
-const strandedPrices = (rows: number) => `${count(rows, "service provider price")} ${rows === 1 ? "falls" : "fall"} outside the new period; end ${rows === 1 ? "it" : "them"} first`
+const strandedPrices = strandedSentence("service provider price", "end")
 
 /** The one-award rule's sentence: the planning area by its code, the other area by its. */
 export const awardedElsewhere = (planningAreaCode: string, serviceAreaCode: string): string => `Planning area ${planningAreaCode} is already in service area ${serviceAreaCode} over part of that period`
@@ -205,16 +210,11 @@ const reachableAssignmentsOf = (tx: Tx, principal: Principal, where: SQL | undef
 /**
  * The areas the caller reads: the office's projects' (`inProjects`), or, for
  * a provider's account, the areas its own assignments name — through
- * `exists`, so an area the provider held once is read and an area nobody has
- * assigned is still the office's to see.
+ * `exists` over the assignment (auth/provider.ts), so an area the provider
+ * held once is read and an area nobody has assigned is still the office's to
+ * see.
  */
-const readable = (tx: Tx, principal: Principal) =>
-  and(
-    eq(serviceArea.companyId, principal.companyId),
-    providerIdOf(principal) === null
-      ? inProjects(serviceArea.projectId, principal)
-      : exists(reachableAssignmentsOf(tx, principal, eq(serviceAreaAssignment.serviceAreaId, serviceArea.id))),
-  )
+const readable = (tx: Tx, principal: Principal) => and(eq(serviceArea.companyId, principal.companyId), reachesThroughAssignments(tx, principal, serviceArea, eq(serviceAreaAssignment.serviceAreaId, serviceArea.id)))
 
 /** The areas the caller writes: the office's projects' and no other, since the award is the company's to make and to move. */
 const writable = (principal: Principal) => and(eq(serviceArea.companyId, principal.companyId), inProjects(serviceArea.projectId, principal))
@@ -300,34 +300,35 @@ const overlapping = (columns: { validFrom: PgColumn; validTo: PgColumn }, period
 
 /**
  * The one-award rule: none of `planningAreaIds` is in another area of the
- * project over a period overlapping this one. One statement finds every
- * membership in the way — the planning area's code and the other area's, for
- * the sentence — and takes the other areas' row locks in id order (`for
- * update of` the area, which Postgres wants named without its schema, hence
- * the alias), the caller having taken this area's first, so two areas
- * claiming each other's planning area take turns and neither passes on a
- * state the other has not written. The refusal is a 409 at the entry, the
- * first in body order, with the sentence as `detail` too.
+ * project over a period overlapping this one. The planning areas named are
+ * locked first, in id order (`lockRows`), so two awards claiming the same
+ * ground take turns on it — the second waits for the first to commit and then
+ * finds the membership it wrote — and a create, which has no area of its own
+ * to lock yet, is serialised the same way as a PUT; the caller holding its
+ * own area's lock has taken it before this, so the order is always the area
+ * and then the ground. Then one statement finds every membership in the way —
+ * the planning area's code and the other area's, for the sentence. The
+ * refusal is a 409 at the entry, the first in body order, with the sentence
+ * as `detail` too.
  */
 async function requireAwardedOnce(tx: Tx, area: { companyId: string; projectId: string; id: string | null }, planningAreaIds: readonly string[], period: Period, at = "planningAreaIds"): Promise<void> {
   if (planningAreaIds.length === 0) return
-  const held = alias(serviceArea, "held")
+  await lockRows(tx, planningArea, area.companyId, planningAreaIds)
   const conflicts = await tx
-    .select({ planningAreaId: serviceAreaPlanningArea.planningAreaId, planningAreaCode: planningArea.code, serviceAreaCode: held.code })
+    .select({ planningAreaId: serviceAreaPlanningArea.planningAreaId, planningAreaCode: planningArea.code, serviceAreaCode: serviceArea.code })
     .from(serviceAreaPlanningArea)
-    .innerJoin(held, and(eq(held.companyId, serviceAreaPlanningArea.companyId), eq(held.id, serviceAreaPlanningArea.serviceAreaId)))
+    .innerJoin(serviceArea, and(eq(serviceArea.companyId, serviceAreaPlanningArea.companyId), eq(serviceArea.id, serviceAreaPlanningArea.serviceAreaId)))
     .innerJoin(planningArea, and(eq(planningArea.companyId, serviceAreaPlanningArea.companyId), eq(planningArea.id, serviceAreaPlanningArea.planningAreaId)))
     .where(
       and(
         eq(serviceAreaPlanningArea.companyId, area.companyId),
-        eq(held.projectId, area.projectId),
-        area.id === null ? undefined : ne(held.id, area.id),
+        eq(serviceArea.projectId, area.projectId),
+        area.id === null ? undefined : ne(serviceArea.id, area.id),
         inArray(serviceAreaPlanningArea.planningAreaId, [...planningAreaIds]),
-        overlapping(held, period),
+        overlapping(serviceArea, period),
       ),
     )
-    .orderBy(asc(held.id))
-    .for("update", { of: held })
+    .orderBy(asc(serviceArea.id))
   // The first entry of the body that is in the way, so the path names what the caller wrote.
   for (const [index, id] of planningAreaIds.entries()) {
     const conflict = conflicts.find((found) => found.planningAreaId === id)
@@ -585,7 +586,7 @@ export function serviceAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "putServiceAreaPlanningAreas",
         summary: "Replace the planning areas a service area covers",
         description:
-          "Replaces the whole set with the one in the body: a planning area the body leaves out is not covered afterwards, and an empty list is an award that reaches no route. Every id is a planning area of the area's project (400 at `ids.N` otherwise), each named once (400 on `ids`), and none is in another service area of the project over a period overlapping this area's (409 at the entry, the one-award rule, held under both areas' locks). The area's `updatedAt` moves, since the set is part of the area on the wire. A service provider's account changes nothing here.",
+          "Replaces the whole set with the one in the body: a planning area the body leaves out is not covered afterwards, and an empty list is an award that reaches no route. Every id is a planning area of the area's project (400 at `ids.N` otherwise), each named once (400 on `ids`), and none is in another service area of the project over a period overlapping this area's (409 at the entry, the one-award rule, held under the planning areas' row locks so two awards claiming the same ground take turns). The area's `updatedAt` moves, since the set is part of the area on the wire. A service provider's account changes nothing here.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The service area with the planning areas it now covers.", ServiceArea),
@@ -609,7 +610,7 @@ export function serviceAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
         // The area's lock, then the area, then the ids proved, then the
         // one-award rule over them, then the replacement: routes/id-sets.ts's
         // steps spelled out, since the rule runs between the proof and the
-        // write and takes the other areas' locks (routes/shared.ts).
+        // write and takes the planning areas' locks (routes/shared.ts).
         await lockRow(tx, serviceArea, { companyId: principal.companyId, id })
         const current = await findArea(tx, writable(principal), id)
         if (current === undefined) throw noSuchArea(id)

@@ -9,13 +9,16 @@ import { DAY_WINDOW_ORDERED } from "@waste/contracts/queries"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { customer } from "@waste/db/schema/customers"
 import { outboxEvent } from "@waste/db/schema/execution"
-import { billableEvent, billingRun, invoice } from "@waste/db/schema/finance"
-import { company } from "@waste/db/schema/organisation"
+import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine } from "@waste/db/schema/finance"
+import { company, project } from "@waste/db/schema/organisation"
 import { withCompany } from "@waste/db/tenant"
-import { and, asc, count, eq } from "drizzle-orm"
+import { and, asc, count, eq, inArray, sql } from "drizzle-orm"
 
 import { createApp } from "../app"
-import { BILLING_RUN_MAX_EVENTS, tooManyEvents } from "../routes/billing-runs"
+import { newId, type IdMinter } from "../ids"
+import { notCancelled } from "../routes/billable-events"
+import { BILLING_RUN_MAX_EVENTS, runBilling, selectBilling, tooManyEvents } from "../routes/billing-runs"
+import { lockRow } from "../routes/shared"
 import { pickupEvent, reversalEvent, seedBilling, type BillingFixtures } from "./billing-fixtures"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
@@ -316,6 +319,86 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
       assert.deepEqual([first.status, second.status], [201, 201])
       const counts = [BillingRunDetail.parse(await first.json()).invoiceCount, BillingRunDetail.parse(await second.json()).invoiceCount].sort()
       assert.deepEqual(counts, [0, 2], "one run issued both invoices and the other none")
+    })
+
+    test("locks the events it invoices: a cancellation sent while a run holds them waits for the run and is then refused as invoiced, so no event is both invoiced and cancelled", async () => {
+      // The run is hand-driven to its selection — the project locked and the ready events read `for update` the way `runBilling` reads them, the transaction held open — so a cancellation that found the row unlocked would stamp `cancelled_at` on an event the run is about to invoice (READ COMMITTED: the run's line is invisible until it commits), a line the customer pays for a row the office thinks is gone. With the lock the cancellation waits: the run goes on to its invoices and commits only once Postgres reports the cancellation blocked behind it (`pg_blocking_pids`, the driver suite's precedent), and the cancellation then reads the line the run wrote.
+      const day = "2026-12-07"
+      const event = await entered(manual({ serviceDate: day }))
+      assert.equal(event.status, "ready")
+      const scope = { companyId: a.companyId, projectId: copenhagen }
+      const window = { periodFrom: day, periodTo: day }
+      const proceed = Promise.withResolvers<void>()
+      const selected = Promise.withResolvers<number>()
+      const running = withCompany(pool.db, a.companyId, async (tx: Tx) => {
+        const [{ pid }] = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
+        await lockRow(tx, project, { companyId: a.companyId, id: copenhagen })
+        const selection = await selectBilling(tx, scope, window, { lock: true })
+        assert.deepEqual(
+          selection.events.map((ready) => ready.id),
+          [event.id],
+          "the one ready event of the day",
+        )
+        selected.resolve(pid)
+        await proceed.promise
+        return await runBilling(tx, { ...scope, ...window, note: null, requestedBy: a.users.olivia.id, newId, now: () => NOON })
+      })
+      /** Rejects if the run ends before it is let go — a statement refused, say — so a broken run fails the test instead of hanging it on the pid. */
+      const endedEarly = running.then(() => Promise.reject(new Error("the run's transaction ended before it was released")))
+      void endedEarly.catch(() => undefined)
+      // The cancellation is sent once the selection is made and held, so what it meets is the lock and not the timing.
+      let cancelling: Promise<Response> | undefined
+      try {
+        const pid = await Promise.race([selected.promise, endedEarly])
+        cancelling = olivia(`/billable-events/${event.id}/cancel`, { method: "POST", body: { reason: "not-delivered" } })
+        // Postgres names the backends a process blocks: the cancellation is waiting on the run's transaction once this answers a row, and not before.
+        const blocked = async (): Promise<boolean> => (await pool.sql`select pid from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))`).length > 0
+        const deadline = Date.now() + 10_000
+        while (!(await blocked())) {
+          assert.ok(Date.now() < deadline, "the cancellation never waited on the run: the selection took no lock on the events")
+          await new Promise((resolve) => setTimeout(resolve, 20))
+        }
+      } finally {
+        proceed.resolve()
+        await running.catch(() => undefined)
+        await cancelling?.catch(() => undefined)
+      }
+      const done = await running
+      assert.ok(cancelling, "the cancellation was sent")
+      assert.deepEqual([done.run.eventCount, done.invoiceIds.length], [1, 1], "the run invoiced the event")
+      assert.equal((await refused(await cancelling, 409)).detail, notCancelled(event.id, "invoiced"), "the cancellation read the line the run wrote")
+      const charged = await readEvent(event.id)
+      assert.deepEqual([charged.status, charged.cancelledAt, charged.cancelReason, charged.invoiceLineId !== null], ["invoiced", null, null, true], "invoiced and never cancelled")
+    })
+
+    test("is one transaction: a run that fails after its first invoice is written leaves no run, invoice, line, exclusion, event or number behind, and the events stay ready", async () => {
+      // The failure is provoked at the second invoice's id: a minter that gives out after the run's id, the first invoice's and its one line's, so the first document — row, line and `invoice-issued` — has been written when the run dies, and everything the transaction holds has to go with it.
+      const day = "2026-12-14"
+      const housing = await entered(manual({ serviceDate: day }))
+      const anna = await entered(manual({ serviceDate: day, agreementId: fx.agreements.anna.id }))
+      /** The exclusion rows and the lines naming the two events: what `written` does not count. */
+      const rest = () =>
+        withCompany(pool.db, a.companyId, async (tx: Tx) => {
+          const [exclusions] = await tx.select({ rows: count() }).from(billingRunExclusion).where(eq(billingRunExclusion.companyId, a.companyId))
+          const [lines] = await tx.select({ rows: count() }).from(invoiceLine).where(and(eq(invoiceLine.companyId, a.companyId), inArray(invoiceLine.billableEventId, [housing.id, anna.id])))
+          return { exclusions: exclusions?.rows ?? 0, lines: lines?.rows ?? 0 }
+        })
+      const before = { ...(await written()), ...(await rest()) }
+      assert.equal(before.lines, 0)
+      let minted = 0
+      const givesOut: IdMinter = () => {
+        if (++minted > 3) throw new Error("the minter gave out")
+        return newId()
+      }
+      await assert.rejects(
+        withCompany(pool.db, a.companyId, (tx: Tx) => runBilling(tx, { companyId: a.companyId, projectId: copenhagen, periodFrom: day, periodTo: day, note: null, requestedBy: a.users.olivia.id, newId: givesOut, now: () => NOON })),
+        /the minter gave out/,
+      )
+      assert.equal(minted, 4, "the run's id, the first invoice's, its line's, and the second invoice's: the first document was written before the run died")
+      assert.deepEqual({ ...(await written()), ...(await rest()) }, before, "no run, no invoice, no line, no exclusion, no invoice-issued, and the counter where it was")
+      assert.deepEqual([(await readEvent(housing.id)).status, (await readEvent(anna.id)).status], ["ready", "ready"], "neither event is on a line")
+      const done = await run(period(day))
+      assert.deepEqual([done.eventCount, done.invoiceCount], [2, 2], "the same run, with a minter that lasts, issues both")
     })
 
     test("holds the body to the caller's projects and its period to its order, and refuses a member the server owns", async () => {

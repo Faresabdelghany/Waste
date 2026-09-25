@@ -189,7 +189,7 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   app.route("/", priceListRoutes(guard))
   app.route("/", serviceAreaRoutes(guard))
   app.route("/", serviceProviderPriceRoutes(guard))
-  // The billing half: a cancellation is stamped with the request's clock, a run and a credit note issue on "today" on the project's clock and publish with the request's instant, so all three take `now`. The preview goes on before the run module's `:id` read would otherwise be asked to take "preview" as an id.
+  // The billing half: a cancellation is stamped with the request's clock, a run and a credit note issue on "today" on the project's clock and publish with the request's instant, so all three take `now`.
   app.route("/", billableEventRoutes(guard, { now }))
   app.route("/", billingRunRoutes(guard, { now }))
   app.route("/", invoiceRoutes(guard, { now }))

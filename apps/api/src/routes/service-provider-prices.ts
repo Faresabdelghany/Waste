@@ -30,7 +30,13 @@
 // takes it, and the fee moves through `index` alone. A day at or before the
 // row's start is a 400 on `appliedFrom`, since the index applies inside the
 // price's period; a day at or after an end the row already has is a 409,
-// since that row is over and the one in force is the one to index.
+// since that row is over and the one in force is the one to index. The new
+// row cannot overlap another: its period is the tail of the row it splits,
+// which the constraint already held clear of every other row, and a create
+// racing for that ground waits on the old row's committed version and loses
+// to it — so the indexed insert runs bare, and `service_provider_price_no_overlap`
+// answering there would be the 409 naming a constraint, the signal a rule
+// above is broken, not a sentence to write.
 //
 // Two scopes, as routes/service-areas.ts has them (auth/provider.ts, §7.22):
 // the office reads and writes the prices of its projects; a Service
@@ -56,13 +62,13 @@ import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
-import { providerIdOf, reachesAssignments } from "../auth/provider"
+import { reachesThroughAssignments } from "../auth/provider"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { projectCurrency } from "./fleet-lookups"
-import { periodAfter, periodOf, requireWithin, type Period } from "./periods"
+import { periodAfter, periodOf, requireWithin } from "./periods"
 import { requireProduct, requireServiceAreaAssignment } from "./references"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
 import { refuseUnofferedProduct } from "./statuses"
@@ -133,17 +139,7 @@ const noSuchPrice = (id: string) => problem(404, { detail: `No service provider 
  * provider, through `exists` over the assignment (auth/provider.ts).
  */
 const readable = (tx: Tx, principal: Principal) =>
-  and(
-    eq(serviceProviderPrice.companyId, principal.companyId),
-    providerIdOf(principal) === null
-      ? inProjects(serviceProviderPrice.projectId, principal)
-      : exists(
-          tx
-            .select({ one: sql`1` })
-            .from(serviceAreaAssignment)
-            .where(and(eq(serviceAreaAssignment.companyId, principal.companyId), eq(serviceAreaAssignment.id, serviceProviderPrice.serviceAreaAssignmentId), reachesAssignments(principal))),
-        ),
-  )
+  and(eq(serviceProviderPrice.companyId, principal.companyId), reachesThroughAssignments(tx, principal, serviceProviderPrice, eq(serviceAreaAssignment.id, serviceProviderPrice.serviceAreaAssignmentId)))
 
 /** The prices the caller writes: the office's projects' and no other, since the company sets what it pays. */
 const writable = (principal: Principal) => and(eq(serviceProviderPrice.companyId, principal.companyId), inProjects(serviceProviderPrice.projectId, principal))
@@ -155,17 +151,6 @@ async function findPrice(tx: Tx, where: SQL | undefined, id: string): Promise<Ro
     .from(serviceProviderPrice)
     .where(and(where, eq(serviceProviderPrice.id, id)))
     .limit(1)
-  return row
-}
-
-/** The period of the assignment a stored price hangs on, for the containment a patch is held to; the key says it is there, so its absence is a bug. */
-async function assignmentPeriodOf(tx: Tx, companyId: string, id: string): Promise<Period> {
-  const [row] = await tx
-    .select({ validFrom: serviceAreaAssignment.validFrom, validTo: serviceAreaAssignment.validTo })
-    .from(serviceAreaAssignment)
-    .where(and(eq(serviceAreaAssignment.companyId, companyId), eq(serviceAreaAssignment.id, id)))
-    .limit(1)
-  if (row === undefined) throw new Error(`assignmentPeriodOf: no assignment ${id} in company ${companyId}`)
   return row
 }
 
@@ -342,7 +327,8 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const current = await findPrice(tx, writable(principal), id)
         if (current === undefined) throw noSuchPrice(id)
         if (patch.validTo !== undefined) {
-          const assignment = await assignmentPeriodOf(tx, principal.companyId, current.serviceAreaAssignmentId)
+          // The stored assignment, read the way the create reads a named one: the price's project is the assignment's by the composite key, so the check finds it.
+          const assignment = await requireServiceAreaAssignment(tx, { companyId: principal.companyId, projectId: current.projectId }, current.serviceAreaAssignmentId)
           requireWithin(assignment, periodAfter(current, patch), OUTSIDE_ASSIGNMENT)
         }
         const [row] = await refuseOverlap({ [PRICE_RUNNING]: PRICE_RUNNING_SENTENCE }, () =>
@@ -396,28 +382,27 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
           .update(serviceProviderPrice)
           .set({ validTo: index.appliedFrom })
           .where(and(eq(serviceProviderPrice.companyId, principal.companyId), eq(serviceProviderPrice.id, id)))
-        const [row] = await refuseOverlap({ [PRICE_RUNNING]: PRICE_RUNNING_SENTENCE }, () =>
-          tx
-            .insert(serviceProviderPrice)
-            .values({
-              id: newId(),
-              companyId: principal.companyId,
-              projectId: current.projectId,
-              serviceAreaAssignmentId: current.serviceAreaAssignmentId,
-              productId: current.productId,
-              bidMinor: current.bidMinor,
-              unitPriceMinor: indexedFee(base, index.basisPoints),
-              currency: current.currency,
-              indexedFromId: current.id,
-              indexLabel: index.label,
-              indexBasisPoints: index.basisPoints,
-              indexBase: index.base,
-              notes: null,
-              validFrom: index.appliedFrom,
-              validTo: current.validTo,
-            })
-            .returning(columns),
-        )
+        // The new row takes the tail of the one just ended, ground the constraint held clear of every other row: no overlap is reachable here (the header says why), so the insert runs bare.
+        const [row] = await tx
+          .insert(serviceProviderPrice)
+          .values({
+            id: newId(),
+            companyId: principal.companyId,
+            projectId: current.projectId,
+            serviceAreaAssignmentId: current.serviceAreaAssignmentId,
+            productId: current.productId,
+            bidMinor: current.bidMinor,
+            unitPriceMinor: indexedFee(base, index.basisPoints),
+            currency: current.currency,
+            indexedFromId: current.id,
+            indexLabel: index.label,
+            indexBasisPoints: index.basisPoints,
+            indexBase: index.base,
+            notes: null,
+            validFrom: index.appliedFrom,
+            validTo: current.validTo,
+          })
+          .returning(columns)
         return created(c, "/service-provider-prices", priceOf(row))
       },
     )

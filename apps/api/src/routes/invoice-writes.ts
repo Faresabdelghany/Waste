@@ -7,13 +7,13 @@
 // written is followed by its `invoice-issued` in the same transaction, so the
 // outbox is complete by construction.
 //
-// The number is one `update … returning` under the company's row lock, the
-// route's and the ticket's rule (`next_route_number`, `next_ticket_number`)
-// one document at a time: a run of a thousand invoices numbers them in one
-// transaction, the lock held for the rest of it, and a run that fails rolls
-// its numbers back with its rows, so the company's series is unbroken. A
-// credit note takes its number from the same series (§7.13): one series, two
-// prefixes, the contracts' `invoiceLabel`.
+// The number is `nextNumber` (routes/shared.ts), the ticket's statement over
+// the company's other counter: one `update … returning` under the company's
+// row lock, one document at a time — a run of a thousand invoices numbers
+// them in one transaction, the lock held for the rest of it, and a run that
+// fails rolls its numbers back with its rows, so the company's series is
+// unbroken. A credit note takes its number from the same series (§7.13): one
+// series, two prefixes, the contracts' `invoiceLabel`.
 //
 // Every line's shape is checked before the insert (`invoiceLineShapeIssue`):
 // the API composes every line itself — from an event, or from the line it
@@ -26,32 +26,19 @@
 import type { InvoiceDetail } from "@waste/contracts/invoices"
 import type { Tx } from "@waste/db/client"
 import { invoice, invoiceLine } from "@waste/db/schema/finance"
-import { company } from "@waste/db/schema/organisation"
 import { vatOf } from "@waste/domain/finance/money"
 import type { CreditReason, InvoiceKind } from "@waste/domain/finance/vocabulary"
-import { eq, sql } from "drizzle-orm"
 
 import type { IdMinter } from "../ids"
 import { emit } from "../outbox"
 import { invoiceColumns, invoiceOf, lineColumns, lineOf } from "./billing-shapes"
-import { refuseDuplicate } from "./shared"
+import { nextNumber, refuseDuplicate } from "./shared"
 
 /** `invoice_line_billable_event_id_idx`: an event is on one line of one invoice, the database's word behind the run's selection. */
 export const EVENT_ON_ONE_LINE = "invoice_line_billable_event_id_idx"
 
 /** What a run whose selection another run invoiced under it is told: the backstop behind the project's lock. */
 export const INVOICED_BY_ANOTHER_RUN = "An event in the selection was invoiced by another run; run again"
-
-/** The next document number of the company: one `update … returning` under the company's row lock, never renumbered. */
-export async function nextInvoiceNumber(tx: Tx, companyId: string): Promise<number> {
-  const [row] = await tx
-    .update(company)
-    .set({ nextInvoiceNumber: sql`${company.nextInvoiceNumber} + 1` })
-    .where(eq(company.id, companyId))
-    .returning({ next: company.nextInvoiceNumber })
-  if (row === undefined) throw new Error(`no company ${companyId} to number an invoice in`)
-  return row.next - 1
-}
 
 /** The document as a door composes it: everything but the number, the totals, the id and the stamp, which are the write's. */
 export type InvoiceDraft = {
@@ -130,7 +117,7 @@ export async function issueInvoice(tx: Tx, input: IssueInvoiceInput): Promise<In
   }
   const netMinor = lines.reduce((sum, line) => sum + line.netMinor, 0)
   const vatMinor = lines.reduce((sum, line) => sum + line.vatMinor, 0)
-  const number = await nextInvoiceNumber(tx, companyId)
+  const number = await nextNumber(tx, companyId, "nextInvoiceNumber")
   const [row] = await tx
     .insert(invoice)
     .values({ id: input.newId(), companyId, ...draft, number, netMinor, vatMinor, grossMinor: netMinor + vatMinor })

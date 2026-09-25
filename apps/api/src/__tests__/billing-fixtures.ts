@@ -37,7 +37,7 @@ import type { PricedAmounts } from "@waste/domain/finance/pricing"
 
 import { newId } from "../ids"
 import { priceDraft, recordBillableEvent } from "../routes/billable-writes"
-import { nextTicketNumber } from "../routes/ticket-writes"
+import { nextNumber } from "../routes/shared"
 import type { ExecutionFixtures } from "./execution-fixtures"
 import { seedPriceList, type SeededPriceList } from "./finance-fixtures"
 import { testId, type Tenant } from "./tenant"
@@ -310,7 +310,7 @@ export async function ticketEvent(pool: Database, tenant: Tenant, fixtures: Bill
   const projectId = tenant.projects.copenhagen.id
   const ticketId = testId()
   return await withCompany(pool.db, tenant.companyId, async (tx: Tx) => {
-    const number = await nextTicketNumber(tx, tenant.companyId)
+    const number = await nextNumber(tx, tenant.companyId, "nextTicketNumber")
     await tx.insert(ticket).values({
       id: ticketId,
       companyId: tenant.companyId,

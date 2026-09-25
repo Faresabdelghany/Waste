@@ -312,5 +312,29 @@ describe("the service provider price endpoints", { skip: database.skip }, () => 
       await refused(await viewer(`/service-provider-prices/${harborPrice.id}/index`, { method: "POST", body: { label: "CPI", basisPoints: 100, base: "bid", appliedFrom: DECEMBER } }), 404)
       assert.equal((await page(olivia, `?productId=${bulky.id}&serviceAreaAssignmentId=${nordren.assignmentId}&limit=200`)).items.length, 3, "a refused index wrote nothing")
     })
+
+    test("the indexed row can meet no other: the ground it takes is the tail of the row it splits, which the constraint holds clear — a create over it is refused, and the split row is indexed again inside what it kept", async () => {
+      const chain = (await page(olivia, `?productId=${bulky.id}&serviceAreaAssignmentId=${nordren.assignmentId}&limit=200`)).items
+      const [first, second] = chain
+      assert.deepEqual([first.validFrom, first.validTo, second.validFrom, second.validTo], [MARCH, JULY, JULY, OCTOBER])
+      // What the indexed row's ground looks like to anyone else: taken, in the create's words.
+      const wedge = await refused(await olivia("/service-provider-prices", { method: "POST", body: { serviceAreaAssignmentId: nordren.assignmentId, productId: bulky.id, bidMinor: 1, validFrom: JULY, validTo: OCTOBER } }), 409)
+      assert.equal(wedge.detail, PRICE_RUNNING)
+      // The ended row is indexed again inside the period it kept: the new row takes [May, July), the tail of [March, July), and meets nothing.
+      const again = await index(olivia, first.id, { label: "Spring CPI", basisPoints: 100, base: "bid", appliedFrom: "2026-05-01" })
+      assert.deepEqual([again.validFrom, again.validTo, again.indexedFromId, again.unitPriceMinor], ["2026-05-01", JULY, first.id, 3_030])
+      assert.deepEqual([(await one(olivia, first.id)).validTo, (await one(olivia, second.id)).validFrom], ["2026-05-01", JULY], "the split row ends on the day; the next row of the chain is untouched")
+      const rows = (await page(olivia, `?productId=${bulky.id}&serviceAreaAssignmentId=${nordren.assignmentId}&limit=200`)).items
+      assert.deepEqual(
+        rows.map((item) => [item.validFrom, item.validTo]).sort(),
+        [
+          [MARCH, "2026-05-01"],
+          ["2026-05-01", JULY],
+          [JULY, OCTOBER],
+          [OCTOBER, NEXT_YEAR],
+        ],
+        "four rows tiling the period, none overlapping",
+      )
+    })
   })
 })

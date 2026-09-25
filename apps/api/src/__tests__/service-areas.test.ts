@@ -8,10 +8,15 @@ import { PlanningArea } from "@waste/contracts/planning-areas"
 import { PROVIDER_NEEDS_A_DAY, ServiceArea, ServiceAreaAssignment, ServiceAreaCreated, ServiceAreaDetail } from "@waste/contracts/service-areas"
 import { ServiceProviderPrice } from "@waste/contracts/service-provider-prices"
 import { ENDS_AFTER_IT_STARTS } from "@waste/contracts/validity"
-import { createDb, type Database } from "@waste/db/client"
+import { createDb, type Database, type Tx } from "@waste/db/client"
+import { serviceArea, serviceAreaPlanningArea } from "@waste/db/schema/finance"
+import { planningArea } from "@waste/db/schema/planning-areas"
+import { withCompany } from "@waste/db/tenant"
+import { sql } from "drizzle-orm"
 import * as z from "zod"
 
 import { createApp } from "../app"
+import { lockRow } from "../routes/shared"
 import { callingAs, type Call } from "./calls"
 import { nextMillisecond } from "./clock"
 import { created } from "./created"
@@ -256,6 +261,59 @@ describe("the service area and assignment endpoints", { skip: database.skip }, (
       assert.equal(reaching.detail, awardedElsewhere("OP-CEN-04", "CA-S-2"))
       assert.deepEqual(paths(reaching), ["planningAreaIds.0"])
       assert.equal((await page(olivia, "?limit=200")).items.some((item) => item.code === "CA-S-3"), false)
+    })
+
+    test("serialises two awards of one planning area on its row lock: a create sent while another award of the ground is in flight waits for it, and is then refused naming the award that won", async () => {
+      // The winner is hand-driven — the planning area locked as the create locks it, the award and its membership written the way the create writes them, the transaction held open — so a create that took no lock on the ground would read no membership (READ COMMITTED: an uncommitted row is invisible), pass the one-award rule, and leave two live awards over one planning area, paid twice. With the lock the create waits: the winner commits only once Postgres reports the create blocked behind it (`pg_blocking_pids`, the driver suite's precedent), and the create then finds the membership the winner wrote.
+      const ground = await create(olivia, "/planning-areas", { projectId: a.projects.copenhagen.id, code: "OP-CEN-07", name: "Nørrebro", purpose: "route-planning" }, PlanningArea)
+      const winnersArea = testId()
+      const released = Promise.withResolvers<void>()
+      const held = Promise.withResolvers<number>()
+      const winner = withCompany(pool.db, a.companyId, async (tx: Tx) => {
+        const [{ pid }] = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
+        await lockRow(tx, planningArea, { companyId: a.companyId, id: ground.id })
+        await tx.insert(serviceArea).values({ id: winnersArea, companyId: a.companyId, projectId: a.projects.copenhagen.id, code: "CA-N-1", name: "Nørrebro 1", boundaryText: "The contract's boundary for CA-N-1", validFrom: JANUARY, validTo: NEXT_YEAR })
+        await tx.insert(serviceAreaPlanningArea).values({ id: testId(), companyId: a.companyId, projectId: a.projects.copenhagen.id, serviceAreaId: winnersArea, planningAreaId: ground.id })
+        held.resolve(pid)
+        await released.promise
+      })
+      /** Rejects if the winner ends before it is released — an insert refused, say — so a broken winner fails the test instead of hanging it on the pid. */
+      const endedEarly = winner.then(() => Promise.reject(new Error("the winner's transaction ended before it was released")))
+      void endedEarly.catch(() => undefined)
+      // The create is sent once the winner holds the ground, so what it meets is the lock and not the timing.
+      let losing: Promise<Response> | undefined
+      try {
+        const pid = await Promise.race([held.promise, endedEarly])
+        losing = olivia("/service-areas", { method: "POST", body: body("CA-N-2", { planningAreaIds: [ground.id], validFrom: JULY, validTo: null }) })
+        // Postgres names the backends a process blocks: the create is waiting on the winner's transaction once this answers a row, and not before.
+        const blocked = async (): Promise<boolean> => (await pool.sql`select pid from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))`).length > 0
+        const deadline = Date.now() + 10_000
+        while (!(await blocked())) {
+          assert.ok(Date.now() < deadline, "the create never waited on the planning area: the one-award rule took no lock on the ground")
+          await new Promise((resolve) => setTimeout(resolve, 20))
+        }
+      } finally {
+        released.resolve()
+        await winner
+        await losing?.catch(() => undefined)
+      }
+      assert.ok(losing, "the create was sent")
+      const lost = await refused(await losing, 409)
+      assert.deepEqual([lost.detail, paths(lost)], [awardedElsewhere("OP-CEN-07", "CA-N-1"), ["planningAreaIds.0"]], "the rule's sentence, naming the award that won")
+      assert.deepEqual((await page(olivia, `?planningAreaId=${ground.id}&limit=200`)).items.map((item) => item.code), ["CA-N-1"], "one live award over the ground, the winner's")
+    })
+
+    test("two creates naming one planning area at once: one is made and the other refused naming it, whichever the timing gives", async () => {
+      const ground = await create(olivia, "/planning-areas", { projectId: a.projects.copenhagen.id, code: "OP-CEN-08", name: "Vesterbro", purpose: "route-planning" }, PlanningArea)
+      const [left, right] = await Promise.all([
+        olivia("/service-areas", { method: "POST", body: body("CA-V-1", { planningAreaIds: [ground.id] }) }),
+        olivia("/service-areas", { method: "POST", body: body("CA-V-2", { planningAreaIds: [ground.id] }) }),
+      ])
+      assert.deepEqual([left.status, right.status].sort(), [201, 409], `${JSON.stringify(await left.clone().json())} / ${JSON.stringify(await right.clone().json())}`)
+      const won = left.status === 201 ? "CA-V-1" : "CA-V-2"
+      const lost = await readProblem(left.status === 409 ? left : right)
+      assert.deepEqual([lost.detail, paths(lost)], [awardedElsewhere("OP-CEN-08", won), ["planningAreaIds.0"]])
+      assert.deepEqual((await page(olivia, `?planningAreaId=${ground.id}&limit=200`)).items.map((item) => item.code), [won], "the ground is awarded once")
     })
 
     test("refuses a role without create, and a provider's account, which works in no project", async () => {

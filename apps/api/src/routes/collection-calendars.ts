@@ -68,7 +68,6 @@ import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
-import { count } from "@waste/domain/text"
 import { and, asc, eq, gt, gte, inArray, lt, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -79,7 +78,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { periodAfter, refuseStranded, requireOrdered, type Period } from "./periods"
+import { periodAfter, refuseStranded, requireOrdered, strandedSentence, type Period } from "./periods"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stamp, stampsOf } from "./shared"
 
 const MODULE = "configure.calendars"
@@ -125,8 +124,7 @@ const CALENDAR_RUNNING = "collection_calendar_no_overlap"
 const CALENDAR_RUNNING_SENTENCE = "This project already has a calendar in force over that period; a project has one calendar at a time"
 
 /** What a period the holidays do not fit inside is refused with; the rows in the way are not in the body, so the caller removes them first. */
-const strandedHolidays = (rows: number) =>
-  `${count(rows, "holiday")} ${rows === 1 ? "falls" : "fall"} outside the new period; remove ${rows === 1 ? "it" : "them"} first`
+const strandedHolidays = strandedSentence("holiday", "remove")
 
 const noSuchCalendar = (id: string) => problem(404, { detail: `No collection calendar ${id} in the projects this account works in` })
 

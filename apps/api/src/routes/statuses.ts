@@ -99,10 +99,13 @@ export function refuseInactiveCustomer(status: CustomerStatus | undefined, path:
   throw problem(409, { detail: INACTIVE_PARTY[path] })
 }
 
+/** What a body naming a product that is not offered is told: the status it has, and what the reference needs. Read by the descriptions that quote it, so the document says what the route says. */
+export const unofferedProduct = (status: Exclude<ProductStatus, "active">): string => `The product is ${status}; only an active product can be subscribed to`
+
 /** A Product a subscription names: offered, or the sentence naming the status it has instead. */
 export function refuseUnofferedProduct(status: ProductStatus | undefined): void {
   if (status === undefined || status === "active") return
-  throw problem(409, { detail: `The product is ${status}; only an active product can be subscribed to` })
+  throw problem(409, { detail: unofferedProduct(status) })
 }
 
 /**

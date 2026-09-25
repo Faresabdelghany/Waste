@@ -9,10 +9,10 @@
 // company, the draft, `createdBy`, `sourceEventId`, an id minter and a clock,
 // and never a Principal or a Context, so a worker with no request in hand can
 // call it (§7.24; where it lives once `apps/worker` exists is decided with
-// #97 part B). The number is one `update … returning` under the company's row
-// lock, the route's rule (`next_route_number`) one at a time: a ticket is one
-// create, and the lock is held for the rest of the request, which tens of
-// tickets a day do not notice.
+// #97 part B). The number is `nextNumber` (routes/shared.ts), one `update …
+// returning` under the company's row lock, the route's rule
+// (`next_route_number`) one at a time: a ticket is one create, and the lock is
+// held for the rest of the request, which tens of tickets a day do not notice.
 //
 // `appendTicketEvent` is the allocation's `appendEvent` rule (#101): every
 // write to the ticket's row is followed by one `ticket_event` in the same
@@ -25,16 +25,15 @@
 // left for `ticket_event_kind_shape` to answer as a 500 naming a constraint.
 import type { Ticket, TicketLinks } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
-import { company } from "@waste/db/schema/organisation"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { ticketEventShapeIssue } from "@waste/domain/resolution/event-shapes"
 import type { TicketEventKind, TicketKind, TicketPriority, TicketResolution, TicketSource, TicketStatus, TicketVisibility } from "@waste/domain/resolution/vocabulary"
-import { eq, sql } from "drizzle-orm"
 
 import { newId as processId, type IdMinter } from "../ids"
 import { emit } from "../outbox"
 import { linkAlert } from "./alert-links"
 import { eventColumns, ticketColumns, ticketOf, type TicketEventRow, type TicketRow } from "./resolution-shapes"
+import { nextNumber } from "./shared"
 
 /** The case as a caller opens it: what the office's body or the consumer's `ticketFor` says, with every link spelled (null where none). */
 export type TicketDraft = {
@@ -86,17 +85,6 @@ export type TicketEventDraft = {
   sourceEventId: string | null
 }
 
-/** The next ticket number of the company: one `update … returning` under the company's row lock, never renumbered. */
-export async function nextTicketNumber(tx: Tx, companyId: string): Promise<number> {
-  const [row] = await tx
-    .update(company)
-    .set({ nextTicketNumber: sql`${company.nextTicketNumber} + 1` })
-    .where(eq(company.id, companyId))
-    .returning({ next: company.nextTicketNumber })
-  if (row === undefined) throw new Error(`no company ${companyId} to number a ticket in`)
-  return row.next - 1
-}
-
 /**
  * Appends one history row after a write to the ticket's row — or a comment,
  * which follows no write. The shape is checked before the insert; the row
@@ -136,7 +124,7 @@ export async function appendTicketEvent(tx: Tx, ticketRef: TicketRef, event: Tic
  */
 export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row: TicketRow; answered: Ticket }> {
   const { companyId, draft, createdBy, sourceEventId } = input
-  const number = await nextTicketNumber(tx, companyId)
+  const number = await nextNumber(tx, companyId, "nextTicketNumber")
   const [row] = await tx
     .insert(ticket)
     .values({

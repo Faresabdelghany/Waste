@@ -89,6 +89,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { projectToday } from "./fleet-lookups"
 import { periodAfter, requireOrdered } from "./periods"
 import { requireDepot, requirePlanningArea, requireUnloadingStation, type Scope } from "./references"
 import {
@@ -99,7 +100,6 @@ import {
   mergeReferences,
   noSuchScheme,
   pickOf,
-  projectToday,
   referencesOf,
   requireFleetInService,
   requireGroupDriver,

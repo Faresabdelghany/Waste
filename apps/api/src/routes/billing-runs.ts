@@ -15,7 +15,15 @@
 // `manual` and `reversal` event of the project whose service date lies in
 // the period and whose reading is `ready` — priced, not cancelled, not on an
 // invoice line, not reversed (a reversed original stays on its invoice; the
-// reversal is what is selected) — refuses a selection above
+// reversal is what is selected) — and reads them `for update`, since a
+// cancellation (`POST /billable-events/:id/cancel`) takes the event's row
+// lock before it reads and would otherwise stamp `cancelled_at` on an event
+// the run is invoicing, a line the customer pays for a row the office thinks
+// is gone: locked at the selection, the cancellation waits for the run and is
+// then refused as invoiced. The lock is `of` the event alone, not the
+// agreement and product it joins, so a pickup recorded under the agreement
+// during the run is not held up; at most `BILLING_RUN_MAX_EVENTS` row locks,
+// under the project's. It refuses a selection above
 // `BILLING_RUN_MAX_EVENTS` (409: a run is one transaction), groups the rest
 // by payer (`agreement.payer_customer_id`) and currency, and for each group
 // issues one invoice through routes/invoice-writes.ts: the next number of
@@ -48,8 +56,8 @@ import { billableEvent, billingRun, billingRunExclusion, invoiceLine } from "@wa
 import { project } from "@waste/db/schema/organisation"
 import { PAYMENT_TERMS_DAYS } from "@waste/domain/finance/money"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
-import { and, asc, count, eq, gt, gte, isNotNull, isNull, lte, notExists, sql, type SQL } from "drizzle-orm"
-import { alias } from "drizzle-orm/pg-core"
+import { and, asc, count, eq, getTableColumns, gt, gte, isNotNull, isNull, lte, notExists, sql, type SQL } from "drizzle-orm"
+import { alias, type PgColumn } from "drizzle-orm/pg-core"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -59,9 +67,8 @@ import { requireGrant } from "../auth/require"
 import { newId, type IdMinter } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { eventColumns, exclusionColumns, exclusionOf, findRun, noSuchRun, runColumns, runDetailOf, runOf, runScope, type EventRow, type ExclusionRow, type RunRow } from "./billing-shapes"
-import { dayInTimezone } from "./days"
-import { projectTimezone } from "./fleet-lookups"
+import { exclusionColumns, exclusionOf, findRun, noSuchRun, runColumns, runDetailOf, runOf, runScope, type EventRow, type ExclusionRow, type RunRow } from "./billing-shapes"
+import { projectToday } from "./fleet-lookups"
 import { issueInvoice, type LineDraft } from "./invoice-writes"
 import type { Scope } from "./references"
 import type { ClockOptions } from "./scheme-groups"
@@ -95,58 +102,65 @@ type Excluded = { customerId: string; eventCount: number }
 /** What a run or a preview finds: the ready events in line order, the groups in numbering order, and the payers excluded. */
 export type Selection = { events: ReadyEvent[]; groups: Group[]; exclusions: Excluded[] }
 
-/** The events of the project whose service date lies in the period and that were not cancelled. */
-const inPeriod = (scope: Scope, period: BillingPeriod): SQL | undefined =>
-  and(
-    eq(billableEvent.companyId, scope.companyId),
-    eq(billableEvent.projectId, scope.projectId),
-    gte(billableEvent.serviceDate, period.periodFrom),
-    lte(billableEvent.serviceDate, period.periodTo),
-    isNull(billableEvent.cancelledAt),
-  )
+/** The event columns the selection's predicates read: the `billable_event` table's own, or an alias's. */
+type EventColumns = { id: PgColumn; companyId: PgColumn; projectId: PgColumn; serviceDate: PgColumn; cancelledAt: PgColumn; blockReason: PgColumn }
 
-/** The `ready` reading as a `where`: priced, not cancelled, no line naming it, no reversal naming it. */
-function ready(tx: Tx, scope: Scope, period: BillingPeriod): SQL | undefined {
+/** The events of the project whose service date lies in the period and that were not cancelled. */
+const inPeriod = (scope: Scope, period: BillingPeriod, on: EventColumns = billableEvent): SQL | undefined =>
+  and(eq(on.companyId, scope.companyId), eq(on.projectId, scope.projectId), gte(on.serviceDate, period.periodFrom), lte(on.serviceDate, period.periodTo), isNull(on.cancelledAt))
+
+/** The `ready` reading as a `where`: priced, not cancelled, no line naming it, no reversal naming it. `on` is the event row the statement is over, the table or an alias of it. */
+function ready(tx: Tx, scope: Scope, period: BillingPeriod, on: EventColumns = billableEvent): SQL | undefined {
   const reversal = alias(billableEvent, "reversal")
   return and(
-    inPeriod(scope, period),
-    isNull(billableEvent.blockReason),
+    inPeriod(scope, period, on),
+    isNull(on.blockReason),
     notExists(
       tx
         .select({ one: sql`1` })
         .from(invoiceLine)
-        .where(and(eq(invoiceLine.companyId, scope.companyId), eq(invoiceLine.billableEventId, billableEvent.id))),
+        .where(and(eq(invoiceLine.companyId, scope.companyId), eq(invoiceLine.billableEventId, on.id))),
     ),
     notExists(
       tx
         .select({ one: sql`1` })
         .from(reversal)
-        .where(and(eq(reversal.companyId, scope.companyId), eq(reversal.reversesEventId, billableEvent.id))),
+        .where(and(eq(reversal.companyId, scope.companyId), eq(reversal.reversesEventId, on.id))),
     ),
   )
 }
 
+/** Whether the selection takes the events' row locks: the run does, the preview writes nothing and holds nothing. */
+export type SelectionOptions = { lock?: boolean }
+
 /**
  * The selection and the grouping, as the run and the preview both make them:
  * the ready count first (the ceiling is a 409 before a single row is read
- * whole), then the ready events in line order, then the blocked events per
- * payer — a blocked event with no agreement (`no-subscription`) names no
- * payer and is nobody's exclusion — and the payers among them with nothing
- * ready. The groups are ordered by payer and then currency, so two runs over
- * the same events number their invoices the same way.
+ * whole), then the ready events in line order — `for update` of the events
+ * when `lock` is set, so what the run invoices is what it read and a
+ * cancellation waits behind it; the statement runs over an alias, since
+ * Postgres wants the locked relation named without its schema — then the
+ * blocked events per payer — a blocked event with no agreement
+ * (`no-subscription`) names no payer and is nobody's exclusion — and the
+ * payers among them with nothing ready. The groups are ordered by payer and
+ * then currency, so two runs over the same events number their invoices the
+ * same way.
  */
-export async function selectBilling(tx: Tx, scope: Scope, period: BillingPeriod): Promise<Selection> {
+export async function selectBilling(tx: Tx, scope: Scope, period: BillingPeriod, { lock = false }: SelectionOptions = {}): Promise<Selection> {
   const [counted] = await tx.select({ rows: count() }).from(billableEvent).where(ready(tx, scope, period))
   const readyCount = counted?.rows ?? 0
   if (readyCount > BILLING_RUN_MAX_EVENTS) throw problem(409, { detail: tooManyEvents(readyCount) })
   // The agreement and the product every ready event names, joined for the grouping and the line's text.
-  const events: ReadyEvent[] = await tx
-    .select({ ...eventColumns, agreementNumber: agreement.number, payerCustomerId: agreement.payerCustomerId, productName: product.name, invoiceName: product.invoiceName })
-    .from(billableEvent)
-    .innerJoin(agreement, and(eq(agreement.companyId, billableEvent.companyId), eq(agreement.id, billableEvent.agreementId)))
-    .innerJoin(product, and(eq(product.companyId, billableEvent.companyId), eq(product.id, billableEvent.productId)))
-    .where(ready(tx, scope, period))
-    .orderBy(asc(agreement.number), asc(billableEvent.serviceDate), asc(product.name), asc(billableEvent.id))
+  const event = alias(billableEvent, "event")
+  const { companyId: _companyId, ...columns } = getTableColumns(event)
+  const selected = tx
+    .select({ ...columns, agreementNumber: agreement.number, payerCustomerId: agreement.payerCustomerId, productName: product.name, invoiceName: product.invoiceName })
+    .from(event)
+    .innerJoin(agreement, and(eq(agreement.companyId, event.companyId), eq(agreement.id, event.agreementId)))
+    .innerJoin(product, and(eq(product.companyId, event.companyId), eq(product.id, event.productId)))
+    .where(ready(tx, scope, period, event))
+    .orderBy(asc(agreement.number), asc(event.serviceDate), asc(product.name), asc(event.id))
+  const events: ReadyEvent[] = await (lock ? selected.for("update", { of: event }) : selected)
   const blocked = await tx
     .select({ customerId: agreement.payerCustomerId, events: count() })
     .from(billableEvent)
@@ -235,10 +249,9 @@ export async function runBilling(tx: Tx, input: RunBillingInput): Promise<{ run:
   const { companyId, projectId } = input
   const scope: Scope = { companyId, projectId }
   await lockRow(tx, project, { companyId, id: projectId })
-  const timezone = await projectTimezone(tx, companyId, projectId)
-  const selection = await selectBilling(tx, scope, input)
+  const selection = await selectBilling(tx, scope, input, { lock: true })
   const at = input.now()
-  const issuedOn = dayInTimezone(at, timezone)
+  const issuedOn = await projectToday(tx, scope, () => at)()
   const dueOn = addDays(issuedOn, PAYMENT_TERMS_DAYS)
   const [run] = await tx
     .insert(billingRun)
@@ -353,7 +366,7 @@ export function billingRunRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         description:
           "Runs billing synchronously, in the request's transaction, for a project the caller works in (400 at `projectId` otherwise) over the service dates `periodFrom` to `periodTo` (`periodTo` on or after `periodFrom`, 400 at `periodTo`). " +
           RUN_RULES +
-          ` A selection above ${grouped(BILLING_RUN_MAX_EVENTS)} ready events is refused (409, \`5 214 ready events fall in the period; narrow it — a run is one transaction\`). Under the project's row lock, so two runs of one project take turns and the second finds only what the first left; two runs over overlapping periods are allowed for the same reason. For each group the run takes the next number of the company's series (\`INV-<n>\`, unbroken: a run that fails rolls its numbers back with its rows), writes the invoice — \`issuedOn\` today on the project's clock, \`dueOn\` ${PAYMENT_TERMS_DAYS} days on, the period, the totals summed from the lines — and its lines in a fixed order, agreement number, service date, product name, event id, each line one event with the product's invoice name (or its name) and the service date as its frozen text and the event's amounts, a reversal a negative line, and emits one \`invoice-issued\` per invoice in the same transaction, carrying the invoice with its lines as \`GET /invoices/{id}\` answers it. The run's row is written \`completed\` with its counts and its totals over every currency summed as integers; a run with nothing ready is a completed run of zero invoices. An event another run invoiced under this one is the backstop the project's lock makes unreachable (409, \`An event in the selection was invoiced by another run; run again\`).`,
+          ` A selection above ${grouped(BILLING_RUN_MAX_EVENTS)} ready events is refused (409, \`5 214 ready events fall in the period; narrow it — a run is one transaction\`). Under the project's row lock, so two runs of one project take turns and the second finds only what the first left; two runs over overlapping periods are allowed for the same reason. The events selected are read \`for update\`, so a cancellation sent while the run is invoicing them waits for it and is then refused as invoiced (409), and no event is both invoiced and cancelled. For each group the run takes the next number of the company's series (\`INV-<n>\`, unbroken: a run that fails rolls its numbers back with its rows), writes the invoice — \`issuedOn\` today on the project's clock, \`dueOn\` ${PAYMENT_TERMS_DAYS} days on, the period, the totals summed from the lines — and its lines in a fixed order, agreement number, service date, product name, event id, each line one event with the product's invoice name (or its name) and the service date as its frozen text and the event's amounts, a reversal a negative line, and emits one \`invoice-issued\` per invoice in the same transaction, carrying the invoice with its lines as \`GET /invoices/{id}\` answers it. The run's row is written \`completed\` with its counts and its totals over every currency summed as integers; a run with nothing ready is a completed run of zero invoices. An event another run invoiced under this one is the backstop the project's lock makes unreachable (409, \`An event in the selection was invoiced by another run; run again\`).`,
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The run as completed, with its exclusions and the ids of the invoices it issued.", BillingRunDetail),

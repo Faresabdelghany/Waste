@@ -56,8 +56,7 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { findInvoice, invoiceColumns, invoiceDetailOf, invoiceOf, invoiceScope, labelOf, linesOf, noSuchInvoice, type LineRow } from "./billing-shapes"
-import { dayInTimezone } from "./days"
-import { projectTimezone } from "./fleet-lookups"
+import { projectToday } from "./fleet-lookups"
 import { issueInvoice, type LineDraft } from "./invoice-writes"
 import { requireCustomer } from "./references"
 import type { ClockOptions } from "./scheme-groups"
@@ -275,7 +274,7 @@ export function invoiceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
         if (creditable.every(({ remaining }) => remaining <= 0)) throw problem(409, { detail: fullyCredited(labelOf(current)) })
         const drafts = creditedLines(creditable, body.lines)
         const at = now()
-        const today = dayInTimezone(at, await projectTimezone(tx, principal.companyId, current.projectId))
+        const today = await projectToday(tx, { companyId: principal.companyId, projectId: current.projectId }, () => at)()
         const issued = await issueInvoice(tx, {
           companyId: principal.companyId,
           draft: {
