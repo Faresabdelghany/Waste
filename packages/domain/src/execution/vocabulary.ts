@@ -21,11 +21,17 @@
 // reason, and `PICKUP_REASONS` is the prototype's six driver reasons and the
 // four the system writes. `DRIVER_PICKUP_REASONS` beside it is the six a
 // device may send, a value of the list like Planning's `DEFAULT_WEEKEND`, so
-// a command cannot claim a stop was skipped by regeneration. `PROOF_KINDS` is
-// the glossary's "time, GPS, photo, weight, signature, or driver event": five
-// driver events, four kinds of evidence, and `correction`, the dispatcher's
-// audited change of an outcome; execution/proof-shapes.ts says what each
-// carries. `DRIVER_COMMAND_KINDS` is the prototype's ten driver actions less
+// a command cannot claim a stop was skipped by regeneration. `PICKUP_OUTCOMES`
+// is the statuses minus `planned`: what a correction gives and a correction
+// proof carries, a list of its own since a column's check and an enum read it
+// (nothing moves a pickup back to planned). `PROOF_KINDS` is the glossary's
+// "time, GPS, photo, weight, signature, or driver event": seven driver events
+// — `arrival`, `completion`, `skip`, `failure`, `problem` about a stop,
+// `route-started` and `route-ended` about the route, so what the device said
+// when it started and ended the day is a row and not a discarded body — four
+// kinds of evidence, and `correction`, the dispatcher's audited change of an
+// outcome; execution/proof-shapes.ts says what each carries.
+// `DRIVER_COMMAND_KINDS` is the prototype's ten driver actions less
 // `retry-sync` (the device's, not a command) and `reschedule-stop` (a
 // Ticket's), plus `arrive`, the four evidence commands, `record-unload`, and
 // `pause`/`resume` in place of breaks. `COMMAND_OUTCOMES` is what the receipt
@@ -42,10 +48,12 @@
 export const ROUTE_STATUSES = ["planned", "ready", "active", "completed", "cancelled"] as const
 /** Where a Pickup stands: #97 B's four, verbatim; `skipped` was not attempted, `failed` was. */
 export const PICKUP_STATUSES = ["planned", "completed", "skipped", "failed"] as const
+/** The statuses a pickup may be moved to: every one but `planned`, which nothing moves a pickup back to. What a correction gives and a correction proof carries. */
+export const PICKUP_OUTCOMES = ["completed", "skipped", "failed"] as const
 /** Why a stop was skipped or failed: the driver's six, then the four the system writes. */
 export const PICKUP_REASONS = ["inaccessible", "contamination", "not-presented", "capacity", "safety", "other", "route-ended", "route-cancelled", "removed-by-dispatcher", "regeneration"] as const
-/** What a Proof of Service is: five driver events, four kinds of evidence, and the dispatcher's correction. */
-export const PROOF_KINDS = ["arrival", "completion", "skip", "failure", "problem", "photo", "weight", "signature", "note", "correction"] as const
+/** What a Proof of Service is: seven driver events — five about a stop, two about the route — four kinds of evidence, and the dispatcher's correction. */
+export const PROOF_KINDS = ["arrival", "completion", "skip", "failure", "problem", "route-started", "route-ended", "photo", "weight", "signature", "note", "correction"] as const
 /** Who recorded a proof or an unload. */
 export const EXECUTION_SOURCES = ["driver-app", "dispatch", "integration"] as const
 /** What a driver's device may say, one contract each. */
@@ -59,6 +67,7 @@ export const OUTBOX_AGGREGATES = ["route", "pickup", "unload", "command"] as con
 
 export type RouteStatus = (typeof ROUTE_STATUSES)[number]
 export type PickupStatus = (typeof PICKUP_STATUSES)[number]
+export type PickupOutcome = (typeof PICKUP_OUTCOMES)[number]
 export type PickupReason = (typeof PICKUP_REASONS)[number]
 export type ProofKind = (typeof PROOF_KINDS)[number]
 export type ExecutionSource = (typeof EXECUTION_SOURCES)[number]
@@ -86,6 +95,7 @@ export type ClosingReason = (typeof CLOSING_REASONS)[number]
 export const EXECUTION_VOCABULARIES = {
   ROUTE_STATUSES,
   PICKUP_STATUSES,
+  PICKUP_OUTCOMES,
   PICKUP_REASONS,
   PROOF_KINDS,
   EXECUTION_SOURCES,

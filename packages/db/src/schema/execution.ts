@@ -46,12 +46,13 @@
 // route (`session_route_open_idx`) and one per driver (`session_driver_open_idx`).
 // Its `projectKey` carries the route too, for the same reason as the pickup's.
 //
-// `proof_of_service` is one ledger for ten kinds (§7.13), each with a shape:
-// `proof_of_service_kind_shape` is one CASE built from the domain's
+// `proof_of_service` is one ledger for twelve kinds (§7.13), each with a
+// shape: `proof_of_service_kind_shape` is one CASE built from the domain's
 // `PROOF_SHAPES` (execution/proof-shapes.ts), so the table and the check are
 // one spelling and the database test holds the rendered CASE to `proofShape`
 // over every kind; `proof_of_service_pickup_shape` says which kinds are a
-// stop's and which may stand on the route alone, from the same table; and
+// stop's, which are the route's own (`route-started`, `route-ended`) and
+// which may stand on the route alone, from the same table; and
 // `_session_shape`, which `unload` shares, says a driver-recorded row names
 // its session and an office row names none. `object_key` is the Storage
 // object of a photo or a signature, which the API holds to the row's own ids.
@@ -72,7 +73,17 @@
 // `problem` are the two `jsonb` columns of this context beside the outbox's
 // `payload` (§7.6): kept verbatim for another reader, never queried by
 // column, and `driver_command_problem_shape` gives a rejected command its
-// problem and an applied one none.
+// problem and an applied one none. A receipt is writable for any rejection,
+// or "never silently dropped" (ADR-0004) would be false: `route_id` is
+// nullable, since a command refused because no such route is assigned to the
+// driver has no route the key could check — the device's claimed id stays in
+// `body`, the column is null, and `driver_command_route_shape` holds such a
+// row to a rejection naming no session and no pickup; the composite key
+// stands and Postgres leaves a row with a null member unchecked. The project
+// stays NOT NULL and is the driver's own where no route says otherwise, so
+// the row is the project's like every Execution row and the driver key stays
+// checked; the driver's log, `(company_id, driver_id, id)`, is what the sync
+// rules' driver bucket reads, a receipt without a route included.
 //
 // `outbox_event` is written in the request's transaction after the rows it
 // describes and stamped `published_at` by the relay (part C), so it spreads
@@ -82,7 +93,7 @@
 // e-mail index, for the same reason: the relay's read is one statement in the
 // system that crosses companies.
 import { PROOF_SHAPES } from "@waste/domain/execution/proof-shapes"
-import { COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, OUTBOX_AGGREGATES, OUTBOX_KINDS, PICKUP_REASONS, PICKUP_STATUSES, PROOF_KINDS, ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
+import { COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, OUTBOX_AGGREGATES, OUTBOX_KINDS, PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_STATUSES, PROOF_KINDS, ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
 import { sql, type SQL } from "drizzle-orm"
 import { boolean, check, date, index, integer, jsonb, text, time, timestamp, unique, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
 
@@ -279,8 +290,8 @@ export const session = wms.table(
   ],
 )
 
-/** The kinds that may stand on the route alone, from the domain's table. */
-const ROUTE_LEVEL_KINDS = PROOF_KINDS.filter((kind) => PROOF_SHAPES[kind].pickup === "optional")
+/** The kinds by what they say of the pickup, from the domain's table: a stop's kinds name one, the route's own name none, the rest may stand on the route alone. */
+const kindsNaming = (pickup: "required" | "optional" | "none") => sql.raw(PROOF_KINDS.filter((kind) => PROOF_SHAPES[kind].pickup === pickup).map(literal).join(", "))
 
 /** One `WHEN` of the kind CASE: what the kind carries and forbids, as SQL over the row's columns. */
 function kindClause(kind: (typeof PROOF_KINDS)[number], columns: { reason: PgColumn; objectKey: PgColumn; weightKg: PgColumn; outcome: PgColumn; note: PgColumn; source: PgColumn }): SQL {
@@ -336,12 +347,15 @@ export const proofOfService = wms.table(
     oneOf(t.kind, PROOF_KINDS),
     oneOf(t.source, EXECUTION_SOURCES),
     oneOf(t.reason, PICKUP_REASONS),
-    oneOf(t.outcome, PICKUP_STATUSES),
+    oneOf(t.outcome, PICKUP_OUTCOMES),
     validGeometry(t.location),
     positive(t.locationAccuracyM),
     positive(t.weightKg),
-    // A stop's kind names a pickup; a problem, a photo and a note may stand on the route alone. From the domain's table.
-    check(tableObjectName(t.id.table, "pickup_shape", "proofOfService"), sql`${t.kind} in (${sql.raw(ROUTE_LEVEL_KINDS.map(literal).join(", "))}) or ${t.pickupId} is not null`),
+    // A stop's kind names a pickup, the route's two name none, and a problem, a photo and a note may stand on the route alone. From the domain's table.
+    check(
+      tableObjectName(t.id.table, "pickup_shape", "proofOfService"),
+      sql`(${t.kind} in (${kindsNaming("required")}) and ${t.pickupId} is not null) or (${t.kind} in (${kindsNaming("none")}) and ${t.pickupId} is null) or ${t.kind} in (${kindsNaming("optional")})`,
+    ),
     // A driver-recorded row names its session and an office row names none.
     check(tableObjectName(t.id.table, "session_shape", "proofOfService"), sql`(${t.source} = 'driver-app') = (${t.sessionId} is not null)`),
     // What each kind carries and forbids: one CASE built from PROOF_SHAPES, the one spelling of the table.
@@ -417,9 +431,9 @@ export const driverCommand = wms.table(
     ...id,
     ...projectScoped,
     ...recorded,
-    /** Every driver command names a route, `start-route` included. */
-    routeId: uuid().notNull(),
-    /** What the command named or made; null on a rejected `start-route`. */
+    /** The route the command named, where it is one the driver reaches; null on a command rejected because no such route is assigned to the driver, whose claimed id is then in `body` alone. */
+    routeId: uuid(),
+    /** What the command named or made; null on a rejected `start-route` and on any receipt without a route. */
     sessionId: uuid(),
     pickupId: uuid(),
     driverId: uuid().notNull(),
@@ -443,11 +457,14 @@ export const driverCommand = wms.table(
     oneOf(t.kind, DRIVER_COMMAND_KINDS),
     oneOf(t.outcome, COMMAND_OUTCOMES),
     check(tableObjectName(t.id.table, "problem_shape", "driverCommand"), sql`(${t.outcome} = 'rejected') = (${t.problem} is not null)`),
+    // A receipt without a route is a rejection that named nothing the driver reaches: no session, no pickup, and never an applied command.
+    check(tableObjectName(t.id.table, "route_shape", "driverCommand"), sql`${t.routeId} is not null or (${t.outcome} = 'rejected' and ${t.sessionId} is null and ${t.pickupId} is null)`),
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.routeId),
     tenantIndex(t, t.pickupId),
-    tenantIndex(t, t.driverId),
-    // A session's log in order: leads with the session, so it is the index the reference needs too.
+    // The driver's log in order — what the sync rules' driver bucket reads, a receipt without a route included — leading with the driver, so it is the index the reference needs too.
+    index(tableObjectName(t.companyId.table, "driver_id_idx", "driverCommand")).on(t.companyId, t.driverId, t.id),
+    // A session's log in order, likewise.
     index(tableObjectName(t.companyId.table, "session_id_idx", "driverCommand")).on(t.companyId, t.sessionId, t.id),
   ],
 )
@@ -474,8 +491,8 @@ export const outboxEvent = wms.table(
     tenantReference(t, [t.projectId], project),
     oneOf(t.kind, OUTBOX_KINDS),
     oneOf(t.aggregateKind, OUTBOX_AGGREGATES),
-    // The relay's read, across companies: the unpublished rows in id order.
-    indexOn(t.publishedAt, t.id).where(sql`${t.publishedAt} is null`),
+    // The relay's read, across companies: the unpublished rows in id order. A partial index over `id` alone, since `published_at` is null on every row in it and a constant-null leading column would say nothing.
+    indexOn(t.id).where(sql`${t.publishedAt} is null`),
     tenantIndex(t, t.projectId),
     // A route's own event log.
     tenantIndex(t, t.aggregateId),

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { PICKUP_OUTCOMES } from "@waste/domain/execution/vocabulary"
+
 import { Pickup, PickupCorrection, PickupDetail, PickupListQuery, PickupOutcome, PickupRemove, REASON_WITH_A_MISS, reasonWithOutcome } from "../pickups"
 import { DAY_WINDOW_ORDERED } from "../queries"
 import { refusal } from "./expect"
@@ -72,6 +74,7 @@ describe("the dispatcher's commands", () => {
   })
 
   test("a correction gives an outcome that is not planned, a note, and a reason exactly with a skip or a failure", () => {
+    assert.deepEqual(PickupOutcome.options, [...PICKUP_OUTCOMES])
     assert.deepEqual(PickupOutcome.options, ["completed", "skipped", "failed"])
     assert.deepEqual(PickupCorrection.parse({ outcome: "completed", note: "Driver's photo shows the bin emptied" }), { outcome: "completed", note: "Driver's photo shows the bin emptied" })
     assert.deepEqual(PickupCorrection.parse({ outcome: "failed", reason: "contamination", note: "Confirmed by the crew" }), { outcome: "failed", reason: "contamination", note: "Confirmed by the crew" })

@@ -21,7 +21,7 @@ const full = { reason: "inaccessible", objectKey: KEY, weightKg: 148, outcome: "
 const exemplar = (kind: ProofKind): ProofRow => {
   const shape = PROOF_SHAPES[kind]
   return {
-    pickupId: THIRD,
+    pickupId: shape.pickup === "none" ? null : THIRD,
     reason: shape.reason === "none" ? null : full.reason,
     objectKey: shape.objectKey === "none" ? null : full.objectKey,
     weightKg: shape.weightKg === "none" ? null : full.weightKg,
@@ -71,8 +71,11 @@ describe("ProofOfService", () => {
         }
       }
       const onRoute = { ...exemplar(kind), pickupId: null }
-      assert.equal(ProofOfService.safeParse(proof(kind, onRoute)).success, PROOF_SHAPES[kind].pickup === "optional", `${kind} on the route alone`)
+      assert.equal(ProofOfService.safeParse(proof(kind, onRoute)).success, PROOF_SHAPES[kind].pickup !== "required", `${kind} on the route alone`)
+      const onAStop = { ...exemplar(kind), pickupId: THIRD }
+      assert.equal(ProofOfService.safeParse(proof(kind, onAStop)).success, PROOF_SHAPES[kind].pickup !== "none", `${kind} on a stop`)
     }
+    assert.deepEqual(refusal(ProofOfService.safeParse(proof("route-ended", { ...exemplar("route-ended"), pickupId: THIRD }))), [{ path: "kind", message: "A route-ended proof is the route's and names no pickup" }])
     assert.ok(disagreements > 20, `${disagreements} disagreements refused`)
     assert.deepEqual(refusal(ProofOfService.safeParse(proof("correction", { ...exemplar("correction"), source: "driver-app" }))), [{ path: "kind", message: "A correction proof comes from dispatch" }])
   })

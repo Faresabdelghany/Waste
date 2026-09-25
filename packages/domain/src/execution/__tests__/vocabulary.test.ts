@@ -12,12 +12,13 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Execution", vocabulary, vocabulary.EXECUTION_VOCABULARIES, 9, ["DRIVER_PICKUP_REASONS", "CLOSING_REASONS"])
+defineVocabularyTests("Execution", vocabulary, vocabulary.EXECUTION_VOCABULARIES, 10, ["DRIVER_PICKUP_REASONS", "CLOSING_REASONS"])
 
 describe("the Execution vocabulary's own rules", () => {
-  test("the route and pickup statuses are #97 B's, verbatim", () => {
+  test("the route and pickup statuses are #97 B's, verbatim, and the outcomes are the statuses less planned", () => {
     assert.deepEqual([...vocabulary.ROUTE_STATUSES], ["planned", "ready", "active", "completed", "cancelled"])
     assert.deepEqual([...vocabulary.PICKUP_STATUSES], ["planned", "completed", "skipped", "failed"])
+    assert.deepEqual([...vocabulary.PICKUP_OUTCOMES], vocabulary.PICKUP_STATUSES.filter((status) => status !== "planned"))
   })
 
   test("the driver's six reasons and the system's four make the reason list; the closing reasons are two of the system's", () => {
@@ -28,8 +29,8 @@ describe("the Execution vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.CLOSING_REASONS], ["route-ended", "route-cancelled"])
   })
 
-  test("the proof kinds are five driver events, four kinds of evidence and the correction", () => {
-    assert.deepEqual([...vocabulary.PROOF_KINDS], ["arrival", "completion", "skip", "failure", "problem", "photo", "weight", "signature", "note", "correction"])
+  test("the proof kinds are seven driver events — five about a stop, two about the route — four kinds of evidence and the correction", () => {
+    assert.deepEqual([...vocabulary.PROOF_KINDS], ["arrival", "completion", "skip", "failure", "problem", "route-started", "route-ended", "photo", "weight", "signature", "note", "correction"])
   })
 
   test("the fourteen command kinds leave out the device's retry and the Ticket's reschedule, and the receipt stores two outcomes", () => {

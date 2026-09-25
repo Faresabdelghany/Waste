@@ -8892,7 +8892,7 @@
           "name": "route_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "session_id": {
           "name": "session_id",
@@ -9024,6 +9024,12 @@
             },
             {
               "expression": "driver_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -9185,6 +9191,10 @@
         "driver_command_problem_shape": {
           "name": "driver_command_problem_shape",
           "value": "(\"wms\".\"driver_command\".\"outcome\" = 'rejected') = (\"wms\".\"driver_command\".\"problem\" is not null)"
+        },
+        "driver_command_route_shape": {
+          "name": "driver_command_route_shape",
+          "value": "\"wms\".\"driver_command\".\"route_id\" is not null or (\"wms\".\"driver_command\".\"outcome\" = 'rejected' and \"wms\".\"driver_command\".\"session_id\" is null and \"wms\".\"driver_command\".\"pickup_id\" is null)"
         }
       },
       "isRLSEnabled": false
@@ -9264,28 +9274,6 @@
         }
       },
       "indexes": {
-        "outbox_event_published_at_id_idx": {
-          "name": "outbox_event_published_at_id_idx",
-          "columns": [
-            {
-              "expression": "published_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"wms\".\"outbox_event\".\"published_at\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "outbox_event_project_id_idx": {
           "name": "outbox_event_project_id_idx",
           "columns": [
@@ -9324,6 +9312,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "outbox_event_id_idx": {
+          "name": "outbox_event_id_idx",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"wms\".\"outbox_event\".\"published_at\" is null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -10132,7 +10136,7 @@
       "checkConstraints": {
         "proof_of_service_kind_one_of": {
           "name": "proof_of_service_kind_one_of",
-          "value": "\"wms\".\"proof_of_service\".\"kind\" in ('arrival', 'completion', 'skip', 'failure', 'problem', 'photo', 'weight', 'signature', 'note', 'correction')"
+          "value": "\"wms\".\"proof_of_service\".\"kind\" in ('arrival', 'completion', 'skip', 'failure', 'problem', 'route-started', 'route-ended', 'photo', 'weight', 'signature', 'note', 'correction')"
         },
         "proof_of_service_source_one_of": {
           "name": "proof_of_service_source_one_of",
@@ -10144,7 +10148,7 @@
         },
         "proof_of_service_outcome_one_of": {
           "name": "proof_of_service_outcome_one_of",
-          "value": "\"wms\".\"proof_of_service\".\"outcome\" in ('planned', 'completed', 'skipped', 'failed')"
+          "value": "\"wms\".\"proof_of_service\".\"outcome\" in ('completed', 'skipped', 'failed')"
         },
         "proof_of_service_location_valid": {
           "name": "proof_of_service_location_valid",
@@ -10160,7 +10164,7 @@
         },
         "proof_of_service_pickup_shape": {
           "name": "proof_of_service_pickup_shape",
-          "value": "\"wms\".\"proof_of_service\".\"kind\" in ('problem', 'photo', 'note') or \"wms\".\"proof_of_service\".\"pickup_id\" is not null"
+          "value": "(\"wms\".\"proof_of_service\".\"kind\" in ('arrival', 'completion', 'skip', 'failure', 'weight', 'signature', 'correction') and \"wms\".\"proof_of_service\".\"pickup_id\" is not null) or (\"wms\".\"proof_of_service\".\"kind\" in ('route-started', 'route-ended') and \"wms\".\"proof_of_service\".\"pickup_id\" is null) or \"wms\".\"proof_of_service\".\"kind\" in ('problem', 'photo', 'note')"
         },
         "proof_of_service_session_shape": {
           "name": "proof_of_service_session_shape",
@@ -10168,7 +10172,7 @@
         },
         "proof_of_service_kind_shape": {
           "name": "proof_of_service_kind_shape",
-          "value": "case \"wms\".\"proof_of_service\".\"kind\" when 'arrival' then \"wms\".\"proof_of_service\".\"reason\" is null and \"wms\".\"proof_of_service\".\"object_key\" is null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is null when 'completion' then \"wms\".\"proof_of_service\".\"reason\" is null and \"wms\".\"proof_of_service\".\"object_key\" is null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is null when 'skip' then \"wms\".\"proof_of_service\".\"reason\" is not null and \"wms\".\"proof_of_service\".\"object_key\" is null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is null when 'failure' then \"wms\".\"proof_of_service\".\"reason\" is not null and \"wms\".\"proof_of_service\".\"object_key\" is null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is null when 'problem' then \"wms\".\"proof_of_service\".\"reason\" is not null and \"wms\".\"proof_of_service\".\"object_key\" is null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is null and \"wms\".\"proof_of_service\".\"note\" is not null when 'photo' then \"wms\".\"proof_of_service\".\"reason\" is null and \"wms\".\"proof_of_service\".\"object_key\" is not null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is null when 'weight' then \"wms\".\"proof_of_service\".\"reason\" is null and \"wms\".\"proof_of_service\".\"object_key\" is null and \"wms\".\"proof_of_service\".\"weight_kg\" is not null and \"wms\".\"proof_of_service\".\"outcome\" is null when 'signature' then \"wms\".\"proof_of_service\".\"reason\" is null and \"wms\".\"proof_of_service\".\"object_key\" is not null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is null when 'note' then \"wms\".\"proof_of_service\".\"reason\" is null and \"wms\".\"proof_of_service\".\"object_key\" is null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is null and \"wms\".\"proof_of_service\".\"note\" is not null when 'correction' then \"wms\".\"proof_of_service\".\"object_key\" is null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is not null and \"wms\".\"proof_of_service\".\"note\" is not null and \"wms\".\"proof_of_service\".\"source\" = 'dispatch' else false end"
+          "value": "case \"wms\".\"proof_of_service\".\"kind\" when 'arrival' then \"wms\".\"proof_of_service\".\"reason\" is null and \"wms\".\"proof_of_service\".\"object_key\" is null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is null when 'completion' then \"wms\".\"proof_of_service\".\"reason\" is null and \"wms\".\"proof_of_service\".\"object_key\" is null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is null when 'skip' then \"wms\".\"proof_of_service\".\"reason\" is not null and \"wms\".\"proof_of_service\".\"object_key\" is null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is null when 'failure' then \"wms\".\"proof_of_service\".\"reason\" is not null and \"wms\".\"proof_of_service\".\"object_key\" is null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is null when 'problem' then \"wms\".\"proof_of_service\".\"reason\" is not null and \"wms\".\"proof_of_service\".\"object_key\" is null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is null and \"wms\".\"proof_of_service\".\"note\" is not null when 'route-started' then \"wms\".\"proof_of_service\".\"reason\" is null and \"wms\".\"proof_of_service\".\"object_key\" is null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is null when 'route-ended' then \"wms\".\"proof_of_service\".\"reason\" is null and \"wms\".\"proof_of_service\".\"object_key\" is null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is null when 'photo' then \"wms\".\"proof_of_service\".\"reason\" is null and \"wms\".\"proof_of_service\".\"object_key\" is not null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is null when 'weight' then \"wms\".\"proof_of_service\".\"reason\" is null and \"wms\".\"proof_of_service\".\"object_key\" is null and \"wms\".\"proof_of_service\".\"weight_kg\" is not null and \"wms\".\"proof_of_service\".\"outcome\" is null when 'signature' then \"wms\".\"proof_of_service\".\"reason\" is null and \"wms\".\"proof_of_service\".\"object_key\" is not null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is null when 'note' then \"wms\".\"proof_of_service\".\"reason\" is null and \"wms\".\"proof_of_service\".\"object_key\" is null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is null and \"wms\".\"proof_of_service\".\"note\" is not null when 'correction' then \"wms\".\"proof_of_service\".\"object_key\" is null and \"wms\".\"proof_of_service\".\"weight_kg\" is null and \"wms\".\"proof_of_service\".\"outcome\" is not null and \"wms\".\"proof_of_service\".\"note\" is not null and \"wms\".\"proof_of_service\".\"source\" = 'dispatch' else false end"
         }
       },
       "isRLSEnabled": false

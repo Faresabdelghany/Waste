@@ -21,7 +21,7 @@ import { join } from "node:path"
 import { describe, test } from "node:test"
 
 import { PROOF_SHAPES } from "@waste/domain/execution/proof-shapes"
-import { PICKUP_REASONS, PICKUP_STATUSES, PROOF_KINDS } from "@waste/domain/execution/vocabulary"
+import { PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_STATUSES, PROOF_KINDS } from "@waste/domain/execution/vocabulary"
 import { getTableName, is, sql } from "drizzle-orm"
 import { check, PgTable, text } from "drizzle-orm/pg-core"
 
@@ -75,6 +75,8 @@ const kindShape = (() => {
     `when 'skip' then ${reasoned}`,
     `when 'failure' then ${reasoned}`,
     `when 'problem' then ${reasoned} and ${some("note")}`,
+    `when 'route-started' then ${bare}`,
+    `when 'route-ended' then ${bare}`,
     `when 'photo' then ${[none("reason"), some("object_key"), none("weight_kg"), none("outcome")].join(" and ")}`,
     `when 'weight' then ${[none("reason"), none("object_key"), some("weight_kg"), none("outcome")].join(" and ")}`,
     `when 'signature' then ${[none("reason"), some("object_key"), none("weight_kg"), none("outcome")].join(" and ")}`,
@@ -180,11 +182,12 @@ const expected = [
     oneOfCheck("proof_of_service", "kind", ...PROOF_KINDS),
     oneOfCheck("proof_of_service", "source", ...SOURCES),
     oneOfCheck("proof_of_service", "reason", ...REASONS),
-    oneOfCheck("proof_of_service", "outcome", ...STATUSES),
+    oneOfCheck("proof_of_service", "outcome", ...PICKUP_OUTCOMES),
     geometryCheck("proof_of_service", "location"),
     positiveCheck("proof_of_service", "location_accuracy_m"),
     positiveCheck("proof_of_service", "weight_kg"),
-    `CONSTRAINT "proof_of_service_pickup_shape" CHECK (${ref("proof_of_service", "kind")} in (${list("problem", "photo", "note")}) or ${ref("proof_of_service", "pickup_id")} is not null)`,
+    // A stop's kinds name a pickup, the route's two name none, and three may stand on the route alone.
+    `CONSTRAINT "proof_of_service_pickup_shape" CHECK ((${ref("proof_of_service", "kind")} in (${list("arrival", "completion", "skip", "failure", "weight", "signature", "correction")}) and ${ref("proof_of_service", "pickup_id")} is not null) or (${ref("proof_of_service", "kind")} in (${list("route-started", "route-ended")}) and ${ref("proof_of_service", "pickup_id")} is null) or ${ref("proof_of_service", "kind")} in (${list("problem", "photo", "note")}))`,
     sessionShape("proof_of_service"),
     kindShape,
   ]),
@@ -213,7 +216,8 @@ const expected = [
     `CONSTRAINT "unload_weights_shape" CHECK ((${ref("unload", "gross_kg")} is null) = (${ref("unload", "tare_kg")} is null) and (${ref("unload", "gross_kg")} is null or ${ref("unload", "net_kg")} = ${ref("unload", "gross_kg")} - ${ref("unload", "tare_kg")}))`,
   ]),
   createLedger("driver_command", [
-    '"route_id" uuid NOT NULL',
+    // Nullable: a command rejected because no such route is assigned to the driver has no route the key could check, and is still a receipt.
+    '"route_id" uuid',
     '"session_id" uuid',
     '"pickup_id" uuid',
     '"driver_id" uuid NOT NULL',
@@ -226,6 +230,7 @@ const expected = [
     oneOfCheck("driver_command", "kind", "start-route", "arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-unload", "pause", "resume", "end-route"),
     oneOfCheck("driver_command", "outcome", "applied", "rejected"),
     `CONSTRAINT "driver_command_problem_shape" CHECK ((${ref("driver_command", "outcome")} = 'rejected') = (${ref("driver_command", "problem")} is not null))`,
+    `CONSTRAINT "driver_command_route_shape" CHECK (${ref("driver_command", "route_id")} is not null or (${ref("driver_command", "outcome")} = 'rejected' and ${ref("driver_command", "session_id")} is null and ${ref("driver_command", "pickup_id")} is null))`,
   ]),
   createTable("outbox_event", "project", [
     '"kind" text NOT NULL',
@@ -325,11 +330,11 @@ const expected = [
   index("driver_command", "driver_command_project_id_idx", "company_id", "project_id"),
   index("driver_command", "driver_command_route_id_idx", "company_id", "route_id"),
   index("driver_command", "driver_command_pickup_id_idx", "company_id", "pickup_id"),
-  index("driver_command", "driver_command_driver_id_idx", "company_id", "driver_id"),
-  // A session's log in order, leading with the session.
+  // The driver's log in order — the sync rules' driver bucket's read — and a session's, each leading with its column.
+  index("driver_command", "driver_command_driver_id_idx", "company_id", "driver_id", "id"),
   index("driver_command", "driver_command_session_id_idx", "company_id", "session_id", "id"),
-  // The relay's read, across companies: the second index without the tenant after the hook's e-mail index.
-  `CREATE INDEX "outbox_event_published_at_id_idx" ON "wms"."outbox_event" USING btree ("published_at","id") WHERE ${ref("outbox_event", "published_at")} is null;`,
+  // The relay's read, across companies: the second index without the tenant after the hook's e-mail index, over id alone since published_at is null on every row in it.
+  `CREATE INDEX "outbox_event_id_idx" ON "wms"."outbox_event" USING btree ("id") WHERE ${ref("outbox_event", "published_at")} is null;`,
   index("outbox_event", "outbox_event_project_id_idx", "company_id", "project_id"),
   index("outbox_event", "outbox_event_aggregate_id_idx", "company_id", "aggregate_id"),
 ]
@@ -441,16 +446,19 @@ describe("the checks of this context", () => {
     const checks = checksOf(proofOfService)
     assert.equal(`CONSTRAINT "proof_of_service_kind_shape" CHECK (${checks.get("proof_of_service_kind_shape")})`, kindShape)
     for (const kind of PROOF_KINDS) assert.ok(checks.get("proof_of_service_kind_shape")?.includes(`when '${kind}' then`), kind)
-    const routeLevel = PROOF_KINDS.filter((kind) => PROOF_SHAPES[kind].pickup === "optional")
-    assert.deepEqual(routeLevel, ["problem", "photo", "note"])
-    assert.match(checks.get("proof_of_service_pickup_shape") ?? "", /in \('problem', 'photo', 'note'\) or .*"pickup_id" is not null/)
+    assert.deepEqual(PROOF_KINDS.filter((kind) => PROOF_SHAPES[kind].pickup === "optional"), ["problem", "photo", "note"])
+    assert.deepEqual(PROOF_KINDS.filter((kind) => PROOF_SHAPES[kind].pickup === "none"), ["route-started", "route-ended"])
+    const pickupShape = checks.get("proof_of_service_pickup_shape") ?? ""
+    assert.match(pickupShape, /in \('arrival', 'completion', 'skip', 'failure', 'weight', 'signature', 'correction'\) and .*"pickup_id" is not null/)
+    assert.match(pickupShape, /in \('route-started', 'route-ended'\) and .*"pickup_id" is null/)
+    assert.match(pickupShape, /or .*"kind" in \('problem', 'photo', 'note'\)$/)
   })
 
   test("every shape check of the seven tables renders without parameters, the way every check in a migration must", () => {
     assert.deepEqual([...checksOf(route).keys()], ["route_status_one_of", "route_actual_shape", "route_stamps_shape"])
     assert.deepEqual([...checksOf(pickup).keys()], ["pickup_status_one_of", "pickup_reason_one_of", "pickup_position_positive", "pickup_place_exactly_one", "pickup_outcome_shape", "pickup_reason_shape"])
     assert.deepEqual([...checksOf(unload).keys()].slice(-2), ["unload_session_shape", "unload_weights_shape"])
-    assert.deepEqual([...checksOf(driverCommand).keys()], ["driver_command_kind_one_of", "driver_command_outcome_one_of", "driver_command_problem_shape"])
+    assert.deepEqual([...checksOf(driverCommand).keys()], ["driver_command_kind_one_of", "driver_command_outcome_one_of", "driver_command_problem_shape", "driver_command_route_shape"])
     assert.deepEqual([...checksOf(outboxEvent).keys()], ["outbox_event_kind_one_of", "outbox_event_aggregate_kind_one_of"])
     assert.deepEqual([...checksOf(session).keys()], [], "open and ended are readings of ended_at; a session has no status to check")
   })

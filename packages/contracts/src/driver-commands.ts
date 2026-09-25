@@ -143,8 +143,13 @@ export type DriverCommandBatch = z.infer<typeof DriverCommandBatch>
 export const WireOutcome = z.enum([...COMMAND_OUTCOMES, "replayed"])
 export type WireOutcome = z.infer<typeof WireOutcome>
 
-/** The row a command made, read back: a session for `start-route`, a proof for the evidence and outcome commands, an unload for `record-unload`, the route for `end-route`. */
-export const CommandResult = z.union([Session, ProofOfService, Unload, Route])
+/** The row a command made, read back and tagged with what it is — a session for `start-route`, a proof for the evidence and outcome commands, an unload for `record-unload`, the route for `end-route` — so a device never takes a stripped object of one resource for another. */
+export const CommandResult = z.discriminatedUnion("resource", [
+  z.object({ resource: z.literal("session"), value: Session }),
+  z.object({ resource: z.literal("proof"), value: ProofOfService }),
+  z.object({ resource: z.literal("unload"), value: Unload }),
+  z.object({ resource: z.literal("route"), value: Route }),
+])
 export type CommandResult = z.infer<typeof CommandResult>
 
 /** One command's outcome in the batch's answer, in body order. */

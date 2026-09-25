@@ -20,16 +20,14 @@
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
-import { PickupReason, PickupStatus } from "./execution"
+import { PickupOutcome, PickupReason, PickupStatus } from "./execution"
 import { Id } from "./ids"
 import { ProofOfService } from "./proofs"
 import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
 import { PositiveInt, stamped } from "./resource"
 import { Paragraph } from "./text"
 
-/** An outcome a pickup may be moved to: any status but planned. */
-export const PickupOutcome = PickupStatus.exclude(["planned"])
-export type PickupOutcome = z.infer<typeof PickupOutcome>
+export { PickupOutcome }
 
 export const Pickup = z.object({
   ...stamped,

@@ -18,6 +18,7 @@ import {
   pickupCorrection,
   pickupTransition,
   ROUTE_COMMANDS,
+  routeCancellation,
   routeTransition,
   type Transition,
 } from "../transitions"
@@ -126,6 +127,13 @@ describe("openPickupsClose and nextPickup", () => {
     assert.deepEqual(openPickupsClose([pickups[1], pickups[3]], "route-ended").pickups, [], "a decided pickup is left as it is")
     assert.equal(closingReasonOf("end"), "route-ended")
     assert.equal(closingReasonOf("cancel"), "route-cancelled")
+  })
+
+  test("a cancellation closes the open pickups as route-cancelled, and ends the session exactly when the route was active", () => {
+    assert.deepEqual(routeCancellation("active"), { closing: { status: "skipped", reason: "route-cancelled" }, endsSession: true })
+    for (const status of ["planned", "ready", "completed", "cancelled"] as const) {
+      assert.deepEqual(routeCancellation(status), { closing: { status: "skipped", reason: "route-cancelled" }, endsSession: false }, status)
+    }
   })
 
   test("the next pickup is the first planned one by position, whatever order the list is in, and none once every stop is decided", () => {

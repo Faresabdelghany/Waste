@@ -16,7 +16,7 @@ import { proofShapeIssue } from "@waste/domain/execution/proof-shapes"
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
-import { ExecutionSource, ObjectKey, PickupReason, PickupStatus, ProofKind } from "./execution"
+import { ExecutionSource, ObjectKey, PickupOutcome, PickupReason, ProofKind } from "./execution"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { PositiveInt, recorded } from "./resource"
@@ -47,8 +47,8 @@ export const ProofOfService = z
     weightKg: PositiveInt.nullable(),
     /** The Storage object of a photo or a signature. */
     objectKey: ObjectKey.nullable(),
-    /** On a correction: the status the pickup was moved to. */
-    outcome: PickupStatus.nullable(),
+    /** On a correction: the outcome the pickup was moved to. */
+    outcome: PickupOutcome.nullable(),
   })
   .superRefine((row, context) => {
     const issue = proofShapeIssue(row.kind, row)

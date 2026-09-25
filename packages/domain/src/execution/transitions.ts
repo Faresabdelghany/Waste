@@ -31,7 +31,17 @@
 // change: a pickup with an outcome may be moved to another, a `planned` one
 // has nothing to correct. `nextPickup` is the reading the prototype called
 // `Next`: the first `planned` pickup by position.
-import { CLOSING_REASONS, type ClosingReason, type PickupStatus, type RouteStatus } from "./vocabulary"
+//
+// `routeCancellation` is what cancelling does beyond the status, spelled once
+// for the office's cancel and the device alike: every open pickup closes as
+// `skipped · route-cancelled`, and a route cancelled while `active` has its
+// open session ended, since a session is on an assigned route and the route
+// is over — so the driver is not locked out of the next one, and a device's
+// `end-route` arriving afterwards finds nothing to end and is applied as
+// nothing (commands.ts), never refused.
+import { CLOSING_REASONS, type ClosingReason, type PickupOutcome, type PickupStatus, type RouteStatus } from "./vocabulary"
+
+export type { PickupOutcome }
 
 /** What a machine answers: the next status, nothing to do, or a refusal with its sentence. */
 export type Transition<Status extends string> = { kind: "move"; to: Status } | { kind: "stay" } | { kind: "refuse"; sentence: string }
@@ -99,9 +109,6 @@ export function routeTransition(status: RouteStatus, command: RouteCommand, labe
 export const PICKUP_COMMANDS = ["complete", "skip", "fail"] as const
 export type PickupCommand = (typeof PICKUP_COMMANDS)[number]
 
-/** A pickup's status once it has left `planned`. */
-export type PickupOutcome = Exclude<PickupStatus, "planned">
-
 /** The status each driver command moves a planned pickup to. */
 export const PICKUP_OUTCOME_OF: Readonly<Record<PickupCommand, PickupOutcome>> = { complete: "completed", skip: "skipped", fail: "failed" }
 
@@ -137,6 +144,12 @@ export const closingReasonOf = (command: "end" | "cancel"): ClosingReason => (co
 export function openPickupsClose<Pickup extends { status: PickupStatus }>(pickups: readonly Pickup[], reason: ClosingReason): { pickups: Pickup[]; outcome: PickupClosing } {
   return { pickups: pickups.filter((pickup) => pickup.status === "planned"), outcome: { status: "skipped", reason } }
 }
+
+/** What cancelling a route does beyond its status: the open pickups close, and the session ends where one is running. */
+export type RouteCancellation = { closing: PickupClosing; endsSession: boolean }
+
+/** The rule once, for the office's cancel and the device: every cancellation closes the open pickups, and an active route's ends its open session. */
+export const routeCancellation = (status: RouteStatus): RouteCancellation => ({ closing: { status: "skipped", reason: closingReasonOf("cancel") }, endsSession: status === "active" })
 
 /** The reading the prototype called `Next`: the first planned pickup by position, or undefined when every stop is decided. */
 export function nextPickup<Pickup extends { status: PickupStatus; position: number }>(pickups: readonly Pickup[]): Pickup | undefined {

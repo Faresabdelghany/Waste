@@ -21,7 +21,9 @@
 // out of bounds, a vehicle that is not a powered vehicle of the project, an
 // object key naming another route; a 409 is a state the body cannot mend — a
 // route not dispatched, a driver already on a route, a pickup already
-// decided, a vehicle retired. The sentences are the transitions', the
+// decided, a vehicle that is not active (in the workshop or unavailable is
+// planned with for next month, not driven today; the status is named, since
+// each is corrected differently). The sentences are the transitions', the
 // licence rule's (resources/licence.ts) and this module's own, spelled once.
 //
 // An effect is one thing the applier writes, named for what happened and
@@ -30,13 +32,20 @@
 // appended with the command's id, a pickup's outcome, an unload, a session
 // opened, paused, resumed or ended, and the outbox event each of those is
 // worth. `start-route` opens the session and moves the route in one effect,
-// since the two are one fact; `end-route` closes the open pickups, the route
-// and the session in one, and the applier emits one `pickup-skipped` per
-// pickup it closes from its own `returning`, since only it knows how many
-// there were. A `pause` on a paused session and a `resume` on a running one
-// decide to apply nothing: idempotent, like `confirm` (#101), and the receipt
-// is still written. The applier moves `session.last_seen_at` on every applied
-// command whatever the effects say; that is its rule, not an effect.
+// since the two are one fact, and appends a `route-started` proof with what
+// the device said — where it stood — so nothing of the body is discarded;
+// `end-route` appends a `route-ended` proof (the note, the place) and closes
+// the open pickups, the route and the session in one, and the applier emits
+// one `pickup-skipped` per pickup it closes from its own `returning`, since
+// only it knows how many there were. A `pause` on a paused session and a
+// `resume` on a running one decide to apply nothing: idempotent, like
+// `confirm` (#101), and the receipt is still written; so does an `end-route`
+// on a route the office cancelled meanwhile, whose session
+// `routeCancellation` already ended — applied as nothing with a note for the
+// log, never refused, so the driver is not locked out of the next route and
+// a `start-route` on it goes through. The applier moves
+// `session.last_seen_at` on every applied command whatever the effects say;
+// that is its rule, not an effect.
 //
 // The body types below are the shapes the contracts' command schemas
 // (@waste/contracts/driver-commands) parse to, spelled here without zod
@@ -199,7 +208,8 @@ export type Effect =
   /** An outbox event to write after the rows it describes, its payload the resource the route would answer. */
   | { kind: "event"; event: OutboxKind; aggregate: OutboxAggregate; aggregateId: string }
 
-export type Decision = { apply: Effect[] } | { reject: Rejection }
+/** The effects to run — with a note for the log where applying nothing is the right answer — or the rejection to record. */
+export type Decision = { apply: Effect[]; note?: string } | { reject: Rejection }
 
 // The sentences of this module.
 
@@ -219,8 +229,10 @@ export const alreadyOnRoute = (driver: string, label: string): string => `${driv
 export const NOT_A_POWERED_VEHICLE = "Not a powered vehicle of this project"
 /** A `start-route` naming a trailer that is not a trailer of the project. */
 export const NOT_A_TRAILER = "Not a trailer of this project"
-/** A `start-route` naming a retired vehicle or trailer: the fleet's status gate in the route's words. */
-export const isRetired = (label: string, as: "vehicle" | "trailer"): string => `${label} is retired; a route needs a ${as} in service`
+/** A `start-route` naming a vehicle or trailer that is not `active`: the fleet's status gate in the route's words, the status named since each is corrected differently. */
+export const notInService = (label: string, status: VehicleStatus, as: "vehicle" | "trailer"): string => `${label} is ${status}; a route needs a ${as} in service`
+/** A device ending a route the office cancelled meanwhile: applied as nothing, so the driver is not locked out, and the log says why. */
+export const ROUTE_CANCELLED_NOTHING_TO_END = "The route was cancelled; nothing to end"
 /** A `record-unload` naming a station that is not the company's. */
 export const NOT_A_STATION = "Not an unloading station of this company"
 /** A `record-unload` naming a fraction that is not the company's. */
@@ -292,6 +304,9 @@ export function decide(command: Command, driver: CommandDriver, state: Lookups, 
   if (occurred < now - clock.backdateMs) return invalid("occurredAt", recordedTooLate(clock.backdateMs))
 
   if (command.kind === "start-route") return decideStart(command, driver, route, state)
+
+  // The office cancelled the route while the device was out: its session is already ended (routeCancellation), and the day's end has nothing to end. Applied, not refused, so the driver is not locked out of the next route.
+  if (command.kind === "end-route" && route.status === "cancelled") return { apply: [], note: ROUTE_CANCELLED_NOTHING_TO_END }
 
   if (route.status !== "active") return reject(409, notActive(route.label))
   const { session } = state
@@ -367,13 +382,19 @@ export function decide(command: Command, driver: CommandDriver, state: Lookups, 
     case "resume":
       return { apply: session.pausedAt === null ? [] : [{ kind: "resume" }] }
     case "end-route":
-      return { apply: [{ kind: "end-route", at: command.occurredAt }, event("route-completed", "route", route.id)] }
+      return {
+        apply: [
+          { kind: "append-proof", proof: proof(command, "route-ended", { note: command.body.note, location: command.body.location, accuracyM: command.body.accuracyM }) },
+          { kind: "end-route", at: command.occurredAt },
+          event("route-completed", "route", route.id),
+        ],
+      }
     default:
       return reject(409, notActive(route.label))
   }
 }
 
-/** `start-route`: the route is ready, the driver is on no other route, the vehicle and the trailer are the project's and in service, the driver holds the class the vehicle requires on the operating date. */
+/** `start-route`: the route is ready, the driver is on no other route, the vehicle and the trailer are the project's and active, the driver holds the class the vehicle requires on the operating date. */
 function decideStart(command: Command<"start-route">, driver: CommandDriver, route: RouteState, state: Lookups): Decision {
   const transition = routeTransition(route.status, "start", route.label)
   if (transition.kind !== "move") return reject(409, transition.kind === "refuse" ? transition.sentence : notActive(route.label))
@@ -384,11 +405,13 @@ function decideStart(command: Command<"start-route">, driver: CommandDriver, rou
   if (body.trailerId !== undefined && (trailer === undefined || trailer.id !== body.trailerId || trailer.kind !== "trailer")) return invalid("body.trailerId", NOT_A_TRAILER)
   const refusal = licenceRefusal(driver, vehicle.requiredLicenceClass, route.operatingDate)
   if (refusal !== undefined) return invalid("body.vehicleId", licenceSentence(refusal, { driver: driver.name, vehicle: vehicle.label }, THE_OPERATING_DATE))
-  if (vehicle.status === "retired") return reject(409, isRetired(vehicle.label, "vehicle"))
-  if (trailer !== undefined && body.trailerId !== undefined && trailer.status === "retired") return reject(409, isRetired(trailer.label, "trailer"))
+  // Only an active vehicle goes out: one in the workshop or otherwise unavailable is planned with for next month, not driven today.
+  if (vehicle.status !== "active") return reject(409, notInService(vehicle.label, vehicle.status, "vehicle"))
+  if (trailer !== undefined && body.trailerId !== undefined && trailer.status !== "active") return reject(409, notInService(trailer.label, trailer.status, "trailer"))
   return {
     apply: [
       { kind: "start-route", sessionId: command.id, vehicleId: vehicle.id, trailerId: body.trailerId ?? null, appVersion: body.appVersion ?? null, at: command.occurredAt },
+      { kind: "append-proof", proof: proof(command, "route-started", { location: body.location, accuracyM: body.accuracyM }) },
       event("route-started", "route", route.id),
     ],
   }

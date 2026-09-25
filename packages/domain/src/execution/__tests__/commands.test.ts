@@ -10,18 +10,19 @@ import {
   alreadyOnRoute,
   BEFORE_THE_SESSION_STARTED,
   decide,
-  isRetired,
   NOT_A_FRACTION,
   NOT_A_POWERED_VEHICLE,
   NOT_A_STATION,
   NOT_A_TRAILER,
   noPickupOnRoute,
   noRouteAssigned,
+  notInService,
   OBJECT_KEY_NAMES_ANOTHER,
   objectKeyNames,
   objectKeyOf,
   RECORDED_AFTER_IT_HAPPENED,
   recordedTooLate,
+  ROUTE_CANCELLED_NOTHING_TO_END,
   type Clock,
   type Command,
   type CommandDriver,
@@ -32,7 +33,7 @@ import {
   type SessionState,
   type VehicleState,
 } from "../commands"
-import { alreadyDecided, notActive, notDispatched } from "../transitions"
+import { alreadyDecided, notActive, notDispatched, routeCancellation } from "../transitions"
 import { DRIVER_COMMAND_KINDS, type RouteStatus } from "../vocabulary"
 
 const COMPANY = "018f7c31-a000-7000-8000-000000000001"
@@ -153,12 +154,15 @@ describe("decide: the clock", () => {
 describe("decide: start-route", () => {
   const start = (body: Partial<Command<"start-route">["body"]> = {}) => command("start-route", { vehicleId: VEHICLE, ...body })
 
-  test("a ready route starts: the session opens with the command's id, the actual assignment is the body's, and route-started is worth an event", () => {
-    assert.deepEqual(applied(decide(start({ trailerId: TRAILER, appVersion: "1.4.0", location: point }), mads, readyToStart(), clock)), [
+  test("a ready route starts: the session opens with the command's id, the actual assignment is the body's, a route-started proof keeps where the device stood, and route-started is worth an event", () => {
+    assert.deepEqual(applied(decide(start({ trailerId: TRAILER, appVersion: "1.4.0", location: point, accuracyM: 12 }), mads, readyToStart(), clock)), [
       { kind: "start-route", sessionId: COMMAND, vehicleId: VEHICLE, trailerId: TRAILER, appVersion: "1.4.0", at: EARLIER },
+      { kind: "append-proof", proof: { id: COMMAND, kind: "route-started", pickupId: null, occurredAt: EARLIER, reason: null, note: null, weightKg: null, objectKey: null, location: point, locationAccuracyM: 12 } },
       { kind: "event", event: "route-started", aggregate: "route", aggregateId: ROUTE },
     ])
-    assert.deepEqual(applied(decide(start(), mads, readyToStart({ trailer: undefined }), clock))[0], { kind: "start-route", sessionId: COMMAND, vehicleId: VEHICLE, trailerId: null, appVersion: null, at: EARLIER })
+    const bare = applied(decide(start(), mads, readyToStart({ trailer: undefined }), clock))
+    assert.deepEqual(bare[0], { kind: "start-route", sessionId: COMMAND, vehicleId: VEHICLE, trailerId: null, appVersion: null, at: EARLIER })
+    assert.deepEqual((bare[1] as { proof: { location: unknown; kind: string } }).proof.location, null, "no place given is no place recorded, and the proof is still appended")
   })
 
   test("a planned route is not dispatched, an active one is already active, a completed or cancelled one does not change: 409", () => {
@@ -191,13 +195,17 @@ describe("decide: start-route", () => {
     const expired = { ...mads, licenceExpiry: "2026-10-04" }
     assert.deepEqual(rejected(decide(start(), expired, readyToStart(), clock)).detail, "Mads Jensen's licence expires on 2026-10-04, before the operating date")
     assert.equal(rejected(decide(start(), { ...mads, licenceClass: null }, readyToStart(), clock)).detail, "Mads Jensen holds no licence class on record")
-    assert.equal(applied(decide(start(), { ...mads, licenceExpiry: "2026-10-05" }, readyToStart(), clock)).length, 2, "the last day the licence holds is the operating date")
+    assert.equal(applied(decide(start(), { ...mads, licenceExpiry: "2026-10-05" }, readyToStart(), clock)).length, 3, "the last day the licence holds is the operating date")
   })
 
-  test("a retired vehicle or trailer is the fleet's 409, after every 400", () => {
-    assert.deepEqual(rejected(decide(start(), mads, readyToStart({ vehicle: { ...truck, status: "retired" } }), clock)), { status: 409, detail: isRetired("WH-24", "vehicle") })
-    assert.deepEqual(rejected(decide(start({ trailerId: TRAILER }), mads, readyToStart({ trailer: { ...trailer, status: "retired" } }), clock)), { status: 409, detail: "WH-T3 is retired; a route needs a trailer in service" })
-    assert.equal(applied(decide(start(), mads, readyToStart({ vehicle: { ...truck, status: "maintenance" } }), clock)).length, 2, "in the workshop is not retired")
+  test("only an active vehicle or trailer goes out: retired, in the workshop or unavailable is the fleet's 409 naming the status, after every 400", () => {
+    for (const status of ["retired", "maintenance", "unavailable"] as const) {
+      assert.deepEqual(rejected(decide(start(), mads, readyToStart({ vehicle: { ...truck, status } }), clock)), { status: 409, detail: notInService("WH-24", status, "vehicle") }, status)
+      assert.deepEqual(rejected(decide(start({ trailerId: TRAILER }), mads, readyToStart({ trailer: { ...trailer, status } }), clock)), { status: 409, detail: `WH-T3 is ${status}; a route needs a trailer in service` }, status)
+    }
+    assert.equal(notInService("WH-24", "maintenance", "vehicle"), "WH-24 is maintenance; a route needs a vehicle in service")
+    // A trailer named but not hitched is not judged: the body did not name it.
+    assert.equal(applied(decide(start(), mads, readyToStart({ trailer: { ...trailer, status: "retired" } }), clock)).length, 3)
   })
 })
 
@@ -223,11 +231,28 @@ describe("decide: every later command", () => {
     assert.deepEqual(applied(decide(command("resume", {}), mads, running(), clock)), [])
   })
 
-  test("end-route closes the route, its session and its open pickups in one effect, and is worth route-completed; the applier emits one pickup-skipped per pickup it closed", () => {
-    assert.deepEqual(applied(decide(command("end-route", { note: "Done for today", location: point }), mads, running(), clock)), [
+  test("end-route appends a route-ended proof with the note and the place, closes the route, its session and its open pickups in one effect, and is worth route-completed; the applier emits one pickup-skipped per pickup it closed", () => {
+    assert.deepEqual(applied(decide(command("end-route", { note: "Done for today", location: point, accuracyM: 6 }), mads, running(), clock)), [
+      { kind: "append-proof", proof: { id: COMMAND, kind: "route-ended", pickupId: null, occurredAt: EARLIER, reason: null, note: "Done for today", weightKg: null, objectKey: null, location: point, locationAccuracyM: 6 } },
       { kind: "end-route", at: EARLIER },
       { kind: "event", event: "route-completed", aggregate: "route", aggregateId: ROUTE },
     ])
+    assert.deepEqual((applied(decide(command("end-route", {}), mads, running(), clock))[0] as { proof: { note: null; location: null } }).proof.note, null)
+  })
+
+  test("end-route on a route the office cancelled meanwhile is applied as nothing, with the note for the log, so the driver is not locked out; a completed route still refuses", () => {
+    // The office's cancel ended the session (routeCancellation); the device, offline, still sends its end of the day.
+    const cancelled = running({ route: { ...route("cancelled"), actualDriverId: mads.id }, session: session({ endedAt: "2026-10-05T07:45:00.000Z" }) })
+    const decision = decide(command("end-route", { note: "Done" }), mads, cancelled, clock)
+    assert.deepEqual(decision, { apply: [], note: ROUTE_CANCELLED_NOTHING_TO_END })
+    assert.equal(ROUTE_CANCELLED_NOTHING_TO_END, "The route was cancelled; nothing to end")
+    assert.deepEqual(rejected(decide(command("end-route", {}), mads, running({ route: route("completed"), session: session({ endedAt: NOW }) }), clock)), { status: 409, detail: notActive("RC-1042") })
+    // Every other command on the cancelled route is still refused as not active.
+    assert.deepEqual(rejected(decide(command("pause", {}), mads, cancelled, clock)), { status: 409, detail: notActive("RC-1042") })
+    // And with the session ended by the cancellation, the driver starts the next route.
+    assert.equal(routeCancellation("active").endsSession, true)
+    const next = readyToStart({ route: { ...route("ready"), id: OTHER_PICKUP, label: "RC-1043" }, driverOpenOn: undefined })
+    assert.equal(applied(decide({ ...command("start-route", { vehicleId: VEHICLE }), routeId: OTHER_PICKUP }, mads, next, clock)).length, 3)
   })
 })
 

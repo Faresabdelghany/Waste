@@ -7,12 +7,15 @@
 // database test holds to it over every triple. Here the test runs every kind
 // with each column set and unset through both.
 //
-// The glossary's "time, GPS, photo, weight, signature, or driver event" is ten
-// kinds with a shape each. A driver event — `arrival`, `completion`, `skip`,
-// `failure`, `problem` — is about a stop, so the first four name a pickup and
-// the problem may stand on the route alone (a road closed); a skip, a failure
-// and a problem say why (`reason`), and an arrival and a completion say
-// nothing but that they happened. The evidence kinds carry their evidence and
+// The glossary's "time, GPS, photo, weight, signature, or driver event" is
+// twelve kinds with a shape each. A driver event about a stop — `arrival`,
+// `completion`, `skip`, `failure`, `problem` — names a pickup, but for the
+// problem, which may stand on the route alone (a road closed); a skip, a
+// failure and a problem say why (`reason`), and an arrival and a completion
+// say nothing but that they happened. Two driver events are the route's and
+// never a stop's: `route-started` and `route-ended`, what the device said when
+// it started and ended the day — a note, where it stood — kept as rows rather
+// than discarded with the command's body. The evidence kinds carry their evidence and
 // nothing else's: a `photo` and a `signature` carry the Storage object's key
 // and nothing else carries one, a `weight` carries whole kilograms and
 // nothing else does, a `note` carries its note. A photo and a note may stand
@@ -33,8 +36,8 @@ export type Presence = "required" | "none" | "any"
 
 /** What one kind of proof carries. */
 export type ProofShape = {
-  /** Whether the kind is a stop's, or may stand on the route alone. */
-  pickup: "required" | "optional"
+  /** Whether the kind is a stop's, may stand on the route alone, or is the route's and never a stop's. */
+  pickup: "required" | "optional" | "none"
   reason: Presence
   objectKey: Presence
   weightKg: Presence
@@ -62,13 +65,15 @@ const REASONED: ProofShape = { ...EVENT, reason: "required" }
 /** A Storage object's key and nothing else. */
 const OBJECT: ProofShape = { ...EVENT, objectKey: "required" }
 
-/** The table: what each of the ten kinds carries. */
+/** The table: what each of the twelve kinds carries. */
 export const PROOF_SHAPES: Readonly<Record<ProofKind, ProofShape>> = {
   arrival: EVENT,
   completion: EVENT,
   skip: REASONED,
   failure: REASONED,
   problem: { ...REASONED, pickup: "optional", note: "required" },
+  "route-started": { ...EVENT, pickup: "none" },
+  "route-ended": { ...EVENT, pickup: "none" },
   photo: { ...OBJECT, pickup: "optional" },
   weight: { ...EVENT, weightKg: "required" },
   signature: OBJECT,
@@ -85,6 +90,7 @@ const holds = (presence: Presence, value: unknown): boolean => (presence === "an
 export function proofShapeIssue(kind: ProofKind, row: ProofRow): string | undefined {
   const shape = PROOF_SHAPES[kind]
   if (shape.pickup === "required" && row.pickupId === null) return `A ${kind} proof names a pickup`
+  if (shape.pickup === "none" && row.pickupId !== null) return `A ${kind} proof is the route's and names no pickup`
   for (const column of PRESENCE_COLUMNS) {
     if (holds(shape[column], row[column])) continue
     return shape[column] === "required" ? `A ${kind} proof carries ${column}` : `A ${kind} proof carries no ${column}`

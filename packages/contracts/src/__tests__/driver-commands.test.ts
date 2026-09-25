@@ -155,8 +155,15 @@ describe("what the door answers and stores", () => {
   test("an outcome row is applied with its result, replayed with the first result, or rejected with its problem", () => {
     assert.deepEqual(WireOutcome.options, ["applied", "rejected", "replayed"])
     const session = { id: ID, projectId: OTHER, routeId: THIRD, driverId: ID, vehicleId: OTHER, trailerId: null, deviceId: "device-7", appVersion: null, startedAt: WHEN, endedAt: null, pausedAt: null, lastSeenAt: WHEN, ...STAMPS }
-    assert.deepEqual(CommandOutcomeRow.parse({ commandId: ID, outcome: "applied", result: session }), { commandId: ID, outcome: "applied", result: session })
+    const result = { resource: "session", value: session }
+    assert.deepEqual(CommandOutcomeRow.parse({ commandId: ID, outcome: "applied", result }), { commandId: ID, outcome: "applied", result })
     assert.deepEqual(CommandOutcomeRow.parse({ commandId: ID, outcome: "replayed", problem }), { commandId: ID, outcome: "replayed", problem })
+    // The result is tagged with what it is, so a session is never taken for a route or a stripped object of either.
+    assert.deepEqual(refusal(CommandOutcomeRow.safeParse({ commandId: ID, outcome: "applied", result: session })).map((issue) => issue.path), ["result.resource"])
+    const mistagged = refusal(CommandOutcomeRow.safeParse({ commandId: ID, outcome: "applied", result: { resource: "route", value: session } }))
+    assert.ok(mistagged.length > 0)
+    for (const issue of mistagged) assert.match(issue.path, /^result\.value/, "a session tagged as a route is held to the route's shape")
+    assert.equal(CommandOutcomeRow.safeParse({ commandId: ID, outcome: "applied", result: { resource: "ticket", value: session } }).success, false)
     assert.deepEqual(CommandOutcomeRow.parse({ commandId: ID, outcome: "rejected", problem }), { commandId: ID, outcome: "rejected", problem })
     assert.deepEqual(CommandOutcomeRow.parse({ commandId: ID, outcome: "applied" }), { commandId: ID, outcome: "applied" }, "a pause makes no row")
     assert.equal(CommandOutcomeRow.safeParse({ commandId: ID, outcome: "pending" }).success, false)

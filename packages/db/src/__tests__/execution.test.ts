@@ -579,7 +579,7 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
       const exemplar = (kind: ProofKind): ProofRow => {
         const shape = PROOF_SHAPES[kind]
         return {
-          pickupId: a.pickup,
+          pickupId: shape.pickup === "none" ? null : a.pickup,
           reason: shape.reason === "none" ? null : full.reason,
           objectKey: shape.objectKey === "none" ? null : full.objectKey,
           weightKg: shape.weightKg === "none" ? null : full.weightKg,
@@ -605,7 +605,7 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
       }
       let rows = 0
       for (const kind of PROOF_KINDS) {
-        const variations: ProofRow[] = [exemplar(kind), { ...exemplar(kind), pickupId: null }]
+        const variations: ProofRow[] = [exemplar(kind), { ...exemplar(kind), pickupId: null }, { ...exemplar(kind), pickupId: a.pickup }]
         for (const column of columns) {
           variations.push({ ...exemplar(kind), [column]: full[column] }, { ...exemplar(kind), [column]: null })
         }
@@ -615,7 +615,7 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
           rows += 1
         }
       }
-      assert.equal(rows, 140, "ten kinds, fourteen rows each")
+      assert.equal(rows, 180, "twelve kinds, fifteen rows each")
     }))
 
   test("an unload's weights come together and add up, and the office's row names no session (23514 unload_weights_shape, unload_session_shape)", () =>
@@ -639,9 +639,20 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(driverCommand).values(receipt({ problem: { status: 409 } }))), refusedWith("23514", /driver_command_problem_shape/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(driverCommand).values(receipt({ outcome: "replayed" }))), refusedWith("23514", /driver_command_outcome_one_of/), "replayed is the wire's word and is never stored")
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(driverCommand).values(receipt({ kind: "retry-sync" }))), refusedWith("23514", /driver_command_kind_one_of/))
-      await tx.insert(driverCommand).values(receipt({ outcome: "rejected", problem: { type: "about:blank", title: "Conflict", status: 409, detail: "Pickup 1 is already completed" }, sessionId: null, pickupId: null }))
+      const refusedCompletion = { type: "about:blank", title: "Conflict", status: 409, detail: "Pickup 1 is already completed" }
+      await tx.insert(driverCommand).values(receipt({ outcome: "rejected", problem: refusedCompletion, sessionId: null, pickupId: null }))
       // The receipt's id is the client's: a second command with the same id is a replay the API answers, and the key refuses the row (23505 driver_command_pkey).
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(driverCommand).values(receipt({ id: a.command }))), refusedWith("23505", /driver_command_pkey/))
+      // A receipt is writable for any rejection (ADR-0004): a command naming a route the driver does not reach has no route the key could check, so the column is null, the claimed id stays in the body, and the row is the driver's project's.
+      const noSuchRoute = { type: "about:blank", title: "Not Found", status: 404, detail: `No route ${b.route} assigned to this driver` }
+      await tx.insert(driverCommand).values(receipt({ id: a.other, routeId: null, sessionId: null, pickupId: null, kind: "start-route", body: { vehicleId: a.vehicle, routeId: b.route }, outcome: "rejected", problem: noSuchRoute }))
+      // Such a row is a rejection naming no session and no pickup, and never an applied command (23514 driver_command_route_shape).
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(driverCommand).values(receipt({ id: a.third, routeId: null, sessionId: null, pickupId: null }))), refusedWith("23514", /driver_command_route_shape/), "applied without a route")
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(driverCommand).values(receipt({ id: a.third, routeId: null, pickupId: null, outcome: "rejected", problem: noSuchRoute }))), refusedWith("23514", /driver_command_route_shape/), "a session without a route")
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(driverCommand).values(receipt({ id: a.third, routeId: null, sessionId: null, outcome: "rejected", problem: noSuchRoute }))), refusedWith("23514", /driver_command_route_shape/), "a pickup without a route")
+      // The driver's log reads both, in order, through its index.
+      const log = await tx.select({ id: driverCommand.id, routeId: driverCommand.routeId }).from(driverCommand).where(and(eq(driverCommand.companyId, a.company), eq(driverCommand.driverId, a.driver))).orderBy(driverCommand.id)
+      assert.deepEqual(log.map((row) => row.routeId), [a.route, a.route, null], "the seeded arrival, the refused completion, the route nobody assigned")
       const event = { id: a.other, companyId: a.company, projectId: a.project, kind: "pickup-completed", aggregateKind: "pickup", aggregateId: a.pickup, occurredAt: at(6, 25), payload: { id: a.pickup, status: "completed" } } as const
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, kind: "route.started" })), refusedWith("23514", /outbox_event_kind_one_of/), "kebab, not dotted")
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, aggregateKind: "ticket" })), refusedWith("23514", /outbox_event_aggregate_kind_one_of/))

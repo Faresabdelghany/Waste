@@ -26,6 +26,7 @@ import {
   EXECUTION_SOURCES,
   OUTBOX_AGGREGATES,
   OUTBOX_KINDS,
+  PICKUP_OUTCOMES,
   PICKUP_REASONS,
   PICKUP_STATUSES,
   PROOF_KINDS,
@@ -40,6 +41,10 @@ export type RouteStatus = z.infer<typeof RouteStatus>
 /** Where a Pickup stands; `skipped` was not attempted, `failed` was. */
 export const PickupStatus = z.enum(PICKUP_STATUSES)
 export type PickupStatus = z.infer<typeof PickupStatus>
+
+/** The statuses a pickup may be moved to: every one but planned, which nothing moves a pickup back to. */
+export const PickupOutcome = z.enum(PICKUP_OUTCOMES)
+export type PickupOutcome = z.infer<typeof PickupOutcome>
 
 /** Why a stop was skipped or failed: the driver's six and the system's four. */
 export const PickupReason = z.enum(PICKUP_REASONS)

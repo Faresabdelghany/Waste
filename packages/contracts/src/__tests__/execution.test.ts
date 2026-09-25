@@ -8,6 +8,7 @@ import {
   EXECUTION_SOURCES,
   OUTBOX_AGGREGATES,
   OUTBOX_KINDS,
+  PICKUP_OUTCOMES,
   PICKUP_REASONS,
   PICKUP_STATUSES,
   PROOF_KINDS,
@@ -25,6 +26,7 @@ import {
   ObjectKey,
   OutboxAggregate,
   OutboxKind,
+  PickupOutcome,
   PickupReason,
   PickupStatus,
   ProofKind,
@@ -42,6 +44,7 @@ describe("the Execution enums", () => {
   test("are the vocabulary the database checks against, value for value and in the same order", () => {
     assert.deepEqual(RouteStatus.options, [...ROUTE_STATUSES])
     assert.deepEqual(PickupStatus.options, [...PICKUP_STATUSES])
+    assert.deepEqual(PickupOutcome.options, [...PICKUP_OUTCOMES])
     assert.deepEqual(PickupReason.options, [...PICKUP_REASONS])
     assert.deepEqual(DriverPickupReason.options, [...DRIVER_PICKUP_REASONS])
     assert.deepEqual(ProofKind.options, [...PROOF_KINDS])
@@ -56,6 +59,7 @@ describe("the Execution enums", () => {
     assert.equal(RouteStatus.safeParse("Draft").success, false, "a generated route is never a draft")
     assert.equal(RouteStatus.safeParse("paused").success, false, "a reading of the session")
     assert.equal(PickupStatus.safeParse("rescheduled").success, false, "a Ticket's outcome")
+    assert.equal(PickupOutcome.safeParse("planned").success, false, "nothing moves a pickup back to planned")
     assert.equal(PickupStatus.safeParse("next").success, false, "a reading")
     assert.equal(DriverPickupReason.safeParse("route-ended").success, false, "the system's, not a device's")
     assert.equal(PickupReason.safeParse("route-ended").success, true)

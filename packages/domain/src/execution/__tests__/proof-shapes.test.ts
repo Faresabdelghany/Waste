@@ -13,7 +13,7 @@ const bare: ProofRow = { pickupId: null, reason: null, objectKey: null, weightKg
 const exemplar = (kind: ProofKind): ProofRow => {
   const shape = PROOF_SHAPES[kind]
   return {
-    pickupId: "pickup",
+    pickupId: shape.pickup === "none" ? null : "pickup",
     reason: shape.reason === "none" ? null : "inaccessible",
     objectKey: shape.objectKey === "none" ? null : "c/r/k.jpg",
     weightKg: shape.weightKg === "none" ? null : 148,
@@ -24,17 +24,22 @@ const exemplar = (kind: ProofKind): ProofRow => {
 }
 
 describe("PROOF_SHAPES", () => {
-  test("spells the ten kinds: what each names, carries, forbids and comes from", () => {
+  test("spells the twelve kinds: what each names, carries, forbids and comes from", () => {
     assert.deepEqual(Object.keys(PROOF_SHAPES).sort(), [...PROOF_KINDS].sort())
     const requires = (kind: ProofKind) => Object.entries(PROOF_SHAPES[kind]).filter(([, presence]) => presence === "required").map(([column]) => column)
     const forbids = (kind: ProofKind) => Object.entries(PROOF_SHAPES[kind]).filter(([, presence]) => presence === "none").map(([column]) => column)
-    // Five driver events: the first four name a pickup, the problem may stand on the route; a skip, a failure and a problem say why.
+    // Five driver events about a stop: the first four name a pickup, the problem may stand on the route; a skip, a failure and a problem say why.
     assert.deepEqual(requires("arrival"), ["pickup"])
     assert.deepEqual(requires("completion"), ["pickup"])
     assert.deepEqual(requires("skip"), ["pickup", "reason"])
     assert.deepEqual(requires("failure"), ["pickup", "reason"])
     assert.deepEqual(requires("problem"), ["reason", "note"])
     assert.equal(PROOF_SHAPES.problem.pickup, "optional")
+    // Two about the route and never a stop, carrying a note and a place if the device gave them and nothing else.
+    for (const kind of ["route-started", "route-ended"] as const) {
+      assert.deepEqual(requires(kind), [])
+      assert.deepEqual(forbids(kind), ["pickup", "reason", "objectKey", "weightKg", "outcome"], kind)
+    }
     // Four kinds of evidence, each carrying its own and nothing else's.
     assert.deepEqual(requires("photo"), ["objectKey"])
     assert.deepEqual(requires("signature"), ["pickup", "objectKey"])
@@ -81,10 +86,13 @@ describe("proofShape", () => {
         if (shape[column] === "required") assert.equal(proofShapeIssue(kind, absent), `A ${kind} proof carries ${column}`)
         if (shape[column] === "none") assert.equal(proofShapeIssue(kind, given), `A ${kind} proof carries no ${column}`)
       }
-      // The pickup: a stop's kind names one, the others may stand on the route.
+      // The pickup: a stop's kind names one, the route's two name none, the others may stand on the route.
       const onRoute = { ...exemplar(kind), pickupId: null }
-      assert.equal(proofShape(kind, onRoute), shape.pickup === "optional", `${kind} on the route alone`)
+      assert.equal(proofShape(kind, onRoute), shape.pickup !== "required", `${kind} on the route alone`)
       if (shape.pickup === "required") assert.equal(proofShapeIssue(kind, onRoute), `A ${kind} proof names a pickup`)
+      const onAStop = { ...exemplar(kind), pickupId: "pickup" }
+      assert.equal(proofShape(kind, onAStop), shape.pickup !== "none", `${kind} on a stop`)
+      if (shape.pickup === "none") assert.equal(proofShapeIssue(kind, onAStop), `A ${kind} proof is the route's and names no pickup`)
       // The source: only a correction is the dispatcher's alone.
       for (const source of EXECUTION_SOURCES) {
         assert.equal(proofShape(kind, { ...exemplar(kind), source }), shape.source === "any" || source === "dispatch", `${kind} from ${source}`)
@@ -93,5 +101,7 @@ describe("proofShape", () => {
     assert.equal(proofShapeIssue("correction", { ...exemplar("correction"), source: "driver-app" }), "A correction proof comes from dispatch")
     assert.equal(proofShape("arrival", bare), false, "an arrival names a pickup")
     assert.equal(proofShape("note", { ...bare, note: "x" }), true, "a note may stand on the route")
+    assert.equal(proofShape("route-started", bare), true, "the day's start says nothing but that it happened")
+    assert.equal(proofShape("route-ended", { ...bare, note: "Done for today" }), true)
   })
 })
