@@ -62,8 +62,10 @@
 // with its weights in whole kilograms (§7.15): `net_kg` is given, gross and
 // tare come together or not at all, and where both are given net is gross
 // less tare (`unload_weights_shape`, the prototype's own sentence). Weight
-// control is Finance's review over these rows (step 7); a wrong unload is
-// corrected there by a new row and nothing here is updated.
+// control is Finance's review over these rows (Issue #112, `weight_review`):
+// a wrong unload is corrected there by a new row naming the old and nothing
+// here is updated, and the row carries `unload_project_key` since 0010 for
+// the review to point at.
 //
 // `driver_command` is the receipt: one row per command a device ever sent,
 // applied or rejected, keyed by the client's id (§7.5) — the idempotency
@@ -406,6 +408,8 @@ export const unload = wms.table(
     tenantReference(t, [t.unloadingStationId], unloadingStation),
     tenantReference(t, [t.wasteFractionId], wasteFraction),
     tenantReference(t, [t.recordedBy], userAccount),
+    // What the weight review points at (Issue #112, migration 0010): the day something pointed at it, the way the placement got its key in 0007.
+    projectKey(t),
     oneOf(t.source, EXECUTION_SOURCES),
     validGeometry(t.location),
     positive(t.grossKg),

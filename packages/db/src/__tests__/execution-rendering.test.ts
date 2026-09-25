@@ -20,10 +20,12 @@
 // more: `outbox_event`'s two checks grew by Resolution's three kinds and its
 // `ticket` aggregate, and `company` gained `next_ticket_number`; 0010 (Issue
 // #112) grew the two checks again, by Finance's two kinds and its `invoice`
-// and `settlement`, and gave `company` `next_invoice_number`. An applied file
-// is never edited, so 0008 is held to the earlier spelling: `CHANGED_IN_0010`
-// maps the outbox's CREATE TABLE as drizzle-kit writes it now onto what it
-// wrote as of 0009, `CHANGED_IN_0009` maps that onto what 0008 says, and the
+// and `settlement`, gave `unload` the project key the weight review points
+// at, and gave `company` `next_invoice_number`. An applied file is never
+// edited, so 0008 is held to the earlier spelling: `CHANGED_IN_0010` maps the
+// outbox's CREATE TABLE as drizzle-kit writes it now onto what it wrote as of
+// 0009 and the unload's onto what 0008 says, `CHANGED_IN_0009` maps the
+// outbox's 0009 spelling onto 0008's, and the
 // company's ALTER TABLE is diffed from 0002's spelling to 0008's rather than
 // to today's, the way planning-rendering.test.ts holds 0006 to its own day.
 // resolution-rendering.test.ts and finance-rendering.test.ts pin the
@@ -150,8 +152,39 @@ const outboxEventTable = (asOf: "0008" | "0009" | "0010"): string =>
 /** What 0009 changed on a table 0008 created: the outbox's CREATE TABLE as drizzle-kit generated it as of 0009, and as it generated it as of 0008. */
 const CHANGED_IN_0009 = new Map([[outboxEventTable("0009"), outboxEventTable("0008")]])
 
-/** What 0010 changed on it again (Issue #112): the CREATE TABLE as drizzle-kit generates it now, and as it generated it as of 0009. Applied before `CHANGED_IN_0009`, so today's spelling is mapped back one file at a time. */
-const CHANGED_IN_0010 = new Map([[outboxEventTable("0010"), outboxEventTable("0009")]])
+/** unload as drizzle-kit writes it today — with the project key 0010 added for the weight review to point at (Issue #112), the day something pointed at it — and as it wrote it as of 0008, without. */
+const unloadTable = (finance: boolean): string =>
+  createLedger("unload", [
+    '"route_id" uuid NOT NULL',
+    '"session_id" uuid',
+    '"unloading_station_id" uuid NOT NULL',
+    '"waste_fraction_id" uuid NOT NULL',
+    '"source" text NOT NULL',
+    `"occurred_at" ${INSTANT} NOT NULL`,
+    '"recorded_by" uuid NOT NULL',
+    '"device_id" text',
+    '"location" geometry(Point, 4326)',
+    '"gross_kg" integer',
+    '"tare_kg" integer',
+    '"net_kg" integer NOT NULL',
+    '"weighbridge_ticket" text',
+    '"object_key" text',
+    '"note" text',
+    ...(finance ? [uniqueKey("unload_project_key", "company_id", "project_id", "id")] : []),
+    oneOfCheck("unload", "source", ...SOURCES),
+    geometryCheck("unload", "location"),
+    positiveCheck("unload", "gross_kg"),
+    positiveCheck("unload", "tare_kg"),
+    positiveCheck("unload", "net_kg"),
+    sessionShape("unload"),
+    `CONSTRAINT "unload_weights_shape" CHECK ((${ref("unload", "gross_kg")} is null) = (${ref("unload", "tare_kg")} is null) and (${ref("unload", "gross_kg")} is null or ${ref("unload", "net_kg")} = ${ref("unload", "gross_kg")} - ${ref("unload", "tare_kg")}))`,
+  ])
+
+/** What 0010 changed on two of the seven (Issue #112): the outbox's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0009, and the unload's onto what 0008 says. Applied before `CHANGED_IN_0009`, so today's spelling is mapped back one file at a time. */
+const CHANGED_IN_0010 = new Map([
+  [outboxEventTable("0010"), outboxEventTable("0009")],
+  [unloadTable(true), unloadTable(false)],
+])
 
 const expected = [
   createTable("route", "project", [
@@ -246,30 +279,7 @@ const expected = [
     sessionShape("proof_of_service"),
     kindShape,
   ]),
-  createLedger("unload", [
-    '"route_id" uuid NOT NULL',
-    '"session_id" uuid',
-    '"unloading_station_id" uuid NOT NULL',
-    '"waste_fraction_id" uuid NOT NULL',
-    '"source" text NOT NULL',
-    `"occurred_at" ${INSTANT} NOT NULL`,
-    '"recorded_by" uuid NOT NULL',
-    '"device_id" text',
-    '"location" geometry(Point, 4326)',
-    '"gross_kg" integer',
-    '"tare_kg" integer',
-    '"net_kg" integer NOT NULL',
-    '"weighbridge_ticket" text',
-    '"object_key" text',
-    '"note" text',
-    oneOfCheck("unload", "source", ...SOURCES),
-    geometryCheck("unload", "location"),
-    positiveCheck("unload", "gross_kg"),
-    positiveCheck("unload", "tare_kg"),
-    positiveCheck("unload", "net_kg"),
-    sessionShape("unload"),
-    `CONSTRAINT "unload_weights_shape" CHECK ((${ref("unload", "gross_kg")} is null) = (${ref("unload", "tare_kg")} is null) and (${ref("unload", "gross_kg")} is null or ${ref("unload", "net_kg")} = ${ref("unload", "gross_kg")} - ${ref("unload", "tare_kg")}))`,
-  ]),
+  unloadTable(true),
   createLedger("driver_command", [
     // Nullable: a command rejected because no such route is assigned to the driver has no route the key could check, and is still a receipt.
     '"route_id" uuid',
@@ -451,6 +461,7 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     const today = await statementsFor(tables)
     for (const statement of CHANGED_IN_0010.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0009.keys()) assert.ok([...CHANGED_IN_0010.values()].includes(statement), statement.split("\n")[0])
+    assert.equal(CHANGED_IN_0010.size, 2, "the outbox's vocabulary and the unload's key")
   })
 
   test("and carries below them the fence and trigger, or revoke, of each table, then the sync role, its grants and the publication: 7 x 3 + 3 + 17 + 1 = 42 statements", async () => {
