@@ -23,21 +23,30 @@
 // is for an envelope that does not, and then nothing is applied and nothing
 // recorded, since the queue will retry. For each command, in this order:
 //
-//   the receipt   — read first, by the command's id. Found: the stored outcome
-//                   is answered again as `replayed`, with the row it made read
-//                   back or the problem it was refused with, and nothing is
-//                   written, not even `last_seen_at`. A replay whose body
-//                   differs from the stored one is still the first answer —
-//                   a replayed command is a no-op answering the first result
-//                   — and the difference is logged, since it is the client's
-//                   bug and not the server's decision to make;
+//   the receipt   — read first, by the command's id among this driver's own.
+//                   Found: the stored outcome is answered again as
+//                   `replayed`, with the row it made read back or the problem
+//                   it was refused with, and nothing is written, not even
+//                   `last_seen_at`. A replay that differs from the stored
+//                   command — its kind, route, instant, device or body — is
+//                   still the first answer — a replayed command is a no-op
+//                   answering the first result — and the difference is
+//                   logged, since it is the client's bug and not the server's
+//                   decision to make. Bounded by the driver and not the
+//                   company, because a replay hands back the rows the first
+//                   upload made, and only the device that sent a command is
+//                   owed them;
 //   the lock      — the route's row (`lockRow`), so commands on one route take
 //                   turns with each other and with the office's cancel, and
 //                   two uploads of one batch serialise on it: the second reads
 //                   the first's receipt and replays. The route is then read by
 //                   id inside the company and not under the assignment, since
 //                   `decide` judges the assignment itself and the receipt of a
-//                   refused command needs the route's project;
+//                   refused command needs the route's project — and nothing
+//                   else of a route that is not this driver's is read
+//                   (`readLookups`), so the receipt of that rejection names no
+//                   session and no pickup, and a device learns nothing of a
+//                   route it was not given;
 //   the body      — parsed against its kind's schema (`COMMAND_BODIES`). A
 //                   body that fails is a rejection recorded like any other,
 //                   with the schema's issues as its problem, so a device never
@@ -63,17 +72,32 @@
 //   the receipt   — written after the effects (`driver_command`: the outcome,
 //                   the problem on a rejection, the body verbatim), and the
 //                   outbox events last (outbox.ts), each with the resource the
-//                   route would answer at that instant as its payload, a
-//                   rejection's being the receipt itself.
+//                   route would answer at that instant as its payload — a
+//                   pickup's event the pickup with the proofs this command
+//                   made, a route-level `report-problem`'s the route with its
+//                   problem proof the same way, so the reason and the note
+//                   travel with it, the route's other events the bare route
+//                   — a rejection's being the receipt itself.
 //
 // All of it inside the command's savepoint, so a command that fails midway
-// leaves nothing of itself behind and the batch goes on. A race the lock did
-// not see — two uploads of one batch meeting on a primary key, the receipt's
-// or that of the row the command makes with the same id — is the fourth door,
-// `replayed` in routes/shared.ts: the savepoint rolls the loser's rows back and
-// the first receipt is read and answered as `replayed`, a 200 and never a
-// 409, because here the key is the command and the command has already
-// happened.
+// leaves nothing of itself behind and the batch goes on. Two races the lock
+// does not see are each one command's answer and never the batch's. Two
+// uploads of one batch meeting on a primary key — the receipt's, or that of
+// the row the command makes with the same id — is the fourth door, `replayed`
+// in routes/shared.ts: the savepoint rolls the loser's rows back and the first
+// receipt is read and answered as `replayed`, a 200 and never a 409, because
+// here the key is the command and the command has already happened; the same
+// key held by a command that is not this driver's — another device minted the
+// id — is a rejection (`ANOTHER_DEVICES_COMMAND`, 409 in the outcome), never a
+// replay, and the one rejection no receipt can hold, since the receipt's key
+// is that id, so it goes to the log. And two of one driver's routes started at
+// once, each batch under its own route's lock, meet on the one-live-session-
+// per-driver index once the winner commits (`DRIVER_OPEN_INDEX`): the loser's
+// savepoint rolls back, the winner is read, and the command is recorded as the
+// rejection `decide` would have made a statement later, "Mads Jensen is
+// already on route RC-1039; end it first"; the one-per-route index is the same
+// news of a start the lock somehow did not serialise, "Route RC-1042 is
+// already active".
 //
 // Every rejection is recorded, the one for a route the driver does not reach
 // included: the receipt's `route_id` and `driver_id` both carry a project by
@@ -90,23 +114,33 @@
 // no longer exists for them.
 //
 // The wire shapes are routes/execution-shapes.ts's, shared with the office's
-// four modules; the door's own is the scope there (`driverRouteScope`,
+// four modules; the door's own are the scope there (`driverRouteScope`,
 // `findAssignedRoute`, `noSuchAssignedRoute`), whose fence is the assignment
-// where the office's is `inProjects`.
-import { COMMAND_BODIES, CommandOutcomeRow, DriverCommandBatch, DriverCommandBatchOutcome, DriverCommandReceipt, DriverMe, type CommandResult, type DriverCommandEnvelope } from "@waste/contracts/driver-commands"
+// where the office's is `inProjects`, and the route read's pickups
+// (`driverPickupsOfRoute`): `GET /driver/routes/:id` answers the contracts'
+// `DriverRouteDetail`, the route with what hangs off it and each pickup's
+// place joined — the address and the point of the property or the shared
+// collection point it names, the container's label, the fraction's name —
+// the one read that denormalises for the wire what the synced device joins
+// from its own buckets (#104 §5).
+import { COMMAND_BODIES, CommandOutcomeRow, DriverCommandBatch, DriverCommandBatchOutcome, DriverCommandReceipt, DriverMe, DriverRouteDetail, type CommandResult, type DriverCommandEnvelope, type DriverPickup } from "@waste/contracts/driver-commands"
 import { RouteStatus, routeLabel } from "@waste/contracts/execution"
+import type { FlatPoint } from "@waste/contracts/geojson"
 import { Id } from "@waste/contracts/ids"
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import type { Problem } from "@waste/contracts/problem"
-import { Route, RouteDetail } from "@waste/contracts/routes"
+import { Route } from "@waste/contracts/routes"
 import type { Tx } from "@waste/db/client"
+import { tableObjectName } from "@waste/db/names"
 import { wasteFraction } from "@waste/db/schema/catalogue"
+import { container } from "@waste/db/schema/containers"
+import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { driverCommand, pickup, proofOfService, route, session, unload } from "@waste/db/schema/execution"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { project } from "@waste/db/schema/organisation"
 import { unloadingStation } from "@waste/db/schema/places"
-import { decide, type Clock, type Command, type CommandDriver, type Effect, type Lookups, type PickupState, type RouteState, type SessionState, type VehicleState } from "@waste/domain/execution/commands"
-import { closingReasonOf } from "@waste/domain/execution/transitions"
+import { alreadyOnRoute, assignedTo, decide, type Clock, type Command, type CommandDriver, type Effect, type Lookups, type PickupState, type RouteState, type SessionState, type VehicleState } from "@waste/domain/execution/commands"
+import { alreadyActive, closingReasonOf } from "@waste/domain/execution/transitions"
 import type { DriverCommandKind, OutboxAggregate, OutboxKind } from "@waste/domain/execution/vocabulary"
 import type { LicenceClass, VehicleKind, VehicleStatus } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, gt, inArray, isNull, or, sql, type SQL } from "drizzle-orm"
@@ -119,21 +153,23 @@ import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal
 import { requireGrant } from "../auth/require"
 import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problemBody, validate } from "../problem"
+import { describeProblem, invalidRequest, problemBody, uniqueConstraintOf, validate } from "../problem"
 import { driverColumns, driverOf } from "./drivers"
 import {
   driverRouteScope,
   findAssignedRoute,
+  labelOf,
   noSuchAssignedRoute,
   pickupColumns,
   pickupOf,
-  progressByRoute,
   proofColumns,
   proofOf,
   receiptColumns,
   receiptOf,
   routeColumns,
-  routeOf,
+  routesOf,
+  routeWithProgress,
+  routeWithSessions,
   sessionColumns,
   sessionOf,
   unloadColumns,
@@ -158,6 +194,22 @@ const DriverReceiptListQuery = PageRequest.extend({ routeId: Id.optional() })
 
 /** The primary keys a race between two uploads of one batch can meet: the receipt's, and that of the row a command makes with the same id. */
 const REPLAY_KEYS = [primaryKeyOf(driverCommand), primaryKeyOf(session), primaryKeyOf(proofOfService), primaryKeyOf(unload)]
+
+/** What a command is told when its id is already another device's command's — one of the keys above taken, and no receipt of this driver's under it: never replayed, since a replay would hand that command's rows to a device that did not send it, and recorded nowhere, since the receipt's key is that id. */
+export const ANOTHER_DEVICES_COMMAND = "That command id belongs to another device's command"
+
+/**
+ * The two partial unique indexes a `start-route` can meet that the route's
+ * lock does not serialise (packages/db/src/schema/execution.ts, `session`):
+ * one live session per driver — two of the driver's routes started at once,
+ * each batch under its own route's lock, the second's insert waiting on the
+ * first's commit and then refused — and one per route, the backstop, since
+ * the route's own lock serialises its starts. Each becomes the command's
+ * rejection in the domain's words, the rule `decide` judged a statement too
+ * early, and never the batch's 409.
+ */
+const DRIVER_OPEN_INDEX = tableObjectName(session, "driver_open_idx", "driverDoorRoutes")
+const ROUTE_OPEN_INDEX = tableObjectName(session, "route_open_idx", "driverDoorRoutes")
 
 /**
  * The routes a driver's day is made of: `ready` or `active`, or `completed`
@@ -199,6 +251,45 @@ async function openSessionOf(tx: Tx, companyId: string, profile: DriverProfile):
   return row
 }
 
+/**
+ * One route's pickups with their places joined, by position: the
+ * `DriverPickup`s of `GET /driver/routes/:id` (#104 §5). One statement over
+ * the pickup's own place columns — `property_id` or
+ * `shared_collection_point_id`, the place on the service date (§7.11), never
+ * the placement valid today, which may have moved since — and its container
+ * and fraction, the address and the point read through the property's or
+ * the point's column, the point's codec decoding it (@waste/db/schema/geometry)
+ * exactly as the Registry's own reads do. `pickup_place_exactly_one` and the
+ * two project keys hold every pickup to one place that is there, so a row
+ * with neither address is a broken invariant and thrown, not a client's.
+ */
+async function driverPickupsOfRoute(tx: Tx, companyId: string, routeId: string): Promise<DriverPickup[]> {
+  const rows = await tx
+    .select({
+      ...pickupColumns,
+      propertyAddress: property.address,
+      propertyLocation: property.location,
+      pointAddress: sharedCollectionPoint.address,
+      pointLocation: sharedCollectionPoint.location,
+      containerLabel: container.label,
+      wasteFractionName: wasteFraction.name,
+    })
+    .from(pickup)
+    .innerJoin(container, and(eq(container.companyId, pickup.companyId), eq(container.id, pickup.containerId)))
+    .innerJoin(wasteFraction, and(eq(wasteFraction.companyId, pickup.companyId), eq(wasteFraction.id, pickup.wasteFractionId)))
+    .leftJoin(property, and(eq(property.companyId, pickup.companyId), eq(property.id, pickup.propertyId)))
+    .leftJoin(sharedCollectionPoint, and(eq(sharedCollectionPoint.companyId, pickup.companyId), eq(sharedCollectionPoint.id, pickup.sharedCollectionPointId)))
+    .where(and(eq(pickup.companyId, companyId), eq(pickup.routeId, routeId)))
+    .orderBy(asc(pickup.position), asc(pickup.id))
+  return rows.map(({ propertyAddress, propertyLocation, pointAddress, pointLocation, containerLabel, wasteFractionName, ...stop }) => {
+    const address = propertyAddress ?? pointAddress
+    if (address === null) throw new Error(`pickup ${stop.id} names no place that is there`)
+    // The columns are `geometry(Point, 4326)`, flat: what they hold is the contracts' `FlatPoint`, however the column's type spells the altitude as optional.
+    const location = (propertyLocation ?? pointLocation) as FlatPoint | null
+    return { ...pickupOf(stop), address, location, containerLabel, wasteFractionName }
+  })
+}
+
 // The applier.
 
 /** What every command in a batch is judged and recorded with. */
@@ -230,12 +321,19 @@ const namedPickup = (body: unknown): string | undefined => {
   return typeof pickupId === "string" ? pickupId : undefined
 }
 
-/** The receipt by the command's id, in this company; undefined when the command is new. */
-async function findReceipt(tx: Tx, companyId: string, id: string): Promise<ReceiptRow | undefined> {
+/**
+ * The receipt by the command's id, among this driver's; undefined when the
+ * command is new to them. Bounded by the driver and not the company alone,
+ * because a replay answers the rows the first upload made — a session, a
+ * proof with where the device stood — and only the device that sent a
+ * command is owed them: an id another driver's command holds is met at the
+ * key on the write and refused there (`ANOTHER_DEVICES_COMMAND`).
+ */
+async function findReceipt(tx: Tx, companyId: string, profile: DriverProfile, id: string): Promise<ReceiptRow | undefined> {
   const [row] = await tx
     .select(receiptColumns)
     .from(driverCommand)
-    .where(and(eq(driverCommand.companyId, companyId), eq(driverCommand.id, id)))
+    .where(and(eq(driverCommand.companyId, companyId), eq(driverCommand.driverId, profile.id), eq(driverCommand.id, id)))
     .limit(1)
   return row
 }
@@ -267,7 +365,18 @@ async function knownToCompany(tx: Tx, table: typeof unloadingStation | typeof wa
   return row !== undefined
 }
 
-const routeState = (row: RouteRow): RouteState => ({ id: row.id, label: routeLabel(row.number), status: row.status as RouteState["status"], plannedDriverId: row.plannedDriverId, actualDriverId: row.actualDriverId, operatingDate: row.operatingDate })
+/** The label of the route this driver has a session open on, any route; undefined when none. What the start rule reads, and what the loser of a race on `DRIVER_OPEN_INDEX` reads again to name the winner. */
+async function driverOpenOn(tx: Tx, companyId: string, profile: DriverProfile): Promise<string | undefined> {
+  const [driving] = await tx
+    .select({ number: route.number })
+    .from(session)
+    .innerJoin(route, and(eq(route.companyId, session.companyId), eq(route.id, session.routeId)))
+    .where(and(eq(session.companyId, companyId), eq(session.driverId, profile.id), isNull(session.endedAt)))
+    .limit(1)
+  return driving === undefined ? undefined : routeLabel(driving.number)
+}
+
+const routeState = (row: RouteRow): RouteState => ({ id: row.id, label: labelOf(row), status: row.status as RouteState["status"], plannedDriverId: row.plannedDriverId, actualDriverId: row.actualDriverId, operatingDate: row.operatingDate })
 const sessionState = (row: SessionRow): SessionState => ({ id: row.id, driverId: row.driverId, startedAt: row.startedAt.toISOString(), endedAt: row.endedAt === null ? null : row.endedAt.toISOString(), pausedAt: row.pausedAt === null ? null : row.pausedAt.toISOString() })
 const pickupState = (row: PickupRow): PickupState => ({ id: row.id, position: row.position, status: row.status as PickupState["status"], arrivedAt: row.arrivedAt === null ? null : row.arrivedAt.toISOString() })
 
@@ -277,13 +386,18 @@ const pickupState = (row: PickupRow): PickupState => ({ id: row.id, position: ro
  * kind, the route the driver has a session open on for `start-route`, the
  * pickup the body names, the vehicle and the trailer of the route's project,
  * the station and the fraction of the company. Nothing is read for a route
- * that is not there, since the first rule refuses before any of it is asked.
+ * that is not there, or that is not this driver's (the domain's
+ * `assignedTo`, the rule `decide` refuses by first): the receipt of that
+ * rejection then names no session and no pickup, and a device learns nothing
+ * of a route it was not given — not the other driver's open session, not the
+ * stop it guessed at.
  */
 async function readLookups(tx: Tx, applier: Applier, envelope: DriverCommandEnvelope, routeRow: RouteRow | undefined, body: unknown): Promise<Read> {
   const { companyId } = applier.principal
   const lookups: Lookups = { companyId, route: undefined, session: undefined, driverOpenOn: undefined, pickup: undefined, vehicle: undefined, trailer: undefined, stationKnown: false, fractionKnown: false }
   if (routeRow === undefined) return { lookups, route: undefined, session: undefined, pickup: undefined }
   lookups.route = routeState(routeRow)
+  if (!assignedTo(routeRow, applier.profile.id)) return { lookups, route: routeRow, session: undefined, pickup: undefined }
 
   const [open] = await tx
     .select(sessionColumns)
@@ -306,13 +420,7 @@ async function readLookups(tx: Tx, applier: Applier, envelope: DriverCommandEnve
   // A body that failed its schema is not here (`undefined`), and a body that passed is an object; the fields are read the same way either way.
   const fields: Record<string, unknown> = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {}
   if (envelope.kind === "start-route") {
-    const [driving] = await tx
-      .select({ number: route.number })
-      .from(session)
-      .innerJoin(route, and(eq(route.companyId, session.companyId), eq(route.id, session.routeId)))
-      .where(and(eq(session.companyId, companyId), eq(session.driverId, applier.profile.id), isNull(session.endedAt)))
-      .limit(1)
-    if (driving !== undefined) lookups.driverOpenOn = routeLabel(driving.number)
+    lookups.driverOpenOn = await driverOpenOn(tx, companyId, applier.profile)
     const { vehicleId, trailerId } = fields
     if (typeof vehicleId === "string") lookups.vehicle = await findVehicleState(tx, companyId, routeRow.projectId, vehicleId)
     if (typeof trailerId === "string") lookups.trailer = await findVehicleState(tx, companyId, routeRow.projectId, trailerId)
@@ -362,12 +470,10 @@ async function resultOf(tx: Tx, companyId: string, kind: DriverCommandKind, id: 
   return undefined
 }
 
-/** The route on the wire as it stands, with its progress; undefined when it is somehow gone. */
+/** The route on the wire as it stands, with its progress read the way a page reads it; undefined when it is somehow gone. */
 async function readRoute(tx: Tx, companyId: string, id: string): Promise<Route | undefined> {
   const row = await findRouteInCompany(tx, companyId, id)
-  if (row === undefined) return undefined
-  const progress = await progressByRoute(tx, companyId, [id])
-  return routeOf(row, progress.get(id)!)
+  return row === undefined ? undefined : await routeWithProgress(tx, companyId, row)
 }
 
 /** A pickup on the wire as it stands, with the proofs this command made for it: the payload of a pickup event. */
@@ -381,10 +487,35 @@ async function readPickupWithProofs(tx: Tx, companyId: string, pickupId: string,
   return { ...pickupOf(row), proofs: proofs.map(proofOf) }
 }
 
+/**
+ * The route on the wire as it stands, with the proofs this command made on
+ * the route alone: the payload of a route-level `pickup-problem-reported`, so
+ * the problem's `reason` and `note` travel with the event the way a stop's
+ * problem travels with its pickup, and a consumer reads `proofs[0]` either
+ * way. The route's other events carry the bare `Route`.
+ */
+async function readRouteWithProofs(tx: Tx, companyId: string, routeId: string, commandId: string): Promise<unknown> {
+  const found = await readRoute(tx, companyId, routeId)
+  if (found === undefined) return undefined
+  const proofs = await tx
+    .select(proofColumns)
+    .from(proofOfService)
+    .where(and(eq(proofOfService.companyId, companyId), eq(proofOfService.routeId, routeId), isNull(proofOfService.pickupId), eq(proofOfService.id, commandId)))
+  return { ...found, proofs: proofs.map(proofOf) }
+}
+
+/** Whether a replay says something other than the first upload did: the kind, the device, the instant, the route, or the body — the route read from the body where the receipt kept the claimed id there. */
+const differsFromReceipt = (receipt: ReceiptRow, envelope: DriverCommandEnvelope): boolean =>
+  receipt.kind !== envelope.kind ||
+  receipt.deviceId !== envelope.deviceId ||
+  receipt.occurredAt.getTime() !== Date.parse(envelope.occurredAt) ||
+  (receipt.routeId !== null && receipt.routeId !== envelope.routeId) ||
+  !isDeepStrictEqual(receipt.body, bodyKept(envelope, receipt.routeId))
+
 /** The receipt's first answer, given again: the stored outcome with the row it made read back or the problem it was refused with, and nothing written. */
 async function replayOf(tx: Tx, applier: Applier, receipt: ReceiptRow, envelope: DriverCommandEnvelope): Promise<CommandOutcomeRow> {
-  if (!isDeepStrictEqual(receipt.body, bodyKept(envelope, receipt.routeId))) {
-    applier.log({ commandId: envelope.id, kind: envelope.kind, detail: "replayed with a body that differs from the first upload; the first answer stands" })
+  if (differsFromReceipt(receipt, envelope)) {
+    applier.log({ commandId: envelope.id, kind: envelope.kind, detail: "replayed with a command that differs from the first upload; the first answer stands" })
   }
   if (receipt.outcome === "rejected") return { commandId: receipt.id, outcome: "replayed", problem: receipt.problem as Problem }
   const result = await resultOf(tx, applier.principal.companyId, receipt.kind as DriverCommandKind, receipt.id, receipt.routeId)
@@ -617,7 +748,9 @@ async function recordApplication(tx: Tx, applier: Applier, envelope: DriverComma
     for (const event of made.events) {
       const payload =
         event.aggregate === "route"
-          ? await readRoute(savepoint, companyId, event.aggregateId)
+          ? event.event === "pickup-problem-reported"
+            ? await readRouteWithProofs(savepoint, companyId, event.aggregateId, envelope.id)
+            : await readRoute(savepoint, companyId, event.aggregateId)
           : event.aggregate === "pickup"
             ? await readPickupWithProofs(savepoint, companyId, event.aggregateId, envelope.id)
             : (await resultOf(savepoint, companyId, envelope.kind, envelope.id, routeRow.id))?.value
@@ -633,36 +766,57 @@ async function recordApplication(tx: Tx, applier: Applier, envelope: DriverComma
 
 /** One command through the door: the header's order. */
 async function applyOne(tx: Tx, applier: Applier, envelope: DriverCommandEnvelope): Promise<CommandOutcomeRow> {
-  const { companyId } = applier.principal
-  const earlier = await findReceipt(tx, companyId, envelope.id)
+  const { companyId, user } = applier.principal
+  const { profile } = applier
+  const earlier = await findReceipt(tx, companyId, profile, envelope.id)
   if (earlier !== undefined) return await replayOf(tx, applier, earlier, envelope)
 
   await lockRow(tx, route, { companyId, id: envelope.routeId })
   const routeRow = await findRouteInCompany(tx, companyId, envelope.routeId)
 
+  // The fourth door as this one uses it (routes/shared.ts, `replayed`): the write; or, the key met, the caller's own first answer; or, the key held by no receipt of the caller's, the rejection an id another device minted earns — never a replay, and recorded nowhere, since the receipt's key is that id, so the log has it.
+  const replaying = () => findReceipt(tx, companyId, profile, envelope.id).then((found) => (found === undefined ? undefined : replayOf(tx, applier, found, envelope)))
+  const taken = async (): Promise<CommandOutcomeRow> => {
+    applier.log({ commandId: envelope.id, kind: envelope.kind, routeId: envelope.routeId, driverId: profile.id, userId: user.id, detail: ANOTHER_DEVICES_COMMAND })
+    return { commandId: envelope.id, outcome: "rejected", problem: rejectionProblem(409, ANOTHER_DEVICES_COMMAND) }
+  }
+  const through = (write: () => Promise<CommandOutcomeRow>) => replayed(REPLAY_KEYS, write, replaying, taken)
+
   const parsed = COMMAND_BODIES[envelope.kind].safeParse(envelope.body)
-  const replaying = () => findReceipt(tx, companyId, envelope.id).then((found) => (found === undefined ? undefined : replayOf(tx, applier, found, envelope)))
   if (!parsed.success) {
     const invalid = invalidRequest("json", parsed.error.issues.map((issue) => ({ path: ["body", ...issue.path].map(String).join("."), message: issue.message })))
     const read = await readLookups(tx, applier, envelope, routeRow, undefined)
-    return await replayed(REPLAY_KEYS, () => recordRejection(tx, applier, envelope, read, invalid.body), replaying)
+    return await through(() => recordRejection(tx, applier, envelope, read, invalid.body))
   }
 
   const read = await readLookups(tx, applier, envelope, routeRow, parsed.data)
   // The body was parsed by its kind's schema, which is the shape the domain's `CommandBodies[kind]` spells.
   const command = { id: envelope.id, kind: envelope.kind, routeId: envelope.routeId, occurredAt: envelope.occurredAt, deviceId: envelope.deviceId, body: parsed.data } as Command
-  const driving: CommandDriver = { id: applier.profile.id, name: applier.profile.name, licenceClass: applier.profile.licenceClass, licenceExpiry: applier.profile.licenceExpiry }
+  const driving: CommandDriver = { id: profile.id, name: profile.name, licenceClass: profile.licenceClass, licenceExpiry: profile.licenceExpiry }
   const decision = decide(command, driving, read.lookups, applier.clock)
   if ("reject" in decision) {
     const { status, detail, errors } = decision.reject
-    return await replayed(REPLAY_KEYS, () => recordRejection(tx, applier, envelope, read, rejectionProblem(status, detail, errors)), replaying)
+    return await through(() => recordRejection(tx, applier, envelope, read, rejectionProblem(status, detail, errors)))
   }
   // `decide` applies nothing to a route it did not find under the assignment.
   if (read.route === undefined) throw new Error(`decide applied ${envelope.kind} to route ${envelope.routeId}, which was not read`)
   const found = read.route
   // Applying nothing with a reason — a device ending a route the office cancelled meanwhile — is recorded as applied; the reason is the log's.
   if (decision.note !== undefined) applier.log({ commandId: envelope.id, kind: envelope.kind, routeId: envelope.routeId, note: decision.note })
-  return await replayed(REPLAY_KEYS, () => recordApplication(tx, applier, envelope, read, found, decision.apply), replaying)
+  try {
+    return await through(() => recordApplication(tx, applier, envelope, read, found, decision.apply))
+  } catch (error) {
+    // The race the route's lock does not see: two of this driver's routes started at once, each under its own lock, meeting on the one-live-session-per-driver index once the winner commits — the rule `decide` judged over `driverOpenOn` a statement too early. The command's savepoint has rolled its rows back; the winner is read and the loser recorded as the rejection the rule would have been, and the rest of the batch stands. The route's own index is the same news of a start the lock somehow did not serialise.
+    const constraint = uniqueConstraintOf(error)
+    if (constraint === DRIVER_OPEN_INDEX) {
+      const winner = await driverOpenOn(tx, companyId, profile)
+      // The index refused this insert for the winner's committed row, which the statement after reads; a row ended in between is a race of races, left to the error handler with the constraint's name.
+      if (winner === undefined) throw error
+      return await through(() => recordRejection(tx, applier, envelope, read, rejectionProblem(409, alreadyOnRoute(profile.name, winner))))
+    }
+    if (constraint === ROUTE_OPEN_INDEX) return await through(() => recordRejection(tx, applier, envelope, read, rejectionProblem(409, alreadyActive(labelOf(found)))))
+    throw error
+  }
 }
 
 /** What every route here describes the same way: no usable token, no grant, no driver profile. */
@@ -704,8 +858,7 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         if (row === undefined) throw new Error(`driver ${profile.id} resolved and then not found`)
         const open = await openSessionOf(tx, principal.companyId, profile)
         const routes = await dayRoutes(tx, principal, profile, now(), {})
-        const progress = await progressByRoute(tx, principal.companyId, routes.map((found) => found.id))
-        const body: DriverMe = { driver: driverOf(row), openSession: open === undefined ? null : sessionOf(open), routes: routes.map((found) => routeOf(found, progress.get(found.id)!)) }
+        const body: DriverMe = { driver: driverOf(row), openSession: open === undefined ? null : sessionOf(open), routes: await routesOf(tx, principal.companyId, routes) }
         return c.json(body)
       },
     )
@@ -733,20 +886,21 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const principal = c.get("principal")
         const profile = await resolveDriver(tx, principal)
         const rows = await dayRoutes(tx, principal, profile, now(), { status, after, limit: fetchLimit(limit) })
-        const progress = await progressByRoute(tx, principal.companyId, rows.map((found) => found.id))
-        return c.json(pageOf(rows.map((found) => routeOf(found, progress.get(found.id)!)), limit))
+        // Paged first, so the row that only proves there is a next page is not one whose progress is counted.
+        const { items, nextCursor } = pageOf(rows, limit)
+        return c.json({ items: await routesOf(tx, principal.companyId, items), nextCursor })
       },
     )
     .get(
       "/driver/routes/:id",
       describeRoute({
         operationId: "getDriverRoute",
-        summary: "One of the driver's routes, with its stops",
+        summary: "One of the driver's routes, with its stops and their places",
         description:
-          "The route with what hangs off it: its pickups by position, the open session or null, every session oldest first, and its unloads oldest first — what a device without sync reads to run the route. A route not assigned to the caller's driver profile, of another company, or not there at all is answered the same way (404, `No route <id> assigned to this driver`), so the device learns nothing about routes it was not given.",
+          "The route with what hangs off it: its pickups by position, each with its place joined — the `address` and `location` (a point, or null for a property not yet geocoded) of the property or the shared collection point the pickup names on the service date, the container's `label` and the waste fraction's `name` — the open session or null, every session oldest first, and its unloads oldest first: what a device without sync reads to run the route, and the one read that denormalises for the wire what the synced device joins from its own buckets. A route not assigned to the caller's driver profile, of another company, or not there at all is answered the same way (404, `No route <id> assigned to this driver`), so the device learns nothing about routes it was not given.",
         security: BEARER_SECURITY,
         responses: {
-          200: describeJson("The route with its pickups, sessions and unloads.", RouteDetail),
+          200: describeJson("The route with its pickups and their places, its sessions and its unloads.", DriverRouteDetail),
           400: describeProblem("The path does not hold an id."),
           ...driverProblems("view"),
           404: describeProblem("No route with that id is assigned to this driver."),
@@ -762,31 +916,8 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const profile = await resolveDriver(tx, principal)
         const row = await findAssignedRoute(tx, principal, profile, id)
         if (row === undefined) throw noSuchAssignedRoute(id)
-        const { companyId } = principal
-        const pickups = await tx
-          .select(pickupColumns)
-          .from(pickup)
-          .where(and(eq(pickup.companyId, companyId), eq(pickup.routeId, id)))
-          .orderBy(asc(pickup.position), asc(pickup.id))
-        const sessions = await tx
-          .select(sessionColumns)
-          .from(session)
-          .where(and(eq(session.companyId, companyId), eq(session.routeId, id)))
-          .orderBy(asc(session.id))
-        const unloads = await tx
-          .select(unloadColumns)
-          .from(unload)
-          .where(and(eq(unload.companyId, companyId), eq(unload.routeId, id)))
-          .orderBy(asc(unload.id))
-        const progress = await progressByRoute(tx, companyId, [id])
-        const open = sessions.find((found) => found.endedAt === null)
-        const body: RouteDetail = {
-          ...routeOf(row, progress.get(id)!),
-          pickups: pickups.map(pickupOf),
-          session: open === undefined ? null : sessionOf(open),
-          sessions: sessions.map(sessionOf),
-          unloads: unloads.map(unloadOf),
-        }
+        const [answered, pickups] = await Promise.all([routeWithSessions(tx, principal.companyId, row), driverPickupsOfRoute(tx, principal.companyId, id)])
+        const body: DriverRouteDetail = { ...answered, pickups }
         return c.json(body)
       },
     )
@@ -796,7 +927,7 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         operationId: "applyDriverCommands",
         summary: "Apply a device's queued commands",
         description:
-          "The driver door of ADR-0004. The body is one to two hundred commands, each `{ id, kind, routeId, occurredAt, deviceId, body }` with an id the device minted (a UUIDv7, the command's idempotency key and the id of the row it makes), applied in body order, each in its own savepoint, and answered 200 with one outcome per command in order — `applied` with the row it made, `replayed` with the first outcome for an id already received (nothing written, a body that differs logged and ignored), or `rejected` with the problem, which is recorded in the command's receipt as well. A 400 is for a batch that does not parse (an id twice, more than two hundred, an envelope out of shape): then nothing is applied and nothing recorded. A body that fails its kind's schema is one command's rejection, never the batch's. The fourteen kinds and their bodies: `start-route` (`vehicleId`, `trailerId?`, `appVersion?`, `location?`) opens the session and moves the route `ready → active`; `arrive` (`pickupId`, `location?`, `accuracyM?`) appends an arrival and sets the pickup's first `arrivedAt`; `complete-pickup`, `skip-pickup` and `fail-pickup` (`pickupId`, a `reason` for the last two, `note?`, `location?`) append the proof and move the pickup out of `planned`; `report-problem` (`pickupId?`, `reason`, `note`, `location?`) appends a problem and moves nothing; `add-photo` and `add-signature` (`pickupId` — optional for a photo — and `objectKey`) and `add-weight` (`pickupId`, `weightKg`) and `add-note` (`pickupId?`, `note`) append evidence; `record-unload` (`unloadingStationId`, `wasteFractionId`, `netKg`, `grossKg?`, `tareKg?`, `weighbridgeTicket?`, `objectKey?`, `location?`, `note?`) appends an unload; `pause` and `resume` (`{}`) set and clear the session's `pausedAt`, idempotently; `end-route` (`location?`, `note?`) closes every planned pickup as `skipped · route-ended`, moves the route `active → completed` and ends the session. The rules, judged in this order and each answering its sentence: the route is one of this driver's (404, `No route <id> assigned to this driver`); `occurredAt` is at most five minutes ahead of the request's clock (400, `Recorded after it happened`) and at most forty-eight hours behind it (400, `Recorded more than 48 hours after it happened`); `start-route` wants a `ready` route (409, `Route RC-1042 is not dispatched; a driver starts a ready route` / `… is already active` / `… is completed and does not change`), a driver on no other route (409, `Mads Jensen is already on route RC-1039; end it first`), a powered vehicle of the route's project (400 at `body.vehicleId`, `Not a powered vehicle of this project`) and a trailer where one is named (400 at `body.trailerId`), the licence the vehicle requires on the operating date (400 at `body.vehicleId`, `Freja Holm needs a C licence for WH-24`), and a vehicle and trailer in service (409, `WH-99 is retired; a route needs a vehicle in service`); every later command wants an `active` route with this driver's open session on it (409, `Route RC-1042 is not active`) and an instant at or after the session started (400, `Before the session started`); a command naming a pickup wants one of the route's (404, `No pickup <id> on route RC-1042`), and an outcome wants a `planned` one (409, `Pickup 12 is already completed`: the first outcome stands and a second is a rejection, not a change); `record-unload` wants a station and a fraction of the company (400 at `body.unloadingStationId` / `body.wasteFractionId`); an `objectKey` is `<companyId>/<routeId>/<commandId>.<jpg|jpeg|png|webp>` for this command (400 at `body.objectKey`, `The object key names another route or another command`). A vehicle or trailer not in service is refused naming its status (409, `WH-99 is retired; a route needs a vehicle in service`). Every applied command moves the session's `lastSeenAt` to the request's clock and writes its outbox events; every command's receipt is written with the body verbatim — a rejection for a route the driver does not reach is recorded without a route, in the driver's project, the claimed route id kept beside the body as `{ routeId, body }`. An `end-route` on a route the office cancelled meanwhile is applied as nothing, so the device is not locked out.",
+          "The driver door of ADR-0004. The body is one to two hundred commands, each `{ id, kind, routeId, occurredAt, deviceId, body }` with an id the device minted (a UUIDv7, the command's idempotency key and the id of the row it makes), applied in body order, each in its own savepoint, and answered 200 with one outcome per command in order — `applied` with the row it made, `replayed` with the first outcome for an id this driver's devices already sent (nothing written, a command that differs in kind, route, instant, device or body logged and ignored), or `rejected` with the problem, which is recorded in the command's receipt as well. An id that another device's command already holds — another driver's, whatever its company — is refused (409, `That command id belongs to another device's command`) and never replayed, since a replay would hand that command's rows to a device that did not send it; it is the one rejection no receipt can hold, the receipt's key being that id, so it is logged instead. A 400 is for a batch that does not parse (an id twice, more than two hundred, an envelope out of shape): then nothing is applied and nothing recorded. A body that fails its kind's schema is one command's rejection, never the batch's. The fourteen kinds and their bodies: `start-route` (`vehicleId`, `trailerId?`, `appVersion?`, `location?`) opens the session and moves the route `ready → active`; `arrive` (`pickupId`, `location?`, `accuracyM?`) appends an arrival and sets the pickup's first `arrivedAt`; `complete-pickup`, `skip-pickup` and `fail-pickup` (`pickupId`, a `reason` for the last two, `note?`, `location?`) append the proof and move the pickup out of `planned`; `report-problem` (`pickupId?`, `reason`, `note`, `location?`) appends a problem and moves nothing; `add-photo` and `add-signature` (`pickupId` — optional for a photo — and `objectKey`) and `add-weight` (`pickupId`, `weightKg`) and `add-note` (`pickupId?`, `note`) append evidence; `record-unload` (`unloadingStationId`, `wasteFractionId`, `netKg`, `grossKg?`, `tareKg?`, `weighbridgeTicket?`, `objectKey?`, `location?`, `note?`) appends an unload; `pause` and `resume` (`{}`) set and clear the session's `pausedAt`, idempotently; `end-route` (`location?`, `note?`) closes every planned pickup as `skipped · route-ended`, moves the route `active → completed` and ends the session. The rules, judged in this order and each answering its sentence: the route is one of this driver's (404, `No route <id> assigned to this driver`); `occurredAt` is at most five minutes ahead of the request's clock (400, `Recorded after it happened`) and at most forty-eight hours behind it (400, `Recorded more than 48 hours after it happened`); `start-route` wants a `ready` route (409, `Route RC-1042 is not dispatched; a driver starts a ready route` / `… is already active` / `… is completed and does not change`), a driver on no other route (409, `Mads Jensen is already on route RC-1039; end it first` — held again at the write: two of the driver's routes started at once, each batch under its own route's lock, meet on the one-live-session-per-driver index once the first commits, and the second is that command's rejection with this sentence naming the route that won, the rest of its batch standing), a powered vehicle of the route's project (400 at `body.vehicleId`, `Not a powered vehicle of this project`) and a trailer where one is named (400 at `body.trailerId`), the licence the vehicle requires on the operating date (400 at `body.vehicleId`, `Freja Holm needs a C licence for WH-24`), and a vehicle and trailer in service (409, `WH-99 is retired; a route needs a vehicle in service`); every later command wants an `active` route with this driver's open session on it (409, `Route RC-1042 is not active`) and an instant at or after the session started (400, `Before the session started`); a command naming a pickup wants one of the route's (404, `No pickup <id> on route RC-1042`), and an outcome wants a `planned` one (409, `Pickup 12 is already completed`: the first outcome stands and a second is a rejection, not a change); `record-unload` wants a station and a fraction of the company (400 at `body.unloadingStationId` / `body.wasteFractionId`); an `objectKey` is `<companyId>/<routeId>/<commandId>.<jpg|jpeg|png|webp>` for this command (400 at `body.objectKey`, `The object key names another route or another command`). A vehicle or trailer not in service is refused naming its status (409, `WH-99 is retired; a route needs a vehicle in service`). Every applied command moves the session's `lastSeenAt` to the request's clock and writes its outbox events — a pickup's event carries the pickup with the proofs this command made, a route-level `report-problem`'s `pickup-problem-reported` the route with its problem proof as `proofs` the same way, so the reason and the note travel with it, and the route's other events the route alone; every command's receipt is written with the body verbatim — a rejection for a route the driver does not reach is recorded without a route, in the driver's project, the claimed route id kept beside the body as `{ routeId, body }`, and one for a route of their project assigned to another driver names that route and no session and no pickup, since nothing of a route the driver was not given is read for it. An `end-route` on a route the office cancelled meanwhile is applied as nothing, so the device is not locked out.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One outcome per command, in body order.", DriverCommandBatchOutcome),

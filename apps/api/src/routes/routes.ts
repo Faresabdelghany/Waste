@@ -15,8 +15,9 @@
 // or the refusal's sentence, which is the 409. The rules the office holds
 // beyond the machine are each a sentence here: dispatch needs a planned
 // driver (§7.18: the driver door's scope is the assignment, so a route
-// without a driver reaches no device); assign, reschedule and the order are
-// refused once a route is `active` (§7.20: ADR-0002 freezes the sequence at
+// without a driver reaches no device) and assign may not clear the driver of
+// a `ready` route, the same rule from the other side; assign, reschedule and
+// the order are refused once a route is `active` (§7.20: ADR-0002 freezes the sequence at
 // session start, and the assignment is then the session's); cancel closes
 // every open pickup as `skipped · route-cancelled` through the domain's
 // `openPickupsClose` and ends an open session, since a cancelled route is
@@ -49,7 +50,7 @@ import type { Tx } from "@waste/db/client"
 import { driverCommand, pickup, route, session } from "@waste/db/schema/execution"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
 import { notInService, THE_OPERATING_DATE } from "@waste/domain/execution/commands"
-import { activeAnd, doesNotChange, openPickupsClose, routeCancellation, routeTransition } from "@waste/domain/execution/transitions"
+import { activeAnd, doesNotChange, hasNotRun, openPickupsClose, routeCancellation, routeTransition } from "@waste/domain/execution/transitions"
 import type { PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
 import { licenceRefusal, licenceSentence } from "@waste/domain/resources/licence"
 import type { VehicleStatus } from "@waste/domain/resources/vocabulary"
@@ -64,26 +65,8 @@ import { requireGrant } from "../auth/require"
 import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import {
-  findRoute,
-  labelOf,
-  noSuchRoute,
-  pickupColumns,
-  pickupOf,
-  pickupsOfRoute,
-  receiptColumns,
-  receiptOf,
-  routeColumns,
-  routeScope,
-  routesOf,
-  routeWithProgress,
-  sessionOf,
-  sessionsOfRoute,
-  unloadOf,
-  unloadsOfRoute,
-  type RouteRow,
-} from "./execution-shapes"
-import { findDriver, findVehicle, vehicleLabel } from "./fleet-lookups"
+import { detailOf, findRoute, labelOf, noSuchRoute, pickupColumns, pickupOf, pickupsOfRoute, receiptColumns, receiptOf, routeColumns, routeScope, routesOf, type RouteRow } from "./execution-shapes"
+import { findDriver, findVehicle, vehicleLabel, type DriverRow, type VehicleRow } from "./fleet-lookups"
 import { NOT_AN_UNLOADING_STATION, requireDepot, type Scope } from "./references"
 import type { ClockOptions } from "./scheme-groups"
 import { describeJson, IdParam, lockRow, stamp } from "./shared"
@@ -96,6 +79,9 @@ const ReceiptPage = Page(DriverCommandReceipt)
 
 /** What a dispatch of a route nobody is assigned to is told: the driver door's scope is the assignment, so a route without one reaches no device. */
 export const noPlannedDriver = (label: string): string => `Route ${label} has no planned driver; assign one first`
+
+/** What an assign clearing the driver of a `ready` route is told: the same rule from the other side — a dispatched route without a driver would reach no device and nobody could start it. */
+export const dispatchedNeedsADriver = (label: string): string => `Route ${label} is dispatched; assign another driver or cancel it`
 
 /** The consequence each office command spells when the route is already running (the domain's `activeAnd`). */
 const ASSIGNMENT_IS_THE_SESSIONS = "the session's driver and vehicle are its actual assignment"
@@ -156,16 +142,27 @@ export function requireNotStarted(current: RouteRow, consequence: string): void 
   }
 }
 
-/** The route with everything that hangs off it: the pickups by position, the open session, every session, the unloads. */
-async function detailOf(tx: Tx, companyId: string, row: RouteRow): Promise<RouteDetail> {
-  const [answered, pickups, sessions, unloads] = await Promise.all([
-    routeWithProgress(tx, companyId, row),
-    pickupsOfRoute(tx, companyId, row.id),
-    sessionsOfRoute(tx, companyId, row.id),
-    unloadsOfRoute(tx, companyId, row.id),
-  ])
-  const open = sessions.find((candidate) => candidate.endedAt === null)
-  return { ...answered, pickups: pickups.map(pickupOf), session: open === undefined ? null : sessionOf(open), sessions: sessions.map(sessionOf), unloads: unloads.map(unloadOf) }
+/**
+ * An office command made on a route that ran: `active` and `completed` pass,
+ * a route that has not is a 409 ("Route RC-1042 has not run"), and a
+ * cancelled one does not change. The rule a pickup's `correct-outcome`
+ * (routes/pickups.ts) and the office's unload capture (routes/unloads.ts)
+ * both hold, spelled once beside its opposite above.
+ */
+export function requireRan(current: RouteRow): void {
+  const label = labelOf(current)
+  switch (current.status) {
+    case "active":
+    case "completed":
+      return
+    case "planned":
+    case "ready":
+      throw problem(409, { detail: hasNotRun(label) })
+    case "cancelled":
+      throw problem(409, { detail: doesNotChange(label, "cancelled") })
+    default:
+      throw new Error(`route ${current.id} carries a status the vocabulary does not know: ${current.status}`)
+  }
 }
 
 /**
@@ -211,13 +208,14 @@ type Assignment = Pick<RouteRow, "plannedVehicleId" | "plannedDriverId" | "plann
  * take the vehicle on that day is a 400 at `path` in the domain's words, the
  * day being the operating date and so named in the sentence. Nothing is
  * asked when the route names one of the two or neither. The rows are read
- * for their class, label, licence and name, and their status is not asked
- * here: what is named afresh is gated by the caller.
+ * for their class, label, licence and name — or taken from `read`, where the
+ * caller already has them (assign reads what the body named afresh) — and
+ * their status is not asked here: what is named afresh is gated by the caller.
  */
-async function requireLicenceOn(tx: Tx, scope: Scope, pair: { plannedVehicleId: string | null; plannedDriverId: string | null }, day: string, path: string): Promise<void> {
+async function requireLicenceOn(tx: Tx, scope: Scope, pair: { plannedVehicleId: string | null; plannedDriverId: string | null }, day: string, path: string, read: { vehicle?: VehicleRow; driver?: DriverRow } = {}): Promise<void> {
   if (pair.plannedVehicleId === null || pair.plannedDriverId === null) return
-  const truck = await findVehicle(tx, scope, pair.plannedVehicleId, "powered-vehicle", "vehicleId")
-  const who = await findDriver(tx, scope, pair.plannedDriverId, "driverId")
+  const truck = read.vehicle ?? (await findVehicle(tx, scope, pair.plannedVehicleId, "powered-vehicle", "vehicleId"))
+  const who = read.driver ?? (await findDriver(tx, scope, pair.plannedDriverId, "driverId"))
   const refusal = licenceRefusal(who, truck.requiredLicenceClass, day)
   if (refusal !== undefined) throw invalidRequest("body", [{ path, message: licenceSentence(refusal, { driver: who.name, vehicle: vehicleLabel(truck) }, THE_OPERATING_DATE) }])
 }
@@ -314,7 +312,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "assignRoute",
         summary: "Move a route's Planned Assignment",
         description:
-          "The `assign` command: moves the planned vehicle, driver, trailer, depot or unloading station of a route that has not started, any of them cleared with null; at least one field must be given. Under the route's row lock. A `planned` route stays `planned` and a `ready` one stays `ready` — a route already running is refused (409): the session's driver and vehicle are its actual assignment, and a swap mid-route is a Ticket's outcome later; a completed or cancelled route does not change. " +
+          "The `assign` command: moves the planned vehicle, driver, trailer, depot or unloading station of a route that has not started, any of them cleared with null; at least one field must be given. Under the route's row lock. A `planned` route stays `planned` and a `ready` one stays `ready` — a route already running is refused (409): the session's driver and vehicle are its actual assignment, and a swap mid-route is a Ticket's outcome later; a completed or cancelled route does not change. A `ready` route keeps a driver: it was dispatched to one, and a dispatched route without a driver would reach no device, so clearing `driverId` on it is refused (409, `Route RC-1042 is dispatched; assign another driver or cancel it`) where moving it to another driver is not. " +
           ASSIGN_RULES +
           " The `route-reassigned` event is written in the same transaction when the driver or the vehicle moved, carrying the route as answered here.",
         security: BEARER_SECURITY,
@@ -324,7 +322,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
             "The path does not hold an id, or the body changes nothing, names a member the command does not take, or names a vehicle, trailer, driver, depot or station the rules above refuse — each at the field that is wrong.",
           ),
           ...commandProblems("edit"),
-          409: describeProblem("The route is active, completed or cancelled, or a vehicle or trailer named afresh is not active or a driver named afresh is inactive or suspended; the detail says which."),
+          409: describeProblem("The route is active, completed or cancelled, the body clears the driver of a ready route, or a vehicle or trailer named afresh is not active or a driver named afresh is inactive or suspended; the detail says which."),
         },
       }),
       guard,
@@ -348,12 +346,14 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
           unloadingStationId: body.unloadingStationId === undefined ? current.unloadingStationId : body.unloadingStationId,
         }
         const moved = { vehicle: body.vehicleId !== undefined, driver: body.driverId !== undefined, trailer: body.trailerId !== undefined, depot: body.depotId !== undefined, station: body.unloadingStationId !== undefined }
+        // The route's own state, judged with `requireNotStarted` before the body's references: a dispatched route keeps a driver (dispatch demanded one), so clearing it is refused where moving it is not.
+        if (current.status === "ready" && moved.driver && after.plannedDriverId === null) throw problem(409, { detail: dispatchedNeedsADriver(labelOf(current)) })
 
-        // The 400s in body order: what is named afresh is the project's and of its kind, then the pair's licence on the operating date, then the places.
+        // The 400s in body order: what is named afresh is the project's and of its kind, then the pair's licence on the operating date — over the rows just read where the body named them — then the places.
         const vehicle = moved.vehicle && after.plannedVehicleId !== null ? await findVehicle(tx, scope, after.plannedVehicleId, "powered-vehicle", "vehicleId") : null
         const driver = moved.driver && after.plannedDriverId !== null ? await findDriver(tx, scope, after.plannedDriverId, "driverId") : null
         const trailer = moved.trailer && after.plannedTrailerId !== null ? await findVehicle(tx, scope, after.plannedTrailerId, "trailer", "trailerId") : null
-        if (moved.vehicle || moved.driver) await requireLicenceOn(tx, scope, after, current.operatingDate, "driverId")
+        if (moved.vehicle || moved.driver) await requireLicenceOn(tx, scope, after, current.operatingDate, "driverId", { vehicle: vehicle ?? undefined, driver: driver ?? undefined })
         if (moved.depot) await requireDepot(tx, scope, after.depotId)
         if (moved.station && after.unloadingStationId !== null) await requireStationAccepting(tx, principal.companyId, current.id, after.unloadingStationId)
 

@@ -32,7 +32,7 @@ import { Page } from "@waste/contracts/pagination"
 import { Pickup, PickupCorrection, PickupDetail, PickupListQuery, PickupRemove } from "@waste/contracts/pickups"
 import type { Tx } from "@waste/db/client"
 import { pickup, proofOfService, route } from "@waste/db/schema/execution"
-import { doesNotChange, hasNotRun, pickupCorrection, pickupTransition } from "@waste/domain/execution/transitions"
+import { pickupCorrection, pickupTransition } from "@waste/domain/execution/transitions"
 import type { PickupStatus } from "@waste/domain/execution/vocabulary"
 import { and, asc, eq, gt, gte, lte } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -45,9 +45,9 @@ import { newId } from "../ids"
 import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { findRoute, labelOf, noSuchPickup, pickupColumns, pickupOf, pickupScope, proofOf, proofsOfPickup, type PickupRow, type RouteRow } from "./execution-shapes"
+import { findRoute, noSuchPickup, pickupColumns, pickupOf, pickupScope, proofOf, proofsOfPickup, type PickupRow, type RouteRow } from "./execution-shapes"
 import { requireRoute } from "./references"
-import { requireNotStarted } from "./routes"
+import { requireNotStarted, requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
 import { describeJson, IdParam, lockRow } from "./shared"
 
@@ -90,23 +90,6 @@ async function lockedPickup(tx: Tx, principal: Principal, id: string): Promise<{
   // The key holds every pickup to a route of its project, and the pickup was read under the caller's scope a moment ago.
   if (parent === undefined) throw new Error(`pickup ${id} names route ${current.routeId}, which is not there`)
   return { current, parent }
-}
-
-/** A correction is made on a route that ran: `active` or `completed`; a route that has not is refused, and a cancelled one does not change. */
-function requireRan(parent: RouteRow): void {
-  const label = labelOf(parent)
-  switch (parent.status) {
-    case "active":
-    case "completed":
-      return
-    case "planned":
-    case "ready":
-      throw problem(409, { detail: hasNotRun(label) })
-    case "cancelled":
-      throw problem(409, { detail: doesNotChange(label, "cancelled") })
-    default:
-      throw new Error(`route ${parent.id} carries a status the vocabulary does not know: ${parent.status}`)
-  }
 }
 
 const commandProblems = (action: "view" | "edit") => ({
@@ -218,7 +201,9 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const { current, parent } = await lockedPickup(tx, principal, id)
         requireNotStarted(parent, A_STOP_IS_THE_DRIVERS)
         const transition = pickupTransition(current.status as PickupStatus, "skip", current.position)
-        if (transition.kind !== "move") throw problem(409, { detail: transition.kind === "refuse" ? transition.sentence : `Pickup ${current.position} is already skipped` })
+        if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
+        // A skip moves a planned pickup or refuses a decided one; the machine never answers "stay" for it, so that branch is a bug in the machine and not a client's.
+        if (transition.kind !== "move") throw new Error(`a skip of pickup ${id} neither moved nor refused`)
         const at = now()
         const [row] = await tx
           .update(pickup)

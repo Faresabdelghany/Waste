@@ -599,9 +599,6 @@ export type RouteOptions = {
   project?: "copenhagen" | "harbor"
 }
 
-/** Where the company's route counter starts (`company.next_route_number`'s default), so `routeFor`'s walk below begins at the operating date. */
-const FIRST_ROUTE_NUMBER = 1000
-
 /** The calendar day so many days before another, both `YYYY-MM-DD`. */
 const daysBefore = (day: string, days: number): string => new Date(Date.parse(`${day}T00:00:00Z`) - days * 86_400_000).toISOString().slice(0, 10)
 
@@ -611,9 +608,11 @@ const daysBefore = (day: string, days: number): string => new Date(Date.parse(`$
  * group of the project. Its number is the company's counter, the way
  * `seedRoute` and generation take it, so no two routes of a tenant share one
  * whichever writer minted them; and since the generation key is scheme, group
- * and service date, the service date walks back one day per number from the
- * operating date, which stays — two routes of one group on one operating day
- * is what a shifted holiday makes.
+ * and service date, the service date walks back one day per unit of the
+ * number from the operating date — the number itself, not its distance from
+ * the counter's first value, so two numbers can never land on one day — while
+ * the operating date stays: two routes of one group on one operating day is
+ * what a shifted holiday makes.
  */
 export async function routeFor(pool: Database, tenant: Tenant, fleet: FleetFixtures, fixtures: DriverFixtures, options: RouteOptions): Promise<FixtureRoute> {
   const { companyId } = tenant
@@ -634,7 +633,7 @@ export async function routeFor(pool: Database, tenant: Tenant, fleet: FleetFixtu
       ...scoped,
       routeSchemeId: inHarbor ? fixtures.harbor.scheme.id : fixtures.scheme.id,
       collectionGroupId: inHarbor ? fixtures.harbor.group.id : fixtures.group.id,
-      serviceDate: daysBefore(operatingDate, Math.max(0, number - FIRST_ROUTE_NUMBER)),
+      serviceDate: daysBefore(operatingDate, number),
       operatingDate,
       status,
       number,

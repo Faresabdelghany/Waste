@@ -103,6 +103,7 @@ import { subscription } from "@waste/db/schema/agreements"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { warehouse } from "@waste/db/schema/places"
 import { stockMovement } from "@waste/db/schema/stock"
+import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
 import { assetStateOf as stateAfter, movementShape } from "@waste/domain/resources/asset-state"
 import type { AssetStatus, StockMovementKind, StockPlaceKind } from "@waste/domain/resources/vocabulary"
 import { and, asc, desc, eq, gt, gte, lte, or } from "drizzle-orm"
@@ -180,8 +181,6 @@ export const placementAlreadyEnded = (label: string, day: string) => `Container 
 
 // The 400s: a body that says something the ledger cannot take.
 
-/** `occurredAt` further ahead of the request's clock than a device's clock accounts for. */
-export const RECORDED_AFTER_IT_HAPPENED = "A movement is recorded after it happened"
 /** A transfer to the place the container already stands in. */
 export const ALREADY_THERE = "Already there"
 /** A decommission of a container in service that names no end for its placement. */

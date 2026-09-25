@@ -350,18 +350,23 @@ export const primaryKeyOf = (table: PgTable): string => `${getTableName(table)}_
  * reads what was recorded for the id and its answer is returned in the
  * write's place. The savepoint the caller ran the write in has rolled the
  * loser's rows back by then; the read is a fresh statement and sees the
- * winner's committed row. A 23505 on any other constraint, or an id nobody
- * recorded (`first` answers undefined), rethrows the write's own error, since
- * neither is a replay.
+ * winner's committed row. A 23505 on any other constraint rethrows the
+ * write's own error, since it is not a replay; so does a named key that
+ * `first` finds nothing recorded under — unless the caller gives `taken`,
+ * whose answer stands in for the write then: the key is held by a row the
+ * caller cannot see, which for the driver door (routes/driver.ts) is a
+ * command id another driver's device minted, and that is neither a replay
+ * nor a conflict of the caller's own making.
  */
-export async function replayed<T>(keys: readonly string[], write: () => Promise<T>, first: () => Promise<T | undefined>): Promise<T> {
+export async function replayed<T>(keys: readonly string[], write: () => Promise<T>, first: () => Promise<T | undefined>, taken?: () => Promise<T>): Promise<T> {
   try {
     return await write()
   } catch (error) {
     const constraint = uniqueConstraintOf(error)
     if (constraint === undefined || !keys.includes(constraint)) throw error
     const recorded = await first()
-    if (recorded === undefined) throw error
-    return recorded
+    if (recorded !== undefined) return recorded
+    if (taken === undefined) throw error
+    return await taken()
   }
 }

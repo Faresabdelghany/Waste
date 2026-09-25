@@ -117,6 +117,45 @@ describe("replayed, the door that answers a client-minted id already present as 
       "an error that is not a unique violation is not a replay either",
     )
   })
+
+  test("answers `taken` for a named key that nothing the caller can see recorded, when the caller gives one, and never for another constraint", async () => {
+    const answer = await replayed(
+      keys,
+      async () => {
+        throw uniqueViolation(primaryKeyOf(session))
+      },
+      async () => undefined,
+      async () => "taken",
+    )
+    assert.equal(answer, "taken", "the id is another device's command")
+    const other = uniqueViolation("session_driver_open_idx")
+    await assert.rejects(
+      replayed(
+        keys,
+        async () => {
+          throw other
+        },
+        async () => undefined,
+        async () => "taken",
+      ),
+      (error) => error === other,
+      "an index that is not a command's key is not a taken id",
+    )
+    let asked = 0
+    const recorded = await replayed(
+      keys,
+      async () => {
+        throw uniqueViolation(primaryKeyOf(driverCommand))
+      },
+      async () => "replayed",
+      async () => {
+        asked += 1
+        return "taken"
+      },
+    )
+    assert.equal(recorded, "replayed")
+    assert.equal(asked, 0, "the first answer wins where there is one")
+  })
 })
 
 describe("the clock bounds a recorded instant is held within", () => {

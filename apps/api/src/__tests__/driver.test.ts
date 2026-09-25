@@ -1,15 +1,16 @@
 import assert from "node:assert/strict"
 import { after, before, beforeEach, describe, test } from "node:test"
 
-import { CommandOutcomeRow, DriverCommandBatchOutcome, DriverCommandReceipt, DriverMe, EACH_COMMAND_ONCE, type CommandResult } from "@waste/contracts/driver-commands"
+import { CommandOutcomeRow, DriverCommandBatchOutcome, DriverCommandReceipt, DriverMe, DriverRouteDetail, EACH_COMMAND_ONCE, type CommandResult } from "@waste/contracts/driver-commands"
 import { OBJECT_KEY_SHAPE } from "@waste/contracts/execution"
 import { Page } from "@waste/contracts/pagination"
 import { ProofOfService } from "@waste/contracts/proofs"
-import { Route, RouteDetail } from "@waste/contracts/routes"
+import { Route } from "@waste/contracts/routes"
 import { Session } from "@waste/contracts/sessions"
 import { NET_IS_GROSS_LESS_TARE, Unload } from "@waste/contracts/unloads"
 import { createDb, type Database } from "@waste/db/client"
-import { driverCommand, outboxEvent, proofOfService, session as sessionTable } from "@waste/db/schema/execution"
+import { property as propertyTable, sharedCollectionPoint } from "@waste/db/schema/customers"
+import { driverCommand, outboxEvent, pickup as pickupTable, proofOfService, session as sessionTable } from "@waste/db/schema/execution"
 import { vehicle as vehicleTable } from "@waste/db/schema/fleet"
 import { withCompany } from "@waste/db/tenant"
 import {
@@ -37,12 +38,12 @@ import { createApp } from "../app"
 import { NOT_A_DRIVERS_LOGIN } from "../auth/driver"
 import { authenticate } from "../auth/principal"
 import { errorHandler } from "../problem"
-import { driverDoorRoutes } from "../routes/driver"
+import { ANOTHER_DEVICES_COMMAND, driverDoorRoutes } from "../routes/driver"
 import { routeRoutes } from "../routes/routes"
 import { COMMAND_BACKDATE_MS, OCCURRED_AT_SKEW_MS } from "../routes/shared"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest, ownerUnderTest } from "./database"
-import { FIXTURE_DAY, routeFor, seedDriverFixtures, type DriverFixtures, type FixtureRoute, type RouteOptions } from "./execution-fixtures"
+import { FIXTURE_DAY, routeFor, seedDriverFixtures, TOWN_HALL, type DriverFixtures, type FixtureRoute, type RouteOptions } from "./execution-fixtures"
 import { readProblem } from "./read-problem"
 import { seedFleet, seedPlanning, type FleetFixtures } from "./scheme-fixtures"
 import { dropTenant, seedTenant, testId, type Tenant } from "./tenant"
@@ -104,6 +105,8 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
   let lars: Call
   let ungranted: Call
   let theirMads: Call
+  /** The other company's dispatcher, for the yard-clearing cancel there. */
+  let theirOlivia: Call
 
   before(async () => {
     pool = createDb(database.url, { max: 6 })
@@ -131,19 +134,26 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
     lars = callingAs(app, keys, a.users.lars, a.companyId)
     ungranted = callingAs(app, keys, a.users.viewer, a.companyId)
     theirMads = callingAs(app, keys, theirFixtures.accounts.mads, b.companyId)
+    theirOlivia = callingAs(app, keys, b.users.olivia, b.companyId)
   })
   /**
    * A driver runs one route at a time (`session_driver_open_idx`), so a
    * session one test leaves open would refuse the next test's `start-route`
-   * for the driver's sake. Before each test the yard is quiet: every route of
-   * the company with an open session is cancelled through the office's own
-   * command, which ends the session and closes the open pickups the way a
-   * dispatcher would.
+   * for the driver's sake. Before each test the yard is quiet in both
+   * companies: every route with an open session is cancelled through the
+   * office's own command, which ends the session and closes the open pickups
+   * the way a dispatcher would — the other company's too, since a test that
+   * starts a route there would otherwise trip its Mads's index later.
    */
   beforeEach(async () => {
     if (!a) return
-    const open = await withCompany(pool.db, a.companyId, (tx) => tx.select({ routeId: sessionTable.routeId }).from(sessionTable).where(and(eq(sessionTable.companyId, a.companyId), isNull(sessionTable.endedAt))))
-    for (const found of open) await cancelled(found.routeId, "Cleared by the suite")
+    for (const [tenant, dispatcher] of [
+      [a, olivia],
+      [b, theirOlivia],
+    ] as const) {
+      const open = await withCompany(pool.db, tenant.companyId, (tx) => tx.select({ routeId: sessionTable.routeId }).from(sessionTable).where(and(eq(sessionTable.companyId, tenant.companyId), isNull(sessionTable.endedAt))))
+      for (const found of open) await cancelled(found.routeId, "Cleared by the suite", dispatcher)
+    }
   })
   after(async () => {
     if (a) await dropTenant(pool, a.companyId, ownerPool)
@@ -159,14 +169,15 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
   /** A route of company a, Mads's and ready unless said. */
   const minted = (options: Partial<RouteOptions> = {}) => routeFor(pool, a, fleet, fixtures, { driver: fleet.drivers.mads, ...options })
   /** The office's cancel (`POST /routes/:id/cancel`) as the dispatcher sends it: the route cancelled with the reason as its note, its open session ended, its open pickups closed. */
-  const cancelled = async (routeId: string, reason: string): Promise<void> => {
-    const response = await olivia(`/routes/${routeId}/cancel`, { method: "POST", body: { reason } })
+  const cancelled = async (routeId: string, reason: string, dispatcher = olivia): Promise<void> => {
+    const response = await dispatcher(`/routes/${routeId}/cancel`, { method: "POST", body: { reason } })
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
   }
-  const detail = async (id: string, call = mads): Promise<RouteDetail> => {
+  /** The driver's route read, parsed with its own contract: the pickups carry their places. */
+  const detail = async (id: string, call = mads): Promise<DriverRouteDetail> => {
     const response = await call(`/driver/routes/${id}`)
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
-    return RouteDetail.parse(await response.json())
+    return DriverRouteDetail.parse(await response.json())
   }
   const send = async (commands: unknown[], call = mads): Promise<CommandOutcomeRow[]> => {
     const response = await call("/driver/commands", { method: "POST", body: { commands } })
@@ -306,7 +317,7 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
   })
 
   describe("GET /driver/routes/:id", () => {
-    test("answers the route with its pickups by position, no session and no unloads yet", async () => {
+    test("answers the route with its pickups by position, each with its place joined, no session and no unloads yet", async () => {
       const route = await minted({ pickups: 3 })
       const found = await detail(route.id)
       assert.deepEqual([found.id, found.label, found.status, found.session, found.sessions, found.unloads], [route.id, route.label, "ready", null, [], []])
@@ -314,11 +325,56 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
         found.pickups.map((pickup) => [pickup.id, pickup.position, pickup.status, pickup.reason, pickup.arrivedAt, pickup.outcomeAt, pickup.propertyId, pickup.wasteFractionId]),
         route.pickupIds.map((id, index) => [id, index + 1, "planned", null, null, null, fixtures.property.id, fixtures.residual.id]),
       )
+      // The place joined: the property's address and point (none until it is geocoded), the container's label, the fraction's name — what the device shows at the stop.
+      assert.deepEqual(
+        found.pickups.map((pickup) => [pickup.address, pickup.location, pickup.containerLabel, pickup.wasteFractionName]),
+        fixtures.containers.map((bin) => ["Parkvej 18, 2100 København Ø", null, bin.label, "Residual waste"]),
+      )
       assert.deepEqual(found.planned, { vehicleId: fleet.vehicles.wh24.id, driverId: fleet.drivers.mads.id, trailerId: null, serviceProviderId: null, depotId: fleet.depots.nordhavn.id, unloadingStationId: fleet.stations.amager.id })
       assert.equal(found.plannedStartTime, "06:30")
       assert.equal(found.operatingDate, FIXTURE_DAY)
       const planned = await minted({ status: "planned" })
       assert.equal((await detail(planned.id)).status, "planned", "assigned is assigned, whatever the status")
+    })
+
+    test("reads a geocoded property's point through the column's codec, and a shared collection point's address and point where the pickup names one", async () => {
+      const route = await minted({ pickups: 2 })
+      const pointId = testId()
+      await withCompany(pool.db, a.companyId, async (tx) => {
+        await tx.update(propertyTable).set({ location: TOWN_HALL }).where(and(eq(propertyTable.companyId, a.companyId), eq(propertyTable.id, fixtures.property.id)))
+        await tx.insert(sharedCollectionPoint).values({
+          id: pointId,
+          companyId: a.companyId,
+          projectId: a.projects.copenhagen.id,
+          name: "Havnegade island",
+          kind: "underground",
+          address: "Havnegade 3, 1058 København K",
+          location: { type: "Point", coordinates: [12.5951, 55.7089] },
+          operatingModel: "municipal",
+          accessMode: "open",
+          billingMode: "municipal",
+          status: "open",
+        })
+        // The second stop moves to the point: one place, the other way (`pickup_place_exactly_one`).
+        await tx
+          .update(pickupTable)
+          .set({ propertyId: null, sharedCollectionPointId: pointId })
+          .where(and(eq(pickupTable.companyId, a.companyId), eq(pickupTable.id, route.pickupIds[1])))
+      })
+      try {
+        const found = await detail(route.id)
+        assert.deepEqual(
+          found.pickups.map((pickup) => [pickup.propertyId, pickup.sharedCollectionPointId, pickup.address, pickup.location]),
+          [
+            [fixtures.property.id, null, "Parkvej 18, 2100 København Ø", TOWN_HALL],
+            [null, pointId, "Havnegade 3, 1058 København K", { type: "Point", coordinates: [12.5951, 55.7089] }],
+          ],
+          "the property's point once geocoded, the point's address and point where the stop is one",
+        )
+      } finally {
+        // The one property every other route's pickups stand at goes back to being ungeocoded, as the fixture has it.
+        await withCompany(pool.db, a.companyId, (tx) => tx.update(propertyTable).set({ location: null }).where(and(eq(propertyTable.companyId, a.companyId), eq(propertyTable.id, fixtures.property.id))))
+      }
     })
 
     test("a route not assigned to this driver, of another company, or not there is one sentence (404)", async () => {
@@ -577,10 +633,16 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
       await rejected(envelope("arrive", route.id, { pickupId: route.pickupIds[0] }, { occurredAt: at("07:31") }), 409, notActive(route.label))
     })
 
-    test("is refused on another driver's active route with the assignment's 404", async () => {
+    test("is refused on another driver's active route with the assignment's 404, and the receipt names neither their session nor the stop", async () => {
       const alis = await routeFor(pool, a, fleet, fixtures, { driver: fixtures.drivers.ali, serviceProviderId: a.serviceProviders.nordren.id })
       await started(alis, { call: ali })
-      await rejected(envelope("arrive", alis.id, { pickupId: alis.pickupIds[0] }, { occurredAt: at("07:00") }), 404, noRouteAssigned(alis.id))
+      const guess = envelope("arrive", alis.id, { pickupId: alis.pickupIds[0] }, { occurredAt: at("07:00") })
+      await rejected(guess, 404, noRouteAssigned(alis.id))
+      // The route is of Mads's project, so the receipt names it; but nothing else of a route he was not given is read, so it names no session (Ali's open one) and no pickup (the stop he guessed at), and hands neither back.
+      const [receipt] = (await receipts(`?routeId=${alis.id}`)).items.filter((item) => item.id === guess.id)
+      assert.deepEqual([receipt.routeId, receipt.sessionId, receipt.pickupId, receipt.outcome], [alis.id, null, null, "rejected"])
+      const [rejection] = await events(guess.id)
+      assert.deepEqual([(rejection.payload as { sessionId: unknown }).sessionId, (rejection.payload as { pickupId: unknown }).pickupId], [null, null], "the event's receipt says the same")
     })
   })
 
@@ -671,7 +733,14 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
       assert.deepEqual((await events(pickupId)).map((event) => [event.kind, event.aggregateKind]), [["pickup-problem-reported", "pickup"]])
       const onRoute = valueOf(await applied(envelope("report-problem", route.id, { reason: "other", note: "Road closed at Parkvej" }, { occurredAt: at("07:01") })), "proof", ProofOfService)
       assert.deepEqual([onRoute.kind, onRoute.pickupId], ["problem", null])
-      assert.ok((await events(route.id)).some((event) => event.kind === "pickup-problem-reported" && event.aggregateKind === "route"), "a route-level problem is the route's event")
+      const problemReported = (await events(route.id)).find((event) => event.kind === "pickup-problem-reported")
+      assert.ok(problemReported, "a route-level problem is the route's event")
+      assert.equal(problemReported.aggregateKind, "route")
+      // The payload is the route with the problem proof, so the reason and the note travel with the event the way a stop's do inside its pickup.
+      const reported = problemReported.payload as { id: string; status: string; proofs: unknown[] }
+      assert.deepEqual([reported.id, reported.status, reported.proofs], [route.id, "active", [onRoute]], "the route as it stands, with the one proof this command made")
+      assert.deepEqual([(reported.proofs[0] as ProofOfService).reason, (reported.proofs[0] as ProofOfService).note], ["other", "Road closed at Parkvej"])
+      assert.equal(Route.parse(problemReported.payload).id, route.id, "and still a Route to a consumer that reads one")
       assert.equal((await detail(route.id)).pickups[0].status, "planned", "a reported problem moves no status")
 
       const photoId = mint()
@@ -845,6 +914,22 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
         assert.equal(differing.outcome, "replayed")
         assert.deepEqual(differing.result, first[3].result)
         assert.equal(logged.length, 1, "the difference is logged")
+        // The envelope is compared too, not the body alone: another device, another instant, another kind or another route replaying the id is the same note.
+        for (const [what, changed] of [
+          ["the device", { ...day[3], deviceId: "device-mads-02" }],
+          ["the instant", { ...day[3], occurredAt: at("06:51") }],
+          ["the kind", { ...day[3], kind: "fail-pickup" as const }],
+          ["the route", { ...day[7], routeId: testId() }],
+        ] as const) {
+          logged.length = 0
+          const [again] = await send([changed])
+          assert.equal(again.outcome, "replayed", what)
+          assert.equal(logged.length, 1, `${what} differs: logged`)
+        }
+        logged.length = 0
+        const [same] = await send([day[3]])
+        assert.equal(same.outcome, "replayed")
+        assert.equal(logged.length, 0, "the same command again is not logged")
         assert.deepEqual(await written(), before)
       } finally {
         now = MORNING
@@ -870,6 +955,66 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
         assert.equal((await sessionRow(start.id)).lastSeenAt.toISOString(), seen.toISOString(), "a rejection is not")
       } finally {
         now = MORNING
+      }
+    })
+
+    test("an id another device's command holds is refused, never replayed and recorded nowhere, while the device that sent it still replays it", async () => {
+      const route = await minted()
+      const alis = await routeFor(pool, a, fleet, fixtures, { driver: fixtures.drivers.ali, serviceProviderId: a.serviceProviders.nordren.id })
+      const theirs = await routeFor(pool, b, theirFleet, theirFixtures, { driver: theirFleet.drivers.mads })
+      const start = envelope("start-route", route.id, { vehicleId: fleet.vehicles.wh24.id, location: { type: "Point", coordinates: [12.5951, 55.7089] } })
+      await applied(start)
+      const before = await written()
+      logged.length = 0
+      // Ali's device claims Mads's command id: for a start of his own route, whose session would take the id (`session_pkey`), and for a pause, which makes no row and meets the receipt's key.
+      for (const [what, claimed, call] of [
+        ["Ali starting his route on Mads's id", envelope("start-route", alis.id, { vehicleId: fleet.vehicles.wh25.id }, { id: start.id, deviceId: "device-ali-01" }), ali],
+        ["Ali pausing on Mads's id", envelope("pause", alis.id, {}, { id: start.id, deviceId: "device-ali-01" }), ali],
+        ["another company's driver on Mads's id", envelope("start-route", theirs.id, { vehicleId: theirFleet.vehicles.wh24.id }, { id: start.id, deviceId: "device-their-mads" }), theirMads],
+      ] as const) {
+        const outcome = await one(claimed, call)
+        assert.equal(outcome.outcome, "rejected", what)
+        assert.deepEqual([outcome.problem?.status, outcome.problem?.detail, outcome.result], [409, ANOTHER_DEVICES_COMMAND, undefined], what)
+      }
+      assert.equal(ANOTHER_DEVICES_COMMAND, "That command id belongs to another device's command")
+      assert.deepEqual(await written(), before, "no session, no receipt, no event: the id's receipt is Mads's and stays his")
+      assert.equal((await detail(alis.id, ali)).status, "ready", "Ali's route did not start")
+      assert.equal((await receipts("?limit=200", ali)).items.some((receipt) => receipt.id === start.id), false, "and Ali has no receipt under the id")
+      assert.equal(logged.length, 3, "the one rejection no receipt can hold goes to the log")
+      assert.deepEqual((logged[0] as { detail: unknown; driverId: unknown }).detail, ANOTHER_DEVICES_COMMAND)
+      assert.equal((logged[0] as { driverId: unknown }).driverId, fixtures.drivers.ali.id)
+      // Mads's own replay still answers the first outcome, the session read back, and the other device learned nothing of it.
+      const [replay] = await send([start])
+      assert.equal(replay.outcome, "replayed")
+      assert.equal(valueOf(replay, "session", Session).id, start.id)
+      assert.deepEqual(await written(), before)
+    })
+
+    test("two of one driver's routes started at once meet on the one-live-session-per-driver index: one starts, the other is that command's rejection naming the winner, and both batches go on", async () => {
+      const first = await minted()
+      const second = await minted()
+      const batches = [first, second].map((route) => [envelope("start-route", route.id, { vehicleId: fleet.vehicles.wh24.id }), envelope("pause", route.id, {}, { occurredAt: at("06:31") })])
+      const [left, right] = await Promise.all(batches.map((batch) => send(batch)))
+      const outcomes = [left, right].map((batch) => batch.map((outcome) => outcome.outcome).join(","))
+      assert.deepEqual([...outcomes].sort(), ["applied,applied", "rejected,rejected"], "one start went through with its pause; the other's start and pause were both answered")
+      const won = outcomes[0] === "applied,applied" ? first : second
+      const lost = won === first ? second : first
+      const loser = won === first ? right : left
+      assert.equal(loser[0].problem?.status, 409)
+      assert.equal(loser[0].problem?.detail, alreadyOnRoute("Mads Jensen", won.label), "the rule `decide` would have applied a statement later, naming the route that won")
+      assert.equal(loser[1].problem?.detail, notActive(lost.label), "the rest of the losing batch was judged and recorded, not lost")
+      assert.deepEqual((await detail(lost.id)).sessions, [], "the loser's session was rolled back")
+      assert.equal((await detail(lost.id)).status, "ready")
+      assert.equal((await detail(won.id)).status, "active")
+      for (const [route, batch] of [
+        [won, won === first ? batches[0] : batches[1]],
+        [lost, lost === first ? batches[0] : batches[1]],
+      ] as const) {
+        assert.deepEqual(
+          (await receipts(`?routeId=${route.id}`)).items.map((receipt) => receipt.id),
+          batch.map((command) => command.id),
+          `${route.label}: both commands have their receipt`,
+        )
       }
     })
 

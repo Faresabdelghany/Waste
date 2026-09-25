@@ -260,6 +260,9 @@ export function objectKeyNames(key: string, ids: { companyId: string; routeId: s
   return key.startsWith(prefix) && (OBJECT_EXTENSIONS as readonly string[]).includes(key.slice(prefix.length))
 }
 
+/** Whether the route is the driver's — planned for them, or started by them: the assignment, the driver door's one fence (the API spells the same in SQL for its reads, and asks this before it reads anything else of a route for a command). */
+export const assignedTo = (route: Pick<RouteState, "plannedDriverId" | "actualDriverId">, driverId: string): boolean => route.plannedDriverId === driverId || route.actualDriverId === driverId
+
 const reject = (status: Rejection["status"], detail: string, errors?: FieldError[]): Decision => ({ reject: errors ? { status, detail, errors } : { status, detail } })
 const invalid = (path: string, message: string): Decision => reject(400, message, [{ path, message }])
 
@@ -295,9 +298,7 @@ const event = (kind: OutboxKind, aggregate: OutboxAggregate, aggregateId: string
  */
 export function decide(command: Command, driver: CommandDriver, state: Lookups, clock: Clock): Decision {
   const { route } = state
-  if (route === undefined || (route.plannedDriverId !== driver.id && route.actualDriverId !== driver.id)) {
-    return reject(404, noRouteAssigned(command.routeId))
-  }
+  if (route === undefined || !assignedTo(route, driver.id)) return reject(404, noRouteAssigned(command.routeId))
   const occurred = Date.parse(command.occurredAt)
   const now = Date.parse(clock.now)
   if (occurred > now + clock.skewAheadMs) return invalid("occurredAt", RECORDED_AFTER_IT_HAPPENED)

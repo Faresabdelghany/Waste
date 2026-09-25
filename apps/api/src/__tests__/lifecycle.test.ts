@@ -13,6 +13,7 @@ import { createDb, type Database } from "@waste/db/client"
 import { containerServicePlacement } from "@waste/db/schema/containers"
 import { stockMovement } from "@waste/db/schema/stock"
 import { withCompany } from "@waste/db/tenant"
+import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
 import { eq } from "drizzle-orm"
 
 import { createApp } from "../app"
@@ -22,7 +23,6 @@ import {
   NOT_A_MOVEMENT_OF_THIS_CONTAINER,
   OUTSIDE_SUBSCRIPTION,
   placementAlreadyEnded,
-  RECORDED_AFTER_IT_HAPPENED,
   VALID_TO_SAYS_NOTHING,
 } from "../routes/lifecycle"
 import { OCCURRED_AT_SKEW_MS } from "../routes/shared"

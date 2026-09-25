@@ -56,13 +56,13 @@ export type RouteAssignment = z.infer<typeof RouteAssignment>
 
 /** What a route whose label is not its number is told. */
 export const LABEL_IS_THE_NUMBER = "label is the number under the route prefix"
-const labelIsTheNumber = { message: LABEL_IS_THE_NUMBER, path: ["label"] }
+export const labelIsTheNumber = { message: LABEL_IS_THE_NUMBER, path: ["label"] }
 
 /** The label is the number's. */
 export const labelMatches = (value: { number: number; label: string }): boolean => value.label === routeLabel(value.number)
 
-/** A route's fields, spelled once for the three resources that carry them; each refines `labelMatches` again, since spreading takes the fields and not the rule. */
-const routeFields = {
+/** A route's fields, spelled once for the resources that carry them — the three here and the driver's `DriverRouteDetail` (driver-commands.ts); each refines `labelMatches` again, since spreading takes the fields and not the rule. */
+export const routeFields = {
   ...stamped,
   projectId: Id,
   routeSchemeId: Id,

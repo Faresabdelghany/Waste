@@ -24,6 +24,12 @@
 // null on a rejection for a route the driver does not reach, which is
 // recorded in the driver's project with the claimed id kept in `body` as
 // `{ routeId, body }` — and `DriverMe` the connected client's start screen.
+// `DriverRouteDetail` is the driver's read of one route (#104 §5): a
+// `RouteDetail` whose pickups are `DriverPickup`s, each with its place
+// joined — the address and the point of the property or the shared
+// collection point it names, the container's label, the waste fraction's
+// name — the one read that denormalises for the wire what the device
+// otherwise gets by sync.
 //
 // The rules the bodies hold: a reason is one of the driver's six
 // (`DriverPickupReason`; the system's four are the server's), a
@@ -39,10 +45,11 @@ import { CommandOutcome, DriverCommandKind, DriverPickupReason, OBJECT_KEY, OBJE
 import { Driver } from "./fleet"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
+import { Pickup } from "./pickups"
 import { Problem } from "./problem"
 import { ProofOfService } from "./proofs"
 import { eachOnce, eachOnceSentence, PositiveInt, recorded } from "./resource"
-import { Route } from "./routes"
+import { labelIsTheNumber, labelMatches, Route, routeFields } from "./routes"
 import { Session } from "./sessions"
 import { Label, Paragraph } from "./text"
 import { bothGrossAndTare, netIsGrossLessTare, Unload, weightsAddUp, weightsPaired } from "./unloads"
@@ -209,3 +216,37 @@ export const DriverMe = z.object({
   routes: z.array(Route),
 })
 export type DriverMe = z.infer<typeof DriverMe>
+
+/**
+ * A pickup as the driver's route read answers it (#104 §5): the `Pickup`
+ * with its place joined — the `address` and `location` of the property or
+ * the shared collection point the pickup names on the service date, the
+ * container's `label` and the waste fraction's `name` — the four things a
+ * device shows at a stop, which the synced client joins from its own buckets
+ * and the connected client reads here. `location` is null for a property not
+ * yet geocoded; a shared collection point always has one.
+ */
+export const DriverPickup = Pickup.extend({
+  /** The service address as one text, the property's or the point's. */
+  address: Paragraph,
+  location: FlatPoint.nullable(),
+  containerLabel: Label,
+  wasteFractionName: Label,
+})
+export type DriverPickup = z.infer<typeof DriverPickup>
+
+/** `GET /driver/routes/:id`: `RouteDetail` with the pickups' places joined — the one read that denormalises for the wire what the device otherwise gets by sync. */
+export const DriverRouteDetail = z
+  .object({
+    ...routeFields,
+    /** By position, each with its place. */
+    pickups: z.array(DriverPickup),
+    /** The open session, or null. */
+    session: Session.nullable(),
+    /** Every session, oldest first. */
+    sessions: z.array(Session),
+    /** Oldest first. */
+    unloads: z.array(Unload),
+  })
+  .refine(labelMatches, labelIsTheNumber)
+export type DriverRouteDetail = z.infer<typeof DriverRouteDetail>

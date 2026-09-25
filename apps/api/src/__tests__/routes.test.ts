@@ -291,6 +291,15 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
       assert.equal((await eventsAbout(seeded.id)).length, 1, "one reassignment went through")
     })
 
+    test("keeps a ready route's driver: clearing it is refused (409), while moving it, and clearing a planned route's, are not", async () => {
+      const kept = await refused(await command(ex.routes.ready.id, "assign", { driverId: null }), 409)
+      assert.equal(kept.detail, `Route ${ex.routes.ready.label} is dispatched; assign another driver or cancel it`)
+      assert.equal((await read(ex.routes.ready.id)).planned.driverId, fleet.drivers.mads.id, "the driver stands: a dispatched route without one would reach no device")
+      assert.equal((await commanded(ex.routes.ready.id, "assign", { driverId: fleet.drivers.mads.id })).planned.driverId, fleet.drivers.mads.id, "moving the driver is not clearing it")
+      const seeded = await fresh(mads())
+      assert.equal((await commanded(seeded.id, "assign", { driverId: null })).planned.driverId, null, "a planned route may lose its driver; dispatch asks for one")
+    })
+
     test("refuses a route that runs, one that has ended, one another company or project owns, and a role without edit", async () => {
       const active = await fresh({ status: "active" })
       const running = await refused(await command(active.id, "assign", { trailerId: fleet.vehicles.trailer.id }), 409)

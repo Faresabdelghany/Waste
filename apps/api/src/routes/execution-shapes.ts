@@ -2,8 +2,10 @@
 // `pickup`, `session`, `proof_of_service`, `unload` and `driver_command` on
 // the wire, the scopes every route statement is bounded by — the office's,
 // the tenant and `inProjects`; the driver door's, the tenant and the
-// assignment — and the two page-wide reads a route carries, its progress and
-// its open session, so routes/routes.ts, routes/pickups.ts, routes/live.ts,
+// assignment — the two page-wide reads a route carries, its progress and
+// its open session, and the route's detail (`detailOf`, and
+// `routeWithSessions` underneath it, which the driver's read adds its own
+// pickups to), so routes/routes.ts, routes/pickups.ts, routes/live.ts,
 // routes/unloads.ts and routes/driver.ts each say only which route does what,
 // the way routes/scheme-groups.ts holds Planning's shapes for its two modules.
 //
@@ -24,7 +26,7 @@ import type { FlatPoint } from "@waste/contracts/geojson"
 import type { Pickup } from "@waste/contracts/pickups"
 import type { Problem } from "@waste/contracts/problem"
 import type { ProofOfService } from "@waste/contracts/proofs"
-import type { Route, RouteProgress } from "@waste/contracts/routes"
+import type { Route, RouteDetail, RouteProgress } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
 import type { Unload } from "@waste/contracts/unloads"
 import type { Tx } from "@waste/db/client"
@@ -395,6 +397,25 @@ export async function unloadsOfRoute(tx: Tx, companyId: string, routeId: string)
     .from(unload)
     .where(and(eq(unload.companyId, companyId), eq(unload.routeId, routeId)))
     .orderBy(asc(unload.id))
+}
+
+/**
+ * What hangs off a route beside its stops: the route with its progress, the
+ * open session or null, every session oldest first, its unloads oldest
+ * first — the pieces the office's `RouteDetail` and the driver's
+ * `DriverRouteDetail` share, each adding pickups of its own shape (the
+ * office's bare, the driver's with their places joined, routes/driver.ts).
+ */
+export async function routeWithSessions(tx: Tx, companyId: string, row: RouteRow): Promise<Omit<RouteDetail, "pickups">> {
+  const [answered, sessions, unloads] = await Promise.all([routeWithProgress(tx, companyId, row), sessionsOfRoute(tx, companyId, row.id), unloadsOfRoute(tx, companyId, row.id)])
+  const open = sessions.find((candidate) => candidate.endedAt === null)
+  return { ...answered, session: open === undefined ? null : sessionOf(open), sessions: sessions.map(sessionOf), unloads: unloads.map(unloadOf) }
+}
+
+/** The route with everything that hangs off it, as the office reads and every office command answers it: the pickups by position beside the rest. */
+export async function detailOf(tx: Tx, companyId: string, row: RouteRow): Promise<RouteDetail> {
+  const [answered, pickups] = await Promise.all([routeWithSessions(tx, companyId, row), pickupsOfRoute(tx, companyId, row.id)])
+  return { ...answered, pickups: pickups.map(pickupOf) }
 }
 
 export const receiptColumns = {

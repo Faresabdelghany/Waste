@@ -372,9 +372,16 @@ describe("GET /openapi.json", () => {
     assert.match(document.paths["/driver/me"].get.description ?? "", /the assignment, never Project Access/)
     assert.match(document.paths["/driver/routes"].get.description ?? "", /never by Project Access/)
     assert.match(document.paths["/driver/routes/{id}"].get.description ?? "", /No route <id> assigned to this driver/)
+    // The driver's route read is the joined one: the places travel with the pickups.
+    assert.match(document.paths["/driver/routes/{id}"].get.description ?? "", /each with its place joined — the `address` and `location`/)
+    assert.match(document.paths["/driver/routes/{id}"].get.description ?? "", /the container's `label` and the waste fraction's `name`/)
     const door = document.paths["/driver/commands"].post.description ?? ""
     assert.match(door, /applied in body order, each in its own savepoint/)
-    assert.match(door, /`replayed` with the first outcome for an id already received \(nothing written/)
+    assert.match(door, /`replayed` with the first outcome for an id this driver's devices already sent \(nothing written/)
+    assert.match(door, /An id that another device's command already holds .* is refused \(409, `That command id belongs to another device's command`\) and never replayed/)
+    assert.match(door, /two of the driver's routes started at once, each batch under its own route's lock, meet on the one-live-session-per-driver index/)
+    assert.match(door, /a route-level `report-problem`'s `pickup-problem-reported` the route with its problem proof as `proofs`/)
+    assert.match(door, /assigned to another driver names that route and no session and no pickup/)
     assert.match(door, /A body that fails its kind's schema is one command's rejection, never the batch's/)
     assert.match(door, /at most five minutes ahead of the request's clock \(400, `Recorded after it happened`\)/)
     assert.match(door, /at most forty-eight hours behind it \(400, `Recorded more than 48 hours after it happened`\)/)

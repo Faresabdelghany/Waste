@@ -11,7 +11,13 @@
 // The payload is the wire resource as the route would answer it at that
 // instant — a `Route`, a `PickupDetail` with the proof the command made, an
 // `Unload`, a `DriverCommandReceipt` — so a consumer reads what the API
-// would have answered and never the tables. `occurredAt` is the command's
+// would have answered and never the tables. One event carries a little
+// more: a route-level `report-problem` (no pickup named) writes
+// `pickup-problem-reported` on the route aggregate with the `Route` plus
+// `proofs`, the problem proof the command made, the way a stop's problem
+// travels inside its `PickupDetail`, so the `reason` and the `note` reach
+// Resolution whichever aggregate the problem was reported on and a consumer
+// reads `proofs[0]` either way. `occurredAt` is the command's
 // instant and not the request's: the day a cancelled route was cancelled,
 // the instant a pickup left `planned`, when the truck tipped. `projectId`
 // travels with the event because every Execution row is a project's and the

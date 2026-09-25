@@ -13,11 +13,14 @@ import {
   DriverCommandEnvelope,
   DriverCommandReceipt,
   DriverMe,
+  DriverPickup,
+  DriverRouteDetail,
   EACH_COMMAND_ONCE,
   OBJECT_KEY_SHAPE,
   PROBLEM_WITH_A_REJECTION,
   WireOutcome,
 } from "../driver-commands"
+import { LABEL_IS_THE_NUMBER } from "../routes"
 import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE } from "../unloads"
 import { refusal } from "./expect"
 
@@ -201,5 +204,45 @@ describe("what the door answers and stores", () => {
     const me = { driver, openSession: null, routes: [] }
     assert.deepEqual(DriverMe.parse(me), me)
     assert.deepEqual(refusal(DriverMe.safeParse({ ...me, routes: undefined })).map((issue) => issue.path), ["routes"])
+  })
+
+  test("the driver's route read is the detail with each pickup's place joined: the address, the point or null, the container's label and the fraction's name", () => {
+    const pickup = { id: THIRD, projectId: OTHER, routeId: ID, containerId: COMPANY, position: 1, status: "planned", reason: null, note: null, propertyId: ID, sharedCollectionPointId: null, wasteFractionId: OTHER, arrivedAt: null, outcomeAt: null, ...STAMPS }
+    const joined = { ...pickup, address: "Parkvej 18, 2100 København Ø", location: POINT, containerLabel: "BIN-82014", wasteFractionName: "Residual waste" }
+    assert.deepEqual(DriverPickup.parse(joined), joined)
+    assert.deepEqual(DriverPickup.parse({ ...joined, location: null }), { ...joined, location: null }, "a property not yet geocoded has no point")
+    for (const key of ["address", "location", "containerLabel", "wasteFractionName"]) {
+      assert.deepEqual(refusal(DriverPickup.safeParse({ ...joined, [key]: undefined })).map((issue) => issue.path), [key], `${key} is what the device shows at the stop`)
+    }
+    assert.equal(DriverPickup.safeParse({ ...joined, location: { type: "Point", coordinates: [12.5951, 55.7089, 10] } }).success, false, "a flat point")
+    assert.equal(DriverPickup.safeParse({ ...joined, address: "   " }).success, false, "an address says something")
+
+    const route = {
+      id: ID,
+      projectId: OTHER,
+      routeSchemeId: THIRD,
+      collectionGroupId: ID,
+      serviceDate: "2026-10-05",
+      operatingDate: "2026-10-05",
+      number: 1042,
+      label: "RC-1042",
+      status: "ready",
+      note: null,
+      cancelledByGeneration: false,
+      generationRunId: null,
+      plannedStartTime: "06:30",
+      planned: { vehicleId: OTHER, driverId: THIRD, trailerId: null, serviceProviderId: null, depotId: ID, unloadingStationId: OTHER },
+      actual: { vehicleId: null, driverId: null, trailerId: null },
+      dispatchedAt: WHEN,
+      startedAt: null,
+      completedAt: null,
+      cancelledAt: null,
+      progress: { planned: 1, completed: 0, skipped: 0, failed: 0, total: 1, fraction: 0 },
+      ...STAMPS,
+    }
+    const detail = { ...route, pickups: [joined], session: null, sessions: [], unloads: [] }
+    assert.deepEqual(DriverRouteDetail.parse(detail), detail)
+    assert.deepEqual(refusal(DriverRouteDetail.safeParse({ ...detail, pickups: [pickup] })).map((issue) => issue.path).sort(), ["pickups.0.address", "pickups.0.containerLabel", "pickups.0.location", "pickups.0.wasteFractionName"], "a bare pickup is the office's shape, not the driver's")
+    assert.deepEqual(refusal(DriverRouteDetail.safeParse({ ...detail, label: "RC-1043" })), [{ path: "label", message: LABEL_IS_THE_NUMBER }], "the route's own rule holds here too")
   })
 })

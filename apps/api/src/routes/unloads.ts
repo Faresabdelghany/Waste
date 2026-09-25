@@ -31,7 +31,6 @@ import { Page } from "@waste/contracts/pagination"
 import { Unload, UnloadCreate, UnloadListQuery } from "@waste/contracts/unloads"
 import { route, unload } from "@waste/db/schema/execution"
 import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
-import { doesNotChange, hasNotRun } from "@waste/domain/execution/transitions"
 import { and, asc, eq, gt, gte, lte } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -42,32 +41,16 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { findRoute, labelOf, noSuchRoute, noSuchUnload, unloadColumns, unloadOf, unloadScope, type RouteRow } from "./execution-shapes"
+import { describeProblem, invalidRequest, validate } from "../problem"
+import { findRoute, noSuchRoute, noSuchUnload, unloadColumns, unloadOf, unloadScope } from "./execution-shapes"
 import { requireRoute, requireUnloadingStation, requireWasteFraction } from "./references"
+import { requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS } from "./shared"
 
 const MODULE = "route-studio.weights"
 
 const UnloadPage = Page(Unload)
-
-/** An unload is captured on a route that ran: `active` or `completed`; a route that has not is refused, and a cancelled one does not change. */
-function requireRan(current: RouteRow): void {
-  const label = labelOf(current)
-  switch (current.status) {
-    case "active":
-    case "completed":
-      return
-    case "planned":
-    case "ready":
-      throw problem(409, { detail: hasNotRun(label) })
-    case "cancelled":
-      throw problem(409, { detail: doesNotChange(label, "cancelled") })
-    default:
-      throw new Error(`route ${current.id} carries a status the vocabulary does not know: ${current.status}`)
-  }
-}
 
 export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
   return new Hono<AuthEnv>()
