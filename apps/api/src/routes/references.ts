@@ -34,14 +34,17 @@
 import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
 import type { Tx } from "@waste/db/client"
+import { userAccount } from "@waste/db/schema/access"
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
 import { customer, property, sharedCollectionPoint } from "@waste/db/schema/customers"
+import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
 import { serviceProvider } from "@waste/db/schema/organisation"
 import { depot, unloadingStation, warehouse } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
-import { and, eq, inArray } from "drizzle-orm"
+import type { VehicleKind } from "@waste/domain/resources/vocabulary"
+import { and, eq, inArray, isNull } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 
 import { invalidRequest } from "../problem"
@@ -251,4 +254,64 @@ export async function requireDepot(tx: Tx, scope: Scope, id: string | null | und
 export async function requireUnloadingStation(tx: Tx, companyId: string, id: string | null | undefined, path = "unloadingStationId"): Promise<void> {
   if (id == null) return
   await requireRow(tx, unloadingStation, inCompany(companyId, id), { path, message: NOT_AN_UNLOADING_STATION })
+}
+
+// Resources, slice 4 (Issue #101): the fleet. A vehicle and a driver are the
+// project's, like the depot they are based at, so both checks are `inProject`.
+// A vehicle is asked for with the kind the caller demands — an allocation's
+// `vehicleId` is a powered vehicle and its `trailerId` a trailer, a collection
+// group's vehicle a powered one — and the kind goes into the one statement
+// beside the project: a trailer offered where a powered vehicle is required
+// is "not a powered vehicle of this project" the way another project's is,
+// since the sentence names what was asked for and the caller can pick
+// another. A driver's login is a user account of this company that is not
+// deactivated; whether it has signed in yet is the account's business, not
+// the driver profile's.
+
+/** What a body is told when the vehicle it names is not one of the project's, or not of the kind asked for. */
+export const NOT_A_VEHICLE = "Not a vehicle of this project"
+export const NOT_A_POWERED_VEHICLE = "Not a powered vehicle of this project"
+export const NOT_A_TRAILER = "Not a trailer of this project"
+
+/** The sentence for a vehicle held to a kind, or to none. */
+const notAVehicleOf = (kind: VehicleKind | undefined): string => (kind === "powered-vehicle" ? NOT_A_POWERED_VEHICLE : kind === "trailer" ? NOT_A_TRAILER : NOT_A_VEHICLE)
+
+/**
+ * A Vehicle a body names: the project's, and of the kind demanded when one
+ * is. One statement and one sentence, the kind in the `where` beside the
+ * project, so a row of the wrong kind and a row that is not there are told
+ * the same thing — which names what the field wanted.
+ */
+export async function requireVehicle(
+  tx: Tx,
+  scope: Scope,
+  id: string | null | undefined,
+  { kind }: { kind?: VehicleKind } = {},
+  path = "vehicleId",
+): Promise<void> {
+  if (id == null) return
+  await requireRow(
+    tx,
+    vehicle,
+    { companyId: scope.companyId, id, also: and(eq(vehicle.projectId, scope.projectId), kind === undefined ? undefined : eq(vehicle.kind, kind)) },
+    { path, message: notAVehicleOf(kind) },
+  )
+}
+
+/** What a body is told when it names a driver of another project. */
+export const NOT_A_DRIVER = "Not a driver of this project"
+
+/** A Driver a body names: the project's, since a workforce profile is based in one project like the vehicle it takes out. */
+export async function requireDriver(tx: Tx, scope: Scope, id: string | null | undefined, path = "driverId"): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, driver, inProject(driver, scope, id), { path, message: NOT_A_DRIVER })
+}
+
+/** What a driver body is told when the login it names is not an account here, or is a deactivated one. */
+export const NOT_A_USER_ACCOUNT = "Not a user account of this company"
+
+/** A user account a body names as a driver's login: this company's, active or invited — a deactivated account is no login to drive under. */
+export async function requireUserAccount(tx: Tx, companyId: string, id: string | null | undefined, path = "userAccountId"): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, userAccount, { companyId, id, also: isNull(userAccount.deactivatedAt) }, { path, message: NOT_A_USER_ACCOUNT })
 }

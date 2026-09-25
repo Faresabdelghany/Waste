@@ -156,6 +156,8 @@ describe("GET /openapi.json", () => {
       "/customers/{id}",
       "/depots",
       "/depots/{id}",
+      "/drivers",
+      "/drivers/{id}",
       "/healthz",
       "/me",
       "/placements",
@@ -209,6 +211,9 @@ describe("GET /openapi.json", () => {
       "/vehicle-types",
       "/vehicle-types/{id}",
       "/vehicle-types/{id}/container-types",
+      "/vehicles",
+      "/vehicles/{id}",
+      "/vehicles/{id}/compartments",
       "/warehouses",
       "/warehouses/{id}",
       "/waste-fractions",
@@ -264,8 +269,8 @@ describe("GET /openapi.json", () => {
     }
     assert.equal(
       secured,
-      131,
-      "/me, the ten organisation routes, the twelve access routes, the fifty-one registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each, agreements with their subscriptions and containers with their placements — the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six — and the eighteen resources routes of slice 3: vehicle types with their container types, five, warehouses and depots, four each, and unloading stations with their fractions, five — and the seven of the container ledger (Issue #101, slice 5): the five commands receive, return, transfer, decommission and adjust, one container's movements, and the ledger across containers — and Resources' seven vehicle allocation routes (#101, slice 6): the list, the allocate command, the read, the three commands change, confirm and release, and the history",
+      140,
+      "/me, the ten organisation routes, the twelve access routes, the fifty-one registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each, agreements with their subscriptions and containers with their placements — the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six — and the eighteen resources routes of slice 3: vehicle types with their container types, five, warehouses and depots, four each, and unloading stations with their fractions, five — and the seven of the container ledger (Issue #101, slice 5): the five commands receive, return, transfer, decommission and adjust, one container's movements, and the ledger across containers — and Resources' seven vehicle allocation routes (#101, slice 6): the list, the allocate command, the read, the three commands change, confirm and release, and the history — and the nine fleet routes of Resources' slice 4: vehicles with the compartments set, five, and drivers, four",
     )
   })
 
@@ -907,6 +912,65 @@ describe("GET /openapi.json", () => {
     assert.equal(required("/vehicle-allocations/{id}/confirm"), undefined)
 
     for (const path of ["/vehicle-allocations", "/vehicle-allocations/{id}/events"]) {
+      const page = document.paths[path].get.responses["200"].content["application/json"].schema
+      assert.deepEqual(page.required, ["items", "nextCursor"], path)
+      assert.equal(page.properties?.items.type, "array", path)
+    }
+  })
+
+  test("documents each fleet route with its verbs, its problems and the rules a client must know", async () => {
+    const document = await spec()
+    const operations = (path: string) =>
+      Object.fromEntries(Object.entries(document.paths[path]).map(([method, operation]) => [method, operation.operationId]))
+
+    assert.deepEqual(operations("/vehicles"), { get: "listVehicles", post: "createVehicle" })
+    assert.deepEqual(operations("/vehicles/{id}"), { get: "getVehicle", patch: "patchVehicle" })
+    assert.deepEqual(operations("/vehicles/{id}/compartments"), { put: "putVehicleCompartments" })
+    assert.deepEqual(operations("/drivers"), { get: "listDrivers", post: "createDriver" })
+    assert.deepEqual(operations("/drivers/{id}"), { get: "getDriver", patch: "patchDriver" })
+
+    // What a caller can earn on each of them, and in what shape.
+    for (const path of ["/vehicles", "/drivers"]) {
+      assert.deepEqual(Object.keys(document.paths[path].get.responses), ["200", "400", "401", "403"], path)
+      assert.deepEqual(Object.keys(document.paths[path].post.responses), ["201", "400", "401", "403", "409"], path)
+      assert.deepEqual(Object.keys(document.paths[`${path}/{id}`].get.responses), ["200", "400", "401", "403", "404"], path)
+      assert.deepEqual(Object.keys(document.paths[`${path}/{id}`].patch.responses), ["200", "400", "401", "403", "404", "409"], path)
+    }
+    // The set is replaced whole and nothing there can collide: positions are renumbered and a fraction twice is the body's own 400.
+    assert.deepEqual(Object.keys(document.paths["/vehicles/{id}/compartments"].put.responses), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(document.paths["/vehicles/{id}/compartments"].put.requestBody?.content["application/json"].schema.required, ["compartments"])
+    for (const [status, operation] of Object.entries(document.paths["/vehicles/{id}"].patch.responses)) {
+      const media = Object.keys(operation.content)
+      assert.deepEqual(media, [status === "200" ? "application/json" : "application/problem+json"], status)
+    }
+
+    // Both lists are project-scoped and take the project filter beside the page; each adds its own.
+    const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
+    assert.deepEqual(byName(document.paths["/vehicles"].get).sort(), ["query:cursor", "query:homeDepotId", "query:kind", "query:limit", "query:projectId", "query:status", "query:vehicleTypeId"])
+    assert.deepEqual(byName(document.paths["/drivers"].get).sort(), ["query:cursor", "query:homeDepotId", "query:licenceClass", "query:limit", "query:projectId", "query:status"])
+    assert.deepEqual(byName(document.paths["/vehicles/{id}/compartments"].put), ["path:id"])
+
+    // The rules a client must know are in the prose, not only in the code.
+    assert.match(document.paths["/vehicles"].post.description ?? "", /a powered vehicle has at least one, a trailer may have none/)
+    assert.match(document.paths["/vehicles"].post.description ?? "", /unique across the company, not inside a project/)
+    assert.match(document.paths["/vehicles"].post.description ?? "", /an unknown class passes nobody/)
+    assert.match(document.paths["/vehicles"].get.description ?? "", /an account that works in none[^.]*reads an empty page/)
+    assert.match(document.paths["/vehicles/{id}"].patch.description ?? "", /a powered vehicle does not become a trailer/)
+    assert.match(document.paths["/vehicles/{id}"].patch.description ?? "", /refused \(409\) counting them; release them first/)
+    assert.match(document.paths["/vehicles/{id}/compartments"].put.description ?? "", /Replaces the whole list/)
+    assert.match(document.paths["/vehicles/{id}/compartments"].put.description ?? "", /positions are 1\.\.n in the body's order/)
+    assert.match(document.paths["/vehicles/{id}/compartments"].put.description ?? "", /the stored kind decides/)
+    assert.match(document.paths["/drivers"].post.description ?? "", /one account is the login of at most one driver/)
+    assert.match(document.paths["/drivers"].post.description ?? "", /null is not on record, which is eligible for nothing/)
+    assert.match(document.paths["/drivers"].get.description ?? "", /exactly that class/)
+    assert.match(document.paths["/drivers/{id}"].patch.description ?? "", /A licence renewal is an edit here/)
+
+    // A write takes a JSON body, and it is the strict one the contracts spell.
+    const required = (path: string) => document.paths[path].post.requestBody?.content["application/json"].schema.required
+    assert.deepEqual(required("/vehicles"), ["projectId", "registration", "kind", "vehicleTypeId", "requiredLicenceClass"])
+    assert.deepEqual(required("/drivers"), ["projectId", "name", "employment"])
+
+    for (const path of ["/vehicles", "/drivers"]) {
       const page = document.paths[path].get.responses["200"].content["application/json"].schema
       assert.deepEqual(page.required, ["items", "nextCursor"], path)
       assert.equal(page.properties?.items.type, "array", path)

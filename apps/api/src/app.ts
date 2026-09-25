@@ -40,6 +40,7 @@ import { companyRoutes } from "./routes/company"
 import { containerRoutes } from "./routes/containers"
 import { customerRoutes } from "./routes/customers"
 import { depotRoutes } from "./routes/depots"
+import { driverRoutes } from "./routes/drivers"
 import { lifecycleRoutes } from "./routes/lifecycle"
 import { meRoutes } from "./routes/me"
 import { planningAreaRoutes } from "./routes/planning-areas"
@@ -55,6 +56,7 @@ import { unloadingStationRoutes } from "./routes/unloading-stations"
 import { userRoutes } from "./routes/users"
 import { vehicleAllocationRoutes } from "./routes/vehicle-allocations"
 import { vehicleTypeRoutes } from "./routes/vehicle-types"
+import { vehicleRoutes } from "./routes/vehicles"
 import { warehouseRoutes } from "./routes/warehouses"
 
 export type AppOptions = {
@@ -150,6 +152,8 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   app.route("/", depotRoutes(guard))
   app.route("/", unloadingStationRoutes(guard))
   app.route("/", vehicleAllocationRoutes(guard))
+  app.route("/", vehicleRoutes(guard))
+  app.route("/", driverRoutes(guard))
 
   app.get(
     "/openapi.json",
