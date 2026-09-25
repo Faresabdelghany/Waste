@@ -528,7 +528,7 @@ describe("the vehicle allocation endpoints", { skip: database.skip || owner.skip
       const freed = await allocate(body(day, "06:00", "10:00", { driverId: fleet.drivers.mads.id, trailerId: fleet.vehicles.trailer.id }))
       assert.notEqual(freed.id, created.id, "the vehicle, the driver and the trailer are free over the window again")
       assert.deepEqual((await refused(await command(freed.id, "release", {}), 400)).errors?.map((error) => error.path), ["reason"])
-      assert.deepEqual((await refused(await command(freed.id, "release", { reason: "x", note: "y" }), 400)).errors?.map((error) => error.path), [""], "a member the command does not take")
+      assert.deepEqual((await refused(await command(freed.id, "release", { reason: "x", note: "y" }), 400)).errors?.map((error) => error.path), ["note"], "a member the command does not take, told at the member (Issue #74)")
       assert.equal((await one(olivia, freed.id)).status, "planned", "nothing written by the refused bodies")
     })
 

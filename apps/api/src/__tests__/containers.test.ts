@@ -563,16 +563,20 @@ describe("the container and placement endpoints", { skip: database.skip || owner
       const held = await agreement("AGR-3446", a.projects.copenhagen.id, (await create(olivia, "/customers", { kind: "organisation", name: "Leaving Housing" }, Customer)).id)
       const demolished = await property(a.projects.copenhagen.id, "Demolished 1", "Demolished 1, 2100 København Ø")
       const served = await subscribeTo(held, (await product(a.projects.copenhagen.id, "Demolished collection", weekly.id)).id, demolished.id)
-      const standing = await place(await container("BIN-3446"), { subscriptionId: served.id })
+      // Stocked first, since a container is issued out of a warehouse (Issue #101), and labelled apart from the ledger tests' bins.
+      const into = await stocked("BIN-3470")
+      const standing = await place(into, { subscriptionId: served.id })
       await setStatus(olivia, `/properties/${demolished.id}`, "inactive")
 
-      const later = await container("BIN-3447")
+      const later = await stocked("BIN-3471")
       const problem = await refused(
         await olivia(`/containers/${later.id}/placements`, { method: "POST", body: { subscriptionId: served.id, wasteFractionId: residual.id, validFrom: JANUARY } }),
         409,
       )
       assert.equal(problem.detail, "The subscription's property is inactive; a placement needs an active property")
-      assert.equal((await patchPlacement(standing.id, { validTo: APRIL })).validTo, APRIL, "the placement already there is ended by its period; the status never reaches back to it")
+      // Ended through the container's return, the ledger's door out of service (Issue #101): the status never reaches back to it.
+      assert.equal((await returned(into, APRIL)).placementId, standing.id, "the placement already there is ended by its period, through the return")
+      assert.equal((await onePlacement(olivia, standing.id)).validTo, APRIL)
 
       const wrong = await refused(
         await olivia(`/containers/${later.id}/placements`, { method: "POST", body: { subscriptionId: served.id, wasteFractionId: testId(), validFrom: JANUARY } }),
@@ -585,16 +589,19 @@ describe("the container and placement endpoints", { skip: database.skip || owner
       const held = await agreement("AGR-3448", a.projects.copenhagen.id, (await create(olivia, "/customers", { kind: "organisation", name: "Bank Housing" }, Customer)).id)
       const bank = await point(a.projects.copenhagen.id, "Closing bank", "open")
       const served = await subscribeAtPoint(held, (await product(a.projects.copenhagen.id, "Bank collection", weekly.id)).id, bank.id)
-      const standing = await place(await container("BIN-3448"), { subscriptionId: served.id })
+      const into = await stocked("BIN-3472")
+      const standing = await place(into, { subscriptionId: served.id })
       await setStatus(olivia, `/shared-collection-points/${bank.id}`, "closed")
 
-      const later = await container("BIN-3449")
+      const later = await stocked("BIN-3473")
       const closed = await refused(
         await olivia(`/containers/${later.id}/placements`, { method: "POST", body: { subscriptionId: served.id, wasteFractionId: residual.id, validFrom: JANUARY } }),
         409,
       )
       assert.equal(closed.detail, "The subscription's shared collection point is closed; a placement needs an open or restricted point")
-      assert.equal((await patchPlacement(standing.id, { validTo: APRIL })).validTo, APRIL, "the placement already there is ended by its period; the status never reaches back to it")
+      // Ended through the container's return, the ledger's door out of service (Issue #101): the status never reaches back to it.
+      assert.equal((await returned(into, APRIL)).placementId, standing.id, "the placement already there is ended by its period, through the return")
+      assert.equal((await onePlacement(olivia, standing.id)).validTo, APRIL)
 
       await setStatus(olivia, `/shared-collection-points/${bank.id}`, "draft")
       const drafted = await refused(
@@ -602,7 +609,7 @@ describe("the container and placement endpoints", { skip: database.skip || owner
         409,
       )
       assert.equal(drafted.detail, "The subscription's shared collection point is draft; a placement needs an open or restricted point", "a place a subscription may not be made at is a place a container may not be placed at: one definition of served")
-      assert.equal((await patchPlacement(standing.id, { validTo: JULY })).validTo, JULY, "and the placement already there is still ended freely")
+      assert.equal((await patchPlacement(standing.id, { validTo: JULY })).validTo, JULY, "and the end of the placement already there is still corrected freely")
 
       await setStatus(olivia, `/shared-collection-points/${bank.id}`, "restricted")
       const again = await place(later, { subscriptionId: served.id, validFrom: JULY })

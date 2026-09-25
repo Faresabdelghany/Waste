@@ -128,7 +128,8 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
     const collection = await create(
       olivia,
       "/products",
-      { projectId: a.projects.copenhagen.id, name: "Residual collection", kind: "container-collection", unit: "pickup", serviceFrequencyId: weekly.id },
+      // Active, since a subscription needs an active product (routes/statuses.ts, Issue #79).
+      { projectId: a.projects.copenhagen.id, name: "Residual collection", kind: "container-collection", unit: "pickup", serviceFrequencyId: weekly.id, status: "active" },
       Product,
     )
     const property = async (name: string) => create(olivia, "/properties", { projectId: a.projects.copenhagen.id, name, address: `${name}, 2100 København Ø`, kind: "residential" }, Property)
