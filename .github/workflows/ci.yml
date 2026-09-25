@@ -113,3 +113,54 @@ jobs:
       - name: Container logs
         if: always()
         run: docker logs api || true
+
+  e2e:
+    name: End-to-end (web, Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # The browser Playwright drives, cached under the pinned @playwright/test
+      # version: a new Playwright wants a new Chromium build, nothing else
+      # does. On a hit only the system libraries Chromium links against are
+      # installed, since the cache holds the browser and not them.
+      - id: playwright
+        run: echo "version=$(node -p "require('./apps/web/package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        id: browser
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - if: steps.browser.outputs.cache-hit != 'true'
+        run: pnpm --filter @waste/web exec playwright install --with-deps chromium
+      - if: steps.browser.outputs.cache-hit == 'true'
+        run: pnpm --filter @waste/web exec playwright install-deps chromium
+
+      # The root tsconfig excludes e2e/, so `pnpm typecheck` in verify never
+      # sees a spec; this is the one type check the suite gets.
+      - run: pnpm typecheck:e2e
+
+      # The web app alone: the suite needs no database and no API (fixture
+      # data and localStorage; the one external service, OSRM, is stubbed
+      # per test and the tile servers are aborted). playwright.config.ts
+      # serves this build on port 3000 under CI, waits for it to answer, and
+      # runs the suite with two retries; locally there is no managed server.
+      - run: pnpm --filter @waste/web build
+      - run: pnpm test:e2e
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          retention-days: 14
+          if-no-files-found: ignore

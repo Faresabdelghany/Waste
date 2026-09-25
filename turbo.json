@@ -57,7 +57,11 @@
       ]
     },
     "test:e2e": {
-      "cache": false
+      "cache": false,
+      "env": [
+        "CI",
+        "PLAYWRIGHT_BASE_URL"
+      ]
     },
     "@waste/db#test": {
       "dependsOn": [
