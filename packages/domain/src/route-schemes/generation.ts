@@ -28,6 +28,15 @@
 //   and how far that moved since the scheme's last stamp (`containerDrift`,
 //   container-drift.ts) — a rule re-resolves against the container base on
 //   every run, so a shift past the threshold is said out loud, never silent.
+//   One-off edits (issue #38): a route a planner edited for one collection
+//   only carries the `thisCollectionOnly` marker and is left as edited by
+//   every later run — a refreshable one is a skip row, a cancelled one is not
+//   resurrected, a holiday that joined the list does not cancel it and neither
+//   does the unserved-date cleanup, since a one-off on a date the template
+//   does not plan is exactly the deviation asked for — until its date passes
+//   or a scheme edit applied to every future collection releases the marker
+//   (edit.ts). Deletion and an edit that invalidates the scheme still cancel
+//   it: future planning stopping is not a run reshaping.
 
 import { EMPTY_FACT } from "../record-values"
 import type { BusinessRecord } from "../prototype-record"
@@ -173,6 +182,70 @@ export function schemeVersionOf(scheme: BusinessRecord): string {
 /* -------------------------------- planning -------------------------------- */
 
 const REFRESHABLE_STATUSES = new Set(["Draft", "Planned"])
+
+/** A route generation may still reshape: Draft or Planned — nothing that has reached operations. */
+export const routeIsRefreshable = (route: BusinessRecord): boolean =>
+  REFRESHABLE_STATUSES.has(route.status)
+
+/* ------------------------ one-off edits (issue #38) ----------------------- */
+
+/**
+ * The deviation a route edited for one collection only shows, and the tail of
+ * the skip row's note when a later run leaves it alone.
+ */
+export const THIS_COLLECTION_ONLY_NOTE = "Edited for this collection only"
+
+/** True for a route a scheme edit wrote under "This collection only" (edit.ts) and nothing has released since. */
+export function routeEditedForThisCollectionOnly(route: BusinessRecord): boolean {
+  return route.submittedValues?.thisCollectionOnly === true
+}
+
+/**
+ * The one-off shape: the route as the edit's generation wrote it, carrying the
+ * `thisCollectionOnly` marker planSchemeGeneration honours and the deviation
+ * a route detail shows (routeDeviationNote) — after any holiday note, since
+ * both hold. Cancels take it too, so a collection group taken off one date is
+ * not put back by the next run.
+ */
+export function thisCollectionOnlyRoute(route: BusinessRecord): BusinessRecord {
+  const deviation = route.facts.Deviation?.trim()
+  return {
+    ...route,
+    facts: {
+      ...route.facts,
+      Deviation:
+        deviation && deviation !== "None"
+          ? `${deviation} · ${THIS_COLLECTION_ONLY_NOTE}`
+          : THIS_COLLECTION_ONLY_NOTE,
+    },
+    submittedValues: { ...route.submittedValues, thisCollectionOnly: true },
+  }
+}
+
+/**
+ * The scheme's routes with their one-off holds released, for a run that must
+ * reshape them — every hold for a scheme edit applied to every future
+ * collection, or the one date's for a new one-off on a date that already
+ * carries one (the later edit wins). A copy; other schemes' routes, unheld
+ * routes and, with a date given, other dates' routes come back as they are.
+ * The release only matters to the plan: a route the run then refreshes or
+ * resurrects is rewritten whole and loses the marker with it, and one the run
+ * leaves alone — outside the window, not planned — is not written and keeps it.
+ */
+export function releaseThisCollectionOnly(
+  schemeId: string,
+  routes: readonly BusinessRecord[],
+  serviceDate?: string,
+): BusinessRecord[] {
+  return routes.map((route) => {
+    if (stringValueOf(route, "schemeId") !== schemeId || !routeEditedForThisCollectionOnly(route)) {
+      return route
+    }
+    if (serviceDate !== undefined && stringValueOf(route, "serviceDate") !== serviceDate) return route
+    const { thisCollectionOnly: _released, ...submittedValues } = route.submittedValues ?? {}
+    return { ...route, submittedValues }
+  })
+}
 
 /** A record's submitted value as a non-empty string, else undefined. */
 export const stringValueOf = (
@@ -361,7 +434,10 @@ export function planSchemeGeneration(input: {
       const groupFields = groupFieldsOf(group)
 
       if (holidaySkip) {
-        if (existing && existing.status === "Planned") {
+        // A held one-off (issue #38) is left as edited here too: the planner
+        // decided this collection, and a holiday that joined the list since
+        // does not undo it.
+        if (existing && existing.status === "Planned" && !routeEditedForThisCollectionOnly(existing)) {
           routes.push({
             action: "cancel",
             routeId: existing.id,
@@ -385,7 +461,9 @@ export function planSchemeGeneration(input: {
             containerIds,
             ...groupFields,
             existing,
-            note: `${existing.status} — left untouched`,
+            note: routeEditedForThisCollectionOnly(existing)
+              ? `${existing.status} — ${THIS_COLLECTION_ONLY_NOTE.toLowerCase()}, left as edited`
+              : `${existing.status} — left untouched`,
             holidayNote: holidaySkip,
           })
         } else {
@@ -409,13 +487,19 @@ export function planSchemeGeneration(input: {
       // the scheme serves the date again — the holiday left the list, the
       // service day returned, the group is planned again — the route is
       // re-created. An operationally cancelled route (no marker) stays untouched.
+      // A route edited for one collection only (issue #38) is left as
+      // edited, whatever its refreshable status or generation-authored
+      // cancel says — the planner asked for exactly that — until its hold is
+      // released (releaseThisCollectionOnly) or its date passes.
+      const held = existing !== undefined && routeEditedForThisCollectionOnly(existing)
       const resurrect =
+        !held &&
         existing?.status === "Cancelled" &&
         existing.submittedValues?.cancelledByGeneration === true
       const action: PlannedRouteAction =
         !existing || resurrect
           ? "create"
-          : REFRESHABLE_STATUSES.has(existing.status)
+          : !held && REFRESHABLE_STATUSES.has(existing.status)
             ? "refresh"
             : "skip"
       const matchWarning = action === "skip" ? undefined : matchWarningFor(group, day)
@@ -435,7 +519,11 @@ export function planSchemeGeneration(input: {
         ...assignmentOf(group),
         ...(existing && !resurrect ? { existing } : {}),
         ...(action === "skip"
-          ? { note: `${existing?.status} — left untouched` }
+          ? {
+              note: held
+                ? `${existing?.status} — ${THIS_COLLECTION_ONLY_NOTE.toLowerCase()}, left as edited`
+                : `${existing?.status} — left untouched`,
+            }
           : {}),
         ...(holidayNote ? { holidayNote } : {}),
         ...(matchWarning ? { matchWarning } : {}),
@@ -452,6 +540,10 @@ export function planSchemeGeneration(input: {
     if (plannedIdentities.has(identity)) continue
     if (serviceDate < generationWindow.from || serviceDate > walkEnd) continue
     if (existing.status !== "Planned") continue
+    // A one-off the template does not plan is the deviation the planner
+    // asked for (issue #38) — a collection moved to another day, say — not a
+    // stale route; it stays until its hold is released.
+    if (routeEditedForThisCollectionOnly(existing)) continue
     routes.push({
       action: "cancel",
       routeId: existing.id,
@@ -658,7 +750,9 @@ export function pickupRemovedFromPlan(pickup: BusinessRecord): boolean {
  * [from, to] (`to` omitted = every future route) and whose status is
  * refreshable (Draft/Planned) are touched: Ready/Active/Completed routes,
  * cancels without the marker, and routes outside the bound are operational
- * reality or unjudged and stay exactly as stored.
+ * reality or unjudged and stay exactly as stored. A route edited for one
+ * collection only (issue #38) is cancelled like any other: its hold keeps a
+ * run from reshaping it, and future planning stopping is not a run.
  */
 export function cancelSchemeFutureRoutes(input: {
   schemeId: string
