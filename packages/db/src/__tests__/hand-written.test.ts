@@ -1,4 +1,4 @@
-// The three SQL helpers by their text, the derivation of what a table's
+// The five SQL helpers by their text, the derivation of what a table's
 // migration file must carry, and the gate that holds every table of the
 // schema to it (migrations/README.md). No database.
 //
@@ -14,14 +14,27 @@ import { is } from "drizzle-orm"
 import { pgTable, PgTable, text, uuid } from "drizzle-orm/pg-core"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
-import { id, tenant, timestamps, validity, validPeriod } from "../schema/columns"
+import { id, orderedWindow, recorded, tenant, timestamps, validity, validPeriod, window } from "../schema/columns"
 import { wms } from "../schema/wms"
+import { appendOnly } from "../sql/append-only"
 import { excludeOverlapping } from "../sql/exclude-overlapping"
-import { createsTable, createTableStatement, handWrittenStatements, missingHandWritten, overlapConstraintShape, statementsOf } from "../sql/hand-written"
+import { excludeOverlappingWindow } from "../sql/exclude-overlapping-window"
+import {
+  createsTable,
+  createTableStatement,
+  handWrittenStatements,
+  isLedger,
+  isReservation,
+  missingHandWritten,
+  overlapConstraintShape,
+  statementsOf,
+  windowConstraintShape,
+} from "../sql/hand-written"
 import { tenantFence } from "../sql/tenant-fence"
 import { touchUpdatedAt } from "../sql/touch-updated-at"
 
 const TABLE = '"wms"."specimen_hand_written"'
+const RESERVATION = '"wms"."specimen_reservation"'
 
 // An effective-dated record keyed by the container it concerns.
 const specimen = wms.table(
@@ -31,10 +44,20 @@ const specimen = wms.table(
 )
 // A current-state row: tenant and timestamps, no validity.
 const current = wms.table("specimen_current", { ...id, ...tenant, ...timestamps, note: text() })
-// A ledger: appended, never updated.
-const ledger = wms.table("specimen_ledger", { ...id, ...tenant, createdAt: timestamps.createdAt, note: text() })
+// A ledger: appended, never updated — the one stamp, no updated_at.
+const ledger = wms.table("specimen_ledger", { ...id, ...tenant, ...recorded, note: text() })
+// A reservation: a window on a clock with the ordered check, keyed by a vehicle and, where there is one, a driver.
+const reservation = wms.table(
+  "specimen_reservation",
+  { ...id, ...tenant, ...timestamps, ...window, vehicleId: uuid().notNull(), driverId: uuid(), status: text().notNull() },
+  (columns) => [orderedWindow(columns)],
+)
+// A snapshot of a reservation: the window columns copied into a ledger, no check, so not a reservation.
+const snapshot = wms.table("specimen_snapshot", { ...id, ...tenant, ...recorded, ...window, vehicleId: uuid().notNull() })
 
 const CONSTRAINT = `ALTER TABLE ${TABLE} ADD CONSTRAINT "specimen_hand_written_no_overlap" EXCLUDE USING gist ("company_id" WITH =, "container_id" WITH =, daterange("valid_from", "valid_to", '[)') WITH &&);`
+const WINDOW_RANGE = `tstzrange("planned_from", "planned_to", '[)') WITH &&)`
+const VEHICLE_CONSTRAINT = `ALTER TABLE ${RESERVATION} ADD CONSTRAINT "specimen_reservation_vehicle_no_overlap" EXCLUDE USING gist ("company_id" WITH =, "vehicle_id" WITH =, ${WINDOW_RANGE};`
 
 describe("excludeOverlapping", () => {
   test("one gist exclusion over company_id, the key, and the half-open date range, named <table>_no_overlap", () => {
@@ -105,17 +128,112 @@ describe("touchUpdatedAt", () => {
   })
 })
 
+describe("appendOnly", () => {
+  test("takes UPDATE and DELETE on the ledger back from the API role, and from nobody else", () => {
+    assert.deepEqual(appendOnly(ledger), [`REVOKE UPDATE, DELETE ON "wms"."specimen_ledger" FROM wms_api;`])
+  })
+
+  test("refuses a table with updated_at: its rows change, and a ledger's do not", () => {
+    assert.throws(() => appendOnly(specimen), /appendOnly: "wms"\."specimen_hand_written" has updated_at; a ledger spreads recorded, not timestamps, since its rows are never updated/)
+    assert.throws(() => appendOnly(current), /appendOnly: "wms"\."specimen_current" has updated_at/)
+  })
+})
+
+describe("excludeOverlappingWindow", () => {
+  test("one gist exclusion over company_id, the key and the half-open tstzrange, named by its key with a trailing _id dropped", () => {
+    assert.deepEqual(excludeOverlappingWindow(reservation, [reservation.vehicleId]), [VEHICLE_CONSTRAINT])
+  })
+
+  test("takes a predicate, so a released reservation frees its window and a null key stays out of the index", () => {
+    assert.deepEqual(excludeOverlappingWindow(reservation, [reservation.vehicleId], `"status" <> 'released'`), [
+      `${VEHICLE_CONSTRAINT.slice(0, -1)} WHERE ("status" <> 'released');`,
+    ])
+    assert.deepEqual(excludeOverlappingWindow(reservation, [reservation.driverId], `"driver_id" is not null and "status" <> 'released'`), [
+      `ALTER TABLE ${RESERVATION} ADD CONSTRAINT "specimen_reservation_driver_no_overlap" EXCLUDE USING gist ("company_id" WITH =, "driver_id" WITH =, ${WINDOW_RANGE} WHERE ("driver_id" is not null and "status" <> 'released');`,
+    ])
+    // A key of two columns is named by both.
+    assert.match(excludeOverlappingWindow(reservation, [reservation.vehicleId, reservation.status])[0], /"specimen_reservation_vehicle_status_no_overlap" EXCLUDE USING gist \("company_id" WITH =, "vehicle_id" WITH =, "status" WITH =, tstzrange/)
+  })
+
+  test("refuses a nullable key column without a predicate keeping its nulls out: a null never equals anything in an exclusion constraint", () => {
+    assert.throws(
+      () => excludeOverlappingWindow(reservation, [reservation.driverId]),
+      /excludeOverlappingWindow: "driver_id" is nullable; a null never equals anything in an exclusion constraint, so rows with a null there would overlap freely\. Make it NOT NULL, or keep them out of the index with a where of "driver_id" is not null\./,
+    )
+    assert.throws(() => excludeOverlappingWindow(reservation, [reservation.driverId], `"status" <> 'released'`), /"driver_id" is nullable/)
+  })
+
+  test("refuses a table without the window, without the orderedWindow check, or without company_id", () => {
+    assert.throws(() => excludeOverlappingWindow(current, [current.note]), /excludeOverlappingWindow: "wms"\."specimen_current" has no planned_from and planned_to; spread the window column set/)
+    assert.throws(
+      () => excludeOverlappingWindow(snapshot, [snapshot.vehicleId]),
+      /excludeOverlappingWindow: "wms"\."specimen_snapshot" has no "specimen_snapshot_window" check; add orderedWindow\(columns\) beside its columns, or an empty window would pass the constraint/,
+    )
+    const untenanted = wms.table("specimen_window_untenanted", { ...id, ...window, vehicleId: uuid().notNull() }, (columns) => [orderedWindow(columns)])
+    assert.throws(() => excludeOverlappingWindow(untenanted, [untenanted.vehicleId]), /excludeOverlappingWindow: "wms"\."specimen_window_untenanted" has no company_id; spread the tenant column set/)
+  })
+
+  test("refuses a column of another table, the window columns as key, and company_id named in the key, which leads it already", () => {
+    assert.throws(() => excludeOverlappingWindow(reservation, [current.note]), /excludeOverlappingWindow: column "note" is not a column of "wms"\."specimen_reservation"/)
+    assert.throws(() => excludeOverlappingWindow(reservation, [reservation.plannedTo]), /excludeOverlappingWindow: "planned_to" is the window, not the key/)
+    assert.throws(() => excludeOverlappingWindow(reservation, [reservation.companyId]), /excludeOverlappingWindow: "company_id" leads every key already; name the key beside it/)
+  })
+
+  test("refuses a constraint name Postgres would truncate", () => {
+    // 43 bytes: room for `_window` (50) and none for `_vehicle_no_overlap` (62)? 43 + 19 = 62 fits; 45 does not.
+    const name = `specimen_${"o".repeat(36)}`
+    const long = wms.table(name, { ...id, ...tenant, ...window, vehicleId: uuid().notNull() }, (columns) => [orderedWindow(columns)])
+    assert.throws(() => excludeOverlappingWindow(long, [long.vehicleId]), new RegExp(`excludeOverlappingWindow: "${name}_vehicle_no_overlap" is 64 bytes; Postgres would truncate it to 63 silently`))
+  })
+})
+
 describe("what a table's migration file must carry", () => {
-  test("the fence for every table, the trigger for a table with updated_at, the constraint's shape for an effective-dated one", () => {
+  test("the fence for every table, the trigger for a table with updated_at, the revoke for a ledger, the constraint's shape for an effective-dated one", () => {
     assert.deepEqual(handWrittenStatements(specimen), [...tenantFence(specimen), ...touchUpdatedAt(specimen)])
     assert.deepEqual(handWrittenStatements(current), [...tenantFence(current), ...touchUpdatedAt(current)])
-    assert.deepEqual(handWrittenStatements(ledger), tenantFence(ledger))
+    assert.deepEqual(handWrittenStatements(ledger), [...tenantFence(ledger), ...appendOnly(ledger)])
+    assert.deepEqual([isLedger(specimen), isLedger(current), isLedger(ledger), isLedger(snapshot)], [false, false, true, true])
     assert.deepEqual(overlapConstraintShape(specimen), {
       prefix: `ALTER TABLE ${TABLE} ADD CONSTRAINT "specimen_hand_written_no_overlap" EXCLUDE USING gist ("company_id" WITH =`,
       suffix: `daterange("valid_from", "valid_to", '[)') WITH &&);`,
     })
     assert.equal(overlapConstraintShape(current), undefined)
     assert.equal(createTableStatement(specimen), `CREATE TABLE ${TABLE} (`)
+  })
+
+  test("a reservation is a table with the window check; a snapshot of one is not, and neither is anything else", () => {
+    assert.deepEqual([isReservation(reservation), isReservation(snapshot), isReservation(specimen), isReservation(ledger)], [true, false, false, false])
+    assert.deepEqual(windowConstraintShape(reservation), { prefix: `ALTER TABLE ${RESERVATION} ADD CONSTRAINT "specimen_reservation_`, infix: WINDOW_RANGE })
+    assert.equal(windowConstraintShape(snapshot), undefined)
+    // Every constraint the window helper writes begins with the prefix and carries the range, whatever its key and predicate.
+    const { prefix, infix } = windowConstraintShape(reservation)!
+    for (const [statement] of [
+      excludeOverlappingWindow(reservation, [reservation.vehicleId]),
+      excludeOverlappingWindow(reservation, [reservation.driverId], `"driver_id" is not null`),
+      excludeOverlappingWindow(reservation, [reservation.vehicleId, reservation.status], `"status" <> 'released'`),
+    ]) {
+      assert.ok(statement.startsWith(prefix), statement)
+      assert.ok(statement.includes(infix), statement)
+    }
+  })
+
+  test("a reservation's file lacks the window constraint until one of the helper's shape is there, with any key and predicate", () => {
+    const [enable, policy] = tenantFence(reservation)
+    const [trigger] = touchUpdatedAt(reservation)
+    const withoutConstraint = [`CREATE TABLE ${RESERVATION} ();`, enable, policy, trigger].join("\n--> statement-breakpoint\n")
+    assert.deepEqual(missingHandWritten(reservation, withoutConstraint), [
+      `-- excludeOverlappingWindow(specimen_reservation, [...its key], where?) writes the exclusion constraint: ALTER TABLE ${RESERVATION} ADD CONSTRAINT "specimen_reservation_..._no_overlap" EXCLUDE USING gist ("company_id" WITH =, ..., ${WINDOW_RANGE}`,
+    ])
+    const [driverConstraint] = excludeOverlappingWindow(reservation, [reservation.driverId], `"driver_id" is not null and "status" <> 'released'`)
+    assert.deepEqual(missingHandWritten(reservation, `${withoutConstraint}\n--> statement-breakpoint\n${driverConstraint}`), [])
+    // A constraint of another table or over another range does not count.
+    const other = `ALTER TABLE "wms"."other" ADD CONSTRAINT "other_vehicle_no_overlap" EXCLUDE USING gist ("company_id" WITH =, "vehicle_id" WITH =, ${WINDOW_RANGE};`
+    assert.equal(missingHandWritten(reservation, `${withoutConstraint}\n--> statement-breakpoint\n${other}`).length, 1)
+    // A ledger's file is complete with its fence and its revoke, and a snapshot's window asks for nothing.
+    const [ledgerEnable, ledgerPolicy] = tenantFence(snapshot)
+    const [revoke] = appendOnly(snapshot)
+    assert.deepEqual(missingHandWritten(snapshot, [`CREATE TABLE "wms"."specimen_snapshot" ();`, ledgerEnable, ledgerPolicy, revoke].join("\n--> statement-breakpoint\n")), [])
+    assert.deepEqual(missingHandWritten(snapshot, [`CREATE TABLE "wms"."specimen_snapshot" ();`, ledgerEnable, ledgerPolicy].join("\n--> statement-breakpoint\n")), [revoke])
   })
 
   test("the shape is the helper's own spelling: every key the helper writes begins and ends with it", () => {
@@ -229,6 +347,20 @@ describe("the migrations carry every table's hand-written statements", () => {
       assert.equal(creating.length, 1, `${createTableStatement(table)} appears in ${creating.map((file) => file.name).join(", ") || "no migration"}`)
       const missing = missingHandWritten(table, creating[0].text)
       assert.deepEqual(missing, [], `${creating[0].name} lacks, below drizzle-kit's statements and each after a --> statement-breakpoint line:\n${missing.join("\n")}`)
+    }
+  })
+
+  test("the schema has exactly two ledgers and one reservation, and no ledger carries a trigger anywhere", async () => {
+    const all = await tables()
+    const ledgers = all.filter(isLedger).map((table) => createTableStatement(table))
+    assert.deepEqual(ledgers.sort(), ['CREATE TABLE "wms"."stock_movement" (', 'CREATE TABLE "wms"."vehicle_allocation_event" ('])
+    assert.deepEqual(
+      all.filter(isReservation).map((table) => createTableStatement(table)),
+      ['CREATE TABLE "wms"."vehicle_allocation" ('],
+    )
+    const text = (await migrations()).map((file) => file.text).join("\n")
+    for (const name of ["stock_movement", "vehicle_allocation_event"]) {
+      assert.equal(text.includes(`"${name}_touch_updated_at"`), false, `${name} has no updated_at to touch`)
     }
   })
 })

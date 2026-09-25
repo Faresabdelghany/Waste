@@ -25,6 +25,7 @@ import { API_ROLE } from "../roles"
 import { containerType, wasteFraction } from "../schema/catalogue"
 import { collectionCalendar, collectionCalendarHoliday } from "../schema/collection-calendars"
 import { container } from "../schema/containers"
+import { vehicleType } from "../schema/fleet-types"
 import { company, project, serviceProvider } from "../schema/organisation"
 import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "../schema/route-schemes"
@@ -52,6 +53,8 @@ const ids = (n: "a" | "b") => ({
   groupFraction: `018f7c2f-${n}000-7000-8000-00000000000e`,
   groupContainerType: `018f7c2f-${n}000-7000-8000-00000000000f`,
   groupContainer: `018f7c2f-${n}000-7000-8000-000000000010`,
+  /** Resources' vehicle type, which a rule names by id since 0007 (Issue #101). */
+  vehicleType: `018f7c2f-${n}000-7000-8000-000000000011`,
   /** Free for a test's own rows. */
   spare: `018f7c2f-${n}000-7000-8000-0000000000e1`,
   other: `018f7c2f-${n}000-7000-8000-0000000000e2`,
@@ -125,6 +128,7 @@ async function seed(tx: Tx, n: "a" | "b"): Promise<void> {
   await tx.insert(containerType).values({ id: own.containerType, companyId: own.company, name: "240 L bin", volumeLitres: 240 })
   await tx.insert(container).values({ id: own.container, companyId: own.company, projectId: own.project, label: "BIN-82014", containerTypeId: own.containerType, ownership: "company" })
   await tx.insert(serviceProvider).values({ id: own.serviceProvider, companyId: own.company, legalName: "NordRen ApS", registrationNumber: `4000000${n}`, country: "DK", contactName: "Lars Mikkelsen", contactEmail: `lars@${n}.example` })
+  await tx.insert(vehicleType).values({ id: own.vehicleType, companyId: own.company, key: "rear-loader", name: "Rear loader" })
   await tx.insert(planningArea).values({ id: own.planningArea, companyId: own.company, projectId: own.project, code: "OP-CEN-01", name: "Central", purpose: "route-planning" })
   await tx.insert(planningAreaBoundary).values({ id: own.boundary, companyId: own.company, projectId: own.project, validFrom: OPENED, planningAreaId: own.planningArea, boundary: SQUARE })
   await tx.insert(collectionCalendar).values({ id: own.calendar, companyId: own.company, projectId: own.project, validFrom: OPENED, validTo: "2027-01-01", name: "Copenhagen Central 2026" })
@@ -143,7 +147,7 @@ async function seed(tx: Tx, n: "a" | "b"): Promise<void> {
     status: "validated",
   })
   await tx.insert(collectionGroup).values([
-    { id: own.ruleGroup, companyId: own.company, projectId: own.project, routeSchemeId: own.scheme, name: "Rear loaders", position: 1, days: ["monday", "thursday"], stopSource: "rule", ruleVehicleType: "rear-loader", serviceProviderId: own.serviceProvider },
+    { id: own.ruleGroup, companyId: own.company, projectId: own.project, routeSchemeId: own.scheme, name: "Rear loaders", position: 1, days: ["monday", "thursday"], stopSource: "rule", ruleVehicleTypeId: own.vehicleType, serviceProviderId: own.serviceProvider },
     { id: own.manualGroup, companyId: own.company, projectId: own.project, routeSchemeId: own.scheme, name: "By hand", position: 2, days: ["monday"], stopSource: "manual" },
   ])
   await tx.insert(collectionGroupFraction).values({ id: own.groupFraction, companyId: own.company, projectId: own.project, collectionGroupId: own.ruleGroup, wasteFractionId: own.wasteFraction })
@@ -280,8 +284,12 @@ describe("the Planning tables against a fresh database", { skip: database.skip }
     assert.deepEqual(seenByB, { counts: ownRows, schemes: [b.scheme] })
   })
 
-  test("a group that names another company's fraction, container type or service provider is refused by the composite key (23503)", () =>
+  test("a group that names another company's fraction, container type, service provider or vehicle type is refused by the composite key (23503)", () =>
     seeded(async (tx) => {
+      await assert.rejects(
+        tx.transaction((savepoint) => savepoint.insert(collectionGroup).values(group({ ruleVehicleTypeId: b.vehicleType }))),
+        refusedWith("23503", /collection_group_rule_vehicle_type_id_fk/),
+      )
       await assert.rejects(
         tx.transaction((savepoint) => savepoint.insert(collectionGroupFraction).values({ id: a.spare, companyId: a.company, projectId: a.project, collectionGroupId: a.ruleGroup, wasteFractionId: b.wasteFraction })),
         refusedWith("23503", /collection_group_fraction_waste_fraction_id_fk/),
@@ -402,8 +410,9 @@ describe("the Planning tables against a fresh database", { skip: database.skip }
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(routeScheme).values(scheme({ frequency: "every-2-weeks", weekRotation: "third" }))), refusedWith("23514", /route_scheme_week_rotation_one_of/))
       await tx.insert(routeScheme).values(scheme({ frequency: "every-2-weeks", weekRotation: "even" }))
 
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(collectionGroup).values(group({ stopSource: "manual", ruleVehicleType: "rear-loader" }))), refusedWith("23514", /collection_group_rule_shape/))
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(collectionGroup).values(group({ ruleVehicleType: "side-loader" }))), refusedWith("23514", /collection_group_rule_vehicle_type_one_of/))
+      // The vehicle type is a row since 0007 (Issue #101), so a type nobody made is the key's refusal and not a check's.
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(collectionGroup).values(group({ stopSource: "manual", ruleVehicleTypeId: a.vehicleType }))), refusedWith("23514", /collection_group_rule_shape/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(collectionGroup).values(group({ ruleVehicleTypeId: a.spare }))), refusedWith("23503", /collection_group_rule_vehicle_type_id_fk/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(collectionGroup).values(group({ position: 0 }))), refusedWith("23514", /collection_group_position_positive/))
       // A rule group without a vehicle type asks for any; a manual one without one is the shape.
       await tx.insert(collectionGroup).values([group({}), group({ id: a.other, name: "Picked", stopSource: "manual", position: 3 })])
