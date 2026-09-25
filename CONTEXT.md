@@ -157,7 +157,7 @@ A presentation-only label-and-value line shown on a record in the prototype. The
 _Avoid_: Attribute (as a stored field), event, proof of service
 
 **Session**:
-A driver-app work session on an assigned route, tracking the driver's device state, connectivity, queued actions, and proof progress from assignment to completion.
+A driver-app work session on an assigned route, tracking the driver's device state, connectivity, queued actions, and proof progress from assignment to completion. It is created by starting an assigned Route and ended by ending it; a driver has one open Session at a time, and so does a Route.
 _Avoid_: Route, actual assignment, pickup
 
 **Scenario**:
@@ -173,7 +173,7 @@ The controlled process that turns an approved plan into production configuration
 _Avoid_: Save, publish draft
 
 **Proof of Service**:
-Evidence that work occurred, such as time, GPS, photo, weight, signature, or driver event.
+Evidence that work occurred, such as time, GPS, photo, weight, signature, or driver event. It is appended and never rewritten; a correction is a new row that names the outcome it replaces.
 _Avoid_: Route status, customer note
 
 **Unload**:
