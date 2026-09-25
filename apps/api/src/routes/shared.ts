@@ -46,6 +46,7 @@
 // Nothing here knows a table or a resource: what is not shared by every route
 // module stays in the one that owns it.
 import { Id } from "@waste/contracts/ids"
+import { providerShape } from "@waste/contracts/places"
 import type { Tx } from "@waste/db/client"
 import { and, eq, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
@@ -172,10 +173,11 @@ export type Refusal = { path: string; message: string }
  * what the thing is ("Not a container type of this company"). This runs the
  * lookup, always with `company_id`, and shapes the refusal — so the check a
  * product makes of its container type is the check a subscription will make
- * of its product and an agreement of its customer.
+ * of its product and an agreement of its customer. A `query` target refuses
+ * on the query string, for a list filter that names a row; a body on the body.
  */
-export async function requireRow(tx: Tx, table: TenantTable, row: NamedRow, refusal: Refusal): Promise<void> {
-  await answering(tx, table, table.id, row, refusal)
+export async function requireRow(tx: Tx, table: TenantTable, row: NamedRow, refusal: Refusal, target: "body" | "query" = "body"): Promise<void> {
+  await answering(tx, table, table.id, row, refusal, target)
 }
 
 /**
@@ -185,18 +187,24 @@ export async function requireRow(tx: Tx, table: TenantTable, row: NamedRow, refu
  * and a row that is not there is still the 400 above, before any 409. The
  * caller names the vocabulary the column's check holds the value to.
  */
-export async function requireStatus<Status extends string>(tx: Tx, table: StatusTable, row: NamedRow, refusal: Refusal): Promise<Status> {
-  return (await answering(tx, table, table.status, row, refusal)) as Status
+export async function requireStatus<Status extends string>(
+  tx: Tx,
+  table: StatusTable,
+  row: NamedRow,
+  refusal: Refusal,
+  target: "body" | "query" = "body",
+): Promise<Status> {
+  return (await answering(tx, table, table.status, row, refusal, target)) as Status
 }
 
 /** One column of the row a body named, or the refusal when there is no such row. */
-async function answering(tx: Tx, table: TenantTable, column: PgColumn, row: NamedRow, refusal: Refusal): Promise<unknown> {
+async function answering(tx: Tx, table: TenantTable, column: PgColumn, row: NamedRow, refusal: Refusal, target: "body" | "query"): Promise<unknown> {
   const [found] = await tx
     .select({ answer: column })
     .from(table)
     .where(and(eq(table.companyId, row.companyId), eq(table.id, row.id), row.also))
     .limit(1)
-  if (found === undefined) throw invalidRequest("body", [refusal])
+  if (found === undefined) throw invalidRequest(target, [refusal])
   return found.answer
 }
 
@@ -262,4 +270,21 @@ export async function refuseCheck<T>(sentences: Readonly<Record<string, Refusal>
     if (refusal === undefined) throw error
     throw invalidRequest("body", [refusal])
   }
+}
+
+// Resources, round A (Issue #101 review): the owning provider's shape, once.
+// A depot, an unloading station, a vehicle and a driver each name a service
+// provider exactly when their ownership (or a driver's employment) says so,
+// and each route held that against its stored row in its own lines. The
+// refusal has one shape here: the rule is the contracts' (`providerShape`,
+// @waste/contracts/places, which judges a half-seen pair as fine and leaves
+// it to the route to merge the stored row in), the path is always
+// `serviceProviderId`, and the sentence is the family's, since a depot's and
+// a driver's differ. routes/place-rules.ts runs the two places through it;
+// the fleet routes switch in the closing round.
+
+/** Holds a row as a write leaves it — `owner` its ownership or employment, `body` its provider — to the contracts' provider rule, refusing at `serviceProviderId` with the family's sentence. */
+export function requireProviderShape(owner: string, body: { serviceProviderId?: string | null }, sentence: string): void {
+  if (providerShape(owner, body)) return
+  throw invalidRequest("body", [{ path: "serviceProviderId", message: sentence }])
 }

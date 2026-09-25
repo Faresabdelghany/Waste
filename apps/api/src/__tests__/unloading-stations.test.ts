@@ -13,7 +13,7 @@ import { callingAs, type Call } from "./calls"
 import { nextMillisecond } from "./clock"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
-import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
+import { dropTenant, grantRole, seedCompanyWithoutProjects, seedTenant, testId, type Tenant } from "./tenant"
 import { signingKeys, type SigningKeys } from "./tokens"
 
 const database = databaseUnderTest()
@@ -199,6 +199,18 @@ describe("the unloading station endpoints", { skip: database.skip }, () => {
       assert.equal(theirs.code, "ARC-VEST", "a code is one station's inside a company, and free in the next")
     })
 
+    test("lets an account granted every project register a station while the company has no project yet: the grant, not the count, reaches a station", async () => {
+      const bare = await seedCompanyWithoutProjects(pool)
+      try {
+        const alone = callingAs(app, keys, bare.users.olivia, bare.companyId)
+        const created = await create(alone, "/unloading-stations", body("ARC-FIRST"), UnloadingStation)
+        assert.deepEqual((await page(alone, "?limit=200")).items.map((row) => row.id), [created.id], "and reads it back")
+        assert.deepEqual(await one(alone, created.id), created)
+      } finally {
+        await dropTenant(pool, bare.companyId)
+      }
+    })
+
     test("refuses an account that works in no project of the company, whatever its grant, with the rule as a 403", async () => {
       const problem = await refused(await lars("/unloading-stations", { method: "POST", body: body("ARC-LARS") }), 403)
       assert.equal(problem.detail, REACHES_NO_STATION)
@@ -244,8 +256,13 @@ describe("the unloading station endpoints", { skip: database.skip }, () => {
       assert.ok(!glassOnly.includes(takesResidual.id), "a station that does not accept the fraction is not listed")
       const residualToo = (await page(olivia, `?limit=200&wasteFractionId=${residual.id}`)).items.map((row) => row.id)
       assert.ok(residualToo.includes(takesGlass.id) && residualToo.includes(takesResidual.id))
-      assert.deepEqual((await page(olivia, `?limit=200&wasteFractionId=${testId()}`)).items, [], "a fraction nobody accepts lists nothing")
+      const unaccepted = await create(olivia, "/waste-fractions", { key: "textiles", name: "Textiles" }, WasteFraction)
+      assert.deepEqual((await page(olivia, `?limit=200&wasteFractionId=${unaccepted.id}`)).items, [], "a fraction nobody accepts lists nothing")
       assert.deepEqual(paths(await refused(await olivia("/unloading-stations?wasteFractionId=not-an-id"), 400)), ["wasteFractionId"])
+      // The filter is held to a fraction of this company, like the containers list's warehouse: a fraction nobody minted, or another company's, is a 400 on the query and not an empty page.
+      const notAFraction = [{ path: "wasteFractionId", message: "Not a waste fraction of this company" }]
+      assert.deepEqual((await refused(await olivia(`/unloading-stations?wasteFractionId=${testId()}`), 400)).errors, notAFraction)
+      assert.deepEqual((await refused(await olivia(`/unloading-stations?wasteFractionId=${theirFraction.id}`), 400)).errors, notAFraction)
     })
 
     test("is the company's: an account that works in one project reads every station, and one that works in none reads an empty page", async () => {

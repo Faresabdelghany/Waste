@@ -11,8 +11,10 @@
 // it carries no `projectId` anywhere. A depot and a station are always
 // located — a route departs from a point and empties at one — and a
 // warehouse is registered before it is geocoded, so its point is nullable
-// like a property's. The `code` of each is the stable reference a person
-// quotes and is set once, like a planning area's.
+// like a property's. Every point is a `FlatPoint` (geojson.ts), since the
+// column is flat and a third ordinate is a 400 here rather than PostGIS's
+// 22023. The `code` of each is the stable reference a person quotes and is
+// set once, like a planning area's.
 //
 // Two shape rules run through the depot and the station, spelled once each
 // with their sentences so the routes can refuse a patch, which carries half
@@ -30,7 +32,7 @@
 import * as z from "zod"
 
 import { IsoTime } from "./dates"
-import { Point } from "./geojson"
+import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { ProjectScopedListQuery } from "./queries"
@@ -89,7 +91,7 @@ export const Warehouse = z.object({
   /** The address as one text; a structured address arrives with the address lookup (#77). */
   address: Paragraph,
   /** Geocoded, null until it is. */
-  location: Point.nullable(),
+  location: FlatPoint.nullable(),
   /** The depot this warehouse shares a yard with, if any. */
   depotId: Id.nullable(),
   status: WarehouseStatus,
@@ -102,7 +104,7 @@ export const WarehouseCreate = z.strictObject({
   code: Label,
   name: Label,
   address: Paragraph,
-  location: Point.nullable().optional(),
+  location: FlatPoint.nullable().optional(),
   depotId: Id.nullable().optional(),
   status: WarehouseStatus.default("active").describe("Defaults to active when absent: a warehouse is registered because stock already moves through it."),
   notes: Paragraph.nullable().optional(),
@@ -114,7 +116,7 @@ export const WarehousePatch = z
   .strictObject({
     name: Label.optional(),
     address: Paragraph.optional(),
-    location: Point.nullable().optional(),
+    location: FlatPoint.nullable().optional(),
     depotId: Id.nullable().optional(),
     status: WarehouseStatus.optional(),
     notes: Paragraph.nullable().optional(),
@@ -130,7 +132,7 @@ export const Depot = z.object({
   name: Label,
   address: Paragraph,
   /** A route departs from a point, so a depot is always located. */
-  location: Point,
+  location: FlatPoint,
   ownership: DepotOwnership,
   /** The owning provider, given exactly with service-provider ownership. */
   serviceProviderId: Id.nullable(),
@@ -150,7 +152,7 @@ export const DepotCreate = z
     code: Label,
     name: Label,
     address: Paragraph,
-    location: Point,
+    location: FlatPoint,
     ownership: DepotOwnership.default("company").describe("Defaults to company when absent: a depot the company runs is the common case; a provider's names its provider."),
     serviceProviderId: Id.nullable().optional(),
     opensAt: IsoTime.nullable().optional(),
@@ -168,7 +170,7 @@ export const DepotPatch = z
   .strictObject({
     name: Label.optional(),
     address: Paragraph.optional(),
-    location: Point.optional(),
+    location: FlatPoint.optional(),
     ownership: DepotOwnership.optional(),
     serviceProviderId: Id.nullable().optional(),
     opensAt: IsoTime.nullable().optional(),
@@ -196,7 +198,7 @@ export const UnloadingStation = z.object({
   name: Label,
   address: Paragraph,
   /** A route empties at a point, so a station is always located. */
-  location: Point,
+  location: FlatPoint,
   ownership: UnloadingStationOwnership,
   serviceProviderId: Id.nullable(),
   opensAt: IsoTime.nullable(),
@@ -216,7 +218,7 @@ export const UnloadingStationCreate = z
     code: Label,
     name: Label,
     address: Paragraph,
-    location: Point,
+    location: FlatPoint,
     ownership: UnloadingStationOwnership,
     serviceProviderId: Id.nullable().optional(),
     opensAt: IsoTime.nullable().optional(),
@@ -236,7 +238,7 @@ export const UnloadingStationPatch = z
   .strictObject({
     name: Label.optional(),
     address: Paragraph.optional(),
-    location: Point.optional(),
+    location: FlatPoint.optional(),
     ownership: UnloadingStationOwnership.optional(),
     serviceProviderId: Id.nullable().optional(),
     opensAt: IsoTime.nullable().optional(),

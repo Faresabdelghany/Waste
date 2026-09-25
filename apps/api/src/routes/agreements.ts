@@ -173,9 +173,10 @@ const OUTSIDE_AGREEMENT = "Outside the agreement's period"
 /** "it" or "them": the sentence has just counted the rows, so the pronoun follows the count. */
 const them = (rows: number) => (rows === 1 ? "it" : "them")
 
-/** What a period a child does not fit inside is refused with; the rows in the way are not in the body, so the caller ends them first. */
+/** What a period a child does not fit inside is refused with; the rows in the way are not in the body, so the caller ends them first — a placement through the ledger's commands, since a form does not end one (Issue #101). */
 const strandedSubscriptions = (rows: number) => `${count(rows, "subscription")} would fall outside the agreement's period; end ${them(rows)} first`
-const strandedPlacements = (rows: number) => `${count(rows, "placement")} would fall outside the subscription's period; end ${them(rows)} first`
+const strandedPlacements = (rows: number) =>
+  `${count(rows, "placement")} would fall outside the subscription's period; end ${them(rows)} first through the container's return or decommission`
 
 const noSuchAgreement = (id: string) => problem(404, { detail: `No agreement ${id} in the projects this account works in` })
 const noSuchSubscription = (id: string) => problem(404, { detail: `No subscription ${id} in the projects this account works in` })
@@ -568,7 +569,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchSubscription",
         summary: "Change a subscription",
         description:
-          "Changes the quantity or the period of one subscription; every field is optional and at least one must be given. The product and the place do not change: a subscription that moves is a subscription that ended and another that began, which is what the period is for. A new period is held to three rules — the end still comes after the start, it still lies inside the agreement's (400 naming the bound), and it still contains every placement of the subscription, a shortening that would strand one being refused (409) so the placements are ended first — and it may not overlap another subscription of the same product at the same place under the agreement.",
+          "Changes the quantity or the period of one subscription; every field is optional and at least one must be given. The product and the place do not change: a subscription that moves is a subscription that ended and another that began, which is what the period is for. A new period is held to three rules — the end still comes after the start, it still lies inside the agreement's (400 naming the bound), and it still contains every placement of the subscription, an open placement included, a shortening that would strand one being refused (409) so the containers are returned or decommissioned first, which is how a placement ends (`POST /containers/{id}/return`, `/decommission`) — and it may not overlap another subscription of the same product at the same place under the agreement.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The subscription as it now stands.", Subscription),
@@ -578,7 +579,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.agreements`."),
           404: describeProblem("No subscription with that id in the projects this account works in."),
-          409: describeProblem("Placements of the subscription would fall outside the new period, or the agreement already subscribes to that product at that place over part of it."),
+          409: describeProblem("Placements of the subscription would fall outside the new period (end them through the container's return or decommission first), or the agreement already subscribes to that product at that place over part of it."),
         },
       }),
       guard,

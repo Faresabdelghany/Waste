@@ -28,7 +28,9 @@
 //
 // A Property's `location` is the first point this system stores rather than
 // derives: it is null until the address is geocoded. A Shared Collection
-// Point's is not nullable — the place is the record.
+// Point's is not nullable — the place is the record. Both are `FlatPoint`
+// (geojson.ts): the column is `geometry(Point, 4326)`, flat, so a third
+// ordinate is refused here at `coordinates` and never by PostGIS as a 500.
 import {
   CUSTOMER_KINDS,
   CUSTOMER_STATUSES,
@@ -47,7 +49,7 @@ import {
 } from "@waste/domain/registry/vocabulary"
 import * as z from "zod"
 
-import { Point } from "./geojson"
+import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
 import { changesSomething, PositiveInt, somethingToChange, stamped } from "./resource"
@@ -195,7 +197,7 @@ export const Property = z.object({
   registryId: Label.nullable(),
   kind: PropertyKind,
   /** Geocoded, null until it is. */
-  location: Point.nullable(),
+  location: FlatPoint.nullable(),
   notes: Paragraph.nullable(),
   status: PropertyStatus,
   /** Who the property's customers are and as what; replaced whole through its own route. */
@@ -210,7 +212,7 @@ export const PropertyCreate = z
     address: Paragraph,
     registryId: Label.nullable().optional(),
     kind: PropertyKind,
-    location: Point.nullable().optional(),
+    location: FlatPoint.nullable().optional(),
     notes: Paragraph.nullable().optional(),
     status: PropertyStatus.default("active").describe("Defaults to active when absent: a property is registered in order to be served."),
     parties: PartiesBody.default([]).describe("The parties the property starts with; none when absent."),
@@ -225,7 +227,7 @@ export const PropertyPatch = z
     address: Paragraph.optional(),
     registryId: Label.nullable().optional(),
     kind: PropertyKind.optional(),
-    location: Point.nullable().optional(),
+    location: FlatPoint.nullable().optional(),
     notes: Paragraph.nullable().optional(),
     status: PropertyStatus.optional(),
   })
@@ -320,7 +322,7 @@ export const SharedCollectionPoint = z.object({
   kind: SharedCollectionPointKind,
   address: Paragraph,
   /** The place is the record, so the point is always located. */
-  location: Point,
+  location: FlatPoint,
   /** How far a Property may be and still be served here. */
   eligibilityDistanceM: Metres.nullable(),
   operatingModel: SharedCollectionPointOperatingModel,
@@ -342,7 +344,7 @@ export const SharedCollectionPointCreate = z
     name: Label,
     kind: SharedCollectionPointKind,
     address: Paragraph,
-    location: Point,
+    location: FlatPoint,
     eligibilityDistanceM: Metres.nullable().optional(),
     operatingModel: SharedCollectionPointOperatingModel,
     accessMode: SharedCollectionPointAccessMode,
@@ -361,7 +363,7 @@ export const SharedCollectionPointPatch = z
     name: Label.optional(),
     kind: SharedCollectionPointKind.optional(),
     address: Paragraph.optional(),
-    location: Point.optional(),
+    location: FlatPoint.optional(),
     eligibilityDistanceM: Metres.nullable().optional(),
     operatingModel: SharedCollectionPointOperatingModel.optional(),
     accessMode: SharedCollectionPointAccessMode.optional(),

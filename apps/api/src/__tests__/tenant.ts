@@ -182,6 +182,44 @@ export async function seedTenant(pool: Database): Promise<Tenant> {
   return tenant
 }
 
+/** A company with no project yet: its administrator, and nothing else to seed. */
+export type BareTenant = { companyId: string; roles: { administrator: { id: string } }; users: { olivia: Account } }
+
+/**
+ * A company that has registered no project, for the one rule that turns on
+ * it (Issue #101, review round A): an account granted every project reaches
+ * what serves every project — an unloading station — before the company has
+ * its first project, since `allProjects` is a grant and not a count
+ * (routes/unloading-stations.ts). Olivia is seeded as in `seedTenant`, on
+ * the administrator charter, `allProjects` and primary. Drop it with
+ * `dropTenant` like any tenant.
+ */
+export async function seedCompanyWithoutProjects(pool: Database): Promise<BareTenant> {
+  const companyId = testId()
+  const slug = randomBytes(4).toString("hex")
+  const tenant: BareTenant = {
+    companyId,
+    roles: { administrator: { id: testId() } },
+    users: { olivia: { id: testId(), authUserId: randomUUID(), email: `olivia.larsen@${slug}.example`, fullName: "Olivia Larsen" } },
+  }
+  await withCompany(pool.db, companyId, async (tx) => {
+    await tx.insert(company).values({
+      id: companyId,
+      companyId,
+      name: `Test Company ${slug}`,
+      legalName: `Test Company ${slug} A/S`,
+      registrationNumber: String(randomInt(10_000_000, 100_000_000)),
+      country: "DK",
+      status: "active",
+    })
+    await tx.insert(role).values({ id: tenant.roles.administrator.id, companyId, key: "company-administrator", name: "Company Administrator", scope: "Company", description: "Everything in the company", system: true })
+    const { olivia } = tenant.users
+    await tx.insert(userAccount).values({ id: olivia.id, companyId, authUserId: olivia.authUserId, email: olivia.email, fullName: olivia.fullName, roleId: tenant.roles.administrator.id, allProjects: true, primaryAdministrator: true })
+    await tx.insert(roleGrant).values(grantRows(companyId, tenant.roles.administrator.id, charter("company-administrator")))
+  })
+  return tenant
+}
+
 /**
  * Grants a seeded role rows beyond its charter, the way a company does when
  * it edits the permission matrix. A route test of a context the seeded

@@ -18,15 +18,19 @@
 // neither — an overnight window, 22:00 to 05:00, is two times and allowed.
 // The contracts hold a create body to both, since it carries the whole
 // picture, and hold a patch only where it carries both halves; the route holds
-// the patch against the stored row for the rest, in the contracts' words, so a
-// rule a client can fix never reaches the table's checks as a 500. The
-// provider named is this company's (400 on `serviceProviderId`).
+// the patch against the stored row for the rest, in the contracts' words,
+// under the row's lock taken before the read (two patches of one depot would
+// otherwise both pass), and the table's two checks answer in the same words
+// through `refuseCheck` should one get past, so a rule a client can fix never
+// reaches a client as a 500. The provider named is this company's (400 on
+// `serviceProviderId`).
 //
 // The hours are `time` columns on the project's clock, `HH:MM:SS` in Postgres
 // and `HH:MM` on the wire through `timeOf` (routes/shared.ts), as a scheme's
 // planned start is. The point goes in and comes back as GeoJSON through the
-// column type; a point off the globe is the contracts' 400 at the ordinate,
-// and `depot_location_valid` stands behind that through `refuseCheck`.
+// column type; a point off the globe or with a third ordinate is the
+// contracts' 400 at the coordinates (`FlatPoint`), and `depot_location_valid`
+// stands behind that through `refuseCheck`.
 //
 // The rest is the shape every project-scoped family has: each statement
 // carries the tenant and `inProjects` (auth/projects.ts), a create names a
@@ -35,6 +39,7 @@
 // each collision with its own sentence. The grant is `resources.depots`,
 // which the unloading stations share (#101 §6.22: one module key, two
 // families).
+import type { FlatPoint } from "@waste/contracts/geojson"
 import { Page } from "@waste/contracts/pagination"
 import { Depot, DepotCreate, DepotListQuery, DepotPatch } from "@waste/contracts/places"
 import type { DepotOwnership, DepotStatus } from "@waste/contracts/resources"
@@ -50,9 +55,9 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { hourOf, pointInvalid, requirePlaceShape } from "./place-rules"
+import { hourOf, placeShapeInvalid, pointInvalid, requirePlaceShape } from "./place-rules"
 import { requireServiceProvider } from "./references"
-import { describeJson, IdParam, refuseCheck, refuseDuplicate, stampsOf } from "./shared"
+import { describeJson, IdParam, lockRow, refuseCheck, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "resources.depots"
 const DepotPage = Page(Depot)
@@ -77,7 +82,7 @@ const columns = {
 
 type Row = Pick<typeof depot.$inferSelect, keyof typeof columns>
 
-/** The row on the wire. The two coded fields are text with a CHECK in the database and an enum here; the hours drop Postgres's seconds. */
+/** The row on the wire. The two coded fields are text with a CHECK in the database and an enum here; the hours drop Postgres's seconds; the point is the contracts' `FlatPoint`, since the column is flat and refuses a third ordinate on write, however the column's type spells the altitude as optional. */
 function depotOf(row: Row): Depot {
   return {
     id: row.id,
@@ -85,7 +90,7 @@ function depotOf(row: Row): Depot {
     code: row.code,
     name: row.name,
     address: row.address,
-    location: row.location,
+    location: row.location as FlatPoint,
     ownership: row.ownership as DepotOwnership,
     serviceProviderId: row.serviceProviderId,
     opensAt: hourOf(row.opensAt),
@@ -105,6 +110,9 @@ const nameTaken = (name: string) => `This project already has a depot called ${J
 
 /** `CHECK (st_isvalid(location) and not st_isempty(location) and <WGS 84>)`: the one check only the database runs on the point. */
 const LOCATION_INVALID = "depot_location_valid"
+
+/** Every check the table runs that a body can be told about: the point, and the two shape rules behind `requirePlaceShape`. */
+const CHECKS = { ...pointInvalid(LOCATION_INVALID), ...placeShapeInvalid("depot") }
 
 const noSuchDepot = (id: string) => problem(404, { detail: `No depot ${id} in the projects this account works in` })
 
@@ -190,7 +198,7 @@ export function depotRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const principal = c.get("principal")
         requireProject(principal, values.projectId)
         await requireServiceProvider(tx, principal.companyId, values.serviceProviderId)
-        const [row] = await refuseCheck(pointInvalid(LOCATION_INVALID), () =>
+        const [row] = await refuseCheck(CHECKS, () =>
           refuseDuplicate({ [CODE_TAKEN]: codeTaken(values.code), [NAME_TAKEN]: nameTaken(values.name) }, () =>
             tx
               .insert(depot)
@@ -256,15 +264,20 @@ export function depotRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const principal = c.get("principal")
 
-        // The row first, then what the patch points at and what it leaves
-        // behind: an id nobody minted is a 404 here as in every other family.
+        // The row's lock, then the row, then what the patch points at and
+        // what it leaves behind: the shape rules are held against the stored
+        // row, and two patches of one depot each read and then write, so the
+        // lock makes the second read what the first wrote (routes/shared.ts).
+        // An id nobody minted locks nothing and is a 404 here as in every
+        // other family.
+        await lockRow(tx, depot, { companyId: principal.companyId, id })
         const current = await findDepot(tx, principal, id)
         if (current === undefined) throw noSuchDepot(id)
         await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)
         requirePlaceShape(current, patch)
 
         const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
-        const [row] = await refuseCheck(pointInvalid(LOCATION_INVALID), () =>
+        const [row] = await refuseCheck(CHECKS, () =>
           refuseDuplicate(sentences, () =>
             tx
               .update(depot)

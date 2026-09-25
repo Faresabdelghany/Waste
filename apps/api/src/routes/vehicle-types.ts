@@ -29,9 +29,10 @@
 // query, a create may carry the set it starts with, a patch never touches it,
 // and the PUT replaces it whole, the type's own row stamped first so
 // `updatedAt` moves. Every id is a container type of this company (400 at
-// `containerTypeIds.N`, the singular check's sentence), and an empty set is a
-// type no typed rule matches through — the prototype's "no compatibility
-// profile → excluded with a reason", kept.
+// `containerTypeIds.N`, the singular check's sentence), a create and the PUT
+// answer the set they were given in read order rather than reading it back
+// (`asRead`), and an empty set is a type no typed rule matches through — the
+// prototype's "no compatibility profile → excluded with a reason", kept.
 import { Page } from "@waste/contracts/pagination"
 import { VehicleType, VehicleTypeContainerTypesSet, VehicleTypeCreate, VehicleTypeListQuery, VehicleTypePatch } from "@waste/contracts/vehicle-types"
 import type { Tx } from "@waste/db/client"
@@ -46,7 +47,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet } from "./id-sets"
+import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet } from "./id-sets"
 import { requireContainerType } from "./references"
 import { describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
 
@@ -182,7 +183,8 @@ export function vehicleTypeRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .returning(columns),
         )
         await writeIds(tx, containerTypes, { companyId: principal.companyId, id: row.id }, containerTypeIds)
-        return c.json(await typeWithContainerTypes(tx, principal.companyId, row), 201)
+        // The set just written is known — held to the company, each id once — so it is answered in read order and not read back.
+        return c.json(typeOf(row, asRead(containerTypeIds)), 201)
       },
     )
     .get(
@@ -286,7 +288,7 @@ export function vehicleTypeRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .returning(columns),
         )
         if (row === undefined) throw noSuchType(id)
-        return c.json(await typeWithContainerTypes(tx, principal.companyId, row))
+        return c.json(typeOf(row, asRead(containerTypeIds)))
       },
     )
 }

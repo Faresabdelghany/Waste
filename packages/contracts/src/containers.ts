@@ -25,14 +25,17 @@
 // command grows into) and the project is the container's, so a create body
 // names neither.
 //
-// The patch moves the end of the period, corrects the fraction and changes
-// the override; it does not move `validFrom` and does not change the
-// subscription. A placement that starts on another day or serves another
-// subscription is another placement, and the database's exclusion constraint
-// — one container in service in one place at a time — is what makes that the
-// honest way to say it. Whether the new end still lies inside the
-// subscription's period is the route's question, since this schema cannot see
-// the stored row.
+// The end of a placement is the ledger's (Issue #101): a create names the
+// first day only, since a container leaves service through the `return` or
+// `decommission` command, which ends the placement and appends the movement
+// together, and a patch corrects the end of a placement that already has one,
+// corrects the fraction and changes the override. Neither moves `validFrom`
+// or changes the subscription: a placement that starts on another day or
+// serves another subscription is another placement, and the database's
+// exclusion constraint — one container in service in one place at a time — is
+// what makes that the honest way to say it. Whether a corrected end still lies
+// inside the subscription's period is the route's question, since this schema
+// cannot see the stored row.
 import { CONTAINER_OWNERSHIPS } from "@waste/domain/registry/vocabulary"
 import * as z from "zod"
 
@@ -43,7 +46,7 @@ import { changesSomething, somethingToChange, stamped } from "./resource"
 import { AssetStatus } from "./resources"
 import { AssetState } from "./stock"
 import { Label, Paragraph } from "./text"
-import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
+import { endsAfterItStarts, Validity, validityOrdered } from "./validity"
 
 /** Whose Container it is; `unrecorded` is what an imported registry usually says. */
 export const ContainerOwnership = z.enum(CONTAINER_OWNERSHIPS)
@@ -112,26 +115,27 @@ export type ContainerServicePlacement = z.infer<typeof ContainerServicePlacement
  * `issue` command of the Stock Movement ledger (Issue #101, ADR-0003: one
  * action, one command), so it also says what the movement it appends may:
  * when the container was issued and what paper it quotes. Neither is a column
- * of the placement.
+ * of the placement. There is no `validTo`: a placement ends only through the
+ * container's `return` or `decommission`, which end it and append the
+ * movement together, so the strict object refuses the member by name.
  */
-export const ContainerServicePlacementCreate = z
-  .strictObject({
-    subscriptionId: Id,
-    wasteFractionId: Id,
-    serviceFrequencyId: Id.nullable().optional(),
-    ...ValidityCreate,
-    /** When the container was issued, on the person's word; the request's clock when absent. The issue movement's, never the placement's. */
-    occurredAt: IsoDateTime.optional(),
-    /** A delivery note or a ticket the issue quotes; the movement's. */
-    reference: Label.optional(),
-  })
-  .refine(validityOrdered, endsAfterItStarts)
+export const ContainerServicePlacementCreate = z.strictObject({
+  subscriptionId: Id,
+  wasteFractionId: Id,
+  serviceFrequencyId: Id.nullable().optional(),
+  /** The first day the container serves here; the end is the ledger's to set. */
+  validFrom: IsoDate,
+  /** When the container was issued, on the person's word; the request's clock when absent. The issue movement's, never the placement's. */
+  occurredAt: IsoDateTime.optional(),
+  /** A delivery note or a ticket the issue quotes; the movement's. */
+  reference: Label.optional(),
+})
 export type ContainerServicePlacementCreate = z.infer<typeof ContainerServicePlacementCreate>
 
-/** Ending a placement is giving it a `validTo`; a placement that starts on another day or serves another subscription is another placement. */
+/** Corrects a placement the ledger has already ended, its fraction or its override; a placement that starts on another day or serves another subscription is another placement. */
 export const ContainerServicePlacementPatch = z
   .strictObject({
-    /** Null takes the end off again, while the container is still in service there. */
+    /** A corrected end for a placement that already has one. The route refuses an end on an open placement and null on an ended one (409 each): the container's `return` or `decommission` sets the end, and the ledger's word on when it left is not taken back by a form. */
     validTo: IsoDate.nullable().optional(),
     wasteFractionId: Id.optional(),
     serviceFrequencyId: Id.nullable().optional(),

@@ -2,9 +2,10 @@
 // `GET /containers` lists them, `POST /containers` registers one,
 // `GET`/`PATCH /containers/:id` read and correct one,
 // `POST /containers/:id/placements` puts one into service, and
-// `GET /placements`, `GET`/`PATCH /placements/:id` answer and end the service
-// itself. No delete: a container that has been collected from is behind
-// pickups and tickets, and taking one out of service is ending its placement.
+// `GET /placements`, `GET`/`PATCH /placements/:id` answer and correct the
+// service itself. No delete: a container that has been collected from is
+// behind pickups and tickets, and taking one out of service is a command of
+// the ledger (routes/lifecycle.ts), never a form.
 //
 // A Container carries no status and no location of its own. An editable
 // asset state is the option ADR-0003 rejected: whether a container is in
@@ -32,28 +33,32 @@
 // The container is the path's and the project is the container's, so the body
 // names neither.
 //
-// `POST /containers/:id/placements` is the `issue` command of the ledger
-// (#101's seam into the Registry): one action, one command, and this route
-// stays the only door into service. It hands `move` (routes/lifecycle.ts) the
-// placement's statements as the Registry half of the movement: `move` takes
-// the container's row lock, reads its state, refuses a container that is not
-// in a warehouse or in maintenance (409 naming the state — no record, in
-// service at another placement, retired), then runs `open`, which locks the
-// subscription, holds the period inside it and writes the placement as
-// before, and appends the `issue` movement from the warehouse the container
-// stood in, `placement_id` the new row's. Either both rows exist or neither.
-// The body's references are held before the ledger is consulted — a
-// subscription of another project, a fraction of another company — so a body
-// that names nothing real is a 400 whatever the container's state, and the
-// subscription's period is read again under its lock inside `open`, since a
-// read before the lock only says which subscription to lock. `occurredAt` and
-// `reference` on the body are the movement's and never the placement's.
-//
-// Leaving service is `return` or `decommission` (lifecycle.ts), which end the
-// placement and append the movement together, so `PATCH /placements/:id` no
-// longer ends an open placement: it corrects the end of one already ended,
-// and refuses to set an end on an open one or to take one off (409 each),
-// since the ledger says when the container left.
+// The seam into the ledger (Issue #101): `POST /containers/:id/placements` is
+// the `issue` command, one action and one command, and the only door into
+// service; `return` and `decommission` (lifecycle.ts) are the doors out, each
+// ending the placement and appending the movement together. So a placement's
+// end is the ledger's: a create carries none (the contracts refuse `validTo`
+// by name), and `PATCH /placements/:id` corrects the end of a placement
+// already ended, refusing to set one on an open placement or to take one off
+// (409 each), since the ledger says when the container left. The issue route
+// holds what the body names before the ledger is consulted — a subscription
+// of another project, a fraction of another company, a start outside the
+// subscription's period — so a body that names nothing real is a 400
+// whatever the container's state; then hands `move` the placement's
+// statements as the Registry half of the movement: `move` takes the
+// container's row lock, reads its state, refuses a container that is not in a
+// warehouse or in maintenance (409 naming the state — no record, in service
+// at another placement, retired), runs `open`, which locks the subscription,
+// reads its period again underneath (a read before the lock only says which
+// subscription to lock) and writes the placement, and appends the `issue`
+// movement from the warehouse the container stood in, `placement_id` the new
+// row's. Either both rows exist or neither. A placement starts inside the
+// subscription's period and, open, may outlive a bounded subscription on
+// paper until the container is returned — the return holds its `validTo`
+// inside the period, and a subscription cannot be shortened under an open
+// placement (agreements.ts counts it) — since the person issuing the
+// container cannot say when it comes back. `occurredAt` and `reference` on
+// the body are the movement's and never the placement's.
 //
 // The cadence in force is read and never written. A placement's
 // `serviceFrequencyId` is an override and null is the ordinary case, so the
@@ -114,7 +119,7 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { ALREADY_PLACED, alreadyPlaced, containerScope, move, noSuchContainer, OUTSIDE_SUBSCRIPTION, type LifecycleOptions } from "./lifecycle"
-import { periodAfter, periodOf, requireWithin, type Period } from "./periods"
+import { periodAfter, requireWithin, type Period } from "./periods"
 import { requireContainerType, requireServiceFrequency, requireWarehouse, requireWasteFraction, type Scope } from "./references"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stampsOf } from "./shared"
 import { refuseUnservedPlace, type Place } from "./statuses"
@@ -246,6 +251,19 @@ const labelTaken = (label: string) => `This company already has a container labe
 
 /** What a body is told when it names a subscription of another project; the composite key holds it to the same thing. */
 const NOT_A_SUBSCRIPTION = "Not a subscription of this container's project"
+
+/**
+ * A placement starts inside the subscription's period: on or after its first
+ * day and before its first day out, refused at `validFrom` with the sentence
+ * every bound outside the subscription earns. The end is not judged here,
+ * since a create has none — the ledger sets it, and holds it inside the
+ * period then (routes/lifecycle.ts, `endPlacement`).
+ */
+function requireStartsWithin(served: Period, validFrom: string): void {
+  if (validFrom < served.validFrom || (served.validTo !== null && validFrom >= served.validTo)) {
+    throw invalidRequest("body", [{ path: "validFrom", message: OUTSIDE_SUBSCRIPTION }])
+  }
+}
 
 // The patch's rule since the ledger (Issue #101): a placement is ended by a
 // command, never by a form, and the ledger's word on when the container left
@@ -523,12 +541,12 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         operationId: "createPlacement",
         summary: "Issue a container into service",
         description:
-          "Puts the container the path names into service under a subscription, which says the agreement, the product and the place it serves. The container says the project, so the body names neither it nor the project, and the subscription must be that project's. The place, read through the subscription, must still serve: a property no longer active, or a point no longer open or restricted, is refused (409) naming the status it has, while the placements already there are ended by their period, since a status gates a new reference and never an existing one. The waste fraction is this company's; the service frequency, where given, is the project's and overrides the product's — leave it out and the cadence in force is the product's, answered as `effectiveServiceFrequencyId`. The period lies inside the subscription's, naming the bound that does not, and the container may not already be placed over part of it: one container serves in one place at a time. This is the `issue` command of the Stock Movement ledger and the only door into service: the container must be in a warehouse or in maintenance — one with no stock record (receive it first), one in service at another placement (return it first) or one retired is refused (409 naming the state) — and the placement and the `issue` movement from the warehouse it stood in are written in one transaction, both or neither. `occurredAt` is when it was issued, the request's clock when absent and never later than that (400), and `reference` the paper it quotes; both are the movement's, read through `GET /containers/{id}/movements`. The server mints the id.",
+          "Puts the container the path names into service under a subscription, which says the agreement, the product and the place it serves. The container says the project, so the body names neither it nor the project, and the subscription must be that project's. The place, read through the subscription, must still serve: a property no longer active, or a point no longer open or restricted, is refused (409) naming the status it has, while the placements already there are ended by their period, since a status gates a new reference and never an existing one. The waste fraction is this company's; the service frequency, where given, is the project's and overrides the product's — leave it out and the cadence in force is the product's, answered as `effectiveServiceFrequencyId`. The placement starts inside the subscription's period (400 on `validFrom`) and carries no end: a placement ends only through `POST /containers/{id}/return` or `/decommission`, which end it on the day they say and append the movement together, so `validTo` on this body is refused by name. The container may not already be placed over part of the period: one container serves in one place at a time. This is the `issue` command of the Stock Movement ledger and the only door into service: the container must be in a warehouse or in maintenance — one with no stock record (receive it first), one in service at another placement (return it first) or one retired is refused (409 naming the state), though a body that names nothing real is a 400 whatever the state — and the placement and the `issue` movement from the warehouse it stood in are written in one transaction, both or neither. `occurredAt` is when it was issued, the request's clock when absent and at most five minutes ahead of it (400), and `reference` the paper it quotes; both are the movement's, read through `GET /containers/{id}/movements`. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeCreated("The placement as it was written, with the cadence in force; the issue movement is on the container's ledger.", ContainerServicePlacement),
+          201: describeCreated("The placement as it was written, open, with the cadence in force; the issue movement is on the container's ledger.", ContainerServicePlacement),
           400: describeProblem(
-            "The path does not hold an id, or the body is missing a field, names a member the server owns, ends on or before the day it starts, falls outside the subscription's period, names a subscription, waste fraction or service frequency outside the scope its key allows, or dates the issue after the request.",
+            "The path does not hold an id, or the body is missing a field, names a member the server owns (`validTo` included: a placement ends through the ledger's commands), starts outside the subscription's period, names a subscription, waste fraction or service frequency outside the scope its key allows, or dates the issue more than five minutes after the request.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `resources.containers`."),
@@ -550,23 +568,26 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         if (into === undefined) throw noSuchContainer(id)
         const within = { companyId: principal.companyId, projectId: into.projectId }
         // What the body names, held before the ledger is consulted: a body
-        // that names nothing real is refused whatever the container's state.
-        await findServedSubscription(tx, within, values.subscriptionId)
+        // that names nothing real, or starts outside the subscription's
+        // period, is refused whatever the container's state. The period is
+        // read again and held again under the subscription's lock inside
+        // `open`; this unlocked check is the cheap one that answers first.
+        const served = await findServedSubscription(tx, within, values.subscriptionId)
         await requireWasteFraction(tx, principal.companyId, values.wasteFractionId)
         await requireServiceFrequency(tx, within, values.serviceFrequencyId)
+        requireStartsWithin(served, values.validFrom)
 
-        let placementId: string | undefined
-        await move(tx, principal, into, {
+        const movement = await move(tx, principal, into, {
           kind: "issue",
           // The Registry half, run once the container is locked and its state
           // allows: the subscription locked (after the container's, top
           // down), its period and its place's state read again underneath,
-          // the placement held inside the period and the place held to still
-          // serve, then written.
+          // the start held inside the period and the place held to still
+          // serve, then the placement written, open.
           open: async () => {
             await lockRow(tx, subscription, { companyId: principal.companyId, id: values.subscriptionId })
             const served = await findServedSubscription(tx, within, values.subscriptionId)
-            requireWithin(served, periodOf(values), OUTSIDE_SUBSCRIPTION)
+            requireStartsWithin(served, values.validFrom)
             // Every 400 above, every 409 below (routes/statuses.ts).
             refuseUnservedPlace(served, "placement")
             const [written] = await refuseOverlap({ [ALREADY_PLACED]: alreadyPlaced(into.label) }, () =>
@@ -581,18 +602,18 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
                 })
                 .returning({ id: containerServicePlacement.id }),
             )
-            placementId = written.id
             return written.id
           },
           ...(occurredAt === undefined ? {} : { occurredAt }),
           ...(reference === undefined ? {} : { reference }),
           at: now(),
         })
-        if (placementId === undefined) throw new Error(`container ${into.id} was issued and no placement was written`)
+        // An issue arrives at the placement `open` wrote, so the movement names it; a row that does not is a broken invariant, not a client's doing.
+        if (movement.placementId === null) throw new Error(`the issue movement ${movement.id} of container ${into.id} names no placement`)
         // Read back through the one select every placement is answered from,
         // since the cadence in force is a join and not a column.
-        const row = await findPlacement(tx, principal, placementId)
-        if (row === undefined) throw noSuchPlacement(placementId)
+        const row = await findPlacement(tx, principal, movement.placementId)
+        if (row === undefined) throw noSuchPlacement(movement.placementId)
         return created(c, "/placements", placementOf(row))
       },
     )

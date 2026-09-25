@@ -43,12 +43,15 @@ import { vehicleType } from "@waste/db/schema/fleet-types"
 import { serviceProvider } from "@waste/db/schema/organisation"
 import { depot, unloadingStation, warehouse } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
-import type { VehicleKind } from "@waste/domain/resources/vocabulary"
+import type { VehicleKind, WarehouseStatus } from "@waste/domain/resources/vocabulary"
 import { and, eq, inArray, isNull } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 
 import { invalidRequest } from "../problem"
 import { requireRow, requireStatus, type NamedRow, type TenantTable } from "./shared"
+
+/** Where a refused id is answered: on the body it came in, or on the query string a list filter named it in. */
+type Target = "body" | "query"
 
 /** What a body is told when it names a customer this company does not have; one sentence, wherever the id sat. */
 export const NOT_A_CUSTOMER = "Not a customer of this company"
@@ -96,10 +99,10 @@ export async function requireContainerType(tx: Tx, companyId: string, id: string
   await requireRow(tx, containerType, inCompany(companyId, id), { path, message: "Not a container type of this company" })
 }
 
-/** A waste fraction a body names: the company's, since a fraction is what the country sorts, not what a project does. */
-export async function requireWasteFraction(tx: Tx, companyId: string, id: string | null | undefined, path = "wasteFractionId"): Promise<void> {
+/** A waste fraction a body or a query names: the company's, since a fraction is what the country sorts, not what a project does. A `query` target is a list filter's (`GET /unloading-stations?wasteFractionId=`, #101 round A), refused on the query string. */
+export async function requireWasteFraction(tx: Tx, companyId: string, id: string | null | undefined, path = "wasteFractionId", target: Target = "body"): Promise<void> {
   if (id == null) return
-  await requireRow(tx, wasteFraction, inCompany(companyId, id), { path, message: "Not a waste fraction of this company" })
+  await requireRow(tx, wasteFraction, inCompany(companyId, id), { path, message: "Not a waste fraction of this company" }, target)
 }
 
 /** A service frequency a body names: the project's, since a cadence belongs to one project (`project_id` leads its key). */
@@ -206,29 +209,37 @@ export async function requireVehicleType(tx: Tx, companyId: string, id: string |
 /** What a body or a query is told when it reaches for a warehouse outside the project, or the projects, it may see. */
 export const NOT_A_WAREHOUSE = "Not a warehouse of this project"
 
+/** The warehouse a check found, as the ledger's status gate reads it (routes/statuses.ts, #101 round A): the name a sentence says and the status it judges. */
+export type WarehouseRef = { id: string; name: string; status: WarehouseStatus }
+
 /**
  * A warehouse a body or a query names: the project's — or, for a list that
  * names no project, one of the caller's projects, handed in as their ids. A
- * `query` target is refused on the query string; a body on the body.
+ * `query` target is refused on the query string; a body on the body. Answers
+ * the row it found, so the ledger can hold its status without a second
+ * statement (#79: a status gates a new reference and never an existing one);
+ * undefined for an id that is null or absent, which points at nothing.
  */
 export async function requireWarehouse(
   tx: Tx,
   scope: { companyId: string; projectId: string | readonly string[] },
   id: string | null | undefined,
   path = "warehouseId",
-  target: "body" | "query" = "body",
-): Promise<void> {
-  if (id == null) return
+  target: Target = "body",
+): Promise<WarehouseRef | undefined> {
+  if (id == null) return undefined
   const refusal = () => invalidRequest(target, [{ path, message: NOT_A_WAREHOUSE }])
   const projects = typeof scope.projectId === "string" ? [scope.projectId] : [...scope.projectId]
   // An account that works in no project sees no warehouse; `in ()` is not SQL.
   if (projects.length === 0) throw refusal()
   const [found] = await tx
-    .select({ id: warehouse.id })
+    .select({ id: warehouse.id, name: warehouse.name, status: warehouse.status })
     .from(warehouse)
     .where(and(eq(warehouse.companyId, scope.companyId), inArray(warehouse.projectId, projects), eq(warehouse.id, id)))
     .limit(1)
   if (found === undefined) throw refusal()
+  // `status` is text with a CHECK in the database and the vocabulary's tuple here.
+  return { id: found.id, name: found.name, status: found.status as WarehouseStatus }
 }
 
 // Resources, slice 3 (Issue #101): the other two places. A depot is a

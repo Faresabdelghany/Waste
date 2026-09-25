@@ -30,13 +30,21 @@
 // The plural check reads the singular's sentence. `requireEachOf` finds the
 // lowest id that is not a row of the table in this company in one statement
 // and hands it to the singular check of routes/references.ts at its dotted
-// path, the way scheme-groups.ts does, so a body naming one bad id and a body
-// naming one among two hundred are told the same thing and the sentence is
-// spelled once; the second statement is spent on the failure path only.
+// path, so a body naming one bad id and a body naming one among two hundred
+// are told the same thing and the sentence is spelled once. The two
+// statements themselves — that one, and a page's entries grouped by parent —
+// are routes/sets.ts's since the #101 review, shared with members.ts.
+//
+// A create and a PUT answer the set they were given, `asRead`, rather than
+// reading the rows they just wrote back: the body was held to what its key
+// allows and each id named once, so what was written is known, and the order
+// is the order Postgres gives a uuid, which for the lowercase spelling the
+// contracts' `Id` normalises to is the string order.
 import type { Tx } from "@waste/db/client"
-import { and, asc, eq, inArray, type SQL } from "drizzle-orm"
+import { and, eq, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 
+import { eachPresent, groupedBy } from "./sets"
 import { stamp, type TenantTable } from "./shared"
 
 /** The record a set hangs on, and the company every row of the set inherits from it. */
@@ -70,21 +78,19 @@ type Singular = (tx: Tx, companyId: string, id: string, path: string) => Promise
  * The plural of a references.ts check: every id a row of `table` in this
  * company, found in one statement, and the lowest one that is not handed to
  * `singular` at `<path>.<index>`, which refuses it with the family's own
- * sentence. A row that arrived between the two statements is a row that is
- * there, and the singular lets it through.
+ * sentence — again until nothing is missing, since a row that arrived between
+ * the two statements is a row that is there (routes/sets.ts).
  */
 export function requireEachOf(table: TenantTable, path: string, singular: Singular): IdSet<IdSetTable>["require"] {
   return async (tx, companyId, ids) => {
-    const named = [...new Set(ids)]
-    if (named.length === 0) return
-    const rows = await tx
-      .select({ id: table.id })
-      .from(table)
-      .where(and(eq(table.companyId, companyId), inArray(table.id, named)))
-    const found = new Set((rows as { id: string }[]).map((row) => row.id))
-    const index = ids.findIndex((id) => !found.has(id))
-    if (index === -1) return
-    await singular(tx, companyId, ids[index], `${path}.${index}`)
+    await eachPresent(
+      tx,
+      table,
+      table.id,
+      companyId,
+      ids.map((id, index) => ({ id, path: `${path}.${index}` })),
+      (entry) => singular(tx, companyId, entry.id, entry.path),
+    )
   }
 }
 
@@ -93,22 +99,12 @@ export function requireEachOf(table: TenantTable, path: string, singular: Singul
  * the entry's id: a list of fifty records is two statements, never fifty-one.
  */
 export async function idsOf(tx: Tx, set: IdSetColumns, companyId: string, parentIds: readonly string[]): Promise<Map<string, string[]>> {
-  const byParent = new Map<string, string[]>()
-  if (parentIds.length === 0) return byParent
-  const rows = await tx
-    .select({ parent: set.parentId, id: set.entryId })
-    .from(set.table)
-    .where(and(eq(set.table.companyId, companyId), inArray(set.parentId, [...parentIds])))
-    .orderBy(asc(set.entryId))
-  // A bare `PgColumn` carries `data: unknown`, so the selection reads as
-  // unknown however plainly these two are `uuid`.
-  for (const row of rows as { parent: string; id: string }[]) {
-    const found = byParent.get(row.parent)
-    if (found === undefined) byParent.set(row.parent, [row.id])
-    else found.push(row.id)
-  }
-  return byParent
+  const grouped = await groupedBy(tx, set.table, set.parentId, { id: set.entryId }, [set.entryId], companyId, parentIds)
+  return new Map([...grouped].map(([parent, entries]) => [parent, entries.map((entry) => entry.id)]))
 }
+
+/** A body's set as the next read answers it: each id once, in the order Postgres gives a uuid, which is the string order of its lowercase spelling. */
+export const asRead = (ids: readonly string[]): string[] => [...new Set(ids)].sort()
 
 /** One record's set, read the way a page reads it, so what a write answers is what the next read says. */
 export async function idsFor(tx: Tx, set: IdSetColumns, companyId: string, parentId: string): Promise<string[]> {

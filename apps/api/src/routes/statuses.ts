@@ -49,8 +49,10 @@
 // either.
 import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
+import type { WarehouseStatus } from "@waste/domain/resources/vocabulary"
 
 import { problem } from "../problem"
+import type { WarehouseRef } from "./references"
 
 /** The two fields an agreement names a customer in: as its holder, and as the customer it is billed to. */
 export type Party = "customerId" | "payerCustomerId"
@@ -106,4 +108,37 @@ export function refuseUnservedPlace(place: Place, reference: PlaceReference): vo
       detail: `${PLACE_OF[reference]} shared collection point is ${sharedCollectionPointStatus}; a ${reference} needs an open or restricted point`,
     })
   }
+}
+
+// Resources (Issue #101, its review rounds) applies the same rule to its own
+// rows: a record that is closed, a draft or inactive takes no new row pointing
+// at it, and every row already pointing at it stands. The refusal is the same
+// 409 naming the status — the row the caller named is really there, so it is
+// not the 400 a missing id earns, and no better body would do while the record
+// stands as it does — with the family's own sentence, since what "closed"
+// forbids differs from a warehouse to a product. `requireStatus` is the one
+// mechanism; each round appends its gates below it, under its own heading.
+
+/** Refuses a status a new reference may not point at, with the family's sentence; any other status passes. */
+export function requireStatus<Status extends string>(status: Status, closedTo: readonly Status[], sentence: (status: Status) => string): void {
+  if (closedTo.includes(status)) throw problem(409, { detail: sentence(status) })
+}
+
+// Resources, round A (Issue #101 review): the warehouse a movement arrives at.
+// A closed or draft warehouse takes no new stock — nothing is received,
+// returned, transferred or adjusted into it — and what stands there stands:
+// the ledger's rows are never rewritten, the projection goes on reading them,
+// and a transfer out of it is a movement into somewhere else, which is the
+// way to empty it. `active` and `restricted` take stock; what `restricted`
+// restricts is inventory's question, not the ledger's.
+
+/** The warehouse statuses a movement may not arrive at. */
+export const WAREHOUSE_TAKES_NO_STOCK: readonly WarehouseStatus[] = ["draft", "closed"]
+
+/** What a movement into a closed or draft warehouse is told, naming the warehouse and its status. */
+export const takesNoStock = (name: string, status: WarehouseStatus): string => `${name} is ${status}; a movement arrives only at an active or restricted warehouse`
+
+/** Holds the warehouse a movement arrives at open for stock: the #79 rule as the ledger applies it, a 409 naming the status. */
+export function requireWarehouseTakesStock(found: WarehouseRef): void {
+  requireStatus(found.status, WAREHOUSE_TAKES_NO_STOCK, (status) => takesNoStock(found.name, status))
 }

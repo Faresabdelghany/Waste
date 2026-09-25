@@ -17,8 +17,9 @@
 //
 // The location is nullable, like a property's: a warehouse is registered
 // before it is geocoded. It goes in and comes back as GeoJSON through the
-// column type (@waste/db/schema/geometry); a point off the globe is the
-// contracts' 400 at the ordinate before the database sees it, and
+// column type (@waste/db/schema/geometry); a point off the globe, or one with
+// a third ordinate, is the contracts' 400 at the coordinates before the
+// database sees it (`FlatPoint`, since the column is flat), and
 // `warehouse_location_valid` stands behind that as `refuseCheck`'s 400 on
 // `location` (routes/place-rules.ts says why the door is a backstop for a
 // point).
@@ -29,6 +30,7 @@
 // the code — the stable reference a person quotes, `WH-WEST` — is set once
 // and unique per project beside the name, each collision with its own
 // sentence. The grant is `resources.warehouses`.
+import type { FlatPoint } from "@waste/contracts/geojson"
 import { Page } from "@waste/contracts/pagination"
 import { Warehouse, WarehouseCreate, WarehouseListQuery, WarehousePatch } from "@waste/contracts/places"
 import type { WarehouseStatus } from "@waste/contracts/resources"
@@ -67,7 +69,7 @@ const columns = {
 
 type Row = Pick<typeof warehouse.$inferSelect, keyof typeof columns>
 
-/** The row on the wire. `status` is text with a CHECK in the database and an enum here, both read off the one vocabulary tuple; the point arrives as the GeoJSON the column type decoded. */
+/** The row on the wire. `status` is text with a CHECK in the database and an enum here, both read off the one vocabulary tuple; the point arrives as the GeoJSON the column type decoded. The column is `geometry(Point, 4326)`, flat — a third ordinate is refused on write — so what it holds is the contracts' `FlatPoint` however the column's type spells the altitude as optional. */
 function warehouseOf(row: Row): Warehouse {
   return {
     id: row.id,
@@ -75,7 +77,7 @@ function warehouseOf(row: Row): Warehouse {
     code: row.code,
     name: row.name,
     address: row.address,
-    location: row.location,
+    location: row.location as FlatPoint | null,
     depotId: row.depotId,
     status: row.status as WarehouseStatus,
     notes: row.notes,

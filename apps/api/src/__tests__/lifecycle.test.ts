@@ -10,7 +10,6 @@ import { Page } from "@waste/contracts/pagination"
 import { StockMovement } from "@waste/contracts/stock"
 import { ENDS_AFTER_IT_STARTS } from "@waste/contracts/validity"
 import { createDb, type Database } from "@waste/db/client"
-import { warehouse } from "@waste/db/schema/places"
 import { stockMovement } from "@waste/db/schema/stock"
 import { withCompany } from "@waste/db/tenant"
 import { eq } from "drizzle-orm"
@@ -20,13 +19,16 @@ import {
   ALREADY_THERE,
   GIVE_VALID_TO,
   NOT_A_MOVEMENT_OF_THIS_CONTAINER,
+  OCCURRED_AT_SKEW_MS,
   OUTSIDE_SUBSCRIPTION,
   RECORDED_AFTER_IT_HAPPENED,
   VALID_TO_SAYS_NOTHING,
 } from "../routes/lifecycle"
+import { takesNoStock } from "../routes/statuses"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { readProblem } from "./read-problem"
+import { stocked as stockedIn, warehouseIn } from "./stock-fixtures"
 import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
 import { signingKeys, type SigningKeys } from "./tokens"
 
@@ -49,6 +51,8 @@ const OCTOBER = "2026-10-01"
 const NEXT_YEAR = "2027-01-01"
 /** An instant no request's clock has reached. */
 const FUTURE = "2100-01-01T00:00:00Z"
+/** The clock the skew tests pin the request to. */
+const PINNED = Date.parse("2026-09-25T12:00:00Z")
 
 /** The SQLSTATE of a refused statement, through Drizzle's wrapper or straight from postgres.js. */
 const sqlstate = (error: unknown): string | undefined => {
@@ -111,9 +115,9 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
     other = callingAs(app, keys, b.users.olivia, b.companyId)
     ungranted = callingAs(app, keys, b.users.viewer, b.companyId)
 
-    west = await warehouseIn(a.companyId, a.projects.copenhagen.id, "WH-WEST")
-    east = await warehouseIn(a.companyId, a.projects.copenhagen.id, "WH-EAST")
-    havnen = await warehouseIn(a.companyId, a.projects.harbor.id, "WH-HAVNEN")
+    west = await warehouseIn(pool, a.companyId, a.projects.copenhagen.id, "WH-WEST")
+    east = await warehouseIn(pool, a.companyId, a.projects.copenhagen.id, "WH-EAST")
+    havnen = await warehouseIn(pool, a.companyId, a.projects.harbor.id, "WH-HAVNEN")
 
     bin = await create(olivia, "/container-types", { name: "240 L bin", volumeLitres: 240 }, ContainerType)
     residual = await create(olivia, "/waste-fractions", { key: "residual", name: "Residual waste" }, WasteFraction)
@@ -148,7 +152,7 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
 
     const theirBin = await create(other, "/container-types", { name: "240 L bin", volumeLitres: 240 }, ContainerType)
     theirContainer = await create(other, "/containers", { projectId: b.projects.copenhagen.id, label: "BIN-THEIRS", containerTypeId: theirBin.id }, Container)
-    await create(other, `/containers/${theirContainer.id}/receive`, { warehouseId: await warehouseIn(b.companyId, b.projects.copenhagen.id, "WH-THEIRS") }, StockMovement)
+    await create(other, `/containers/${theirContainer.id}/receive`, { warehouseId: await warehouseIn(pool, b.companyId, b.projects.copenhagen.id, "WH-THEIRS") }, StockMovement)
   })
   after(async () => {
     if (a) await dropTenant(pool, a.companyId, ownerPool)
@@ -169,15 +173,6 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
     return await readProblem(response)
   }
 
-  /** A warehouse of a project, written directly as `wms_api` (its routes are #101's slice 3), named `Warehouse <code>`. */
-  const warehouseIn = async (companyId: string, projectId: string, code: string): Promise<string> => {
-    const id = testId()
-    await withCompany(pool.db, companyId, async (tx) => {
-      await tx.insert(warehouse).values({ id, companyId, projectId, code, name: `Warehouse ${code}`, address: "Sundkrogsgade 1", status: "active" })
-    })
-    return id
-  }
-
   /** A container of this test's own, in Copenhagen Central unless it says otherwise. */
   const container = (label: string, values: Record<string, unknown> = {}) =>
     create(olivia, "/containers", { projectId: a.projects.copenhagen.id, label, containerTypeId: bin.id, ...values }, Container)
@@ -191,12 +186,9 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
     command(into, "return", { warehouseId, validTo, ...body })
   const decommission = (into: Container, body: Record<string, unknown> = {}) => command(into, "decommission", { reason: "Crushed", ...body })
   const adjust = (into: Container, body: Record<string, unknown>) => command(into, "adjust", { reason: "The ledger was wrong", ...body })
-  /** A container received into the west warehouse: the state most commands start from. */
-  const stocked = async (label: string, values: Record<string, unknown> = {}, warehouseId = west): Promise<Container> => {
-    const into = await container(label, values)
-    await receive(into, warehouseId)
-    return into
-  }
+  /** A container received into the west warehouse: the state most commands start from (stock-fixtures.ts). */
+  const stocked = (label: string, values: Record<string, unknown> = {}, warehouseId = west): Promise<Container> =>
+    stockedIn(olivia, { projectId: a.projects.copenhagen.id, label, containerTypeId: bin.id, ...values }, warehouseId)
   /** Issues the container into service under the open-ended subscription, from January unless said otherwise. */
   const place = (into: Container, values: Record<string, unknown> = {}) =>
     create(olivia, `/containers/${into.id}/placements`, { subscriptionId: subscribed.id, wasteFractionId: residual.id, validFrom: JANUARY, ...values }, ContainerServicePlacement)
@@ -338,9 +330,9 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
 
     test("writes the placement and the movement in one transaction, or neither", async () => {
       const into = await stocked("BIN-5024")
-      // The clock rule is held on the whole row, after the placement is
-      // written: the refusal rolls the request back and takes the placement
-      // with it.
+      // The clock is held before the Registry half runs (round A), so no
+      // placement is written for the refusal to roll back; the reading is
+      // untouched either way.
       const late = await refused(
         await olivia(`/containers/${into.id}/placements`, { method: "POST", body: { subscriptionId: subscribed.id, wasteFractionId: residual.id, validFrom: JANUARY, occurredAt: FUTURE } }),
         400,
@@ -419,20 +411,20 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
 
     test("holds validTo to the placement's start and the subscription's period, and leaves the placement open when refused", async () => {
       const into = await stocked("BIN-5033")
-      // Placed to the subscription's own end: an open placement would already be outside it.
-      const placed = await place(into, { subscriptionId: bounded.id, validFrom: APRIL, validTo: OCTOBER })
+      // Placed open under a subscription that ends in October: the return's
+      // `validTo` is what is held inside it.
+      const placed = await place(into, { subscriptionId: bounded.id, validFrom: APRIL })
       const beyond = await refusedCommand(into, "return", { warehouseId: west, validTo: NEXT_YEAR }, 400)
       assert.deepEqual(beyond.errors, [{ path: "validTo", message: OUTSIDE_SUBSCRIPTION }])
       const backwards = await refusedCommand(into, "return", { warehouseId: west, validTo: JANUARY }, 400)
       assert.deepEqual(backwards.errors, [{ path: "validTo", message: ENDS_AFTER_IT_STARTS }])
       const elsewhere = await refusedCommand(into, "return", { warehouseId: havnen, validTo: JULY }, 400)
       assert.deepEqual(elsewhere.errors, [{ path: "warehouseId", message: "Not a warehouse of this project" }])
-      // The placement is ended on July and then the row is refused by the
-      // clock: the request rolls back and the placement ends in October as
-      // before, the container still in service.
+      // The clock is held before the Registry half runs, so the placement is
+      // never touched: it stays open, the container still in service.
       const late = await refusedCommand(into, "return", { warehouseId: west, validTo: JULY, occurredAt: FUTURE }, 400)
       assert.deepEqual(late.errors, [{ path: "occurredAt", message: RECORDED_AFTER_IT_HAPPENED }])
-      assert.equal((await onePlacement(placed.id)).validTo, OCTOBER, "as it was")
+      assert.equal((await onePlacement(placed.id)).validTo, null, "still open: the clock refused before the placement was touched")
       assert.equal((await one(into.id)).assetState?.status, "in-service", "still in service")
       assert.deepEqual((await movements(into)).items.map((movement) => movement.kind), ["receipt", "issue"])
 
@@ -571,7 +563,7 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
     })
 
     test("answers the ledger across containers with its filters, inside the caller's projects", async () => {
-      const yard = await warehouseIn(a.companyId, a.projects.copenhagen.id, "WH-5072")
+      const yard = await warehouseIn(pool, a.companyId, a.projects.copenhagen.id, "WH-5072")
       const first = await stocked("BIN-5072", {}, yard)
       const second = await stocked("BIN-5073", {}, yard)
       const moved = await transfer(second, west, { occurredAt: "2026-03-01T10:00:00Z" })
@@ -610,10 +602,77 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
     })
   })
 
+  describe("the order inside move, and the clock's skew (review round A)", () => {
+    test("holds the clock before the Registry half: a return dated in the future is refused at occurredAt whatever its validTo says, and the placement is untouched", async () => {
+      const into = await stocked("BIN-5100")
+      const placed = await place(into, { subscriptionId: bounded.id, validFrom: APRIL })
+      const late = await refusedCommand(into, "return", { warehouseId: west, validTo: NEXT_YEAR, occurredAt: FUTURE }, 400)
+      assert.deepEqual(late.errors, [{ path: "occurredAt", message: RECORDED_AFTER_IT_HAPPENED }], "the clock, not the bound the Registry half would have refused")
+      assert.equal((await onePlacement(placed.id)).validTo, null, "still open")
+      assert.equal((await one(into.id)).assetState?.status, "in-service")
+      // The state gate still comes first: a container that is not in service is refused as such before the clock is read.
+      const unrecorded = await container("BIN-5101")
+      assert.equal((await refusedCommand(unrecorded, "return", { warehouseId: west, validTo: APRIL, occurredAt: FUTURE }, 409)).detail, "Container BIN-5101 is not in service")
+    })
+
+    test("lets occurredAt run ahead of the request's clock by the skew a device's clock accounts for, and no further", async () => {
+      const pinned = createApp({ probe: pool, pool, verifier: keys.verifier, now: () => new Date(PINNED) })
+      const oliviaThen = callingAs(pinned, keys, a.users.olivia, a.companyId)
+      const atTheEdge = new Date(PINNED + OCCURRED_AT_SKEW_MS).toISOString()
+      const received = await command(await container("BIN-5102"), "receive", { warehouseId: west, occurredAt: atTheEdge }, oliviaThen)
+      assert.equal(received.occurredAt, atTheEdge, "five minutes ahead is a device's clock")
+      const beyond = new Date(PINNED + OCCURRED_AT_SKEW_MS + 1_000).toISOString()
+      const late = await refusedCommand(await container("BIN-5103"), "receive", { warehouseId: west, occurredAt: beyond }, 400, oliviaThen)
+      assert.deepEqual(late.errors, [{ path: "occurredAt", message: RECORDED_AFTER_IT_HAPPENED }], "a second past the skew is recorded before it happened")
+      assert.equal(OCCURRED_AT_SKEW_MS, 5 * 60_000, "the one constant")
+    })
+  })
+
+  describe("the warehouse a movement arrives at takes stock (#79: a status gates a new reference, never an existing one)", () => {
+    test("refuses a receipt, a transfer, a return and an adjustment into a closed or draft warehouse, naming the status, and takes a restricted one", async () => {
+      const closed = await warehouseIn(pool, a.companyId, a.projects.copenhagen.id, "WH-CLOSED", "closed")
+      const draft = await warehouseIn(pool, a.companyId, a.projects.copenhagen.id, "WH-DRAFT", "draft")
+      const restricted = await warehouseIn(pool, a.companyId, a.projects.copenhagen.id, "WH-RESTRICTED", "restricted")
+
+      const into = await container("BIN-5110")
+      assert.equal((await refusedCommand(into, "receive", { warehouseId: closed }, 409)).detail, takesNoStock("Warehouse WH-CLOSED", "closed"))
+      assert.equal((await refusedCommand(into, "receive", { warehouseId: closed }, 409)).detail, "Warehouse WH-CLOSED is closed; a movement arrives only at an active or restricted warehouse")
+      assert.equal((await refusedCommand(into, "receive", { warehouseId: draft }, 409)).detail, "Warehouse WH-DRAFT is draft; a movement arrives only at an active or restricted warehouse")
+      assert.equal((await one(into.id)).assetState, null, "nothing was written")
+      assert.equal((await receive(into, restricted)).toWarehouseId, restricted, "restricted takes stock")
+
+      assert.equal((await refusedCommand(into, "transfer", { warehouseId: closed }, 409)).detail, takesNoStock("Warehouse WH-CLOSED", "closed"))
+      assert.equal((await refusedCommand(into, "transfer", { warehouseId: draft, toKind: "maintenance" }, 409)).detail, takesNoStock("Warehouse WH-DRAFT", "draft"), "maintenance at a draft warehouse is still into it")
+      assert.equal((await refusedCommand(into, "adjust", { toKind: "warehouse", warehouseId: closed, reason: "x" }, 409)).detail, takesNoStock("Warehouse WH-CLOSED", "closed"))
+      const placed = await place(into)
+      assert.equal((await refusedCommand(into, "return", { warehouseId: closed, validTo: APRIL }, 409)).detail, takesNoStock("Warehouse WH-CLOSED", "closed"))
+      assert.equal((await onePlacement(placed.id)).validTo, null, "the placement was not ended behind the refusal")
+      assert.deepEqual((await movements(into)).items.map((movement) => movement.kind), ["receipt", "issue"])
+
+      // Existence before status: a closed warehouse of another project is not this project's warehouse at all.
+      const theirClosed = await warehouseIn(pool, a.companyId, a.projects.harbor.id, "WH-HAVN-CLOSED", "closed")
+      assert.deepEqual((await refusedCommand(into, "return", { warehouseId: theirClosed, validTo: APRIL }, 400)).errors, [{ path: "warehouseId", message: "Not a warehouse of this project" }])
+    })
+
+    test("leaves what stands in a warehouse standing when it closes: the projection reads it, a transfer out is the way to empty it, and only a new arrival is refused", async () => {
+      const yard = await warehouseIn(pool, a.companyId, a.projects.copenhagen.id, "WH-5111")
+      const standing = await stocked("BIN-5111", {}, yard)
+      const closing = await olivia(`/warehouses/${yard}`, { method: "PATCH", body: { status: "closed" } })
+      assert.equal(closing.status, 200, JSON.stringify(await closing.clone().json()))
+
+      assert.equal((await one(standing.id)).assetState?.warehouseId, yard, "the reading still says it stands there")
+      assert.deepEqual((await containers(`?warehouseId=${yard}`)).items.map((item) => item.id), [standing.id], "and the list still finds it")
+      assert.equal((await refusedCommand(await container("BIN-5112"), "receive", { warehouseId: yard }, 409)).detail, takesNoStock("Warehouse WH-5111", "closed"))
+      const out = await transfer(standing, west)
+      assert.deepEqual([out.fromWarehouseId, out.toWarehouseId], [yard, west], "out of the closed warehouse is a movement into an open one")
+      assert.deepEqual((await containers(`?warehouseId=${yard}`)).items, [], "emptied")
+    })
+  })
+
   describe("the reading after the commands", () => {
     test("GET /containers answers assetState, assetStatus and warehouseId from what the commands wrote", async () => {
-      const yard = await warehouseIn(a.companyId, a.projects.copenhagen.id, "WH-5080")
-      const shed = await warehouseIn(a.companyId, a.projects.copenhagen.id, "WH-5081")
+      const yard = await warehouseIn(pool, a.companyId, a.projects.copenhagen.id, "WH-5080")
+      const shed = await warehouseIn(pool, a.companyId, a.projects.copenhagen.id, "WH-5081")
       const into = await stocked("BIN-5080", {}, yard)
       assert.deepEqual((await containers(`?warehouseId=${yard}`)).items.map((item) => item.id), [into.id])
       await transfer(into, shed)

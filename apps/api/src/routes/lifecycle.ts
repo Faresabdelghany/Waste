@@ -32,28 +32,36 @@
 //                 Where the intent passes, the movement's `from` is where the
 //                 reading says the container is (a supplier when there is
 //                 none);
-//   arrival     — what the body named, held to the container's project
-//                 (`requireWarehouse`, 400 on the field), and the Registry
-//                 half where service opens or ends: the issue's placement is
-//                 written by the route that owns those statements
-//                 (containers.ts, handed in as `open`), and a return's or a
-//                 decommission's placement is ended here by `endPlacement`,
-//                 under the subscription's lock and inside its period, with
-//                 the sentences the placement patch answers;
-//   append      — the row, `id: newId()`, `recordedBy` the caller's account,
-//                 `occurredAt` the body's or the request's clock. The row is
-//                 held to its two rules where it is whole: the shape
+//   hold        — the row's two rules, where they can first be judged and
+//                 before any Registry statement runs: the shape
 //                 (`movementShape`, the domain's table of pairs each kind
-//                 allows, a 400 on the field the intent carried its `to` in,
-//                 one door before the database's `stock_movement_kind_shape`
-//                 would answer a code) and the clock (a movement recorded
-//                 before it happened is refused, 400 on `occurredAt`). That
-//                 is after the Registry half — the row is not whole before the
-//                 placement it names exists — so a refused row leaves no
-//                 placement behind either, the transaction being the
-//                 request's, and that is the proof the suite runs. Nothing is
-//                 read back from the projection: the row just written is, by
-//                 construction, the latest.
+//                 allows, over where the movement leaves from and the kind of
+//                 place the intent arrives at, which the body says before any
+//                 warehouse is looked up — a 400 on the field the intent
+//                 carried its `to` in, one door before the database's
+//                 `stock_movement_kind_shape` would answer a code) and the
+//                 clock (`occurredAt` may run ahead of the request's clock by
+//                 `OCCURRED_AT_SKEW_MS`, a device's clock being a device's,
+//                 and no further: 400 on `occurredAt`). A body that says
+//                 something the ledger cannot take is refused with nothing to
+//                 roll back;
+//   arrival     — what the body named, held to the container's project
+//                 (`requireWarehouse`, 400 on the field) and to a warehouse
+//                 that takes stock (routes/statuses.ts, a 409 naming the
+//                 status: a closed or draft warehouse takes no new movement,
+//                 while what stands there stands — #79's rule), and the
+//                 Registry half where service opens or ends: the issue's
+//                 placement is written by the route that owns those
+//                 statements (containers.ts, handed in as `open`), and a
+//                 return's or a decommission's placement is ended here by
+//                 `endPlacement`, under the subscription's lock and inside its
+//                 period, with the sentences the placement patch answers;
+//   append      — the row, `id: newId()`, `recordedBy` the caller's account,
+//                 `occurredAt` the instant `hold` settled. Nothing is read
+//                 back from the projection: the row just written is, by
+//                 construction, the latest. The transaction is the request's,
+//                 so a refusal anywhere above leaves no placement behind, and
+//                 that is the proof the suite runs.
 //
 // Postgres's shape checks (23514) are the backstop and, unnamed, a 500 — the
 // signal that a sentence is missing here. The exclusion constraint on the
@@ -108,8 +116,9 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { requireWithin } from "./periods"
-import { requireWarehouse } from "./references"
+import { requireWarehouse, type Scope } from "./references"
 import { describeJson, IdParam, lockRow, refuseOverlap } from "./shared"
+import { requireWarehouseTakesStock } from "./statuses"
 
 const MODULE = "resources.containers"
 const INVENTORY = "resources.inventory"
@@ -159,7 +168,14 @@ const noAdjustmentInService = (label: string) =>
 
 // The 400s: a body that says something the ledger cannot take.
 
-/** `occurredAt` later than the request's clock. */
+/**
+ * How far ahead of the request's clock `occurredAt` may run: a driver's
+ * device keeps its own time, and a scan stamped a minute or two ahead of the
+ * server is a scan, not a prophecy. Beyond it the instant is refused as
+ * recorded before it happened.
+ */
+export const OCCURRED_AT_SKEW_MS = 5 * 60_000
+/** `occurredAt` further ahead of the request's clock than a device's clock accounts for. */
 export const RECORDED_AFTER_IT_HAPPENED = "A movement is recorded after it happened"
 /** A transfer to the place the container already stands in. */
 export const ALREADY_THERE = "Already there"
@@ -288,8 +304,10 @@ async function departure(tx: Tx, principal: Principal, subject: ContainerRef, re
  * held inside the subscription's period (400 on `validTo`, naming the bound;
  * the ordering rule with it, routes/periods.ts) and may not run the placement
  * into the next one (the exclusion constraint, a 409). A placement the
- * reading names and the table does not have is a broken invariant, not a
- * client's doing.
+ * reading names and the table does not have, or one that already has an end
+ * — a create carries none and the patch refuses to set one on an open
+ * placement, so a container in service is at an open placement by
+ * construction — is a broken invariant, not a client's doing.
  */
 async function endPlacement(tx: Tx, principal: Principal, subject: ContainerRef, placementId: string, validTo: string): Promise<void> {
   const { companyId } = principal
@@ -298,6 +316,7 @@ async function endPlacement(tx: Tx, principal: Principal, subject: ContainerRef,
       .select({
         subscriptionId: containerServicePlacement.subscriptionId,
         validFrom: containerServicePlacement.validFrom,
+        validTo: containerServicePlacement.validTo,
         subscriptionValidFrom: subscription.validFrom,
         subscriptionValidTo: subscription.validTo,
       })
@@ -317,6 +336,7 @@ async function endPlacement(tx: Tx, principal: Principal, subject: ContainerRef,
   await lockRow(tx, subscription, { companyId, id: before.subscriptionId })
   const [current] = await held()
   if (current === undefined) throw missing()
+  if (current.validTo !== null) throw new Error(`container ${subject.id} is in service at placement ${placementId}, which already ended on ${current.validTo}`)
   requireWithin({ validFrom: current.subscriptionValidFrom, validTo: current.subscriptionValidTo }, { validFrom: current.validFrom, validTo }, OUTSIDE_SUBSCRIPTION)
   await refuseOverlap({ [ALREADY_PLACED]: alreadyPlaced(subject.label) }, () =>
     tx
@@ -337,23 +357,34 @@ async function requireMovementOf(tx: Tx, principal: Principal, subject: Containe
   if (row === undefined) throw invalidRequest("body", [{ path: "correctsMovementId", message: NOT_A_MOVEMENT_OF_THIS_CONTAINER }])
 }
 
+/**
+ * The warehouse a movement arrives at: the container's project's (400 on the
+ * field) and one that takes stock (409 naming the status, routes/statuses.ts).
+ * The gate is on the arrival only — a transfer out of a closed warehouse is a
+ * movement into somewhere else, and the stock standing in one stands.
+ */
+async function arrivalWarehouse(tx: Tx, within: Scope, id: string | null): Promise<void> {
+  const found = await requireWarehouse(tx, within, id)
+  if (found !== undefined) requireWarehouseTakesStock(found)
+}
+
 /** Where the intent arrives, held to the container's project, and the Registry half where service opens or ends. */
 async function arrival(tx: Tx, principal: Principal, subject: ContainerRef, reading: Reading | null, from: Place, intent: Intent): Promise<{ to: Place; placementId: string | null }> {
   const within = { companyId: principal.companyId, projectId: subject.projectId }
   switch (intent.kind) {
     case "receipt":
-      await requireWarehouse(tx, within, intent.to.warehouseId)
+      await arrivalWarehouse(tx, within, intent.to.warehouseId)
       return { to: intent.to, placementId: null }
     case "issue":
       return { to: SERVICE, placementId: await intent.open() }
     case "return":
-      await requireWarehouse(tx, within, intent.to.warehouseId)
+      await arrivalWarehouse(tx, within, intent.to.warehouseId)
       // `departure` let a return through only in service, and service is a placement.
       if (reading?.placementId == null) throw new Error(`container ${subject.id} is in service at no placement`)
       await endPlacement(tx, principal, subject, reading.placementId, intent.validTo)
       return { to: intent.to, placementId: reading.placementId }
     case "transfer":
-      await requireWarehouse(tx, within, intent.to.warehouseId)
+      await arrivalWarehouse(tx, within, intent.to.warehouseId)
       if (intent.to.kind === from.kind && intent.to.warehouseId === from.warehouseId) {
         throw invalidRequest("body", [{ path: "warehouseId", message: ALREADY_THERE }])
       }
@@ -369,7 +400,7 @@ async function arrival(tx: Tx, principal: Principal, subject: ContainerRef, read
       return { to: SCRAP, placementId: null }
     case "adjustment":
       await requireMovementOf(tx, principal, subject, intent.correctsMovementId)
-      await requireWarehouse(tx, within, intent.to.warehouseId)
+      await arrivalWarehouse(tx, within, intent.to.warehouseId)
       return { to: intent.to, placementId: null }
   }
 }
@@ -418,24 +449,35 @@ function movementOf(row: Row): StockMovement {
 /** Where a body carries the destination a refused shape is answered on; the body as a whole where the route fixed it. */
 const toKindPath = (kind: StockMovementKind): string => (kind === "return" || kind === "transfer" || kind === "adjustment" ? "toKind" : "")
 
+/** The kind of place the intent arrives at, known from the body alone: the issue's is service, the decommission's scrap, the rest name theirs. */
+const destinationKind = (intent: Intent): StockPlaceKind => (intent.kind === "issue" ? "service" : intent.kind === "decommission" ? "scrap" : intent.to.kind)
+
 /**
- * Appends the row, whole: held to the shape table and to the clock, then
- * inserted. `recordedAt` is the database's now; `occurredAt` is the body's
- * word or the request's clock.
+ * The row's two rules, held as soon as `departure` has said where the
+ * movement leaves from and before any Registry statement runs: the shape
+ * table over the kind, the place left and the kind of place arrived at (a
+ * 400 on the field the intent carried its `to` in), and the clock — the
+ * body's instant may run ahead of the request's by `OCCURRED_AT_SKEW_MS` and
+ * no further (400 on `occurredAt`). Answers the instant the row will carry.
  */
+function hold(kind: StockMovementKind, from: Place, toKind: StockPlaceKind, says: Says): Date {
+  if (!movementShape(kind, from.kind, toKind)) {
+    throw invalidRequest("body", [{ path: toKindPath(kind), message: noSuchShape(kind, from.kind, toKind) }])
+  }
+  const occurredAt = says.occurredAt === undefined ? says.at : new Date(says.occurredAt)
+  if (occurredAt.getTime() > says.at.getTime() + OCCURRED_AT_SKEW_MS) throw invalidRequest("body", [{ path: "occurredAt", message: RECORDED_AFTER_IT_HAPPENED }])
+  return occurredAt
+}
+
+/** Appends the row `hold` settled and `arrival` completed. `recordedAt` is the database's now. */
 async function append(
   tx: Tx,
   principal: Principal,
   subject: ContainerRef,
-  movement: { kind: StockMovementKind; from: Place; to: Place; placementId: string | null; correctsMovementId?: string },
+  movement: { kind: StockMovementKind; from: Place; to: Place; placementId: string | null; occurredAt: Date; correctsMovementId?: string },
   says: Says,
 ): Promise<StockMovement> {
   const { kind, from, to } = movement
-  if (!movementShape(kind, from.kind, to.kind)) {
-    throw invalidRequest("body", [{ path: toKindPath(kind), message: noSuchShape(kind, from.kind, to.kind) }])
-  }
-  const occurredAt = says.occurredAt === undefined ? says.at : new Date(says.occurredAt)
-  if (occurredAt.getTime() > says.at.getTime()) throw invalidRequest("body", [{ path: "occurredAt", message: RECORDED_AFTER_IT_HAPPENED }])
   const [row] = await tx
     .insert(stockMovement)
     .values({
@@ -449,7 +491,7 @@ async function append(
       toKind: to.kind,
       toWarehouseId: to.warehouseId,
       placementId: movement.placementId,
-      occurredAt,
+      occurredAt: movement.occurredAt,
       recordedBy: principal.user.id,
       reason: says.reason ?? null,
       reference: says.reference ?? null,
@@ -460,21 +502,22 @@ async function append(
 }
 
 /**
- * The one function the commands call: lock, read, departure, arrival, append
- * (the header says why in that order). The route has found the container
- * under the caller's scope; everything else the command does happens here,
- * inside the request's transaction, so a refusal at any step leaves nothing
- * behind.
+ * The one function the commands call: lock, read, departure, hold, arrival,
+ * append (the header says why in that order). The route has found the
+ * container under the caller's scope; everything else the command does
+ * happens here, inside the request's transaction, so a refusal at any step
+ * leaves nothing behind.
  */
 export async function move(tx: Tx, principal: Principal, subject: ContainerRef, intent: Intent): Promise<StockMovement> {
   const reading = await lockedReading(tx, principal, subject)
   const from = await departure(tx, principal, subject, reading, intent)
+  const occurredAt = hold(intent.kind, from, destinationKind(intent), intent)
   const { to, placementId } = await arrival(tx, principal, subject, reading, from, intent)
   return await append(
     tx,
     principal,
     subject,
-    { kind: intent.kind, from, to, placementId, ...(intent.kind === "adjustment" ? { correctsMovementId: intent.correctsMovementId } : {}) },
+    { kind: intent.kind, from, to, placementId, occurredAt, ...(intent.kind === "adjustment" ? { correctsMovementId: intent.correctsMovementId } : {}) },
     intent,
   )
 }
@@ -502,13 +545,13 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         operationId: "receiveContainer",
         summary: "Receive a container into a warehouse",
         description:
-          "Appends the container's first Stock Movement: from a supplier into a warehouse of its project. Only a container with no stock record yet can be received — one already in stock (409 naming the warehouse), in service (409: return it first) or retired (409: a scrapped container does not come back; register a new one) is refused, and a wrong first record is repaired through `adjust`. `occurredAt` is when it happened, on the caller's word, the request's clock when absent, and never later than that (400); `reference` is the delivery note. The server mints the id and records who asked.",
+          "Appends the container's first Stock Movement: from a supplier into a warehouse of its project. Only a container with no stock record yet can be received — one already in stock (409 naming the warehouse), in service (409: return it first) or retired (409: a scrapped container does not come back; register a new one) is refused, and a wrong first record is repaired through `adjust`. The warehouse takes stock: a closed or draft one is refused (409 naming the status), while what already stands in it stands. `occurredAt` is when it happened, on the caller's word, the request's clock when absent, and at most five minutes ahead of it, a device's clock being a device's (400 beyond); `reference` is the delivery note. The server mints the id and records who asked.",
         security: BEARER_SECURITY,
         responses: {
           201: describeJson("The receipt as it was appended.", StockMovement),
-          400: describeProblem("The path does not hold an id, or the body is missing the warehouse, names a member the ledger owns, names a warehouse that is not this container's project's, or dates the receipt after the request."),
+          400: describeProblem("The path does not hold an id, or the body is missing the warehouse, names a member the ledger owns, names a warehouse that is not this container's project's, or dates the receipt more than five minutes after the request."),
           ...commandProblems("create"),
-          409: describeProblem("The container already has a stock record: it is in stock, in service or retired."),
+          409: describeProblem("The container already has a stock record — it is in stock, in service or retired — or the warehouse is closed or a draft and takes no stock."),
         },
       }),
       guard,
@@ -531,15 +574,15 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         operationId: "returnContainer",
         summary: "Take a container out of service into stock",
         description:
-          "Ends the placement the container is in service at on `validTo` — the first day it no longer serves, held inside the subscription's period (400 naming the bound) and off the next placement (409) — and appends the return in the same transaction: from that placement into a warehouse of its project, or into maintenance at one when `toKind` says so. Either both change or neither. A container that is not in service is refused (409). `occurredAt` and `reference` are the movement's; `reason` says why it came back.",
+          "Ends the placement the container is in service at on `validTo` — the first day it no longer serves, held inside the subscription's period (400 naming the bound) and off the next placement (409) — and appends the return in the same transaction: from that placement into a warehouse of its project, or into maintenance at one when `toKind` says so. Either both change or neither. A container that is not in service is refused (409), and so is a warehouse that is closed or a draft (409 naming the status). `occurredAt` and `reference` are the movement's, the instant at most five minutes ahead of the request's clock; `reason` says why it came back.",
         security: BEARER_SECURITY,
         responses: {
           201: describeJson("The return as it was appended; the placement now ends on `validTo`.", StockMovement),
           400: describeProblem(
-            "The path does not hold an id, or the body is missing the warehouse or `validTo`, names a member the ledger owns, names a warehouse that is not this container's project's, ends the placement on or before the day it started or outside the subscription's period, or dates the return after the request.",
+            "The path does not hold an id, or the body is missing the warehouse or `validTo`, names a member the ledger owns, names a warehouse that is not this container's project's, ends the placement on or before the day it started or outside the subscription's period, or dates the return more than five minutes after the request.",
           ),
           ...commandProblems("create"),
-          409: describeProblem("The container is not in service, or the new end would run its placement into the next one."),
+          409: describeProblem("The container is not in service, the warehouse is closed or a draft and takes no stock, or the new end would run its placement into the next one."),
         },
       }),
       guard,
@@ -562,13 +605,13 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         operationId: "transferContainer",
         summary: "Move a container between places in stock",
         description:
-          "Appends a transfer from where the container stands — a warehouse, or maintenance at one — to another warehouse of its project, or into or out of maintenance, recorded on arrival: a container on a truck between two warehouses reads as still in the first until the second records it. The same place and the same kind is refused (400 on `warehouseId`: already there). A container with no stock record, in service or retired is refused (409).",
+          "Appends a transfer from where the container stands — a warehouse, or maintenance at one — to another warehouse of its project, or into or out of maintenance, recorded on arrival: a container on a truck between two warehouses reads as still in the first until the second records it. The same place and the same kind is refused (400 on `warehouseId`: already there), and a warehouse that is closed or a draft takes nothing (409 naming the status; a transfer out of one is the way to empty it). A container with no stock record, in service or retired is refused (409).",
         security: BEARER_SECURITY,
         responses: {
           201: describeJson("The transfer as it was appended.", StockMovement),
-          400: describeProblem("The path does not hold an id, or the body is missing the warehouse, names a member the ledger owns, names a warehouse that is not this container's project's, names the place the container already stands in, or dates the transfer after the request."),
+          400: describeProblem("The path does not hold an id, or the body is missing the warehouse, names a member the ledger owns, names a warehouse that is not this container's project's, names the place the container already stands in, or dates the transfer more than five minutes after the request."),
           ...commandProblems("create"),
-          409: describeProblem("The container is not in stock: it has no record, is in service or is retired."),
+          409: describeProblem("The container is not in stock — it has no record, is in service or is retired — or the warehouse is closed or a draft and takes no stock."),
         },
       }),
       guard,
@@ -596,7 +639,7 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         responses: {
           201: describeJson("The decommission as it was appended; a placement it ended now ends on `validTo`.", StockMovement),
           400: describeProblem(
-            "The path does not hold an id, or the body is missing the reason, names a member the ledger owns, gives `validTo` out of service or withholds it in service, ends the placement on or before the day it started or outside the subscription's period, or dates the decommission after the request.",
+            "The path does not hold an id, or the body is missing the reason, names a member the ledger owns, gives `validTo` out of service or withholds it in service, ends the placement on or before the day it started or outside the subscription's period, or dates the decommission more than five minutes after the request.",
           ),
           ...commandProblems("create"),
           409: describeProblem("The container has no stock record, is already retired, or the placement's new end would run it into the next one."),
@@ -622,15 +665,15 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         operationId: "adjustContainer",
         summary: "Correct the ledger's reading of a container",
         description:
-          "The correction door: appends an adjustment from wherever the ledger says the container is — a supplier when it has no record, which is how an import that skipped the receipt is repaired — to a warehouse of its project, to maintenance at one, or to scrap, with the reason and, where it corrects one, the movement it corrects, which must be this container's (400). Neither side may be service: a container in service is refused (409) and is returned or decommissioned instead, since an adjustment does not touch a placement. `edit` on `resources.containers`, not `create`: this rewrites what the ledger says rather than recording what happened.",
+          "The correction door: appends an adjustment from wherever the ledger says the container is — a supplier when it has no record, which is how an import that skipped the receipt is repaired — to a warehouse of its project, to maintenance at one, or to scrap, with the reason and, where it corrects one, the movement it corrects, which must be this container's (400). Neither side may be service: a container in service is refused (409) and is returned or decommissioned instead, since an adjustment does not touch a placement. A warehouse that is closed or a draft takes nothing (409 naming the status). `edit` on `resources.containers`, not `create`: this rewrites what the ledger says rather than recording what happened.",
         security: BEARER_SECURITY,
         responses: {
           201: describeJson("The adjustment as it was appended.", StockMovement),
           400: describeProblem(
-            "The path does not hold an id, or the body is missing the reason or the target, names a member the ledger owns, names a warehouse with scrap or none with a place in stock, names a warehouse that is not this container's project's, names a movement that is not this container's, or dates the adjustment after the request.",
+            "The path does not hold an id, or the body is missing the reason or the target, names a member the ledger owns, names a warehouse with scrap or none with a place in stock, names a warehouse that is not this container's project's, names a movement that is not this container's, or dates the adjustment more than five minutes after the request.",
           ),
           ...commandProblems("edit"),
-          409: describeProblem("The container is in service: return or decommission it."),
+          409: describeProblem("The container is in service (return or decommission it), or the warehouse is closed or a draft and takes no stock."),
         },
       }),
       guard,

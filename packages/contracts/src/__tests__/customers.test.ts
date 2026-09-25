@@ -57,6 +57,8 @@ const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
 const THIRD = "01a0d3a5-e5e0-7000-8000-000000000003"
 const STAMPS = { createdAt: "2026-09-24T13:41:00.000Z", updatedAt: "2026-09-24T13:41:00.000Z" }
 const POINT = { type: "Point", coordinates: [12.5683, 55.6761] }
+/** The same point with an altitude: what a flat column refuses with 22023 after the write, and the contracts refuse first (#101). */
+const LIFTED = { type: "Point", coordinates: [12.5683, 55.6761, 10] }
 
 /** More ids than a set body may carry, to tell the body's bound from the row's. */
 const tooManyIds = Array.from({ length: 201 }, (_unused, index) => `01a0d3a5-e5e0-7000-8000-${String(index).padStart(12, "0")}`)
@@ -189,6 +191,14 @@ describe("Property", () => {
     assert.equal(Property.safeParse({ ...property, location: { type: "Point", coordinates: [200, 55] } }).success, false)
     assert.equal(Property.safeParse({ ...property, location: [12.5683, 55.6761] }).success, false)
     assert.equal(Property.safeParse({ ...property, kind: "house" }).success, false)
+  })
+
+  test("holds its point flat: a third ordinate is refused at the coordinates, on the resource, the create and the patch alike (#101)", () => {
+    assert.deepEqual(refusal(Property.safeParse({ ...property, location: LIFTED })).map((issue) => issue.path), ["location.coordinates"])
+    const body = { projectId: OTHER, name: "Parkvej 18", address: "Parkvej 18, 2000 Frederiksberg", kind: "residential", location: LIFTED }
+    assert.deepEqual(refusal(PropertyCreate.safeParse(body)).map((issue) => issue.path), ["location.coordinates"])
+    assert.deepEqual(refusal(PropertyPatch.safeParse({ location: LIFTED })).map((issue) => issue.path), ["location.coordinates"])
+    assert.equal(PropertyCreate.safeParse({ ...body, location: POINT }).success, true)
   })
 
   test("names each party by customer and role, and refuses a role outside the vocabulary", () => {
@@ -333,6 +343,9 @@ describe("SharedCollectionPoint", () => {
       assert.deepEqual(refusal(SharedCollectionPointCreate.safeParse(without)).map((issue) => issue.path), [key])
     }
     refusesWhatTheServerOwns(SharedCollectionPointCreate, body)
+    assert.deepEqual(refusal(SharedCollectionPointCreate.safeParse({ ...body, location: LIFTED })).map((issue) => issue.path), ["location.coordinates"], "a flat point: no altitude (#101)")
+    assert.deepEqual(refusal(SharedCollectionPoint.safeParse({ ...point, location: LIFTED })).map((issue) => issue.path), ["location.coordinates"])
+    assert.deepEqual(refusal(SharedCollectionPointPatch.safeParse({ location: LIFTED })).map((issue) => issue.path), ["location.coordinates"])
   })
 
   test("patches the point but not its project or its membership", () => {

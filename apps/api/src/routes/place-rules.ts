@@ -11,24 +11,31 @@
 // contracts judge a patch only where it carries both halves, so the route
 // holds the patch against the stored row before the update goes out and
 // refuses in the contracts' own words at the contracts' own paths, so one rule
-// has one sentence wherever it was noticed. Without that the table's
-// `depot_provider_shape` or `depot_hours_shape` check would answer, and a rule
-// a client can fix would arrive as a 500.
+// has one sentence wherever it was noticed: the provider through
+// `requireProviderShape` (routes/shared.ts, the one refusal shape the fleet
+// shares), then the hours. The route takes the row's lock before it reads the
+// row (`lockRow`), since two patches of one depot each read and then write
+// and would otherwise both pass; and the table's `<table>_provider_shape` and
+// `<table>_hours_shape` checks stand behind that through `refuseCheck`
+// (`placeShapeInvalid`), in the same words at the same paths, so a check the
+// pre-check somehow did not foresee is a 400 and never a 500 with a constraint
+// name in the log.
 //
 // The point goes in and comes back as GeoJSON through the column type, the
 // way a property's does, and `refuseCheck` (routes/shared.ts) stands behind
 // `<table>_location_valid` as it stands behind a planning area's polygon:
 // SQLSTATE 23514 on that constraint is a 400 on `location`, "Not a valid
 // point". For a point the door is a backstop and not a path a body can reach:
-// the contracts already refuse an ordinate off the globe by shape, a Point
-// with coordinates is never empty, and PostGIS calls every point valid — where
-// a polygon's ring can cross itself past the shape rule and only ST_IsValid
-// sees it. It is wired all the same, so a check the API did not foresee is a
-// sentence and not a 500 with a constraint name in the log.
-import { BOTH_HOURS_OR_NEITHER, hoursShape, PROVIDER_WITH_PROVIDER_OWNERSHIP, providerShape } from "@waste/contracts/places"
+// the contracts already refuse an ordinate off the globe and a third ordinate
+// by shape (`FlatPoint`), a Point with coordinates is never empty, and PostGIS
+// calls every point valid — where a polygon's ring can cross itself past the
+// shape rule and only ST_IsValid sees it. It is wired all the same, so a check
+// the API did not foresee is a sentence and not a 500 with a constraint name
+// in the log.
+import { BOTH_HOURS_OR_NEITHER, hoursShape, PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/contracts/places"
 
 import { invalidRequest } from "../problem"
-import { timeOf, type Refusal } from "./shared"
+import { requireProviderShape, timeOf, type Refusal } from "./shared"
 
 /** The four columns the two shape rules read, as a stored depot or station carries them. */
 export type PlaceShape = {
@@ -50,7 +57,8 @@ export type PlaceShapePatch = {
  * Holds the row a patch leaves behind to the two shape rules, in the
  * contracts' words and at their paths — `serviceProviderId` for the owner,
  * `closesAt` for the hours — so a client reads one answer whichever noticed.
- * Both rules are judged, since a form can fix both at once.
+ * The provider is judged first, through the one refusal shape the fleet
+ * shares, then the hours.
  */
 export function requirePlaceShape(current: PlaceShape, patch: PlaceShapePatch): void {
   const merged: PlaceShape = {
@@ -59,11 +67,23 @@ export function requirePlaceShape(current: PlaceShape, patch: PlaceShapePatch): 
     opensAt: patch.opensAt === undefined ? current.opensAt : patch.opensAt,
     closesAt: patch.closesAt === undefined ? current.closesAt : patch.closesAt,
   }
-  const errors: { path: string; message: string }[] = []
-  if (!providerShape(merged.ownership, merged)) errors.push({ path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP })
-  if (!hoursShape(merged)) errors.push({ path: "closesAt", message: BOTH_HOURS_OR_NEITHER })
-  if (errors.length > 0) throw invalidRequest("body", errors)
+  requireProviderShape(merged.ownership, merged, PROVIDER_WITH_PROVIDER_OWNERSHIP)
+  if (!hoursShape(merged)) throw invalidRequest("body", [{ path: "closesAt", message: BOTH_HOURS_OR_NEITHER }])
 }
+
+/** The tables that carry the two shape checks, as their constraint names are spelled. */
+export type PlaceShapeTable = "depot" | "unloading_station"
+
+/**
+ * The `refuseCheck` door for a place's `<table>_provider_shape` and
+ * `<table>_hours_shape`, in the contracts' words at the contracts' paths: the
+ * backstop behind `requirePlaceShape`, so a row the pre-check let through and
+ * the table refuses is the same 400 and not a 500.
+ */
+export const placeShapeInvalid = (table: PlaceShapeTable): Record<string, Refusal> => ({
+  [`${table}_provider_shape`]: { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP },
+  [`${table}_hours_shape`]: { path: "closesAt", message: BOTH_HOURS_OR_NEITHER },
+})
 
 /** A nullable `time` column as the wire spells it: `HH:MM`, or null where no hour was recorded. */
 export const hourOf = (value: string | null): string | null => (value === null ? null : timeOf(value))

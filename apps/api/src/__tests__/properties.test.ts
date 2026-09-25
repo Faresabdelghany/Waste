@@ -135,6 +135,14 @@ describe("the property endpoints", { skip: database.skip }, () => {
         problem.errors?.map((error) => error.path),
         ["location.coordinates.0"],
       )
+      const lifted = await refused(
+        await olivia("/properties", {
+          method: "POST",
+          body: { ...body(a.projects.copenhagen.id, "Lifted"), location: { type: "Point", coordinates: [12.5683, 55.6761, 10] } },
+        }),
+        400,
+      )
+      assert.deepEqual(lifted.errors?.map((error) => error.path), ["location.coordinates"], "a third ordinate: the column is flat, and the refusal is the contracts' and never PostGIS's 22023 (#101)")
     })
 
     test("writes the parties the body starts with, each a customer of this company", async () => {

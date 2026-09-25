@@ -28,6 +28,8 @@ const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
 const THIRD = "01a0d3a5-e5e0-7000-8000-000000000003"
 const STAMPS = { createdAt: "2026-09-24T13:41:00.000Z", updatedAt: "2026-09-24T13:41:00.000Z" }
 const POINT = { type: "Point", coordinates: [12.5951, 55.7089] }
+/** The same point with an altitude: what a flat column refuses with 22023 after the write, and the contracts refuse first. */
+const LIFTED = { type: "Point", coordinates: [12.5951, 55.7089, 10] }
 const providerIssue = { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP }
 const hoursIssue = { path: "closesAt", message: BOTH_HOURS_OR_NEITHER }
 
@@ -110,6 +112,14 @@ describe("Warehouse", () => {
     refusesAnEmptyPatch(WarehousePatch)
     for (const key of ["projectId", "code"]) assert.match(refusal(WarehousePatch.safeParse({ name: "x", [key]: "y" }))[0].message, new RegExp(key))
   })
+
+  test("holds its point flat: a third ordinate is refused at the coordinates, on the resource, the create and the patch alike", () => {
+    assert.deepEqual(refusal(Warehouse.safeParse({ ...warehouse, location: LIFTED })).map((issue) => issue.path), ["location.coordinates"])
+    const body = { projectId: OTHER, code: "WH-WEST", name: "Warehouse West", address: "Sundkrogsgade 1", location: LIFTED }
+    assert.deepEqual(refusal(WarehouseCreate.safeParse(body)).map((issue) => issue.path), ["location.coordinates"])
+    assert.deepEqual(refusal(WarehousePatch.safeParse({ location: LIFTED })).map((issue) => issue.path), ["location.coordinates"])
+    assert.equal(WarehouseCreate.safeParse({ ...body, location: POINT }).success, true)
+  })
 })
 
 describe("Depot", () => {
@@ -131,6 +141,8 @@ describe("Depot", () => {
     assert.deepEqual(refusal(DepotCreate.safeParse({ ...body, opensAt: "06:00" })), [hoursIssue])
     assert.deepEqual(refusal(DepotCreate.safeParse({ ...body, closesAt: "18:00" })), [hoursIssue])
     assert.equal(DepotCreate.safeParse({ ...body, opensAt: "22:00", closesAt: "05:00" }).success, true, "an overnight window")
+    assert.deepEqual(refusal(DepotCreate.safeParse({ ...body, location: LIFTED })).map((issue) => issue.path), ["location.coordinates"], "a flat point: no altitude")
+    assert.deepEqual(refusal(DepotPatch.safeParse({ location: LIFTED })).map((issue) => issue.path), ["location.coordinates"])
     refusesWhatTheServerOwns(DepotCreate, body)
     for (const key of Object.keys(body)) {
       const without: Record<string, unknown> = { ...body }
@@ -164,6 +176,8 @@ describe("UnloadingStation", () => {
     assert.deepEqual(refusal(UnloadingStationCreate.safeParse({ ...body, opensAt: "06:00" })), [hoursIssue])
     assert.deepEqual(refusal(UnloadingStationCreate.safeParse({ ...body, wasteFractionIds: [OTHER, OTHER] })), [{ path: "wasteFractionIds", message: EACH_FRACTION_ONCE }])
     assert.equal(UnloadingStationCreate.safeParse({ ...body, wasteFractionIds: tooManyIds }).success, false)
+    assert.deepEqual(refusal(UnloadingStationCreate.safeParse({ ...body, location: LIFTED })).map((issue) => issue.path), ["location.coordinates"], "a flat point: no altitude")
+    assert.deepEqual(refusal(UnloadingStationPatch.safeParse({ location: LIFTED })).map((issue) => issue.path), ["location.coordinates"])
     refusesWhatTheServerOwns(UnloadingStationCreate, body)
     assert.match(refusal(UnloadingStationCreate.safeParse({ ...body, projectId: OTHER }))[0].message, /projectId/)
     for (const key of Object.keys(body)) {

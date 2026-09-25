@@ -154,6 +154,11 @@ describe("the warehouse endpoints", { skip: database.skip }, () => {
         400,
       )
       assert.deepEqual(paths(offTheGlobe), ["location.coordinates.1"])
+      const lifted = await refused(
+        await olivia("/warehouses", { method: "POST", body: body(a.projects.copenhagen.id, "WH-OFF", { location: { type: "Point", coordinates: [12.5977, 55.7083, 10] } }) }),
+        400,
+      )
+      assert.deepEqual(paths(lifted), ["location.coordinates"], "a third ordinate: the column is flat, and the refusal is the contracts' and never PostGIS's 22023")
       assert.deepEqual(paths(await refused(await olivia("/warehouses", { method: "POST", body: body(a.projects.copenhagen.id, "WH-OFF", { status: "open" }) }), 400)), ["status"])
       const owned = await refused(await olivia("/warehouses", { method: "POST", body: body(a.projects.copenhagen.id, "WH-OFF", { id: testId() }) }), 400)
       assert.ok(owned.errors?.some((error) => /id/.test(error.message)), JSON.stringify(owned.errors))

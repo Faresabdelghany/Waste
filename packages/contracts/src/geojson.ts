@@ -61,12 +61,23 @@ export type Polygon = z.infer<typeof Polygon>
 // which the API can only answer as a 500. So a boundary is held to two
 // ordinates here, where the refusal is a 400 naming the position: the same
 // ring rules as `Polygon`, over positions of exactly `[longitude, latitude]`.
-// `Point` keeps `Position` for now; the Registry's points can adopt
-// `Position2D` when their routes want the same answer.
+// `FlatPoint` is the same over one position (Issue #101, review round A):
+// every point a column of this system stores — a property's, a shared
+// collection point's, a warehouse's, a depot's, an unloading station's — is a
+// `FlatPoint` on the wire, so a third ordinate is a 400 at `coordinates` and
+// never PostGIS's 22023. `Point` stays for a geometry no column holds, such as
+// a stop the map places from an address.
 
 /** `[longitude, latitude]` and nothing else: a position for a flat column. */
 export const Position2D = z.tuple([Longitude, Latitude])
 export type Position2D = z.infer<typeof Position2D>
+
+/** `Point` over a flat position: what a `geometry(Point, 4326)` column takes without a 22023 on the way in. */
+export const FlatPoint = z.object({
+  type: z.literal("Point"),
+  coordinates: Position2D,
+})
+export type FlatPoint = z.infer<typeof FlatPoint>
 
 /** `LinearRing` over flat positions: four or more, closed, three distinct. */
 export const FlatLinearRing = z

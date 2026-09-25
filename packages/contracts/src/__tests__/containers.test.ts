@@ -127,14 +127,17 @@ describe("ContainerServicePlacementCreate", () => {
 
   test("names the subscription, the fraction and the first day; the container is the path's and the project is its", () => {
     assert.deepEqual(ContainerServicePlacementCreate.parse(body), body)
-    assert.deepEqual(ContainerServicePlacementCreate.parse({ ...body, serviceFrequencyId: OTHER, validTo: "2027-01-01" }), {
-      ...body,
-      serviceFrequencyId: OTHER,
-      validTo: "2027-01-01",
-    })
+    assert.deepEqual(ContainerServicePlacementCreate.parse({ ...body, serviceFrequencyId: OTHER }), { ...body, serviceFrequencyId: OTHER })
     for (const key of ["containerId", "projectId", "effectiveServiceFrequencyId"]) {
       assert.match(refusal(ContainerServicePlacementCreate.safeParse({ ...body, [key]: OTHER }))[0].message, new RegExp(key))
     }
+  })
+
+  test("carries no end: a placement ends through the container's return or decommission, so validTo is refused by name (Issue #101)", () => {
+    const issues = refusal(ContainerServicePlacementCreate.safeParse({ ...body, validTo: "2027-01-01" }))
+    assert.deepEqual(issues.map((issue) => issue.path), [""])
+    assert.match(issues[0].message, /validTo/)
+    assert.equal(ContainerServicePlacementCreate.safeParse({ ...body, validTo: null }).success, false, "not even as null")
   })
 
   test("is the issue command too, so it takes when the container was issued and what paper it quotes, for the movement (Issue #101)", () => {
@@ -147,19 +150,18 @@ describe("ContainerServicePlacementCreate", () => {
     }
   })
 
-  test("needs all three, refuses a backwards period, and mints nothing", () => {
+  test("needs all three, and mints nothing", () => {
     for (const key of Object.keys(body)) {
       const without: Record<string, unknown> = { ...body }
       delete without[key]
       assert.deepEqual(refusal(ContainerServicePlacementCreate.safeParse(without)).map((issue) => issue.path), [key])
     }
-    assert.deepEqual(refusal(ContainerServicePlacementCreate.safeParse({ ...body, validTo: "2026-01-01" })), [{ path: "validTo", message: BACKWARDS }])
     refusesWhatTheServerOwns(ContainerServicePlacementCreate, body)
   })
 })
 
 describe("ContainerServicePlacementPatch", () => {
-  test("ends the placement, corrects the fraction and overrides the frequency, and moves nothing else", () => {
+  test("corrects the end, the fraction and the override, and moves nothing else", () => {
     assert.deepEqual(ContainerServicePlacementPatch.parse({ validTo: "2026-07-01" }), { validTo: "2026-07-01" })
     assert.deepEqual(ContainerServicePlacementPatch.parse({ serviceFrequencyId: null }), { serviceFrequencyId: null })
     assert.deepEqual(ContainerServicePlacementPatch.parse({ wasteFractionId: THIRD }), { wasteFractionId: THIRD })

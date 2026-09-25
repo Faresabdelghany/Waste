@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { FlatLinearRing, FlatPolygon, Latitude, LinearRing, Longitude, Point, Polygon, Position, Position2D } from "../geojson"
+import { FlatLinearRing, FlatPoint, FlatPolygon, Latitude, LinearRing, Longitude, Point, Polygon, Position, Position2D } from "../geojson"
 
 const cph: [number, number] = [12.5683, 55.6761]
 
@@ -37,6 +37,18 @@ describe("Position2D, FlatLinearRing and FlatPolygon (#97)", () => {
     const result = FlatPolygon.safeParse(lifted)
     assert.equal(result.success, false)
     assert.deepEqual(result.error?.issues.map((issue) => issue.path.join(".")), ["coordinates.0.2"], "the position with the third ordinate, by name")
+  })
+
+  test("a flat point takes what Point takes, less the altitude, and refuses a third ordinate at the coordinates (#101)", () => {
+    const point = { type: "Point", coordinates: cph }
+    assert.deepEqual(FlatPoint.parse(point), point)
+    assert.deepEqual(Point.parse(point), point, "every flat point is a point")
+    const lifted = { type: "Point", coordinates: [...cph, 10] }
+    assert.equal(Point.safeParse(lifted).success, true, "Point allows an altitude")
+    const result = FlatPoint.safeParse(lifted)
+    assert.equal(result.success, false)
+    assert.deepEqual(result.error?.issues.map((issue) => issue.path.join(".")), ["coordinates"], "the tuple that grew a third ordinate")
+    assert.equal(FlatPoint.safeParse({ type: "Point", coordinates: [200, 55] }).success, false, "and the WGS 84 range still holds")
   })
 })
 

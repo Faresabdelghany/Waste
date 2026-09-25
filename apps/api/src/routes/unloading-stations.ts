@@ -23,27 +23,34 @@
 // reads are 404s, and its writes find no row; a create, which no scope can
 // bound, is refused up front (403 stating the rule, since a better body would
 // not help). An account that works in any project of the company reaches
-// every station, since a station serves every project. This is deliberately
-// not the rule the other company-wide families (waste fractions, container
-// types, vehicle types) follow, where a provider with the grant reads the
-// company's vocabulary: a vocabulary says nothing about the company's
-// operation, and where it unloads does.
+// every station, since a station serves every project, and so does one that
+// works in all of them while the company has none yet: `allProjects` is the
+// grant, not the count, and a company registers its plant before its first
+// project. This is deliberately not the rule the other company-wide families
+// (waste fractions, container types, vehicle types) follow, where a provider
+// with the grant reads the company's vocabulary: a vocabulary says nothing
+// about the company's operation, and where it unloads does.
 //
 // The fractions are the set that travels with the record, through the
 // company-wide, role-less sibling in routes/id-sets.ts: read with the station
 // sorted by id, a page's loaded in one query, a create may carry the set it
 // starts with, a patch never touches it, the PUT replaces it whole and moves
 // the stamp. Every id is a waste fraction of this company (400 at
-// `wasteFractionIds.N`). `?wasteFractionId=` on the list answers the stations
-// that accept a fraction, as one `exists`.
+// `wasteFractionIds.N`), and a create and the PUT answer the set they were
+// given, in read order, rather than reading it back. `?wasteFractionId=` on
+// the list answers the stations that accept a fraction, as one `exists`, and
+// is held to a fraction of this company (400 on the query), like the
+// containers list's `warehouseId`.
 //
 // The two shape rules and the hours are the depot's (routes/place-rules.ts):
 // the owning provider is named with `service-provider` ownership and with
 // nothing else, the hours are both or neither, a patch is held against the
-// stored row in the contracts' words, and the point goes through
+// stored row in the contracts' words under the row's lock, the table's two
+// checks answer in the same words behind that, and the point goes through
 // `unloading_station_location_valid` behind `refuseCheck`. The grant is
 // `resources.depots`, shared with the depots (#101 §6.22: one module key, two
 // families).
+import type { FlatPoint } from "@waste/contracts/geojson"
 import { Page } from "@waste/contracts/pagination"
 import { UnloadingStation, UnloadingStationCreate, UnloadingStationFractionsSet, UnloadingStationListQuery, UnloadingStationPatch } from "@waste/contracts/places"
 import type { UnloadingStationOwnership, UnloadingStationStatus } from "@waste/contracts/resources"
@@ -60,10 +67,10 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet } from "./id-sets"
-import { hourOf, pointInvalid, requirePlaceShape } from "./place-rules"
+import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet } from "./id-sets"
+import { hourOf, placeShapeInvalid, pointInvalid, requirePlaceShape } from "./place-rules"
 import { requireServiceProvider, requireWasteFraction } from "./references"
-import { describeJson, IdParam, refuseCheck, refuseDuplicate, stampsOf } from "./shared"
+import { describeJson, IdParam, lockRow, refuseCheck, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "resources.depots"
 const UnloadingStationPage = Page(UnloadingStation)
@@ -96,14 +103,14 @@ const fractions: IdSet<typeof unloadingStationFraction> = {
   require: requireEachOf(wasteFraction, "wasteFractionIds", requireWasteFraction),
 }
 
-/** The row on the wire, with the fractions the page loaded for it, by id. The two coded fields are text with a CHECK in the database and an enum here; the hours drop Postgres's seconds. */
+/** The row on the wire, with the fractions the page loaded for it, by id. The two coded fields are text with a CHECK in the database and an enum here; the hours drop Postgres's seconds; the point is the contracts' `FlatPoint`, since the column is flat and refuses a third ordinate on write, however the column's type spells the altitude as optional. */
 function stationOf(row: Row, wasteFractionIds: readonly string[]): UnloadingStation {
   return {
     id: row.id,
     code: row.code,
     name: row.name,
     address: row.address,
-    location: row.location,
+    location: row.location as FlatPoint,
     ownership: row.ownership as UnloadingStationOwnership,
     serviceProviderId: row.serviceProviderId,
     opensAt: hourOf(row.opensAt),
@@ -130,13 +137,16 @@ const nameTaken = (name: string) => `This company already has an unloading stati
 /** `CHECK (st_isvalid(location) and not st_isempty(location) and <WGS 84>)`: the one check only the database runs on the point. */
 const LOCATION_INVALID = "unloading_station_location_valid"
 
+/** Every check the table runs that a body can be told about: the point, and the two shape rules behind `requirePlaceShape`. */
+const CHECKS = { ...pointInvalid(LOCATION_INVALID), ...placeShapeInvalid("unloading_station") }
+
 /** What an account that works in no project is told when it tries to register a station: the rule in the header, as a 403 since a better body would not help. */
 const REACHES_NO_STATION = "This account works in no project and reaches no unloading station"
 
 const noSuchStation = (id: string) => problem(404, { detail: `No unloading station ${id} in this company` })
 
-/** Whether the caller works in any project of the company: what reaching a station, which serves every project, takes. */
-const worksInAProject = (principal: Principal): boolean => projectIdsOf(principal).length > 0
+/** Whether the caller works in any project of the company — or in all of them, which is a grant and holds while the company has none yet: what reaching a station, which serves every project, takes. */
+const worksInAProject = (principal: Principal): boolean => principal.user.allProjects || projectIdsOf(principal).length > 0
 
 /**
  * The rows of this company, for an account that works in a project of it:
@@ -170,11 +180,11 @@ export function unloadingStationRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "listUnloadingStations",
         summary: "The company's unloading stations",
         description:
-          "One page of the company's unloading stations, oldest first (ids are time-ordered), each with `wasteFractionIds`, what it accepts, by id. A station is the company's and serves every project, so there is no `projectId` to narrow by; an account that works in no project of the company, such as a service provider's, reads an empty page, since where the company unloads is not its to see until step 7. `status` narrows it to the stations in that state and `wasteFractionId` to the stations that accept that fraction. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of the company's unloading stations, oldest first (ids are time-ordered), each with `wasteFractionIds`, what it accepts, by id. A station is the company's and serves every project, so there is no `projectId` to narrow by; an account that works in no project of the company, such as a service provider's, reads an empty page, since where the company unloads is not its to see until step 7. `status` narrows it to the stations in that state and `wasteFractionId` to the stations that accept that fraction, which must be a waste fraction of this company (400 on the query). Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of unloading stations, each with its fractions.", UnloadingStationPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `status` is not one of the four, or `wasteFractionId` is not an id."),
+          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `status` is not one of the four, or `wasteFractionId` is not a waste fraction of this company."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `view` on `resources.depots`."),
         },
@@ -187,6 +197,8 @@ export function unloadingStationRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const after = afterCursor(cursor)
         const tx = c.get("tx")
         const principal = c.get("principal")
+        // The fraction asked about is one of this company's, like the containers list's warehouse: a filter that names a row is held to it.
+        await requireWasteFraction(tx, principal.companyId, wasteFractionId, "wasteFractionId", "query")
         const rows = await tx
           .select(columns)
           .from(unloadingStation)
@@ -235,7 +247,7 @@ export function unloadingStationRoutes(guard: MiddlewareHandler<AuthEnv>) {
         if (!worksInAProject(principal)) throw problem(403, { detail: REACHES_NO_STATION })
         await requireServiceProvider(tx, principal.companyId, values.serviceProviderId)
         await fractions.require(tx, principal.companyId, wasteFractionIds)
-        const [row] = await refuseCheck(pointInvalid(LOCATION_INVALID), () =>
+        const [row] = await refuseCheck(CHECKS, () =>
           refuseDuplicate({ [CODE_TAKEN]: codeTaken(values.code), [NAME_TAKEN]: nameTaken(values.name) }, () =>
             tx
               .insert(unloadingStation)
@@ -244,7 +256,8 @@ export function unloadingStationRoutes(guard: MiddlewareHandler<AuthEnv>) {
           ),
         )
         await writeIds(tx, fractions, { companyId: principal.companyId, id: row.id }, wasteFractionIds)
-        return c.json(await stationWithFractions(tx, principal.companyId, row), 201)
+        // The set just written is known — held to the company, each id once — so it is answered in read order and not read back.
+        return c.json(stationOf(row, asRead(wasteFractionIds)), 201)
       },
     )
     .get(
@@ -304,15 +317,19 @@ export function unloadingStationRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const principal = c.get("principal")
 
-        // The row first, then what the patch points at and what it leaves
-        // behind: an id nobody minted is a 404 here as in every other family.
+        // The row's lock, then the row, then what the patch points at and
+        // what it leaves behind: the shape rules are held against the stored
+        // row, and two patches of one station each read and then write, so
+        // the lock makes the second read what the first wrote. An id nobody
+        // minted locks nothing and is a 404 here as in every other family.
+        await lockRow(tx, unloadingStation, { companyId: principal.companyId, id })
         const current = await findStation(tx, principal, id)
         if (current === undefined) throw noSuchStation(id)
         await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)
         requirePlaceShape(current, patch)
 
         const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
-        const [row] = await refuseCheck(pointInvalid(LOCATION_INVALID), () =>
+        const [row] = await refuseCheck(CHECKS, () =>
           refuseDuplicate(sentences, () =>
             tx
               .update(unloadingStation)
@@ -360,7 +377,7 @@ export function unloadingStationRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .returning(columns),
         )
         if (row === undefined) throw noSuchStation(id)
-        return c.json(await stationWithFractions(tx, principal.companyId, row))
+        return c.json(stationOf(row, asRead(wasteFractionIds)))
       },
     )
 }
