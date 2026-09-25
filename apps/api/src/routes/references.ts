@@ -266,28 +266,31 @@ export async function requireUnloadingStation(tx: Tx, companyId: string, id: str
 // since the sentence names what was asked for and the caller can pick
 // another. A driver's login is a user account of this company that is not
 // deactivated; whether it has signed in yet is the account's business, not
-// the driver profile's.
+// the driver profile's. Where a caller needs the row and not only its
+// existence — the class a vehicle requires, the licence a driver holds —
+// routes/fleet-lookups.ts reads it, refusing in the sentences spelled here.
 
 /** What a body is told when the vehicle it names is not one of the project's, or not of the kind asked for. */
 export const NOT_A_VEHICLE = "Not a vehicle of this project"
 export const NOT_A_POWERED_VEHICLE = "Not a powered vehicle of this project"
 export const NOT_A_TRAILER = "Not a trailer of this project"
 
-/** The sentence for a vehicle held to a kind, or to none. */
-const notAVehicleOf = (kind: VehicleKind | undefined): string => (kind === "powered-vehicle" ? NOT_A_POWERED_VEHICLE : kind === "trailer" ? NOT_A_TRAILER : NOT_A_VEHICLE)
+/** The sentence for a vehicle held to a kind, or to none; routes/fleet-lookups.ts's `findVehicle` refuses with it too. */
+export const notAVehicleOf = (kind: VehicleKind | undefined): string => (kind === "powered-vehicle" ? NOT_A_POWERED_VEHICLE : kind === "trailer" ? NOT_A_TRAILER : NOT_A_VEHICLE)
 
 /**
  * A Vehicle a body names: the project's, and of the kind demanded when one
  * is. One statement and one sentence, the kind in the `where` beside the
  * project, so a row of the wrong kind and a row that is not there are told
- * the same thing — which names what the field wanted.
+ * the same thing — which names what the field wanted. The kind and the path
+ * travel in one options object, since a caller that names the one usually
+ * names the other (`trailerId` is a trailer).
  */
 export async function requireVehicle(
   tx: Tx,
   scope: Scope,
   id: string | null | undefined,
-  { kind }: { kind?: VehicleKind } = {},
-  path = "vehicleId",
+  { kind, path = "vehicleId" }: { kind?: VehicleKind; path?: string } = {},
 ): Promise<void> {
   if (id == null) return
   await requireRow(

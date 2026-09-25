@@ -35,7 +35,6 @@ import { Page } from "@waste/contracts/pagination"
 import { providerShape } from "@waste/contracts/places"
 import type { Tx } from "@waste/db/client"
 import { driver } from "@waste/db/schema/fleet"
-import { depot } from "@waste/db/schema/places"
 import type { DriverStatus, EmploymentType, LicenceClass } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -47,8 +46,8 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { requireServiceProvider, requireUserAccount } from "./references"
-import { describeJson, IdParam, lockRow, refuseDuplicate, requireRow, stampsOf } from "./shared"
+import { requireDepot, requireServiceProvider, requireUserAccount } from "./references"
+import { describeJson, IdParam, lockRow, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "fleet.drivers"
 const DriverPage = Page(Driver)
@@ -111,20 +110,6 @@ const collisions = (values: { workforceReference?: string | null; userAccountId?
 })
 
 const noSuchDriver = (id: string) => problem(404, { detail: `No driver ${id} in the projects this account works in` })
-
-/** What a body is told when the home depot it names is not one of the project's. */
-const NOT_A_DEPOT = "Not a depot of this project"
-
-/**
- * A depot a body names as the home: the project's, since a driver is based
- * where their project's routes leave from. Local to the two fleet modules until
- * slice 3's `requireDepot` lands in routes/references.ts, where this moves at
- * the merge (vehicles.ts carries the same lines).
- */
-async function requireHomeDepot(tx: Tx, scope: Scope, id: string | null | undefined, path = "homeDepotId"): Promise<void> {
-  if (id == null) return
-  await requireRow(tx, depot, { companyId: scope.companyId, id, also: eq(depot.projectId, scope.projectId) }, { path, message: NOT_A_DEPOT })
-}
 
 /** The provider rule as the merged row must hold it, in the driver's words: a patch carries one half and the stored row the other. */
 function requireProviderShape(merged: { employment: string; serviceProviderId: string | null }): void {
@@ -220,7 +205,7 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>) {
 
         // The 400s first, each at its field, in the order a body reads.
         await requireServiceProvider(tx, principal.companyId, values.serviceProviderId)
-        await requireHomeDepot(tx, within, values.homeDepotId)
+        await requireDepot(tx, within, values.homeDepotId, "homeDepotId")
         await requireUserAccount(tx, principal.companyId, values.userAccountId)
 
         const [row] = await refuseDuplicate(collisions(values), () =>
@@ -311,7 +296,7 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>) {
 
         requireProviderShape(merged)
         await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)
-        await requireHomeDepot(tx, within, patch.homeDepotId)
+        await requireDepot(tx, within, patch.homeDepotId, "homeDepotId")
         await requireUserAccount(tx, principal.companyId, patch.userAccountId)
 
         const [row] = await refuseDuplicate(collisions(patch), () =>

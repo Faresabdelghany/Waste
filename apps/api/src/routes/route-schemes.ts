@@ -18,7 +18,7 @@
 // partial configuration. Resources (Issue #101) gave the scheme a depot and an
 // unloading station and the group a vehicle and a default driver, and #101's
 // slice 6 the rules that hold them: the depot is one of the project's and the
-// station one of the company's (400 at the field, routes/fleet-lookups.ts);
+// station one of the company's (400 at the field, routes/references.ts);
 // a group's vehicle is a powered vehicle of the project and its driver one who
 // may take it on the day the scheme starts or today, whichever is later, and
 // on a validated scheme no vehicle or driver is on two groups a shared day
@@ -84,9 +84,8 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { requireDepot, requireUnloadingStation } from "./fleet-lookups"
 import { periodAfter, requireOrdered } from "./periods"
-import { requirePlanningArea } from "./references"
+import { requireDepot, requirePlanningArea, requireUnloadingStation } from "./references"
 import {
   findScheme,
   groupsOf,

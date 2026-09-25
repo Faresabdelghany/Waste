@@ -30,7 +30,7 @@
 // that hold them. A group's `vehicleId` is a `powered-vehicle` of the scheme's
 // project and its `driverId` a driver of it — two more sets of
 // `requireGroupReferences`, held like the others, their sentences spelled in
-// routes/fleet-lookups.ts. A group naming both names a driver who may take
+// routes/references.ts. A group naming both names a driver who may take
 // that vehicle: `requireGroupDriver` is the licence rule of
 // @waste/domain/resources/licence judged on the day the scheme's period
 // starts or today on the project's clock, whichever is later (#101 §6.18), a
@@ -74,7 +74,7 @@ import { newId } from "../ids"
 import { invalidRequest, problem } from "../problem"
 import { dayInTimezone } from "./days"
 import { findDriver, findVehicle, projectTimezone, vehicleLabel } from "./fleet-lookups"
-import { requireContainer, requireContainerType, requireServiceProvider, requireVehicleType, requireWasteFraction } from "./references"
+import { requireContainer, requireContainerType, requireDriver, requireServiceProvider, requireVehicle, requireVehicleType, requireWasteFraction } from "./references"
 import { stamp, stampsOf, timeOf, type TenantTable } from "./shared"
 
 /** The grant every scheme and group route runs under: a group is a part of its scheme and not a surface of its own. */
@@ -373,9 +373,9 @@ export async function requireGroupReferences(tx: Tx, scope: Scope, refs: GroupRe
     and(eq(vehicle.companyId, scope.companyId), eq(vehicle.projectId, scope.projectId), eq(vehicle.kind, "powered-vehicle")),
     refs.vehicles,
   )
-  if (truck !== undefined) await findVehicle(tx, scope, truck.id, "powered-vehicle", truck.path)
+  if (truck !== undefined) await requireVehicle(tx, scope, truck.id, { kind: "powered-vehicle", path: truck.path })
   const who = await firstMissing(tx, driver, and(eq(driver.companyId, scope.companyId), eq(driver.projectId, scope.projectId)), refs.drivers)
-  if (who !== undefined) await findDriver(tx, scope, who.id, who.path)
+  if (who !== undefined) await requireDriver(tx, scope, who.id, who.path)
 }
 
 /**

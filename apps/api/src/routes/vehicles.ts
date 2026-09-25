@@ -75,7 +75,6 @@ import type { Tx } from "@waste/db/client"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
-import { depot } from "@waste/db/schema/places"
 import type { FuelType, LicenceClass, VehicleKind, VehicleOwnership, VehicleStatus } from "@waste/domain/resources/vocabulary"
 import { count } from "@waste/domain/text"
 import { and, asc, eq, gt, inArray, ne, or, sql } from "drizzle-orm"
@@ -89,8 +88,8 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { refuseStranded } from "./periods"
-import { requireServiceProvider, requireVehicleType, requireWasteFraction } from "./references"
-import { describeJson, IdParam, lockRow, refuseDuplicate, requireRow, stamp, stampsOf } from "./shared"
+import { requireDepot, requireServiceProvider, requireVehicleType, requireWasteFraction } from "./references"
+import { describeJson, IdParam, lockRow, refuseDuplicate, stamp, stampsOf } from "./shared"
 
 const MODULE = "fleet.vehicles"
 const VehiclePage = Page(Vehicle)
@@ -328,20 +327,6 @@ const liveAllocations = (companyId: string, vehicleId: string) =>
     gt(vehicleAllocation.plannedTo, sql`now()`),
   )
 
-/** What a body is told when the home depot it names is not one of the project's. */
-const NOT_A_DEPOT = "Not a depot of this project"
-
-/**
- * A depot a body names as the home: the project's, since a vehicle is based
- * where its project's routes leave from. Local to the two fleet modules until
- * slice 3's `requireDepot` lands in routes/references.ts, where this moves at
- * the merge (drivers.ts carries the same lines).
- */
-async function requireHomeDepot(tx: Tx, scope: Scope, id: string | null | undefined, path = "homeDepotId"): Promise<void> {
-  if (id == null) return
-  await requireRow(tx, depot, { companyId: scope.companyId, id, also: eq(depot.projectId, scope.projectId) }, { path, message: NOT_A_DEPOT })
-}
-
 /** The provider rule as the merged row must hold it, in the contracts' words: a patch carries one half and the stored row the other. */
 function requireProviderShape(merged: { ownership: string; serviceProviderId: string | null }): void {
   if (providerShape(merged.ownership, merged)) return
@@ -440,7 +425,7 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         // The 400s first, each at its field, in the order a body reads.
         await requireVehicleType(tx, principal.companyId, values.vehicleTypeId)
         await requireServiceProvider(tx, principal.companyId, values.serviceProviderId)
-        await requireHomeDepot(tx, within, values.homeDepotId)
+        await requireDepot(tx, within, values.homeDepotId, "homeDepotId")
         await requireCompartmentFractions(tx, principal.companyId, compartments)
 
         const [row] = await refuseDuplicate(collisions(values), () =>
@@ -533,7 +518,7 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         requireProviderShape(merged)
         await requireVehicleType(tx, principal.companyId, patch.vehicleTypeId)
         await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)
-        await requireHomeDepot(tx, within, patch.homeDepotId)
+        await requireDepot(tx, within, patch.homeDepotId, "homeDepotId")
         if (patch.status === "retired" && current.status !== "retired") {
           await refuseStranded(tx, vehicleAllocation, liveAllocations(principal.companyId, id), liveAllocationsNameThis)
         }

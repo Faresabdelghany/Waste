@@ -70,8 +70,8 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { dayInTimezone } from "./days"
-import { findDriver, findVehicle, projectTimezone, requireDepot, vehicleLabel, type DriverRow, type Scope, type VehicleRow } from "./fleet-lookups"
-import { requireWasteFraction } from "./references"
+import { findDriver, findVehicle, projectTimezone, vehicleLabel, type DriverRow, type VehicleRow } from "./fleet-lookups"
+import { requireDepot, requireWasteFraction, type Scope } from "./references"
 import { describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
 
 /** The grant every route here runs under: the planner's, not the fleet's. */
