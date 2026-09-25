@@ -90,7 +90,7 @@ import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { lastDayInside } from "./days"
 import { findDriver, findVehicle, projectTimezone, vehicleLabel, type DriverRow, type VehicleRow } from "./fleet-lookups"
 import { requireDepot, requireWasteFraction, type Scope } from "./references"
-import { describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
 import { LIVE_ALLOCATION_STATUSES, refuseRetiredVehicle, refuseUnavailableDriver } from "./statuses"
 
 /** The grant every route here runs under: the planner's, not the fleet's. */
@@ -427,7 +427,7 @@ export function vehicleAllocationRoutes(guard: MiddlewareHandler<AuthEnv>) {
           " The database holds one live reservation of a vehicle, of a driver and of a trailer at a time, so a window touching another live allocation's is refused (409) saying whose it was; a released allocation reserves nothing. `status` is `planned` unless the body says `confirmed`; `released` is a command of its own. The `allocate` event is appended in the same transaction, carrying the snapshot; an allocation names no route and no collection group. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The allocation as it was written.", VehicleAllocation),
+          201: describeCreated("The allocation as it was written.", VehicleAllocation),
           400: describeProblem(
             "The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the instant it starts, asks to be created `released`, names a vehicle that is not a powered vehicle of that project, a trailer that is not a trailer of it or is another live allocation's vehicle over the window, a driver who is not that project's or may not take the vehicle on the window's last day, a depot that is not that project's, or a waste fraction that is not this company's — each at the field that is wrong.",
           ),
@@ -464,7 +464,7 @@ export function vehicleAllocationRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .returning(columns),
         )
         await appendEvent(tx, principal, row, "allocate", null)
-        return c.json(allocationOf(row), 201)
+        return created(c, "/vehicle-allocations", allocationOf(row))
       },
     )
     .get(

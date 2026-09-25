@@ -137,7 +137,7 @@ describe("the container and placement endpoints", { skip: database.skip || owner
       { projectId: b.projects.copenhagen.id, label: "BIN-THEIRS", containerTypeId: theirBin.id },
       Container,
     )
-    await create(other, `/containers/${theirContainer.id}/receive`, { warehouseId: await warehouseIn(pool, b.companyId, b.projects.copenhagen.id, "WH-THEIRS") }, StockMovement)
+    await appended(other, `/containers/${theirContainer.id}/receive`, { warehouseId: await warehouseIn(pool, b.companyId, b.projects.copenhagen.id, "WH-THEIRS") }, StockMovement)
   })
   after(async () => {
     if (a) await dropTenant(pool, a.companyId, ownerPool)
@@ -150,6 +150,12 @@ describe("the container and placement endpoints", { skip: database.skip || owner
 
   const create = async <T extends { id: string }>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> =>
     created(call, path, await call(path, { method: "POST", body: values }), schema)
+  /** A ledger command's 201: the movement parsed and no Location to follow, since a movement has no address of its own (app.test.ts). */
+  const appended = async <T>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> => {
+    const response = await call(path, { method: "POST", body: values })
+    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
+    return schema.parse(await response.json())
+  }
   const refused = async (response: Response, status: number) => {
     assert.equal(response.status, status, JSON.stringify(await response.clone().json()))
     return await readProblem(response)
@@ -216,7 +222,7 @@ describe("the container and placement endpoints", { skip: database.skip || owner
   const stocked = (label: string, values: Record<string, unknown> = {}, warehouseId = west): Promise<Container> =>
     stockedIn(olivia, body(label, values), warehouseId)
   /** Takes the container out of service on `validTo`, back into the west warehouse: how a placement ends since the ledger. */
-  const returned = (into: Container, validTo: string) => create(olivia, `/containers/${into.id}/return`, { warehouseId: west, validTo }, StockMovement)
+  const returned = (into: Container, validTo: string) => appended(olivia, `/containers/${into.id}/return`, { warehouseId: west, validTo }, StockMovement)
   const onePlacement = async (call: Call, id: string): Promise<ContainerServicePlacement> => {
     const response = await call(`/placements/${id}`)
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))

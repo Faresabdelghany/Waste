@@ -13,6 +13,7 @@ import { and, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
+import { created } from "./created"
 import { nextMillisecond } from "./clock"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { readProblem } from "./read-problem"
@@ -99,11 +100,8 @@ describe("the vehicle allocation endpoints", { skip: database.skip || owner.skip
 
   type Schema<T> = { parse: (value: unknown) => T }
 
-  const create = async <T>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> => {
-    const response = await call(path, { method: "POST", body: values })
-    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
-    return schema.parse(await response.json())
-  }
+  const create = async <T extends { id: string }>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> =>
+    created(call, path, await call(path, { method: "POST", body: values }), schema)
   /** A body on Copenhagen Central for WH-24 over the hours of a day, with whatever else the test says. */
   const body = (day: string, from: string, to: string, values: Record<string, unknown> = {}) => ({
     projectId: a.projects.copenhagen.id,

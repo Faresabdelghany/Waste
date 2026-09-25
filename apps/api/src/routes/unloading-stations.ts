@@ -70,7 +70,7 @@ import { describeProblem, problem, validate } from "../problem"
 import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet } from "./id-sets"
 import { hourOf, placeShapeInvalid, pointInvalid, requirePlacePatch } from "./place-rules"
 import { requireServiceProvider, requireWasteFraction } from "./references"
-import { describeJson, IdParam, lockRow, refuseCheck, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseCheck, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "resources.depots"
 const UnloadingStationPage = Page(UnloadingStation)
@@ -228,7 +228,7 @@ export function unloadingStationRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Registers an unloading station for the company — a station serves every project, so the body names none, and an account that works in no project of the company may not register one (403). The code is the stable reference a person quotes (`ARC-AMAGER`) and is set once; the code and the name are each unique inside the company. The location is required — a route empties at a point — and one off the globe is refused before the database sees it. The ownership has no default, since the plant the company delivers to (`external`) is as common as its own; the owning service provider is named with `service-provider` ownership and with nothing else, this company's (400 on `serviceProviderId`). The opening hours are two times, both or neither (400 on `closesAt`); an overnight window is allowed. `weighbridge` says whether the station weighs what is delivered and defaults to false; the tickets themselves are Execution's. `wasteFractionIds` is what the station starts out accepting, each a waste fraction of this company (400 at `wasteFractionIds.N` otherwise) and each named once, none when absent. The status defaults to `active`. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The unloading station as it was written, with its fractions by id.", UnloadingStation),
+          201: describeCreated("The unloading station as it was written, with its fractions by id.", UnloadingStation),
           400: describeProblem(
             "The body is missing a field, names a member the server owns, holds a point off the globe, names a provider without service-provider ownership or none with it, gives one opening time without the other, names the same fraction twice, or names a service provider or a waste fraction that is not this company's.",
           ),
@@ -257,7 +257,7 @@ export function unloadingStationRoutes(guard: MiddlewareHandler<AuthEnv>) {
         )
         await writeIds(tx, fractions, { companyId: principal.companyId, id: row.id }, wasteFractionIds)
         // The set just written is known — held to the company, each id once — so it is answered in read order and not read back.
-        return c.json(stationOf(row, asRead(wasteFractionIds)), 201)
+        return created(c, "/unloading-stations", stationOf(row, asRead(wasteFractionIds)))
       },
     )
     .get(

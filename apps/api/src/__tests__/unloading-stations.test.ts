@@ -10,6 +10,7 @@ import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
+import { created } from "./created"
 import { nextMillisecond } from "./clock"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
@@ -95,11 +96,8 @@ describe("the unloading station endpoints", { skip: database.skip }, () => {
     ...values,
   })
 
-  const create = async <T>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> => {
-    const response = await call(path, { method: "POST", body: values })
-    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
-    return schema.parse(await response.json())
-  }
+  const create = async <T extends { id: string }>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> =>
+    created(call, path, await call(path, { method: "POST", body: values }), schema)
   const station = (code: string, values: Record<string, unknown> = {}) => create(olivia, "/unloading-stations", body(code, values), UnloadingStation)
   const one = async (call: Call, id: string): Promise<UnloadingStation> => {
     const response = await call(`/unloading-stations/${id}`)

@@ -49,7 +49,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet } from "./id-sets"
 import { requireContainerType } from "./references"
-import { describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "configure.master"
 const VehicleTypePage = Page(VehicleType)
@@ -159,7 +159,7 @@ export function vehicleTypeRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Adds a vehicle type to the company's own vocabulary. `key` is the stable slug the rest of the system quotes (`rear-loader`) and is set once; `name` is what a person reads. Both are unique inside the company, each with its own sentence. `containerTypeIds` is the compatibility set the type starts with — the container types a vehicle of this type may service, each one of this company's (400 at `containerTypeIds.N` otherwise) and each named once — and none when absent, which is a type no typed Stop Matching Rule matches through. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The vehicle type as it was written, with its container types by id.", VehicleType),
+          201: describeCreated("The vehicle type as it was written, with its container types by id.", VehicleType),
           400: describeProblem(
             "The body is missing a field, spells the key as something other than a lowercase slug, names a member the server owns, names the same container type twice, or names a container type that is not this company's.",
           ),
@@ -184,7 +184,7 @@ export function vehicleTypeRoutes(guard: MiddlewareHandler<AuthEnv>) {
         )
         await writeIds(tx, containerTypes, { companyId: principal.companyId, id: row.id }, containerTypeIds)
         // The set just written is known — held to the company, each id once — so it is answered in read order and not read back.
-        return c.json(typeOf(row, asRead(containerTypeIds)), 201)
+        return created(c, "/vehicle-types", typeOf(row, asRead(containerTypeIds)))
       },
     )
     .get(

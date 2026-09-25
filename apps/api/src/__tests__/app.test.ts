@@ -276,13 +276,23 @@ describe("GET /openapi.json", () => {
 
   test("declares the Location header on every 201 and Location on nothing else: a create says where the row is now read, a command or a set replacement does not", async () => {
     const document = await spec()
+    // The ledger's five commands (Issue #101) answer 201 as well — a Stock
+    // Movement is appended — and declare no Location: a movement is read on
+    // its container's ledger (`GET /containers/{id}/movements`) and on the
+    // ledger across containers, never at an address of its own, so there is
+    // nothing for the header to name. They are the one exception, counted.
+    const ledgerCommands = new Set(["receive", "return", "transfer", "decommission", "adjust"].map((verb) => `POST /containers/{id}/${verb}`))
     let creates = 0
+    let appends = 0
     for (const [path, operations] of Object.entries(document.paths)) {
       for (const [method, operation] of Object.entries(operations)) {
         for (const [status, response] of Object.entries(operation.responses)) {
           const location = response.headers?.Location
           const where = `${method.toUpperCase()} ${path} ${status}`
-          if (status === "201") {
+          if (status === "201" && ledgerCommands.has(`${method.toUpperCase()} ${path}`)) {
+            appends += 1
+            assert.equal(location, undefined, `${where}: a movement has no address of its own to name`)
+          } else if (status === "201") {
             creates += 1
             assert.equal(method, "post", `${where}: only a POST creates`)
             assert.equal(location?.schema?.type, "string", `${where} must declare Location`)
@@ -295,10 +305,11 @@ describe("GET /openapi.json", () => {
         }
       }
     }
+    assert.equal(appends, 5, "the ledger's five commands: receive, return, transfer, decommission and adjust")
     assert.equal(
       creates,
-      21,
-      "the twenty-one creates: projects, service providers, users and roles; waste fractions, container types, service frequencies, products, customers, properties, property groups, shared collection points, agreements and containers; the two nested ones, a subscription under its agreement and a placement under its container; and Planning's five — planning areas and, under an area, boundary versions, collection calendars, route schemes and, under a scheme, collection groups",
+      28,
+      "the twenty-eight creates: projects, service providers, users and roles; waste fractions, container types, service frequencies, products, customers, properties, property groups, shared collection points, agreements and containers; the two nested ones, a subscription under its agreement and a placement under its container; and Planning's five — planning areas and, under an area, boundary versions, collection calendars, route schemes and, under a scheme, collection groups; and Resources' seven (Issue #101) — vehicle types, warehouses, depots, unloading stations, vehicles, drivers and vehicle allocations",
     )
   })
 

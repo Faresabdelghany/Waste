@@ -95,7 +95,7 @@ import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { refuseStranded } from "./periods"
 import { requireDepot, requireServiceProvider, requireVehicleType, requireWasteFraction, type Scope } from "./references"
 import { groupsInForceNaming } from "./scheme-groups"
-import { describeJson, IdParam, lockRow, refuseDuplicate, requireProviderShape, stamp, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, requireProviderShape, stamp, stampsOf } from "./shared"
 import { groupsName, liveAllocationsName, liveAllocationsNaming } from "./statuses"
 
 const MODULE = "fleet.vehicles"
@@ -389,7 +389,7 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Registers a vehicle in one project, which must be a project the caller works in, with the compartments it starts with in position order, 1..n in the body's order — a powered vehicle has at least one, a trailer may have none. The registration (the plate) is unique across the company, not inside a project, and so is the callsign where given. The vehicle type is one of this company's, the home depot one of the named project's, the owning service provider one of this company's and named with `service-provider` ownership and with nothing else, and every compartment's waste fractions are this company's, each named once per compartment. `ownership` defaults to `company` and `status` to `active`. `requiredLicenceClass` is required: an unknown class passes nobody, so a vehicle without one is a vehicle nobody may take out. The server mints every id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The vehicle as it was written, with its compartments.", Vehicle),
+          201: describeCreated("The vehicle as it was written, with its compartments.", Vehicle),
           400: describeProblem(
             "The body is missing a field, names a member the server owns, names a project this account does not work in, gives a powered vehicle no compartment, names a fraction twice in one compartment, names the provider without service-provider ownership or the ownership without a provider, or names a vehicle type, service provider, depot or waste fraction outside the scope its key allows — each at the entry that is wrong.",
           ),
@@ -432,7 +432,7 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .returning(columns),
         )
         await writeCompartments(tx, within, row.id, compartments)
-        return c.json(await vehicleWithCompartments(tx, principal.companyId, row), 201)
+        return created(c, "/vehicles", await vehicleWithCompartments(tx, principal.companyId, row))
       },
     )
     .get(

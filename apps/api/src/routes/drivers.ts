@@ -62,7 +62,7 @@ import { describeProblem, problem, validate } from "../problem"
 import { refuseStranded } from "./periods"
 import { requireDepot, requireServiceProvider, requireUserAccount, type Scope } from "./references"
 import { groupsInForceNaming } from "./scheme-groups"
-import { describeJson, IdParam, lockRow, refuseDuplicate, requireProviderShape, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, requireProviderShape, stampsOf } from "./shared"
 import { groupsName, liveAllocationsName, liveAllocationsNaming } from "./statuses"
 
 const MODULE = "fleet.drivers"
@@ -201,7 +201,7 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Registers a workforce profile in one project, which must be a project the caller works in. The workforce reference, where given, is unique across the company; the login (`userAccountId`), where given, is a user account of this company that is not deactivated, and one account is the login of at most one driver. The employing service provider is this company's and is named with `service-provider` employment and with nothing else; the home depot is the named project's. The licence is three attributes: the class held (`b`, `c` or `ce`; null is not on record, which is eligible for nothing), the number, and the expiry as the last day it holds — whether a driver may take a vehicle on a day is judged where a vehicle is named, never here. `status` defaults to `active`. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The driver as it was written.", Driver),
+          201: describeCreated("The driver as it was written.", Driver),
           400: describeProblem(
             "The body is missing a field, names a member the server owns, names a project this account does not work in, gives a class outside `b`, `c`, `ce` or an expiry that is not a calendar day, names the provider without service-provider employment or the employment without a provider, or names a service provider, depot or user account outside the scope its key allows — each at the field that is wrong.",
           ),
@@ -243,7 +243,7 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>) {
             })
             .returning(columns),
         )
-        return c.json(driverOf(row), 201)
+        return created(c, "/drivers", driverOf(row))
       },
     )
     .get(

@@ -9,6 +9,7 @@ import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
+import { created } from "./created"
 import { nextMillisecond } from "./clock"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
@@ -76,11 +77,7 @@ describe("the depot endpoints", { skip: database.skip }, () => {
     ...values,
   })
 
-  const create = async (call: Call, values: unknown): Promise<Depot> => {
-    const response = await call("/depots", { method: "POST", body: values })
-    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
-    return Depot.parse(await response.json())
-  }
+  const create = async (call: Call, values: unknown): Promise<Depot> => created(call, "/depots", await call("/depots", { method: "POST", body: values }), Depot)
   const depot = (code: string, values: Record<string, unknown> = {}) => create(olivia, body(a.projects.copenhagen.id, code, values))
   const one = async (call: Call, id: string): Promise<Depot> => {
     const response = await call(`/depots/${id}`)

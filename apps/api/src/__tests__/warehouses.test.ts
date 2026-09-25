@@ -9,6 +9,7 @@ import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
+import { created } from "./created"
 import { nextMillisecond } from "./clock"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
@@ -87,11 +88,8 @@ describe("the warehouse endpoints", { skip: database.skip }, () => {
   })
   const depotBody = (projectId: string, code: string) => ({ projectId, code, name: `Depot ${code}`, address: `${code}, 2100 København Ø`, location: nordhavn })
 
-  const create = async <T>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> => {
-    const response = await call(path, { method: "POST", body: values })
-    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
-    return schema.parse(await response.json())
-  }
+  const create = async <T extends { id: string }>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> =>
+    created(call, path, await call(path, { method: "POST", body: values }), schema)
   const warehouse = (code: string, values: Record<string, unknown> = {}) => create(olivia, "/warehouses", body(a.projects.copenhagen.id, code, values), Warehouse)
   const one = async (call: Call, id: string): Promise<Warehouse> => {
     const response = await call(`/warehouses/${id}`)

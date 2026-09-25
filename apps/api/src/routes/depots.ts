@@ -57,7 +57,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { hourOf, placeShapeInvalid, pointInvalid, requirePlacePatch } from "./place-rules"
 import { requireServiceProvider } from "./references"
-import { describeJson, IdParam, lockRow, refuseCheck, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseCheck, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "resources.depots"
 const DepotPage = Page(Depot)
@@ -180,7 +180,7 @@ export function depotRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Registers a depot in one project, which must be a project the caller works in. The code is the stable reference a person quotes (`DEP-NORD`) and is set once; the code and the name are each unique inside the project. The location is required — a route departs from a point — and one off the globe is refused before the database sees it. The ownership defaults to `company`, and the owning service provider is named with `service-provider` ownership and with nothing else, this company's (400 on `serviceProviderId`). The opening hours are two times on the project's clock, both or neither (400 on `closesAt`); an overnight window, 22:00 to 05:00, is allowed. `vehicleCapacity`, where given, is a whole number above zero. The status defaults to `active`. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The depot as it was written.", Depot),
+          201: describeCreated("The depot as it was written.", Depot),
           400: describeProblem(
             "The body is missing a field, names a member the server owns, names a project this account does not work in, holds a point off the globe, names a provider with company ownership or none with service-provider ownership, gives one opening time without the other, gives a capacity of nothing, or names a service provider that is not this company's.",
           ),
@@ -206,7 +206,7 @@ export function depotRoutes(guard: MiddlewareHandler<AuthEnv>) {
               .returning(columns),
           ),
         )
-        return c.json(depotOf(row), 201)
+        return created(c, "/depots", depotOf(row))
       },
     )
     .get(

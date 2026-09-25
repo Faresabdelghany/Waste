@@ -16,6 +16,7 @@ import { createApp } from "../app"
 import { ProblemError } from "../problem"
 import { NOT_A_POWERED_VEHICLE, NOT_A_TRAILER, NOT_A_VEHICLE, requireVehicle } from "../routes/references"
 import { callingAs, type Call } from "./calls"
+import { created } from "./created"
 import { nextMillisecond } from "./clock"
 import { databaseUnderTest } from "./database"
 import { seedFleet, type FleetFixtures } from "./fleet-fixtures"
@@ -111,11 +112,8 @@ describe("the vehicle endpoints", { skip: database.skip }, () => {
     ...values,
   })
 
-  const create = async <T>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> => {
-    const response = await call(path, { method: "POST", body: values })
-    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
-    return schema.parse(await response.json())
-  }
+  const create = async <T extends { id: string }>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> =>
+    created(call, path, await call(path, { method: "POST", body: values }), schema)
   const vehicle = (values: Record<string, unknown> = {}) => create(olivia, "/vehicles", body(values), Vehicle)
   const one = async (call: Call, id: string): Promise<Vehicle> => {
     const response = await call(`/vehicles/${id}`)

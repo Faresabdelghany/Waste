@@ -48,7 +48,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { pointInvalid } from "./place-rules"
 import { requireDepot } from "./references"
-import { describeJson, IdParam, refuseCheck, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, refuseCheck, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "resources.warehouses"
 const WarehousePage = Page(Warehouse)
@@ -160,7 +160,7 @@ export function warehouseRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Registers a warehouse in one project, which must be a project the caller works in. The code is the stable reference a person quotes (`WH-WEST`) and is set once; the code and the name are each unique inside the project. The location is null until the warehouse is geocoded, and a point off the globe is refused before the database sees it. `depotId`, where given, is the depot the warehouse shares a yard with and must be a depot of the same project: colocation is one pointer, not two that can disagree. The status defaults to `active`. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The warehouse as it was written.", Warehouse),
+          201: describeCreated("The warehouse as it was written.", Warehouse),
           400: describeProblem(
             "The body is missing a field, names a member the server owns, names a project this account does not work in, holds a point off the globe, or names a depot that is not of this project.",
           ),
@@ -186,7 +186,7 @@ export function warehouseRoutes(guard: MiddlewareHandler<AuthEnv>) {
               .returning(columns),
           ),
         )
-        return c.json(warehouseOf(row), 201)
+        return created(c, "/warehouses", warehouseOf(row))
       },
     )
     .get(
