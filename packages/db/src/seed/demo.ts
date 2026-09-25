@@ -1,21 +1,27 @@
 // The demo company, as `pnpm db:seed` writes it (Issue #70, slice 2): the
 // tenant the prototype has always shown — Kystbyen Renovation, its three
 // projects, the two service providers it works with, the eleven seeded roles
-// with their grants, and the two accounts the login picker offers.
+// with their grants, and the two accounts the login picker offers — and,
+// since 2026-09-25, its Registry: the catalogue, the customers with their
+// properties, groups and shared points, the agreements with their
+// subscriptions, and the containers with their placements, derived from the
+// web prototype's fixtures in registry.ts and written in the same transaction.
 //
 // Three properties make this a seed and not a fixture script:
 //
-//   Fixed ids. Every record's id is spelled below, a UUID version 7 by hand,
-//   so the local database and the hosted project hold the same company: a
-//   token minted against the hosted project opens the same rows locally, and
-//   a test may name a row without looking it up. A test holds their shape.
+//   Fixed ids. Every record's id is spelled below or derived by ids.ts, a UUID
+//   version 7 by hand, so the local database and the hosted project hold the
+//   same company: a token minted against the hosted project opens the same
+//   rows locally, and a test may name a row without looking it up. A test
+//   holds their shape.
 //
-//   Idempotent. Every insert is `on conflict ... do update` keyed by the id,
-//   and the update is skipped when the stored row already says what this run
-//   proposes, so a second run writes nothing at all — not even an `updated_at`
-//   through the touch trigger. What someone edited by hand is put back; what
-//   the seed does not own is left alone (an account's `auth_user_id` and
-//   `deactivated_at` are the hook's and the API's, never the seed's).
+//   Idempotent. Every insert is `on conflict ... do update` keyed by the id
+//   (upsert.ts), and the update is skipped when the stored row already says
+//   what this run proposes, so a second run writes nothing at all — not even
+//   an `updated_at` through the touch trigger. What someone edited by hand is
+//   put back; what the seed does not own is left alone (an account's
+//   `auth_user_id` and `deactivated_at` are the hook's and the API's, never
+//   the seed's). Nothing is deleted but a grant a charter dropped.
 //
 //   Any admin URL. Unlike bootstrap, which refuses a non-loopback host because
 //   it sets a password, this runs the same statements anywhere: the hosted
@@ -50,28 +56,27 @@
 // `seed.test.ts` checks for the one company a test file commits rows under.
 import { normaliseGrants } from "@waste/domain/access/grants"
 import { SYSTEM_ROLES, type SystemRoleKey } from "@waste/domain/access/system-roles"
-import { and, eq, inArray, sql, type SQL } from "drizzle-orm"
-import type { PgColumn } from "drizzle-orm/pg-core"
+import { and, eq, inArray, sql } from "drizzle-orm"
 
 import { createDb, type Tx } from "../client"
-import { columnName } from "../names"
 import { role, roleGrant, serviceProviderAccess, userAccount } from "../schema/access"
 import { company, project, serviceProvider } from "../schema/organisation"
+import { DEMO_COMPANY_ID, DEMO_PROJECT_IDS } from "./ids"
+import { applyRegistry, REGISTRY_COUNTS, REGISTRY_IDS, type RegistryCounts } from "./registry"
+import { upsertOwned } from "./upsert"
 
 /**
- * Every id the seed writes. UUID version 7 by hand: the first twelve hex
- * digits are a millisecond (2026-09-24, when the seed was written), the third
- * group's `7` the version, the fourth group's `8` the variant, and the rest
- * says which record it is — a random-looking constant is harder to recognise
- * in a log than a counted one, and these are demo data, not secrets.
+ * Every id the seed writes. UUID version 7 by hand (ids.ts has the scheme):
+ * the first twelve hex digits are a millisecond (2026-09-24, when the seed was
+ * written), the third group's `7` the version and its other digits the kind
+ * of record, the fourth group's `8` the variant, and the rest an ordinal — a
+ * random-looking constant is harder to recognise in a log than a counted one,
+ * and these are demo data, not secrets. The Registry's ids under `registry`
+ * are keyed by the prototype's own record ids (registry.ts).
  */
 export const DEMO_IDS = {
-  company: "01a0d2a4-a280-7001-8000-000000000001",
-  projects: {
-    copenhagen: "01a0d2a4-a280-7002-8000-000000000001",
-    harbor: "01a0d2a4-a280-7002-8000-000000000002",
-    cairo: "01a0d2a4-a280-7002-8000-000000000003",
-  },
+  company: DEMO_COMPANY_ID,
+  projects: DEMO_PROJECT_IDS,
   serviceProviders: {
     nordren: "01a0d2a4-a280-7003-8000-000000000001",
     cityhaul: "01a0d2a4-a280-7003-8000-000000000002",
@@ -96,6 +101,7 @@ export const DEMO_IDS = {
   serviceProviderAccess: {
     lars: "01a0d2a4-a280-7006-8000-000000000001",
   },
+  registry: REGISTRY_IDS,
 } as const
 
 const COMPANY_ID = DEMO_IDS.company
@@ -223,7 +229,7 @@ const PROVIDER_ACCESS: (typeof serviceProviderAccess.$inferInsert)[] = [
   },
 ]
 
-/** What the seed says the company holds. */
+/** What the seed says the company holds: Organisation & Access by name, then the Registry's fifteen tables. */
 export type DemoSeedCounts = {
   projects: number
   serviceProviders: number
@@ -231,7 +237,7 @@ export type DemoSeedCounts = {
   roleGrants: number
   users: number
   serviceProviderAccess: number
-}
+} & RegistryCounts
 
 export type DemoSeedReport = {
   companyId: string
@@ -247,44 +253,7 @@ const COUNTS: DemoSeedCounts = {
   roleGrants: GRANTS.length,
   users: USERS.length,
   serviceProviderAccess: PROVIDER_ACCESS.length,
-}
-
-/** `excluded.<column>`: the value this run proposed for a row that is already there. */
-const proposed = (column: PgColumn): SQL => sql`excluded.${sql.identifier(columnName(column))}`
-
-/**
- * The stored column, qualified by its table: inside `DO UPDATE` both the row
- * found and `excluded` are in scope, so a bare column name is ambiguous
- * (42702).
- */
-const stored = (column: PgColumn): SQL => sql`${column}`
-
-/**
- * How Drizzle's `set` is keyed: by the column's property name, not its name in
- * the database. Every column of this schema is declared without a name of its
- * own (the casing makes it), so the property name is what the column carries;
- * a column declared otherwise is refused here rather than silently set wrong.
- */
-function propertyOf(column: PgColumn): string {
-  if (!column.keyAsName) {
-    throw new Error(`the seed keys its updates by property name, and ${columnName(column)} was declared with a name of its own`)
-  }
-  return column.name
-}
-
-/** The columns the seed owns, set back to what this run proposed. */
-function restore(columns: readonly PgColumn[]): Record<string, SQL> {
-  return Object.fromEntries(columns.map((column) => [propertyOf(column), proposed(column)]))
-}
-
-/**
- * True when the stored row disagrees with the one this run proposed. As the
- * `WHERE` of `DO UPDATE` it makes an unchanged row no write at all, so the
- * touch trigger does not fire and `updated_at` still says when the value last
- * really changed.
- */
-function changesSomething(columns: readonly PgColumn[]): SQL {
-  return sql`(${sql.join(columns.map(stored), sql`, `)}) is distinct from (${sql.join(columns.map(proposed), sql`, `)})`
+  ...REGISTRY_COUNTS,
 }
 
 const COMPANY_COLUMNS = [company.name, company.legalName, company.registrationNumber, company.country, company.status]
@@ -316,45 +285,11 @@ async function applyDemo(tx: Tx): Promise<number> {
     changed += rows.length
   }
 
-  written(
-    await tx
-      .insert(company)
-      .values(COMPANY)
-      .onConflictDoUpdate({ target: company.id, set: restore(COMPANY_COLUMNS), setWhere: changesSomething(COMPANY_COLUMNS) })
-      .returning({ id: company.id }),
-  )
-  written(
-    await tx
-      .insert(project)
-      .values(PROJECTS)
-      .onConflictDoUpdate({ target: project.id, set: restore(PROJECT_COLUMNS), setWhere: changesSomething(PROJECT_COLUMNS) })
-      .returning({ id: project.id }),
-  )
-  written(
-    await tx
-      .insert(serviceProvider)
-      .values(SERVICE_PROVIDERS)
-      .onConflictDoUpdate({
-        target: serviceProvider.id,
-        set: restore(SERVICE_PROVIDER_COLUMNS),
-        setWhere: changesSomething(SERVICE_PROVIDER_COLUMNS),
-      })
-      .returning({ id: serviceProvider.id }),
-  )
-  written(
-    await tx
-      .insert(role)
-      .values(ROLES)
-      .onConflictDoUpdate({ target: role.id, set: restore(ROLE_COLUMNS), setWhere: changesSomething(ROLE_COLUMNS) })
-      .returning({ id: role.id }),
-  )
-  written(
-    await tx
-      .insert(userAccount)
-      .values(USERS)
-      .onConflictDoUpdate({ target: userAccount.id, set: restore(USER_COLUMNS), setWhere: changesSomething(USER_COLUMNS) })
-      .returning({ id: userAccount.id }),
-  )
+  changed += await upsertOwned(tx, company, [COMPANY], COMPANY_COLUMNS)
+  changed += await upsertOwned(tx, project, PROJECTS, PROJECT_COLUMNS)
+  changed += await upsertOwned(tx, serviceProvider, SERVICE_PROVIDERS, SERVICE_PROVIDER_COLUMNS)
+  changed += await upsertOwned(tx, role, ROLES, ROLE_COLUMNS)
+  changed += await upsertOwned(tx, userAccount, USERS, USER_COLUMNS)
 
   // A grant has no fixed id — there are hundreds — so its identity is what it
   // means: the role, the module and the action. The seeded roles' grant set is
@@ -393,6 +328,9 @@ async function applyDemo(tx: Tx): Promise<number> {
       id: serviceProviderAccess.id,
     }),
   )
+
+  // The Registry last: its rows name the company and the projects above.
+  changed += await applyRegistry(tx)
 
   return changed
 }

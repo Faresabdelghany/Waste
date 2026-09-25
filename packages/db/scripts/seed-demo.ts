@@ -20,7 +20,25 @@ const held = [
   count(counts.roleGrants, "grant"),
   count(counts.users, "user"),
 ].join(", ")
+const registry = [
+  count(counts.wasteFractions, "waste fraction"),
+  count(counts.containerTypes, "container type"),
+  count(counts.serviceFrequencies, "service frequency", "service frequencies"),
+  count(counts.products, "product"),
+  count(counts.customers, "customer"),
+  count(counts.properties, "property", "properties"),
+  count(counts.propertyParties, "party", "parties"),
+  count(counts.propertyGroups, "property group"),
+  count(counts.propertyGroupMembers, "group member"),
+  count(counts.sharedCollectionPoints, "shared collection point"),
+  count(counts.sharedCollectionPointMembers, "point member"),
+  count(counts.agreements, "agreement"),
+  count(counts.subscriptions, "subscription"),
+  count(counts.containers, "container"),
+  count(counts.containerServicePlacements, "placement"),
+].join(", ")
 console.log(
   `@waste/db: demo company ${companyId} on ${new URL(url).hostname} holds ${held}; ` +
+    `its Registry ${registry}; ` +
     (changed === 0 ? "nothing to change" : `${count(changed, "row")} written`),
 )
