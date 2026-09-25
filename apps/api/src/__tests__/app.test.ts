@@ -128,7 +128,7 @@ describe("GET /openapi.json", () => {
     assert.deepEqual([...documented].sort(), [...registered].sort())
   })
 
-  test("documents the probes and every route of the organisation, access, registry and planning contexts, and no other path", async () => {
+  test("documents the probes and every route of the organisation, access, registry, planning and resources contexts, and no other path", async () => {
     const document = await spec()
     assert.deepEqual(Object.keys(document.paths).sort(), [
       "/agreements",
@@ -145,9 +145,19 @@ describe("GET /openapi.json", () => {
       "/container-types/{id}",
       "/containers",
       "/containers/{id}",
+      "/containers/{id}/adjust",
+      "/containers/{id}/decommission",
+      "/containers/{id}/movements",
       "/containers/{id}/placements",
+      "/containers/{id}/receive",
+      "/containers/{id}/return",
+      "/containers/{id}/transfer",
       "/customers",
       "/customers/{id}",
+      "/depots",
+      "/depots/{id}",
+      "/drivers",
+      "/drivers/{id}",
       "/healthz",
       "/me",
       "/placements",
@@ -182,12 +192,30 @@ describe("GET /openapi.json", () => {
       "/shared-collection-points",
       "/shared-collection-points/{id}",
       "/shared-collection-points/{id}/members",
+      "/stock-movements",
       "/subscriptions/{id}",
+      "/unloading-stations",
+      "/unloading-stations/{id}",
+      "/unloading-stations/{id}/fractions",
       "/users",
       "/users/{id}",
       "/users/{id}/deactivate",
       "/users/{id}/make-primary-administrator",
       "/users/{id}/reactivate",
+      "/vehicle-allocations",
+      "/vehicle-allocations/{id}",
+      "/vehicle-allocations/{id}/change",
+      "/vehicle-allocations/{id}/confirm",
+      "/vehicle-allocations/{id}/events",
+      "/vehicle-allocations/{id}/release",
+      "/vehicle-types",
+      "/vehicle-types/{id}",
+      "/vehicle-types/{id}/container-types",
+      "/vehicles",
+      "/vehicles/{id}",
+      "/vehicles/{id}/compartments",
+      "/warehouses",
+      "/warehouses/{id}",
       "/waste-fractions",
       "/waste-fractions/{id}",
     ])
@@ -241,20 +269,30 @@ describe("GET /openapi.json", () => {
     }
     assert.equal(
       secured,
-      99,
-      "/me, the ten organisation routes, the twelve access routes, the fifty-one registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each, agreements with their subscriptions and containers with their placements — and the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six",
+      140,
+      "/me, the ten organisation routes, the twelve access routes, the fifty-one registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each, agreements with their subscriptions and containers with their placements — the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six — and the eighteen resources routes of slice 3: vehicle types with their container types, five, warehouses and depots, four each, and unloading stations with their fractions, five — and the seven of the container ledger (Issue #101, slice 5): the five commands receive, return, transfer, decommission and adjust, one container's movements, and the ledger across containers — and Resources' seven vehicle allocation routes (#101, slice 6): the list, the allocate command, the read, the three commands change, confirm and release, and the history — and the nine fleet routes of Resources' slice 4: vehicles with the compartments set, five, and drivers, four",
     )
   })
 
   test("declares the Location header on every 201 and Location on nothing else: a create says where the row is now read, a command or a set replacement does not", async () => {
     const document = await spec()
+    // The ledger's five commands (Issue #101) answer 201 as well — a Stock
+    // Movement is appended — and declare no Location: a movement is read on
+    // its container's ledger (`GET /containers/{id}/movements`) and on the
+    // ledger across containers, never at an address of its own, so there is
+    // nothing for the header to name. They are the one exception, counted.
+    const ledgerCommands = new Set(["receive", "return", "transfer", "decommission", "adjust"].map((verb) => `POST /containers/{id}/${verb}`))
     let creates = 0
+    let appends = 0
     for (const [path, operations] of Object.entries(document.paths)) {
       for (const [method, operation] of Object.entries(operations)) {
         for (const [status, response] of Object.entries(operation.responses)) {
           const location = response.headers?.Location
           const where = `${method.toUpperCase()} ${path} ${status}`
-          if (status === "201") {
+          if (status === "201" && ledgerCommands.has(`${method.toUpperCase()} ${path}`)) {
+            appends += 1
+            assert.equal(location, undefined, `${where}: a movement has no address of its own to name`)
+          } else if (status === "201") {
             creates += 1
             assert.equal(method, "post", `${where}: only a POST creates`)
             assert.equal(location?.schema?.type, "string", `${where} must declare Location`)
@@ -267,10 +305,11 @@ describe("GET /openapi.json", () => {
         }
       }
     }
+    assert.equal(appends, 5, "the ledger's five commands: receive, return, transfer, decommission and adjust")
     assert.equal(
       creates,
-      21,
-      "the twenty-one creates: projects, service providers, users and roles; waste fractions, container types, service frequencies, products, customers, properties, property groups, shared collection points, agreements and containers; the two nested ones, a subscription under its agreement and a placement under its container; and Planning's five — planning areas and, under an area, boundary versions, collection calendars, route schemes and, under a scheme, collection groups",
+      28,
+      "the twenty-eight creates: projects, service providers, users and roles; waste fractions, container types, service frequencies, products, customers, properties, property groups, shared collection points, agreements and containers; the two nested ones, a subscription under its agreement and a placement under its container; and Planning's five — planning areas and, under an area, boundary versions, collection calendars, route schemes and, under a scheme, collection groups; and Resources' seven (Issue #101) — vehicle types, warehouses, depots, unloading stations, vehicles, drivers and vehicle allocations",
     )
   })
 
@@ -588,7 +627,9 @@ describe("GET /openapi.json", () => {
       "query:validOn",
     ])
     assert.deepEqual(byName(document.paths["/agreements/{id}/subscriptions"].get).sort(), ["path:id", "query:cursor", "query:limit", "query:validOn"])
-    assert.deepEqual(byName(document.paths["/containers"].get).sort(), ["query:containerTypeId", "query:cursor", "query:limit", "query:projectId"])
+    // The two ledger filters, answered from the projection since Resources (#101).
+    assert.deepEqual(byName(document.paths["/containers"].get).sort(), ["query:assetStatus", "query:containerTypeId", "query:cursor", "query:limit", "query:projectId", "query:warehouseId"])
+    assert.match(document.paths["/containers"].get.description ?? "", /standing in that warehouse/)
     assert.deepEqual(byName(document.paths["/placements"].get).sort(), [
       "query:containerId",
       "query:cursor",
@@ -620,6 +661,73 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(required("/containers/{id}/placements"), ["subscriptionId", "wasteFractionId", "validFrom"])
 
     for (const path of ["/agreements", "/agreements/{id}/subscriptions", "/containers", "/placements"]) {
+      const page = document.paths[path].get.responses["200"].content["application/json"].schema
+      assert.deepEqual(page.required, ["items", "nextCursor"], path)
+      assert.equal(page.properties?.items.type, "array", path)
+    }
+  })
+
+  test("documents each route of the container ledger with its verbs, its problems and the rules a client must know (Issue #101, slice 5)", async () => {
+    const document = await spec()
+    const operations = (path: string) =>
+      Object.fromEntries(Object.entries(document.paths[path]).map(([method, operation]) => [method, operation.operationId]))
+
+    assert.deepEqual(operations("/containers/{id}/receive"), { post: "receiveContainer" })
+    assert.deepEqual(operations("/containers/{id}/return"), { post: "returnContainer" })
+    assert.deepEqual(operations("/containers/{id}/transfer"), { post: "transferContainer" })
+    assert.deepEqual(operations("/containers/{id}/decommission"), { post: "decommissionContainer" })
+    assert.deepEqual(operations("/containers/{id}/adjust"), { post: "adjustContainer" })
+    assert.deepEqual(operations("/containers/{id}/movements"), { get: "listContainerMovements" })
+    assert.deepEqual(operations("/stock-movements"), { get: "listStockMovements" })
+    assert.equal(document.paths["/containers/{id}/issue"], undefined, "one action, one command: the issue is the placement create")
+
+    // Every command hangs off a container, so it answers 404 as well as its state's 409.
+    for (const verb of ["receive", "return", "transfer", "decommission", "adjust"]) {
+      assert.deepEqual(Object.keys(document.paths[`/containers/{id}/${verb}`].post.responses), ["201", "400", "401", "403", "404", "409"], verb)
+      for (const [status, operation] of Object.entries(document.paths[`/containers/{id}/${verb}`].post.responses)) {
+        assert.deepEqual(Object.keys(operation.content), [status === "201" ? "application/json" : "application/problem+json"], `${verb} ${status}`)
+      }
+    }
+    assert.deepEqual(Object.keys(document.paths["/containers/{id}/movements"].get.responses), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(Object.keys(document.paths["/stock-movements"].get.responses), ["200", "400", "401", "403"])
+
+    const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
+    assert.deepEqual(byName(document.paths["/containers/{id}/movements"].get).sort(), ["path:id", "query:cursor", "query:limit"])
+    assert.deepEqual(byName(document.paths["/stock-movements"].get).sort(), [
+      "query:containerId",
+      "query:cursor",
+      "query:from",
+      "query:kind",
+      "query:limit",
+      "query:projectId",
+      "query:to",
+      "query:warehouseId",
+    ])
+
+    // The rules a client must know are in the prose, not only in the code.
+    assert.match(document.paths["/containers/{id}/receive"].post.description ?? "", /Only a container with no stock record yet can be received/)
+    assert.match(document.paths["/containers/{id}/return"].post.description ?? "", /Either both change or neither/)
+    assert.match(document.paths["/containers/{id}/transfer"].post.description ?? "", /reads as still in the first until the second records it/)
+    assert.match(document.paths["/containers/{id}/decommission"].post.description ?? "", /In service, `validTo` is required \(400\)/)
+    assert.match(document.paths["/containers/{id}/adjust"].post.description ?? "", /Neither side may be service/)
+    assert.match(document.paths["/containers/{id}/adjust"].post.description ?? "", /`edit` on `resources.containers`, not `create`/, "the grant is a choice, and the document says which")
+    assert.match(document.paths["/containers/{id}/movements"].get.description ?? "", /oldest first/)
+    assert.match(document.paths["/stock-movements"].get.description ?? "", /an account that works in none[^.]*reads an empty page/)
+    assert.match(document.paths["/containers/{id}/placements"].post.description ?? "", /the `issue` command of the Stock Movement ledger and the only door into service/)
+    assert.match(document.paths["/containers/{id}/placements"].post.description ?? "", /both or neither/)
+    assert.match(document.paths["/placements/{id}"].patch.description ?? "", /a `validTo` on an open placement is refused \(409\)/)
+
+    // A command takes the strict body the contracts spell; the issue's gained the movement's two fields and nothing else required.
+    const required = (path: string) => document.paths[path].post.requestBody?.content["application/json"].schema.required
+    assert.deepEqual(required("/containers/{id}/receive"), ["warehouseId"])
+    assert.deepEqual(required("/containers/{id}/return"), ["warehouseId", "validTo"])
+    assert.deepEqual(required("/containers/{id}/transfer"), ["warehouseId"])
+    assert.deepEqual(required("/containers/{id}/decommission"), ["reason"])
+    assert.deepEqual(required("/containers/{id}/adjust"), ["toKind", "reason"])
+    assert.deepEqual(required("/containers/{id}/placements"), ["subscriptionId", "wasteFractionId", "validFrom"])
+    assert.ok(Object.keys(document.paths["/containers/{id}/placements"].post.requestBody?.content["application/json"].schema.properties ?? {}).includes("occurredAt"))
+
+    for (const path of ["/containers/{id}/movements", "/stock-movements"]) {
       const page = document.paths[path].get.responses["200"].content["application/json"].schema
       assert.deepEqual(page.required, ["items", "nextCursor"], path)
       assert.equal(page.properties?.items.type, "array", path)
@@ -664,7 +772,10 @@ describe("GET /openapi.json", () => {
 
     // The rules a client must know are in the prose, not only in the code.
     assert.match(document.paths["/route-schemes"].post.description ?? "", /one scheme of a name is in force at a time in a project/)
-    assert.match(document.paths["/route-schemes"].post.description ?? "", /wait for Resources and are not held here/)
+    assert.match(document.paths["/route-schemes"].post.description ?? "", /so is the depot the routes depart from, and the unloading station they empty at is one of this company's/)
+    assert.match(document.paths["/route-schemes"].post.description ?? "", /holds the licence class the vehicle requires on the day the scheme's period starts or today, whichever is later/)
+    assert.match(document.paths["/route-schemes/{id}/collection-groups"].post.description ?? "", /no vehicle or driver is on two groups that run on a shared day/)
+    assert.match(document.paths["/collection-groups/{id}"].patch.description ?? "", /the vehicle or the driver of one collection group/)
     assert.match(document.paths["/route-schemes/{id}"].patch.description ?? "", /counting the groups, which have to be moved first/)
     assert.match(document.paths["/route-schemes/{id}"].patch.description ?? "", /shortening the period is free/)
     assert.match(document.paths["/route-schemes/{id}/occurrences"].get.description ?? "", /nothing is written, and no generation run is started/i)
@@ -676,7 +787,7 @@ describe("GET /openapi.json", () => {
     const required = (path: string, method: "post" | "put" = "post") => document.paths[path][method].requestBody?.content["application/json"].schema.required
     assert.deepEqual(required("/route-schemes"), ["projectId", "name", "serviceType", "frequency", "serviceDays", "collectionGroups", "validFrom"])
     assert.deepEqual(required("/route-schemes/{id}/collection-groups"), ["name", "days", "stopSource"])
-    assert.deepEqual(required("/collection-groups/{id}/stop-matching-rule", "put"), ["wasteFractionIds", "containerTypeIds", "vehicleType"])
+    assert.deepEqual(required("/collection-groups/{id}/stop-matching-rule", "put"), ["wasteFractionIds", "containerTypeIds", "vehicleTypeId"])
     assert.deepEqual(required("/collection-groups/{id}/containers", "put"), ["containerIds"])
 
     for (const path of ["/route-schemes", "/route-schemes/{id}/collection-groups"]) {
@@ -686,6 +797,199 @@ describe("GET /openapi.json", () => {
     }
     // The occurrence read answers rows and no cursor: a computation over a bounded window, not a table.
     assert.equal(document.paths["/route-schemes/{id}/occurrences"].get.responses["200"].content["application/json"].schema.type, "array")
+  })
+
+  test("documents each resources route of slice 3 with its verbs, its problems and the rules a client must know", async () => {
+    const document = await spec()
+    const operations = (path: string) =>
+      Object.fromEntries(Object.entries(document.paths[path]).map(([method, operation]) => [method, operation.operationId]))
+
+    assert.deepEqual(operations("/vehicle-types"), { get: "listVehicleTypes", post: "createVehicleType" })
+    assert.deepEqual(operations("/vehicle-types/{id}"), { get: "getVehicleType", patch: "patchVehicleType" })
+    assert.deepEqual(operations("/vehicle-types/{id}/container-types"), { put: "putVehicleTypeContainerTypes" })
+    assert.deepEqual(operations("/warehouses"), { get: "listWarehouses", post: "createWarehouse" })
+    assert.deepEqual(operations("/warehouses/{id}"), { get: "getWarehouse", patch: "patchWarehouse" })
+    assert.deepEqual(operations("/depots"), { get: "listDepots", post: "createDepot" })
+    assert.deepEqual(operations("/depots/{id}"), { get: "getDepot", patch: "patchDepot" })
+    assert.deepEqual(operations("/unloading-stations"), { get: "listUnloadingStations", post: "createUnloadingStation" })
+    assert.deepEqual(operations("/unloading-stations/{id}"), { get: "getUnloadingStation", patch: "patchUnloadingStation" })
+    assert.deepEqual(operations("/unloading-stations/{id}/fractions"), { put: "putUnloadingStationFractions" })
+
+    // What a caller can earn on each of them, and in what shape.
+    for (const path of ["/vehicle-types", "/warehouses", "/depots", "/unloading-stations"]) {
+      assert.deepEqual(Object.keys(document.paths[path].get.responses), ["200", "400", "401", "403"], path)
+      assert.deepEqual(Object.keys(document.paths[path].post.responses), ["201", "400", "401", "403", "409"], path)
+      assert.deepEqual(Object.keys(document.paths[`${path}/{id}`].get.responses), ["200", "400", "401", "403", "404"], path)
+      assert.deepEqual(Object.keys(document.paths[`${path}/{id}`].patch.responses), ["200", "400", "401", "403", "404", "409"], path)
+    }
+    // A set is replaced whole, and nothing there can collide: a repeated id is the body's own 400 and never the key's 409.
+    for (const [path, set] of [
+      ["/vehicle-types/{id}/container-types", "containerTypeIds"],
+      ["/unloading-stations/{id}/fractions", "wasteFractionIds"],
+    ] as const) {
+      assert.deepEqual(Object.keys(document.paths[path].put.responses), ["200", "400", "401", "403", "404"], path)
+      assert.deepEqual(document.paths[path].put.requestBody?.content["application/json"].schema.required, [set], path)
+    }
+    for (const [status, operation] of Object.entries(document.paths["/depots/{id}"].patch.responses)) {
+      const media = Object.keys(operation.content)
+      assert.deepEqual(media, [status === "200" ? "application/json" : "application/problem+json"], status)
+    }
+
+    // A project-scoped list takes the project filter beside the page and its status; the two company-wide ones do not.
+    const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
+    for (const path of ["/warehouses", "/depots"]) {
+      assert.deepEqual(byName(document.paths[path].get).sort(), ["query:cursor", "query:limit", "query:projectId", "query:status"], path)
+    }
+    assert.deepEqual(byName(document.paths["/vehicle-types"].get).sort(), ["query:cursor", "query:limit"])
+    assert.deepEqual(byName(document.paths["/unloading-stations"].get).sort(), ["query:cursor", "query:limit", "query:status", "query:wasteFractionId"])
+    assert.deepEqual(byName(document.paths["/vehicle-types/{id}/container-types"].put), ["path:id"])
+
+    // The rules a client must know are in the prose, not only in the code.
+    assert.match(document.paths["/vehicle-types"].post.description ?? "", /`key` is the stable slug[^.]*set once/)
+    assert.match(document.paths["/vehicle-types/{id}"].patch.description ?? "", /The key does not change/)
+    assert.match(document.paths["/vehicle-types/{id}/container-types"].put.description ?? "", /Replaces the whole compatibility set/)
+    assert.match(document.paths["/warehouses"].post.description ?? "", /must be a depot of the same project/)
+    assert.match(document.paths["/warehouses"].get.description ?? "", /an account that works in none[^.]*reads an empty page/)
+    assert.match(document.paths["/depots"].post.description ?? "", /The location is required/)
+    assert.match(document.paths["/depots"].post.description ?? "", /both or neither \(400 on `closesAt`\)/)
+    assert.match(document.paths["/depots/{id}"].patch.description ?? "", /held against the stored row/)
+    assert.match(document.paths["/unloading-stations"].get.description ?? "", /an account that works in no project of the company[^.]*reads an empty page/)
+    assert.match(document.paths["/unloading-stations"].post.description ?? "", /may not register one \(403\)/)
+    assert.match(document.paths["/unloading-stations/{id}/fractions"].put.description ?? "", /Replaces the whole set of fractions/)
+
+    // A write takes a JSON body, and it is the strict one the contracts spell.
+    const required = (path: string) => document.paths[path].post.requestBody?.content["application/json"].schema.required
+    assert.deepEqual(required("/vehicle-types"), ["key", "name"])
+    assert.deepEqual(required("/warehouses"), ["projectId", "code", "name", "address"])
+    assert.deepEqual(required("/depots"), ["projectId", "code", "name", "address", "location"])
+    assert.deepEqual(required("/unloading-stations"), ["code", "name", "address", "location", "ownership"])
+
+    for (const path of ["/vehicle-types", "/warehouses", "/depots", "/unloading-stations"]) {
+      const page = document.paths[path].get.responses["200"].content["application/json"].schema
+      assert.deepEqual(page.required, ["items", "nextCursor"], path)
+      assert.equal(page.properties?.items.type, "array", path)
+    }
+  })
+
+  test("documents each vehicle allocation route of #101's slice 6 with its verbs, its problems and the rules a client must know", async () => {
+    const document = await spec()
+    const operations = (path: string) =>
+      Object.fromEntries(Object.entries(document.paths[path]).map(([method, operation]) => [method, operation.operationId]))
+
+    assert.deepEqual(operations("/vehicle-allocations"), { get: "listVehicleAllocations", post: "allocateVehicle" })
+    assert.deepEqual(operations("/vehicle-allocations/{id}"), { get: "getVehicleAllocation" })
+    assert.deepEqual(operations("/vehicle-allocations/{id}/change"), { post: "changeVehicleAllocation" })
+    assert.deepEqual(operations("/vehicle-allocations/{id}/confirm"), { post: "confirmVehicleAllocation" })
+    assert.deepEqual(operations("/vehicle-allocations/{id}/release"), { post: "releaseVehicleAllocation" })
+    assert.deepEqual(operations("/vehicle-allocations/{id}/events"), { get: "listVehicleAllocationEvents" })
+
+    // An overlap is a 409 on the allocate and the change, a released allocation on the change and the confirm; the release is idempotent and refuses nothing but a bad body.
+    assert.deepEqual(Object.keys(document.paths["/vehicle-allocations"].get.responses), ["200", "400", "401", "403"])
+    assert.deepEqual(Object.keys(document.paths["/vehicle-allocations"].post.responses), ["201", "400", "401", "403", "409"])
+    assert.deepEqual(Object.keys(document.paths["/vehicle-allocations/{id}"].get.responses), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(Object.keys(document.paths["/vehicle-allocations/{id}/change"].post.responses), ["200", "400", "401", "403", "404", "409"])
+    assert.deepEqual(Object.keys(document.paths["/vehicle-allocations/{id}/confirm"].post.responses), ["200", "400", "401", "403", "404", "409"])
+    assert.deepEqual(Object.keys(document.paths["/vehicle-allocations/{id}/release"].post.responses), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(Object.keys(document.paths["/vehicle-allocations/{id}/events"].get.responses), ["200", "400", "401", "403", "404"])
+
+    const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
+    assert.deepEqual(byName(document.paths["/vehicle-allocations"].get).sort(), [
+      "query:cursor",
+      "query:driverId",
+      "query:limit",
+      "query:overlappingFrom",
+      "query:overlappingTo",
+      "query:projectId",
+      "query:status",
+      "query:trailerId",
+      "query:vehicleId",
+    ])
+    assert.deepEqual(byName(document.paths["/vehicle-allocations/{id}/events"].get).sort(), ["path:id", "query:cursor", "query:limit"])
+
+    // The rules a client must know are in the prose, not only in the code.
+    assert.match(document.paths["/vehicle-allocations"].get.description ?? "", /a reservation ending exactly when the window starts does not touch it/)
+    assert.match(document.paths["/vehicle-allocations"].post.description ?? "", /holds the licence class the vehicle requires on the window's last day, the last instant inside it rendered in the project's timezone/)
+    assert.match(document.paths["/vehicle-allocations/{id}/change"].post.description ?? "", /A status gates a new reference and never an existing one/)
+    assert.match(document.paths["/vehicles/{id}"].patch.description ?? "", /nor is one a collection group of a route scheme in force today names/)
+    assert.match(document.paths["/drivers/{id}"].patch.description ?? "", /`inactive` or `suspended` under a live allocation/)
+    assert.match(document.paths["/route-schemes/{id}"].patch.description ?? "", /judged again on the new start, and a driver who may not take the vehicle then is refused at `validFrom`/)
+    assert.match(document.paths["/vehicle-allocations"].post.description ?? "", /one live reservation of a vehicle, of a driver and of a trailer at a time/)
+    assert.match(document.paths["/vehicle-allocations/{id}/change"].post.description ?? "", /A released allocation does not change \(409\)/)
+    assert.match(document.paths["/vehicle-allocations/{id}/confirm"].post.description ?? "", /without a write and without an event/)
+    assert.match(document.paths["/vehicle-allocations/{id}/release"].post.description ?? "", /its window is freed/)
+    assert.match(document.paths["/vehicle-allocations/{id}/events"].get.description ?? "", /append-only/)
+
+    // A write takes a JSON body, and it is the strict one the contracts spell; the confirm's is empty.
+    const required = (path: string) => document.paths[path].post.requestBody?.content["application/json"].schema.required
+    assert.deepEqual(required("/vehicle-allocations"), ["projectId", "vehicleId", "plannedFrom", "plannedTo"])
+    assert.deepEqual(required("/vehicle-allocations/{id}/change"), ["reason"])
+    assert.deepEqual(required("/vehicle-allocations/{id}/release"), ["reason"])
+    assert.equal(required("/vehicle-allocations/{id}/confirm"), undefined)
+
+    for (const path of ["/vehicle-allocations", "/vehicle-allocations/{id}/events"]) {
+      const page = document.paths[path].get.responses["200"].content["application/json"].schema
+      assert.deepEqual(page.required, ["items", "nextCursor"], path)
+      assert.equal(page.properties?.items.type, "array", path)
+    }
+  })
+
+  test("documents each fleet route with its verbs, its problems and the rules a client must know", async () => {
+    const document = await spec()
+    const operations = (path: string) =>
+      Object.fromEntries(Object.entries(document.paths[path]).map(([method, operation]) => [method, operation.operationId]))
+
+    assert.deepEqual(operations("/vehicles"), { get: "listVehicles", post: "createVehicle" })
+    assert.deepEqual(operations("/vehicles/{id}"), { get: "getVehicle", patch: "patchVehicle" })
+    assert.deepEqual(operations("/vehicles/{id}/compartments"), { put: "putVehicleCompartments" })
+    assert.deepEqual(operations("/drivers"), { get: "listDrivers", post: "createDriver" })
+    assert.deepEqual(operations("/drivers/{id}"), { get: "getDriver", patch: "patchDriver" })
+
+    // What a caller can earn on each of them, and in what shape.
+    for (const path of ["/vehicles", "/drivers"]) {
+      assert.deepEqual(Object.keys(document.paths[path].get.responses), ["200", "400", "401", "403"], path)
+      assert.deepEqual(Object.keys(document.paths[path].post.responses), ["201", "400", "401", "403", "409"], path)
+      assert.deepEqual(Object.keys(document.paths[`${path}/{id}`].get.responses), ["200", "400", "401", "403", "404"], path)
+      assert.deepEqual(Object.keys(document.paths[`${path}/{id}`].patch.responses), ["200", "400", "401", "403", "404", "409"], path)
+    }
+    // The set is replaced whole and nothing there can collide: positions are renumbered and a fraction twice is the body's own 400.
+    assert.deepEqual(Object.keys(document.paths["/vehicles/{id}/compartments"].put.responses), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(document.paths["/vehicles/{id}/compartments"].put.requestBody?.content["application/json"].schema.required, ["compartments"])
+    for (const [status, operation] of Object.entries(document.paths["/vehicles/{id}"].patch.responses)) {
+      const media = Object.keys(operation.content)
+      assert.deepEqual(media, [status === "200" ? "application/json" : "application/problem+json"], status)
+    }
+
+    // Both lists are project-scoped and take the project filter beside the page; each adds its own.
+    const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
+    assert.deepEqual(byName(document.paths["/vehicles"].get).sort(), ["query:cursor", "query:homeDepotId", "query:kind", "query:limit", "query:projectId", "query:status", "query:vehicleTypeId"])
+    assert.deepEqual(byName(document.paths["/drivers"].get).sort(), ["query:cursor", "query:homeDepotId", "query:licenceClass", "query:limit", "query:projectId", "query:status"])
+    assert.deepEqual(byName(document.paths["/vehicles/{id}/compartments"].put), ["path:id"])
+
+    // The rules a client must know are in the prose, not only in the code.
+    assert.match(document.paths["/vehicles"].post.description ?? "", /a powered vehicle has at least one, a trailer may have none/)
+    assert.match(document.paths["/vehicles"].post.description ?? "", /unique across the company, not inside a project/)
+    assert.match(document.paths["/vehicles"].post.description ?? "", /an unknown class passes nobody/)
+    assert.match(document.paths["/vehicles"].get.description ?? "", /an account that works in none[^.]*reads an empty page/)
+    assert.match(document.paths["/vehicles/{id}"].patch.description ?? "", /a powered vehicle does not become a trailer/)
+    assert.match(document.paths["/vehicles/{id}"].patch.description ?? "", /refused \(409\) counting them — release the allocations, reassign the groups, and retire it then/)
+    assert.match(document.paths["/vehicles/{id}/compartments"].put.description ?? "", /Replaces the whole list/)
+    assert.match(document.paths["/vehicles/{id}/compartments"].put.description ?? "", /positions are 1\.\.n in the body's order/)
+    assert.match(document.paths["/vehicles/{id}/compartments"].put.description ?? "", /the stored kind decides/)
+    assert.match(document.paths["/drivers"].post.description ?? "", /one account is the login of at most one driver/)
+    assert.match(document.paths["/drivers"].post.description ?? "", /null is not on record, which is eligible for nothing/)
+    assert.match(document.paths["/drivers"].get.description ?? "", /exactly that class/)
+    assert.match(document.paths["/drivers/{id}"].patch.description ?? "", /A licence renewal is an edit here/)
+
+    // A write takes a JSON body, and it is the strict one the contracts spell.
+    const required = (path: string) => document.paths[path].post.requestBody?.content["application/json"].schema.required
+    assert.deepEqual(required("/vehicles"), ["projectId", "registration", "kind", "vehicleTypeId", "requiredLicenceClass"])
+    assert.deepEqual(required("/drivers"), ["projectId", "name", "employment"])
+
+    for (const path of ["/vehicles", "/drivers"]) {
+      const page = document.paths[path].get.responses["200"].content["application/json"].schema
+      assert.deepEqual(page.required, ["items", "nextCursor"], path)
+      assert.equal(page.properties?.items.type, "array", path)
+    }
   })
 
   test("documents /me with the problem responses a token can earn", async () => {

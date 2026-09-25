@@ -8,9 +8,15 @@ import { describe, test } from "node:test"
 import {
   alreadyPicked,
   containerPickedTwice,
+  groupDriverIssue,
+  groupRuns,
+  isParked,
   manualWithoutContainer,
   NO_PLANNING_AREA_FOR_RULE,
+  onTwoGroups,
+  resourcesOnTwoGroups,
   ruleWithoutFraction,
+  schemeLicenceDay,
   schemeStructureIssues,
   serviceDaysWithoutGroup,
   type GroupStructure,
@@ -67,20 +73,115 @@ describe("schemeStructureIssues", () => {
     assert.deepEqual(schemeStructureIssues({ ...sound, hasPlanningArea: false, collectionGroups: [manual("Glass", ["monday", "thursday"])] }), [])
   })
 
-  test("lists every sentence that holds, the days first, the groups next, the planning area last", () => {
+  test("lists every sentence that holds, the days first, the groups next, the planning area, then the vehicles and drivers on two groups", () => {
     assert.deepEqual(
       schemeStructureIssues({
         serviceDays: ["monday", "tuesday"],
         hasPlanningArea: false,
-        collectionGroups: [rule("Residual", ["monday"], 0), manual("Glass", [], 0)],
+        collectionGroups: [
+          { ...rule("Residual", ["monday"], 0), vehicle: wh24 },
+          { ...manual("Glass", [], 0), vehicle: wh24 },
+          { ...manual("Paper", ["monday"]), vehicle: wh24 },
+        ],
       }),
       [
         "Service days without a collection group: tuesday",
         "Collection group Residual matches by rule but names no waste fraction",
         "Collection group Glass picks containers but names none",
         "The scheme has no planning area and a collection group matches by rule",
+        "Vehicle WH-24 is on two collection groups that run on monday: Residual, Paper",
       ],
     )
+  })
+})
+
+const wh24 = { id: "vehicle-24", label: "WH-24" }
+const wh25 = { id: "vehicle-25", label: "WH-25" }
+const mads = { id: "driver-mads", label: "Mads Jensen" }
+
+describe("isParked and groupRuns", () => {
+  test("a group with no days is parked and does not run; one with a day runs — the predicate the API spells as cardinality(days) > 0", () => {
+    assert.equal(isParked([]), true)
+    assert.equal(isParked(["monday"]), false)
+    assert.equal(groupRuns(rule("North", [])), false)
+    assert.equal(groupRuns(rule("North", ["monday"])), true)
+    assert.equal(groupRuns({ days: ["monday", "thursday"] }), true, "any shape with days will do: a stored group, a body")
+  })
+
+  test("a parked group is what the structural rules already read it as: it covers no day and conflicts with nothing", () => {
+    const parked = { ...rule("North", []), vehicle: { id: "v1", label: "WH-24" } }
+    const running = { ...rule("South", ["monday"]), vehicle: { id: "v1", label: "WH-24" } }
+    assert.deepEqual(schemeStructureIssues({ serviceDays: ["monday"], hasPlanningArea: true, collectionGroups: [parked, running] }), [])
+    assert.deepEqual(schemeStructureIssues({ serviceDays: ["monday"], hasPlanningArea: true, collectionGroups: [parked] }), [serviceDaysWithoutGroup(["monday"])])
+  })
+})
+
+describe("resourcesOnTwoGroups", () => {
+  test("names a vehicle two groups run with on a shared day, once per day in weekday order, the groups in group order", () => {
+    const groups: GroupStructure[] = [
+      { ...rule("South", ["thursday", "monday"]), vehicle: wh24, driver: null },
+      { ...manual("North", ["monday", "thursday"]), vehicle: wh24, driver: null },
+    ]
+    assert.deepEqual(resourcesOnTwoGroups(groups), [
+      "Vehicle WH-24 is on two collection groups that run on monday: South, North",
+      "Vehicle WH-24 is on two collection groups that run on thursday: South, North",
+    ])
+    assert.equal(onTwoGroups("Vehicle", "WH-24", "monday", ["North", "South"]), "Vehicle WH-24 is on two collection groups that run on monday: North, South")
+    assert.equal(onTwoGroups("Driver", "Mads Jensen", "friday", ["A", "B", "C"]), "Driver Mads Jensen is on three collection groups that run on friday: A, B, C")
+  })
+
+  test("the same vehicle on groups with no day in common is one truck on two days, and a group with no days conflicts with nothing", () => {
+    assert.deepEqual(resourcesOnTwoGroups([{ ...rule("Mondays", ["monday"]), vehicle: wh24 }, { ...rule("Thursdays", ["thursday"]), vehicle: wh24 }]), [])
+    assert.deepEqual(resourcesOnTwoGroups([{ ...rule("Mondays", ["monday"]), vehicle: wh24 }, { ...rule("Paused", []), vehicle: wh24 }]), [])
+    assert.deepEqual(resourcesOnTwoGroups([{ ...rule("Mondays", ["monday"]), vehicle: wh24 }, { ...rule("Also Mondays", ["monday"]), vehicle: wh25 }]), [], "two trucks on one day")
+  })
+
+  test("vehicles before drivers, resources in the order the groups first name them, and a group naming neither is left out", () => {
+    const groups: GroupStructure[] = [
+      { ...rule("A", ["monday"]), vehicle: wh25, driver: mads },
+      { ...rule("B", ["monday"]), vehicle: wh24, driver: null },
+      { ...rule("C", ["monday"]) },
+      { ...rule("D", ["monday"]), vehicle: wh24, driver: mads },
+      { ...rule("E", ["monday"]), vehicle: wh25 },
+    ]
+    assert.deepEqual(resourcesOnTwoGroups(groups), [
+      "Vehicle WH-25 is on two collection groups that run on monday: A, E",
+      "Vehicle WH-24 is on two collection groups that run on monday: B, D",
+      "Driver Mads Jensen is on two collection groups that run on monday: A, D",
+    ])
+  })
+})
+
+describe("schemeLicenceDay", () => {
+  test("is the scheme's start or today, whichever is later, and says which it was; a scheme starting today is judged on its start", () => {
+    assert.deepEqual(schemeLicenceDay("2027-03-01", "2026-09-25"), { day: "2027-03-01", meaning: "the scheme starts" })
+    assert.deepEqual(schemeLicenceDay("2026-01-01", "2026-09-25"), { day: "2026-09-25", meaning: "today" })
+    assert.deepEqual(schemeLicenceDay("2026-09-25", "2026-09-25"), { day: "2026-09-25", meaning: "the scheme starts" })
+  })
+})
+
+describe("groupDriverIssue", () => {
+  const vehicle = { label: "WH-24", requiredLicenceClass: "c" as const }
+
+  test("spells the three licence refusals in the allocation's words, the expiry one ending with what the day meant", () => {
+    const today = { day: "2026-09-25", meaning: "today" as const }
+    const start = { day: "2027-03-01", meaning: "the scheme starts" as const }
+    assert.equal(groupDriverIssue({ vehicle, driver: { name: "Jonas Lind", licenceClass: null, licenceExpiry: null } }, today), "Jonas Lind holds no licence class on record")
+    assert.equal(groupDriverIssue({ vehicle, driver: { name: "Freja Holm", licenceClass: "b", licenceExpiry: null } }, today), "Freja Holm needs a C licence for WH-24")
+    assert.equal(
+      groupDriverIssue({ vehicle, driver: { name: "Sofie Nielsen", licenceClass: "c", licenceExpiry: "2026-09-05" } }, today),
+      "Sofie Nielsen's licence expires on 2026-09-05, before today",
+    )
+    assert.equal(
+      groupDriverIssue({ vehicle, driver: { name: "Sofie Nielsen", licenceClass: "c", licenceExpiry: "2026-12-31" } }, start),
+      "Sofie Nielsen's licence expires on 2026-12-31, before the scheme starts",
+    )
+  })
+
+  test("a driver who holds the class, or a higher one, on the judged day is no issue", () => {
+    const today = { day: "2026-09-25", meaning: "today" as const }
+    assert.equal(groupDriverIssue({ vehicle, driver: { name: "Mads Jensen", licenceClass: "ce", licenceExpiry: "2030-12-31" } }, today), undefined)
+    assert.equal(groupDriverIssue({ vehicle, driver: { name: "Sofie Nielsen", licenceClass: "c", licenceExpiry: "2026-09-25" } }, today), undefined, "the expiry is the last day the licence holds")
   })
 })
 

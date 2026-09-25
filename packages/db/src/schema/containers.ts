@@ -22,11 +22,15 @@
 // inherited by query, never copied.
 //
 // Its exclusion constraint is over `container_id` alone: a container serves in
-// one place at a time. Nothing references a placement, so it has no
-// `projectKey` of its own and therefore no unique constraint leading with
-// `(company_id, project_id)`: its reference to the Project takes a
-// `tenantIndex` instead. `POST /containers/:id/placements` is the seam the
-// "issue into service" command grows into when the ledger arrives.
+// one place at a time. It carries a project key since migration 0007 (Issue
+// #101), because the Stock Movement ledger references it — the placement an
+// issue opens or a return closes — and the key carries the container,
+// `unique (company_id, project_id, container_id, id)`, so the ledger's
+// reference names the placement *of the container it moves* and container A
+// cannot be recorded as issued into container B's placement. The key leads
+// with `(company_id, project_id)`, so the `tenantIndex` on the project it took
+// while nothing pointed at it is gone. `POST /containers/:id/placements` is
+// the seam the "issue into service" command grows into with the ledger.
 import { CONTAINER_OWNERSHIPS } from "@waste/domain/registry/vocabulary"
 import { text, uuid } from "drizzle-orm/pg-core"
 
@@ -84,8 +88,9 @@ export const containerServicePlacement = wms.table(
     projectReference(t, [t.subscriptionId], subscription),
     projectReference(t, [t.serviceFrequencyId], serviceFrequency),
     tenantReference(t, [t.wasteFractionId], wasteFraction),
+    // What the ledger points at: the placement of this container, by both columns.
+    projectKey(t, t.containerId),
     validPeriod(t),
-    tenantIndex(t, t.projectId),
     tenantIndex(t, t.subscriptionId),
     tenantIndex(t, t.wasteFractionId),
     tenantIndex(t, t.serviceFrequencyId),

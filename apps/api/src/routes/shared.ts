@@ -46,6 +46,8 @@
 // Nothing here knows a table or a resource: what is not shared by every route
 // module stays in the one that owns it.
 import { Id } from "@waste/contracts/ids"
+import { providerShape } from "@waste/contracts/places"
+import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
 import { and, eq, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
@@ -157,6 +159,9 @@ export type NamedRow = { companyId: string; id: string; also?: SQL }
 /** What a body is told about a value it carried — a row that is not there, a check the database refused: a 400 at the field that named it. */
 export type Refusal = { path: string; message: string }
 
+/** Where a refused id is answered: on the body it came in, or on the query string a list filter named it in. */
+export type Target = "body" | "query"
+
 /**
  * Holds an id a body named to a row that is really there — in this company,
  * and under whatever else its key demands, which `also` carries: the project
@@ -172,10 +177,23 @@ export type Refusal = { path: string; message: string }
  * what the thing is ("Not a container type of this company"). This runs the
  * lookup, always with `company_id`, and shapes the refusal — so the check a
  * product makes of its container type is the check a subscription will make
- * of its product and an agreement of its customer.
+ * of its product and an agreement of its customer. A `query` target refuses
+ * on the query string, for a list filter that names a row; a body on the body.
  */
-export async function requireRow(tx: Tx, table: TenantTable, row: NamedRow, refusal: Refusal): Promise<void> {
-  await answering(tx, table, table.id, row, refusal)
+export async function requireRow(tx: Tx, table: TenantTable, row: NamedRow, refusal: Refusal, target: Target = "body"): Promise<void> {
+  const issue = await rowIssue(tx, table, row, refusal)
+  if (issue !== undefined) throw invalidRequest(target, [issue])
+}
+
+/**
+ * The same lookup as an answer rather than a throw: the refusal where there
+ * is no such row, undefined where there is. For a route that holds a body to
+ * several rules at once and lists every refusal in one 400 — a place patch's
+ * provider beside its two shape rules (routes/place-rules.ts) — so a client
+ * mending one is not told about the other on its next try.
+ */
+export async function rowIssue(tx: Tx, table: TenantTable, row: NamedRow, refusal: Refusal): Promise<Refusal | undefined> {
+  return (await answering(tx, table, table.id, row)) === undefined ? refusal : undefined
 }
 
 /**
@@ -186,18 +204,19 @@ export async function requireRow(tx: Tx, table: TenantTable, row: NamedRow, refu
  * caller names the vocabulary the column's check holds the value to.
  */
 export async function requireStatus<Status extends string>(tx: Tx, table: StatusTable, row: NamedRow, refusal: Refusal): Promise<Status> {
-  return (await answering(tx, table, table.status, row, refusal)) as Status
+  const found = await answering(tx, table, table.status, row)
+  if (found === undefined) throw invalidRequest("body", [refusal])
+  return found.answer as Status
 }
 
-/** One column of the row a body named, or the refusal when there is no such row. */
-async function answering(tx: Tx, table: TenantTable, column: PgColumn, row: NamedRow, refusal: Refusal): Promise<unknown> {
+/** One column of the row a body named, or undefined when there is no such row: the statement behind the three doors above. */
+async function answering(tx: Tx, table: TenantTable, column: PgColumn, row: NamedRow): Promise<{ answer: unknown } | undefined> {
   const [found] = await tx
     .select({ answer: column })
     .from(table)
     .where(and(eq(table.companyId, row.companyId), eq(table.id, row.id), row.also))
     .limit(1)
-  if (found === undefined) throw invalidRequest("body", [refusal])
-  return found.answer
+  return found
 }
 
 /**
@@ -262,4 +281,32 @@ export async function refuseCheck<T>(sentences: Readonly<Record<string, Refusal>
     if (refusal === undefined) throw error
     throw invalidRequest("body", [refusal])
   }
+}
+
+// Resources, round A (Issue #101 review): the owning provider's shape, once.
+// A depot, an unloading station, a vehicle and a driver each name a service
+// provider exactly when their ownership (or a driver's employment) says so,
+// and each route held that against its stored row in its own lines. The
+// refusal has one shape here: the rule is the contracts' (`providerShape`,
+// @waste/contracts/places, which judges a half-seen pair as fine and leaves
+// it to the route to merge the stored row in), the path is always
+// `serviceProviderId`, and the sentence is the family's, since a depot's and
+// a driver's differ. It comes in two doors: `providerShapeIssue` answers the
+// field error or nothing, for a caller that holds a row to more than one
+// rule and lists every refusal in one 400 (routes/place-rules.ts, the two
+// places), and `requireProviderShape` throws it, for a caller with one rule
+// to hold (routes/vehicles.ts and routes/drivers.ts, since the closing
+// round). Both take the row as the write leaves it — the provider merged onto
+// the stored row, `string | null` and never absent — so a raw patch, whose
+// provider may be undefined, does not compile.
+
+/** The provider rule's answer for a row as a write leaves it — `owner` its ownership or employment, `body` its provider — at `serviceProviderId` with the family's sentence; undefined where the row holds. */
+export function providerShapeIssue(owner: string, body: { serviceProviderId: string | null }, sentence: string): ProblemFieldError | undefined {
+  return providerShape(owner, body) ? undefined : { path: "serviceProviderId", message: sentence }
+}
+
+/** Holds a row as a write leaves it to the contracts' provider rule, refusing at `serviceProviderId` with the family's sentence: `providerShapeIssue`, thrown. */
+export function requireProviderShape(owner: string, body: { serviceProviderId: string | null }, sentence: string): void {
+  const issue = providerShapeIssue(owner, body, sentence)
+  if (issue !== undefined) throw invalidRequest("body", [issue])
 }

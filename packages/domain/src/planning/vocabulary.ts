@@ -13,13 +13,16 @@
 // route-schemes/creation.ts — and each of those modules re-exports its list,
 // so no import in this package or in apps/web changed. `RECURRENCE_FREQUENCIES`
 // is the tuple the existing `RecurrenceFrequency` union is now read off.
-// Two lists are the tokens of display tuples the prototype still reads by
+// One list is the tokens of a display tuple the prototype still reads by
 // name: `SERVICE_TYPES` of route-schemes/scope.ts's `SCHEME_SERVICE_TYPES`
-// ("Container collection") and `STOP_MATCH_VEHICLE_TYPES` of
-// route-schemes/matching.ts's tuple of the same name ("Rear loader"); the
-// display tuples stay the web's until the adapter (#81) maps them, and this
-// module is what the database and the API speak. The last two lists are part
-// B's (generation as a job) and are here because they are only tuples.
+// ("Container collection"); the display tuple stays the web's until the
+// adapter (#81) maps it, and this module is what the database and the API
+// speak. The vehicle a rule asks for was a token list here too
+// (`STOP_MATCH_VEHICLE_TYPES`, "a working taxonomy until Resources"); it left
+// with Resources (Issue #101), where a vehicle type is a company's row
+// (`vehicle_type`) and a rule names it by id, while route-schemes/matching.ts
+// keeps its display tuple for the web. The last two lists are part B's
+// (generation as a job) and are here because they are only tuples.
 //
 // A value is a kebab-case token: it goes into a migration as a SQL literal
 // and onto the wire as an enum member, and those are the same string. A list
@@ -42,8 +45,6 @@ export const SCHEME_EDIT_POLICIES = ["ask", "future", "single"] as const
 export const SERVICE_TYPES = ["container-collection", "underground-collection", "kerbside-collection", "crane-collection", "tank-emptying"] as const
 /** How a Collection Group finds its stops: a Stop Matching Rule, or containers picked by hand. */
 export const STOP_SOURCES = ["rule", "manual"] as const
-/** The vehicle a rule may ask for; a working taxonomy until Resources owns vehicle types. */
-export const STOP_MATCH_VEHICLE_TYPES = ["rear-loader", "organic-sealed", "paper-compactor", "glass-crane", "vacuum-tanker"] as const
 /** The stored half of a scheme's lifecycle; scheduled, effective and expired are readings of runs and of the period. */
 export const ROUTE_SCHEME_STATUSES = ["draft", "validated"] as const
 /** Why the Planning Area exists, which decides what reads it. */
@@ -61,7 +62,6 @@ export type OccurrenceStatus = (typeof OCCURRENCE_STATUSES)[number]
 export type SchemeEditPolicy = (typeof SCHEME_EDIT_POLICIES)[number]
 export type ServiceType = (typeof SERVICE_TYPES)[number]
 export type StopSource = (typeof STOP_SOURCES)[number]
-export type StopMatchVehicleType = (typeof STOP_MATCH_VEHICLE_TYPES)[number]
 export type RouteSchemeStatus = (typeof ROUTE_SCHEME_STATUSES)[number]
 export type PlanningAreaPurpose = (typeof PLANNING_AREA_PURPOSES)[number]
 export type GenerationTrigger = (typeof GENERATION_TRIGGERS)[number]
@@ -86,7 +86,6 @@ export const PLANNING_VOCABULARIES = {
   SCHEME_EDIT_POLICIES,
   SERVICE_TYPES,
   STOP_SOURCES,
-  STOP_MATCH_VEHICLE_TYPES,
   ROUTE_SCHEME_STATUSES,
   PLANNING_AREA_PURPOSES,
   GENERATION_TRIGGERS,

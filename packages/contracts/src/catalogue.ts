@@ -35,8 +35,8 @@ import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS } from "@waste/domain/re
 import * as z from "zod"
 
 import { Id } from "./ids"
-import { changesSomething, somethingToChange, stamped } from "./resource"
-import { Label, Paragraph } from "./text"
+import { changesSomething, PositiveInt, somethingToChange, stamped } from "./resource"
+import { Label, Paragraph, Slug } from "./text"
 
 /** What a Product delivers. */
 export const ProductKind = z.enum(PRODUCT_KINDS)
@@ -50,17 +50,11 @@ export type ProductStatus = z.infer<typeof ProductStatus>
 export const ProductUnit = z.enum(PRODUCT_UNITS)
 export type ProductUnit = z.infer<typeof ProductUnit>
 
-/** The longest a fraction key may be. A slug, not a sentence. */
-const KEY_MAX = 50
-
-/** A lowercase slug: `residual`, `food`, `hard-plastic`. */
-const FractionKey = z
-  .string()
-  .max(KEY_MAX)
-  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "a lowercase slug of letters, digits and single hyphens, such as food or hard-plastic")
+/** A lowercase slug: `residual`, `food`, `hard-plastic` — the one key shape of text.ts. */
+const FractionKey = Slug()
 
 /** A volume, a rate or an interval: a whole positive number, since zero is none of them. */
-const Count = z.int().positive()
+const Count = PositiveInt
 
 export const WasteFraction = z.object({
   ...stamped,

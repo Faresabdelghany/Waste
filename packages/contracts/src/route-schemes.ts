@@ -21,28 +21,37 @@
 // the create body carries the rule or the containers to match it, never both
 // — `ONE_WAY_TO_FIND_STOPS`, refused at `stopSource`. The rule is three things
 // (the fractions it matches, one or more; the container types it is
-// restricted to, none or more; the vehicle it asks for, or none), the manual
-// alternative a list of containers in stop order. Both are sets and are
-// replaced whole through their own routes; a group's patch moves its name,
-// order, days and provider and never its source, its rule or its list. The
-// implicit group of a scheme without explicit groups is a row the server
-// writes: `RouteSchemeCreate.collectionGroups` has at least one entry, and the
-// quick form's one rule becomes that one group. Fractions are the group's and
+// restricted to, none or more; the vehicle type it asks for, or none — a
+// vehicle type being a row of the company's since Resources, Issue #101, and
+// named by id where 0006 had a token), the manual alternative a list of
+// containers in stop order. Both are sets and are replaced whole through their
+// own routes; a group's patch moves its name, order, days and provider and
+// never its source, its rule or its list. The implicit group of a scheme
+// without explicit groups is a row the server writes:
+// `RouteSchemeCreate.collectionGroups` has at least one entry, and the quick
+// form's one rule becomes that one group. Fractions are the group's and
 // plural, as the glossary has them; the adapter writes the scheme's one
 // fraction into each group.
 //
-// Not here: the group's vehicle and driver and the scheme's depot and
-// unloading station (Resources, with step 6), a scheme's own service demand
-// (a Subscription is the Registry's), and `lastGeneratedAt` and the drift
-// stamps (part B adds them to the resource).
+// Resources gave the group its vehicle and default driver and the scheme its
+// depot and unloading station (Issue #101): the four are on the resources,
+// nullable, and since #101's slice 6 on the write bodies too — the group's
+// create and patch take `vehicleId` and `driverId`, the scheme's create and
+// patch `depotId` and `unloadingStationId`, each nullable so a form may clear
+// what it set — and the routes hold them: a powered vehicle of the project, a
+// driver of the project who may take that vehicle, no vehicle or driver on
+// two groups a shared day (a validated scheme's structural rule), a depot of
+// the project, a station of the company. Not here: a scheme's own service
+// demand (a Subscription is the Registry's), and `lastGeneratedAt` and the
+// drift stamps (part B adds them to the resource).
 import { OCCURRENCE_STATUSES, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 import * as z from "zod"
 
 import { IsoDate, IsoTime } from "./dates"
 import { Id } from "./ids"
-import { eachOnce, HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, ServiceDays, ServiceType, StopMatchVehicleType, StopSource, WeekRotation } from "./planning"
+import { eachOnce, HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, ServiceDays, ServiceType, StopSource, WeekRotation } from "./planning"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, somethingToChange, stamped } from "./resource"
+import { changesSomething, eachOnceSentence, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label } from "./text"
 import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
 
@@ -67,25 +76,26 @@ export const GROUPS_MAX = 50
 export const AT_MOST_GROUPS = `A scheme has at most ${GROUPS_MAX} collection groups`
 
 /** An order among siblings: whole and positive, since the first is number one. */
-const Ordinal = z.int().positive()
+const Ordinal = PositiveInt
 
-export const EACH_FRACTION_ONCE = "Name each waste fraction once: a rule matches a fraction or it does not"
-export const EACH_CONTAINER_TYPE_ONCE = "Name each container type once: a rule is restricted to a type or it is not"
-export const EACH_CONTAINER_ONCE = "Name each container once: a container has one place in the group's stop order"
+export const EACH_FRACTION_ONCE = eachOnceSentence("waste fraction", "a rule matches a fraction or it does not")
+export const EACH_CONTAINER_TYPE_ONCE = eachOnceSentence("container type", "a rule is restricted to a type or it is not")
+export const EACH_CONTAINER_ONCE = eachOnceSentence("container", "a container has one place in the group's stop order")
 
 /** A distinct set of ids, bounded. */
 const idSet = (message: string) => z.array(Id).max(CONTAINERS_MAX).refine((ids) => eachOnce(ids), { message })
 
 /**
  * How a rule group finds its stops: the fractions it matches (one or more),
- * the container types it is restricted to (none or more) and the vehicle it
- * asks for, if any. The same shape is the resource's `rule` and the body of
- * `PUT /collection-groups/:id/stop-matching-rule`.
+ * the container types it is restricted to (none or more) and the vehicle type
+ * it asks for, if any — one of the company's rows, applied by generation
+ * through the type's compatibility set and never by name. The same shape is
+ * the resource's `rule` and the body of `PUT /collection-groups/:id/stop-matching-rule`.
  */
 export const StopMatchingRule = z.strictObject({
   wasteFractionIds: idSet(EACH_FRACTION_ONCE).min(1),
   containerTypeIds: idSet(EACH_CONTAINER_TYPE_ONCE),
-  vehicleType: StopMatchVehicleType.nullable(),
+  vehicleTypeId: Id.nullable(),
 })
 export type StopMatchingRule = z.infer<typeof StopMatchingRule>
 
@@ -116,6 +126,10 @@ export const CollectionGroup = z.object({
   /** The picked containers in stop order, for a manual group; empty for a rule group. */
   containerIds: z.array(Id),
   serviceProviderId: Id.nullable(),
+  /** The vehicle the group runs with, a powered vehicle of the project; null while unsaid. */
+  vehicleId: Id.nullable(),
+  /** The default driver, one of the project's who may take the vehicle; null while unsaid. */
+  driverId: Id.nullable(),
 })
 export type CollectionGroup = z.infer<typeof CollectionGroup>
 
@@ -146,17 +160,23 @@ export const CollectionGroupCreate = z
     rule: StopMatchingRule.nullable().optional(),
     containerIds: ContainerIds.nullable().optional(),
     serviceProviderId: Id.nullable().optional(),
+    /** A powered vehicle of the scheme's project (Issue #101). */
+    vehicleId: Id.nullable().optional(),
+    /** A driver of the scheme's project who may take the vehicle, judged on the scheme's start or today, whichever is later (Issue #101). */
+    driverId: Id.nullable().optional(),
   })
   .refine(oneWayToFindStopsGiven, oneWayToFindStops)
 export type CollectionGroupCreate = z.infer<typeof CollectionGroupCreate>
 
-/** The name, the order, the days and the provider; the source, the rule and the list never move through a patch. */
+/** The name, the order, the days, the provider, the vehicle and the driver; the source, the rule and the list never move through a patch. */
 export const CollectionGroupPatch = z
   .strictObject({
     name: Label.optional(),
     position: Ordinal.optional(),
     days: ServiceDays.optional(),
     serviceProviderId: Id.nullable().optional(),
+    vehicleId: Id.nullable().optional(),
+    driverId: Id.nullable().optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type CollectionGroupPatch = z.infer<typeof CollectionGroupPatch>
@@ -224,6 +244,10 @@ const RouteSchemeFields = {
   /** Whether the nightly job keeps the coming week planned. */
   planAhead: z.boolean(),
   status: RouteSchemeStatus,
+  /** Where the routes depart from, a depot of the project; null while unsaid. */
+  depotId: Id.nullable(),
+  /** Where the routes empty, a station of the company; null while unsaid. */
+  unloadingStationId: Id.nullable(),
   /** By position. */
   collectionGroups: z.array(CollectionGroup),
   ...Validity.shape,
@@ -246,6 +270,10 @@ export const RouteSchemeCreate = z
     editPolicy: SchemeEditPolicy.default("ask").describe("Defaults to ask when absent; stored, consumed by nothing yet."),
     planAhead: z.boolean().default(true).describe("Defaults to true when absent: the nightly job keeps the coming week planned."),
     status: RouteSchemeStatus.default("draft").describe("Defaults to draft when absent: a draft accepts partial configuration, a validated scheme is held to the structural rules."),
+    /** A depot of the project (Issue #101). */
+    depotId: Id.nullable().optional(),
+    /** An unloading station of the company (Issue #101). */
+    unloadingStationId: Id.nullable().optional(),
     /** At least one: a scheme without explicit groups has one implicit group, which the server writes as a row. At most `GROUPS_MAX`. */
     collectionGroups: z.array(CollectionGroupCreate).min(1).max(GROUPS_MAX, AT_MOST_GROUPS),
     ...ValidityCreate,
@@ -284,6 +312,10 @@ export const RouteSchemePatch = z
     editPolicy: SchemeEditPolicy.optional(),
     planAhead: z.boolean().optional(),
     status: RouteSchemeStatus.optional(),
+    /** A depot of the project; null clears it. */
+    depotId: Id.nullable().optional(),
+    /** An unloading station of the company; null clears it. */
+    unloadingStationId: Id.nullable().optional(),
     validFrom: IsoDate.optional(),
     /** Null reopens the period; a day ends it. */
     validTo: IsoDate.nullable().optional(),

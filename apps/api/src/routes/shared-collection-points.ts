@@ -46,6 +46,7 @@ import {
   type SharedCollectionPointOperatingModel,
   type SharedCollectionPointStatus,
 } from "@waste/contracts/customers"
+import type { FlatPoint } from "@waste/contracts/geojson"
 import { Page } from "@waste/contracts/pagination"
 import { ProjectScopedListQuery } from "@waste/contracts/queries"
 import type { Tx } from "@waste/db/client"
@@ -120,7 +121,7 @@ const memberOf = (entry: Entry): SharedCollectionPointMember => ({
 })
 const entryOf = (member: SharedCollectionPointMember): Entry => ({ id: member.propertyId, role: member.role })
 
-/** The row on the wire, with the members the page loaded for it. The five coded fields are text with a CHECK in the database and an enum here. */
+/** The row on the wire, with the members the page loaded for it. The five coded fields are text with a CHECK in the database and an enum here; the point is the contracts' `FlatPoint`, since the column is `geometry(Point, 4326)`, flat, and refuses a third ordinate on write, however the column's type spells the altitude as optional. */
 function pointOf(row: Row, served: readonly Entry[]): SharedCollectionPoint {
   return {
     id: row.id,
@@ -128,7 +129,7 @@ function pointOf(row: Row, served: readonly Entry[]): SharedCollectionPoint {
     name: row.name,
     kind: row.kind as SharedCollectionPointKind,
     address: row.address,
-    location: row.location,
+    location: row.location as FlatPoint,
     eligibilityDistanceM: row.eligibilityDistanceM,
     operatingModel: row.operatingModel as SharedCollectionPointOperatingModel,
     accessMode: row.accessMode as SharedCollectionPointAccessMode,

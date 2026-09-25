@@ -20,46 +20,33 @@
 // an empty range and overlap nothing, which is why the table must carry the
 // `validPeriod` check (schema/columns.ts) before this constraint is written
 // for it. Postgres refuses an overlap with SQLSTATE 23P01, naming the
-// constraint.
+// constraint. The key itself is resolved by sql/key.ts, shared with the
+// window sibling (exclude-overlapping-window.ts).
 import { getTableConfig, type PgColumn, type PgTable } from "drizzle-orm/pg-core"
 
 import { VALIDITY_CHECK } from "../schema/columns"
-import { columnsByName, qualifiedTable, quoted, tableObjectName } from "../names"
+import { quoted, tableObjectName } from "../names"
+import { resolveKey } from "./key"
 
 const HELPER = "excludeOverlapping"
 /** The suffix of the constraint's name. */
 export const NO_OVERLAP = "no_overlap"
+/** The range this helper spells its constraint over. */
+const VALIDITY_RANGE = { columns: ["valid_from", "valid_to"], noun: "period", set: "validity" } as const
 
 /** The statement that adds the exclusion constraint for this business key, for the table's migration file. */
 export function excludeOverlapping(table: PgTable, key: PgColumn[]): string[] {
-  const target = qualifiedTable(table, HELPER)
-  const columns = columnsByName(table)
-  if (!columns.has("valid_from") || !columns.has("valid_to")) {
-    throw new Error(`${HELPER}: ${target} has no valid_from and valid_to; spread the validity column set`)
-  }
+  const { target, own } = resolveKey(table, key, HELPER, VALIDITY_RANGE)
   const checkName = tableObjectName(table, VALIDITY_CHECK, HELPER)
   if (!getTableConfig(table).checks.some((check) => check.name === checkName)) {
     throw new Error(`${HELPER}: ${target} has no "${checkName}" check; add validPeriod(columns) beside its columns, or an empty period would pass the constraint`)
   }
-  const companyId = columns.get("company_id")
-  if (!companyId) {
-    throw new Error(`${HELPER}: ${target} has no company_id; spread the tenant column set`)
-  }
-  const names = [companyId, ...key].map((column) => {
-    const name = [...columns].find(([, candidate]) => candidate === column)?.[0]
-    if (name === undefined) {
-      throw new Error(`${HELPER}: column "${column.name}" is not a column of ${target}`)
-    }
-    if (name === "valid_from" || name === "valid_to") {
-      throw new Error(`${HELPER}: "${name}" is the period, not the key`)
-    }
+  for (const { name, column } of own) {
     if (!column.notNull) {
       throw new Error(`${HELPER}: "${name}" is nullable; a null never equals anything in an exclusion constraint, so rows with a null there would overlap freely. Make it NOT NULL or leave it out of the key.`)
     }
-    return name
-  })
-  const unique = names.filter((name, index) => names.indexOf(name) === index)
-  const equalities = unique.map((name) => `${quoted(name)} WITH =`).join(", ")
+  }
+  const equalities = ["company_id", ...own.map((column) => column.name)].map((name) => `${quoted(name)} WITH =`).join(", ")
   const period = `daterange(${quoted("valid_from")}, ${quoted("valid_to")}, '[)') WITH &&`
   return [`ALTER TABLE ${target} ADD CONSTRAINT ${quoted(tableObjectName(table, NO_OVERLAP, HELPER))} EXCLUDE USING gist (${equalities}, ${period});`]
 }

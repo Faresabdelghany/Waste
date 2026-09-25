@@ -4,7 +4,9 @@
 // would refuse it as a 500 naming nothing. Shared here because three modules
 // read them — `organisation.ts` for a project's weekend, `route-schemes.ts` for
 // nearly everything, `planning-areas.ts` for a purpose — and a list spelled in
-// one place is a list that cannot drift between them.
+// one place is a list that cannot drift between them. The vehicle a rule asks
+// for is not an enum since Resources (Issue #101): a vehicle type is a row of
+// the company's (`vehicle-types.ts`), and a Stop Matching Rule names it by id.
 //
 // `ServiceDays` is the one shape of a set of weekdays: a project's weekend, a
 // scheme's service days, a group's days are each a list of `ServiceDay` with
@@ -22,11 +24,15 @@ import {
   SCHEME_EDIT_POLICIES,
   SERVICE_DAYS,
   SERVICE_TYPES,
-  STOP_MATCH_VEHICLE_TYPES,
   STOP_SOURCES,
   WEEK_ROTATIONS,
 } from "@waste/domain/planning/vocabulary"
 import * as z from "zod"
+
+import { eachOnce, eachOnceSentence } from "./resource"
+
+/** The one distinct-entries rule, spelled in resource.ts; re-exported here since Planning's modules read it from this one. */
+export { eachOnce }
 
 /** One of the seven weekdays. */
 export const ServiceDay = z.enum(SERVICE_DAYS)
@@ -56,10 +62,6 @@ export type ServiceType = z.infer<typeof ServiceType>
 export const StopSource = z.enum(STOP_SOURCES)
 export type StopSource = z.infer<typeof StopSource>
 
-/** The vehicle a Stop Matching Rule may ask for; a working taxonomy until Resources owns vehicle types. */
-export const StopMatchVehicleType = z.enum(STOP_MATCH_VEHICLE_TYPES)
-export type StopMatchVehicleType = z.infer<typeof StopMatchVehicleType>
-
 /** The stored half of a scheme's lifecycle; scheduled, effective and expired are readings, never sent. */
 export const RouteSchemeStatus = z.enum(ROUTE_SCHEME_STATUSES)
 export type RouteSchemeStatus = z.infer<typeof RouteSchemeStatus>
@@ -68,18 +70,8 @@ export type RouteSchemeStatus = z.infer<typeof RouteSchemeStatus>
 export const PlanningAreaPurpose = z.enum(PLANNING_AREA_PURPOSES)
 export type PlanningAreaPurpose = z.infer<typeof PlanningAreaPurpose>
 
-/**
- * Each entry of a set names its thing once, as the database's key insists:
- * the one rule behind every distinct-entries refine of Planning's modules (a
- * set of days, a rule's fractions, a group's containers, a calendar's
- * holidays by day). `key` says what identifies an entry; the entry itself by
- * default.
- */
-export const eachOnce = <Entry>(entries: readonly Entry[], key: (entry: Entry) => unknown = (entry) => entry): boolean =>
-  new Set(entries.map(key)).size === entries.length
-
 /** What a set of days with a day in it twice is told. */
-export const EACH_DAY_ONCE = "Name each day once: a set of days holds each day at most once"
+export const EACH_DAY_ONCE = eachOnceSentence("day", "a set of days holds each day at most once")
 
 /** A set of weekdays, each named at most once; may be empty. A scheme's service days add `.min(1)`, a project's weekend `.max(6)`. */
 export const ServiceDays = z.array(ServiceDay).refine((days) => eachOnce(days), { message: EACH_DAY_ONCE })

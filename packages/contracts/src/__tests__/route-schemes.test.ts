@@ -40,10 +40,10 @@ const STAMPS = { createdAt: "2026-09-24T13:41:00.000Z", updatedAt: "2026-09-24T1
 const BACKWARDS = "validTo is the first day out of force, so it comes after validFrom"
 const ALL_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
-const rule = { wasteFractionIds: [THIRD], containerTypeIds: [FOURTH], vehicleType: "rear-loader" }
+const rule = { wasteFractionIds: [THIRD], containerTypeIds: [FOURTH], vehicleTypeId: ID }
 
-const ruleGroup = { id: ID, routeSchemeId: OTHER, name: "Rear loaders", position: 1, days: ["monday", "thursday"], stopSource: "rule", rule, containerIds: [], serviceProviderId: THIRD, ...STAMPS }
-const manualGroup = { id: OTHER, routeSchemeId: OTHER, name: "By hand", position: 2, days: ["monday"], stopSource: "manual", rule: null, containerIds: [THIRD, FOURTH], serviceProviderId: null, ...STAMPS }
+const ruleGroup = { id: ID, routeSchemeId: OTHER, name: "Rear loaders", position: 1, days: ["monday", "thursday"], stopSource: "rule", rule, containerIds: [], serviceProviderId: THIRD, vehicleId: FOURTH, driverId: null, ...STAMPS }
+const manualGroup = { id: OTHER, routeSchemeId: OTHER, name: "By hand", position: 2, days: ["monday"], stopSource: "manual", rule: null, containerIds: [THIRD, FOURTH], serviceProviderId: null, vehicleId: null, driverId: null, ...STAMPS }
 
 const scheme = {
   id: OTHER,
@@ -59,6 +59,8 @@ const scheme = {
   editPolicy: "ask",
   planAhead: true,
   status: "validated",
+  depotId: FOURTH,
+  unloadingStationId: null,
   collectionGroups: [ruleGroup, manualGroup],
   validFrom: "2026-01-01",
   validTo: null,
@@ -69,9 +71,9 @@ const scheme = {
 const manyIds = (n: number) => Array.from({ length: n }, (_, i) => `01a0d3a5-e5e0-7000-8000-${(0x100000 + i).toString(16).padStart(12, "0")}`)
 
 describe("StopMatchingRule", () => {
-  test("names one or more fractions, none or more container types, and a vehicle type or null", () => {
+  test("names one or more fractions, none or more container types, and a vehicle type of the company by id, or null", () => {
     assert.deepEqual(StopMatchingRule.parse(rule), rule)
-    const anyVehicle = { wasteFractionIds: [THIRD, FOURTH], containerTypeIds: [], vehicleType: null }
+    const anyVehicle = { wasteFractionIds: [THIRD, FOURTH], containerTypeIds: [], vehicleTypeId: null }
     assert.deepEqual(StopMatchingRule.parse(anyVehicle), anyVehicle)
     assert.equal(StopMatchingRuleSet, StopMatchingRule, "the PUT body is the rule itself")
   })
@@ -84,7 +86,8 @@ describe("StopMatchingRule", () => {
     assert.deepEqual(refusal(StopMatchingRule.safeParse({ ...rule, wasteFractionIds: manyIds(CONTAINERS_MAX + 1) })).map((issue) => issue.path), ["wasteFractionIds"])
     assert.deepEqual(refusal(StopMatchingRule.safeParse({ ...rule, containerTypeIds: manyIds(CONTAINERS_MAX + 1) })).map((issue) => issue.path), ["containerTypeIds"])
     assert.match(refusal(StopMatchingRule.safeParse({ ...rule, planningAreaId: FOURTH }))[0].message, /planningAreaId/)
-    assert.equal(StopMatchingRule.safeParse({ ...rule, vehicleType: "Rear loader" }).success, false)
+    assert.equal(StopMatchingRule.safeParse({ ...rule, vehicleTypeId: "rear-loader" }).success, false, "a row's id since Resources, never the token")
+    assert.match(refusal(StopMatchingRule.safeParse({ ...rule, vehicleType: "rear-loader" }))[0].message, /vehicleType/, "the 0006 spelling is refused by name")
   })
 })
 
@@ -94,6 +97,18 @@ describe("CollectionGroup", () => {
     assert.deepEqual(CollectionGroup.parse(manualGroup), manualGroup)
     const stopped = { ...ruleGroup, days: [] }
     assert.deepEqual(CollectionGroup.parse(stopped), stopped, "a group that no longer runs keeps its row with no days")
+  })
+
+  test("carries its vehicle and its driver on the resource and on both write bodies, each nullable so a form may clear it (#101, slice 6)", () => {
+    for (const key of ["vehicleId", "driverId"] as const) {
+      assert.ok(Object.keys(CollectionGroup.shape).includes(key), key)
+      assert.equal(CollectionGroupCreate.parse({ name: "x", days: [], stopSource: "rule", rule, [key]: FOURTH })[key], FOURTH, key)
+      assert.equal(CollectionGroupCreate.parse({ name: "x", days: [], stopSource: "rule", rule, [key]: null })[key], null, key)
+      assert.equal(CollectionGroupCreate.parse({ name: "x", days: [], stopSource: "rule", rule })[key], undefined, "absent is unsaid, not null")
+      assert.deepEqual(CollectionGroupPatch.parse({ [key]: FOURTH }), { [key]: FOURTH }, "naming one is a change")
+      assert.deepEqual(CollectionGroupPatch.parse({ [key]: null }), { [key]: null })
+      assert.deepEqual(refusal(CollectionGroupPatch.safeParse({ [key]: "not-an-id" })).map((issue) => issue.path), [key])
+    }
   })
 
   test("holds the position to a whole positive number and the days to distinct weekdays", () => {
@@ -164,6 +179,19 @@ describe("RouteScheme", () => {
   test("carries none of the readings: no scheduled, effective or expired status, no lastGeneratedAt until part B", () => {
     for (const reading of ["scheduled", "effective", "expired"]) assert.equal(RouteScheme.safeParse({ ...scheme, status: reading }).success, false, reading)
     assert.equal(Object.keys(RouteScheme.shape).includes("lastGeneratedAt"), false)
+  })
+
+  test("carries its depot and its unloading station on the resource and on both write bodies, each nullable so a form may clear it (#101, slice 6)", () => {
+    const body = { projectId: THIRD, name: "x", serviceType: "container-collection", frequency: "weekly", serviceDays: ["monday"], collectionGroups: [{ name: "g", days: [], stopSource: "rule", rule }], validFrom: "2026-01-01" }
+    for (const key of ["depotId", "unloadingStationId"] as const) {
+      assert.ok(Object.keys(RouteScheme.shape).includes(key), key)
+      assert.equal(RouteSchemeCreate.parse({ ...body, [key]: FOURTH })[key], FOURTH, key)
+      assert.equal(RouteSchemeCreate.parse({ ...body, [key]: null })[key], null, key)
+      assert.equal(RouteSchemeCreate.parse(body)[key], undefined, "absent is unsaid, not null")
+      assert.deepEqual(RouteSchemePatch.parse({ [key]: FOURTH }), { [key]: FOURTH }, "naming one is a change")
+      assert.deepEqual(RouteSchemePatch.parse({ [key]: null }), { [key]: null })
+      assert.deepEqual(refusal(RouteSchemePatch.safeParse({ [key]: "not-an-id" })).map((issue) => issue.path), [key])
+    }
   })
 
   test("holds the period, the rotation and the days on the way out too", () => {

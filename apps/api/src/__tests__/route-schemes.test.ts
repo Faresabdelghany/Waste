@@ -97,7 +97,7 @@ describe("the route scheme endpoints", { skip: database.skip }, () => {
         frequency: "weekly",
         serviceDays: ["monday"],
         validFrom: JANUARY,
-        collectionGroups: [{ name: "Theirs", days: ["monday"], stopSource: "rule", rule: { wasteFractionIds: [theirFraction.id], containerTypeIds: [], vehicleType: null } }],
+        collectionGroups: [{ name: "Theirs", days: ["monday"], stopSource: "rule", rule: { wasteFractionIds: [theirFraction.id], containerTypeIds: [], vehicleTypeId: null } }],
       },
       RouteScheme,
     )
@@ -115,7 +115,7 @@ describe("the route scheme endpoints", { skip: database.skip }, () => {
     name,
     days,
     stopSource: "rule",
-    rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleType: null },
+    rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: null },
     ...values,
   })
   /** A manual group picking the containers given, in that order. */
@@ -169,7 +169,7 @@ describe("the route scheme endpoints", { skip: database.skip }, () => {
     test("mints the ids, takes the defaults, and writes the groups with their rule or their containers", async () => {
       const created = await scheme("Residual Mondays", {
         plannedStartTime: "06:30",
-        collectionGroups: [ruleGroup("Residual", ["monday", "thursday"], { rule: { wasteFractionIds: [residual.id, glass.id], containerTypeIds: [bin.id], vehicleType: "rear-loader" } }), manualGroup("Bank", ["thursday"], [bin2.id, bin1.id])],
+        collectionGroups: [ruleGroup("Residual", ["monday", "thursday"], { rule: { wasteFractionIds: [residual.id, glass.id], containerTypeIds: [bin.id], vehicleTypeId: planning.vehicleTypes.rearLoader.id } }), manualGroup("Bank", ["thursday"], [bin2.id, bin1.id])],
       })
       assert.equal(Id.parse(created.id), created.id, "a version 7 id the server minted")
       assert.equal(created.projectId, a.projects.copenhagen.id)
@@ -185,7 +185,12 @@ describe("the route scheme endpoints", { skip: database.skip }, () => {
       assert.equal(Id.parse(residualGroup.id), residualGroup.id)
       assert.deepEqual([residualGroup.position, bank.position], [1, 2], "positions 1..n in the body's order when absent")
       assert.equal(residualGroup.routeSchemeId, created.id)
-      assert.deepEqual(residualGroup.rule, { wasteFractionIds: [residual.id, glass.id], containerTypeIds: [bin.id], vehicleType: "rear-loader" })
+      assert.deepEqual(residualGroup.rule, { wasteFractionIds: [residual.id, glass.id], containerTypeIds: [bin.id], vehicleTypeId: planning.vehicleTypes.rearLoader.id })
+      assert.deepEqual(
+        [created.depotId, created.unloadingStationId, residualGroup.vehicleId, residualGroup.driverId],
+        [null, null, null, null],
+        "Resources' columns on the scheme and the group, read as null until #101's slice 6 writes them",
+      )
       assert.deepEqual(residualGroup.containerIds, [])
       assert.equal(bank.rule, null, "a manual group has no rule")
       assert.deepEqual(bank.containerIds, [bin2.id, bin1.id], "in the body's stop order, not by id")
@@ -217,15 +222,20 @@ describe("the route scheme endpoints", { skip: database.skip }, () => {
 
     test("holds every group's references to the scope its key allows, naming the entry", async () => {
       const fraction = await refused(
-        await post(body("Fraction", { collectionGroups: [ruleGroup("Residual", ["monday", "thursday"]), ruleGroup("Theirs", ["monday"], { rule: { wasteFractionIds: [residual.id, theirFraction.id], containerTypeIds: [], vehicleType: null } })] })),
+        await post(body("Fraction", { collectionGroups: [ruleGroup("Residual", ["monday", "thursday"]), ruleGroup("Theirs", ["monday"], { rule: { wasteFractionIds: [residual.id, theirFraction.id], containerTypeIds: [], vehicleTypeId: null } })] })),
         400,
       )
       assert.deepEqual(fraction.errors, [{ path: "collectionGroups.1.rule.wasteFractionIds.1", message: "Not a waste fraction of this company" }])
       const type = await refused(
-        await post(body("Type", { collectionGroups: [ruleGroup("Residual", ["monday", "thursday"], { rule: { wasteFractionIds: [residual.id], containerTypeIds: [testId()], vehicleType: null } })] })),
+        await post(body("Type", { collectionGroups: [ruleGroup("Residual", ["monday", "thursday"], { rule: { wasteFractionIds: [residual.id], containerTypeIds: [testId()], vehicleTypeId: null } })] })),
         400,
       )
       assert.deepEqual(type.errors, [{ path: "collectionGroups.0.rule.containerTypeIds.0", message: "Not a container type of this company" }])
+      const vehicleType = await refused(
+        await post(body("Vehicle type", { collectionGroups: [ruleGroup("Residual", ["monday", "thursday"], { rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: testId() } })] })),
+        400,
+      )
+      assert.deepEqual(vehicleType.errors, [{ path: "collectionGroups.0.rule.vehicleTypeId", message: "Not a vehicle type of this company" }])
       const container = await refused(
         await post(body("Container", { collectionGroups: [ruleGroup("Residual", ["monday"]), manualGroup("Bank", ["thursday"], [bin1.id, harborBin.id])] })),
         400,

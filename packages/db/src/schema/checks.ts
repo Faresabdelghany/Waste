@@ -47,8 +47,8 @@ import { check, type CheckBuilder, type PgColumn } from "drizzle-orm/pg-core"
 import { columnName, quoted, tableObjectName } from "../names"
 import type { TenantColumns } from "./references"
 
-/** A SQL string literal: single quotes, quotes inside doubled. */
-const literal = (value: string): string => `'${value.replaceAll("'", "''")}'`
+/** A SQL string literal: single quotes, quotes inside doubled. The one spelling for every value this package writes into SQL text — a check's, a predicate's, a CASE's. */
+export const literal = (value: string): string => `'${value.replaceAll("'", "''")}'`
 
 /** `CHECK (<column> in ('a', 'b', ...))`, named `<table>_<column>_one_of`. */
 export function oneOf(column: PgColumn, values: readonly string[]): CheckBuilder {

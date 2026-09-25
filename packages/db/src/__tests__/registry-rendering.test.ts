@@ -7,6 +7,15 @@
 // table and the three exclusion constraints. The two new key helpers and the
 // two new check helpers by their text and their refusals. No database.
 //
+// Migration 0007 (Issue #101) gave `container_service_placement` a project
+// key — through the container, `(company_id, project_id, container_id, id)`,
+// since the Stock Movement ledger references the placement of the container it
+// moves — and dropped the index on its project that the key now leads with.
+// An applied file is never edited, so 0004 is held to the earlier spelling:
+// `CHANGED_IN_0007` maps the CREATE TABLE as drizzle-kit writes it now onto
+// what 0004 says, and `DROPPED_IN_0007` is what 0004 has that the schema no
+// longer generates.
+//
 // This is also what makes a change to the vocabulary a migration: the values
 // are spelled here as the file spells them, so adding one to a list in
 // @waste/domain/registry/vocabulary fails this test until a migration replaces
@@ -71,6 +80,23 @@ const tables = {
 }
 
 const MIGRATION = "0004_registry.sql"
+
+/** container_service_placement as drizzle-kit writes it today, with the through-the-container project key 0007 added, and as it wrote it as of 0004, without. */
+const placementTable = (resources: boolean): string =>
+  createTable("container_service_placement", "dated", [
+    '"container_id" uuid NOT NULL',
+    '"subscription_id" uuid NOT NULL',
+    '"waste_fraction_id" uuid NOT NULL',
+    '"service_frequency_id" uuid',
+    ...(resources ? [uniqueKey("container_service_placement_container_id_project_key", "company_id", "project_id", "container_id", "id")] : []),
+    validityCheck("container_service_placement"),
+  ])
+
+/** What 0007 changed on a table 0004 created. */
+const CHANGED_IN_0007 = new Map([[placementTable(true), placementTable(false)]])
+
+/** What 0004 created and 0007 dropped: the index on the placement's project, which its key now leads with. */
+const DROPPED_IN_0007 = [index("container_service_placement", "container_service_placement_project_id_idx", "company_id", "project_id")]
 
 const expected = [
   createTable("waste_fraction", "tenant", [
@@ -234,13 +260,7 @@ const expected = [
     uniqueKey("container_project_key", "company_id", "project_id", "id"),
     oneOfCheck("container", "ownership", "company", "customer", "unrecorded"),
   ]),
-  createTable("container_service_placement", "dated", [
-    '"container_id" uuid NOT NULL',
-    '"subscription_id" uuid NOT NULL',
-    '"waste_fraction_id" uuid NOT NULL',
-    '"service_frequency_id" uuid',
-    validityCheck("container_service_placement"),
-  ]),
+  placementTable(true),
   companyFk("waste_fraction"),
   companyFk("container_type"),
   companyFk("service_frequency"),
@@ -310,7 +330,6 @@ const expected = [
   index("subscription", "subscription_property_id_idx", "company_id", "property_id"),
   index("subscription", "subscription_shared_collection_point_id_idx", "company_id", "shared_collection_point_id"),
   index("container", "container_container_type_id_idx", "company_id", "container_type_id"),
-  index("container_service_placement", "container_service_placement_project_id_idx", "company_id", "project_id"),
   index("container_service_placement", "container_service_placement_subscription_id_idx", "company_id", "subscription_id"),
   index("container_service_placement", "container_service_placement_waste_fraction_id_idx", "company_id", "waste_fraction_id"),
   index("container_service_placement", "container_service_placement_service_frequency_id_idx", "company_id", "service_frequency_id"),
@@ -329,16 +348,22 @@ describe("the Registry tables as drizzle-kit writes them", () => {
     assert.deepEqual(await statementsFor(tables), expected)
   })
 
-  test("migration 0004 begins with exactly what drizzle-kit generates for the schema", async () => {
+  /** Everything drizzle-kit wrote at the head of 0004, as it was generated as of 0004: the placement in its earlier spelling, and the index 0007 dropped back in. */
+  const generatedHead = async (): Promise<string[]> => [...(await statementsFor(tables)).map((statement) => CHANGED_IN_0007.get(statement) ?? statement), ...DROPPED_IN_0007]
+
+  test("migration 0004 begins with exactly what drizzle-kit generated for the schema as of 0004", async () => {
     const statements = statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
     // The same statements, whatever order drizzle-kit's loader gave the tables (it sorts a module's exports).
-    const generated = (await statementsFor(tables)).map(normalised).sort()
+    const generated = (await generatedHead()).map(normalised).sort()
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
+    const today = await statementsFor(tables)
+    for (const statement of CHANGED_IN_0007.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of DROPPED_IN_0007) assert.equal(today.includes(statement), false, statement)
   })
 
   test("and carries below them the fence and trigger of each table and the three exclusion constraints: 15 x 3 + 3 = 48 statements", async () => {
     const statements = statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
-    const generated = await statementsFor(tables)
+    const generated = await generatedHead()
     const tail = statements.slice(generated.length)
     assert.equal(tail.length, 48, "fifteen tables, each two fence statements and one trigger, then one exclusion constraint per effective-dated table")
     assert.deepEqual(tail, handWritten.map(normalised))
@@ -398,6 +423,24 @@ describe("the project-scoped key helpers", () => {
   test("projectReference refuses a key without columns", () => {
     const empty = wms.table("specimen_project_empty", { ...id, ...projectScoped }, (t) => [projectReference(t, [], target)])
     assert.throws(() => getTableConfig(empty), /projectReference: "specimen_project_empty" names no columns beside company_id and project_id/)
+  })
+
+  test("a reference through another column points at the target's own columns, and a key through another column is of the table's own — a column of another table is refused by name", () => {
+    const through = wms.table("specimen_project_through", { ...id, ...projectScoped, ...timestamps, ownerId: uuid().notNull(), code: text().notNull() }, (t) => [projectKey(t, t.ownerId)])
+    const elsewhere = wms.table("specimen_project_elsewhere", { ...id, ...projectScoped, ownerId: uuid().notNull() })
+    const sound = wms.table("specimen_project_via", { ...id, ...projectScoped, ownerId: uuid().notNull(), throughId: uuid() }, (t) => [
+      projectReference(t, [t.ownerId, t.throughId], through, [through.ownerId, through.id]),
+    ])
+    assert.deepEqual(getTableConfig(sound).foreignKeys.length, 1)
+    assert.match(getTableConfig(through).uniqueConstraints[0].name ?? "", /^specimen_project_through_owner_id_project_key$/)
+    const astray = wms.table("specimen_project_astray", { ...id, ...projectScoped, ownerId: uuid().notNull(), throughId: uuid() }, (t) => [
+      projectReference(t, [t.ownerId, t.throughId], through, [elsewhere.ownerId, through.id]),
+    ])
+    assert.throws(() => getTableConfig(astray), /projectReference: column "owner_id" is not a column of "specimen_project_through", the table the key points at/)
+    const short = wms.table("specimen_project_short", { ...id, ...projectScoped, ownerId: uuid().notNull() }, (t) => [projectReference(t, [t.ownerId], through, [through.ownerId, through.id])])
+    assert.throws(() => getTableConfig(short), /projectReference: "specimen_project_short" names 1 column\(s\) for a key of 2 in "specimen_project_through"/)
+    const foreignKey = wms.table("specimen_project_foreign_key", { ...id, ...projectScoped, ...timestamps }, (t) => [projectKey(t, elsewhere.ownerId)])
+    assert.throws(() => getTableConfig(foreignKey), /projectKey: column "owner_id" is not a column of "specimen_project_foreign_key"/)
   })
 
   test("refuse a name Postgres would truncate, at definition time", () => {

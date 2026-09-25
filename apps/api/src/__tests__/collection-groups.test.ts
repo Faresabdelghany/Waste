@@ -90,7 +90,7 @@ describe("the collection group endpoints", { skip: database.skip }, () => {
         frequency: "weekly",
         serviceDays: ["monday"],
         validFrom: JANUARY,
-        collectionGroups: [{ name: "Theirs", days: ["monday"], stopSource: "rule", rule: { wasteFractionIds: [theirFraction.id], containerTypeIds: [], vehicleType: null } }],
+        collectionGroups: [{ name: "Theirs", days: ["monday"], stopSource: "rule", rule: { wasteFractionIds: [theirFraction.id], containerTypeIds: [], vehicleTypeId: null } }],
       },
       RouteScheme,
     )
@@ -103,7 +103,7 @@ describe("the collection group endpoints", { skip: database.skip }, () => {
 
   type Schema<T> = { parse: (value: unknown) => T }
 
-  const rule = (values: Record<string, unknown> = {}) => ({ wasteFractionIds: [residual.id], containerTypeIds: [], vehicleType: null, ...values })
+  const rule = (values: Record<string, unknown> = {}) => ({ wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: null, ...values })
   const ruleGroup = (name: string, days: string[], values: Record<string, unknown> = {}) => ({ name, days, stopSource: "rule", rule: rule(), ...values })
   const manualGroup = (name: string, days: string[], containerIds: string[], values: Record<string, unknown> = {}) => ({ name, days, stopSource: "manual", containerIds, ...values })
 
@@ -166,8 +166,9 @@ describe("the collection group endpoints", { skip: database.skip }, () => {
       assert.equal(bank.serviceProviderId, a.serviceProviders.nordren.id)
       assert.deepEqual(await one(olivia, bank.id), bank)
 
-      const glassRun = await add(created.id, ruleGroup("Glass", ["monday"], { position: 1, rule: rule({ wasteFractionIds: [glass.id], containerTypeIds: [igloo.id], vehicleType: "glass-crane" }) }))
-      assert.deepEqual(glassRun.rule, { wasteFractionIds: [glass.id], containerTypeIds: [igloo.id], vehicleType: "glass-crane" })
+      const glassRun = await add(created.id, ruleGroup("Glass", ["monday"], { position: 1, rule: rule({ wasteFractionIds: [glass.id], containerTypeIds: [igloo.id], vehicleTypeId: planning.vehicleTypes.glassCrane.id }) }))
+      assert.deepEqual(glassRun.rule, { wasteFractionIds: [glass.id], containerTypeIds: [igloo.id], vehicleTypeId: planning.vehicleTypes.glassCrane.id })
+      assert.deepEqual([glassRun.vehicleId, glassRun.driverId], [null, null], "Resources' columns, read as null until #101's slice 6 writes them")
       assert.deepEqual((await oneScheme(created.id)).collectionGroups.map((group) => [group.name, group.position]), [["Residual", 1], ["Glass", 1], ["Bank", 2]], "by position, ties by id — the order they were made in")
     })
 
@@ -316,26 +317,29 @@ describe("the collection group endpoints", { skip: database.skip }, () => {
     test("replaces the whole rule of a rule group and moves the stamp; a manual group has no rule to replace", async () => {
       const created = await scheme("Re-ruled", { status: "validated", collectionGroups: [ruleGroup("Residual", ["monday", "thursday"]), manualGroup("Bank", ["thursday"], [bin3.id])] })
       const [residualRun, bank] = created.collectionGroups
-      const replaced = await put(residualRun.id, "stop-matching-rule", { wasteFractionIds: [glass.id, residual.id], containerTypeIds: [igloo.id, bin.id], vehicleType: "glass-crane" })
-      assert.deepEqual(replaced.rule, { wasteFractionIds: [glass.id, residual.id], containerTypeIds: [igloo.id, bin.id], vehicleType: "glass-crane" }, "in the body's order")
+      const replaced = await put(residualRun.id, "stop-matching-rule", { wasteFractionIds: [glass.id, residual.id], containerTypeIds: [igloo.id, bin.id], vehicleTypeId: planning.vehicleTypes.glassCrane.id })
+      assert.deepEqual(replaced.rule, { wasteFractionIds: [glass.id, residual.id], containerTypeIds: [igloo.id, bin.id], vehicleTypeId: planning.vehicleTypes.glassCrane.id }, "in the body's order")
       assert.deepEqual(replaced.containerIds, [])
       assert.ok(replaced.updatedAt > residualRun.updatedAt, "the rule is part of the group on the wire")
       assert.deepEqual(await one(olivia, residualRun.id), replaced)
-      const narrowed = await put(residualRun.id, "stop-matching-rule", { wasteFractionIds: [glass.id], containerTypeIds: [], vehicleType: null })
-      assert.deepEqual(narrowed.rule, { wasteFractionIds: [glass.id], containerTypeIds: [], vehicleType: null }, "what the body left out is gone")
+      const narrowed = await put(residualRun.id, "stop-matching-rule", { wasteFractionIds: [glass.id], containerTypeIds: [], vehicleTypeId: null })
+      assert.deepEqual(narrowed.rule, { wasteFractionIds: [glass.id], containerTypeIds: [], vehicleTypeId: null }, "what the body left out is gone")
 
       const manual = await refused(await olivia(`/collection-groups/${bank.id}/stop-matching-rule`, { method: "PUT", body: rule() }), 409)
       assert.equal(manual.detail, "This collection group picks containers; it has no stop matching rule")
       assert.equal((await one(olivia, bank.id)).updatedAt, bank.updatedAt)
     })
 
-    test("holds the fractions and the types to this company, naming the entry, and refuses an empty rule", async () => {
+    test("holds the fractions, the types and the vehicle type to this company, naming the entry, and refuses an empty rule", async () => {
       const created = await scheme("Rule refs")
       const [group] = created.collectionGroups
       const fraction = await refused(await olivia(`/collection-groups/${group.id}/stop-matching-rule`, { method: "PUT", body: rule({ wasteFractionIds: [residual.id, theirFraction.id] }) }), 400)
       assert.deepEqual(fraction.errors, [{ path: "wasteFractionIds.1", message: "Not a waste fraction of this company" }])
       const type = await refused(await olivia(`/collection-groups/${group.id}/stop-matching-rule`, { method: "PUT", body: rule({ containerTypeIds: [testId()] }) }), 400)
       assert.deepEqual(type.errors, [{ path: "containerTypeIds.0", message: "Not a container type of this company" }])
+      // A vehicle type is a row of the company since Resources (#101): one nobody made, or another company's, is the same refusal.
+      const vehicleType = await refused(await olivia(`/collection-groups/${group.id}/stop-matching-rule`, { method: "PUT", body: rule({ vehicleTypeId: testId() }) }), 400)
+      assert.deepEqual(vehicleType.errors, [{ path: "vehicleTypeId", message: "Not a vehicle type of this company" }])
       const empty = await refused(await olivia(`/collection-groups/${group.id}/stop-matching-rule`, { method: "PUT", body: rule({ wasteFractionIds: [] }) }), 400)
       assert.deepEqual(empty.errors?.map((error) => error.path), ["wasteFractionIds"])
       assert.deepEqual((await one(olivia, group.id)).rule, group.rule, "a refused body leaves the rule as it was")

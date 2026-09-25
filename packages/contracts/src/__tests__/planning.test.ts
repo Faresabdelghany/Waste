@@ -9,7 +9,6 @@ import {
   SCHEME_EDIT_POLICIES,
   SERVICE_DAYS,
   SERVICE_TYPES,
-  STOP_MATCH_VEHICLE_TYPES,
   STOP_SOURCES,
   WEEK_ROTATIONS,
 } from "@waste/domain/planning/vocabulary"
@@ -25,7 +24,6 @@ import {
   ServiceDay,
   ServiceDays,
   ServiceType,
-  StopMatchVehicleType,
   StopSource,
   WeekRotation,
 } from "../planning"
@@ -40,14 +38,12 @@ describe("the planning enums", () => {
     assert.deepEqual(SchemeEditPolicy.options, [...SCHEME_EDIT_POLICIES])
     assert.deepEqual(ServiceType.options, [...SERVICE_TYPES])
     assert.deepEqual(StopSource.options, [...STOP_SOURCES])
-    assert.deepEqual(StopMatchVehicleType.options, [...STOP_MATCH_VEHICLE_TYPES])
     assert.deepEqual(RouteSchemeStatus.options, [...ROUTE_SCHEME_STATUSES])
     assert.deepEqual(PlanningAreaPurpose.options, [...PLANNING_AREA_PURPOSES])
   })
 
   test("refuse the prototype's display strings and the readings that are never stored", () => {
     assert.equal(ServiceType.safeParse("Container collection").success, false, "the web's display tuple is not the wire's")
-    assert.equal(StopMatchVehicleType.safeParse("Rear loader").success, false)
     assert.equal(ServiceDay.safeParse("Monday").success, false)
     for (const reading of ["scheduled", "effective", "expired"]) assert.equal(RouteSchemeStatus.safeParse(reading).success, false, reading)
   })

@@ -34,15 +34,21 @@
 import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
 import type { Tx } from "@waste/db/client"
+import { userAccount } from "@waste/db/schema/access"
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
 import { customer, property, sharedCollectionPoint } from "@waste/db/schema/customers"
+import { driver, vehicle } from "@waste/db/schema/fleet"
+import { vehicleType } from "@waste/db/schema/fleet-types"
 import { serviceProvider } from "@waste/db/schema/organisation"
+import { depot, unloadingStation, warehouse } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
-import { eq } from "drizzle-orm"
+import type { DriverStatus, VehicleKind, VehicleStatus, WarehouseStatus } from "@waste/domain/resources/vocabulary"
+import { and, eq, inArray, isNull } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 
-import { requireRow, requireStatus, type NamedRow, type TenantTable } from "./shared"
+import { invalidRequest } from "../problem"
+import { requireRow, requireStatus, rowIssue, type NamedRow, type Refusal, type Target, type TenantTable } from "./shared"
 
 /** What a body is told when it names a customer this company does not have; one sentence, wherever the id sat. */
 export const NOT_A_CUSTOMER = "Not a customer of this company"
@@ -90,10 +96,10 @@ export async function requireContainerType(tx: Tx, companyId: string, id: string
   await requireRow(tx, containerType, inCompany(companyId, id), { path, message: "Not a container type of this company" })
 }
 
-/** A waste fraction a body names: the company's, since a fraction is what the country sorts, not what a project does. */
-export async function requireWasteFraction(tx: Tx, companyId: string, id: string | null | undefined, path = "wasteFractionId"): Promise<void> {
+/** A waste fraction a body or a query names: the company's, since a fraction is what the country sorts, not what a project does. A `query` target is a list filter's (`GET /unloading-stations?wasteFractionId=`, #101 round A), refused on the query string. */
+export async function requireWasteFraction(tx: Tx, companyId: string, id: string | null | undefined, path = "wasteFractionId", target: Target = "body"): Promise<void> {
   if (id == null) return
-  await requireRow(tx, wasteFraction, inCompany(companyId, id), { path, message: "Not a waste fraction of this company" })
+  await requireRow(tx, wasteFraction, inCompany(companyId, id), { path, message: "Not a waste fraction of this company" }, target)
 }
 
 /** A service frequency a body names: the project's, since a cadence belongs to one project (`project_id` leads its key). */
@@ -176,8 +182,165 @@ export async function requireContainer(tx: Tx, scope: Scope, id: string | null |
   await requireRow(tx, container, inProject(container, scope, id), { path, message: "Not a container of this project" })
 }
 
+/** What a body is told when it names a service provider this company does not have. */
+export const NOT_A_SERVICE_PROVIDER = "Not a service provider of this company"
+
 /** A Service Provider a body names: the company's, since the provider is the company's counterparty and no project's. */
 export async function requireServiceProvider(tx: Tx, companyId: string, id: string | null | undefined, path = "serviceProviderId"): Promise<void> {
   if (id == null) return
-  await requireRow(tx, serviceProvider, inCompany(companyId, id), { path, message: "Not a service provider of this company" })
+  await requireRow(tx, serviceProvider, inCompany(companyId, id), { path, message: NOT_A_SERVICE_PROVIDER })
+}
+
+/** The same check as the field error or nothing (`rowIssue`, routes/shared.ts), for a route listing it beside other refusals in one 400 (a place patch, routes/place-rules.ts); an id that is null or absent names nothing and is no issue. */
+export async function serviceProviderIssue(tx: Tx, companyId: string, id: string | null | undefined, path = "serviceProviderId"): Promise<Refusal | undefined> {
+  if (id == null) return undefined
+  return await rowIssue(tx, serviceProvider, inCompany(companyId, id), { path, message: NOT_A_SERVICE_PROVIDER })
+}
+
+// Resources (Issue #101): a vehicle type is the company's vocabulary, a row
+// and not a token, so a Stop Matching Rule that asks for one names one of the
+// company's. The place and fleet checks of the other families arrive with
+// their routes, slices 3 and 4, the day a body names them.
+
+/** A vehicle type a body names: the company's, since one company's "Rear loader" is another's "Baglæsser". */
+export async function requireVehicleType(tx: Tx, companyId: string, id: string | null | undefined, path = "vehicleTypeId"): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, vehicleType, inCompany(companyId, id), { path, message: "Not a vehicle type of this company" })
+}
+
+// Resources, slice 2 round: the one check the container list makes of its
+// `warehouseId` filter, spelled here since slices 3 and 5 name a warehouse
+// from a body too (a depot's colocated warehouse, a movement's place).
+
+/** What a body or a query is told when it reaches for a warehouse outside the project, or the projects, it may see. */
+export const NOT_A_WAREHOUSE = "Not a warehouse of this project"
+
+/** The warehouse a check found, as the ledger's status gate reads it (routes/statuses.ts, #101 round A): the name a sentence says and the status it judges. */
+export type WarehouseRef = { id: string; name: string; status: WarehouseStatus }
+
+/**
+ * A warehouse a body or a query names: the project's — or, for a list that
+ * names no project, one of the caller's projects, handed in as their ids. A
+ * `query` target is refused on the query string; a body on the body. Answers
+ * the row it found, so the ledger can hold its status without a second
+ * statement (#79: a status gates a new reference and never an existing one);
+ * undefined for an id that is null or absent, which points at nothing.
+ */
+export async function requireWarehouse(
+  tx: Tx,
+  scope: { companyId: string; projectId: string | readonly string[] },
+  id: string | null | undefined,
+  path = "warehouseId",
+  target: Target = "body",
+): Promise<WarehouseRef | undefined> {
+  if (id == null) return undefined
+  const refusal = () => invalidRequest(target, [{ path, message: NOT_A_WAREHOUSE }])
+  const projects = typeof scope.projectId === "string" ? [scope.projectId] : [...scope.projectId]
+  // An account that works in no project sees no warehouse; `in ()` is not SQL.
+  if (projects.length === 0) throw refusal()
+  const [found] = await tx
+    .select({ id: warehouse.id, name: warehouse.name, status: warehouse.status })
+    .from(warehouse)
+    .where(and(eq(warehouse.companyId, scope.companyId), inArray(warehouse.projectId, projects), eq(warehouse.id, id)))
+    .limit(1)
+  if (found === undefined) throw refusal()
+  // `status` is text with a CHECK in the database and the vocabulary's tuple here.
+  return { id: found.id, name: found.name, status: found.status as WarehouseStatus }
+}
+
+// Resources, slice 3 (Issue #101): the other two places. A depot is a
+// project's — a warehouse names the depot it shares a yard with, a vehicle and
+// a driver their home depot, a scheme the one its routes leave from — so its
+// check is `inProject`; an unloading station is the company's, since ARC
+// Amager is where every Copenhagen project unloads, so a scheme that names one
+// names one of the company's. A warehouse's check is the slice 2 round's above.
+
+/** What a body is told when it reaches for a depot of another project; the fence the composite key already holds it to. */
+export const NOT_A_DEPOT = "Not a depot of this project"
+
+/** What a body is told when it names an unloading station this company does not have. */
+export const NOT_AN_UNLOADING_STATION = "Not an unloading station of this company"
+
+/** A Depot a body names: the project's, since a route leaves from its project's yard. */
+export async function requireDepot(tx: Tx, scope: Scope, id: string | null | undefined, path = "depotId"): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, depot, inProject(depot, scope, id), { path, message: NOT_A_DEPOT })
+}
+
+/** An Unloading Station a body names: the company's, since every project of the company unloads at the same plants. */
+export async function requireUnloadingStation(tx: Tx, companyId: string, id: string | null | undefined, path = "unloadingStationId"): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, unloadingStation, inCompany(companyId, id), { path, message: NOT_AN_UNLOADING_STATION })
+}
+
+// Resources, slice 4 (Issue #101): the fleet. A vehicle and a driver are the
+// project's, like the depot they are based at, so both checks are `inProject`.
+// A vehicle is asked for with the kind the caller demands — an allocation's
+// `vehicleId` is a powered vehicle and its `trailerId` a trailer, a collection
+// group's vehicle a powered one — and the kind goes into the one statement
+// beside the project: a trailer offered where a powered vehicle is required
+// is "not a powered vehicle of this project" the way another project's is,
+// since the sentence names what was asked for and the caller can pick
+// another. A driver's login is a user account of this company that is not
+// deactivated; whether it has signed in yet is the account's business, not
+// the driver profile's. Where a caller needs the row and not only its
+// existence — the class a vehicle requires, the licence a driver holds —
+// routes/fleet-lookups.ts reads it, refusing in the sentences spelled here.
+// Both checks answer the row's status (round B of the #101 review, #79's
+// rule: a status gates a new reference and never an existing one) through
+// `requireStatus` in routes/shared.ts — `requireRow`'s statement with one
+// column more, the same 400 at the field when there is no such row — so a
+// route naming a vehicle or a driver afresh can refuse a retired or an
+// unavailable one through routes/statuses.ts without a second statement, and
+// a route that only touches a row already naming them asks nothing.
+
+/** What a body is told when the vehicle it names is not one of the project's, or not of the kind asked for. */
+export const NOT_A_VEHICLE = "Not a vehicle of this project"
+export const NOT_A_POWERED_VEHICLE = "Not a powered vehicle of this project"
+export const NOT_A_TRAILER = "Not a trailer of this project"
+
+/** The sentence for a vehicle held to a kind, or to none; routes/fleet-lookups.ts's `findVehicle` refuses with it too. */
+export const notAVehicleOf = (kind: VehicleKind | undefined): string => (kind === "powered-vehicle" ? NOT_A_POWERED_VEHICLE : kind === "trailer" ? NOT_A_TRAILER : NOT_A_VEHICLE)
+
+/**
+ * A Vehicle a body names: the project's, and of the kind demanded when one
+ * is. One statement and one sentence, the kind in the `where` beside the
+ * project, so a row of the wrong kind and a row that is not there are told
+ * the same thing — which names what the field wanted. The kind and the path
+ * travel in one options object, since a caller that names the one usually
+ * names the other (`trailerId` is a trailer). Answers the row's status, or
+ * undefined for an id that named nothing, so the caller can hold a new
+ * reference to it (routes/statuses.ts) with no second read.
+ */
+export async function requireVehicle(
+  tx: Tx,
+  scope: Scope,
+  id: string | null | undefined,
+  { kind, path = "vehicleId" }: { kind?: VehicleKind; path?: string } = {},
+): Promise<VehicleStatus | undefined> {
+  if (id == null) return undefined
+  return await requireStatus<VehicleStatus>(
+    tx,
+    vehicle,
+    { companyId: scope.companyId, id, also: and(eq(vehicle.projectId, scope.projectId), kind === undefined ? undefined : eq(vehicle.kind, kind)) },
+    { path, message: notAVehicleOf(kind) },
+  )
+}
+
+/** What a body is told when it names a driver of another project. */
+export const NOT_A_DRIVER = "Not a driver of this project"
+
+/** A Driver a body names: the project's, since a workforce profile is based in one project like the vehicle it takes out; answers the status like `requireVehicle`. */
+export async function requireDriver(tx: Tx, scope: Scope, id: string | null | undefined, path = "driverId"): Promise<DriverStatus | undefined> {
+  if (id == null) return undefined
+  return await requireStatus<DriverStatus>(tx, driver, inProject(driver, scope, id), { path, message: NOT_A_DRIVER })
+}
+
+/** What a driver body is told when the login it names is not an account here, or is a deactivated one. */
+export const NOT_A_USER_ACCOUNT = "Not a user account of this company"
+
+/** A user account a body names as a driver's login: this company's, active or invited — a deactivated account is no login to drive under. */
+export async function requireUserAccount(tx: Tx, companyId: string, id: string | null | undefined, path = "userAccountId"): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, userAccount, { companyId, id, also: isNull(userAccount.deactivatedAt) }, { path, message: NOT_A_USER_ACCOUNT })
 }

@@ -34,7 +34,7 @@ import { Id } from "./ids"
 import { Currency } from "./organisation"
 import { PageRequest } from "./pagination"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, somethingToChange, stamped } from "./resource"
+import { changesSomething, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
 
@@ -47,7 +47,7 @@ export const BillingCadence = z.enum(BILLING_CADENCES)
 export type BillingCadence = z.infer<typeof BillingCadence>
 
 /** A count of one thing subscribed to: whole and positive, since zero of a product is no subscription. */
-const Quantity = z.int().positive()
+const Quantity = PositiveInt
 
 export const Agreement = z
   .object({

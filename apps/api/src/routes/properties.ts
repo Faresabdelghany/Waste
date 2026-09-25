@@ -46,6 +46,7 @@ import {
   type PropertyPartyRole,
   type PropertyStatus,
 } from "@waste/contracts/customers"
+import type { FlatPoint } from "@waste/contracts/geojson"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { property, propertyParty } from "@waste/db/schema/customers"
@@ -110,7 +111,7 @@ const parties: MemberSet<typeof propertyParty> = {
 const partyOf = (entry: Entry): PropertyParty => ({ customerId: entry.id, role: entry.role as PropertyPartyRole })
 const entryOf = (party: PropertyParty): Entry => ({ id: party.customerId, role: party.role })
 
-/** The row on the wire, with the parties the page loaded for it. `kind` and `status` are text with a CHECK in the database and an enum here. */
+/** The row on the wire, with the parties the page loaded for it. `kind` and `status` are text with a CHECK in the database and an enum here; the point is the contracts' `FlatPoint`, since the column is `geometry(Point, 4326)`, flat, and refuses a third ordinate on write, however the column's type spells the altitude as optional. */
 function propertyOf(row: Row, held: readonly Entry[]): Property {
   return {
     id: row.id,
@@ -119,7 +120,7 @@ function propertyOf(row: Row, held: readonly Entry[]): Property {
     address: row.address,
     registryId: row.registryId,
     kind: row.kind as PropertyKind,
-    location: row.location,
+    location: row.location as FlatPoint | null,
     notes: row.notes,
     status: row.status as PropertyStatus,
     parties: held.map(partyOf),

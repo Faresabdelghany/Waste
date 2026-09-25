@@ -23,7 +23,12 @@ import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } fr
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
 import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
+import { vehicleAllocation, vehicleAllocationEvent } from "@waste/db/schema/allocations"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
+import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
+import { containerTypeVehicleType, vehicleType } from "@waste/db/schema/fleet-types"
+import { depot, unloadingStation, unloadingStationFraction, warehouse } from "@waste/db/schema/places"
+import { stockMovement } from "@waste/db/schema/stock"
 import {
   customer,
   property,
@@ -177,6 +182,44 @@ export async function seedTenant(pool: Database): Promise<Tenant> {
   return tenant
 }
 
+/** A company with no project yet: its administrator, and nothing else to seed. */
+export type BareTenant = { companyId: string; roles: { administrator: { id: string } }; users: { olivia: Account } }
+
+/**
+ * A company that has registered no project, for the one rule that turns on
+ * it (Issue #101, review round A): an account granted every project reaches
+ * what serves every project — an unloading station — before the company has
+ * its first project, since `allProjects` is a grant and not a count
+ * (routes/unloading-stations.ts). Olivia is seeded as in `seedTenant`, on
+ * the administrator charter, `allProjects` and primary. Drop it with
+ * `dropTenant` like any tenant.
+ */
+export async function seedCompanyWithoutProjects(pool: Database): Promise<BareTenant> {
+  const companyId = testId()
+  const slug = randomBytes(4).toString("hex")
+  const tenant: BareTenant = {
+    companyId,
+    roles: { administrator: { id: testId() } },
+    users: { olivia: { id: testId(), authUserId: randomUUID(), email: `olivia.larsen@${slug}.example`, fullName: "Olivia Larsen" } },
+  }
+  await withCompany(pool.db, companyId, async (tx) => {
+    await tx.insert(company).values({
+      id: companyId,
+      companyId,
+      name: `Test Company ${slug}`,
+      legalName: `Test Company ${slug} A/S`,
+      registrationNumber: String(randomInt(10_000_000, 100_000_000)),
+      country: "DK",
+      status: "active",
+    })
+    await tx.insert(role).values({ id: tenant.roles.administrator.id, companyId, key: "company-administrator", name: "Company Administrator", scope: "Company", description: "Everything in the company", system: true })
+    const { olivia } = tenant.users
+    await tx.insert(userAccount).values({ id: olivia.id, companyId, authUserId: olivia.authUserId, email: olivia.email, fullName: olivia.fullName, roleId: tenant.roles.administrator.id, allProjects: true, primaryAdministrator: true })
+    await tx.insert(roleGrant).values(grantRows(companyId, tenant.roles.administrator.id, charter("company-administrator")))
+  })
+  return tenant
+}
+
 /**
  * Grants a seeded role rows beyond its charter, the way a company does when
  * it edits the permission matrix. A route test of a context the seeded
@@ -197,15 +240,37 @@ export async function grantRole(pool: Database, companyId: string, roleId: strin
  * Organisation & Access's, since every one of them keys on the company and
  * most on a project (Issue #78). Planning's nine tables go before the
  * Registry's, children first, since a collection group names the Registry's
- * fractions, container types and containers (Issue #97).
+ * fractions, container types and containers (Issue #97), and Resources'
+ * eleven go between them — a group names a vehicle and a driver, a scheme a
+ * depot and a station, a movement a container and a placement (Issue #101).
+ * The two ledgers, `stock_movement` and `vehicle_allocation_event`, are swept
+ * first and as the owner (`owner`, a pool on `DATABASE_ADMIN_URL`), since
+ * `wms_api` may not delete from them and the keys would stop the containers
+ * and allocations going otherwise (#101 §6.24); a suite that writes no ledger
+ * row passes none, and one that does and passes none fails loudly on the key.
  */
-export async function dropTenant(pool: Database, companyId: string): Promise<void> {
+export async function dropTenant(pool: Database, companyId: string, owner?: Database): Promise<void> {
+  if (owner !== undefined) {
+    await owner.db.delete(vehicleAllocationEvent).where(eq(vehicleAllocationEvent.companyId, companyId))
+    await owner.db.delete(stockMovement).where(eq(stockMovement.companyId, companyId))
+  }
   await withCompany(pool.db, companyId, async (tx: Tx) => {
     await tx.delete(collectionGroupContainer).where(eq(collectionGroupContainer.companyId, companyId))
     await tx.delete(collectionGroupContainerType).where(eq(collectionGroupContainerType.companyId, companyId))
     await tx.delete(collectionGroupFraction).where(eq(collectionGroupFraction.companyId, companyId))
     await tx.delete(collectionGroup).where(eq(collectionGroup.companyId, companyId))
     await tx.delete(routeScheme).where(eq(routeScheme.companyId, companyId))
+    await tx.delete(vehicleAllocation).where(eq(vehicleAllocation.companyId, companyId))
+    await tx.delete(vehicleCompartmentFraction).where(eq(vehicleCompartmentFraction.companyId, companyId))
+    await tx.delete(vehicleCompartment).where(eq(vehicleCompartment.companyId, companyId))
+    await tx.delete(vehicle).where(eq(vehicle.companyId, companyId))
+    await tx.delete(driver).where(eq(driver.companyId, companyId))
+    await tx.delete(unloadingStationFraction).where(eq(unloadingStationFraction.companyId, companyId))
+    await tx.delete(unloadingStation).where(eq(unloadingStation.companyId, companyId))
+    await tx.delete(warehouse).where(eq(warehouse.companyId, companyId))
+    await tx.delete(depot).where(eq(depot.companyId, companyId))
+    await tx.delete(containerTypeVehicleType).where(eq(containerTypeVehicleType.companyId, companyId))
+    await tx.delete(vehicleType).where(eq(vehicleType.companyId, companyId))
     await tx.delete(collectionCalendarHoliday).where(eq(collectionCalendarHoliday.companyId, companyId))
     await tx.delete(collectionCalendar).where(eq(collectionCalendar.companyId, companyId))
     await tx.delete(planningAreaBoundary).where(eq(planningAreaBoundary.companyId, companyId))

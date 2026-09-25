@@ -32,6 +32,7 @@ const container = {
   serialNumber: "SN-4471",
   ownership: "company",
   notes: "Lid replaced in March.",
+  assetState: { status: "in-service", warehouseId: null, placementId: THIRD, since: "2026-09-24T13:41:00.000Z", movementId: ID },
   ...STAMPS,
 }
 
@@ -56,11 +57,19 @@ describe("ContainerOwnership", () => {
 })
 
 describe("Container", () => {
-  test("is the identity a person reads off the bin, and carries no status and no location", () => {
+  test("is the identity a person reads off the bin, and carries no status and no location of its own", () => {
     assert.deepEqual(Container.parse(container), container)
-    const bare = { ...container, barcode: null, rfid: null, serialNumber: null, notes: null, ownership: "unrecorded" }
-    assert.deepEqual(Container.parse(bare), bare)
+    const bare = { ...container, barcode: null, rfid: null, serialNumber: null, notes: null, ownership: "unrecorded", assetState: null }
+    assert.deepEqual(Container.parse(bare), bare, "no movement yet is no state")
     for (const key of ["status", "location"]) assert.equal(Object.keys(Container.shape).includes(key), false, key)
+  })
+
+  test("carries the ledger's reading as assetState, on the resource and on no write body (Issue #101)", () => {
+    const inStock = { ...container, assetState: { status: "in-warehouse", warehouseId: OTHER, placementId: null, since: "2026-09-24T13:41:00.000Z", movementId: ID } }
+    assert.deepEqual(Container.parse(inStock), inStock)
+    assert.equal(Container.safeParse({ ...container, assetState: { status: "in-transit", warehouseId: null, placementId: null, since: "2026-09-24T13:41:00.000Z", movementId: ID } }).success, false)
+    assert.match(refusal(ContainerCreate.safeParse({ projectId: OTHER, label: "BIN-82014", containerTypeId: THIRD, assetState: null }))[0].message, /assetState/)
+    assert.match(refusal(ContainerPatch.safeParse({ assetState: null }))[0].message, /assetState/)
   })
 
   test("needs a label and a type: a container nobody can name is a container nobody can find", () => {
@@ -118,44 +127,67 @@ describe("ContainerServicePlacementCreate", () => {
 
   test("names the subscription, the fraction and the first day; the container is the path's and the project is its", () => {
     assert.deepEqual(ContainerServicePlacementCreate.parse(body), body)
-    assert.deepEqual(ContainerServicePlacementCreate.parse({ ...body, serviceFrequencyId: OTHER, validTo: "2027-01-01" }), {
-      ...body,
-      serviceFrequencyId: OTHER,
-      validTo: "2027-01-01",
-    })
+    assert.deepEqual(ContainerServicePlacementCreate.parse({ ...body, serviceFrequencyId: OTHER }), { ...body, serviceFrequencyId: OTHER })
     for (const key of ["containerId", "projectId", "effectiveServiceFrequencyId"]) {
       assert.match(refusal(ContainerServicePlacementCreate.safeParse({ ...body, [key]: OTHER }))[0].message, new RegExp(key))
     }
   })
 
-  test("needs all three, refuses a backwards period, and mints nothing", () => {
+  test("carries no end: a placement ends through the container's return or decommission, so validTo is refused by name (Issue #101)", () => {
+    const issues = refusal(ContainerServicePlacementCreate.safeParse({ ...body, validTo: "2027-01-01" }))
+    assert.deepEqual(issues.map((issue) => issue.path), [""])
+    assert.match(issues[0].message, /validTo/)
+    assert.equal(ContainerServicePlacementCreate.safeParse({ ...body, validTo: null }).success, false, "not even as null")
+  })
+
+  test("is the issue command too, so it takes when the container was issued and what paper it quotes, for the movement (Issue #101)", () => {
+    const issued = { ...body, occurredAt: "2026-01-01T07:30:00+01:00", reference: "DN-2048" }
+    assert.deepEqual(ContainerServicePlacementCreate.parse(issued), issued)
+    assert.equal(ContainerServicePlacementCreate.safeParse({ ...body, occurredAt: "2026-01-01" }).success, false, "an instant, not a day")
+    assert.equal(ContainerServicePlacementCreate.safeParse({ ...body, reference: "  " }).success, false)
+    for (const key of ["kind", "fromKind", "fromWarehouseId", "recordedBy"]) {
+      assert.match(refusal(ContainerServicePlacementCreate.safeParse({ ...body, [key]: "warehouse" }))[0].message, new RegExp(key), "the ledger's, never the body's")
+    }
+  })
+
+  test("needs all three, and mints nothing", () => {
     for (const key of Object.keys(body)) {
       const without: Record<string, unknown> = { ...body }
       delete without[key]
       assert.deepEqual(refusal(ContainerServicePlacementCreate.safeParse(without)).map((issue) => issue.path), [key])
     }
-    assert.deepEqual(refusal(ContainerServicePlacementCreate.safeParse({ ...body, validTo: "2026-01-01" })), [{ path: "validTo", message: BACKWARDS }])
     refusesWhatTheServerOwns(ContainerServicePlacementCreate, body)
   })
 })
 
 describe("ContainerServicePlacementPatch", () => {
-  test("ends the placement, corrects the fraction and overrides the frequency, and moves nothing else", () => {
+  test("corrects the end, the fraction and the override, and moves nothing else", () => {
     assert.deepEqual(ContainerServicePlacementPatch.parse({ validTo: "2026-07-01" }), { validTo: "2026-07-01" })
     assert.deepEqual(ContainerServicePlacementPatch.parse({ serviceFrequencyId: null }), { serviceFrequencyId: null })
     assert.deepEqual(ContainerServicePlacementPatch.parse({ wasteFractionId: THIRD }), { wasteFractionId: THIRD })
     refusesAnEmptyPatch(ContainerServicePlacementPatch)
     for (const key of ["validFrom", "subscriptionId", "containerId"]) {
-      assert.match(refusal(ContainerServicePlacementPatch.safeParse({ validTo: null, [key]: "2026-01-01" }))[0].message, new RegExp(key))
+      assert.match(refusal(ContainerServicePlacementPatch.safeParse({ validTo: "2026-07-01", [key]: "2026-01-01" }))[0].message, new RegExp(key))
     }
+  })
+
+  test("takes no null end: reopening a placement is a member the API can never take, since the ledger says when the container left (Issue #101)", () => {
+    assert.deepEqual(
+      refusal(ContainerServicePlacementPatch.safeParse({ validTo: null })).map((issue) => issue.path),
+      ["validTo"],
+      "refused at the boundary, not by a route's 409",
+    )
   })
 })
 
 describe("ContainerListQuery", () => {
-  test("takes a page, the project and the type of container", () => {
+  test("takes a page, the project, the type of container, the asset state and the warehouse it stands in", () => {
     assert.deepEqual(ContainerListQuery.parse({}), { limit: 50 })
     assert.deepEqual(ContainerListQuery.parse({ projectId: OTHER, containerTypeId: THIRD }), { projectId: OTHER, containerTypeId: THIRD, limit: 50 })
+    assert.deepEqual(ContainerListQuery.parse({ assetStatus: "in-warehouse", warehouseId: OTHER }), { assetStatus: "in-warehouse", warehouseId: OTHER, limit: 50 })
     assert.equal(ContainerListQuery.safeParse({ containerTypeId: "all" }).success, false)
+    assert.equal(ContainerListQuery.safeParse({ assetStatus: "in-transit" }).success, false)
+    assert.equal(ContainerListQuery.safeParse({ assetStatus: null }).success, false, "the unrecorded are not askable for")
   })
 })
 

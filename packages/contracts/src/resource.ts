@@ -16,6 +16,12 @@
 // two exclusions run through all of them — the stamps, and the `projectId` of
 // a project-scoped record, since a record does not move between projects (its
 // keys all carry the project, packages/db/src/schema/references.ts).
+//
+// A ledger row (Issue #101: a Stock Movement, a Vehicle Allocation event)
+// spreads `recorded` instead: its id and the instant it was appended. It is
+// never updated, so it has no `updatedAt` to carry, and no patch takes it.
+import * as z from "zod"
+
 import { IsoDateTime } from "./dates"
 import { Id } from "./ids"
 
@@ -28,8 +34,41 @@ export const stamped = {
   updatedAt: IsoDateTime,
 }
 
+/** What the server owns on a ledger row: the id it minted and the one instant, when the row was appended. */
+export const recorded = {
+  id: Id,
+  /** When the row was appended; a ledger row is never updated. */
+  recordedAt: IsoDateTime,
+}
+
 /** What a refused empty patch says. */
 export const somethingToChange = { message: "Give at least one field to change" }
 
 /** A patch must change something. */
 export const changesSomething = (patch: object) => Object.keys(patch).length > 0
+
+/**
+ * A whole number above zero: an order among siblings, a count, a payload, a
+ * volume, a distance. Every named positive integer of these modules
+ * (`Ordinal`, `Quantity`, `Metres`, `Amount`, …) is this shape under the name
+ * its field reads best by; the name adds nothing else.
+ */
+export const PositiveInt = z.int().positive()
+
+/**
+ * Each entry of a set names its thing once, as the database's key insists:
+ * the one rule behind every distinct-entries refine (a set of days, a rule's
+ * fractions, a group's containers, a calendar's holidays by day, a vehicle
+ * type's container types, a station's fractions). `key` says what identifies
+ * an entry; the entry itself by default.
+ */
+export const eachOnce = <Entry>(entries: readonly Entry[], key: (entry: Entry) => unknown = (entry) => entry): boolean =>
+  new Set(entries.map(key)).size === entries.length
+
+/**
+ * What a set with an entry twice is told, one shape for every module: "Name
+ * each <subject> once: <reason>". A module spells its subject, and a reason
+ * only where the rule has one of its own (a container has one place in a stop
+ * order); otherwise the set either holds the thing or it does not.
+ */
+export const eachOnceSentence = (subject: string, reason = "the set holds it or it does not"): string => `Name each ${subject} once: ${reason}`

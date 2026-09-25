@@ -181,6 +181,14 @@ describe("the shared collection point endpoints", { skip: database.skip }, () =>
         400,
       )
       assert.deepEqual(offTheGlobe.errors?.map((error) => error.path), ["location.coordinates.1"])
+      const lifted = await refused(
+        await olivia("/shared-collection-points", {
+          method: "POST",
+          body: { ...body(a.projects.copenhagen.id, "Lifted"), location: { type: "Point", coordinates: [12.5683, 55.6761, 10] } },
+        }),
+        400,
+      )
+      assert.deepEqual(lifted.errors?.map((error) => error.path), ["location.coordinates"], "a third ordinate: the column is flat, and the refusal is the contracts' and never PostGIS's 22023 (#101)")
       const noDistance = await refused(
         await olivia("/shared-collection-points", { method: "POST", body: { ...body(a.projects.copenhagen.id, "No reach"), eligibilityDistanceM: 0 } }),
         400,

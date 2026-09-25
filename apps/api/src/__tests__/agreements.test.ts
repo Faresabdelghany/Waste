@@ -3,7 +3,7 @@ import { after, before, describe, test } from "node:test"
 
 import { Agreement, Subscription } from "@waste/contracts/agreements"
 import { ContainerType, Product, WasteFraction } from "@waste/contracts/catalogue"
-import { Container, ContainerServicePlacement } from "@waste/contracts/containers"
+import { ContainerServicePlacement } from "@waste/contracts/containers"
 import { Customer, Property, SharedCollectionPoint } from "@waste/contracts/customers"
 import { Id } from "@waste/contracts/ids"
 import { Project } from "@waste/contracts/organisation"
@@ -13,13 +13,16 @@ import { createDb, type Database } from "@waste/db/client"
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
-import { databaseUnderTest } from "./database"
+import { databaseUnderTest, ownerUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { pointBody, setStatus } from "./registry"
+import { stocked, warehouseIn } from "./stock-fixtures"
 import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
 import { signingKeys, type SigningKeys } from "./tokens"
 
 const database = databaseUnderTest()
+/** The owner sweeps the one ledger row this suite writes — the receipt behind its placement — which `wms_api` may not delete (#101 §6.24). */
+const owner = ownerUnderTest()
 const AgreementPage = Page(Agreement)
 const SubscriptionPage = Page(Subscription)
 
@@ -32,8 +35,9 @@ const JULY = "2026-07-01"
 const OCTOBER = "2026-10-01"
 const NEXT_YEAR = "2027-01-01"
 
-describe("the agreement and subscription endpoints", { skip: database.skip }, () => {
+describe("the agreement and subscription endpoints", { skip: database.skip || owner.skip }, () => {
   let pool: Database
+  let ownerPool: Database
   let keys: SigningKeys
   /** The company under test. */
   let a: Tenant
@@ -68,6 +72,7 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
 
   before(async () => {
     pool = createDb(database.url, { max: 4 })
+    ownerPool = createDb(owner.url, { max: 1 })
     keys = await signingKeys()
     a = await seedTenant(pool)
     b = await seedTenant(pool)
@@ -126,9 +131,10 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
     )
   })
   after(async () => {
-    if (a) await dropTenant(pool, a.companyId)
-    if (b) await dropTenant(pool, b.companyId)
+    if (a) await dropTenant(pool, a.companyId, ownerPool)
+    if (b) await dropTenant(pool, b.companyId, ownerPool)
     await pool?.close()
+    await ownerPool?.close()
   })
 
   type Schema<T> = { parse: (value: unknown) => T }
@@ -648,11 +654,12 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
     test("refuses an end that would leave its placements outside, and writes nothing", async () => {
       const created = await agreement("AGR-2471")
       const written = await subscribe(created.id, { validFrom: JANUARY })
-      const container = await create(
+      // A container is issued out of stock (Issue #101): received into a
+      // warehouse of the project through the ledger's command (stock-fixtures.ts).
+      const container = await stocked(
         olivia,
-        "/containers",
         { projectId: a.projects.copenhagen.id, label: "BIN-2471", containerTypeId: bin.id },
-        Container,
+        await warehouseIn(pool, a.companyId, a.projects.copenhagen.id, "WH-2471"),
       )
       await create(
         olivia,
@@ -662,7 +669,9 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
       )
 
       const problem = await refused(await olivia(`/subscriptions/${written.id}`, { method: "PATCH", body: { validTo: APRIL } }), 409)
-      assert.equal(problem.detail, "1 placement would fall outside the subscription's period; end it first")
+      assert.equal(problem.detail, "1 placement would fall outside the subscription's period; end it first through the container's return or decommission")
+      const anyEnd = await refused(await olivia(`/subscriptions/${written.id}`, { method: "PATCH", body: { validTo: NEXT_YEAR } }), 409)
+      assert.equal(anyEnd.detail, problem.detail, "an open placement is outside any end: the container comes back through the ledger first")
       const stored = await oneSubscription(olivia, written.id)
       assert.deepEqual([stored.validFrom, stored.validTo], [JANUARY, null])
       assert.equal(stored.updatedAt, written.updatedAt, "a refused patch does not move the stamp")

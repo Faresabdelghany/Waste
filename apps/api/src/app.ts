@@ -39,6 +39,9 @@ import { collectionGroupRoutes } from "./routes/collection-groups"
 import { companyRoutes } from "./routes/company"
 import { containerRoutes } from "./routes/containers"
 import { customerRoutes } from "./routes/customers"
+import { depotRoutes } from "./routes/depots"
+import { driverRoutes } from "./routes/drivers"
+import { lifecycleRoutes } from "./routes/lifecycle"
 import { meRoutes } from "./routes/me"
 import { planningAreaRoutes } from "./routes/planning-areas"
 import { productRoutes } from "./routes/products"
@@ -49,7 +52,12 @@ import { roleRoutes } from "./routes/roles"
 import { routeSchemeRoutes } from "./routes/route-schemes"
 import { serviceProviderRoutes } from "./routes/service-providers"
 import { sharedCollectionPointRoutes } from "./routes/shared-collection-points"
+import { unloadingStationRoutes } from "./routes/unloading-stations"
 import { userRoutes } from "./routes/users"
+import { vehicleAllocationRoutes } from "./routes/vehicle-allocations"
+import { vehicleTypeRoutes } from "./routes/vehicle-types"
+import { vehicleRoutes } from "./routes/vehicles"
+import { warehouseRoutes } from "./routes/warehouses"
 
 export type AppOptions = {
   /** The pool /readyz probes, as the API role: server.ts builds it from probePoolOptions; a test hands whatever it wants probed. */
@@ -133,11 +141,20 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   app.route("/", propertyGroupRoutes(guard))
   app.route("/", sharedCollectionPointRoutes(guard))
   app.route("/", agreementRoutes(guard))
-  app.route("/", containerRoutes(guard))
+  app.route("/", containerRoutes(guard, { now }))
+  app.route("/", lifecycleRoutes(guard, { now }))
   app.route("/", planningAreaRoutes(guard))
   app.route("/", collectionCalendarRoutes(guard))
-  app.route("/", routeSchemeRoutes(guard))
-  app.route("/", collectionGroupRoutes(guard))
+  // Planning's group rules judge a driver on "today" on the project's clock, so the two take the app's `now` as the ledger routes do.
+  app.route("/", routeSchemeRoutes(guard, { now }))
+  app.route("/", collectionGroupRoutes(guard, { now }))
+  app.route("/", vehicleTypeRoutes(guard))
+  app.route("/", warehouseRoutes(guard))
+  app.route("/", depotRoutes(guard))
+  app.route("/", unloadingStationRoutes(guard))
+  app.route("/", vehicleAllocationRoutes(guard))
+  app.route("/", vehicleRoutes(guard))
+  app.route("/", driverRoutes(guard))
 
   app.get(
     "/openapi.json",
