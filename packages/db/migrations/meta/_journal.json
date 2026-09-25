@@ -43,6 +43,13 @@
       "when": 1790273880241,
       "tag": "0005_hook_email",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790293702420,
+      "tag": "0006_planning",
+      "breakpoints": true
     }
   ]
 }

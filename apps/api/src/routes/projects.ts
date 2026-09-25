@@ -21,6 +21,7 @@
 // → Company & Projects is one surface.
 import { Project, ProjectCreate, ProjectPatch, type ProjectStatus } from "@waste/contracts/organisation"
 import { Page, PageRequest } from "@waste/contracts/pagination"
+import type { ServiceDay } from "@waste/contracts/planning"
 import { project } from "@waste/db/schema/organisation"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -44,13 +45,15 @@ const columns = {
   currency: project.currency,
   timezone: project.timezone,
   status: project.status,
+  weekend: project.weekend,
+  holidayList: project.holidayList,
   createdAt: project.createdAt,
   updatedAt: project.updatedAt,
 }
 
 type Row = Pick<typeof project.$inferSelect, keyof typeof columns>
 
-/** The row on the wire. `status` is text with a CHECK in the database and this enum here; packages/db holds the two lists in lockstep. */
+/** The row on the wire. `status` is text with a CHECK in the database and this enum here; packages/db holds the two lists in lockstep. `weekend` is a `text[]` held to the seven by the same tuple the enum reads. */
 function projectOf(row: Row): Project {
   return {
     id: row.id,
@@ -60,6 +63,8 @@ function projectOf(row: Row): Project {
     currency: row.currency,
     timezone: row.timezone,
     status: row.status as ProjectStatus,
+    weekend: row.weekend as ServiceDay[],
+    holidayList: row.holidayList,
     ...stampsOf(row),
   }
 }
@@ -108,7 +113,8 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
       describeRoute({
         operationId: "createProject",
         summary: "Add a project",
-        description: "Creates a project in the caller's company. The server mints the id; a body that carries one is refused.",
+        description:
+          "Creates a project in the caller's company. The server mints the id; a body that carries one is refused. `weekend` is the days the project rests on, each named once — Saturday and Sunday unless the body says otherwise, Friday and Saturday for a project in Cairo — and `holidayList` the name its holidays are looked up under (`Danish public holidays`); null or absent is no list, and a project without one rests on its weekend only, whatever collection calendars it has.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The project as it was written.", Project),
@@ -171,11 +177,12 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
       describeRoute({
         operationId: "patchProject",
         summary: "Change a project",
-        description: "Changes one project of the caller's company; every field is optional and at least one must be given.",
+        description:
+          "Changes one project of the caller's company; every field is optional and at least one must be given. `weekend` replaces the days the project rests on with the list given, each of the seven named at most once; `holidayList` renames the list its holidays are looked up under, or as null takes it away, and a project without one rests on its weekend only, whatever collection calendars it has.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The project as it now stands.", Project),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own, or holds a value of the wrong shape."),
+          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own, holds a value of the wrong shape, or names a weekend day outside the seven or twice."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.organization`."),
           404: describeProblem("No project with that id in this company."),

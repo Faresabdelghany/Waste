@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { Id } from "@waste/contracts/ids"
-import { Project } from "@waste/contracts/organisation"
+import { A_WORKING_DAY, Project } from "@waste/contracts/organisation"
 import { Page } from "@waste/contracts/pagination"
 import { createDb, type Database } from "@waste/db/client"
 
@@ -172,6 +172,30 @@ describe("the project endpoints", { skip: database.skip }, () => {
       assert.equal(created.status, "active")
     })
 
+    test("takes the weekend and the holiday list when the caller gives them, and defaults them when not", async () => {
+      const cairo = await create(olivia, { ...body("Giza Collection"), weekend: ["friday", "saturday"], holidayList: "Egyptian public holidays" })
+      assert.deepEqual(cairo.weekend, ["friday", "saturday"], "the days the project rests on, never derived from a weekday number")
+      assert.equal(cairo.holidayList, "Egyptian public holidays")
+      assert.deepEqual(await one(olivia, cairo.id), cairo)
+      const plain = await create(olivia, body("Ballerup Collection"))
+      assert.deepEqual([plain.weekend, plain.holidayList], [["saturday", "sunday"], null])
+      const named = await create(olivia, { ...body("Ballerup Collection II"), holidayList: null })
+      assert.equal(named.holidayList, null, "an explicit null is no list too")
+    })
+
+    test("refuses a weekend day outside the seven, one named twice, and a weekend that is not a list, naming the field", async () => {
+      const funday = await olivia("/projects", { method: "POST", body: { ...body("Funday Trial"), weekend: ["saturday", "funday"] } })
+      assert.equal(funday.status, 400)
+      assert.deepEqual((await readProblem(funday)).errors?.map((error) => error.path), ["weekend.1"])
+      const twice = await olivia("/projects", { method: "POST", body: { ...body("Twice Trial"), weekend: ["sunday", "sunday"] } })
+      assert.equal(twice.status, 400)
+      assert.deepEqual((await readProblem(twice)).errors?.map((error) => error.path), ["weekend"])
+      const scalar = await olivia("/projects", { method: "POST", body: { ...body("Scalar Trial"), weekend: "saturday" } })
+      assert.equal(scalar.status, 400)
+      const paths = (await readProblem(scalar)).errors?.map((error) => error.path) ?? []
+      assert.ok(paths.length > 0 && paths.every((path) => path === "weekend"), `every issue names the field: ${JSON.stringify(paths)}`)
+    })
+
     test("mints a fresh id for every project, in the order they were made", async () => {
       const first = await create(olivia, body("Valby Pilot"))
       const second = await create(olivia, body("Vesterbro Pilot"))
@@ -228,6 +252,12 @@ describe("the project endpoints", { skip: database.skip }, () => {
       const project = await one(olivia, a.projects.harbor.id)
       assert.equal(project.name, "Harbor Commercial")
       assert.equal(project.status, "onboarding")
+    })
+
+    test("carries the working week: Saturday and Sunday and no holiday list until a project says otherwise", async () => {
+      const project = await one(olivia, a.projects.cairo.id)
+      assert.deepEqual(project.weekend, ["saturday", "sunday"], "the column's default, whatever the project's country")
+      assert.equal(project.holidayList, null, "no list: the project rests on its weekend only, whatever calendars it has")
     })
 
     test("answers 404 for another company's project: the fence makes it a row that does not exist", async () => {
@@ -303,6 +333,50 @@ describe("the project endpoints", { skip: database.skip }, () => {
       assert.match(problem.detail ?? "", /Harbor Commercial/)
       assert.doesNotMatch(problem.detail ?? "", /_key/)
       assert.equal((await one(olivia, created.id)).name, "Sydhavn Trial")
+    })
+
+    test("stores and answers the weekend and the holiday list, and a null takes the list away again", async () => {
+      const created = await create(olivia, body("Alexandria Trial"))
+      const response = await olivia(`/projects/${created.id}`, { method: "PATCH", body: { weekend: ["friday", "saturday"], holidayList: "Egyptian public holidays" } })
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+      const patched = Project.parse(await response.json())
+      assert.deepEqual(patched.weekend, ["friday", "saturday"], "Cairo rests Friday and Saturday")
+      assert.equal(patched.holidayList, "Egyptian public holidays")
+      assert.equal(patched.name, "Alexandria Trial", "what the patch did not name it did not touch")
+      assert.deepEqual(await one(olivia, created.id), patched)
+
+      const rested = await olivia(`/projects/${created.id}`, { method: "PATCH", body: { weekend: [], holidayList: null } })
+      assert.equal(rested.status, 200, JSON.stringify(await rested.clone().json()))
+      const week = Project.parse(await rested.json())
+      assert.deepEqual(week.weekend, [], "a project may rest on no day at all")
+      assert.equal(week.holidayList, null, "and once the list is gone it rests on its weekend only")
+    })
+
+    test("refuses a weekend day outside the seven, one named twice, and a blank holiday list, naming the field and changing nothing", async () => {
+      const created = await create(olivia, body("Aswan Trial"))
+      const funday = await olivia(`/projects/${created.id}`, { method: "PATCH", body: { weekend: ["funday"] } })
+      assert.equal(funday.status, 400)
+      const problem = await readProblem(funday)
+      assert.equal(problem.detail, "The request body is invalid")
+      assert.deepEqual(problem.errors?.map((error) => error.path), ["weekend.0"])
+      const twice = await olivia(`/projects/${created.id}`, { method: "PATCH", body: { weekend: ["saturday", "saturday"] } })
+      assert.equal(twice.status, 400)
+      assert.deepEqual((await readProblem(twice)).errors?.map((error) => error.path), ["weekend"])
+      const blank = await olivia(`/projects/${created.id}`, { method: "PATCH", body: { holidayList: "   " } })
+      assert.equal(blank.status, 400)
+      assert.deepEqual((await readProblem(blank)).errors?.map((error) => error.path), ["holidayList"])
+      assert.deepEqual(await one(olivia, created.id), created)
+    })
+
+    test("refuses a weekend of all seven days: a project has to have a working day", async () => {
+      const created = await create(olivia, body("Luxor Trial"))
+      const week = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+      const everyDay = await olivia(`/projects/${created.id}`, { method: "PATCH", body: { weekend: week } })
+      assert.equal(everyDay.status, 400, "the contract refuses it before the database's own check would")
+      assert.deepEqual((await readProblem(everyDay)).errors, [{ path: "weekend", message: A_WORKING_DAY }])
+      const six = await olivia(`/projects/${created.id}`, { method: "PATCH", body: { weekend: week.slice(1) } })
+      assert.equal(six.status, 200, JSON.stringify(await six.clone().json()))
+      assert.deepEqual(Project.parse(await six.json()).weekend, week.slice(1), "six is the most: one day is left to work on")
     })
   })
 })

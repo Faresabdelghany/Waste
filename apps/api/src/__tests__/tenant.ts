@@ -22,6 +22,7 @@ import type { Database, Tx } from "@waste/db/client"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "@waste/db/schema/access"
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
+import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import {
   customer,
@@ -33,6 +34,8 @@ import {
   sharedCollectionPointMember,
 } from "@waste/db/schema/customers"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
+import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
+import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import { normaliseGrants, type Grant } from "@waste/domain/access/grants"
 import { SYSTEM_ROLES, type SystemRoleKey } from "@waste/domain/access/system-roles"
@@ -192,10 +195,21 @@ export async function grantRole(pool: Database, companyId: string, roleId: strin
  * Deletes everything of the company, as `wms_api` under the fence, children
  * first. Nothing there is fine. The Registry's fifteen tables go before
  * Organisation & Access's, since every one of them keys on the company and
- * most on a project (Issue #78).
+ * most on a project (Issue #78). Planning's nine tables go before the
+ * Registry's, children first, since a collection group names the Registry's
+ * fractions, container types and containers (Issue #97).
  */
 export async function dropTenant(pool: Database, companyId: string): Promise<void> {
   await withCompany(pool.db, companyId, async (tx: Tx) => {
+    await tx.delete(collectionGroupContainer).where(eq(collectionGroupContainer.companyId, companyId))
+    await tx.delete(collectionGroupContainerType).where(eq(collectionGroupContainerType.companyId, companyId))
+    await tx.delete(collectionGroupFraction).where(eq(collectionGroupFraction.companyId, companyId))
+    await tx.delete(collectionGroup).where(eq(collectionGroup.companyId, companyId))
+    await tx.delete(routeScheme).where(eq(routeScheme.companyId, companyId))
+    await tx.delete(collectionCalendarHoliday).where(eq(collectionCalendarHoliday.companyId, companyId))
+    await tx.delete(collectionCalendar).where(eq(collectionCalendar.companyId, companyId))
+    await tx.delete(planningAreaBoundary).where(eq(planningAreaBoundary.companyId, companyId))
+    await tx.delete(planningArea).where(eq(planningArea.companyId, companyId))
     await tx.delete(containerServicePlacement).where(eq(containerServicePlacement.companyId, companyId))
     await tx.delete(subscription).where(eq(subscription.companyId, companyId))
     await tx.delete(agreement).where(eq(agreement.companyId, companyId))

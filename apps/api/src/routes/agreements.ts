@@ -71,7 +71,7 @@ import { validOn } from "@waste/db/query/valid-on"
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { containerServicePlacement } from "@waste/db/schema/containers"
 import { count } from "@waste/domain/text"
-import { and, asc, count as countRows, eq, gt, or, type SQL } from "drizzle-orm"
+import { and, asc, eq, gt, or } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -82,7 +82,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { notWithin, periodAfter, periodOf, requireOrdered, requireWithin, type Period } from "./periods"
+import { notWithin, periodAfter, periodOf, refuseStranded, requireOrdered, requireWithin, type Period } from "./periods"
 import { requireCustomer, requireProduct, requireProperty, requireSharedCollectionPoint } from "./references"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
 import { placeOf, refuseInactiveCustomer, refuseUnofferedProduct, refuseUnservedPlace, type Party } from "./statuses"
@@ -221,45 +221,18 @@ async function findSubscription(
   return { ...held, agreement: { validFrom: agreementValidFrom, validTo: agreementValidTo } }
 }
 
-/**
- * How many rows of a child table would be left outside the period their
- * parent is moving to; the count the 409 states. The parent has already been
- * read under the caller's scope and a child's project is the parent's by the
- * composite key, so this asks for the company and the parent and does not
- * repeat `inProjects`: a count that refuses a write must not be the one
- * statement here that could miss a row.
- */
-async function strayCount(tx: Tx, table: PgTable, where: SQL | undefined): Promise<number> {
-  const [row] = await tx.select({ rows: countRows() }).from(table).where(where)
-  return row?.rows ?? 0
-}
-
 /** A child table of an effective-dated record: the tenant, the period, and the column naming the parent. */
 type ChildTable = PgTable & { companyId: PgColumn; validFrom: PgColumn; validTo: PgColumn }
 
 /**
- * The other side of the containment rule, for a parent whose period is
- * moving: the children the new period would leave outside are counted and
- * the write is refused with the count, because those rows are not in the
- * body and the caller has to end them first. Both parents here ask it —
- * an agreement of its subscriptions, a subscription of its placements —
- * and it is one rule, so it is one function.
+ * The `where` of the children a parent's move would strand, for
+ * `refuseStranded` (routes/periods.ts): this company's rows of the parent
+ * whose period leaves the new one. Both parents here ask it — an agreement of
+ * its subscriptions, a subscription of its placements — so it is spelled
+ * once; the count and the 409 are the shared helper's.
  */
-async function refuseStranded(
-  tx: Tx,
-  table: ChildTable,
-  parentColumn: PgColumn,
-  parent: { companyId: string; id: string },
-  period: Period,
-  sentence: (rows: number) => string,
-): Promise<void> {
-  const strays = await strayCount(
-    tx,
-    table,
-    and(eq(table.companyId, parent.companyId), eq(parentColumn, parent.id), notWithin(table, period)),
-  )
-  if (strays > 0) throw problem(409, { detail: sentence(strays) })
-}
+const strandedChildren = (table: ChildTable, parentColumn: PgColumn, parent: { companyId: string; id: string }, period: Period) =>
+  and(eq(table.companyId, parent.companyId), eq(parentColumn, parent.id), notWithin(table, period))
 
 /** The status of the customer each field names, as `partyStatuses` answers it. */
 type Parties = Readonly<Record<Party, CustomerStatus | undefined>>
@@ -445,7 +418,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
         // Every 400 above, every 409 below (routes/statuses.ts).
         refuseInactiveParties(parties)
         if (period !== undefined) {
-          await refuseStranded(tx, subscription, subscription.agreementId, { companyId: principal.companyId, id }, period, strandedSubscriptions)
+          await refuseStranded(tx, subscription, strandedChildren(subscription, subscription.agreementId, { companyId: principal.companyId, id }, period), strandedSubscriptions)
         }
 
         const [row] = await refuseOverlap({ [NUMBER_RUNNING]: numberRunning(patch.number ?? current.number) }, () =>
@@ -636,9 +609,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
           await refuseStranded(
             tx,
             containerServicePlacement,
-            containerServicePlacement.subscriptionId,
-            { companyId: principal.companyId, id },
-            period,
+            strandedChildren(containerServicePlacement, containerServicePlacement.subscriptionId, { companyId: principal.companyId, id }, period),
             strandedPlacements,
           )
         }

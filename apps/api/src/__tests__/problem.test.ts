@@ -6,8 +6,8 @@ import { Hono } from "hono"
 import { HTTPException } from "hono/http-exception"
 import * as z from "zod"
 
-import { errorHandler, exclusionConstraintOf, membersAt, notFound, problem, ProblemError, problemResponse, uniqueConstraintOf, validate } from "../problem"
-import { refuseDuplicate, refuseOverlap } from "../routes/shared"
+import { checkConstraintOf, errorHandler, exclusionConstraintOf, membersAt, notFound, problem, ProblemError, problemResponse, uniqueConstraintOf, validate } from "../problem"
+import { refuseCheck, refuseDuplicate, refuseOverlap } from "../routes/shared"
 import { readProblem } from "./read-problem"
 
 /** A log that remembers what it was given. */
@@ -90,6 +90,13 @@ describe("errorHandler", () => {
     hono.get("/other-sqlstate", () => {
       throw new Error("Failed query", { cause: Object.assign(new Error("fk"), { code: "23503" }) })
     })
+    hono.get("/check", () => {
+      const cause = Object.assign(new Error('new row for relation "planning_area_boundary" violates check constraint "planning_area_boundary_boundary_valid"'), {
+        code: "23514",
+        constraint_name: "planning_area_boundary_boundary_valid",
+      })
+      throw new Error("Failed query: insert into ...", { cause })
+    })
     hono.get("/boom", () => {
       throw new Error("the database ate my query: postgresql://wms_api:secret@host/db")
     })
@@ -170,6 +177,17 @@ describe("errorHandler", () => {
     assert.equal(entries.length, 2)
   })
 
+  test("answers 500 for a check violation (SQLSTATE 23514) no route foresaw, logging the constraint: the signal that a sentence is missing", async () => {
+    const { entries, log } = recorder()
+    const response = await app(log).request("/check")
+    assert.equal(response.status, 500, "a check the API should have run, or named through refuseCheck, is the server's fault and not the client's news")
+    assert.deepEqual(await readProblem(response), { type: "about:blank", title: "Internal Server Error", status: 500 })
+    assert.equal(entries.length, 1)
+    const cause = (entries[0] as { cause: Record<string, unknown> }).cause
+    assert.equal(cause.code, "23514")
+    assert.equal(cause.constraint_name, "planning_area_boundary_boundary_valid")
+  })
+
   test("logs a projection of a database error: its name, message, SQLSTATE, constraint and stack, never the statement or its parameters", async () => {
     const { entries, log } = recorder()
     const response = await app(log).request("/with-parameters")
@@ -196,6 +214,16 @@ describe("the constraint a failed write names", () => {
   test("is read from a unique violation and an exclusion violation, each by its own SQLSTATE", () => {
     assert.equal(uniqueConstraintOf(failure("23505", "product_project_id_name_key")), "product_project_id_name_key")
     assert.equal(exclusionConstraintOf(failure("23P01", "subscription_no_overlap")), "subscription_no_overlap")
+  })
+
+  test("is read from a check violation by its own SQLSTATE too, and from nothing else", () => {
+    assert.equal(checkConstraintOf(failure("23514", "planning_area_boundary_boundary_valid")), "planning_area_boundary_boundary_valid")
+    assert.equal(checkConstraintOf(failure("23514")), undefined, "a check Postgres did not name is nobody's to answer")
+    assert.equal(checkConstraintOf(failure("23505", "product_project_id_name_key")), undefined)
+    assert.equal(checkConstraintOf(failure("23P01", "subscription_no_overlap")), undefined)
+    assert.equal(checkConstraintOf(new Error("nothing to do with the database")), undefined)
+    assert.equal(uniqueConstraintOf(failure("23514", "planning_area_boundary_boundary_valid")), undefined)
+    assert.equal(exclusionConstraintOf(failure("23514", "planning_area_boundary_boundary_valid")), undefined)
   })
 
   test("is undefined for the other's SQLSTATE, for another error, and where Postgres named none", () => {
@@ -259,6 +287,64 @@ describe("refuseOverlap", () => {
     )
     assert.ok(answered instanceof ProblemError)
     assert.equal(answered.status, 409)
+  })
+})
+
+describe("refuseCheck", () => {
+  const check = (constraint?: string) =>
+    new Error("Failed query", { cause: Object.assign(new Error("violates check constraint"), { code: "23514", ...(constraint === undefined ? {} : { constraint_name: constraint }) }) })
+  const sentences = { planning_area_boundary_boundary_valid: { path: "boundary", message: "Not a valid polygon: the ring crosses itself" } }
+
+  test("hands back what the write answered when it succeeded", async () => {
+    assert.equal(await refuseCheck(sentences, async () => "written"), "written")
+  })
+
+  test("turns a check the route foresaw into a 400 on the field with its sentence, in the validator's own shape", async () => {
+    const raised = await refuseCheck(sentences, async () => {
+      throw check("planning_area_boundary_boundary_valid")
+    }).then(
+      () => assert.fail("the write was expected to be refused"),
+      (error: unknown) => error,
+    )
+    assert.ok(raised instanceof ProblemError)
+    assert.equal(raised.status, 400, "the value will not do: a 400, as the schema would have answered had it been able to see")
+    assert.equal(raised.body.detail, "The request body is invalid")
+    assert.deepEqual(raised.body.errors, [{ path: "boundary", message: "Not a valid polygon: the ring crosses itself" }])
+  })
+
+  test("leaves a check it did not foresee, one Postgres did not name, and another error to the error handler", async () => {
+    for (const error of [check("route_scheme_service_days_non_empty"), check(), new Error("something else")]) {
+      const raised = await refuseCheck(sentences, async () => {
+        throw error
+      }).then(
+        () => assert.fail("the write was expected to be refused"),
+        (thrown: unknown) => thrown,
+      )
+      assert.equal(raised, error)
+    }
+  })
+
+  test("is the check violation's own door: neither of the 409 doors answers one, and it answers neither of theirs", async () => {
+    const conflicts = { planning_area_boundary_boundary_valid: "not this door's sentence" }
+    for (const door of [refuseDuplicate, refuseOverlap]) {
+      const left = await door(conflicts, async () => {
+        throw check("planning_area_boundary_boundary_valid")
+      }).then(
+        () => assert.fail("the write was expected to be refused"),
+        (thrown: unknown) => thrown,
+      )
+      assert.ok(!(left instanceof ProblemError), "a check violation is not a 409 door's to answer")
+    }
+    for (const code of ["23505", "23P01"]) {
+      const error = new Error("Failed query", { cause: Object.assign(new Error("key"), { code, constraint_name: "planning_area_boundary_boundary_valid" }) })
+      const left = await refuseCheck(sentences, async () => {
+        throw error
+      }).then(
+        () => assert.fail("the write was expected to be refused"),
+        (thrown: unknown) => thrown,
+      )
+      assert.equal(left, error)
+    }
   })
 })
 

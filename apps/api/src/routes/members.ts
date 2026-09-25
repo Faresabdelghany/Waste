@@ -42,11 +42,12 @@
 // descriptor per family.
 import type { Tx } from "@waste/db/client"
 import { customer, property } from "@waste/db/schema/customers"
-import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm"
+import { and, asc, eq, inArray, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 
 import { invalidRequest } from "../problem"
 import { NOT_A_CUSTOMER, NOT_A_PROPERTY } from "./references"
+import { stamp } from "./shared"
 
 /**
  * One entry, as the mechanics see it: the row it names and what it is to the
@@ -78,9 +79,6 @@ export type MemberSet<Table extends MemberTable> = SetColumns & {
   /** Holds the whole list to what its key allows, in one statement, or refuses the request at the entry that is wrong. */
   require: (tx: Tx, parent: Parent, entries: readonly Entry[]) => Promise<void>
 }
-
-/** What a set's PUT writes on the record itself: nothing but the stamp, since the set is what changed. */
-const stamp = (): { updatedAt: SQL } => ({ updatedAt: sql`now()` })
 
 /** Every entry's id, each once: what the one lookup asks for, however often the body named it. */
 const namedIds = (entries: readonly Entry[]): string[] => [...new Set(entries.map((entry) => entry.id))]

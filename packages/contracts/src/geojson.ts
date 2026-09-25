@@ -54,3 +54,31 @@ export const Polygon = z.object({
   coordinates: z.array(LinearRing).min(1, { error: "a polygon has an outer ring" }),
 })
 export type Polygon = z.infer<typeof Polygon>
+
+// The flat shapes (Issue #97, with the first stored polygon). A geometry
+// column of this system is flat — `geometry(Polygon, 4326)`, no Z — and
+// PostGIS refuses a third ordinate with 22023 after the write has been sent,
+// which the API can only answer as a 500. So a boundary is held to two
+// ordinates here, where the refusal is a 400 naming the position: the same
+// ring rules as `Polygon`, over positions of exactly `[longitude, latitude]`.
+// `Point` keeps `Position` for now; the Registry's points can adopt
+// `Position2D` when their routes want the same answer.
+
+/** `[longitude, latitude]` and nothing else: a position for a flat column. */
+export const Position2D = z.tuple([Longitude, Latitude])
+export type Position2D = z.infer<typeof Position2D>
+
+/** `LinearRing` over flat positions: four or more, closed, three distinct. */
+export const FlatLinearRing = z
+  .array(Position2D)
+  .min(4, { error: "a linear ring has at least four positions", abort: true })
+  .refine(closes, { error: "a linear ring ends where it starts" })
+  .refine(enclosesArea, { error: "a linear ring has at least three distinct positions" })
+export type FlatLinearRing = z.infer<typeof FlatLinearRing>
+
+/** `Polygon` over flat rings: what a flat geometry column takes without a 22023 on the way in. */
+export const FlatPolygon = z.object({
+  type: z.literal("Polygon"),
+  coordinates: z.array(FlatLinearRing).min(1, { error: "a polygon has an outer ring" }),
+})
+export type FlatPolygon = z.infer<typeof FlatPolygon>

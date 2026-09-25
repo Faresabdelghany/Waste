@@ -117,6 +117,15 @@ export function problem(status: ProblemStatus, options: ProblemOptions = {}): Pr
 // ours to have prevented, so it is a 500 with the error logged.
 const UNIQUE_VIOLATION = "23505"
 const EXCLUSION_VIOLATION = "23P01"
+// A check violation (23514) is different news: the row is alone and its own
+// value will not do. Where the API could run the check itself it does, and
+// the caller reads a 400 before any write; where only the database can (the
+// Planning context's `st_isvalid` on a polygon, Issue #97), the route names
+// the constraint and reads it through `checkConstraintOf` to answer that same
+// 400 on the field (routes/shared.ts, `refuseCheck`). It is not in CONFLICTS
+// below: a check nobody foresaw is ours to have prevented, so it stays a 500,
+// which is the signal that a sentence is missing.
+const CHECK_VIOLATION = "23514"
 
 /** What a conflict says when no route foresaw it; the constraint's name is appended where Postgres gave one. */
 const CONFLICTS: Readonly<Record<string, string>> = {
@@ -154,6 +163,11 @@ export function uniqueConstraintOf(error: unknown): string | undefined {
 /** The same for an exclusion violation: which `EXCLUDE USING gist` refused the period, for the route that foresaw it. */
 export function exclusionConstraintOf(error: unknown): string | undefined {
   return constraintOf(error, EXCLUSION_VIOLATION)
+}
+
+/** The same for a check violation: which `CHECK` refused the value, for the route that foresaw it and could not run the check itself. */
+export function checkConstraintOf(error: unknown): string | undefined {
+  return constraintOf(error, CHECK_VIOLATION)
 }
 
 /** How far down a `cause` chain the projection below goes; Drizzle wraps postgres.js, which wraps nothing. */

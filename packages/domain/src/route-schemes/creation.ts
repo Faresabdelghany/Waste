@@ -14,6 +14,7 @@
 // scheduling; only a technical failure leaves the scheme Validated (D25).
 // Generation stays decoupled from Vehicle Planning.
 
+import { SCHEME_EDIT_POLICIES } from "../planning/vocabulary"
 import type { BusinessRecord } from "../prototype-record"
 import {
   applySchemeGeneration,
@@ -62,9 +63,11 @@ export const isSchemeCreateAs = (value: unknown): value is SchemeCreateAs =>
  * generated routes should apply. Nothing consumes it yet — the edit
  * reconciliation planner always reshapes the future window — so the wizard
  * no longer offers a choice and creation stamps the server-side default,
- * "ask each time". Wiring the policy into reconciliation is ticketed.
+ * "ask each time". Wiring the policy into reconciliation is ticketed. The
+ * list lives in ../planning/vocabulary since Issue #97, where the database
+ * and the contracts read it too; re-exported so its importers did not move.
  */
-export const SCHEME_EDIT_POLICIES = ["ask", "future", "single"] as const
+export { SCHEME_EDIT_POLICIES }
 export type SchemeEditPolicy = (typeof SCHEME_EDIT_POLICIES)[number]
 export const DEFAULT_SCHEME_EDIT_POLICY: SchemeEditPolicy = "ask"
 export const SCHEME_EDIT_POLICY_LABELS: Record<SchemeEditPolicy, string> = {

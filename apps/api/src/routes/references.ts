@@ -35,7 +35,10 @@ import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
 import type { Tx } from "@waste/db/client"
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
+import { container } from "@waste/db/schema/containers"
 import { customer, property, sharedCollectionPoint } from "@waste/db/schema/customers"
+import { serviceProvider } from "@waste/db/schema/organisation"
+import { planningArea } from "@waste/db/schema/planning-areas"
 import { eq } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 
@@ -138,4 +141,43 @@ export async function requireSharedCollectionPoint(
     path,
     message: "Not a shared collection point of this project",
   })
+}
+
+// The Planning context (Issue #97) keys everything on a Project too, so its
+// checks are all `inProject`. A collection calendar has no check here: no body
+// names one (the path does, and a scheme reads its project's calendars and
+// never picks one), and a check nothing calls is added the day something does.
+
+/** What a body is told when it reaches for a planning area of another project; the fence the composite key already holds it to. */
+export const NOT_A_PLANNING_AREA = "Not a planning area of this project"
+
+/** A Planning Area a body names: the project's, since where work happens is planned inside one project. */
+export async function requirePlanningArea(
+  tx: Tx,
+  scope: Scope,
+  id: string | null | undefined,
+  path = "planningAreaId",
+): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, planningArea, inProject(planningArea, scope, id), { path, message: NOT_A_PLANNING_AREA })
+}
+
+// What a Collection Group names (Issue #97, slice 4): a container is the
+// project's, like the group that picks it, and the plural check over a picked
+// list (routes/scheme-groups.ts) hands the one entry it found missing to the
+// singular here, so both say the same thing; a Service Provider is the
+// company's, since Organisation & Access has the table. A scheme and a group
+// are named by no body yet — the path names them — so their checks arrive
+// with part B, the day a body does.
+
+/** A Container a body names: the project's, since a group cannot pick another project's bin. */
+export async function requireContainer(tx: Tx, scope: Scope, id: string | null | undefined, path = "containerId"): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, container, inProject(container, scope, id), { path, message: "Not a container of this project" })
+}
+
+/** A Service Provider a body names: the company's, since the provider is the company's counterparty and no project's. */
+export async function requireServiceProvider(tx: Tx, companyId: string, id: string | null | undefined, path = "serviceProviderId"): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, serviceProvider, inCompany(companyId, id), { path, message: "Not a service provider of this company" })
 }

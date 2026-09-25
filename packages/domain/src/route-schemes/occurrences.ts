@@ -18,6 +18,7 @@
 // knows which weekdays a weekend holds. Weekend days only matter as shift
 // targets: a scheme whose service days include Saturday collects on Saturdays.
 
+import { HOLIDAY_POLICIES, OCCURRENCE_STATUSES } from "../planning/vocabulary"
 import {
   addDays,
   isIsoDate,
@@ -29,7 +30,9 @@ import {
   type ServiceDay,
 } from "./recurrence"
 
-export const HOLIDAY_POLICIES = ["shift-next", "shift-prev", "skip", "collect"] as const
+// The list lives in ../planning/vocabulary since Issue #97, where the database
+// and the contracts read it too; re-exported so its importers did not move.
+export { HOLIDAY_POLICIES }
 export type HolidayPolicy = (typeof HOLIDAY_POLICIES)[number]
 
 export const HOLIDAY_POLICY_LABELS: Record<HolidayPolicy, string> = {
@@ -58,7 +61,9 @@ export type SchemeCalendar = {
   weekend: readonly ServiceDay[]
 }
 
-export type OccurrenceStatus = "planned" | "shifted" | "skipped" | "holiday"
+// The list lives in ../planning/vocabulary since the #97 review round, where the contracts read it too.
+export { OCCURRENCE_STATUSES }
+export type OccurrenceStatus = (typeof OCCURRENCE_STATUSES)[number]
 
 export type Occurrence = {
   /** Running collection number; null for a skipped row. */
@@ -128,16 +133,23 @@ export function isWorkingDay(calendar: SchemeCalendar, iso: string): boolean {
   return !calendar.weekend.includes(serviceDayOf(iso)) && !calendar.holidays.has(iso)
 }
 
-/** The nearest working day from the date in the given direction (exclusive). */
+/**
+ * How far a shift may carry a collection from its recurrence date, in days.
+ * Holidays and weekend days cannot block more than a couple of weeks in a
+ * row; the bound only guards against a degenerate list or a 7-day weekend.
+ * Exported because a reader of holidays for a window (the API's occurrence
+ * preview) needs to reach exactly this far past it and no further.
+ */
+export const SHIFT_SEARCH_DAYS = 60
+
+/** The nearest working day from the date in the given direction (exclusive); `SHIFT_SEARCH_DAYS` out at most. */
 export function shiftToWorkingDay(
   calendar: SchemeCalendar,
   iso: string,
   direction: 1 | -1,
 ): string {
   let cursor = iso
-  // Holidays and weekend days cannot block more than a couple of weeks in a
-  // row; the bound only guards against a degenerate list or a 7-day weekend.
-  for (let step = 0; step < 60; step += 1) {
+  for (let step = 0; step < SHIFT_SEARCH_DAYS; step += 1) {
     cursor = addDays(cursor, direction)
     if (isWorkingDay(calendar, cursor)) return cursor
   }

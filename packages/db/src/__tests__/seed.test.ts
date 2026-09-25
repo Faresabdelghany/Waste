@@ -213,13 +213,14 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
       },
     )
 
+    // With their working weeks (Issue #97): Cairo rests Friday–Saturday, Harbor has no holiday list and rests on its weekend only.
     const projects = await owner.db.select().from(project).orderBy(project.name)
     assert.deepEqual(
-      projects.map((row) => [row.id, row.name, row.kind, row.language, row.currency, row.timezone, row.status]),
+      projects.map((row) => [row.id, row.name, row.kind, row.language, row.currency, row.timezone, row.status, row.weekend, row.holidayList]),
       [
-        [DEMO_IDS.projects.cairo, "Cairo Operations", "Municipality", "ar", "EGP", "Africa/Cairo", "active"],
-        [DEMO_IDS.projects.copenhagen, "Copenhagen Central", "Municipality", "da", "DKK", "Europe/Copenhagen", "active"],
-        [DEMO_IDS.projects.harbor, "Harbor Commercial", "Business unit", "da", "DKK", "Europe/Copenhagen", "onboarding"],
+        [DEMO_IDS.projects.cairo, "Cairo Operations", "Municipality", "ar", "EGP", "Africa/Cairo", "active", ["friday", "saturday"], "Egyptian public holidays"],
+        [DEMO_IDS.projects.copenhagen, "Copenhagen Central", "Municipality", "da", "DKK", "Europe/Copenhagen", "active", ["saturday", "sunday"], "Danish public holidays"],
+        [DEMO_IDS.projects.harbor, "Harbor Commercial", "Business unit", "da", "DKK", "Europe/Copenhagen", "onboarding", ["saturday", "sunday"], null],
       ],
     )
 
@@ -478,6 +479,10 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
       .update(serviceProvider)
       .set({ contactEmail: "nobody@example.invalid" })
       .where(eq(serviceProvider.id, DEMO_IDS.serviceProviders.nordren))
+    // An array column and a nullable one too: the compare-before-write is `is
+    // distinct from` over the whole row, which has to see a moved weekend and
+    // a dropped list the way it sees a renamed company.
+    await owner.db.update(project).set({ weekend: ["sunday"], holidayList: null }).where(eq(project.id, DEMO_IDS.projects.cairo))
     await owner.db.delete(roleGrant).where(eq(roleGrant.roleId, DEMO_IDS.roles.driver))
     await owner.db.insert(roleGrant).values({
       companyId: DEMO_IDS.company,
@@ -509,6 +514,8 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     assert.deepEqual([bin82014.label, bin82014.ownership], ["BIN-82014", "company"])
     const [agr2408] = await owner.db.select().from(agreement).where(eq(agreement.id, DEMO_IDS.registry.agreements["AGR-2408"]))
     assert.equal(agr2408.validTo, "2027-01-01")
+    const [cairo] = await owner.db.select().from(project).where(eq(project.id, DEMO_IDS.projects.cairo))
+    assert.deepEqual([cairo.weekend, cairo.holidayList], [["friday", "saturday"], "Egyptian public holidays"])
     const driverGrants = await owner.db.select().from(roleGrant).where(eq(roleGrant.roleId, DEMO_IDS.roles.driver))
     assert.deepEqual(
       driverGrants.map((row) => `${row.moduleKey}:${row.action}`).sort(),

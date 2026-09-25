@@ -34,15 +34,19 @@ import { errorHandler, notFound } from "./problem"
 import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS } from "./readiness"
 import { agreementRoutes } from "./routes/agreements"
 import { catalogueRoutes } from "./routes/catalogue"
+import { collectionCalendarRoutes } from "./routes/collection-calendars"
+import { collectionGroupRoutes } from "./routes/collection-groups"
 import { companyRoutes } from "./routes/company"
 import { containerRoutes } from "./routes/containers"
 import { customerRoutes } from "./routes/customers"
 import { meRoutes } from "./routes/me"
+import { planningAreaRoutes } from "./routes/planning-areas"
 import { productRoutes } from "./routes/products"
 import { projectRoutes } from "./routes/projects"
 import { propertyRoutes } from "./routes/properties"
 import { propertyGroupRoutes } from "./routes/property-groups"
 import { roleRoutes } from "./routes/roles"
+import { routeSchemeRoutes } from "./routes/route-schemes"
 import { serviceProviderRoutes } from "./routes/service-providers"
 import { sharedCollectionPointRoutes } from "./routes/shared-collection-points"
 import { userRoutes } from "./routes/users"
@@ -130,6 +134,10 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   app.route("/", sharedCollectionPointRoutes(guard))
   app.route("/", agreementRoutes(guard))
   app.route("/", containerRoutes(guard))
+  app.route("/", planningAreaRoutes(guard))
+  app.route("/", collectionCalendarRoutes(guard))
+  app.route("/", routeSchemeRoutes(guard))
+  app.route("/", collectionGroupRoutes(guard))
 
   app.get(
     "/openapi.json",

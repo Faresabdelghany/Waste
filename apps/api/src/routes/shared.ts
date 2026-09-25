@@ -47,13 +47,13 @@
 // module stays in the one that owns it.
 import { Id } from "@waste/contracts/ids"
 import type { Tx } from "@waste/db/client"
-import { and, eq, type SQL } from "drizzle-orm"
+import { and, eq, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import type { Context } from "hono"
 import { resolver } from "hono-openapi"
 import * as z from "zod"
 
-import { exclusionConstraintOf, invalidRequest, problem, uniqueConstraintOf } from "../problem"
+import { checkConstraintOf, exclusionConstraintOf, invalidRequest, problem, uniqueConstraintOf } from "../problem"
 
 /** The path parameter of every `/<resource>/:id` route. */
 export const IdParam = z.object({ id: Id })
@@ -102,6 +102,31 @@ export function stampsOf(row: { createdAt: Date; updatedAt: Date }): { createdAt
 }
 
 /**
+ * What a record's own row is set to when a set that travels with it is
+ * replaced (a Property's parties, a Collection Group's rule): nothing but the
+ * stamp, since the set is what changed. The trigger would move `updated_at`
+ * whatever the update said; naming it is naming what changed, and the update
+ * is also what answers "there is no such record here" under the caller's
+ * scope. One spelling for a Registry set and a Planning set alike.
+ */
+export const stamp = (): { updatedAt: SQL } => ({ updatedAt: sql`now()` })
+
+/** A `time` column as postgres.js hands it over: `HH:MM:SS`, with fractional seconds where the value carried them. */
+const TIME_OF_DAY = /^(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?$/
+
+/**
+ * A `time` column as the wire spells it (Issue #97): Postgres answers
+ * `HH:MM:SS`, the contracts' `IsoTime` is `HH:MM`, so the seconds go. A value
+ * that is not a time of day is a bug in a statement, not a client's, and is
+ * thrown to become the server's 500 rather than sliced into a wrong time.
+ */
+export function timeOf(value: string): string {
+  const match = TIME_OF_DAY.exec(value)
+  if (match === null) throw new Error(`timeOf: ${JSON.stringify(value)} is not a time of day as Postgres spells one (HH:MM:SS)`)
+  return match[1]
+}
+
+/**
  * Runs a write, and turns a unique violation the route named into a 409 with
  * that sentence. A constraint the route did not name is left to the error
  * handler, which is still a 409 — with the constraint's name, which is the
@@ -129,7 +154,7 @@ export type StatusTable = TenantTable & { status: PgColumn }
 /** The row a body named: this company's, and under whatever else its key demands. */
 export type NamedRow = { companyId: string; id: string; also?: SQL }
 
-/** What a row that is not there is told: a 400 at the field that named it. */
+/** What a body is told about a value it carried — a row that is not there, a check the database refused: a 400 at the field that named it. */
 export type Refusal = { path: string; message: string }
 
 /**
@@ -213,5 +238,28 @@ async function refused<T>(
     const detail = constraint === undefined ? undefined : sentences[constraint]
     if (detail === undefined) throw error
     throw problem(409, { detail })
+  }
+}
+
+/**
+ * The third door, one SQLSTATE further along (Issue #97): a check violation
+ * (23514) the route named becomes a 400 on the field, in the shape the
+ * validator's own refusals take. A 400 and not a 409, because nothing else in
+ * the table says otherwise — the row is alone and its own value will not do,
+ * which is what a schema says of a value it refuses; the only difference is
+ * who noticed. The API runs every check it can before the write, so this door
+ * is for the check only the database can run: `st_isvalid` on a polygon,
+ * whose ring may cross itself in a way the shape rule cannot see. A check the
+ * route did not name is left to the error handler, which answers a 500 and
+ * logs the constraint — the signal that a sentence is missing here.
+ */
+export async function refuseCheck<T>(sentences: Readonly<Record<string, Refusal>>, write: () => Promise<T>): Promise<T> {
+  try {
+    return await write()
+  } catch (error) {
+    const constraint = checkConstraintOf(error)
+    const refusal = constraint === undefined ? undefined : sentences[constraint]
+    if (refusal === undefined) throw error
+    throw invalidRequest("body", [refusal])
   }
 }
