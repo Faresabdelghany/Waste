@@ -79,21 +79,22 @@ function boundsOutside(parent: Period, child: Period): Bound[] {
   return outside
 }
 
-/** Refuses a period that runs backwards, the rule the contracts hold a whole body to and a patch escapes. */
-export function requireOrdered(period: Period): void {
+/** Refuses a period that runs backwards, the rule the contracts hold a whole body to and a patch escapes. `at` is where the body carried the period when not at its root: `assignment.` for the first assignment riding on a service area's create (Issue #112). */
+export function requireOrdered(period: Period, at = ""): void {
   if (validityOrdered(period)) return
-  throw invalidRequest("body", [{ path: "validTo", message: ENDS_AFTER_IT_STARTS }])
+  throw invalidRequest("body", [{ path: `${at}validTo`, message: ENDS_AFTER_IT_STARTS }])
 }
 
 /**
  * Holds the period a write leaves behind to itself and to its parent's: a
  * 400 naming each bound that is outside, with the sentence the route wrote
  * ("Outside the agreement's period"), since only the route knows what the
- * parent is called.
+ * parent is called. `at` prefixes the bound's path where the body carried the
+ * period inside a member (`assignment.validTo`).
  */
-export function requireWithin(parent: Period, child: Period, message: string): void {
-  requireOrdered(child)
-  const errors = boundsOutside(parent, child).map((path) => ({ path, message }))
+export function requireWithin(parent: Period, child: Period, message: string, at = ""): void {
+  requireOrdered(child, at)
+  const errors = boundsOutside(parent, child).map((path) => ({ path: `${at}${path}`, message }))
   if (errors.length > 0) throw invalidRequest("body", errors)
 }
 

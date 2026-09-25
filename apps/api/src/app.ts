@@ -48,6 +48,7 @@ import { liveRoutes } from "./routes/live"
 import { meRoutes } from "./routes/me"
 import { pickupRoutes } from "./routes/pickups"
 import { planningAreaRoutes } from "./routes/planning-areas"
+import { priceListRoutes } from "./routes/price-lists"
 import { productRoutes } from "./routes/products"
 import { projectRoutes } from "./routes/projects"
 import { propertyRoutes } from "./routes/properties"
@@ -55,6 +56,8 @@ import { propertyGroupRoutes } from "./routes/property-groups"
 import { roleRoutes } from "./routes/roles"
 import { routeSchemeRoutes } from "./routes/route-schemes"
 import { routeRoutes } from "./routes/routes"
+import { serviceAreaRoutes } from "./routes/service-areas"
+import { serviceProviderPriceRoutes } from "./routes/service-provider-prices"
 import { serviceProviderRoutes } from "./routes/service-providers"
 import { sharedCollectionPointRoutes } from "./routes/shared-collection-points"
 import { ticketRoutes } from "./routes/tickets"
@@ -177,6 +180,10 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   // Resolution (Issue #109): a ticket's `occurredAt` and an alert's `detectedAt` default to the request's clock and may not run ahead of it, and every command stamps and publishes with it, so both modules take `now` too.
   app.route("/", ticketRoutes(guard, { now }))
   app.route("/", alertRoutes(guard, { now }))
+  // Finance & Contracting (Issue #112, slice 3): the tariffs, the awards and what a provider is paid; every rule here is a period against a day the caller names, so none takes the clock.
+  app.route("/", priceListRoutes(guard))
+  app.route("/", serviceAreaRoutes(guard))
+  app.route("/", serviceProviderPriceRoutes(guard))
 
   app.get(
     "/openapi.json",

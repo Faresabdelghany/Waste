@@ -110,3 +110,20 @@ export async function projectTimezone(tx: Tx, companyId: string, projectId: stri
   if (row === undefined) throw new Error(`projectTimezone: no project ${projectId} in company ${companyId}`)
   return row.timezone
 }
+
+/**
+ * The project's currency, ISO 4217 as the contracts checked it: what a price
+ * list defaults to and a default list must be in, and what a provider price
+ * is quoted in (Issue #112). The same rule as the timezone's: the project is
+ * the caller's, proved a moment ago, so its absence here is a bug and is
+ * thrown.
+ */
+export async function projectCurrency(tx: Tx, companyId: string, projectId: string): Promise<string> {
+  const [row] = await tx
+    .select({ currency: project.currency })
+    .from(project)
+    .where(and(eq(project.companyId, companyId), eq(project.id, projectId)))
+    .limit(1)
+  if (row === undefined) throw new Error(`projectCurrency: no project ${projectId} in company ${companyId}`)
+  return row.currency
+}
