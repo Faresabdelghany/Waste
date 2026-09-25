@@ -6,7 +6,9 @@
 // the session and in the browser, a refusal is remembered for the session
 // so the demo server is not hammered, and a route whose road is pending or
 // refused is drawn straight and dashed by the map. Keyed by the stop
-// sequence, so two routes over the same stops share one request.
+// sequence, so two routes over the same stops share one request — and the
+// planning map's dated routes and the guided setup's drafted routes (Issue
+// #39) share one cache, since both are just stops in order.
 
 import { useEffect, useMemo, useRef, useState } from "react"
 
@@ -20,7 +22,9 @@ import {
   type RoadGeometry,
 } from "@/lib/map-planning/road-geometry"
 import { readPersisted, ROAD_GEOMETRY_STORAGE_KEY } from "@/lib/storage-keys"
-import type { AreaRoute } from "@waste/domain/map-planning/routes"
+
+/** Anything the road is asked for: a dated route's located stops, or a drafted route's preview stops. */
+export type RoadRoute = { id: string; stops: readonly { lngLat: LngLat }[] }
 
 export type RoadGeometryState =
   | { status: "pending" }
@@ -65,17 +69,21 @@ const noRoad = (stops: readonly LngLat[]): RoadGeometry => ({
   durationSeconds: 0,
 })
 
-export function useRoadGeometries(routes: readonly AreaRoute[]): ReadonlyMap<string, RoadGeometryState> {
+export function useRoadGeometries(routes: readonly RoadRoute[]): ReadonlyMap<string, RoadGeometryState> {
   const [version, setVersion] = useState(0)
-  const controllerRef = useRef<AbortController | null>(null)
   const mountedRef = useRef(false)
 
+  // A request in flight is shared by every mounted consumer through the
+  // module maps, so no consumer aborts it on its way out (Issue #39): the
+  // first mount used to arm an AbortController that React's development
+  // double-mount fired at once, killing the very first fetch, and the
+  // remount saw the key still in flight and never asked again — a route
+  // pending forever. An answer that lands after a consumer has gone is
+  // still remembered for the next one; only the redraw is skipped.
   useEffect(() => {
     mountedRef.current = true
-    controllerRef.current = new AbortController()
     return () => {
       mountedRef.current = false
-      controllerRef.current?.abort()
     }
   }, [])
 
@@ -94,21 +102,20 @@ export function useRoadGeometries(routes: readonly AreaRoute[]): ReadonlyMap<str
     const bump = () => {
       if (mountedRef.current) setVersion((current) => current + 1)
     }
-    // Roads already on their way (asked for by an earlier route set) redraw us when they land.
+    // Roads already on their way (asked for by an earlier route set, or by another map) redraw us when they land.
     for (const [key] of wanted) inFlight.get(key)?.then(bump)
     const queue = [...wanted].filter(([key]) => !memory.has(key) && !refused.has(key) && !inFlight.has(key))
     const start = () => {
       while (inFlight.size < MAX_IN_FLIGHT && queue.length > 0) {
         const [key, stops] = queue.shift()!
-        const signal = controllerRef.current?.signal
-        const task = fetchRoadGeometry(stops, { signal })
+        const task = fetchRoadGeometry(stops)
           .then(
             (geometry) => {
               rememberRoadGeometry(memory, key, geometry)
               persist()
             },
             () => {
-              if (!signal?.aborted) refused.add(key)
+              refused.add(key)
             },
           )
           .finally(() => {

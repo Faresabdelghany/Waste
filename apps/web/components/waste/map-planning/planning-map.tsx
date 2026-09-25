@@ -15,8 +15,6 @@
 import {
   Map as MapLibreMap,
   NavigationControl,
-  getVersion,
-  setWorkerUrl,
   type StyleSpecification,
 } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
@@ -39,25 +37,22 @@ import { clusterPoints, type MapCluster } from "@/lib/map-planning/clusters"
 import { NO_FRACTION_COLOR, SELECTION_COLOR } from "@/lib/map-planning/colors"
 import { UNCOVERED_COLOR } from "@waste/domain/map-planning/coverage-gaps"
 import { COMPARE_COLORS, clusterMembership, type CompareMembership } from "@waste/domain/map-planning/scheme-compare"
-import { polygonCentroid, worldPoint, type LngLat, type LngLatBounds } from "@waste/domain/map-planning/geo"
+import { polygonCentroid, type LngLat, type LngLatBounds } from "@waste/domain/map-planning/geo"
 import type { MapPoint } from "@waste/domain/map-planning/points"
 import { COPENHAGEN_CENTER } from "@waste/domain/map-planning/positions"
-import { chevronsAlong, localPathData, roadPath } from "@/lib/map-planning/road-geometry"
+import { ROAD_REF_ZOOM, chevronsAlong, roadOverlay, roadOverlayPath, roadPath } from "@/lib/map-planning/road-geometry"
 import type { AreaRoute } from "@waste/domain/map-planning/routes"
 import type { SelectionShape } from "@waste/domain/map-planning/selection"
 import type { ServiceAreaLayer } from "@waste/domain/map-planning/service-areas"
 import { cn } from "@/lib/utils"
 
+import { pointMapLibreWorkerAtRouteHandler } from "./maplibre-worker"
 import type { RoadGeometryState } from "./use-road-geometries"
 
 export type DrawTool = "none" | "rectangle" | "polygon"
 
-// MapLibre 6 derives its module-worker URL from its own module URL, which
-// Turbopack's chunking breaks (the worker never starts, no tile loads). The
-// route handler at app/maplibre/[version]/[asset] serves the worker and its
-// shared chunk from the installed package; the version stamp keeps the
-// immutable cache honest across upgrades.
-setWorkerUrl(`/maplibre/${getVersion()}/maplibre-gl-worker.mjs`)
+// The tile worker's URL, see maplibre-worker.ts — set before the first Map.
+pointMapLibreWorkerAtRouteHandler()
 
 const INITIAL_ZOOM = 12
 /** No floor — the whole world is one zoom-out away. */
@@ -71,11 +66,6 @@ const MIN_RECTANGLE_PX = 6
 const FIT_PADDING_PX = 48
 const FIT_MAX_ZOOM = 16
 const FLY_ZOOM = 17
-/** Road paths are built once in world pixels at this zoom and moved by one group transform. */
-const ROAD_REF_ZOOM = 16
-/** A second fixed point: its screen distance from the centre gives the live scale. */
-const ROAD_PROBE: LngLat = { lng: COPENHAGEN_CENTER.lng + 0.01, lat: COPENHAGEN_CENTER.lat }
-const ROAD_PROBE_WORLD_DX = worldPoint(ROAD_PROBE, ROAD_REF_ZOOM).x - worldPoint(COPENHAGEN_CENTER, ROAD_REF_ZOOM).x
 const CHEVRON_SPACING_PX = 140
 /** Direction chevrons only once streets are legible — at city zoom they read as gaps in the line. */
 const CHEVRON_MIN_SCALE = 2 ** (14 - ROAD_REF_ZOOM)
@@ -654,17 +644,14 @@ function ShapesOverlay({
     for (const route of routes) {
       const state = roadGeometries.get(route.id)
       if (state?.status === "ready" && state.geometry.legs.length > 0) {
-        paths.set(route.id, localPathData(roadPath(state.geometry), ROAD_REF_ZOOM, COPENHAGEN_CENTER))
+        paths.set(route.id, roadOverlayPath(roadPath(state.geometry)))
       }
     }
     return paths
   }, [roadGeometries, routes])
-  const originScreen = project(COPENHAGEN_CENTER)
-  const probeScreen = project(ROAD_PROBE)
-  const roadScale = originScreen && probeScreen ? (probeScreen.x - originScreen.x) / ROAD_PROBE_WORLD_DX : null
-  const roadTransform =
-    originScreen && roadScale !== null ? `translate(${originScreen.x} ${originScreen.y}) scale(${roadScale})` : null
-  const showChevrons = roadScale !== null && roadScale >= CHEVRON_MIN_SCALE
+  const overlay = roadOverlay(project)
+  const roadTransform = overlay?.transform ?? null
+  const showChevrons = overlay !== null && overlay.scale >= CHEVRON_MIN_SCALE
 
   const local = (event: { clientX: number; clientY: number }): ScreenPoint => {
     const rect = svgRef.current?.getBoundingClientRect()
@@ -879,7 +866,7 @@ function ShapesOverlay({
                   />
                   {replaying && (
                     <path
-                      d={localPathData(playback.travelled, ROAD_REF_ZOOM, COPENHAGEN_CENTER)}
+                      d={roadOverlayPath(playback.travelled)}
                       data-route-travelled={route.id}
                       fill="none"
                       stroke={route.color}
