@@ -127,12 +127,16 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      # The browser Playwright drives, cached under the pinned @playwright/test
-      # version: a new Playwright wants a new Chromium build, nothing else
-      # does. On a hit only the system libraries Chromium links against are
-      # installed, since the cache holds the browser and not them.
+      # The browser Playwright drives, cached under the @playwright/test
+      # version pnpm install resolved — read from the installed package, not
+      # from the specifier in apps/web/package.json, so a range or a lockfile
+      # bump can never hit a cache holding the Chromium of an older Playwright
+      # while the install step is skipped. A new Playwright wants a new
+      # Chromium build, nothing else does. On a hit only the system libraries
+      # Chromium links against are installed, since the cache holds the
+      # browser and not them.
       - id: playwright
-        run: echo "version=$(node -p "require('./apps/web/package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(node -p "require('./apps/web/node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v6
         id: browser
         with:
@@ -149,14 +153,23 @@ jobs:
 
       # The web app alone: the suite needs no database and no API (fixture
       # data and localStorage; the one external service, OSRM, is stubbed
-      # per test and the tile servers are aborted). playwright.config.ts
-      # serves this build on port 3000 under CI, waits for it to answer, and
-      # runs the suite with two retries; locally there is no managed server.
+      # per test and the tile servers are aborted). verify builds the web app
+      # too, through `pnpm build`; this job builds it again on purpose rather
+      # than waiting on that job, since the two run side by side and the wait
+      # plus the download of a .next output would cost about what the build
+      # does — the minute and a half is the price of the wall time saved.
+      # playwright.config.ts serves this build on port 3000 under CI, waits
+      # for it to answer, and runs the suite with two retries; locally there
+      # is no managed server.
       - run: pnpm --filter @waste/web build
       - run: pnpm test:e2e
 
+      # Always, not only on failure: a spec that failed once and passed on a
+      # retry leaves the job green (the github reporter annotates it flaky)
+      # and its failed attempt's trace is the one thing that says why.
+      # `if-no-files-found: ignore` covers the clean case.
       - uses: actions/upload-artifact@v7
-        if: failure()
+        if: ${{ !cancelled() }}
         with:
           name: playwright-report
           path: |
