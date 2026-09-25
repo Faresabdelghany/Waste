@@ -46,12 +46,12 @@ import { serviceProvider } from "@waste/db/schema/organisation"
 import { depot, unloadingStation, warehouse } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
 import { alert, ticket } from "@waste/db/schema/resolution"
-import type { AlertStatus } from "@waste/domain/resolution/vocabulary"
 import type { DriverStatus, VehicleKind, VehicleStatus, WarehouseStatus } from "@waste/domain/resources/vocabulary"
 import { and, eq, exists, inArray, isNull, or, sql } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 
 import { invalidRequest } from "../problem"
+import { alertColumns, type AlertRow } from "./resolution-shapes"
 import { requireRow, requireStatus, rowIssue, type NamedRow, type Refusal, type Target, type TenantTable } from "./shared"
 
 /** What a body is told when it names a customer this company does not have; one sentence, wherever the id sat. */
@@ -440,27 +440,28 @@ export const NOT_AN_AGREEMENT = "Not an agreement of this project"
 export const NOT_WORKING_IN_PROJECT = "Not a user account working in this project"
 
 /** A Ticket a body names — as a parent case, or as the ticket an alert answers or is linked to: the project's, through the table's own project key. */
-export async function requireTicket(tx: Tx, scope: Scope, id: string | null | undefined, { path = "ticketId" }: { path?: string } = {}): Promise<void> {
+export async function requireTicket(tx: Tx, scope: Scope, id: string | null | undefined, path = "ticketId"): Promise<void> {
   if (id == null) return
   await requireRow(tx, ticket, inProject(ticket, scope, id), { path, message: NOT_A_TICKET })
 }
 
-/** The alert a check found, as the link rule reads it (routes/alert-links.ts): its status, and the one ticket it is linked to or null. */
-export type AlertRef = { id: string; status: AlertStatus; ticketId: string | null }
-
-/** An Alert a body names: the project's. Answers the row the link rule reads; undefined for an id that named nothing. */
-export async function requireAlert(tx: Tx, scope: Scope, id: string, options?: { path?: string }): Promise<AlertRef>
-export async function requireAlert(tx: Tx, scope: Scope, id: string | null | undefined, options?: { path?: string }): Promise<AlertRef | undefined>
-export async function requireAlert(tx: Tx, scope: Scope, id: string | null | undefined, { path = "alertId" }: { path?: string } = {}): Promise<AlertRef | undefined> {
+/**
+ * An Alert a body names: the project's. Answers the row whole, as the link
+ * rule reads it (routes/alert-links.ts: its status, and the one ticket it is
+ * linked to or null) and as the link command answers it once linked, so the
+ * proof it is there is the one read; undefined for an id that named nothing.
+ */
+export async function requireAlert(tx: Tx, scope: Scope, id: string, options?: { path?: string }): Promise<AlertRow>
+export async function requireAlert(tx: Tx, scope: Scope, id: string | null | undefined, options?: { path?: string }): Promise<AlertRow | undefined>
+export async function requireAlert(tx: Tx, scope: Scope, id: string | null | undefined, { path = "alertId" }: { path?: string } = {}): Promise<AlertRow | undefined> {
   if (id == null) return undefined
   const [found] = await tx
-    .select({ id: alert.id, status: alert.status, ticketId: alert.ticketId })
+    .select(alertColumns)
     .from(alert)
     .where(and(eq(alert.companyId, scope.companyId), eq(alert.projectId, scope.projectId), eq(alert.id, id)))
     .limit(1)
   if (found === undefined) throw invalidRequest("body", [{ path, message: NOT_AN_ALERT }])
-  // `status` is text with a CHECK in the database and the vocabulary's tuple here.
-  return { id: found.id, status: found.status as AlertStatus, ticketId: found.ticketId }
+  return found
 }
 
 /** An Agreement a body names: the project's, since an agreement is made under one project's catalogue. */

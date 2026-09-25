@@ -408,7 +408,7 @@ describe("the alert endpoints", { skip: database.skip || owner.skip }, () => {
       assert.equal(rethought.detail, `This alert is linked to ticket ${first.label}; an alert links to one ticket`, "a ticket named on the create is the one link too")
     })
 
-    test("holds the ticket to the alert's project (400) before the alert's own 409s, and refuses a resolved alert whatever the ticket", async () => {
+    test("holds the ticket to the alert's project (400), and refuses a resolved alert before the body is read: the alert's own state first, as every command orders it", async () => {
       const created = await raise({})
       const harborTicket = await ticketIn(a, a.projects.harbor.id, a.users.olivia.id)
       const elsewhere = await refused(await command(created.id, "link-ticket", { ticketId: harborTicket.id }), 400)
@@ -423,8 +423,8 @@ describe("the alert endpoints", { skip: database.skip || owner.skip }, () => {
       const about = await ticketIn(a, a.projects.copenhagen.id, a.users.olivia.id)
       const refusal = await refused(await command(created.id, "link-ticket", { ticketId: about.id }), 409)
       assert.equal(refusal.detail, ALERT_DOES_NOT_CHANGE, "a resolved alert does not change through any door")
-      const badTicketFirst = await refused(await command(created.id, "link-ticket", { ticketId: harborTicket.id }), 400)
-      assert.deepEqual(badTicketFirst.errors, [{ path: "ticketId", message: "Not a ticket of this project" }], "the body's 400 before the alert's 409")
+      const stateFirst = await refused(await command(created.id, "link-ticket", { ticketId: harborTicket.id }), 409)
+      assert.equal(stateFirst.detail, ALERT_DOES_NOT_CHANGE, "the alert's own state before the body's 400: the path's row is judged first, as every ticket command judges it, and a ticket of another project is not even looked up")
       assert.deepEqual(await one(created.id), resolved, "as it stood")
     })
 

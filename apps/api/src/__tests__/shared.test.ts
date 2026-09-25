@@ -1,14 +1,33 @@
 // The pure helpers of routes/shared.ts that need no request: how a row's
-// stamps and a `time` column are spelled on the wire (Issue #97). No database.
+// stamps and a `time` column are spelled on the wire (Issue #97), the
+// whole-day window a pair of days makes and the skew check (Issue #109). No
+// database.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { IsoTime } from "@waste/contracts/dates"
-
+import { CASING } from "@waste/db/casing"
 import { driverCommand, session } from "@waste/db/schema/execution"
+import { ticket } from "@waste/db/schema/resolution"
+import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
+import type { SQL } from "drizzle-orm"
+import { PgDialect } from "drizzle-orm/pg-core"
 
 import { ProblemError } from "../problem"
-import { COMMAND_BACKDATE_MS, OCCURRED_AT_SKEW_MS, primaryKeyOf, providerShapeIssue, replayed, requireProviderShape, stampsOf, timeOf } from "../routes/shared"
+import {
+  COMMAND_BACKDATE_MS,
+  dayWindow,
+  endOfDayExclusive,
+  instantOf,
+  OCCURRED_AT_SKEW_MS,
+  primaryKeyOf,
+  providerShapeIssue,
+  replayed,
+  requireNotAhead,
+  requireProviderShape,
+  stampsOf,
+  timeOf,
+} from "../routes/shared"
 
 describe("timeOf", () => {
   test("drops the seconds Postgres spells a time with, so the value is the contracts' IsoTime", () => {
@@ -54,6 +73,57 @@ describe("stampsOf", () => {
   test("spells the two instants as RFC 3339 in UTC", () => {
     const at = new Date("2026-09-25T06:30:00.000+02:00")
     assert.deepEqual(stampsOf({ createdAt: at, updatedAt: at }), { createdAt: "2026-09-25T04:30:00.000Z", updatedAt: "2026-09-25T04:30:00.000Z" })
+  })
+})
+
+describe("instantOf", () => {
+  test("spells a nullable instant as RFC 3339 in UTC, and null as null", () => {
+    assert.equal(instantOf(new Date("2026-09-25T06:30:00.000+02:00")), "2026-09-25T04:30:00.000Z")
+    assert.equal(instantOf(null), null)
+  })
+})
+
+// Resolution (Issue #109): the window a `from`/`to` pair of days makes over an instant column.
+
+describe("endOfDayExclusive", () => {
+  test("is the midnight after the day on the UTC calendar: the last millisecond of the day is inside it, the first of the next day is not", () => {
+    const end = endOfDayExclusive("2026-10-05")
+    assert.equal(end.toISOString(), "2026-10-06T00:00:00.000Z")
+    assert.ok(new Date("2026-10-05T23:59:59.999Z") < end, "23:59:59.999 on the day is in")
+    assert.ok(!(new Date("2026-10-06T00:00:00.000Z") < end), "midnight after it is out")
+    assert.equal(endOfDayExclusive("2026-12-31").toISOString(), "2027-01-01T00:00:00.000Z", "across the year")
+    assert.equal(endOfDayExclusive("2028-02-29").toISOString(), "2028-03-01T00:00:00.000Z", "a leap day is a day")
+  })
+})
+
+describe("dayWindow", () => {
+  const dialect = new PgDialect({ casing: CASING })
+  /** The fragment as Postgres would see it: its text, and its parameters as instants. */
+  const rendered = (window: SQL | undefined) => {
+    if (window === undefined) return undefined
+    const query = dialect.sqlToQuery(window)
+    return { sql: query.sql, params: query.params.map((param) => (param instanceof Date ? param.toISOString() : param)) }
+  }
+
+  test("is nothing when neither end was given, as `and` of nothing is", () => {
+    assert.equal(rendered(dayWindow(ticket.occurredAt, undefined, undefined)), undefined)
+  })
+
+  test("takes the whole of both days: `>=` the first instant of `from`, `<` the midnight after `to`", () => {
+    const both = rendered(dayWindow(ticket.occurredAt, "2026-10-01", "2026-10-05"))
+    assert.match(both?.sql ?? "", /"occurred_at" >= \$1 and .*"occurred_at" < \$2/)
+    assert.deepEqual(both?.params, ["2026-10-01T00:00:00.000Z", "2026-10-06T00:00:00.000Z"], "a row at 23:59:59.999Z on the 5th is inside the window and one at 00:00:00Z on the 6th is not")
+    const oneDay = rendered(dayWindow(ticket.occurredAt, "2026-10-05", "2026-10-05"))
+    assert.deepEqual(oneDay?.params, ["2026-10-05T00:00:00.000Z", "2026-10-06T00:00:00.000Z"], "from and to on one day is that day")
+  })
+
+  test("takes one end alone: a lower bound with no upper, an upper with no lower", () => {
+    const from = rendered(dayWindow(ticket.occurredAt, "2026-10-01", undefined))
+    assert.match(from?.sql ?? "", /"occurred_at" >= \$1$/)
+    assert.deepEqual(from?.params, ["2026-10-01T00:00:00.000Z"])
+    const to = rendered(dayWindow(ticket.occurredAt, undefined, "2026-10-05"))
+    assert.match(to?.sql ?? "", /"occurred_at" < \$1$/)
+    assert.deepEqual(to?.params, ["2026-10-06T00:00:00.000Z"])
   })
 })
 
@@ -162,5 +232,25 @@ describe("the clock bounds a recorded instant is held within", () => {
   test("are five minutes ahead and forty-eight hours behind the request, spelled once", () => {
     assert.equal(OCCURRED_AT_SKEW_MS, 5 * 60_000)
     assert.equal(COMMAND_BACKDATE_MS, 48 * 60 * 60_000)
+  })
+})
+
+describe("requireNotAhead, the one skew check the ticket create, the alert raise, the unload capture and the ledger read (Issue #109)", () => {
+  const at = new Date("2026-10-05T12:00:00Z")
+  const refusedAt = (path: string) => (error: unknown) =>
+    error instanceof ProblemError && error.body.status === 400 && JSON.stringify(error.body.errors) === JSON.stringify([{ path, message: RECORDED_AFTER_IT_HAPPENED }])
+
+  test("passes an instant at the clock, up to the skew ahead of it, and any distance behind it, since it has no lower bound", () => {
+    requireNotAhead(at, at)
+    requireNotAhead(new Date(at.getTime() + OCCURRED_AT_SKEW_MS), at)
+    requireNotAhead(new Date(at.getTime() - 1), at)
+    requireNotAhead(new Date("2020-01-01T00:00:00Z"), at)
+  })
+
+  test("refuses a millisecond past the skew as recorded after it happened, at `occurredAt` unless the caller names the field", () => {
+    const beyond = new Date(at.getTime() + OCCURRED_AT_SKEW_MS + 1)
+    assert.throws(() => requireNotAhead(beyond, at), refusedAt("occurredAt"))
+    assert.throws(() => requireNotAhead(beyond, at, "detectedAt"), refusedAt("detectedAt"), "the alert raise names its own field")
+    assert.throws(() => requireNotAhead(new Date(at.getTime() + 60 * 60_000), at), refusedAt("occurredAt"), "an hour ahead is no closer")
   })
 })

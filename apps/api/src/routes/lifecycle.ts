@@ -103,7 +103,6 @@ import { subscription } from "@waste/db/schema/agreements"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { warehouse } from "@waste/db/schema/places"
 import { stockMovement } from "@waste/db/schema/stock"
-import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
 import { assetStateOf as stateAfter, movementShape } from "@waste/domain/resources/asset-state"
 import type { AssetStatus, StockMovementKind, StockPlaceKind } from "@waste/domain/resources/vocabulary"
 import { and, asc, desc, eq, gt, gte, lte, or } from "drizzle-orm"
@@ -118,7 +117,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { requireWithin } from "./periods"
 import { requireWarehouse, type Scope } from "./references"
-import { describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS, refuseOverlap } from "./shared"
+import { describeJson, IdParam, lockRow, refuseOverlap, requireNotAhead } from "./shared"
 import { requireWarehouseTakesStock } from "./statuses"
 
 const MODULE = "resources.containers"
@@ -466,14 +465,15 @@ const destinationKind = (intent: Intent): StockPlaceKind => (intent.kind === "is
  * table over the kind, the place left and the kind of place arrived at (a
  * 400 on the field the intent carried its `to` in), and the clock — the
  * body's instant may run ahead of the request's by `OCCURRED_AT_SKEW_MS` and
- * no further (400 on `occurredAt`). Answers the instant the row will carry.
+ * no further (`requireNotAhead`, routes/shared.ts: 400 on `occurredAt`).
+ * Answers the instant the row will carry.
  */
 function hold(kind: StockMovementKind, from: Place, toKind: StockPlaceKind, says: Says): Date {
   if (!movementShape(kind, from.kind, toKind)) {
     throw invalidRequest("body", [{ path: toKindPath(kind), message: noSuchShape(kind, from.kind, toKind) }])
   }
   const occurredAt = says.occurredAt === undefined ? says.at : new Date(says.occurredAt)
-  if (occurredAt.getTime() > says.at.getTime() + OCCURRED_AT_SKEW_MS) throw invalidRequest("body", [{ path: "occurredAt", message: RECORDED_AFTER_IT_HAPPENED }])
+  requireNotAhead(occurredAt, says.at)
   return occurredAt
 }
 

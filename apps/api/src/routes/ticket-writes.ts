@@ -71,8 +71,6 @@ export type TicketRef = { companyId: string; projectId: string; id: string }
 
 /** One history row as a command hands it in: the kind, the snapshot after the event, and what the kind carries. */
 export type TicketEventDraft = {
-  /** The row's id where the caller minted it; the minter's otherwise. */
-  id?: string
   kind: TicketEventKind
   /** The ticket's status after the event. */
   status: TicketStatus
@@ -110,7 +108,7 @@ export async function appendTicketEvent(tx: Tx, ticketRef: TicketRef, event: Tic
   const [row] = await tx
     .insert(ticketEvent)
     .values({
-      id: event.id ?? mint(),
+      id: mint(),
       companyId: ticketRef.companyId,
       projectId: ticketRef.projectId,
       ticketId: ticketRef.id,

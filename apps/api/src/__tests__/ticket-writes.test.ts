@@ -19,13 +19,12 @@ const PROJECT = "01a0d3a5-e5e0-7000-8000-000000000001"
 const OLIVIA = "01a0d3a5-e5e0-7000-8000-000000000002"
 const ALERT = "01a0d3a5-e5e0-7000-8000-000000000003"
 const ROUTE = "01a0d3a5-e5e0-7000-8000-000000000004"
-const EVENT = "01a0d3a5-e5e0-7000-8000-000000000005"
 const STAMP = new Date("2026-10-05T12:00:00Z")
 const OPENED = new Date("2026-10-05T12:00:01Z")
 
 type Statement = { kind: "update" | "insert" | "select"; table: string; values?: Record<string, unknown>; locked?: boolean }
 
-/** A `tx` that records each statement by kind and table, answering the counter, the inserted rows and the alert `alertRow` describes. */
+/** A `tx` that records each statement by kind and table, answering the counter, the inserted rows, the alert `alertRow` describes and, once linked, that alert as the update leaves it. */
 const scripted = (alertRow?: { status: string; ticketId: string | null }) => {
   const statements: Statement[] = []
   const tx = {
@@ -34,7 +33,7 @@ const scripted = (alertRow?: { status: string; ticketId: string | null }) => {
         where: () => {
           const name = getTableName(table)
           statements.push({ kind: "update", table: name, values })
-          const rows = name === "company" ? [{ next: 8832 }] : []
+          const rows = name === "company" ? [{ next: 8832 }] : name === "alert" && alertRow !== undefined ? [{ id: ALERT, ...alertRow, ...values }] : []
           return Object.assign(Promise.resolve(rows), { returning: () => Promise.resolve(rows) })
         },
       }),
@@ -151,14 +150,15 @@ describe("openTicket", () => {
 describe("appendTicketEvent", () => {
   const ref = { companyId: COMPANY, projectId: PROJECT, id: "01a0d3a5-e5e0-7000-8000-00000000000b" }
 
-  test("writes the row with the caller's id where one is given and the minter's otherwise", async () => {
+  test("writes the row under the ticket's three ids with an id the minter gives it, so two rows appended in turn read in that order", async () => {
     const { tx, statements } = scripted()
-    const own = await appendTicketEvent(tx, ref, { id: EVENT, kind: "comment", status: "open", assigneeUserAccountId: null, resolution: null, body: "A note", visibility: "customer", objectKey: null, recordedBy: OLIVIA, sourceEventId: null }, minter())
-    assert.equal(own.id, EVENT)
-    const minted = await appendTicketEvent(tx, ref, { kind: "status-changed", status: "in-progress", assigneeUserAccountId: null, resolution: null, body: null, visibility: "internal", objectKey: null, recordedBy: OLIVIA, sourceEventId: null }, minter())
-    assert.notEqual(minted.id, EVENT)
+    const mint = minter()
+    const first = await appendTicketEvent(tx, ref, { kind: "comment", status: "open", assigneeUserAccountId: null, resolution: null, body: "A note", visibility: "customer", objectKey: null, recordedBy: OLIVIA, sourceEventId: null }, mint)
+    const second = await appendTicketEvent(tx, ref, { kind: "status-changed", status: "in-progress", assigneeUserAccountId: null, resolution: null, body: null, visibility: "internal", objectKey: null, recordedBy: OLIVIA, sourceEventId: null }, mint)
+    assert.ok(first.id < second.id, "the minter's ids count up, so the history's order is the id order")
     assert.deepEqual(shape(statements), ["insert ticket_event", "insert ticket_event"])
     assert.deepEqual([statements[0].values?.ticketId, statements[0].values?.companyId, statements[0].values?.projectId], [ref.id, COMPANY, PROJECT])
+    assert.deepEqual([statements[0].values?.id, statements[1].values?.id], [first.id, second.id], "the ids written are the minter's")
   })
 
   test("throws before the insert on a row that disagrees with its kind: the API composes every row, so that is a bug and not a client's", async () => {

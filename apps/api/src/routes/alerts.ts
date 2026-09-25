@@ -10,7 +10,7 @@
 // history here and no number: current state, named by its title (#109 §7.18).
 //
 // The stamps follow the status. `acknowledged_at`/`_by` and `resolved_at`/`_by`
-// are alertColumns the table's `alert_stamps_shape` holds to the status, the
+// are columns the table's `alert_stamps_shape` holds to the status, the
 // `route` stamps precedent, so every command runs the domain's
 // `alertTransition` (@waste/domain/resolution/transitions) under the alert's
 // row lock and does one of three things: writes the next status with its
@@ -20,6 +20,13 @@
 // "This alert is resolved and does not change", which the link command reads
 // too). A resolved alert may never have been acknowledged: `resolve` on a
 // `new` alert leaves the acknowledgement stamps null, and the shape allows it.
+//
+// Every command keeps the one order routes/tickets.ts keeps: the alert's own
+// state first, as the machine judges it — a resolved alert refuses every
+// command whatever the body says — then the body's 400s in body order, then
+// the 409s that need the body (the link's "linked to another ticket"). So
+// `link-ticket` answers a resolved alert before it holds the body's ticket
+// to the project.
 //
 // An alert is about something — a route, a vehicle, a driver or a container
 // of its project — or it is nothing: the contracts hold the subject rule at
@@ -44,8 +51,7 @@ import { Alert, AlertAcknowledge, AlertCreate, AlertLinkTicket, AlertListQuery, 
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { alert } from "@waste/db/schema/resolution"
-import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
-import { alertTransition, type AlertCommand } from "@waste/domain/resolution/transitions"
+import { ALERT_DOES_NOT_CHANGE, alertTransition, type AlertCommand } from "@waste/domain/resolution/transitions"
 import type { AlertStatus } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -56,12 +62,12 @@ import { requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, problem, validate } from "../problem"
 import { linkAlert } from "./alert-links"
 import { requireContainer, requireDriver, requireRoute, requireTicket, requireVehicle, type Scope } from "./references"
 import { alertColumns, alertOf, alertScope, noSuchAlert, type AlertRow } from "./resolution-shapes"
 import type { ClockOptions } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, requireNotAhead } from "./shared"
 
 /** The grant every route here runs under: the exceptions board's. */
 const MODULE = "operate.exceptions"
@@ -194,7 +200,7 @@ export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         // The clock first, since it costs no statement: the body's instant may run ahead of the request's by the skew and no further, and behind it as far as it likes.
         const at = now()
         const detectedAt = values.detectedAt === undefined ? at : new Date(values.detectedAt)
-        if (detectedAt.getTime() > at.getTime() + OCCURRED_AT_SKEW_MS) throw invalidRequest("body", [{ path: "detectedAt", message: RECORDED_AFTER_IT_HAPPENED }])
+        requireNotAhead(detectedAt, at, "detectedAt")
         // Then the links, in body order, each held to the project and none to its status.
         await requireRoute(tx, scope, values.routeId)
         await requireVehicle(tx, scope, values.vehicleId)
@@ -313,7 +319,7 @@ export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "linkAlertTicket",
         summary: "Link an alert to a ticket",
         description:
-          "Sets the one ticket the alert is linked to: `ticketId` is a ticket of the alert's project (400 at `ticketId` otherwise). An alert links to one ticket — the same ticket again answers 200 as it stands, without a write, and another is refused (409, `This alert is linked to ticket T-8831; an alert links to one ticket`, naming the ticket it already names); a resolved alert is refused (409, `This alert is resolved and does not change`). The status does not move: `linked to ticket` is `ticketId` not null and no status. The same rule `POST /tickets` runs when a ticket is opened from an alert. Runs under the alert's row lock.",
+          "Sets the one ticket the alert is linked to. The alert's own state is judged first, whatever the body names: a resolved alert is refused (409, `This alert is resolved and does not change`). Then `ticketId` is held to a ticket of the alert's project (400 at `ticketId` otherwise). Then the link: an alert links to one ticket — the same ticket again answers 200 as it stands, without a write, and another is refused (409, `This alert is linked to ticket T-8831; an alert links to one ticket`, naming the ticket it already names). The status does not move: `linked to ticket` is `ticketId` not null and no status. The same rule `POST /tickets` runs when a ticket is opened from an alert. Runs under the alert's row lock.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The alert, linked.", Alert),
@@ -332,13 +338,11 @@ export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const tx = c.get("tx")
         const principal = c.get("principal")
         const current = await lockedAlert(tx, principal, id)
+        // The alert's own state first — the machine's sentence, as `acknowledge` answers it through `judged` — then the body's 400, then the link's own 409 under the same lock: the order every command here and in routes/tickets.ts keeps.
+        if (current.status === "resolved") throw problem(409, { detail: ALERT_DOES_NOT_CHANGE })
         const scope: Scope = { companyId: principal.companyId, projectId: current.projectId }
-        // The body's 400 before the alert's 409s, as every route orders them.
         await requireTicket(tx, scope, ticketId)
-        await linkAlert(tx, scope, current.id, ticketId)
-        const row = await findAlert(tx, principal, id)
-        if (row === undefined) throw noSuchAlert(id)
-        return c.json(alertOf(row))
+        return c.json(alertOf(await linkAlert(tx, scope, current.id, ticketId)))
       },
     )
 }

@@ -49,6 +49,7 @@ import { Id } from "@waste/contracts/ids"
 import { providerShape } from "@waste/contracts/places"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
+import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
 import { and, eq, getTableName, gte, lt, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import type { Context } from "hono"
@@ -342,10 +343,11 @@ export function requireProviderShape(owner: string, body: { serviceProviderId: s
 // Execution (Issue #104, ADR-0004): the clock bounds every recorded instant
 // is held within, and the fourth door. `OCCURRED_AT_SKEW_MS` was the Stock
 // Movement ledger's constant in routes/lifecycle.ts and moved here so the
-// ledger, the driver door and the office's unload capture read one;
-// `COMMAND_BACKDATE_MS` is the lower bound only a device's queue needs, since
-// an office command's instant defaults to the request's clock and a device's
-// may be two days old.
+// ledger, the driver door and the office's unload capture read one, and
+// `requireNotAhead` is the check over it, spelled once since Resolution's
+// review (Issue #109) found it spelled four times; `COMMAND_BACKDATE_MS` is
+// the lower bound only a device's queue needs, since an office command's
+// instant defaults to the request's clock and a device's may be two days old.
 
 /**
  * How far ahead of the request's clock `occurredAt` may run: a driver's
@@ -354,6 +356,21 @@ export function requireProviderShape(owner: string, body: { serviceProviderId: s
  * recorded before it happened.
  */
 export const OCCURRED_AT_SKEW_MS = 5 * 60_000
+
+/**
+ * Holds a recorded instant to the skew: the body's instant — a ticket's or a
+ * movement's `occurredAt`, an unload's, an alert's `detectedAt` — may run
+ * ahead of the request's clock `at` by `OCCURRED_AT_SKEW_MS` and no further,
+ * refused as a 400 at `path` in the domain's words (`RECORDED_AFTER_IT_HAPPENED`),
+ * and has no lower bound here, since the office records a complaint made
+ * yesterday and the ledger a movement found in last week's paperwork; the
+ * forty-eight-hour floor is the driver door's alone (`COMMAND_BACKDATE_MS`,
+ * judged in the domain beside the skew). The ticket create, the alert raise,
+ * the unload capture and the Stock Movement ledger all read this one check.
+ */
+export function requireNotAhead(instant: Date, at: Date, path = "occurredAt"): void {
+  if (instant.getTime() > at.getTime() + OCCURRED_AT_SKEW_MS) throw invalidRequest("body", [{ path, message: RECORDED_AFTER_IT_HAPPENED }])
+}
 
 /**
  * How far behind the request's clock a driver command's `occurredAt` may lie:

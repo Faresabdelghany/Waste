@@ -8,12 +8,12 @@ import { createDb, type Database, type Tx } from "@waste/db/client"
 import { agreement } from "@waste/db/schema/agreements"
 import { customer, property, propertyParty, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { outboxEvent } from "@waste/db/schema/execution"
-import { alert } from "@waste/db/schema/resolution"
+import { alert, ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
 import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
 import { TICKET_COMMAND_TARGETS, TICKET_COMMANDS, type TicketCommand } from "@waste/domain/resolution/transitions"
 import { isClosedTicketStatus, TICKET_STATUSES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
-import { and, asc, eq } from "drizzle-orm"
+import { and, asc, eq, sql } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
@@ -682,6 +682,54 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
       await refused(await comment(theirs.id, { body: "Mine" }), 404)
       await refused(await comment(harbors.id, { body: "Mine" }, viewer), 404)
       assert.match((await refused(await comment(harbors.id, { body: "Mine" }, ungranted), 403)).detail ?? "", /create on operate\.tickets/)
+    })
+
+    test("reads its snapshot under the ticket's row lock: a comment sent while a start is in flight waits for it and carries the status the start wrote, never one the row has left", async () => {
+      // The start is hand-driven — the row moved to in-progress the way `start` writes it, its event appended, the transaction held open — so a read without the lock would pass it (READ COMMITTED: an uncommitted row is invisible), see `open`, and append a comment stamped `open` after the start committed, a history of `[status-changed in-progress, comment open]`. With the lock the comment waits: the start commits only once Postgres reports the comment blocked behind it (`pg_blocking_pids`, the driver suite's precedent), and the comment then reads the row the start left.
+      const fresh = await opened()
+      const released = Promise.withResolvers<void>()
+      const started = Promise.withResolvers<number>()
+      const start = withCompany(pool.db, a.companyId, async (tx: Tx) => {
+        const [{ pid }] = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
+        await tx
+          .update(ticket)
+          .set({ status: "in-progress" })
+          .where(and(eq(ticket.companyId, a.companyId), eq(ticket.id, fresh.id)))
+        await tx.insert(ticketEvent).values({ id: testId(), companyId: a.companyId, projectId: fresh.projectId, ticketId: fresh.id, kind: "status-changed", status: "in-progress", recordedBy: a.users.olivia.id })
+        started.resolve(pid)
+        await released.promise
+      })
+      /** Rejects if the start ends before it is released — a write refused, say — so a broken start fails the test instead of hanging it on the pid. */
+      const endedEarly = start.then(() => Promise.reject(new Error("the start's transaction ended before it was released")))
+      void endedEarly.catch(() => undefined)
+      const commenting = comment(fresh.id, { body: "Called the customer back" })
+      try {
+        const pid = await Promise.race([started.promise, endedEarly])
+        const blocked = async (): Promise<boolean> => (await pool.sql`select pid from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))`).length > 0
+        const deadline = Date.now() + 10_000
+        while (!(await blocked())) {
+          assert.ok(Date.now() < deadline, "the comment never waited on the start: its read took no lock")
+          await new Promise((resolve) => setTimeout(resolve, 20))
+        }
+      } finally {
+        released.resolve()
+        await start
+        await commenting.catch(() => undefined)
+      }
+      const response = await commenting
+      assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
+      const row = TicketEvent.parse(await response.json())
+      assert.equal(row.status, "in-progress", "the snapshot is the row as the start left it")
+      assert.deepEqual(
+        (await history(fresh.id)).map((event) => [event.kind, event.status]),
+        [
+          ["created", "open"],
+          ["status-changed", "in-progress"],
+          ["comment", "in-progress"],
+        ],
+        "the history reads in the order the row moved",
+      )
+      assert.equal((await read(fresh.id)).status, "in-progress", "the start moved the row; the comment did not")
     })
   })
 })

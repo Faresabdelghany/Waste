@@ -425,6 +425,123 @@ describe("GET /openapi.json", () => {
     assert.equal(page.properties?.items.type, "array")
   })
 
+  test("documents each ticket route with its verbs, its problems and the rules a client must know (Issue #109)", async () => {
+    const document = await spec()
+    const operations = (path: string) =>
+      Object.fromEntries(Object.entries(document.paths[path]).map(([method, operation]) => [method, operation.operationId]))
+
+    assert.deepEqual(operations("/tickets"), { get: "listTickets", post: "createTicket" })
+    assert.deepEqual(operations("/tickets/{id}"), { get: "getTicket", patch: "patchTicket" })
+    assert.deepEqual(operations("/tickets/{id}/assign"), { post: "assignTicket" })
+    assert.deepEqual(operations("/tickets/{id}/start"), { post: "startTicket" })
+    assert.deepEqual(operations("/tickets/{id}/wait"), { post: "waitTicket" })
+    assert.deepEqual(operations("/tickets/{id}/hold"), { post: "holdTicket" })
+    assert.deepEqual(operations("/tickets/{id}/complete"), { post: "completeTicket" })
+    assert.deepEqual(operations("/tickets/{id}/reject"), { post: "rejectTicket" })
+    assert.deepEqual(operations("/tickets/{id}/reopen"), { post: "reopenTicket" })
+    assert.deepEqual(operations("/tickets/{id}/events"), { get: "listTicketEvents" })
+    assert.deepEqual(operations("/tickets/{id}/comments"), { post: "commentTicket" })
+
+    // The create's 409 is the alert's (resolved, or linked to another ticket); the patch and six of the commands refuse a closed ticket; reopen is the one command a closed ticket takes and has no 409; the reads, the history and the comment collide with nothing.
+    const responses = (path: string, method: "get" | "post" | "patch") => Object.keys(document.paths[path][method].responses)
+    assert.deepEqual(responses("/tickets", "get"), ["200", "400", "401", "403"])
+    assert.deepEqual(responses("/tickets", "post"), ["201", "400", "401", "403", "409"])
+    assert.deepEqual(responses("/tickets/{id}", "get"), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(responses("/tickets/{id}", "patch"), ["200", "400", "401", "403", "404", "409"])
+    const refuseClosed = ["assign", "start", "wait", "hold", "complete", "reject"]
+    for (const command of refuseClosed) assert.deepEqual(responses(`/tickets/{id}/${command}`, "post"), ["200", "400", "401", "403", "404", "409"], command)
+    assert.deepEqual(responses("/tickets/{id}/reopen", "post"), ["200", "400", "401", "403", "404"], "reopen has no 409: a closed ticket is what it takes, and an open one answers 200 as it stands")
+    assert.deepEqual(responses("/tickets/{id}/events", "get"), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(responses("/tickets/{id}/comments", "post"), ["201", "400", "401", "403", "404"])
+    for (const [status, operation] of Object.entries(document.paths["/tickets/{id}/complete"].post.responses)) {
+      assert.deepEqual(Object.keys(operation.content), [status === "200" ? "application/json" : "application/problem+json"], `complete ${status}`)
+    }
+
+    // The list is project-scoped and takes the board's and the portal's filters beside the page; the history takes its two.
+    const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
+    assert.deepEqual(byName(document.paths["/tickets"].get).sort(), [
+      "query:assigneeUserAccountId",
+      "query:containerId",
+      "query:cursor",
+      "query:customerId",
+      "query:driverId",
+      "query:from",
+      "query:kind",
+      "query:limit",
+      "query:open",
+      "query:pickupId",
+      "query:priority",
+      "query:projectId",
+      "query:propertyId",
+      "query:routeId",
+      "query:source",
+      "query:status",
+      "query:to",
+    ])
+    assert.deepEqual(byName(document.paths["/tickets/{id}/events"].get).sort(), ["path:id", "query:cursor", "query:kind", "query:limit", "query:visibility"])
+    assert.deepEqual(byName(document.paths["/tickets/{id}/start"].post), ["path:id"])
+
+    // A write takes the strict body the contracts spell: what must be given, and nothing the server owns.
+    const required = (path: string, method: "post" | "patch" = "post") => document.paths[path][method].requestBody?.content["application/json"].schema.required
+    assert.deepEqual(required("/tickets"), ["projectId", "subject", "description", "kind"], "priority and source have defaults")
+    assert.equal(required("/tickets/{id}", "patch"), undefined, "a patch names no member as required: at least one is a rule, not a member")
+    assert.deepEqual(required("/tickets/{id}/assign"), ["assigneeUserAccountId"])
+    assert.equal(required("/tickets/{id}/start"), undefined)
+    assert.deepEqual(required("/tickets/{id}/wait"), ["note"])
+    assert.deepEqual(required("/tickets/{id}/hold"), ["note"])
+    assert.deepEqual(required("/tickets/{id}/complete"), ["resolution", "note"])
+    assert.deepEqual(required("/tickets/{id}/reject"), ["reason"])
+    assert.deepEqual(required("/tickets/{id}/reopen"), ["note"])
+    assert.deepEqual(required("/tickets/{id}/comments"), ["body"])
+
+    // The two 201s: the create names where the ticket is now read, the comment names nothing, like the ledger's commands.
+    assert.equal(document.paths["/tickets"].post.responses["201"].headers?.Location?.schema?.type, "string")
+    assert.equal(document.paths["/tickets/{id}/comments"].post.responses["201"].headers, undefined)
+
+    // The rules a client must know are in the prose, not only in the code.
+    const list = document.paths["/tickets"].get.description ?? ""
+    assert.match(list, /an account that works in none[^.]*reads an empty page/)
+    assert.match(list, /both ends inclusive, on the UTC calendar day, so `to=2026-10-05` takes the whole of the 5th/)
+    assert.match(list, /`customerId` is the citizen portal's read model/)
+    const create = document.paths["/tickets"].post.description ?? ""
+    assert.match(create, /`T-<n>`, never renumbered/)
+    assert.match(create, /a pickup is named with its route, 400 at `links\.pickupId`/)
+    assert.match(create, /no status gates a link/)
+    assert.match(create, /at most five minutes ahead of it \(400\) — with no lower bound/)
+    assert.match(create, /not resolved \(409, `This alert is resolved and does not change`\) and not linked to another ticket \(409, `This alert is linked to ticket T-8831; an alert links to one ticket`\)/)
+    assert.match(create, /The `ticket-opened` event is written in the same transaction/)
+    const closed = /A completed or rejected ticket is refused \(409, `Ticket T-8831 is completed; reopen it first`\)/
+    for (const operation of [document.paths["/tickets/{id}"].patch, ...refuseClosed.map((command) => document.paths[`/tickets/{id}/${command}`].post)]) {
+      assert.match(operation.description ?? "", closed, `${operation.operationId} states the closed ticket's sentence`)
+    }
+    const reopen = document.paths["/tickets/{id}/reopen"].post.description ?? ""
+    assert.doesNotMatch(reopen, closed, "reopen is what a closed ticket takes")
+    assert.match(reopen, /`completed` or `rejected` becomes `open`/)
+    assert.match(reopen, /open in any of the four open statuses answers 200 as it stands, without a write or an event/)
+    const patch = document.paths["/tickets/{id}"].patch.description ?? ""
+    assert.match(patch, /a body clearing the route under a pickup is refused at `links\.pickupId`/)
+    assert.match(patch, /no history row is appended/)
+    assert.match(document.paths["/tickets/{id}/assign"].post.description ?? "", /The account already assigned answers 200 as the ticket stands, without a write or an event/)
+    const complete = document.paths["/tickets/{id}/complete"].post.description ?? ""
+    assert.match(complete, /With `recollected`, and only then \(400 at `recollectionRouteId` otherwise\)/)
+    assert.match(complete, /\(409, `Route RC-1042 is completed; a re-collection rides on a route that has not ended`\)/)
+    assert.match(complete, /Not idempotent: a second completion is a change a person meant/)
+    assert.match(document.paths["/tickets/{id}/reject"].post.description ?? "", /Not idempotent: a second rejection is a change a person meant/)
+    assert.match(document.paths["/tickets/{id}/events"].get.description ?? "", /`visibility=customer` is the thread the portal reads, and leaves every internal row out/)
+    const comment = document.paths["/tickets/{id}/comments"].post.description ?? ""
+    assert.match(comment, /`<companyId>\/<ticketId>\/<objectId>\.<jpg\|jpeg\|png\|webp\|pdf>` in the bucket `ticket-attachments`/)
+    assert.match(comment, /400 at `objectKey`, `The attachment key names another company or another ticket`/)
+    assert.match(comment, /Taken on a closed ticket too/)
+    assert.match(comment, /read under the ticket's row lock/)
+    assert.match(comment, /Answers 201 with the event and no `Location`, like the ledger's commands/)
+
+    for (const path of ["/tickets", "/tickets/{id}/events"]) {
+      const page = document.paths[path].get.responses["200"].content["application/json"].schema
+      assert.deepEqual(page.required, ["items", "nextCursor"], path)
+      assert.equal(page.properties?.items.type, "array", path)
+    }
+  })
+
   test("documents the driver door with its verbs, its problems and the rules a device must know (Issue #104, slice 4)", async () => {
     const document = await spec()
     const operations = (path: string) =>

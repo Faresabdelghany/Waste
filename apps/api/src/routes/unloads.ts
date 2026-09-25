@@ -21,7 +21,8 @@
 // and net gross less tare where both are); and `occurredAt` may run ahead of
 // the request's clock by the ledger's skew (`OCCURRED_AT_SKEW_MS`,
 // routes/shared.ts, the one constant the ledger, the driver door and this
-// capture read) and no further, in the domain's words. The
+// capture read, and `requireNotAhead` the one check over it) and no further,
+// in the domain's words. The
 // `unload-recorded` event is written in the same transaction, carrying the
 // unload as answered.
 //
@@ -30,7 +31,6 @@
 import { Page } from "@waste/contracts/pagination"
 import { Unload, UnloadCreate, UnloadListQuery } from "@waste/contracts/unloads"
 import { route, unload } from "@waste/db/schema/execution"
-import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
 import { and, asc, eq, gt, gte, lte } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -41,12 +41,12 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, validate } from "../problem"
+import { describeProblem, validate } from "../problem"
 import { findRoute, noSuchRoute, noSuchUnload, unloadColumns, unloadOf, unloadScope } from "./execution-shapes"
 import { requireRoute, requireUnloadingStation, requireWasteFraction } from "./references"
 import { requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, requireNotAhead } from "./shared"
 
 const MODULE = "route-studio.weights"
 
@@ -168,7 +168,7 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         await requireWasteFraction(tx, principal.companyId, wasteFractionId)
         const at = now()
         const tipped = new Date(occurredAt)
-        if (tipped.getTime() > at.getTime() + OCCURRED_AT_SKEW_MS) throw invalidRequest("body", [{ path: "occurredAt", message: RECORDED_AFTER_IT_HAPPENED }])
+        requireNotAhead(tipped, at)
         requireRan(current)
         const [row] = await tx
           .insert(unload)

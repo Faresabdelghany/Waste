@@ -23,7 +23,8 @@
 // is followed by a history row. `PATCH` appends nothing — a field edit is the
 // audit log's (ADR-0005) — and `updatedAt` moves. A comment is appended and
 // touches the row not at all, on a closed ticket too: a note after the fact
-// is a note.
+// is a note; its snapshot is read under the row's lock like a command's, so
+// it is the row as it stands when the comment lands.
 //
 // The ticket's own state is judged first, as the machine judges it: a closed
 // ticket refuses every command but `reopen` and a comment whatever the body
@@ -66,7 +67,6 @@ import type { Tx } from "@waste/db/client"
 import { propertyParty } from "@waste/db/schema/customers"
 import { route } from "@waste/db/schema/execution"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
-import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
 import { closedTicket, ticketTransition, type TicketCommand } from "@waste/domain/resolution/transitions"
 import { CLOSED_TICKET_STATUSES, isClosedTicketStatus, OPEN_TICKET_STATUSES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, exists, gt, inArray, or } from "drizzle-orm"
@@ -85,7 +85,6 @@ import {
   NOT_A_ROUTE,
   requireAccountInProject,
   requireAgreement,
-  requireAlert,
   requireContainer,
   requireCustomer,
   requireDriver,
@@ -98,7 +97,7 @@ import {
 } from "./references"
 import { alertOf, alertsNamingTicket, eventColumns, eventOf, eventsOfTicket, findTicket, labelOf, linksOf, noSuchTicket, ticketColumns, ticketOf, ticketScope, type TicketRow } from "./resolution-shapes"
 import type { ClockOptions } from "./scheme-groups"
-import { created, dayWindow, describeCreated, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS } from "./shared"
+import { created, dayWindow, describeCreated, describeJson, IdParam, lockRow, requireNotAhead } from "./shared"
 import { appendTicketEvent, openTicket, type TicketEventDraft } from "./ticket-writes"
 
 const MODULE = "operate.tickets"
@@ -159,13 +158,8 @@ async function requireLinks(tx: Tx, scope: Scope, after: TicketLinks, named: Rea
   if (named.has("driverId")) await requireDriver(tx, scope, after.driverId, at("driverId"))
   if (named.has("parentTicketId")) {
     if (self !== undefined && after.parentTicketId === self) throw invalidRequest("body", [{ path: at("parentTicketId"), message: NOT_ITS_OWN_PARENT }])
-    await requireTicket(tx, scope, after.parentTicketId, { path: at("parentTicketId") })
+    await requireTicket(tx, scope, after.parentTicketId, at("parentTicketId"))
   }
-}
-
-/** `occurredAt` may run ahead of the request's clock by the skew a device's clock accounts for and no further; it has no lower bound, since the office records a complaint made yesterday. */
-function requireNotAhead(occurredAt: Date, at: Date, path = "occurredAt"): void {
-  if (occurredAt.getTime() > at.getTime() + OCCURRED_AT_SKEW_MS) throw invalidRequest("body", [{ path, message: RECORDED_AFTER_IT_HAPPENED }])
 }
 
 /**
@@ -354,12 +348,11 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const scope: Scope = { companyId: principal.companyId, projectId: body.projectId }
         const at = now()
         const occurredAt = body.occurredAt === undefined ? at : new Date(body.occurredAt)
-        // The 400s in body order: the clock, the assignee, the links, the alert's existence; the alert's two 409s follow under its lock inside `openTicket`.
+        // The 400s in body order: the clock, the assignee, the links; the alert's own 400 and its two 409s follow under its lock inside `openTicket` (routes/alert-links.ts), which spells them once for both doors, so nothing is checked here that it checks again.
         requireNotAhead(occurredAt, at)
         await requireAccountInProject(tx, scope, body.assigneeUserAccountId)
         const links = linksAfter(NO_LINKS, body.links)
         await requireLinks(tx, scope, links, namedIn(body.links))
-        await requireAlert(tx, scope, body.alertId)
         const { answered } = await openTicket(tx, {
           companyId: principal.companyId,
           draft: {
@@ -719,7 +712,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "commentTicket",
         summary: "Comment on a ticket",
         description:
-          "Appends a `comment` to the ticket's history: the `body`, who may read it (`internal`, the office's, unless `customer` is said — the row the portal then reads), and the Storage key of an attachment if one was uploaded. The key is `<companyId>/<ticketId>/<objectId>.<jpg|jpeg|png|webp|pdf>` in the bucket `ticket-attachments`: `<objectId>` is a UUID the client minted for the object before uploading it, and the first two segments are held to this ticket's company and id, so a caller cannot name another tenant's object or another ticket's (400 at `objectKey`, `The attachment key names another company or another ticket`). Taken on a closed ticket too — a note after the fact is a note — and touches the ticket's row not at all: nothing of the case moves, and `updatedAt` stays. Answers 201 with the event and no `Location`, the one create without one: a history row has no single-row read (`GET /tickets/{id}/events` is a list), and `Location` names where a row is read.",
+          "Appends a `comment` to the ticket's history: the `body`, who may read it (`internal`, the office's, unless `customer` is said — the row the portal then reads), and the Storage key of an attachment if one was uploaded. The key is `<companyId>/<ticketId>/<objectId>.<jpg|jpeg|png|webp|pdf>` in the bucket `ticket-attachments`: `<objectId>` is a UUID the client minted for the object before uploading it, and the first two segments are held to this ticket's company and id, so a caller cannot name another tenant's object or another ticket's (400 at `objectKey`, `The attachment key names another company or another ticket`). Taken on a closed ticket too — a note after the fact is a note — and touches the ticket's row not at all: nothing of the case moves, and `updatedAt` stays. Its snapshot, the status and the assignee after it, is read under the ticket's row lock, so a comment and a command on one ticket take turns and the history never shows a comment stamped with a status the row had already left. Answers 201 with the event and no `Location`, like the ledger's commands: a history row has no single-row read (`GET /tickets/{id}/events` is a list), and `Location` names where a row is read.",
         security: BEARER_SECURITY,
         responses: {
           201: describeJson("The comment as it was appended.", TicketEvent),
@@ -736,8 +729,8 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const { body, visibility, objectKey } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const current = await findTicket(tx, principal, id)
-        if (current === undefined) throw noSuchTicket(id)
+        // The row's lock, though the row is not written: the snapshot below is read under it, so a `start` in flight is waited for and the comment carries the status it wrote, never one the row has left.
+        const current = await lockedTicket(tx, principal, id)
         // The key's first two segments are this row's company and ticket; its third is the object's id, a UUID the client minted before the upload, held to its shape by the contracts and to nothing else here. As specified (#109 §7.23) the third segment was the comment's event id, which the server mints, so no client could ever have posted a matching key and only the 400 was reachable; the rule was corrected at integration.
         if (objectKey !== undefined && !objectKey.startsWith(`${principal.companyId}/${current.id}/`)) {
           throw invalidRequest("body", [{ path: "objectKey", message: KEY_NAMES_ANOTHER }])
