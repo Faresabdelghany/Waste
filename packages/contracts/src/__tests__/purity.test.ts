@@ -6,11 +6,16 @@
 // turns @waste/domain/access/modules into the enums the API boundary checks
 // (Issue #70), the Registry's modules turn @waste/domain/registry/vocabulary
 // into theirs (Issue #78), planning.ts turns
-// @waste/domain/planning/vocabulary into Planning's (Issue #97), and
+// @waste/domain/planning/vocabulary into Planning's (Issue #97),
 // resources.ts and stock.ts turn @waste/domain/resources/vocabulary into
-// Resources' (Issue #101). The direction is sound — the innermost ring
-// depends on nothing — and listing the subpath, not the package, keeps every
-// further reach into the domain a deliberate line here.
+// Resources' (Issue #101), and execution.ts turns
+// @waste/domain/execution/vocabulary into Execution's (Issue #104) while
+// proofs.ts runs @waste/domain/execution/proof-shapes as its refine — the one
+// reach beyond a vocabulary, since the table of what each proof kind carries
+// is a rule the client must hold too and a second spelling here would drift.
+// The direction is sound — the innermost ring depends on nothing — and
+// listing the subpath, not the package, keeps every further reach into the
+// domain a deliberate line here.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -18,6 +23,14 @@ import { definePurityTests } from "@waste/tooling/purity"
 
 definePurityTests({
   packageDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."),
-  allowedImports: ["@waste/domain/access/modules", "@waste/domain/planning/vocabulary", "@waste/domain/registry/vocabulary", "@waste/domain/resources/vocabulary", "zod"],
+  allowedImports: [
+    "@waste/domain/access/modules",
+    "@waste/domain/execution/proof-shapes",
+    "@waste/domain/execution/vocabulary",
+    "@waste/domain/planning/vocabulary",
+    "@waste/domain/registry/vocabulary",
+    "@waste/domain/resources/vocabulary",
+    "zod",
+  ],
   allowedTestImports: ["@waste/tooling/purity"],
 })
