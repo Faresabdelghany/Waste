@@ -2,23 +2,24 @@
 // (src/__tests__/vocabulary.ts), and to three things of its own: the days are
 // Monday first, since recurrence.ts indexes them against getUTCDay; the lists
 // that moved here from the route-scheme modules are still what those modules
-// export, so the move changed no value a stored record carries; and the two
-// lists that are the tokens of a display tuple the prototype still reads by
-// name (`SCHEME_SERVICE_TYPES` in route-schemes/scope.ts, the vehicle types in
-// route-schemes/matching.ts) are held to them position by position, so a
-// service type added to one fails until it is added to the other.
+// export, so the move changed no value a stored record carries; and the one
+// list that is the tokens of a display tuple the prototype still reads by
+// name (`SCHEME_SERVICE_TYPES` in route-schemes/scope.ts) is held to it
+// position by position, so a service type added to one fails until it is
+// added to the other. The vehicle types left for Resources (Issue #101),
+// where a vehicle type is a row and not a token; the display tuple in
+// route-schemes/matching.ts stays the web's and is held to nothing here.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import { SCHEME_EDIT_POLICIES } from "../../route-schemes/creation"
-import { STOP_MATCH_VEHICLE_TYPES as DISPLAY_VEHICLE_TYPES } from "../../route-schemes/matching"
 import { HOLIDAY_POLICIES, OCCURRENCE_STATUSES } from "../../route-schemes/occurrences"
 import { SERVICE_DAYS } from "../../route-schemes/recurrence"
 import { SCHEME_SERVICE_TYPES } from "../../route-schemes/scope"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Planning", vocabulary, vocabulary.PLANNING_VOCABULARIES, 13, ["DEFAULT_WEEKEND"])
+defineVocabularyTests("Planning", vocabulary, vocabulary.PLANNING_VOCABULARIES, 12, ["DEFAULT_WEEKEND"])
 
 /** The kebab token of a display string: `Container collection` is `container-collection`. */
 const tokenOf = (display: string): string => display.toLowerCase().replaceAll(" ", "-")
@@ -41,8 +42,7 @@ describe("the Planning vocabulary's own rules", () => {
     assert.ok(vocabulary.DEFAULT_WEEKEND.length < vocabulary.SERVICE_DAYS.length)
   })
 
-  test("the service types and the vehicle types are the kebab tokens of the prototype's display tuples, same length, same order", () => {
+  test("the service types are the kebab tokens of the prototype's display tuple, same length, same order", () => {
     assert.deepEqual([...vocabulary.SERVICE_TYPES], SCHEME_SERVICE_TYPES.map(tokenOf))
-    assert.deepEqual([...vocabulary.STOP_MATCH_VEHICLE_TYPES], DISPLAY_VEHICLE_TYPES.map(tokenOf))
   })
 })

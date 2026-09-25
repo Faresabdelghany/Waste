@@ -187,12 +187,12 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createCollectionGroup",
         summary: "Add a collection group to a route scheme",
         description:
-          "Adds one collection group to the scheme the path names; the scheme says the project, so the body names neither. The name is unique within the scheme. The group finds its stops one way: `stopSource: rule` with a rule naming one or more waste fractions of this company, none or more container types of this company and, optionally, a vehicle type, and no containers; or `stopSource: manual` with one or more containers of the scheme's project in stop order and no rule. The service provider, where given, is this company's. The group's days lie within the scheme's service days, and no container it picks may already be picked by another group of the scheme on a day both run — the entry is refused naming that group and the day. The position is where the group stands among the scheme's, after the last when absent; it is not unique, and the first rule group wins a container on a shared day. On a `validated` scheme the structural rules are re-run as the scheme would stand with the group — a rule group needs a planning area to match inside — and every sentence that fails is listed (409). The server mints the id.",
+          "Adds one collection group to the scheme the path names; the scheme says the project, so the body names neither. The name is unique within the scheme. The group finds its stops one way: `stopSource: rule` with a rule naming one or more waste fractions of this company, none or more container types of this company and, optionally, a vehicle type of this company, and no containers; or `stopSource: manual` with one or more containers of the scheme's project in stop order and no rule. The service provider, where given, is this company's. The group's days lie within the scheme's service days, and no container it picks may already be picked by another group of the scheme on a day both run — the entry is refused naming that group and the day. The position is where the group stands among the scheme's, after the last when absent; it is not unique, and the first rule group wins a container on a shared day. On a `validated` scheme the structural rules are re-run as the scheme would stand with the group — a rule group needs a planning area to match inside — and every sentence that fails is listed (409). The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The collection group as it was written.", CollectionGroup),
           400: describeProblem(
-            "The path does not hold an id, or the body is missing a field, names a member the server owns, gives both a rule and containers or neither, runs on a day the scheme does not serve, picks a container another group runs on the same day, or names a waste fraction, container type, container or service provider outside the scope its key allows — each at the entry that is wrong.",
+            "The path does not hold an id, or the body is missing a field, names a member the server owns, gives both a rule and containers or neither, runs on a day the scheme does not serve, picks a container another group runs on the same day, or names a waste fraction, container type, vehicle type, container or service provider outside the scope its key allows — each at the entry that is wrong.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `route-studio.schemes`."),
@@ -235,7 +235,7 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
               position: values.position ?? Math.max(0, ...others.map((group) => group.position)) + 1,
               days: values.days,
               stopSource: values.stopSource,
-              ruleVehicleType: values.rule?.vehicleType ?? null,
+              ruleVehicleTypeId: values.rule?.vehicleTypeId ?? null,
               serviceProviderId: values.serviceProviderId ?? null,
             })
             .returning(groupColumns),
@@ -334,12 +334,12 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "putCollectionGroupStopMatchingRule",
         summary: "Replace a collection group's stop matching rule",
         description:
-          "Replaces the whole rule of a rule group with the one in the body: the waste fractions it matches (one or more, this company's), the container types it is restricted to (none or more, this company's) and the vehicle type it asks for, or null. A manual group has no rule to replace, and asking is refused (409) rather than turned into a rule group. The three sets are replaced together under the scheme's row lock, and the group's `updatedAt` moves, since the rule is part of the group on the wire. On a `validated` scheme the structural rules are re-run — a rule group needs a planning area to match inside — and every sentence that fails is listed (409).",
+          "Replaces the whole rule of a rule group with the one in the body: the waste fractions it matches (one or more, this company's), the container types it is restricted to (none or more, this company's) and the vehicle type it asks for (one of this company's, applied by generation through the type's compatibility set), or null. A manual group has no rule to replace, and asking is refused (409) rather than turned into a rule group. The three sets are replaced together under the scheme's row lock, and the group's `updatedAt` moves, since the rule is part of the group on the wire. On a `validated` scheme the structural rules are re-run — a rule group needs a planning area to match inside — and every sentence that fails is listed (409).",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The collection group with the rule it now has.", CollectionGroup),
           400: describeProblem(
-            "The path does not hold an id, or the body is missing a field, names a member it does not own, names a fraction or a type twice, or names a waste fraction or container type that is not this company's — at the entry that is wrong.",
+            "The path does not hold an id, or the body is missing a field, names a member it does not own, names a fraction or a type twice, or names a waste fraction, container type or vehicle type that is not this company's — at the entry that is wrong.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `route-studio.schemes`."),

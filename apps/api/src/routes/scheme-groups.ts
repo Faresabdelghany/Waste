@@ -21,7 +21,17 @@
 // lowest entry that is wrong, by the path the body spelled it at, and its
 // sentence is routes/references.ts's — the singular check is asked to refuse
 // the one entry the plural lookup found missing, so a body naming one bad id
-// and a body naming one among two hundred are told the same thing.
+// and a body naming one among two hundred are told the same thing. The vehicle
+// type a rule asks for is one of those references since Resources (Issue
+// #101): a row of the company's `vehicle_type`, where 0006 had a token.
+//
+// Resources also gave the group a vehicle and a driver and the scheme a depot
+// and an unloading station (migration 0007). They are read here — `groupOf`
+// and `schemeOf` answer them, null until something writes them — and written
+// by nothing yet: the routes that hold them (a powered vehicle of the project,
+// a driver who may take it, no vehicle or driver on two groups a shared day, a
+// depot of the project, a station of the company) arrive with #101's slice 6,
+// and the contracts keep the four off every write body until then.
 //
 // The two rules a scheme is held to across its groups are the domain's
 // (@waste/domain/planning/checks): the structural rules of a validated scheme,
@@ -32,20 +42,11 @@ import type { CollectionGroup, RouteScheme, StopMatchingRule } from "@waste/cont
 import type { Tx } from "@waste/db/client"
 import { containerType, wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
+import { vehicleType } from "@waste/db/schema/fleet-types"
 import { serviceProvider } from "@waste/db/schema/organisation"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
 import { alreadyPicked, containerPickedTwice, schemeStructureIssues, type ContainerPick, type GroupStructure } from "@waste/domain/planning/checks"
-import type {
-  HolidayPolicy,
-  RecurrenceFrequency,
-  RouteSchemeStatus,
-  SchemeEditPolicy,
-  ServiceDay,
-  ServiceType,
-  StopMatchVehicleType,
-  StopSource,
-  WeekRotation,
-} from "@waste/domain/planning/vocabulary"
+import type { HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, ServiceDay, ServiceType, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
 import { and, asc, eq, inArray, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 
@@ -53,7 +54,7 @@ import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { newId } from "../ids"
 import { invalidRequest, problem } from "../problem"
-import { requireContainer, requireContainerType, requireServiceProvider, requireWasteFraction } from "./references"
+import { requireContainer, requireContainerType, requireServiceProvider, requireVehicleType, requireWasteFraction } from "./references"
 import { stamp, stampsOf, timeOf, type TenantTable } from "./shared"
 
 /** The grant every scheme and group route runs under: a group is a part of its scheme and not a surface of its own. */
@@ -84,6 +85,8 @@ export const schemeColumns = {
   editPolicy: routeScheme.editPolicy,
   planAhead: routeScheme.planAhead,
   status: routeScheme.status,
+  depotId: routeScheme.depotId,
+  unloadingStationId: routeScheme.unloadingStationId,
   validFrom: routeScheme.validFrom,
   validTo: routeScheme.validTo,
   createdAt: routeScheme.createdAt,
@@ -100,8 +103,10 @@ export const groupColumns = {
   position: collectionGroup.position,
   days: collectionGroup.days,
   stopSource: collectionGroup.stopSource,
-  ruleVehicleType: collectionGroup.ruleVehicleType,
+  ruleVehicleTypeId: collectionGroup.ruleVehicleTypeId,
   serviceProviderId: collectionGroup.serviceProviderId,
+  vehicleId: collectionGroup.vehicleId,
+  driverId: collectionGroup.driverId,
   createdAt: collectionGroup.createdAt,
   updatedAt: collectionGroup.updatedAt,
 }
@@ -125,6 +130,8 @@ export function schemeOf(row: SchemeRow, groups: CollectionGroup[]): RouteScheme
     editPolicy: row.editPolicy as SchemeEditPolicy,
     planAhead: row.planAhead,
     status: row.status as RouteSchemeStatus,
+    depotId: row.depotId,
+    unloadingStationId: row.unloadingStationId,
     collectionGroups: groups,
     validFrom: row.validFrom,
     validTo: row.validTo,
@@ -147,12 +154,11 @@ function groupOf(row: GroupRow, sets: GroupSets): CollectionGroup {
     position: row.position,
     days: row.days as ServiceDay[],
     stopSource,
-    rule:
-      stopSource === "rule"
-        ? { wasteFractionIds: sets.wasteFractionIds, containerTypeIds: sets.containerTypeIds, vehicleType: row.ruleVehicleType as StopMatchVehicleType | null }
-        : null,
+    rule: stopSource === "rule" ? { wasteFractionIds: sets.wasteFractionIds, containerTypeIds: sets.containerTypeIds, vehicleTypeId: row.ruleVehicleTypeId } : null,
     containerIds: sets.containerIds,
     serviceProviderId: row.serviceProviderId,
+    vehicleId: row.vehicleId,
+    driverId: row.driverId,
     ...stampsOf(row),
   }
 }
@@ -247,10 +253,11 @@ export async function findScheme(tx: Tx, principal: Principal, id: string): Prom
 /** One id a body names and where it names it, for the one lookup per set below. */
 export type Named = { path: string; id: string }
 
-/** Every id a body names across its groups, by what it names: the rule's fractions and container types, the picked containers, the providers. */
+/** Every id a body names across its groups, by what it names: the rule's fractions, container types and vehicle type, the picked containers, the providers. */
 export type GroupReferences = {
   fractions: Named[]
   containerTypes: Named[]
+  vehicleTypes: Named[]
   containers: Named[]
   providers: Named[]
 }
@@ -274,6 +281,7 @@ export function referencesOf(
   return {
     fractions: (group.rule?.wasteFractionIds ?? []).map((id, m) => ({ path: `${rulePrefix}wasteFractionIds.${m}`, id })),
     containerTypes: (group.rule?.containerTypeIds ?? []).map((id, m) => ({ path: `${rulePrefix}containerTypeIds.${m}`, id })),
+    vehicleTypes: group.rule?.vehicleTypeId == null ? [] : [{ path: `${rulePrefix}vehicleTypeId`, id: group.rule.vehicleTypeId }],
     containers: (group.containerIds ?? []).map((id, m) => ({ path: `${prefix}containerIds.${m}`, id })),
     providers: group.serviceProviderId == null ? [] : [{ path: `${prefix}serviceProviderId`, id: group.serviceProviderId }],
   }
@@ -284,6 +292,7 @@ export function mergeReferences(all: readonly GroupReferences[]): GroupReference
   return {
     fractions: all.flatMap((refs) => refs.fractions),
     containerTypes: all.flatMap((refs) => refs.containerTypes),
+    vehicleTypes: all.flatMap((refs) => refs.vehicleTypes),
     containers: all.flatMap((refs) => refs.containers),
     providers: all.flatMap((refs) => refs.providers),
   }
@@ -309,15 +318,18 @@ async function firstMissing(tx: Tx, table: TenantTable, within: SQL | undefined,
 
 /**
  * Holds every id a body names to what its key allows, one statement per set:
- * a waste fraction and a container type are the company's, a container is
- * the scheme's project's, a Service Provider the company's. The first entry
- * that is wrong, set by set in the order a body reads, is a 400 at its path.
+ * a waste fraction, a container type and a vehicle type are the company's, a
+ * container is the scheme's project's, a Service Provider the company's. The
+ * first entry that is wrong, set by set in the order a body reads, is a 400
+ * at its path.
  */
 export async function requireGroupReferences(tx: Tx, scope: Scope, refs: GroupReferences): Promise<void> {
   const fraction = await firstMissing(tx, wasteFraction, eq(wasteFraction.companyId, scope.companyId), refs.fractions)
   if (fraction !== undefined) await requireWasteFraction(tx, scope.companyId, fraction.id, fraction.path)
   const type = await firstMissing(tx, containerType, eq(containerType.companyId, scope.companyId), refs.containerTypes)
   if (type !== undefined) await requireContainerType(tx, scope.companyId, type.id, type.path)
+  const askedFor = await firstMissing(tx, vehicleType, eq(vehicleType.companyId, scope.companyId), refs.vehicleTypes)
+  if (askedFor !== undefined) await requireVehicleType(tx, scope.companyId, askedFor.id, askedFor.path)
   const picked = await firstMissing(tx, container, and(eq(container.companyId, scope.companyId), eq(container.projectId, scope.projectId)), refs.containers)
   if (picked !== undefined) await requireContainer(tx, scope, picked.id, picked.path)
   const provider = await firstMissing(tx, serviceProvider, eq(serviceProvider.companyId, scope.companyId), refs.providers)
@@ -367,7 +379,7 @@ export type GroupSet = { rule: StopMatchingRule } | { containerIds: readonly str
 export async function replaceGroupSet(tx: Tx, principal: Principal, id: string, set: GroupSet): Promise<GroupRow | undefined> {
   const [row] = await tx
     .update(collectionGroup)
-    .set("rule" in set ? { ruleVehicleType: set.rule.vehicleType, ...stamp() } : stamp())
+    .set("rule" in set ? { ruleVehicleTypeId: set.rule.vehicleTypeId, ...stamp() } : stamp())
     .where(and(groupScope(principal), eq(collectionGroup.id, id)))
     .returning(groupColumns)
   if (row === undefined) return undefined

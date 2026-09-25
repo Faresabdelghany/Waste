@@ -15,9 +15,13 @@
 // validated scheme is held to the structural rules of
 // @waste/domain/planning/checks on the create or patch that makes it so and
 // on every write while it is — a 409 listing every sentence. A draft accepts
-// partial configuration. The prototype's remaining blockers — a vehicle and a
-// default driver per group, licence eligibility — wait for Resources (step 6)
-// and are not held here.
+// partial configuration. Resources (Issue #101) gave the scheme a depot and an
+// unloading station and the group a vehicle and a default driver, as columns
+// read here and written by nothing yet: the rules that hold them — a depot of
+// the project, a station of the company, a powered vehicle a driver may take,
+// no vehicle or driver on two groups a shared day — arrive with #101's slice
+// 6, and until then the contracts keep the four off every write body. A
+// rule's vehicle type is one of the company's rows since the same migration.
 //
 // The recurrence has three rules the contracts spell and the database cannot
 // all hold: the week rotation belongs to `every-2-weeks` and to nothing else,
@@ -179,12 +183,12 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>) {
         description:
           "Writes a route scheme in one project, which must be a project the caller works in, with the collection groups it starts with — " +
           GROUPS_BOUND +
-          ". The planning area, where given, is one of that project's. Every group finds its stops one way: a rule group carries a rule naming one or more waste fractions of this company, none or more container types of this company and, optionally, a vehicle type, and picks no containers; a manual group picks one or more containers of this project in stop order and carries no rule. A group's service provider is this company's. A group's days lie within the scheme's service days, and no container is picked by two groups that run on a shared day — the entry is refused naming the group and the day. Groups take positions 1..n in the body's order where a position is absent. The period is half-open, `validFrom` the first day in force and `validTo` the first day out of it, absent meaning the scheme runs on; one scheme of a name is in force at a time in a project, so a new version of a name starts when the old ends and an overlapping one is refused. The week rotation is given with `every-2-weeks` and with nothing else, and a daily scheme serves every weekday. `status` defaults to `draft`, which accepts partial configuration; a scheme created `validated` is held to the structural rules — every service day has a collection group, a rule group names a waste fraction, a manual group picks a container, and a rule group has a planning area to match inside — and refused with every sentence that fails. A vehicle and a driver per group, and their licence eligibility, wait for Resources and are not held here. The server mints every id.",
+          ". The planning area, where given, is one of that project's. Every group finds its stops one way: a rule group carries a rule naming one or more waste fractions of this company, none or more container types of this company and, optionally, a vehicle type of this company, and picks no containers; a manual group picks one or more containers of this project in stop order and carries no rule. A group's service provider is this company's. A group's days lie within the scheme's service days, and no container is picked by two groups that run on a shared day — the entry is refused naming the group and the day. Groups take positions 1..n in the body's order where a position is absent. The period is half-open, `validFrom` the first day in force and `validTo` the first day out of it, absent meaning the scheme runs on; one scheme of a name is in force at a time in a project, so a new version of a name starts when the old ends and an overlapping one is refused. The week rotation is given with `every-2-weeks` and with nothing else, and a daily scheme serves every weekday. `status` defaults to `draft`, which accepts partial configuration; a scheme created `validated` is held to the structural rules — every service day has a collection group, a rule group names a waste fraction, a manual group picks a container, and a rule group has a planning area to match inside — and refused with every sentence that fails. A vehicle and a driver per group, and their licence eligibility, wait for Resources and are not held here. The server mints every id.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The route scheme as it was written, with its collection groups.", RouteScheme),
           400: describeProblem(
-            `The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, gives the week rotation with the wrong cadence, leaves a weekday out of a daily scheme, carries no group or more than ${GROUPS_MAX}, names a group twice, runs a group on a day the scheme does not serve, gives a group both a rule and containers or neither, picks a container two groups run on the same day, or names a planning area, waste fraction, container type, container or service provider outside the scope its key allows — each at the entry that is wrong.`,
+            `The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, gives the week rotation with the wrong cadence, leaves a weekday out of a daily scheme, carries no group or more than ${GROUPS_MAX}, names a group twice, runs a group on a day the scheme does not serve, gives a group both a rule and containers or neither, picks a container two groups run on the same day, or names a planning area, waste fraction, container type, vehicle type, container or service provider outside the scope its key allows — each at the entry that is wrong.`,
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `route-studio.schemes`."),
@@ -236,7 +240,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>) {
           position: group.position ?? n + 1,
           days: group.days,
           stopSource: group.stopSource,
-          ruleVehicleType: group.rule?.vehicleType ?? null,
+          ruleVehicleTypeId: group.rule?.vehicleTypeId ?? null,
           serviceProviderId: group.serviceProviderId ?? null,
         }))
         // The contracts hold a body to one group per name, so the key cannot meet two here.

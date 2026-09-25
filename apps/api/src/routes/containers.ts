@@ -6,14 +6,22 @@
 // itself. No delete: a container that has been collected from is behind
 // pickups and tickets, and taking one out of service is ending its placement.
 //
-// A Container carries no status and no location. An editable asset state is
-// the option ADR-0003 rejected: whether a container is in stock, issued,
-// broken or retired is Resources' projection over the Stock Movement ledger,
-// and where it is, is the placement valid on the day asked. What is here is
-// the identity a person reads off the bin — the label, the type, the barcode,
-// the RFID, the serial number, who owns it and a note — and the label is
-// unique across the company and not inside a project, because that is how it
-// is read off a bin.
+// A Container carries no status and no location of its own. An editable
+// asset state is the option ADR-0003 rejected: whether a container is in
+// stock, issued, broken or retired is Resources' projection over the Stock
+// Movement ledger, and where it is, is the placement valid on the day asked.
+// What is here is the identity a person reads off the bin — the label, the
+// type, the barcode, the RFID, the serial number, who owns it and a note —
+// and the label is unique across the company and not inside a project,
+// because that is how it is read off a bin.
+//
+// The contracts carry the projection on the Container since Resources (Issue
+// #101, slice 2): `assetState`, and the list's `assetStatus` and `warehouseId`.
+// Nothing here reads the ledger yet — the projection's left join
+// (`assetStateOf` in @waste/db/query/asset-state) and the issue command that
+// makes `POST /containers/:id/placements` write the ledger arrive with #101's
+// slice 5 — so `assetState` is answered as null and the two filters are
+// refused with a 400 saying so, rather than accepted and silently not applied.
 //
 // A placement names the subscription, and through it the agreement, the
 // product and the place: ADR-0003 has a placement name all four, and one
@@ -114,9 +122,14 @@ function containerOf(row: Row): Container {
     serialNumber: row.serialNumber,
     ownership: row.ownership as ContainerOwnership,
     notes: row.notes,
+    // The ledger's reading, once the projection joins here (#101, slice 5); null until then, as for a container with no movement.
+    assetState: null,
     ...stampsOf(row),
   }
 }
+
+/** What the two ledger filters are told until the projection joins the list (#101, slice 5). */
+const NOT_YET_ANSWERED = "Not yet answered: the asset state arrives with the container ledger"
 
 /**
  * The placement as the wire spells it, the last field computed rather than
@@ -283,11 +296,11 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "listContainers",
         summary: "The containers the caller's projects hold",
         description:
-          "One page of containers, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused, and `containerTypeId` narrows it to one type. Where a container stands is not here: that is the placement valid on the day asked, `GET /placements`. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of containers, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused, and `containerTypeId` narrows it to one type. Where a container stands is not here: that is the placement valid on the day asked, `GET /placements`. `assetStatus` and `warehouseId`, the ledger's reading, are not yet answered and are refused until the container ledger's routes land. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of containers.", ContainerPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, or `projectId` is not a project this account works in."),
+          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `projectId` is not a project this account works in, or `assetStatus` or `warehouseId` was given, which the ledger's routes will answer."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `view` on `resources.containers`."),
         },
@@ -296,10 +309,15 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "view"),
       validate("query", ContainerListQuery),
       async (c) => {
-        const { limit, cursor, projectId, containerTypeId } = c.req.valid("query")
+        const { limit, cursor, projectId, containerTypeId, assetStatus, warehouseId } = c.req.valid("query")
         const after = afterCursor(cursor)
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
+        const notYet = [
+          ...(assetStatus === undefined ? [] : [{ path: "assetStatus", message: NOT_YET_ANSWERED }]),
+          ...(warehouseId === undefined ? [] : [{ path: "warehouseId", message: NOT_YET_ANSWERED }]),
+        ]
+        if (notYet.length > 0) throw invalidRequest("query", notYet)
         const rows = await c
           .get("tx")
           .select(columns)

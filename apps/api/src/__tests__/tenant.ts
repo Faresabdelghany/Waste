@@ -24,6 +24,7 @@ import { agreement, subscription } from "@waste/db/schema/agreements"
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
 import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
+import { containerTypeVehicleType, vehicleType } from "@waste/db/schema/fleet-types"
 import {
   customer,
   property,
@@ -197,7 +198,10 @@ export async function grantRole(pool: Database, companyId: string, roleId: strin
  * Organisation & Access's, since every one of them keys on the company and
  * most on a project (Issue #78). Planning's nine tables go before the
  * Registry's, children first, since a collection group names the Registry's
- * fractions, container types and containers (Issue #97).
+ * fractions, container types and containers (Issue #97), and Resources'
+ * vehicle types go after the groups that name them (Issue #101; the rest of
+ * Resources' tables join here with their routes, the two ledgers through the
+ * owner, since `wms_api` may not delete from them).
  */
 export async function dropTenant(pool: Database, companyId: string): Promise<void> {
   await withCompany(pool.db, companyId, async (tx: Tx) => {
@@ -206,6 +210,8 @@ export async function dropTenant(pool: Database, companyId: string): Promise<voi
     await tx.delete(collectionGroupFraction).where(eq(collectionGroupFraction.companyId, companyId))
     await tx.delete(collectionGroup).where(eq(collectionGroup.companyId, companyId))
     await tx.delete(routeScheme).where(eq(routeScheme.companyId, companyId))
+    await tx.delete(containerTypeVehicleType).where(eq(containerTypeVehicleType.companyId, companyId))
+    await tx.delete(vehicleType).where(eq(vehicleType.companyId, companyId))
     await tx.delete(collectionCalendarHoliday).where(eq(collectionCalendarHoliday.companyId, companyId))
     await tx.delete(collectionCalendar).where(eq(collectionCalendar.companyId, companyId))
     await tx.delete(planningAreaBoundary).where(eq(planningAreaBoundary.companyId, companyId))

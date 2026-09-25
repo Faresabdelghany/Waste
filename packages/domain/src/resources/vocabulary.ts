@@ -59,6 +59,18 @@ export const ALLOCATION_STATUSES = ["planned", "confirmed", "released"] as const
 /** What was done to an allocation, each appending one event: the prototype's `allocationAction`, verbatim. */
 export const ALLOCATION_ACTIONS = ["allocate", "change", "confirm", "release"] as const
 
+/**
+ * The places a container stands in while in stock — a warehouse, or
+ * maintenance at one — and the places an adjustment may leave it in: in
+ * stock, or scrapped, the correction door for a wrong decommission, never in
+ * service. Not vocabularies but values of one, like Planning's
+ * `DEFAULT_WEEKEND`: the shape table (resources/asset-state.ts) and the
+ * command bodies (@waste/contracts/stock) are both built from them, so the
+ * pairs a command may ask for and the pairs the ledger allows cannot drift.
+ */
+export const STOCK_PLACES = ["warehouse", "maintenance"] as const satisfies readonly (typeof STOCK_PLACE_KINDS)[number][]
+export const ADJUSTMENT_TARGETS = ["warehouse", "maintenance", "scrap"] as const satisfies readonly (typeof STOCK_PLACE_KINDS)[number][]
+
 export type VehicleKind = (typeof VEHICLE_KINDS)[number]
 export type VehicleOwnership = (typeof VEHICLE_OWNERSHIPS)[number]
 export type VehicleStatus = (typeof VEHICLE_STATUSES)[number]

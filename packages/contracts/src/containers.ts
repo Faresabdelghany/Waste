@@ -2,12 +2,18 @@
 // stable Container identity, and an effective-dated Container Service
 // Placement beside it.
 //
-// A Container carries no status and no location. An editable asset state is
-// the option ADR-0003 rejected: whether a container is in stock, issued,
-// broken or retired is Resources' projection over the Stock Movement ledger,
-// and where it is, is the placement valid on the day asked. What is here is
-// the identity a person reads off the bin — the label, the type, the barcode,
-// the RFID, the serial number, who owns it and a note.
+// A Container carries no status and no location of its own. An editable
+// asset state is the option ADR-0003 rejected: whether a container is in
+// stock, issued, broken or retired is Resources' projection over the Stock
+// Movement ledger, and where it is, is the placement valid on the day asked.
+// What is here is the identity a person reads off the bin — the label, the
+// type, the barcode, the RFID, the serial number, who owns it and a note —
+// and, since Resources (Issue #101), the projection read beside it:
+// `assetState`, the latest movement folded onto one of the glossary's four
+// states (`stock.ts`), null for a container with no movement yet, on the
+// resource and on no write body, since nothing writes it. The list asks by
+// it: `assetStatus`, and `warehouseId` for the containers standing in a
+// warehouse, in stock or in maintenance.
 //
 // A placement says which subscription the container serves, which fraction it
 // takes and, where it differs from the product's, at which frequency. The
@@ -34,6 +40,8 @@ import { IsoDate } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
 import { changesSomething, somethingToChange, stamped } from "./resource"
+import { AssetStatus } from "./resources"
+import { AssetState } from "./stock"
 import { Label, Paragraph } from "./text"
 import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
 
@@ -52,6 +60,8 @@ export const Container = z.object({
   serialNumber: Label.nullable(),
   ownership: ContainerOwnership,
   notes: Paragraph.nullable(),
+  /** Where the ledger says the container is; null with no movement yet. Read, never written. */
+  assetState: AssetState.nullable(),
 })
 export type Container = z.infer<typeof Container>
 
@@ -118,9 +128,12 @@ export const ContainerServicePlacementPatch = z
   .refine(changesSomething, somethingToChange)
 export type ContainerServicePlacementPatch = z.infer<typeof ContainerServicePlacementPatch>
 
-/** A page of containers: one project's, of one type. */
+/** A page of containers: one project's, of one type, in one asset state, standing in one warehouse. The unrecorded — no movement, a null state — are not askable for; that is a later read. */
 export const ContainerListQuery = ProjectScopedListQuery.extend({
   containerTypeId: Id.optional(),
+  assetStatus: AssetStatus.optional(),
+  /** The containers standing in this warehouse, in stock or in maintenance. */
+  warehouseId: Id.optional(),
 })
 export type ContainerListQuery = z.infer<typeof ContainerListQuery>
 

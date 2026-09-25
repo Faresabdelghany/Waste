@@ -16,6 +16,10 @@
 // two exclusions run through all of them — the stamps, and the `projectId` of
 // a project-scoped record, since a record does not move between projects (its
 // keys all carry the project, packages/db/src/schema/references.ts).
+//
+// A ledger row (Issue #101: a Stock Movement, a Vehicle Allocation event)
+// spreads `recorded` instead: its id and the instant it was appended. It is
+// never updated, so it has no `updatedAt` to carry, and no patch takes it.
 import { IsoDateTime } from "./dates"
 import { Id } from "./ids"
 
@@ -26,6 +30,13 @@ export const stamped = {
   createdAt: IsoDateTime,
   /** When it last changed; the database keeps it, not the caller. */
   updatedAt: IsoDateTime,
+}
+
+/** What the server owns on a ledger row: the id it minted and the one instant, when the row was appended. */
+export const recorded = {
+  id: Id,
+  /** When the row was appended; a ledger row is never updated. */
+  recordedAt: IsoDateTime,
 }
 
 /** What a refused empty patch says. */

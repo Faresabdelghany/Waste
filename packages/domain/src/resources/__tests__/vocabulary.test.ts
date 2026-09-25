@@ -11,9 +11,18 @@ import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import { LICENCE_CLASSES as DISPLAY_LICENCE_CLASSES } from "../../route-schemes/fleet-profiles"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Resources", vocabulary, vocabulary.RESOURCES_VOCABULARIES, 17)
+defineVocabularyTests("Resources", vocabulary, vocabulary.RESOURCES_VOCABULARIES, 17, ["STOCK_PLACES", "ADJUSTMENT_TARGETS"])
 
 describe("the Resources vocabulary's own rules", () => {
+  test("the stock places and the adjustment targets are places of the place list, and never a service placement", () => {
+    for (const place of [...vocabulary.STOCK_PLACES, ...vocabulary.ADJUSTMENT_TARGETS]) {
+      assert.ok((vocabulary.STOCK_PLACE_KINDS as readonly string[]).includes(place), place)
+      assert.notEqual(place, "service")
+    }
+    assert.deepEqual([...vocabulary.STOCK_PLACES], ["warehouse", "maintenance"])
+    assert.deepEqual([...vocabulary.ADJUSTMENT_TARGETS], ["warehouse", "maintenance", "scrap"])
+  })
+
   test("the movement kinds and the asset states are the glossary's, verbatim", () => {
     assert.deepEqual([...vocabulary.STOCK_MOVEMENT_KINDS], ["receipt", "issue", "return", "transfer", "adjustment", "decommission"])
     assert.deepEqual([...vocabulary.ASSET_STATUSES], ["in-warehouse", "in-service", "in-maintenance", "retired"])

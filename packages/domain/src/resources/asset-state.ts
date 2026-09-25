@@ -19,8 +19,13 @@
 // there runs every pair through both, so the API refuses a nonsense command
 // with a sentence before the check does with a code. `MOVEMENT_SHAPES` is the
 // table as data, for that test and for a form that offers only the pairs a
-// kind allows.
-import { STOCK_PLACE_KINDS, type AssetStatus, type StockMovementKind, type StockPlaceKind } from "./vocabulary"
+// kind allows; the two place lists it is built from, `STOCK_PLACES` and
+// `ADJUSTMENT_TARGETS`, are the vocabulary's (values of one, beside its
+// lists) and re-exported here, since the contracts' command bodies read them
+// from the vocabulary and this module reads them into the table.
+import { ADJUSTMENT_TARGETS, STOCK_PLACE_KINDS, STOCK_PLACES, type AssetStatus, type StockMovementKind, type StockPlaceKind } from "./vocabulary"
+
+export { ADJUSTMENT_TARGETS, STOCK_PLACES }
 
 /** What each place a movement can arrive at says about the container's state; a supplier is never arrived at. */
 export const ASSET_STATUS_OF_PLACE: Readonly<Record<Exclude<StockPlaceKind, "supplier">, AssetStatus>> = {
@@ -34,12 +39,6 @@ export const ASSET_STATUS_OF_PLACE: Readonly<Record<Exclude<StockPlaceKind, "sup
 export function assetStateOf(movement: { toKind: StockPlaceKind }): AssetStatus | null {
   return movement.toKind === "supplier" ? null : ASSET_STATUS_OF_PLACE[movement.toKind]
 }
-
-/** The places a container stands in while in stock: a warehouse, or maintenance at one. */
-export const STOCK_PLACES = ["warehouse", "maintenance"] as const satisfies readonly StockPlaceKind[]
-
-/** The places an adjustment may leave a container in: in stock, or scrapped (the correction door for a wrong decommission); never in service. */
-export const ADJUSTMENT_TARGETS = ["warehouse", "maintenance", "scrap"] as const satisfies readonly StockPlaceKind[]
 
 /** For each kind, where it comes from and where it goes to. */
 export type MovementShape = { readonly from: readonly StockPlaceKind[]; readonly to: readonly StockPlaceKind[] }

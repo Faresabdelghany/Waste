@@ -37,6 +37,7 @@ import type { Tx } from "@waste/db/client"
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
 import { customer, property, sharedCollectionPoint } from "@waste/db/schema/customers"
+import { vehicleType } from "@waste/db/schema/fleet-types"
 import { serviceProvider } from "@waste/db/schema/organisation"
 import { planningArea } from "@waste/db/schema/planning-areas"
 import { eq } from "drizzle-orm"
@@ -180,4 +181,15 @@ export async function requireContainer(tx: Tx, scope: Scope, id: string | null |
 export async function requireServiceProvider(tx: Tx, companyId: string, id: string | null | undefined, path = "serviceProviderId"): Promise<void> {
   if (id == null) return
   await requireRow(tx, serviceProvider, inCompany(companyId, id), { path, message: "Not a service provider of this company" })
+}
+
+// Resources (Issue #101): a vehicle type is the company's vocabulary, a row
+// and not a token, so a Stop Matching Rule that asks for one names one of the
+// company's. The place and fleet checks of the other families arrive with
+// their routes, slices 3 and 4, the day a body names them.
+
+/** A vehicle type a body names: the company's, since one company's "Rear loader" is another's "Baglæsser". */
+export async function requireVehicleType(tx: Tx, companyId: string, id: string | null | undefined, path = "vehicleTypeId"): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, vehicleType, inCompany(companyId, id), { path, message: "Not a vehicle type of this company" })
 }

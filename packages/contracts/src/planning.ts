@@ -4,7 +4,9 @@
 // would refuse it as a 500 naming nothing. Shared here because three modules
 // read them — `organisation.ts` for a project's weekend, `route-schemes.ts` for
 // nearly everything, `planning-areas.ts` for a purpose — and a list spelled in
-// one place is a list that cannot drift between them.
+// one place is a list that cannot drift between them. The vehicle a rule asks
+// for is not an enum since Resources (Issue #101): a vehicle type is a row of
+// the company's (`vehicle-types.ts`), and a Stop Matching Rule names it by id.
 //
 // `ServiceDays` is the one shape of a set of weekdays: a project's weekend, a
 // scheme's service days, a group's days are each a list of `ServiceDay` with
@@ -22,7 +24,6 @@ import {
   SCHEME_EDIT_POLICIES,
   SERVICE_DAYS,
   SERVICE_TYPES,
-  STOP_MATCH_VEHICLE_TYPES,
   STOP_SOURCES,
   WEEK_ROTATIONS,
 } from "@waste/domain/planning/vocabulary"
@@ -55,10 +56,6 @@ export type ServiceType = z.infer<typeof ServiceType>
 /** How a Collection Group finds its stops: by rule, or by containers picked by hand. */
 export const StopSource = z.enum(STOP_SOURCES)
 export type StopSource = z.infer<typeof StopSource>
-
-/** The vehicle a Stop Matching Rule may ask for; a working taxonomy until Resources owns vehicle types. */
-export const StopMatchVehicleType = z.enum(STOP_MATCH_VEHICLE_TYPES)
-export type StopMatchVehicleType = z.infer<typeof StopMatchVehicleType>
 
 /** The stored half of a scheme's lifecycle; scheduled, effective and expired are readings, never sent. */
 export const RouteSchemeStatus = z.enum(ROUTE_SCHEME_STATUSES)

@@ -588,7 +588,9 @@ describe("GET /openapi.json", () => {
       "query:validOn",
     ])
     assert.deepEqual(byName(document.paths["/agreements/{id}/subscriptions"].get).sort(), ["path:id", "query:cursor", "query:limit", "query:validOn"])
-    assert.deepEqual(byName(document.paths["/containers"].get).sort(), ["query:containerTypeId", "query:cursor", "query:limit", "query:projectId"])
+    // The two ledger filters are documented since Resources' contracts (#101, slice 2) and refused until its slice 5 answers them.
+    assert.deepEqual(byName(document.paths["/containers"].get).sort(), ["query:assetStatus", "query:containerTypeId", "query:cursor", "query:limit", "query:projectId", "query:warehouseId"])
+    assert.match(document.paths["/containers"].get.description ?? "", /not yet answered/)
     assert.deepEqual(byName(document.paths["/placements"].get).sort(), [
       "query:containerId",
       "query:cursor",
@@ -676,7 +678,7 @@ describe("GET /openapi.json", () => {
     const required = (path: string, method: "post" | "put" = "post") => document.paths[path][method].requestBody?.content["application/json"].schema.required
     assert.deepEqual(required("/route-schemes"), ["projectId", "name", "serviceType", "frequency", "serviceDays", "collectionGroups", "validFrom"])
     assert.deepEqual(required("/route-schemes/{id}/collection-groups"), ["name", "days", "stopSource"])
-    assert.deepEqual(required("/collection-groups/{id}/stop-matching-rule", "put"), ["wasteFractionIds", "containerTypeIds", "vehicleType"])
+    assert.deepEqual(required("/collection-groups/{id}/stop-matching-rule", "put"), ["wasteFractionIds", "containerTypeIds", "vehicleTypeId"])
     assert.deepEqual(required("/collection-groups/{id}/containers", "put"), ["containerIds"])
 
     for (const path of ["/route-schemes", "/route-schemes/{id}/collection-groups"]) {

@@ -32,6 +32,7 @@ const container = {
   serialNumber: "SN-4471",
   ownership: "company",
   notes: "Lid replaced in March.",
+  assetState: { status: "in-service", warehouseId: null, placementId: THIRD, since: "2026-09-24T13:41:00.000Z", movementId: ID },
   ...STAMPS,
 }
 
@@ -56,11 +57,19 @@ describe("ContainerOwnership", () => {
 })
 
 describe("Container", () => {
-  test("is the identity a person reads off the bin, and carries no status and no location", () => {
+  test("is the identity a person reads off the bin, and carries no status and no location of its own", () => {
     assert.deepEqual(Container.parse(container), container)
-    const bare = { ...container, barcode: null, rfid: null, serialNumber: null, notes: null, ownership: "unrecorded" }
-    assert.deepEqual(Container.parse(bare), bare)
+    const bare = { ...container, barcode: null, rfid: null, serialNumber: null, notes: null, ownership: "unrecorded", assetState: null }
+    assert.deepEqual(Container.parse(bare), bare, "no movement yet is no state")
     for (const key of ["status", "location"]) assert.equal(Object.keys(Container.shape).includes(key), false, key)
+  })
+
+  test("carries the ledger's reading as assetState, on the resource and on no write body (Issue #101)", () => {
+    const inStock = { ...container, assetState: { status: "in-warehouse", warehouseId: OTHER, placementId: null, since: "2026-09-24T13:41:00.000Z", movementId: ID } }
+    assert.deepEqual(Container.parse(inStock), inStock)
+    assert.equal(Container.safeParse({ ...container, assetState: { status: "in-transit", warehouseId: null, placementId: null, since: "2026-09-24T13:41:00.000Z", movementId: ID } }).success, false)
+    assert.match(refusal(ContainerCreate.safeParse({ projectId: OTHER, label: "BIN-82014", containerTypeId: THIRD, assetState: null }))[0].message, /assetState/)
+    assert.match(refusal(ContainerPatch.safeParse({ assetState: null }))[0].message, /assetState/)
   })
 
   test("needs a label and a type: a container nobody can name is a container nobody can find", () => {
@@ -152,10 +161,13 @@ describe("ContainerServicePlacementPatch", () => {
 })
 
 describe("ContainerListQuery", () => {
-  test("takes a page, the project and the type of container", () => {
+  test("takes a page, the project, the type of container, the asset state and the warehouse it stands in", () => {
     assert.deepEqual(ContainerListQuery.parse({}), { limit: 50 })
     assert.deepEqual(ContainerListQuery.parse({ projectId: OTHER, containerTypeId: THIRD }), { projectId: OTHER, containerTypeId: THIRD, limit: 50 })
+    assert.deepEqual(ContainerListQuery.parse({ assetStatus: "in-warehouse", warehouseId: OTHER }), { assetStatus: "in-warehouse", warehouseId: OTHER, limit: 50 })
     assert.equal(ContainerListQuery.safeParse({ containerTypeId: "all" }).success, false)
+    assert.equal(ContainerListQuery.safeParse({ assetStatus: "in-transit" }).success, false)
+    assert.equal(ContainerListQuery.safeParse({ assetStatus: null }).success, false, "the unrecorded are not askable for")
   })
 })
 

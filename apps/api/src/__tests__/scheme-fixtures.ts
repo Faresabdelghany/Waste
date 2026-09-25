@@ -13,6 +13,7 @@
 // a Thursday holiday shifts to Sunday there.
 import type { Database, Tx } from "@waste/db/client"
 import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
+import { vehicleType } from "@waste/db/schema/fleet-types"
 import { project } from "@waste/db/schema/organisation"
 import { planningArea } from "@waste/db/schema/planning-areas"
 import { withCompany } from "@waste/db/tenant"
@@ -23,6 +24,8 @@ import { testId, type Tenant } from "./tenant"
 export type PlanningFixtures = {
   /** One planning area per project the suites plan in. */
   areas: { centrum: { id: string }; harbor: { id: string }; cairo: { id: string } }
+  /** Two vehicle types of the company, which a rule asks for by id since Resources (Issue #101); their routes are #101's slice 3. */
+  vehicleTypes: { rearLoader: { id: string }; glassCrane: { id: string } }
 }
 
 /** The Danish holidays of the Copenhagen calendar: two named by the list's lookup, one by the calendar itself. */
@@ -47,7 +50,10 @@ export const CAIRO_HOLIDAYS = {
 
 export async function seedPlanning(pool: Database, tenant: Tenant): Promise<PlanningFixtures> {
   const { companyId } = tenant
-  const fixtures: PlanningFixtures = { areas: { centrum: { id: testId() }, harbor: { id: testId() }, cairo: { id: testId() } } }
+  const fixtures: PlanningFixtures = {
+    areas: { centrum: { id: testId() }, harbor: { id: testId() }, cairo: { id: testId() } },
+    vehicleTypes: { rearLoader: { id: testId() }, glassCrane: { id: testId() } },
+  }
   const copenhagen = tenant.projects.copenhagen.id
   const harbor = tenant.projects.harbor.id
   const cairo = tenant.projects.cairo.id
@@ -59,6 +65,10 @@ export async function seedPlanning(pool: Database, tenant: Tenant): Promise<Plan
       .update(project)
       .set({ holidayList: "Egyptian public holidays", weekend: ["friday", "saturday"] })
       .where(and(eq(project.companyId, companyId), eq(project.id, cairo)))
+    await tx.insert(vehicleType).values([
+      { id: fixtures.vehicleTypes.rearLoader.id, companyId, key: "rear-loader", name: "Rear loader" },
+      { id: fixtures.vehicleTypes.glassCrane.id, companyId, key: "glass-crane", name: "Glass crane" },
+    ])
     await tx.insert(planningArea).values([
       { id: fixtures.areas.centrum.id, companyId, projectId: copenhagen, code: "OP-CEN-01", name: "Centrum", purpose: "route-planning" },
       { id: fixtures.areas.harbor.id, companyId, projectId: harbor, code: "HB-01", name: "Havnen", purpose: "route-planning" },
