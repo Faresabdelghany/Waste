@@ -8,18 +8,23 @@ import { Customer, Property, SharedCollectionPoint } from "@waste/contracts/cust
 import { Id } from "@waste/contracts/ids"
 import { Project } from "@waste/contracts/organisation"
 import { Page } from "@waste/contracts/pagination"
+import { StockMovement } from "@waste/contracts/stock"
 import { createDb, type Database } from "@waste/db/client"
+import { warehouse } from "@waste/db/schema/places"
+import { withCompany } from "@waste/db/tenant"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
-import { databaseUnderTest } from "./database"
+import { databaseUnderTest, ownerUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { pointBody, setStatus } from "./registry"
 import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
 import { signingKeys, type SigningKeys } from "./tokens"
 
 const database = databaseUnderTest()
+/** The owner sweeps the one ledger row this suite writes — the receipt behind its placement — which `wms_api` may not delete (#101 §6.24). */
+const owner = ownerUnderTest()
 const AgreementPage = Page(Agreement)
 const SubscriptionPage = Page(Subscription)
 
@@ -32,8 +37,9 @@ const JULY = "2026-07-01"
 const OCTOBER = "2026-10-01"
 const NEXT_YEAR = "2027-01-01"
 
-describe("the agreement and subscription endpoints", { skip: database.skip }, () => {
+describe("the agreement and subscription endpoints", { skip: database.skip || owner.skip }, () => {
   let pool: Database
+  let ownerPool: Database
   let keys: SigningKeys
   /** The company under test. */
   let a: Tenant
@@ -68,6 +74,7 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
 
   before(async () => {
     pool = createDb(database.url, { max: 4 })
+    ownerPool = createDb(owner.url, { max: 1 })
     keys = await signingKeys()
     a = await seedTenant(pool)
     b = await seedTenant(pool)
@@ -126,9 +133,10 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
     )
   })
   after(async () => {
-    if (a) await dropTenant(pool, a.companyId)
-    if (b) await dropTenant(pool, b.companyId)
+    if (a) await dropTenant(pool, a.companyId, ownerPool)
+    if (b) await dropTenant(pool, b.companyId, ownerPool)
     await pool?.close()
+    await ownerPool?.close()
   })
 
   type Schema<T> = { parse: (value: unknown) => T }
@@ -654,6 +662,14 @@ describe("the agreement and subscription endpoints", { skip: database.skip }, ()
         { projectId: a.projects.copenhagen.id, label: "BIN-2471", containerTypeId: bin.id },
         Container,
       )
+      // A container is issued out of stock (Issue #101): a warehouse of the
+      // project, written directly since its routes are slice 3's, and the
+      // receipt through the ledger's own command.
+      const warehouseId = testId()
+      await withCompany(pool.db, a.companyId, async (tx) => {
+        await tx.insert(warehouse).values({ id: warehouseId, companyId: a.companyId, projectId: a.projects.copenhagen.id, code: "WH-2471", name: "Warehouse WH-2471", address: "Sundkrogsgade 1", status: "active" })
+      })
+      await create(olivia, `/containers/${container.id}/receive`, { warehouseId }, StockMovement)
       await create(
         olivia,
         `/containers/${container.id}/placements`,

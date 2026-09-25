@@ -36,7 +36,7 @@
 import { CONTAINER_OWNERSHIPS } from "@waste/domain/registry/vocabulary"
 import * as z from "zod"
 
-import { IsoDate } from "./dates"
+import { IsoDate, IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
 import { changesSomething, somethingToChange, stamped } from "./resource"
@@ -106,13 +106,24 @@ export const ContainerServicePlacement = z
   .refine(validityOrdered, endsAfterItStarts)
 export type ContainerServicePlacement = z.infer<typeof ContainerServicePlacement>
 
-/** The container is the path's and the project is the container's, so neither is here; the effective frequency is read, not written. */
+/**
+ * The container is the path's and the project is the container's, so neither
+ * is here; the effective frequency is read, not written. The create is the
+ * `issue` command of the Stock Movement ledger (Issue #101, ADR-0003: one
+ * action, one command), so it also says what the movement it appends may:
+ * when the container was issued and what paper it quotes. Neither is a column
+ * of the placement.
+ */
 export const ContainerServicePlacementCreate = z
   .strictObject({
     subscriptionId: Id,
     wasteFractionId: Id,
     serviceFrequencyId: Id.nullable().optional(),
     ...ValidityCreate,
+    /** When the container was issued, on the person's word; the request's clock when absent. The issue movement's, never the placement's. */
+    occurredAt: IsoDateTime.optional(),
+    /** A delivery note or a ticket the issue quotes; the movement's. */
+    reference: Label.optional(),
   })
   .refine(validityOrdered, endsAfterItStarts)
 export type ContainerServicePlacementCreate = z.infer<typeof ContainerServicePlacementCreate>

@@ -7,12 +7,14 @@ import { Container, ContainerServicePlacement } from "@waste/contracts/container
 import { Customer, Property, SharedCollectionPoint } from "@waste/contracts/customers"
 import { Id } from "@waste/contracts/ids"
 import { Page } from "@waste/contracts/pagination"
+import { StockMovement } from "@waste/contracts/stock"
 import { createDb, type Database } from "@waste/db/client"
 import { warehouse } from "@waste/db/schema/places"
 import { stockMovement } from "@waste/db/schema/stock"
 import { withCompany } from "@waste/db/tenant"
 
 import { createApp } from "../app"
+import { END_BY_COMMAND, leftOn } from "../routes/containers"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -38,10 +40,10 @@ const JULY = "2026-07-01"
 const OCTOBER = "2026-10-01"
 const NEXT_YEAR = "2027-01-01"
 
-describe("the container and placement endpoints", { skip: database.skip }, () => {
+describe("the container and placement endpoints", { skip: database.skip || owner.skip }, () => {
   let pool: Database
-  /** Opened only where the owner's URL is set; the assetState suite below needs it and skips without it. */
-  let ownerPool: Database | undefined
+  /** Every placement here is of a container received through the ledger, so the owner sweeps the whole suite's rows (#101 §6.24). */
+  let ownerPool: Database
   let keys: SigningKeys
   /** The company under test. */
   let a: Tenant
@@ -73,13 +75,16 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
   let inheritedProduct: Product
   let parkvej: Property
   let havnegade: Property
+  /** A warehouse of Copenhagen Central and one of Harbor Commercial: where a container is received before it can be issued (Issue #101). */
+  let west: string
+  let havnen: string
   /** The other company's. */
   let theirBin: ContainerType
   let theirContainer: Container
 
   before(async () => {
     pool = createDb(database.url, { max: 4 })
-    ownerPool = owner.skip ? undefined : createDb(owner.url, { max: 1 })
+    ownerPool = createDb(owner.url, { max: 1 })
     keys = await signingKeys()
     a = await seedTenant(pool)
     b = await seedTenant(pool)
@@ -122,6 +127,9 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
       (await property(a.projects.copenhagen.id, "Strandvej 7", "Strandvej 7, 2100 København Ø")).id,
     )
 
+    west = await warehouseIn(a.projects.copenhagen.id, "WH-WEST")
+    havnen = await warehouseIn(a.projects.harbor.id, "WH-HAVNEN")
+
     theirBin = await create(other, "/container-types", { name: "240 L bin", volumeLitres: 240 }, ContainerType)
     theirContainer = await create(
       other,
@@ -129,6 +137,7 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
       { projectId: b.projects.copenhagen.id, label: "BIN-THEIRS", containerTypeId: theirBin.id },
       Container,
     )
+    await create(other, `/containers/${theirContainer.id}/receive`, { warehouseId: await warehouseIn(b.projects.copenhagen.id, "WH-THEIRS", b.companyId) }, StockMovement)
   })
   after(async () => {
     if (a) await dropTenant(pool, a.companyId, ownerPool)
@@ -195,7 +204,7 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
   }
   const page = async (call: Call, query = "") => ContainerPage.parse(await (await call(`/containers${query}`)).json())
 
-  /** Puts a container into service under a subscription; the fraction is residual unless a test says otherwise. */
+  /** Puts a container into service under a subscription; the fraction is residual unless a test says otherwise. The container has to be in stock: `stocked` makes one. */
   const place = (into: Container, values: Record<string, unknown> = {}) =>
     create(
       olivia,
@@ -203,6 +212,14 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
       { subscriptionId: subscribed.id, wasteFractionId: residual.id, validFrom: JANUARY, ...values },
       ContainerServicePlacement,
     )
+  /** A container received into a warehouse through the ledger's own command (Issue #101): the state the issue command wants. */
+  const stocked = async (label: string, values: Record<string, unknown> = {}, warehouseId = west): Promise<Container> => {
+    const into = await container(label, values)
+    await create(olivia, `/containers/${into.id}/receive`, { warehouseId }, StockMovement)
+    return into
+  }
+  /** Takes the container out of service on `validTo`, back into the west warehouse: how a placement ends since the ledger. */
+  const returned = (into: Container, validTo: string) => create(olivia, `/containers/${into.id}/return`, { warehouseId: west, validTo }, StockMovement)
   const onePlacement = async (call: Call, id: string): Promise<ContainerServicePlacement> => {
     const response = await call(`/placements/${id}`)
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
@@ -216,14 +233,14 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
   const placements = async (call: Call, query = "") => PlacementPage.parse(await (await call(`/placements${query}`)).json())
 
   /** A warehouse of a project, written directly as `wms_api`: its routes are #101's slice 3, and the ledger's reading needs a place to point at. */
-  const warehouseIn = async (projectId: string, code: string): Promise<string> => {
+  const warehouseIn = async (projectId: string, code: string, companyId = a.companyId): Promise<string> => {
     const id = testId()
-    await withCompany(pool.db, a.companyId, async (tx) => {
-      await tx.insert(warehouse).values({ id, companyId: a.companyId, projectId, code, name: `Warehouse ${code}`, address: "Sundkrogsgade 1", status: "active" })
+    await withCompany(pool.db, companyId, async (tx) => {
+      await tx.insert(warehouse).values({ id, companyId, projectId, code, name: `Warehouse ${code}`, address: "Sundkrogsgade 1", status: "active" })
     })
     return id
   }
-  /** A receipt of the container into the warehouse, appended directly as `wms_api` (which may insert into the ledger and never delete): the commands that write it are #101's slice 5. */
+  /** A receipt of the container into the warehouse, appended directly as `wms_api` (which may insert into the ledger and never delete), so the projection is proved over rows the commands did not shape; the commands themselves are lifecycle.test.ts's. */
   const receivedInto = async (into: Container, warehouseId: string, occurredAt: string): Promise<string> => {
     const id = testId()
     await withCompany(pool.db, a.companyId, async (tx) => {
@@ -331,7 +348,7 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
     })
   })
 
-  describe("assetState, the ledger's reading (Issue #101)", { skip: owner.skip }, () => {
+  describe("assetState, the ledger's reading (Issue #101)", () => {
     test("is null for a container with no movement, and where the latest movement left it once one is recorded, on the read, the list and the patch alike", async () => {
       const created = await container("BIN-3490")
       assert.equal(created.assetState, null)
@@ -415,7 +432,7 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
 
   describe("POST /containers/:id/placements", () => {
     test("puts the container into service, taking the project from it, and answers the cadence in force", async () => {
-      const into = await container("BIN-3440")
+      const into = await stocked("BIN-3440")
       const placed = await place(into, { validTo: APRIL })
       assert.equal(Id.parse(placed.id), placed.id)
       assert.equal(placed.containerId, into.id)
@@ -424,10 +441,28 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
       assert.equal(placed.effectiveServiceFrequencyId, weekly.id, "so the product's cadence is the one in force")
       assert.deepEqual([placed.validFrom, placed.validTo], [JANUARY, APRIL])
       assert.deepEqual(await onePlacement(olivia, placed.id), placed, "the create answers what the next read says")
+      assert.equal((await one(olivia, into.id)).assetState?.placementId, placed.id, "the issue movement names the placement it opened")
 
+      await returned(into, APRIL)
       const overridden = await place(into, { validFrom: APRIL, serviceFrequencyId: fortnightly.id })
       assert.equal(overridden.serviceFrequencyId, fortnightly.id)
       assert.equal(overridden.effectiveServiceFrequencyId, fortnightly.id, "the placement's cadence beats the product's")
+    })
+
+    test("is the issue command: a container with no stock record is refused, and the body's instant and paper go on the movement, not the placement", async () => {
+      const unrecorded = await container("BIN-3446")
+      const problem = await refused(
+        await olivia(`/containers/${unrecorded.id}/placements`, { method: "POST", body: { subscriptionId: subscribed.id, wasteFractionId: residual.id, validFrom: JANUARY } }),
+        409,
+      )
+      assert.equal(problem.detail, "Container BIN-3446 has no stock record; receive it first")
+      assert.deepEqual((await placements(olivia, `?containerId=${unrecorded.id}`)).items, [])
+
+      const into = await stocked("BIN-3447")
+      const placed = await place(into, { occurredAt: "2026-01-02T08:00:00Z", reference: "DN-3447" })
+      assert.deepEqual(Object.keys(placed).filter((key) => key === "occurredAt" || key === "reference"), [], "neither is a column of the placement")
+      const state = (await one(olivia, into.id)).assetState
+      assert.deepEqual([state?.status, state?.warehouseId, state?.placementId, state?.since], ["in-service", null, placed.id, "2026-01-02T08:00:00.000Z"], "the issue movement is the reading")
     })
 
     test("answers 404 for a container outside the caller's projects", async () => {
@@ -475,7 +510,7 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
         (await property(a.projects.copenhagen.id, "Bounded 1", "Bounded 1, 2100 København Ø")).id,
       )
       assert.equal((await endSubscription(bounded, OCTOBER)).validTo, OCTOBER)
-      const into = await container("BIN-3443")
+      const into = await stocked("BIN-3443")
 
       const open = await refused(
         await olivia(`/containers/${into.id}/placements`, { method: "POST", body: { subscriptionId: bounded.id, wasteFractionId: residual.id, validFrom: APRIL } }),
@@ -493,11 +528,15 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
     })
 
     test("refuses a second placement of the container over part of the period, and takes one back to back", async () => {
-      const into = await container("BIN-3444")
+      const into = await stocked("BIN-3444")
       await place(into, { validFrom: JANUARY, validTo: APRIL })
+      await returned(into, APRIL)
       const next = await place(into, { validFrom: APRIL, validTo: JULY })
       assert.equal(next.validFrom, APRIL, "the day one placement ends is the day the next may begin")
+      await returned(into, JULY)
 
+      // Back in stock, so the state lets the issue through and the exclusion
+      // constraint is what refuses the period over the two it left.
       const problem = await refused(
         await olivia(`/containers/${into.id}/placements`, { method: "POST", body: { subscriptionId: subscribed.id, wasteFractionId: residual.id, validFrom: FEBRUARY } }),
         409,
@@ -568,8 +607,9 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
 
   describe("GET /placements", () => {
     test("filters by container, by subscription and by the day, and answers none between two placements", async () => {
-      const into = await container("BIN-3450")
+      const into = await stocked("BIN-3450")
       const first = await place(into, { validFrom: JANUARY, validTo: APRIL })
+      await returned(into, APRIL)
       const second = await place(into, { validFrom: JULY })
 
       const all = await placements(olivia, `?limit=200&containerId=${into.id}`)
@@ -589,7 +629,7 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
     })
 
     test("answers the containers standing at a place on a day, through the subscription, and asks for the day", async () => {
-      const into = await container("BIN-3451")
+      const into = await stocked("BIN-3451")
       const placed = await place(into, { validFrom: JANUARY })
 
       const atTheProperty = (await placements(olivia, `?limit=200&propertyId=${parkvej.id}&validOn=${FEBRUARY}`)).items
@@ -603,8 +643,8 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
     })
 
     test("shows an account only the projects it works in, and answers an empty page to one that works in none", async () => {
-      const here = await place(await container("BIN-3452"), { validFrom: OCTOBER })
-      const harborContainer = await container("BIN-3453", { projectId: a.projects.harbor.id })
+      const here = await place(await stocked("BIN-3452"), { validFrom: OCTOBER })
+      const harborContainer = await stocked("BIN-3453", { projectId: a.projects.harbor.id }, havnen)
       const elsewhere = await create(
         olivia,
         `/containers/${harborContainer.id}/placements`,
@@ -630,7 +670,7 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
 
   describe("GET and PATCH /placements/:id", () => {
     test("reads the cadence in force off the product, and follows it when the product's changes", async () => {
-      const placed = await place(await container("BIN-3460"), { subscriptionId: inherited.id, validFrom: JANUARY })
+      const placed = await place(await stocked("BIN-3460"), { subscriptionId: inherited.id, validFrom: JANUARY })
       assert.equal(placed.effectiveServiceFrequencyId, weekly.id)
 
       const changed = await olivia(`/products/${inheritedProduct.id}`, { method: "PATCH", body: { serviceFrequencyId: fortnightly.id } })
@@ -653,14 +693,14 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
       assert.deepEqual((await refused(await olivia("/placements/not-a-uuid"), 400)).errors?.map((error) => error.path), ["id"])
     })
 
-    test("ends a placement, corrects the fraction, and refuses an end outside the subscription's period", async () => {
+    test("corrects the end of an ended placement and the fraction, and refuses an end outside the subscription's period", async () => {
       const bounded = await subscribeTo(
         await agreement("AGR-3462", a.projects.copenhagen.id, (await create(olivia, "/customers", { kind: "organisation", name: "Ending Housing" }, Customer)).id),
         (await product(a.projects.copenhagen.id, "Ending collection", weekly.id)).id,
         (await property(a.projects.copenhagen.id, "Ending 1", "Ending 1, 2100 København Ø")).id,
       )
       assert.equal((await endSubscription(bounded, OCTOBER)).validTo, OCTOBER)
-      const placed = await place(await container("BIN-3462"), { subscriptionId: bounded.id, validFrom: APRIL, validTo: JULY })
+      const placed = await place(await stocked("BIN-3462"), { subscriptionId: bounded.id, validFrom: APRIL, validTo: JULY })
 
       const glass = await create(olivia, "/waste-fractions", { key: "glass", name: "Glass" }, WasteFraction)
       const ended = await patchPlacement(placed.id, { validTo: OCTOBER, wasteFractionId: glass.id })
@@ -669,16 +709,31 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
 
       const beyond = await refused(await olivia(`/placements/${placed.id}`, { method: "PATCH", body: { validTo: NEXT_YEAR } }), 400)
       assert.deepEqual(beyond.errors, [{ path: "validTo", message: "Outside the subscription's period" }])
-      const open = await refused(await olivia(`/placements/${placed.id}`, { method: "PATCH", body: { validTo: null } }), 400)
-      assert.deepEqual(open.errors, [{ path: "validTo", message: "Outside the subscription's period" }])
       const backwards = await refused(await olivia(`/placements/${placed.id}`, { method: "PATCH", body: { validTo: JANUARY } }), 400)
       assert.deepEqual(backwards.errors?.map((error) => error.path), ["validTo"])
       assert.equal((await onePlacement(olivia, placed.id)).validTo, OCTOBER)
     })
 
+    test("neither ends an open placement nor reopens an ended one: the ledger's commands do that (Issue #101)", async () => {
+      const into = await stocked("BIN-3465")
+      const placed = await place(into)
+      const closing = await refused(await olivia(`/placements/${placed.id}`, { method: "PATCH", body: { validTo: JULY } }), 409)
+      assert.equal(closing.detail, END_BY_COMMAND)
+      assert.equal((await onePlacement(olivia, placed.id)).validTo, null, "still open")
+      assert.equal((await patchPlacement(placed.id, { serviceFrequencyId: fortnightly.id })).serviceFrequencyId, fortnightly.id, "the rest of the patch is untouched by the rule")
+
+      await returned(into, JULY)
+      const reopening = await refused(await olivia(`/placements/${placed.id}`, { method: "PATCH", body: { validTo: null } }), 409)
+      assert.equal(reopening.detail, leftOn(JULY))
+      assert.equal(reopening.detail, "The container left this placement on 2026-07-01; the ledger says so")
+      assert.equal((await patchPlacement(placed.id, { validTo: OCTOBER })).validTo, OCTOBER, "a day it already left on may be corrected")
+      assert.equal((await one(olivia, into.id)).assetState?.status, "in-warehouse", "the ledger is untouched by the patch")
+    })
+
     test("refuses an end that would run the placement into the next one", async () => {
-      const into = await container("BIN-3463")
+      const into = await stocked("BIN-3463")
       const first = await place(into, { validFrom: JANUARY, validTo: APRIL })
+      await returned(into, APRIL)
       await place(into, { validFrom: JULY, validTo: OCTOBER })
       const problem = await refused(await olivia(`/placements/${first.id}`, { method: "PATCH", body: { validTo: OCTOBER } }), 409)
       assert.equal(problem.detail, "Container BIN-3463 is already placed over part of that period; end that placement first")
@@ -687,7 +742,7 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
     })
 
     test("refuses an empty patch, a fraction of another company, and a role that may view but not edit", async () => {
-      const placed = await place(await container("BIN-3464"), { validFrom: NEXT_YEAR })
+      const placed = await place(await stocked("BIN-3464"), { validFrom: NEXT_YEAR })
       assert.deepEqual(
         (await refused(await olivia(`/placements/${placed.id}`, { method: "PATCH", body: {} }), 400)).errors?.map((error) => error.path),
         [""],

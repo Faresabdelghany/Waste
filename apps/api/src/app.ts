@@ -40,6 +40,7 @@ import { companyRoutes } from "./routes/company"
 import { containerRoutes } from "./routes/containers"
 import { customerRoutes } from "./routes/customers"
 import { depotRoutes } from "./routes/depots"
+import { lifecycleRoutes } from "./routes/lifecycle"
 import { meRoutes } from "./routes/me"
 import { planningAreaRoutes } from "./routes/planning-areas"
 import { productRoutes } from "./routes/products"
@@ -137,7 +138,8 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   app.route("/", propertyGroupRoutes(guard))
   app.route("/", sharedCollectionPointRoutes(guard))
   app.route("/", agreementRoutes(guard))
-  app.route("/", containerRoutes(guard))
+  app.route("/", containerRoutes(guard, { now }))
+  app.route("/", lifecycleRoutes(guard, { now }))
   app.route("/", planningAreaRoutes(guard))
   app.route("/", collectionCalendarRoutes(guard))
   app.route("/", routeSchemeRoutes(guard))

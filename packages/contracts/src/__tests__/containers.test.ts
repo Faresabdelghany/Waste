@@ -137,6 +137,16 @@ describe("ContainerServicePlacementCreate", () => {
     }
   })
 
+  test("is the issue command too, so it takes when the container was issued and what paper it quotes, for the movement (Issue #101)", () => {
+    const issued = { ...body, occurredAt: "2026-01-01T07:30:00+01:00", reference: "DN-2048" }
+    assert.deepEqual(ContainerServicePlacementCreate.parse(issued), issued)
+    assert.equal(ContainerServicePlacementCreate.safeParse({ ...body, occurredAt: "2026-01-01" }).success, false, "an instant, not a day")
+    assert.equal(ContainerServicePlacementCreate.safeParse({ ...body, reference: "  " }).success, false)
+    for (const key of ["kind", "fromKind", "fromWarehouseId", "recordedBy"]) {
+      assert.match(refusal(ContainerServicePlacementCreate.safeParse({ ...body, [key]: "warehouse" }))[0].message, new RegExp(key), "the ledger's, never the body's")
+    }
+  })
+
   test("needs all three, refuses a backwards period, and mints nothing", () => {
     for (const key of Object.keys(body)) {
       const without: Record<string, unknown> = { ...body }
