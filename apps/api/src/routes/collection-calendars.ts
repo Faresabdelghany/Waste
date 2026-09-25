@@ -69,7 +69,7 @@ import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { count } from "@waste/domain/text"
-import { and, asc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm"
+import { and, asc, eq, gt, gte, inArray, lt, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -80,7 +80,7 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { periodAfter, refuseStranded, requireOrdered, type Period } from "./periods"
-import { describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stampsOf } from "./shared"
+import { describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stamp, stampsOf } from "./shared"
 
 const MODULE = "configure.calendars"
 const CollectionCalendarPage = Page(CollectionCalendar)
@@ -424,7 +424,7 @@ export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
         // for it, and the period read back is the one the days are held to.
         const [row] = await tx
           .update(collectionCalendar)
-          .set({ updatedAt: sql`now()` })
+          .set(stamp())
           .where(and(scope(principal), eq(collectionCalendar.id, id)))
           .returning(columns)
         if (row === undefined) throw noSuchCalendar(id)
