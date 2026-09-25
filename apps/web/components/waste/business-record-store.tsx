@@ -10,20 +10,42 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react"
+import { toast } from "sonner"
 
 import { createExternalStore, type ExternalStore } from "@/lib/external-store"
-import type {
-  BusinessRecord,
-  WorkspaceId,
+import {
+  getModuleDefinition,
+  type BusinessRecord,
+  type WorkspaceId,
 } from "@/lib/data/business-modules"
 import {
   hasLegacyIds,
   migrateLegacyRecordBuckets,
 } from "@/lib/data/legacy-ids"
+import type { ApiClient } from "@/lib/api/client"
+import { problemSentence, type Problem } from "@/lib/api/problem"
+import { moduleKeyOf } from "@/lib/api/records/adapter"
+import { SERVER_MODULES, serverModuleOf } from "@/lib/api/records/modules"
+import {
+  IDLE,
+  loadFailed,
+  loadModule,
+  loaded,
+  loading,
+  problemOfError,
+  recordsOf,
+  withCreated,
+  withRecord,
+  writeRecord,
+  type ModuleState,
+  type ServerRecordsState,
+} from "@/lib/api/records/server-records"
 import {
   BUSINESS_RECORDS_STORAGE_KEY,
   readPersisted,
 } from "@/lib/storage-keys"
+
+import { useApiClient } from "./api-session-store"
 
 /**
  * Key renames specific to this store's records, on top of the shared map in
@@ -64,6 +86,24 @@ type BusinessRecordStores = {
    * write planned against fixture-only state would be clobbered by the load.
    */
   hydrated: ExternalStore<boolean>
+  /**
+   * The server-backed modules (Issue #81): one entry per switched
+   * `workspace.module`, keyed like the records above, each the server's rows
+   * as the prototype shows them once its read has landed. Empty while the
+   * adapter is off or nobody is signed in, so every module reads the
+   * browser's own path then — and a write made in that window goes to the
+   * browser's bucket, which a switched module stops reading once the
+   * server has answered.
+   */
+  server: ExternalStore<ServerRecordsState>
+  /** The client the writes go through; null when there is none. Held here so `upsertRecord` reads the current one when it runs. */
+  client: ExternalStore<ApiClient | null>
+  /**
+   * Writes in flight, by web id, so a second save of a row whose first has
+   * not answered waits its turn rather than racing it to the API. One map
+   * for the whole store, since two components may write the same row.
+   */
+  pendingWrites: Map<string, Promise<void>>
 }
 
 // The context carries the stable store handles, never the state itself — see
@@ -74,9 +114,10 @@ const BusinessRecordStoreContext = createContext<BusinessRecordStores | null>(
 
 // The server (and every hydrating component) sees fixtures only.
 const EMPTY_STORED_RECORDS: StoredRecords = {}
+const NO_SERVER_MODULES: ServerRecordsState = new Map()
 
 function moduleKey(workspaceId: WorkspaceId, moduleId: string) {
-  return `${workspaceId}.${moduleId}`
+  return moduleKeyOf(workspaceId, moduleId)
 }
 
 function isStoredRecords(value: unknown): value is StoredRecords {
@@ -94,6 +135,16 @@ function isStoredRecords(value: unknown): value is StoredRecords {
   )
 }
 
+/** A refusal is told to the person in the API's words: the toast for a write or a read the API refused. */
+function reportProblem(what: string, problem: Problem) {
+  toast.error(what, { description: problemSentence(problem) })
+}
+
+/** The fixtures of a module, the seed's origin, which every mapping matches by name. */
+function fixturesOf(workspaceId: WorkspaceId, moduleId: string): readonly BusinessRecord[] {
+  return getModuleDefinition({ workspaceId, moduleId })?.records ?? []
+}
+
 export function BusinessRecordStoreProvider({
   children,
 }: {
@@ -102,7 +153,11 @@ export function BusinessRecordStoreProvider({
   const [stores] = useState<BusinessRecordStores>(() => ({
     records: createExternalStore<StoredRecords>(EMPTY_STORED_RECORDS),
     hydrated: createExternalStore(false),
+    server: createExternalStore<ServerRecordsState>(NO_SERVER_MODULES),
+    client: createExternalStore<ApiClient | null>(null),
+    pendingWrites: new Map(),
   }))
+  const client = useApiClient()
 
   useEffect(() => {
     const store = stores.records
@@ -142,6 +197,44 @@ export function BusinessRecordStoreProvider({
     return store.subscribe(persist)
   }, [stores])
 
+  // The server-backed modules follow the client: a new token reloads them,
+  // and no client (signed out, adapter off) empties them, so every module
+  // reads the browser's own path again. The switched modules load in
+  // SERVER_MODULES' order, one after the other, since a later module's
+  // mapping resolves the earlier ones' rows (a user names its role and its
+  // projects); each lands as it arrives, and a module that fails is reported
+  // once and left on its fixtures.
+  useEffect(() => {
+    const server = stores.server
+    stores.client.set(client)
+    if (client === null) {
+      server.set(NO_SERVER_MODULES)
+      return
+    }
+    let cancelled = false
+    const run = async () => {
+      for (const module of SERVER_MODULES) {
+        if (cancelled) return
+        const key = moduleKey(module.workspaceId, module.moduleId)
+        server.set((current) => new Map(current).set(key, loading(current.get(key) ?? IDLE)))
+        try {
+          const result = await loadModule(client, module, { fixtures: fixturesOf(module.workspaceId, module.moduleId), state: server.getSnapshot() })
+          if (cancelled) return
+          server.set((current) => new Map(current).set(key, loaded(result, Date.now())))
+        } catch (error) {
+          if (cancelled) return
+          const problem = problemOfError(error)
+          server.set((current) => new Map(current).set(key, loadFailed(current.get(key) ?? IDLE, problem)))
+          reportProblem(`${key} could not be read from the API`, problem)
+        }
+      }
+    }
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [client, stores])
+
   return (
     <BusinessRecordStoreContext.Provider value={stores}>
       {children}
@@ -177,6 +270,17 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
     store.getSnapshot,
     store.getServerSnapshot,
   )
+  const serverModules = useSyncExternalStore(
+    stores.server.subscribe,
+    stores.server.getSnapshot,
+    stores.server.getServerSnapshot,
+  )
+  /** The switched module's state, or null for a module still on the browser's own path. */
+  const serverModuleState = useCallback(
+    (workspaceId: WorkspaceId, moduleId: string): ModuleState | null =>
+      serverModuleOf(workspaceId, moduleId) === undefined ? null : (serverModules.get(moduleKey(workspaceId, moduleId)) ?? IDLE),
+    [serverModules],
+  )
 
   const getRecords = useCallback(
     (
@@ -184,6 +288,13 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
       moduleId: string,
       fixtureRecords: readonly BusinessRecord[],
     ) => {
+      // A switched module answers the server's rows once they are here and
+      // the fixtures until then — never a mixture with the browser's own
+      // bucket, whose records were made against a store that no longer
+      // decides (Issue #81).
+      const server = serverModuleState(workspaceId, moduleId)
+      if (server !== null && server.status === "ready") return recordsOf(server, fixtureRecords)
+
       const stored = storedRecords[moduleKey(workspaceId, moduleId)] ?? []
       const storedById = new Map(stored.map((record) => [record.id, record]))
       const fixtureIds = new Set(fixtureRecords.map((record) => record.id))
@@ -194,12 +305,54 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
 
       return [...createdRecords, ...mergedFixtures]
     },
-    [storedRecords],
+    [serverModuleState, storedRecords],
   )
 
   const upsertRecord = useCallback(
     (workspaceId: WorkspaceId, moduleId: string, record: BusinessRecord) => {
       const key = moduleKey(workspaceId, moduleId)
+      const module = serverModuleOf(workspaceId, moduleId)
+      const serverStore = stores.server
+      const current = module === undefined ? undefined : serverStore.getSnapshot().get(key)
+      const client = stores.client.getSnapshot()
+
+      if (module !== undefined && current !== undefined && current.status === "ready" && client !== null) {
+        // Optimistic and reconciled: the row shows what was saved at once,
+        // the API's answer replaces it, a refusal puts the row back and
+        // tells the person why in the API's words.
+        const before = current.records.find((candidate) => candidate.id === record.id)
+        serverStore.set((state) => new Map(state).set(key, withRecord(state.get(key) ?? current, record)))
+        const run = async () => {
+          const outcome = await writeRecord(client, module, current, record, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
+          serverStore.set((state) => {
+            const latest = state.get(key) ?? current
+            switch (outcome.kind) {
+              case "created":
+                return new Map(state).set(key, withCreated(latest, outcome.optimisticId, outcome.record, outcome.serverId))
+              case "updated":
+                return new Map(state).set(key, withRecord(latest, outcome.record, outcome.serverId))
+              case "unchanged":
+                return state
+              case "refused": {
+                const restored =
+                  before === undefined
+                    ? { ...latest, records: latest.records.filter((candidate) => candidate.id !== outcome.recordId) }
+                    : withRecord(latest, before)
+                return new Map(state).set(key, { ...restored, problem: outcome.problem })
+              }
+            }
+          })
+          if (outcome.kind === "refused") reportProblem(`${record.name} was not saved`, outcome.problem)
+        }
+        const pending = stores.pendingWrites
+        const previous = pending.get(record.id) ?? Promise.resolve()
+        const next: Promise<void> = previous.then(run, run).finally(() => {
+          if (pending.get(record.id) === next) pending.delete(record.id)
+        })
+        pending.set(record.id, next)
+        return
+      }
+
       store.set((current) => {
         const existing = current[key] ?? []
         const hasRecord = existing.some((candidate) => candidate.id === record.id)
@@ -213,7 +366,7 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
         }
       })
     },
-    [store],
+    [store, stores],
   )
 
   return useMemo(

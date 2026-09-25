@@ -30,6 +30,20 @@ const nextConfig = {
       { source: "/contractor-workspace/:path*", destination: "/service-provider-workspace/:path*", permanent: false },
     ]
   },
+  async rewrites() {
+    // The API behind the web's own origin (Issue #81). The browser calls
+    // `NEXT_PUBLIC_WASTE_API_URL` (`/waste-api` locally) and Next forwards it
+    // to `WASTE_API_ORIGIN` (`http://127.0.0.1:3001`): the API has no CORS
+    // yet, and a same-origin path needs none — `Location`, which a browser
+    // may read across origins only when CORS exposes it (#74), is readable
+    // here as it is. The token still travels in `Authorization`; nothing is
+    // a cookie. When the API's CORS lands, the public URL becomes the API's
+    // origin and this rewrite goes; until then a deployment sets both
+    // variables and gets the same one door.
+    const origin = process.env.WASTE_API_ORIGIN?.replace(/\/+$/, "")
+    if (!origin) return []
+    return [{ source: "/waste-api/:path*", destination: `${origin}/:path*` }]
+  },
 }
 
 export default nextConfig

@@ -29,6 +29,25 @@
         "SUPABASE_URL"
       ]
     },
+    "@waste/web#dev": {
+      "cache": false,
+      "persistent": true,
+      "env": [
+        "WASTE_API_ORIGIN"
+      ]
+    },
+    "@waste/web#build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**"
+      ],
+      "env": [
+        "WASTE_API_ORIGIN"
+      ]
+    },
     "lint": {
       "dependsOn": [
         "^lint"
