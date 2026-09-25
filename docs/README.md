@@ -30,3 +30,4 @@ The domain glossary is `CONTEXT.md` at the repository root, not here. Every term
 - [ADR-0004 Offline execution](adr/0004-offline-execution.md) — accepted
 - [ADR-0005 Effective dating and temporal integrity](adr/0005-effective-dating.md) — accepted
 - [ADR-0006 PyVRP optimisation sidecar](adr/0006-pyvrp-optimisation-sidecar.md) — accepted
+- [ADR-0007 Hosting the API, the worker and Valhalla](adr/0007-hosting-api-worker-valhalla.md) — proposed

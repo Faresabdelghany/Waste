@@ -1,0 +1,79 @@
+# The API on Fly.io (docs/adr/0007-hosting-api-worker-valhalla.md): one
+# Machine in Stockholm, beside the database in Supabase's eu-north-1.
+#
+# Deploy from the repository root, not from this directory:
+#
+#     fly deploy --config apps/api/fly.toml
+#
+# The working directory is the build context, and the Dockerfile copies the
+# workspace manifests and the three packages the API runs from the root: the
+# context CI builds with (docker build -f apps/api/Dockerfile .), so the root
+# .dockerignore applies unchanged and there is no apps/api/.dockerignore. The
+# path under [build] is relative to this file (to verify on the first deploy;
+# if flyctl reports the Dockerfile missing, pass --dockerfile
+# apps/api/Dockerfile, which wins over the file).
+#
+# DATABASE_URL and SUPABASE_URL are secrets, set with `fly secrets set` and
+# never written here: the Supabase session pooler URL, port 5432 on the
+# pooler host as wms_api.<project-ref>, and the project's origin. The ADR
+# lists the four commands.
+
+# Global on fly.dev; `fly launch --copy-config` creates the app under it. If
+# the name is taken, change it here and in the secrets command.
+app = "waste-api-dev"
+# Fly's Stockholm, beside Supabase's eu-north-1.
+primary_region = "arn"
+
+# What the host sends to stop the process, and how long it waits before
+# SIGKILL. src/server.ts handles SIGTERM (and SIGINT): the listener drains
+# requests in flight for up to 5 s (SHUTDOWN_GRACE_MS in src/listen.ts) while
+# the probe pool closes, then the request pool closes with its own 5 s end
+# timeout. 12 s covers both ceilings in sequence; Fly's default of 5 s would
+# cut the drain short.
+kill_signal = "SIGTERM"
+kill_timeout = "12s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# HOST and PORT are the image's own defaults (Dockerfile, ENV). Restated so
+# the file says what internal_port below listens on, and so a change to the
+# image cannot move the port away from it unnoticed. Every [env] value is a
+# string, PORT included.
+[env]
+  HOST = "0.0.0.0"
+  PORT = "3001"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  # Development: the Machine stops when idle and starts on the next request,
+  # so an API nobody calls costs its root filesystem and nothing else; the
+  # first request after a stop waits for the start and tsx's module load. A
+  # production app sets min_machines_running = 1 and runs two Machines for a
+  # deploy with no gap.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  # Liveness, and deliberately not /readyz. Fly's check decides whether this
+  # Machine receives traffic and whether a deploy is judged healthy. /readyz
+  # answers 503 while the database is unreachable: readiness, the API's own
+  # answer for a client to route around, and a check on it would fail a
+  # deploy during a database outage and pull the one Machine out of routing
+  # exactly when the API's 503 body is what a client should read. /healthz
+  # answers 200 as long as the process answers, which is what a host's check
+  # asks. The Dockerfile's HEALTHCHECK makes the same split.
+  [[http_service.checks]]
+    method = "GET"
+    path = "/healthz"
+    interval = "30s"
+    timeout = "3s"
+    # Time for tsx to load the modules before the first check counts.
+    grace_period = "10s"
+
+# The smallest Machine; Node with tsx's loader sits well under it. Raise it
+# when the Machine's memory graph says so.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
