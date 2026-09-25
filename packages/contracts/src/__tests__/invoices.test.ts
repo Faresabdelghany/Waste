@@ -115,6 +115,10 @@ describe("InvoiceLine and InvoiceDetail", () => {
     assert.deepEqual(InvoiceLine.parse(creditLine), creditLine)
     const reversal = { ...line, id: OTHER, position: 2, netMinor: -12_345, vatMinor: -3_086 }
     assert.deepEqual(InvoiceLine.parse(reversal), reversal, "a reversal's line is an event's and negative")
+    // The description is a Paragraph: a Label-long invoice name with the service date beside it overflows a Label.
+    const long = { ...line, description: `${"Restaffald ".repeat(18).trimEnd()} · 2026-10-05` }
+    assert.ok(long.description.length > 200, "longer than a Label")
+    assert.deepEqual(InvoiceLine.parse(long), long)
     assert.equal("updatedAt" in InvoiceLine.shape, false)
   })
 

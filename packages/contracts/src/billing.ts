@@ -20,7 +20,7 @@ import { BillingRunStatus, ExclusionReason } from "./finance"
 import { Id } from "./ids"
 import { Currency } from "./organisation"
 import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
-import { Minor, PositiveInt, recorded, stamped } from "./resource"
+import { Minor, NonNegativeInt, PositiveInt, recorded, stamped } from "./resource"
 import { Paragraph } from "./text"
 import * as z from "zod"
 
@@ -32,7 +32,7 @@ const periodIsOrdered = { message: PERIOD_ORDERED, path: ["periodTo"] }
 export const periodOrdered = (period: { periodFrom: string; periodTo: string }): boolean => period.periodTo >= period.periodFrom
 
 /** A count of what a run did: zero or more. */
-const Count = z.int().min(0)
+const Count = NonNegativeInt
 
 /** A run's fields, spelled once for the two resources that carry them; each refines `periodOrdered` again, since spreading takes the fields and not the rule. */
 const billingRunFields = {

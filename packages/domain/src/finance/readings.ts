@@ -18,8 +18,8 @@ import type { BillableEventStatus, BlockReason, WeightReviewDecision, WeightRevi
 /** What decides a Billable Event's status: the two stamps on the row and the two rows that may name it. */
 export type BillableEventReading = {
   blockReason: BlockReason | null
-  /** The cancellation stamp; any instant, or null. */
-  cancelledAt: unknown | null
+  /** The cancellation stamp, or null: the `timestamptz` as Drizzle reads it (a `Date`) or as the wire spells it (an `IsoDateTime` string). The fold asks only whether it is there. */
+  cancelledAt: Date | string | null
   /** Whether an invoice line names the event. */
   invoiced: boolean
   /** Whether a `reversal` event names the event. */
@@ -30,7 +30,7 @@ export type BillableEventReading = {
 export function billableEventStatus(reading: BillableEventReading): BillableEventStatus {
   if (reading.reversed) return "reversed"
   if (reading.invoiced) return "invoiced"
-  if (reading.cancelledAt !== null && reading.cancelledAt !== undefined) return "cancelled"
+  if (reading.cancelledAt !== null) return "cancelled"
   if (reading.blockReason !== null) return "blocked"
   return "ready"
 }

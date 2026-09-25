@@ -693,6 +693,8 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       // The unit price negated so the amounts agree and the kind CASE alone refuses: a reversal's net is zero or less.
       await refuse({ kind: "reversal", reversesEventId: a.event, priceListRowId: null, unitPriceMinor: -PRICE.unitPriceMinor }, /billable_event_kind_shape/, "a positive reversal")
       await refuse({ kind: "reversal", priceListRowId: null, netMinor: -PRICE.netMinor, vatMinor: -PRICE.vatMinor }, /billable_event_kind_shape/, "a reversal naming nothing")
+      // A reversal is never blocked: with the net null, `net_minor <= 0` is null and the CASE would pass, so the branch insists on the net by name.
+      await refuse({ kind: "reversal", reversesEventId: a.event, ...unpriced, blockReason: "no-price-row" }, /billable_event_kind_shape/, "a blocked reversal")
       await refuse({ sourceEventId: a.spare }, /billable_event_origin_shape/, "a person and an event")
       await refuse({ createdBy: null, kind: "pickup", routeId: a.route, pickupId: a.pickup }, /billable_event_origin_shape/, "neither")
       await refuse({ cancelledAt: at(18) }, /billable_event_cancel_shape/, "a cancellation without its reason")
@@ -740,13 +742,12 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       assert.equal(vatOf(-10, 25), -3)
     }))
 
-  test("an invoice's totals agree and follow its kind, its period and its credit go with the kind, it does not credit itself, and a line charges for an event or credits a line (23514)", () =>
+  test("an invoice's totals agree, a credit note's net is zero or less where an invoice's takes either sign, its period and its credit go with the kind, it does not credit itself, and a line charges for an event or credits a line (23514)", () =>
     seeded(async (tx) => {
       const refuse = (values: Partial<typeof invoice.$inferInsert>, constraint: RegExp, why: string) =>
         assert.rejects(tx.transaction((savepoint) => savepoint.insert(invoice).values(creditNote(values))), refusedWith("23514", constraint), why)
       await refuse({ grossMinor: -PRICE.netMinor }, /invoice_totals_shape/, "the gross is not the net and the VAT")
       await refuse({ netMinor: 100, vatMinor: 25, grossMinor: 125 }, /invoice_totals_shape/, "a positive credit note")
-      await refuse({ kind: "invoice", billingRunId: a.run, periodFrom: "2026-10-01", periodTo: "2026-10-31", creditsInvoiceId: null, creditReason: null }, /invoice_totals_shape/, "a negative invoice")
       await refuse({ billingRunId: a.run }, /invoice_kind_shape/, "a credit note naming a run")
       await refuse({ creditReason: null }, /invoice_kind_shape/, "a credit note without its reason")
       await refuse({ kind: "invoice", periodFrom: "2026-10-01", periodTo: "2026-10-31", creditsInvoiceId: null, creditReason: null, netMinor: 0, vatMinor: 0, grossMinor: 0 }, /invoice_kind_shape/, "an invoice without its run")
@@ -758,6 +759,8 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       // The zero credit note stands: a free line credited.
       await tx.insert(invoice).values(creditNote({ id: a.other, number: 1101, netMinor: 0, vatMinor: 0, grossMinor: 0 }))
       await tx.insert(invoice).values(creditNote({}))
+      // An invoice's net is held to no sign: a payer whose period holds more reversals than lines is invoiced a negative net, so a reversal-only payer group does not fail the run.
+      await tx.insert(invoice).values(creditNote({ id: a.fourth, number: 1102, kind: "invoice", billingRunId: a.run, periodFrom: "2026-10-01", periodTo: "2026-10-31", creditsInvoiceId: null, creditReason: null }))
       const refuseLine = (values: Partial<typeof invoiceLine.$inferInsert>, constraint: RegExp, why: string) =>
         assert.rejects(tx.transaction((savepoint) => savepoint.insert(invoiceLine).values(creditLine(values))), refusedWith("23514", constraint), why)
       await refuseLine({ netMinor: PRICE.netMinor, vatMinor: PRICE.vatMinor }, /invoice_line_amounts_shape/, "a positive credit line")

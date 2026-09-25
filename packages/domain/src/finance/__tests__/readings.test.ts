@@ -33,9 +33,9 @@ describe("billableEventStatus", () => {
     }
     assert.equal(readings.length, 24)
     for (const [reading, expected] of readings) assert.equal(billableEventStatus(reading), expected, JSON.stringify(reading))
-    // A cancellation stamp of any kind counts: the fold reads null and nothing else as none.
+    // A stamp of either spelling counts, the Date Drizzle reads or the string the wire carries: the fold reads null and nothing else as none.
     assert.equal(billableEventStatus({ blockReason: null, cancelledAt: STAMP, invoiced: false, reversed: false }), "cancelled")
-    assert.equal(billableEventStatus({ blockReason: null, cancelledAt: undefined, invoiced: false, reversed: false }), "ready")
+    assert.equal(billableEventStatus({ blockReason: null, cancelledAt: STAMP.toISOString(), invoiced: false, reversed: false }), "cancelled")
   })
 })
 

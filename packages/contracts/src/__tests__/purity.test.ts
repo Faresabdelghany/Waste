@@ -17,8 +17,9 @@
 // Resolution's (Issue #109) while tickets.ts runs
 // @waste/domain/resolution/event-shapes as its refine for the same reason,
 // and finance.ts turns @waste/domain/finance/vocabulary into Finance &
-// Contracting's (Issue #112), the sixth vocabulary line. The direction is
-// sound — the innermost ring depends on nothing — and listing the subpath,
+// Contracting's (Issue #112), the sixth `vocabulary` subpath and the ninth
+// domain line of the allowlist. The direction is sound — the innermost ring
+// depends on nothing — and listing the subpath,
 // not the package, keeps every further reach into the domain a deliberate
 // line here.
 import path from "node:path"

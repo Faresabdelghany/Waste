@@ -123,7 +123,7 @@ const kindShape = (() => {
     `when 'pickup' then ${some("pickup_id")} and ${none("ticket_id")} and ${none("reverses_event_id")}`,
     `when 'ticket' then ${some("ticket_id")} and ${none("pickup_id")} and ${none("reverses_event_id")}`,
     `when 'manual' then ${none("pickup_id")} and ${none("ticket_id")} and ${none("reverses_event_id")} and ${some("created_by")}`,
-    `when 'reversal' then ${some("reverses_event_id")} and ${none("pickup_id")} and ${none("ticket_id")} and ${column("net_minor")} <= 0`,
+    `when 'reversal' then ${some("reverses_event_id")} and ${none("pickup_id")} and ${none("ticket_id")} and ${some("net_minor")} and ${column("net_minor")} <= 0`,
   ]
   return `CONSTRAINT "billable_event_kind_shape" CHECK (case ${column("kind")} ${clauses.join(" ")} else false end)`
 })()
@@ -294,7 +294,7 @@ const expected = [
     `CONSTRAINT "invoice_period_shape" CHECK ((${ref("invoice", "period_from")} is null) = (${ref("invoice", "period_to")} is null) and (${ref("invoice", "kind")} = 'invoice') = (${ref("invoice", "period_from")} is not null))`,
     `CONSTRAINT "invoice_kind_shape" CHECK ((${ref("invoice", "kind")} = 'invoice') = (${ref("invoice", "billing_run_id")} is not null) and (${ref("invoice", "kind")} = 'credit-note') = (${ref("invoice", "credits_invoice_id")} is not null) and (${ref("invoice", "kind")} = 'credit-note') = (${ref("invoice", "credit_reason")} is not null))`,
     `CONSTRAINT "invoice_credits_shape" CHECK (${ref("invoice", "credits_invoice_id")} <> ${ref("invoice", "id")})`,
-    `CONSTRAINT "invoice_totals_shape" CHECK (${ref("invoice", "gross_minor")} = ${ref("invoice", "net_minor")} + ${ref("invoice", "vat_minor")} and (${ref("invoice", "kind")} <> 'invoice' or ${ref("invoice", "net_minor")} >= 0) and (${ref("invoice", "kind")} <> 'credit-note' or ${ref("invoice", "net_minor")} <= 0))`,
+    `CONSTRAINT "invoice_totals_shape" CHECK (${ref("invoice", "gross_minor")} = ${ref("invoice", "net_minor")} + ${ref("invoice", "vat_minor")} and (${ref("invoice", "kind")} <> 'credit-note' or ${ref("invoice", "net_minor")} <= 0))`,
   ]),
   createLedger("invoice_line", [
     '"invoice_id" uuid NOT NULL',

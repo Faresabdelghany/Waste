@@ -36,7 +36,7 @@ import {
   WeightReviewState,
   WeightReviewStatus,
 } from "../finance"
-import { Minor, NonNegativeMinor } from "../resource"
+import { Minor, NonNegativeInt, NonNegativeMinor } from "../resource"
 import { refusal } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -91,11 +91,14 @@ describe("WeightReviewState", () => {
   })
 })
 
-describe("Minor and NonNegativeMinor", () => {
-  test("money is a whole number of minor units: Minor takes either sign, NonNegativeMinor zero or more, neither a decimal", () => {
+describe("Minor, NonNegativeMinor and NonNegativeInt", () => {
+  test("money is a whole number of minor units: Minor takes either sign, NonNegativeMinor zero or more, neither a decimal; a count is NonNegativeInt, the one spelling a price shares", () => {
     for (const value of [0, 1, 12_345, -1, -12_345]) assert.equal(Minor.parse(value), value, String(value))
     for (const value of [0, 1, 12_345]) assert.equal(NonNegativeMinor.parse(value), value, String(value))
     for (const value of [-1, -12_345]) assert.equal(NonNegativeMinor.safeParse(value).success, false, `${value} is not a price`)
+    assert.equal(NonNegativeMinor, NonNegativeInt, "a price is the non-negative integer under the name it reads by")
+    for (const value of [0, 7]) assert.equal(NonNegativeInt.parse(value), value, String(value))
+    for (const value of [-1, 1.5]) assert.equal(NonNegativeInt.safeParse(value).success, false, `${value} is not a count`)
     for (const value of [1.5, -0.5, "100", Number.NaN, Number.POSITIVE_INFINITY]) {
       assert.equal(Minor.safeParse(value).success, false, String(value))
       assert.equal(NonNegativeMinor.safeParse(value).success, false, String(value))

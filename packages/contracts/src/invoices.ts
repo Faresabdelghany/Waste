@@ -32,7 +32,7 @@ import { Id } from "./ids"
 import { Currency } from "./organisation"
 import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
 import { eachOnce, eachOnceSentence, Minor, NonNegativeMinor, PositiveInt, recorded } from "./resource"
-import { Label, Paragraph } from "./text"
+import { Paragraph } from "./text"
 import * as z from "zod"
 
 /** What a document whose label is not its number under its kind's prefix is told. */
@@ -100,8 +100,8 @@ export const InvoiceLine = z
     billableEventId: Id.nullable(),
     /** On a credit note's line: the invoice line credited. */
     creditsLineId: Id.nullable(),
-    /** Frozen text: the product's invoice name and the service date as they stood when issued. */
-    description: Label,
+    /** Frozen text: the product's invoice name and the service date as they stood when issued — a `Paragraph`, since a `Label`-long invoice name with the day beside it overflows a `Label`. */
+    description: Paragraph,
     productId: Id.nullable(),
     serviceDate: IsoDate.nullable(),
     /** On a credit line, the quantity credited. */

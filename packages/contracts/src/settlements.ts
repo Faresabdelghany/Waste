@@ -28,7 +28,7 @@ import { Id } from "./ids"
 import { Currency } from "./organisation"
 import { PageRequest } from "./pagination"
 import { ProjectScopedListQuery } from "./queries"
-import { Minor, NonNegativeMinor, PositiveInt, recorded, stamped } from "./resource"
+import { Minor, NonNegativeInt, NonNegativeMinor, PositiveInt, recorded, stamped } from "./resource"
 import { Paragraph } from "./text"
 import { endsAfterItStarts, validityOrdered } from "./validity"
 import * as z from "zod"
@@ -52,7 +52,7 @@ const settlementFields = {
   closedAt: IsoDateTime.nullable(),
   closedBy: Id.nullable(),
   /** The calculation's totals; frozen at close. */
-  lineCount: z.int().min(0),
+  lineCount: NonNegativeInt,
   netMinor: Minor,
   /** The first day of the period. */
   validFrom: IsoDate,
@@ -93,7 +93,7 @@ export const SettlementEvent = z.object({
   kind: SettlementEventKind,
   /** The settlement's status after the event. */
   status: SettlementStatus,
-  lineCount: z.int().min(0),
+  lineCount: NonNegativeInt,
   netMinor: Minor,
   /** On a reopening: why. */
   reason: Paragraph.nullable(),

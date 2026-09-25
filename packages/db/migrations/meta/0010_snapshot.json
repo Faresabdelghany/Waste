@@ -14151,7 +14151,7 @@
         },
         "billable_event_kind_shape": {
           "name": "billable_event_kind_shape",
-          "value": "case \"wms\".\"billable_event\".\"kind\" when 'pickup' then \"wms\".\"billable_event\".\"pickup_id\" is not null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null when 'ticket' then \"wms\".\"billable_event\".\"ticket_id\" is not null and \"wms\".\"billable_event\".\"pickup_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null when 'manual' then \"wms\".\"billable_event\".\"pickup_id\" is null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null and \"wms\".\"billable_event\".\"created_by\" is not null when 'reversal' then \"wms\".\"billable_event\".\"reverses_event_id\" is not null and \"wms\".\"billable_event\".\"pickup_id\" is null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"net_minor\" <= 0 else false end"
+          "value": "case \"wms\".\"billable_event\".\"kind\" when 'pickup' then \"wms\".\"billable_event\".\"pickup_id\" is not null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null when 'ticket' then \"wms\".\"billable_event\".\"ticket_id\" is not null and \"wms\".\"billable_event\".\"pickup_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null when 'manual' then \"wms\".\"billable_event\".\"pickup_id\" is null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null and \"wms\".\"billable_event\".\"created_by\" is not null when 'reversal' then \"wms\".\"billable_event\".\"reverses_event_id\" is not null and \"wms\".\"billable_event\".\"pickup_id\" is null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"net_minor\" is not null and \"wms\".\"billable_event\".\"net_minor\" <= 0 else false end"
         },
         "billable_event_origin_shape": {
           "name": "billable_event_origin_shape",
@@ -14979,7 +14979,7 @@
         },
         "invoice_totals_shape": {
           "name": "invoice_totals_shape",
-          "value": "\"wms\".\"invoice\".\"gross_minor\" = \"wms\".\"invoice\".\"net_minor\" + \"wms\".\"invoice\".\"vat_minor\" and (\"wms\".\"invoice\".\"kind\" <> 'invoice' or \"wms\".\"invoice\".\"net_minor\" >= 0) and (\"wms\".\"invoice\".\"kind\" <> 'credit-note' or \"wms\".\"invoice\".\"net_minor\" <= 0)"
+          "value": "\"wms\".\"invoice\".\"gross_minor\" = \"wms\".\"invoice\".\"net_minor\" + \"wms\".\"invoice\".\"vat_minor\" and (\"wms\".\"invoice\".\"kind\" <> 'credit-note' or \"wms\".\"invoice\".\"net_minor\" <= 0)"
         }
       },
       "isRLSEnabled": false

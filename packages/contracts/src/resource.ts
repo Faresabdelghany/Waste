@@ -56,14 +56,23 @@ export const changesSomething = (patch: object) => Object.keys(patch).length > 0
 export const PositiveInt = z.int().positive()
 
 /**
+ * A whole number of zero or more: a count of what a run did, of a route's
+ * pickups, of a settlement's lines — where none yet is a count of zero and
+ * not a missing one. `PositiveInt`'s sibling, spelled once for the same
+ * reason; a module names it by what its field counts.
+ */
+export const NonNegativeInt = z.int().min(0)
+
+/**
  * Money in minor units (Issue #112): a whole number of øre or cents, never a
  * decimal, so nothing is re-rounded downstream. `Minor` takes either sign,
  * since a reversal's and a credit line's amounts are negative;
  * `NonNegativeMinor` is a price, zero being a free service and not a missing
- * one. The column is `_minor` in the database and an integer there too.
+ * one — `NonNegativeInt` under the name a price reads by. The column is
+ * `_minor` in the database and an integer there too.
  */
 export const Minor = z.int()
-export const NonNegativeMinor = z.int().min(0)
+export const NonNegativeMinor = NonNegativeInt
 
 /**
  * Each entry of a set names its thing once, as the database's key insists:

@@ -398,10 +398,10 @@ export const billableEvent = wms.table(
     check(tableObjectName(t.id.table, "override_shape", "billableEvent"), sql`(${t.kind} = 'manual' and ${t.priceListRowId} is null and ${t.blockReason} is null) = (${t.overrideReason} is not null)`),
     // A pickup names its route: Postgres leaves a composite key with a null member unchecked.
     check(tableObjectName(t.id.table, "pickup_shape", "billableEvent"), sql`${t.pickupId} is null or ${t.routeId} is not null`),
-    // What each kind names: a pickup its pickup, a ticket its ticket, a manual event neither and its person, a reversal the event it undoes and nothing of its own, with a net of zero or less.
+    // What each kind names: a pickup its pickup, a ticket its ticket, a manual event neither and its person, a reversal the event it undoes and nothing of its own, with a net that is there and zero or less — a reversal is never blocked, and `null <= 0` is not false, so the null is refused by name.
     check(
       tableObjectName(t.id.table, "kind_shape", "billableEvent"),
-      sql`case ${t.kind} when 'pickup' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'ticket' then ${t.ticketId} is not null and ${t.pickupId} is null and ${t.reversesEventId} is null when 'manual' then ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null and ${t.createdBy} is not null when 'reversal' then ${t.reversesEventId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.netMinor} <= 0 else false end`,
+      sql`case ${t.kind} when 'pickup' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'ticket' then ${t.ticketId} is not null and ${t.pickupId} is null and ${t.reversesEventId} is null when 'manual' then ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null and ${t.createdBy} is not null when 'reversal' then ${t.reversesEventId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.netMinor} is not null and ${t.netMinor} <= 0 else false end`,
     ),
     // An event is a person's or the consumer's, never both and never neither.
     check(tableObjectName(t.id.table, "origin_shape", "billableEvent"), sql`(${t.createdBy} is null) = (${t.sourceEventId} is not null)`),
@@ -511,7 +511,7 @@ export const invoice = wms.table(
     creditsInvoiceId: uuid(),
     creditReason: text(),
     creditNote: text(),
-    /** The totals as issued; a credit note's zero or negative. */
+    /** The totals as issued; a credit note's zero or negative, an invoice's of either sign, since the reversals of a period may outweigh its lines. */
     netMinor: total().notNull(),
     vatMinor: total().notNull(),
     grossMinor: total().notNull(),
@@ -540,8 +540,8 @@ export const invoice = wms.table(
     ),
     // A credit note does not credit itself; a null passes.
     check(tableObjectName(t.id.table, "credits_shape", "invoice"), sql`${t.creditsInvoiceId} <> ${t.id}`),
-    // The gross is the net and the VAT; an invoice's net is zero or more and a credit note's zero or less.
-    check(tableObjectName(t.id.table, "totals_shape", "invoice"), sql`${t.grossMinor} = ${t.netMinor} + ${t.vatMinor} and (${t.kind} <> 'invoice' or ${t.netMinor} >= 0) and (${t.kind} <> 'credit-note' or ${t.netMinor} <= 0)`),
+    // The gross is the net and the VAT, and a credit note's net is zero or less. An invoice's net is not held to a sign: a payer whose period holds reversals alone, or more reversals than lines, is invoiced a negative net rather than failing the run.
+    check(tableObjectName(t.id.table, "totals_shape", "invoice"), sql`${t.grossMinor} = ${t.netMinor} + ${t.vatMinor} and (${t.kind} <> 'credit-note' or ${t.netMinor} <= 0)`),
     tenantIndex(t, t.customerId),
     tenantIndex(t, t.billingRunId),
     tenantIndex(t, t.creditsInvoiceId),
