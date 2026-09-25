@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { ALLOCATION_STATUSES } from "@waste/domain/resources/vocabulary"
+
 import {
   BOTH_ENDS_OF_THE_WINDOW,
   OVERLAPPING_WINDOW_ORDERED,
@@ -86,6 +88,7 @@ describe("VehicleAllocationCreate", () => {
     assert.match(VehicleAllocationCreate.shape.status.description ?? "", /released is a command of its own/)
     assert.equal(VehicleAllocationCreate.parse({ ...body, status: "confirmed" }).status, "confirmed")
     assert.deepEqual(refusal(VehicleAllocationCreate.safeParse({ ...body, status: "released" })).map((issue) => issue.path), ["status"])
+    assert.deepEqual(VehicleAllocationCreate.shape.status.unwrap().options, ALLOCATION_STATUSES.filter((status) => status !== "released"), "the vocabulary less the one that is a command")
     refusesWhatTheServerOwns(VehicleAllocationCreate, body)
     for (const key of Object.keys(body)) {
       const without: Record<string, unknown> = { ...body }

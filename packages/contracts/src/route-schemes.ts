@@ -49,7 +49,7 @@ import { IsoDate, IsoTime } from "./dates"
 import { Id } from "./ids"
 import { eachOnce, HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, ServiceDays, ServiceType, StopSource, WeekRotation } from "./planning"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, somethingToChange, stamped } from "./resource"
+import { changesSomething, eachOnceSentence, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label } from "./text"
 import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
 
@@ -74,11 +74,11 @@ export const GROUPS_MAX = 50
 export const AT_MOST_GROUPS = `A scheme has at most ${GROUPS_MAX} collection groups`
 
 /** An order among siblings: whole and positive, since the first is number one. */
-const Ordinal = z.int().positive()
+const Ordinal = PositiveInt
 
-export const EACH_FRACTION_ONCE = "Name each waste fraction once: a rule matches a fraction or it does not"
-export const EACH_CONTAINER_TYPE_ONCE = "Name each container type once: a rule is restricted to a type or it is not"
-export const EACH_CONTAINER_ONCE = "Name each container once: a container has one place in the group's stop order"
+export const EACH_FRACTION_ONCE = eachOnceSentence("waste fraction", "a rule matches a fraction or it does not")
+export const EACH_CONTAINER_TYPE_ONCE = eachOnceSentence("container type", "a rule is restricted to a type or it is not")
+export const EACH_CONTAINER_ONCE = eachOnceSentence("container", "a container has one place in the group's stop order")
 
 /** A distinct set of ids, bounded. */
 const idSet = (message: string) => z.array(Id).max(CONTAINERS_MAX).refine((ids) => eachOnce(ids), { message })

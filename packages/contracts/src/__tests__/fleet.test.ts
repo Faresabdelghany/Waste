@@ -10,6 +10,7 @@ import {
   DriverPatch,
   EACH_FRACTION_ONCE,
   poweredVehicleHasACompartment,
+  PROVIDER_WITH_PROVIDER_EMPLOYMENT,
   Vehicle,
   VehicleCompartment,
   VehicleCompartmentCreate,
@@ -27,6 +28,8 @@ const THIRD = "01a0d3a5-e5e0-7000-8000-000000000003"
 const FOURTH = "01a0d3a5-e5e0-7000-8000-000000000004"
 const STAMPS = { createdAt: "2026-09-24T13:41:00.000Z", updatedAt: "2026-09-24T13:41:00.000Z" }
 const providerIssue = { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP }
+/** A driver body has no ownership to be told about: the same rule over its employment, in its own words. */
+const employmentIssue = { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_EMPLOYMENT }
 
 const body = { position: 1, name: "Body", capacityKg: 9000, volumeLitres: 18000, wasteFractionIds: [THIRD] }
 const left = { position: 2, name: "Left", capacityKg: 4000, volumeLitres: null, wasteFractionIds: [THIRD, FOURTH] }
@@ -166,9 +169,10 @@ describe("Driver", () => {
   test("the create defaults to active, holds the provider to the employment, needs the project, the name and the employment, and mints nothing", () => {
     const create = { projectId: OTHER, name: "Jonas Lind", employment: "employee" }
     assert.deepEqual(DriverCreate.parse(create), { ...create, status: "active" })
-    assert.deepEqual(refusal(DriverCreate.safeParse({ ...create, employment: "service-provider" })), [providerIssue])
+    assert.deepEqual(refusal(DriverCreate.safeParse({ ...create, employment: "service-provider" })), [employmentIssue])
     assert.equal(DriverCreate.safeParse({ ...create, employment: "service-provider", serviceProviderId: FOURTH }).success, true)
-    assert.deepEqual(refusal(DriverCreate.safeParse({ ...create, serviceProviderId: FOURTH })), [providerIssue])
+    assert.deepEqual(refusal(DriverCreate.safeParse({ ...create, serviceProviderId: FOURTH })), [employmentIssue])
+    assert.match(PROVIDER_WITH_PROVIDER_EMPLOYMENT, /employment/, "a driver is told about its employment, not an ownership it does not have")
     refusesWhatTheServerOwns(DriverCreate, create)
     for (const key of Object.keys(create)) {
       const without: Record<string, unknown> = { ...create }
@@ -181,7 +185,7 @@ describe("Driver", () => {
     assert.deepEqual(DriverPatch.parse({ licenceClass: "c", licenceExpiry: "2030-01-01", userAccountId: null }), { licenceClass: "c", licenceExpiry: "2030-01-01", userAccountId: null })
     refusesAnEmptyPatch(DriverPatch)
     assert.match(refusal(DriverPatch.safeParse({ name: "x", projectId: OTHER }))[0].message, /projectId/)
-    assert.deepEqual(refusal(DriverPatch.safeParse({ employment: "employee", serviceProviderId: FOURTH })), [providerIssue])
+    assert.deepEqual(refusal(DriverPatch.safeParse({ employment: "employee", serviceProviderId: FOURTH })), [employmentIssue])
     assert.deepEqual(DriverPatch.parse({ employment: "temporary" }), { employment: "temporary" })
   })
 })

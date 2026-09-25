@@ -131,14 +131,14 @@ const warehouseWithAStockPlace = { message: WAREHOUSE_WITH_A_STOCK_PLACE, path: 
 export const Adjust = z
   .strictObject({
     toKind: AdjustmentTarget,
-    /** The warehouse arrived at, exactly when the target is not scrap. */
-    warehouseId: Id.optional(),
+    /** The warehouse arrived at, exactly when the target is not scrap; a form with the field may send null for scrap, the two-field convention `SubscriptionCreate` documents. */
+    warehouseId: Id.nullable().optional(),
     reason: Paragraph,
     /** The movement this one corrects, one of this container's. */
     correctsMovementId: Id.optional(),
     ...occurred,
   })
-  .refine((body) => (body.toKind !== "scrap") === (body.warehouseId !== undefined), warehouseWithAStockPlace)
+  .refine((body) => (body.toKind !== "scrap") === (body.warehouseId != null), warehouseWithAStockPlace)
 export type Adjust = z.infer<typeof Adjust>
 
 /** What a window whose end comes before its start is told. */

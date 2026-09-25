@@ -6,7 +6,7 @@
 // and a Stop Matching Rule names a vehicle type by id.
 //
 // The `key` is the stable slug the rest of the system quotes (`rear-loader`),
-// held to the same lowercase-slug shape as a waste fraction's and set once:
+// held to the one key shape of text.ts (`Slug`, as a waste fraction's) and set once:
 // the patch takes the name and the description and never the key, since a
 // rule or an import that quotes the old one goes on quoting it, and a type
 // that needs another key is another type. The compatibility set travels with
@@ -19,24 +19,16 @@ import * as z from "zod"
 
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
-import { eachOnce } from "./planning"
-import { changesSomething, somethingToChange, stamped } from "./resource"
-import { Label, Paragraph } from "./text"
+import { changesSomething, eachOnce, eachOnceSentence, somethingToChange, stamped } from "./resource"
+import { Label, Paragraph, Slug } from "./text"
 
 /** The most container types a set body may name: a form's list, not an import. */
 const SET_MAX = 200
 
-/** The longest a vehicle type key may be. A slug, not a sentence. */
-export const VEHICLE_TYPE_KEY_MAX = 64
+/** The stable key, `rear-loader`: the one key shape of text.ts, as a waste fraction's. */
+const VehicleTypeKey = Slug()
 
-/** A lowercase slug: letters, digits and single hyphens, as `rear-loader`. The database holds it lowercase; this is what makes two keys that differ by case one key. */
-const VehicleTypeKey = z
-  .string()
-  .min(1)
-  .max(VEHICLE_TYPE_KEY_MAX)
-  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "a lowercase slug of letters, digits and single hyphens, such as rear-loader")
-
-export const EACH_CONTAINER_TYPE_ONCE = "Name each container type once: a vehicle type services a container type or it does not"
+export const EACH_CONTAINER_TYPE_ONCE = eachOnceSentence("container type")
 const eachContainerTypeOnce = { message: EACH_CONTAINER_TYPE_ONCE, path: ["containerTypeIds"] }
 
 const ContainerTypeIds = z.array(Id)

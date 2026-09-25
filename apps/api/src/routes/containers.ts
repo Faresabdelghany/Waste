@@ -15,13 +15,18 @@
 // and the label is unique across the company and not inside a project,
 // because that is how it is read off a bin.
 //
-// The contracts carry the projection on the Container since Resources (Issue
-// #101, slice 2): `assetState`, and the list's `assetStatus` and `warehouseId`.
-// Nothing here reads the ledger yet — the projection's left join
-// (`assetStateOf` in @waste/db/query/asset-state) and the issue command that
-// makes `POST /containers/:id/placements` write the ledger arrive with #101's
-// slice 5 — so `assetState` is answered as null and the two filters are
-// refused with a 400 saying so, rather than accepted and silently not applied.
+// The Container carries the ledger's reading since Resources (Issue #101):
+// `assetState`, its latest Stock Movement folded onto the glossary's four
+// states, read on every request through `assetStateOf` (@waste/db/query/
+// asset-state) — a LATERAL lookup per row, one probe into the ledger's index,
+// joined onto every statement here that answers a Container, the create's and
+// the patch's answers read back through it so what a write answers is what
+// the next read says — and null for a container with no movement yet. The
+// list asks by it: `assetStatus`, and `warehouseId` for the containers
+// standing in a warehouse, in stock or in maintenance, held to the projects
+// the caller works in like every other filter that names a row. What writes
+// the ledger — the issue command this placement route becomes, and the other
+// five — arrives with #101's slice 5.
 //
 // A placement names the subscription, and through it the agreement, the
 // product and the place: ADR-0003 has a placement name all four, and one
@@ -70,11 +75,15 @@ import {
 } from "@waste/contracts/containers"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
+import type { AssetState } from "@waste/contracts/stock"
+import { assetStateOf, assetStatus } from "@waste/db/query/asset-state"
 import { validOn } from "@waste/db/query/valid-on"
 import { subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
+import { warehouse } from "@waste/db/schema/places"
+import type { AssetStatus } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, gt, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -108,7 +117,45 @@ const columns = {
   updatedAt: container.updatedAt,
 }
 
-type Row = Pick<typeof container.$inferSelect, keyof typeof columns>
+/** The ledger's reading beside the container's own columns: its latest movement, nulls for a container with none. */
+const stateColumns = (state: ReturnType<typeof assetStateOf>) => ({
+  stateStatus: assetStatus(state.toKind),
+  stateWarehouseId: state.toWarehouseId,
+  statePlacementId: state.placementId,
+  stateSince: state.occurredAt,
+  stateMovementId: state.movementId,
+})
+
+/** The container's columns and the projection's, as the one statement below selects them; the projection's are null on a LATERAL left join that found no movement. */
+type Row = Pick<typeof container.$inferSelect, keyof typeof columns> & {
+  stateStatus: AssetStatus | null
+  stateWarehouseId: string | null
+  statePlacementId: string | null
+  stateSince: Date | null
+  stateMovementId: string | null
+}
+
+/**
+ * The one statement every container is read through: the row with the
+ * ledger's reading joined LATERAL — one probe per row for the container's
+ * latest movement (`assetStateOf`) — so a page, a single read and the answer
+ * to a write all say the same thing about where a container is. The
+ * subquery is handed back beside the query for a filter over it.
+ */
+function containersFrom(tx: Tx, companyId: string) {
+  const state = assetStateOf(tx, companyId, container.id)
+  return { state, query: tx.select({ ...columns, ...stateColumns(state) }).from(container).leftJoinLateral(state, sql`true`) }
+}
+
+/** The reading as the wire spells it: null with no movement, else where the latest one left the container. */
+function assetStateOfRow(row: Row): AssetState | null {
+  if (row.stateMovementId === null || row.stateSince === null) return null
+  if (row.stateStatus === null) {
+    // The kind check keeps every arrival at a place with a state; a row without one is a broken invariant, not a client's doing.
+    throw new Error(`stock_movement ${row.stateMovementId} arrived at a place with no asset state`)
+  }
+  return { status: row.stateStatus, warehouseId: row.stateWarehouseId, placementId: row.statePlacementId, since: row.stateSince.toISOString(), movementId: row.stateMovementId }
+}
 
 /** The row on the wire. `ownership` is text with a CHECK in the database and an enum here; the vocabulary holds the two in lockstep. */
 function containerOf(row: Row): Container {
@@ -122,14 +169,13 @@ function containerOf(row: Row): Container {
     serialNumber: row.serialNumber,
     ownership: row.ownership as ContainerOwnership,
     notes: row.notes,
-    // The ledger's reading, once the projection joins here (#101, slice 5); null until then, as for a container with no movement.
-    assetState: null,
+    assetState: assetStateOfRow(row),
     ...stampsOf(row),
   }
 }
 
-/** What the two ledger filters are told until the projection joins the list (#101, slice 5). */
-const NOT_YET_ANSWERED = "Not yet answered: the asset state arrives with the container ledger"
+/** What a list is told when it asks for the containers standing in a warehouse the caller cannot see; the composite key and the fence hold the same line. */
+const NOT_A_WAREHOUSE_HERE = "Not a warehouse of the projects this account works in"
 
 /**
  * The placement as the wire spells it, the last field computed rather than
@@ -198,14 +244,29 @@ const scope = (principal: Principal) => and(eq(container.companyId, principal.co
 const placementScope = (principal: Principal) =>
   and(eq(containerServicePlacement.companyId, principal.companyId), inProjects(containerServicePlacement.projectId, principal))
 
-/** One container of this company by id, inside the caller's projects; undefined when it is neither. */
+/** One container of this company by id, inside the caller's projects, with the ledger's reading; undefined when it is neither. */
 async function findContainer(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(container)
-    .where(and(scope(principal), eq(container.id, id)))
+  const [row] = await containersFrom(tx, principal.companyId)
+    .query.where(and(scope(principal), eq(container.id, id)))
     .limit(1)
   return row
+}
+
+/** The row a write just made, read back through the one statement, so the answer carries the reading the next read will. */
+async function readBack(tx: Tx, principal: Principal, id: string): Promise<Row> {
+  const row = await findContainer(tx, principal, id)
+  if (row === undefined) throw new Error(`container ${id} was written and is not there to read back`)
+  return row
+}
+
+/** A warehouse the list may ask about: this company's, in a project the caller works in — a 400 on the filter otherwise, like a project outside the scope. */
+async function requireWarehouseInProjects(tx: Tx, principal: Principal, id: string): Promise<void> {
+  const [row] = await tx
+    .select({ id: warehouse.id })
+    .from(warehouse)
+    .where(and(eq(warehouse.companyId, principal.companyId), inProjects(warehouse.projectId, principal), eq(warehouse.id, id)))
+    .limit(1)
+  if (row === undefined) throw invalidRequest("query", [{ path: "warehouseId", message: NOT_A_WAREHOUSE_HERE }])
 }
 
 /**
@@ -296,11 +357,11 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "listContainers",
         summary: "The containers the caller's projects hold",
         description:
-          "One page of containers, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused, and `containerTypeId` narrows it to one type. Where a container stands is not here: that is the placement valid on the day asked, `GET /placements`. `assetStatus` and `warehouseId`, the ledger's reading, are not yet answered and are refused until the container ledger's routes land. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of containers, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused, and `containerTypeId` narrows it to one type. Each container carries `assetState`, the ledger's reading — its latest Stock Movement folded onto in-warehouse, in-service, in-maintenance or retired, null for a container with no movement yet — and `assetStatus` narrows the page to one state, `warehouseId` to the containers standing in that warehouse, in stock or in maintenance; a warehouse outside the projects this account works in is refused. Where a container serves is the placement valid on the day asked, `GET /placements`. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
-          200: describeJson("One page of containers.", ContainerPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `projectId` is not a project this account works in, or `assetStatus` or `warehouseId` was given, which the ledger's routes will answer."),
+          200: describeJson("One page of containers, each with the ledger's reading.", ContainerPage),
+          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `projectId` is not a project this account works in, or `warehouseId` is not a warehouse of one."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `view` on `resources.containers`."),
         },
@@ -309,24 +370,22 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "view"),
       validate("query", ContainerListQuery),
       async (c) => {
-        const { limit, cursor, projectId, containerTypeId, assetStatus, warehouseId } = c.req.valid("query")
+        const { limit, cursor, projectId, containerTypeId, assetStatus: status, warehouseId } = c.req.valid("query")
         const after = afterCursor(cursor)
+        const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const notYet = [
-          ...(assetStatus === undefined ? [] : [{ path: "assetStatus", message: NOT_YET_ANSWERED }]),
-          ...(warehouseId === undefined ? [] : [{ path: "warehouseId", message: NOT_YET_ANSWERED }]),
-        ]
-        if (notYet.length > 0) throw invalidRequest("query", notYet)
-        const rows = await c
-          .get("tx")
-          .select(columns)
-          .from(container)
+        if (warehouseId !== undefined) await requireWarehouseInProjects(tx, principal, warehouseId)
+        const { state, query } = containersFrom(tx, principal.companyId)
+        const rows = await query
           .where(
             and(
               scope(principal),
               projectId === undefined ? undefined : eq(container.projectId, projectId),
               containerTypeId === undefined ? undefined : eq(container.containerTypeId, containerTypeId),
+              // The ledger's reading, filtered in SQL: the status the latest movement folds onto, and the warehouse it arrived at.
+              status === undefined ? undefined : eq(assetStatus(state.toKind), status),
+              warehouseId === undefined ? undefined : eq(state.toWarehouseId, warehouseId),
               after === undefined ? undefined : gt(container.id, after),
             ),
           )
@@ -341,10 +400,10 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createContainer",
         summary: "Register a container",
         description:
-          "Registers a container in one project, which must be a project the caller works in. The label is the visible Container ID a person reads off the bin and is unique across the company, not inside a project. The container type is this company's. The ownership defaults to `company`. There is no status and no location: whether a container is in stock, issued or broken is Resources' ledger, and where it is, is `POST /containers/{id}/placements`. The server mints the id.",
+          "Registers a container in one project, which must be a project the caller works in. The label is the visible Container ID a person reads off the bin and is unique across the company, not inside a project. The container type is this company's. The ownership defaults to `company`. There is no status and no location of its own: `assetState` is the ledger's reading and is null until a movement is recorded, and where it serves is `POST /containers/{id}/placements`. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeCreated("The container as it was written.", Container),
+          201: describeCreated("The container as it was written, with no asset state yet.", Container),
           400: describeProblem(
             "The body is missing a field, names a member the server owns, names a project this account does not work in, or names a container type that is not this company's.",
           ),
@@ -366,9 +425,9 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
           tx
             .insert(container)
             .values({ ...values, id: newId(), companyId: principal.companyId })
-            .returning(columns),
+            .returning({ id: container.id }),
         )
-        return created(c, "/containers", containerOf(row))
+        return created(c, "/containers", containerOf(await readBack(tx, principal, row.id)))
       },
     )
     .get(
@@ -377,10 +436,10 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "getContainer",
         summary: "One container",
         description:
-          "One container of a project the caller works in. A container of another company, or of a project this account does not work in, is a container that does not exist here.",
+          "One container of a project the caller works in, with `assetState`, the ledger's reading: where its latest Stock Movement left it, null with no movement yet. A container of another company, or of a project this account does not work in, is a container that does not exist here.",
         security: BEARER_SECURITY,
         responses: {
-          200: describeJson("The container.", Container),
+          200: describeJson("The container, with the ledger's reading.", Container),
           400: describeProblem("The path does not hold an id."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `view` on `resources.containers`."),
@@ -438,10 +497,10 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .update(container)
             .set(patch)
             .where(and(scope(principal), eq(container.id, id)))
-            .returning(columns),
+            .returning({ id: container.id }),
         )
         if (row === undefined) throw noSuchContainer(id)
-        return c.json(containerOf(row))
+        return c.json(containerOf(await readBack(tx, principal, row.id)))
       },
     )
     .post(

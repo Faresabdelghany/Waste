@@ -92,9 +92,11 @@ describe("the command bodies", () => {
     const shelf = { toKind: "warehouse", warehouseId: OTHER, reason: "Booked to the wrong shelf", correctsMovementId: THIRD }
     assert.deepEqual(Adjust.parse(shelf), shelf)
     assert.deepEqual(Adjust.parse({ toKind: "scrap", reason: "Never came back from the workshop" }), { toKind: "scrap", reason: "Never came back from the workshop" })
+    assert.deepEqual(Adjust.parse({ toKind: "scrap", warehouseId: null, reason: "x" }), { toKind: "scrap", warehouseId: null, reason: "x" }, "a two-field form sends null for the place it has not")
     const warehouseIssue = { path: "warehouseId", message: WAREHOUSE_WITH_A_STOCK_PLACE }
     assert.deepEqual(refusal(Adjust.safeParse({ toKind: "scrap", warehouseId: OTHER, reason: "x" })), [warehouseIssue])
     assert.deepEqual(refusal(Adjust.safeParse({ toKind: "maintenance", reason: "x" })), [warehouseIssue])
+    assert.deepEqual(refusal(Adjust.safeParse({ toKind: "maintenance", warehouseId: null, reason: "x" })), [warehouseIssue], "null meets the rule, not a type error")
     assert.equal(Adjust.safeParse({ toKind: "service", warehouseId: OTHER, reason: "x" }).success, false, "refused at the schema, before any route")
     assert.deepEqual(refusal(Adjust.safeParse({ toKind: "warehouse", warehouseId: OTHER })).map((issue) => issue.path), ["reason"])
     for (const key of owned) assert.match(refusal(Adjust.safeParse({ ...shelf, [key]: THIRD }))[0].message, new RegExp(key), key)

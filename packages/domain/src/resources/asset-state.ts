@@ -21,11 +21,8 @@
 // table as data, for that test and for a form that offers only the pairs a
 // kind allows; the two place lists it is built from, `STOCK_PLACES` and
 // `ADJUSTMENT_TARGETS`, are the vocabulary's (values of one, beside its
-// lists) and re-exported here, since the contracts' command bodies read them
-// from the vocabulary and this module reads them into the table.
+// lists), which the contracts' command bodies read from there too.
 import { ADJUSTMENT_TARGETS, STOCK_PLACE_KINDS, STOCK_PLACES, type AssetStatus, type StockMovementKind, type StockPlaceKind } from "./vocabulary"
-
-export { ADJUSTMENT_TARGETS, STOCK_PLACES }
 
 /** What each place a movement can arrive at says about the container's state; a supplier is never arrived at. */
 export const ASSET_STATUS_OF_PLACE: Readonly<Record<Exclude<StockPlaceKind, "supplier">, AssetStatus>> = {

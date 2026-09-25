@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { ADJUSTMENT_TARGETS, ASSET_STATUS_OF_PLACE, assetStateOf, MOVEMENT_SHAPES, movementShape, STOCK_PLACES } from "../asset-state"
-import { ASSET_STATUSES, STOCK_MOVEMENT_KINDS, STOCK_PLACE_KINDS, type StockMovementKind, type StockPlaceKind } from "../vocabulary"
+import { ASSET_STATUS_OF_PLACE, assetStateOf, MOVEMENT_SHAPES, movementShape } from "../asset-state"
+import { ADJUSTMENT_TARGETS, ASSET_STATUSES, STOCK_MOVEMENT_KINDS, STOCK_PLACE_KINDS, STOCK_PLACES, type StockMovementKind, type StockPlaceKind } from "../vocabulary"
 
 /** Every (kind, from, to) triple the vocabulary can spell. */
 const everyTriple = STOCK_MOVEMENT_KINDS.flatMap((kind) => STOCK_PLACE_KINDS.flatMap((from) => STOCK_PLACE_KINDS.map((to) => [kind, from, to] as const)))

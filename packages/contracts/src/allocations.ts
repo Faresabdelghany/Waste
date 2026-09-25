@@ -27,12 +27,12 @@ import * as z from "zod"
 import { IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { recorded, somethingToChange, stamped } from "./resource"
+import { PositiveInt, recorded, somethingToChange, stamped } from "./resource"
 import { AllocationAction, AllocationStatus } from "./resources"
 import { Paragraph } from "./text"
 
 /** A payload in whole kilograms, above zero. */
-const Capacity = z.int().positive()
+const Capacity = PositiveInt
 
 /** What a backwards or empty window is told, at the end, the bound a caller can move. */
 export const WINDOW_ENDS_AFTER_IT_STARTS = "plannedTo is the instant the reservation ends, so it comes after plannedFrom"
@@ -76,7 +76,7 @@ export const VehicleAllocationCreate = z
     requiredCapacityKg: Capacity.nullable().optional(),
     plannedFrom: IsoDateTime,
     plannedTo: IsoDateTime,
-    status: z.enum(["planned", "confirmed"]).default("planned").describe("Defaults to planned when absent; confirmed blocks other planners' checks, released is a command of its own."),
+    status: AllocationStatus.exclude(["released"]).default("planned").describe("Defaults to planned when absent; confirmed blocks other planners' checks, released is a command of its own."),
     note: Paragraph.nullable().optional(),
   })
   .refine(windowOrdered, windowEndsAfterItStarts)

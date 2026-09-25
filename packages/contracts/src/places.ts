@@ -33,9 +33,8 @@ import { IsoTime } from "./dates"
 import { Point } from "./geojson"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
-import { eachOnce } from "./planning"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, somethingToChange, stamped } from "./resource"
+import { changesSomething, eachOnce, eachOnceSentence, PositiveInt, somethingToChange, stamped } from "./resource"
 import { DepotOwnership, DepotStatus, UnloadingStationOwnership, UnloadingStationStatus, WarehouseStatus } from "./resources"
 import { Label, Paragraph } from "./text"
 
@@ -43,11 +42,11 @@ import { Label, Paragraph } from "./text"
 const SET_MAX = 200
 
 /** A count of vehicles a yard holds; zero is not a capacity. */
-const VehicleCapacity = z.int().positive()
+const VehicleCapacity = PositiveInt
 
-/** What a body whose ownership and provider disagree is told, at the provider. */
+/** What a body whose ownership and provider disagree is told, at the provider. A driver's employment has a sentence of its own (`fleet.ts`). */
 export const PROVIDER_WITH_PROVIDER_OWNERSHIP = "Name the owning service provider with service-provider ownership and with nothing else"
-const providerWithProviderOwnership = { message: PROVIDER_WITH_PROVIDER_OWNERSHIP, path: ["serviceProviderId"] }
+export const providerWithProviderOwnership = { message: PROVIDER_WITH_PROVIDER_OWNERSHIP, path: ["serviceProviderId"] }
 
 /** What a body giving one opening time is told, at the closing time. */
 export const BOTH_HOURS_OR_NEITHER = "Give both opening and closing time or neither"
@@ -66,8 +65,8 @@ export function providerShape(owner: string | undefined, body: Provided): boolea
   return (owner === "service-provider") === (body.serviceProviderId !== null)
 }
 
-/** The same rule as a create body sees it: an absent provider is none. */
-const providerShapeGiven = (body: { ownership: string } & Provided): boolean => providerShape(body.ownership, { serviceProviderId: body.serviceProviderId ?? null })
+/** The same rule as a create body sees it, `owner` being the body's ownership or employment: an absent provider is none. */
+export const providerShapeGiven = (owner: string, body: Provided): boolean => providerShape(owner, { serviceProviderId: body.serviceProviderId ?? null })
 
 type Hours = { opensAt?: string | null; closesAt?: string | null }
 
@@ -160,7 +159,7 @@ export const DepotCreate = z
     status: DepotStatus.default("active").describe("Defaults to active when absent: a depot is registered because routes already leave from it."),
     notes: Paragraph.nullable().optional(),
   })
-  .refine(providerShapeGiven, providerWithProviderOwnership)
+  .refine((body) => providerShapeGiven(body.ownership, body), providerWithProviderOwnership)
   .refine(hoursShapeGiven, bothHoursOrNeither)
 export type DepotCreate = z.infer<typeof DepotCreate>
 
@@ -183,7 +182,7 @@ export const DepotPatch = z
   .refine(hoursShape, bothHoursOrNeither)
 export type DepotPatch = z.infer<typeof DepotPatch>
 
-export const EACH_FRACTION_ONCE = "Name each waste fraction once: a station accepts a fraction or it does not"
+export const EACH_FRACTION_ONCE = eachOnceSentence("waste fraction")
 const eachFractionOnce = { message: EACH_FRACTION_ONCE, path: ["wasteFractionIds"] }
 
 const WasteFractionIds = z.array(Id)
@@ -227,7 +226,7 @@ export const UnloadingStationCreate = z
     notes: Paragraph.nullable().optional(),
     wasteFractionIds: WasteFractionIdsBody.default([]).describe("The fractions the station starts out accepting; none when absent."),
   })
-  .refine(providerShapeGiven, providerWithProviderOwnership)
+  .refine((body) => providerShapeGiven(body.ownership, body), providerWithProviderOwnership)
   .refine(hoursShapeGiven, bothHoursOrNeither)
   .refine((body) => eachOnce(body.wasteFractionIds), eachFractionOnce)
 export type UnloadingStationCreate = z.infer<typeof UnloadingStationCreate>

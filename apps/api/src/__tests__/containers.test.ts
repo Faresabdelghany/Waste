@@ -8,17 +8,22 @@ import { Customer, Property, SharedCollectionPoint } from "@waste/contracts/cust
 import { Id } from "@waste/contracts/ids"
 import { Page } from "@waste/contracts/pagination"
 import { createDb, type Database } from "@waste/db/client"
+import { warehouse } from "@waste/db/schema/places"
+import { stockMovement } from "@waste/db/schema/stock"
+import { withCompany } from "@waste/db/tenant"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
-import { databaseUnderTest } from "./database"
+import { databaseUnderTest, ownerUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { pointBody, setStatus } from "./registry"
 import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
 import { signingKeys, type SigningKeys } from "./tokens"
 
 const database = databaseUnderTest()
+/** The owner sweeps the ledger rows this suite writes, which `wms_api` may not delete (#101 §6.24). */
+const owner = ownerUnderTest()
 const ContainerPage = Page(Container)
 const PlacementPage = Page(ContainerServicePlacement)
 
@@ -33,8 +38,9 @@ const JULY = "2026-07-01"
 const OCTOBER = "2026-10-01"
 const NEXT_YEAR = "2027-01-01"
 
-describe("the container and placement endpoints", { skip: database.skip }, () => {
+describe("the container and placement endpoints", { skip: database.skip || owner.skip }, () => {
   let pool: Database
+  let ownerPool: Database
   let keys: SigningKeys
   /** The company under test. */
   let a: Tenant
@@ -72,6 +78,7 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
 
   before(async () => {
     pool = createDb(database.url, { max: 4 })
+    ownerPool = createDb(owner.url, { max: 1 })
     keys = await signingKeys()
     a = await seedTenant(pool)
     b = await seedTenant(pool)
@@ -123,9 +130,10 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
     )
   })
   after(async () => {
-    if (a) await dropTenant(pool, a.companyId)
-    if (b) await dropTenant(pool, b.companyId)
+    if (a) await dropTenant(pool, a.companyId, ownerPool)
+    if (b) await dropTenant(pool, b.companyId, ownerPool)
     await pool?.close()
+    await ownerPool?.close()
   })
 
   type Schema<T> = { parse: (value: unknown) => T }
@@ -206,14 +214,43 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
   }
   const placements = async (call: Call, query = "") => PlacementPage.parse(await (await call(`/placements${query}`)).json())
 
+  /** A warehouse of a project, written directly as `wms_api`: its routes are #101's slice 3, and the ledger's reading needs a place to point at. */
+  const warehouseIn = async (projectId: string, code: string): Promise<string> => {
+    const id = testId()
+    await withCompany(pool.db, a.companyId, async (tx) => {
+      await tx.insert(warehouse).values({ id, companyId: a.companyId, projectId, code, name: `Warehouse ${code}`, address: "Sundkrogsgade 1", status: "active" })
+    })
+    return id
+  }
+  /** A receipt of the container into the warehouse, appended directly as `wms_api` (which may insert into the ledger and never delete): the commands that write it are #101's slice 5. */
+  const receivedInto = async (into: Container, warehouseId: string, occurredAt: string): Promise<string> => {
+    const id = testId()
+    await withCompany(pool.db, a.companyId, async (tx) => {
+      await tx.insert(stockMovement).values({
+        id,
+        companyId: a.companyId,
+        projectId: into.projectId,
+        containerId: into.id,
+        kind: "receipt",
+        fromKind: "supplier",
+        toKind: "warehouse",
+        toWarehouseId: warehouseId,
+        occurredAt: new Date(occurredAt),
+        recordedBy: a.users.olivia.id,
+      })
+    })
+    return id
+  }
+
   describe("POST /containers", () => {
-    test("mints the id, defaults the ownership to the company, and carries no status and no location", async () => {
+    test("mints the id, defaults the ownership to the company, and carries no status and no location of its own", async () => {
       const created = await container("BIN-3410", { barcode: "5701234567890", notes: "Left of the gate" })
       assert.equal(Id.parse(created.id), created.id, "a version 7 id the server minted")
       assert.equal(created.projectId, a.projects.copenhagen.id)
       assert.equal(created.ownership, "company", "a container the company bought is the common case")
       assert.deepEqual([created.rfid, created.serialNumber], [null, null])
       assert.deepEqual(Object.keys(created).filter((key) => key === "status" || key === "location"), [], "where it is, is the placement valid that day")
+      assert.equal(created.assetState, null, "no movement yet is no state")
       assert.deepEqual(await one(olivia, created.id), created)
     })
 
@@ -290,6 +327,49 @@ describe("the container and placement endpoints", { skip: database.skip }, () =>
     test("refuses a role without resources.containers view, and a caller with no token", async () => {
       assert.match((await refused(await ungranted("/containers"), 403)).detail ?? "", /view on resources\.containers/)
       assert.equal((await app.request("/containers")).status, 401)
+    })
+  })
+
+  describe("assetState, the ledger's reading (Issue #101)", () => {
+    test("is null for a container with no movement, and where the latest movement left it once one is recorded, on the read, the list and the patch alike", async () => {
+      const created = await container("BIN-3490")
+      assert.equal(created.assetState, null)
+      const west = await warehouseIn(a.projects.copenhagen.id, "WH-3490")
+      const received = await receivedInto(created, west, "2026-09-01T08:00:00Z")
+      const state = { status: "in-warehouse", warehouseId: west, placementId: null, since: "2026-09-01T08:00:00.000Z", movementId: received }
+      assert.deepEqual((await one(olivia, created.id)).assetState, state)
+      assert.deepEqual((await patch(olivia, created.id, { notes: "Received" })).assetState, state, "a write answers what the next read says")
+      const listed = (await page(olivia, `?projectId=${a.projects.copenhagen.id}`)).items.find((item) => item.id === created.id)
+      assert.deepEqual(listed?.assetState, state)
+      // A later movement is the reading; the earlier one is history.
+      const east = await warehouseIn(a.projects.copenhagen.id, "WH-3491")
+      const moved = await receivedInto(created, east, "2026-09-02T08:00:00Z")
+      assert.deepEqual((await one(olivia, created.id)).assetState, { ...state, warehouseId: east, since: "2026-09-02T08:00:00.000Z", movementId: moved })
+    })
+
+    test("the list asks by the reading: assetStatus selects the state, warehouseId the containers standing in that warehouse", async () => {
+      const west = await warehouseIn(a.projects.copenhagen.id, "WH-3492")
+      const stocked = await container("BIN-3492")
+      const unrecorded = await container("BIN-3493")
+      await receivedInto(stocked, west, "2026-09-01T09:00:00Z")
+      const standing = await page(olivia, `?warehouseId=${west}`)
+      assert.deepEqual(standing.items.map((item) => item.id), [stocked.id], "what stands in the warehouse, and nothing else")
+      const inStock = await page(olivia, "?assetStatus=in-warehouse")
+      assert.ok(inStock.items.some((item) => item.id === stocked.id))
+      assert.ok(inStock.items.every((item) => item.assetState?.status === "in-warehouse"), "every item is in the state asked for")
+      assert.equal(inStock.items.some((item) => item.id === unrecorded.id), false, "the unrecorded have no state to match")
+      assert.equal((await page(olivia, "?assetStatus=retired")).items.some((item) => item.id === stocked.id), false)
+      assert.equal((await page(olivia, `?assetStatus=in-service&warehouseId=${west}`)).items.length, 0, "the two filters compose")
+    })
+
+    test("holds warehouseId to the projects the caller works in, naming the filter", async () => {
+      const havnen = await warehouseIn(a.projects.harbor.id, "WH-3494")
+      const outside = await refused(await viewer(`/containers?warehouseId=${havnen}`), 400)
+      assert.deepEqual(outside.errors, [{ path: "warehouseId", message: "Not a warehouse of the projects this account works in" }], "Vera works in Copenhagen Central only")
+      assert.deepEqual((await page(olivia, `?warehouseId=${havnen}`)).items, [], "Olivia works in every project and finds nothing standing there")
+      const nobody = await refused(await olivia(`/containers?warehouseId=${testId()}`), 400)
+      assert.deepEqual(nobody.errors, [{ path: "warehouseId", message: "Not a warehouse of the projects this account works in" }])
+      assert.deepEqual((await refused(await olivia("/containers?assetStatus=in-transit"), 400)).errors?.map((error) => error.path), ["assetStatus"], "a state outside the vocabulary")
     })
   })
 

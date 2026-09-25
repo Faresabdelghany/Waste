@@ -588,9 +588,9 @@ describe("GET /openapi.json", () => {
       "query:validOn",
     ])
     assert.deepEqual(byName(document.paths["/agreements/{id}/subscriptions"].get).sort(), ["path:id", "query:cursor", "query:limit", "query:validOn"])
-    // The two ledger filters are documented since Resources' contracts (#101, slice 2) and refused until its slice 5 answers them.
+    // The two ledger filters, answered from the projection since Resources (#101).
     assert.deepEqual(byName(document.paths["/containers"].get).sort(), ["query:assetStatus", "query:containerTypeId", "query:cursor", "query:limit", "query:projectId", "query:warehouseId"])
-    assert.match(document.paths["/containers"].get.description ?? "", /not yet answered/)
+    assert.match(document.paths["/containers"].get.description ?? "", /standing in that warehouse/)
     assert.deepEqual(byName(document.paths["/placements"].get).sort(), [
       "query:containerId",
       "query:cursor",
@@ -666,7 +666,7 @@ describe("GET /openapi.json", () => {
 
     // The rules a client must know are in the prose, not only in the code.
     assert.match(document.paths["/route-schemes"].post.description ?? "", /one scheme of a name is in force at a time in a project/)
-    assert.match(document.paths["/route-schemes"].post.description ?? "", /wait for Resources and are not held here/)
+    assert.match(document.paths["/route-schemes"].post.description ?? "", /read-only until #101's slice 6/)
     assert.match(document.paths["/route-schemes/{id}"].patch.description ?? "", /counting the groups, which have to be moved first/)
     assert.match(document.paths["/route-schemes/{id}"].patch.description ?? "", /shortening the period is free/)
     assert.match(document.paths["/route-schemes/{id}/occurrences"].get.description ?? "", /nothing is written, and no generation run is started/i)

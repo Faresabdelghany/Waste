@@ -23,8 +23,12 @@ import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } fr
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
 import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
+import { vehicleAllocation, vehicleAllocationEvent } from "@waste/db/schema/allocations"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
+import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
 import { containerTypeVehicleType, vehicleType } from "@waste/db/schema/fleet-types"
+import { depot, unloadingStation, unloadingStationFraction, warehouse } from "@waste/db/schema/places"
+import { stockMovement } from "@waste/db/schema/stock"
 import {
   customer,
   property,
@@ -199,17 +203,34 @@ export async function grantRole(pool: Database, companyId: string, roleId: strin
  * most on a project (Issue #78). Planning's nine tables go before the
  * Registry's, children first, since a collection group names the Registry's
  * fractions, container types and containers (Issue #97), and Resources'
- * vehicle types go after the groups that name them (Issue #101; the rest of
- * Resources' tables join here with their routes, the two ledgers through the
- * owner, since `wms_api` may not delete from them).
+ * eleven go between them — a group names a vehicle and a driver, a scheme a
+ * depot and a station, a movement a container and a placement (Issue #101).
+ * The two ledgers, `stock_movement` and `vehicle_allocation_event`, are swept
+ * first and as the owner (`owner`, a pool on `DATABASE_ADMIN_URL`), since
+ * `wms_api` may not delete from them and the keys would stop the containers
+ * and allocations going otherwise (#101 §6.24); a suite that writes no ledger
+ * row passes none, and one that does and passes none fails loudly on the key.
  */
-export async function dropTenant(pool: Database, companyId: string): Promise<void> {
+export async function dropTenant(pool: Database, companyId: string, owner?: Database): Promise<void> {
+  if (owner !== undefined) {
+    await owner.db.delete(vehicleAllocationEvent).where(eq(vehicleAllocationEvent.companyId, companyId))
+    await owner.db.delete(stockMovement).where(eq(stockMovement.companyId, companyId))
+  }
   await withCompany(pool.db, companyId, async (tx: Tx) => {
     await tx.delete(collectionGroupContainer).where(eq(collectionGroupContainer.companyId, companyId))
     await tx.delete(collectionGroupContainerType).where(eq(collectionGroupContainerType.companyId, companyId))
     await tx.delete(collectionGroupFraction).where(eq(collectionGroupFraction.companyId, companyId))
     await tx.delete(collectionGroup).where(eq(collectionGroup.companyId, companyId))
     await tx.delete(routeScheme).where(eq(routeScheme.companyId, companyId))
+    await tx.delete(vehicleAllocation).where(eq(vehicleAllocation.companyId, companyId))
+    await tx.delete(vehicleCompartmentFraction).where(eq(vehicleCompartmentFraction.companyId, companyId))
+    await tx.delete(vehicleCompartment).where(eq(vehicleCompartment.companyId, companyId))
+    await tx.delete(vehicle).where(eq(vehicle.companyId, companyId))
+    await tx.delete(driver).where(eq(driver.companyId, companyId))
+    await tx.delete(unloadingStationFraction).where(eq(unloadingStationFraction.companyId, companyId))
+    await tx.delete(unloadingStation).where(eq(unloadingStation.companyId, companyId))
+    await tx.delete(warehouse).where(eq(warehouse.companyId, companyId))
+    await tx.delete(depot).where(eq(depot.companyId, companyId))
     await tx.delete(containerTypeVehicleType).where(eq(containerTypeVehicleType.companyId, companyId))
     await tx.delete(vehicleType).where(eq(vehicleType.companyId, companyId))
     await tx.delete(collectionCalendarHoliday).where(eq(collectionCalendarHoliday.companyId, companyId))

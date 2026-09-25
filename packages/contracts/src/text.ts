@@ -25,6 +25,9 @@ export const LABEL_MAX = 200
 /** The longest a paragraph may be. Room for an address, a condition or a note; still not a document. */
 export const PARAGRAPH_MAX = 2000
 
+/** The longest a key may be: a slug the rest of the system quotes, not a sentence. */
+export const KEY_MAX = 50
+
 const saysSomething = (value: string) => value.trim().length > 0
 const somethingOtherThanWhitespace = { message: "Give something other than whitespace" }
 
@@ -35,3 +38,13 @@ export type Label = z.infer<typeof Label>
 /** Prose a person typed — an address, a note, a condition: present, not only whitespace, at most 2000 characters. Stored as it arrived, newlines and all. */
 export const Paragraph = z.string().min(1).max(PARAGRAPH_MAX).refine(saysSomething, somethingOtherThanWhitespace)
 export type Paragraph = z.infer<typeof Paragraph>
+
+/**
+ * A lowercase slug: letters, digits and single hyphens, as `residual`,
+ * `hard-plastic`, `rear-loader` — the stable key the rest of the system
+ * quotes (a waste fraction's, a vehicle type's), held to the shape the
+ * database holds it to (lowercase, unique per company) so two keys cannot
+ * differ by case or spacing alone. One spelling for every key; `max` is
+ * `KEY_MAX` unless a column says otherwise.
+ */
+export const Slug = (max = KEY_MAX) => z.string().max(max).regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "a lowercase slug of letters, digits and single hyphens, such as food, hard-plastic or rear-loader")

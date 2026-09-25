@@ -50,7 +50,7 @@ import * as z from "zod"
 import { Point } from "./geojson"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, somethingToChange, stamped } from "./resource"
+import { changesSomething, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 
 /** A person or an organisation. */
@@ -117,7 +117,7 @@ export type SharedCollectionPointMemberRole = z.infer<typeof SharedCollectionPoi
 const SET_MAX = 200
 
 /** A distance in whole metres; zero is not a distance. */
-const Metres = z.int().positive()
+const Metres = PositiveInt
 
 /** Each entry names its row once, as the database's key insists. */
 const eachNamedOnce = <Entry>(entries: readonly Entry[], key: (entry: Entry) => string) => new Set(entries.map(key)).size === entries.length

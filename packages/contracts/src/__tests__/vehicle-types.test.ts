@@ -21,9 +21,10 @@ describe("VehicleType", () => {
     assert.deepEqual(VehicleType.parse(bare), bare, "a type no typed rule matches through")
   })
 
-  test("holds the key to a lowercase slug, as a waste fraction's is: the display string is not the key", () => {
-    for (const key of ["Rear loader", "rear_loader", "REAR-LOADER", "-rear", "rear--loader", ""]) assert.equal(VehicleType.safeParse({ ...vehicleType, key }).success, false, key)
+  test("holds the key to the one slug shape a waste fraction's key has, at most fifty characters: the display string is not the key", () => {
+    for (const key of ["Rear loader", "rear_loader", "REAR-LOADER", "-rear", "rear--loader", "", "a".repeat(51)]) assert.equal(VehicleType.safeParse({ ...vehicleType, key }).success, false, key)
     assert.equal(VehicleType.safeParse({ ...vehicleType, key: "glass-crane-16t" }).success, true)
+    assert.equal(VehicleType.safeParse({ ...vehicleType, key: "a".repeat(50) }).success, true)
   })
 })
 

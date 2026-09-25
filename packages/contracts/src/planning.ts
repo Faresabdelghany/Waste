@@ -29,6 +29,11 @@ import {
 } from "@waste/domain/planning/vocabulary"
 import * as z from "zod"
 
+import { eachOnce, eachOnceSentence } from "./resource"
+
+/** The one distinct-entries rule, spelled in resource.ts; re-exported here since Planning's modules read it from this one. */
+export { eachOnce }
+
 /** One of the seven weekdays. */
 export const ServiceDay = z.enum(SERVICE_DAYS)
 export type ServiceDay = z.infer<typeof ServiceDay>
@@ -65,18 +70,8 @@ export type RouteSchemeStatus = z.infer<typeof RouteSchemeStatus>
 export const PlanningAreaPurpose = z.enum(PLANNING_AREA_PURPOSES)
 export type PlanningAreaPurpose = z.infer<typeof PlanningAreaPurpose>
 
-/**
- * Each entry of a set names its thing once, as the database's key insists:
- * the one rule behind every distinct-entries refine of Planning's modules (a
- * set of days, a rule's fractions, a group's containers, a calendar's
- * holidays by day). `key` says what identifies an entry; the entry itself by
- * default.
- */
-export const eachOnce = <Entry>(entries: readonly Entry[], key: (entry: Entry) => unknown = (entry) => entry): boolean =>
-  new Set(entries.map(key)).size === entries.length
-
 /** What a set of days with a day in it twice is told. */
-export const EACH_DAY_ONCE = "Name each day once: a set of days holds each day at most once"
+export const EACH_DAY_ONCE = eachOnceSentence("day", "a set of days holds each day at most once")
 
 /** A set of weekdays, each named at most once; may be empty. A scheme's service days add `.min(1)`, a project's weekend `.max(6)`. */
 export const ServiceDays = z.array(ServiceDay).refine((days) => eachOnce(days), { message: EACH_DAY_ONCE })

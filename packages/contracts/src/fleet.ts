@@ -21,16 +21,17 @@
 // vehicle nobody may take out; a driver's `licenceClass` is nullable, since a
 // new hire without a licence is a real record, eligible for nothing until it
 // is filled in. The expiry is the last day the licence holds
-// (`@waste/domain/resources/licence`). The ownership rule of `places.ts`
-// runs over a vehicle's `ownership` and a driver's `employment`.
+// (`@waste/domain/resources/licence`). The provider rule of `places.ts` runs
+// over a vehicle's `ownership` with the places' sentence, and over a driver's
+// `employment` with a sentence of its own, since a driver body has no
+// ownership to be told about.
 import * as z from "zod"
 
 import { IsoDate } from "./dates"
 import { Id } from "./ids"
-import { PROVIDER_WITH_PROVIDER_OWNERSHIP, providerShape } from "./places"
-import { eachOnce } from "./planning"
+import { providerShape, providerShapeGiven, providerWithProviderOwnership } from "./places"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, somethingToChange, stamped } from "./resource"
+import { changesSomething, eachOnce, eachOnceSentence, PositiveInt, somethingToChange, stamped } from "./resource"
 import { DriverStatus, EmploymentType, FuelType, LicenceClass, VehicleKind, VehicleOwnership, VehicleStatus } from "./resources"
 import { Label, Paragraph } from "./text"
 
@@ -41,14 +42,16 @@ export const COMPARTMENTS_MAX = 20
 const FRACTIONS_MAX = 200
 
 /** An order among siblings: whole and positive, since the first is number one. */
-const Ordinal = z.int().positive()
+const Ordinal = PositiveInt
 
 /** A payload or a volume: whole units, above zero. */
-const Amount = z.int().positive()
+const Amount = PositiveInt
 
-const providerWithProviderOwnership = { message: PROVIDER_WITH_PROVIDER_OWNERSHIP, path: ["serviceProviderId"] }
+/** What a driver body whose employment and provider disagree is told, at the provider: the same rule as a place's ownership, in the driver's words. */
+export const PROVIDER_WITH_PROVIDER_EMPLOYMENT = "Name the employing service provider with service-provider employment, and none otherwise"
+const providerWithProviderEmployment = { message: PROVIDER_WITH_PROVIDER_EMPLOYMENT, path: ["serviceProviderId"] }
 
-export const EACH_FRACTION_ONCE = "Name each waste fraction once: a compartment carries a fraction or it does not"
+export const EACH_FRACTION_ONCE = eachOnceSentence("waste fraction")
 
 /** The fractions a compartment carries: one or more, each once. */
 const CompartmentFractionIds = z.array(Id).min(1).refine((ids) => eachOnce(ids), { message: EACH_FRACTION_ONCE })
@@ -127,7 +130,7 @@ export const VehicleCreate = z
     /** In position order, 1..n; at least one for a powered vehicle. */
     compartments: CompartmentsBody.default([]).describe("The compartments in position order, 1..n; a powered vehicle has at least one, a trailer may have none."),
   })
-  .refine((body) => providerShape(body.ownership, { serviceProviderId: body.serviceProviderId ?? null }), providerWithProviderOwnership)
+  .refine((body) => providerShapeGiven(body.ownership, body), providerWithProviderOwnership)
   .refine((body) => poweredVehicleHasACompartment(body.kind, body.compartments), aPoweredVehicleHasACompartment)
 export type VehicleCreate = z.infer<typeof VehicleCreate>
 
@@ -192,7 +195,7 @@ export const DriverCreate = z
     status: DriverStatus.default("active").describe("Defaults to active when absent: a driver is registered in order to drive."),
     notes: Paragraph.nullable().optional(),
   })
-  .refine((body) => providerShape(body.employment, { serviceProviderId: body.serviceProviderId ?? null }), providerWithProviderOwnership)
+  .refine((body) => providerShapeGiven(body.employment, body), providerWithProviderEmployment)
 export type DriverCreate = z.infer<typeof DriverCreate>
 
 /** Everything but the project and the stamps. */
@@ -211,7 +214,7 @@ export const DriverPatch = z
     notes: Paragraph.nullable().optional(),
   })
   .refine(changesSomething, somethingToChange)
-  .refine((patch) => providerShape(patch.employment, patch), providerWithProviderOwnership)
+  .refine((patch) => providerShape(patch.employment, patch), providerWithProviderEmployment)
 export type DriverPatch = z.infer<typeof DriverPatch>
 
 /** A page of vehicles: one project's, of one kind, one type, one status, based at one depot. */
