@@ -12,7 +12,10 @@
 // @waste/domain/execution/vocabulary into Execution's (Issue #104) while
 // proofs.ts runs @waste/domain/execution/proof-shapes as its refine — the one
 // reach beyond a vocabulary, since the table of what each proof kind carries
-// is a rule the client must hold too and a second spelling here would drift.
+// is a rule the client must hold too and a second spelling here would drift —
+// and resolution.ts turns @waste/domain/resolution/vocabulary into
+// Resolution's (Issue #109) while tickets.ts runs
+// @waste/domain/resolution/event-shapes as its refine for the same reason.
 // The direction is sound — the innermost ring depends on nothing — and
 // listing the subpath, not the package, keeps every further reach into the
 // domain a deliberate line here.
@@ -29,6 +32,8 @@ definePurityTests({
     "@waste/domain/execution/vocabulary",
     "@waste/domain/planning/vocabulary",
     "@waste/domain/registry/vocabulary",
+    "@waste/domain/resolution/event-shapes",
+    "@waste/domain/resolution/vocabulary",
     "@waste/domain/resources/vocabulary",
     "zod",
   ],

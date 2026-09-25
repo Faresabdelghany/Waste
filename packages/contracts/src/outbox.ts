@@ -3,7 +3,8 @@
 // to publish and stamp. Not a route's resource — nothing answers it over HTTP
 // — but the relay and its test read rows of this shape, and a consumer reads
 // `payload`, which is the wire resource as the write left it: a `Route`, a
-// `Pickup` with its proof, an `Unload`, a `DriverCommandReceipt`. The payload
+// `Pickup` with its proof, an `Unload`, a `DriverCommandReceipt`, and, since
+// Resolution publishes its three kinds (Issue #109), a `Ticket`. The payload
 // is `z.json()` here, since which resource it is depends on the kind and a
 // consumer parses it with that kind's schema.
 import * as z from "zod"
