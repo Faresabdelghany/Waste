@@ -1,0 +1,235 @@
+// The server-backed half of the record store (Issue #81): what
+// `business-record-store.tsx` reads a switched module from and writes it
+// through. Pure state and transitions over a `Map` of modules, no React, so
+// the rules below are held by lib/api/__tests__/server-records.test.ts without
+// a browser:
+//
+//   A module is `idle` until the store is asked for it, `loading` while its
+//   first read is out, `ready` once the rows are records, `failed` with the
+//   problem when the API refused or did not answer. Until it is `ready` the
+//   store answers the module's fixtures — the same as the browser-only path
+//   shows before hydration — and never a mixture of the two, so a list is
+//   either the server's or the prototype's and nobody counts both.
+//
+//   A record's web id is the adapter's (adapter.ts: a fixture's id when the
+//   seed derived the row from it, else `<prefix>-<uuid>`), and the server's
+//   id is kept beside it in `serverIds`; a write looks the server id up by
+//   the web id, so a patch goes to the row's own route. A record the
+//   workspace has just made keeps the id it minted for the session
+//   (`withCreated`), since the address bar and the selection already carry
+//   it, and takes the adapter's id on the next load.
+//
+//   A write is optimistic and reconciled: the record the workspace handed
+//   over replaces the row at once, so a form closes on a list that already
+//   shows what it saved; then the API's answer, mapped, replaces that, so
+//   the stamps and every field the wire owns are the server's. A refusal
+//   puts the row back as it was and the caller is told in the API's words
+//   (the store's `onProblem`), since a 409 duplicate or a 400 naming a
+//   field is a person's to read, not a console's.
+//
+//   A record the workspace writes that no adapter owns — a companion row a
+//   controlled action made, a soft delete's marked copy — has no route. The
+//   API has no delete (a company deactivates, a project's status moves), so
+//   such a write is refused here with a sentence and the row stays as the
+//   server has it.
+import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
+
+import type { ApiClient } from "../client"
+import { ApiProblem, genericProblem, type Problem } from "../problem"
+import { isLocalRefusal, moduleKeyOf, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
+
+export type ModuleStatus = "idle" | "loading" | "ready" | "failed"
+
+export type ModuleState = {
+  status: ModuleStatus
+  /** The module's records, in list order: the server's rows as the prototype shows them. Empty until `ready`. */
+  records: BusinessRecord[]
+  /** The server id behind each web id. */
+  serverIds: ReadonlyMap<string, string>
+  /** Why the last read or write failed; cleared by the next read. */
+  problem: Problem | null
+  /** The clock of the last successful read. */
+  loadedAt: number | null
+}
+
+export type ServerRecordsState = ReadonlyMap<string, ModuleState>
+
+export const IDLE: ModuleState = { status: "idle", records: [], serverIds: new Map(), problem: null, loadedAt: null }
+
+/** The state of a module the store has been asked for; `IDLE` for one it has not. */
+export function moduleState(state: ServerRecordsState, workspaceId: WorkspaceId, moduleId: string): ModuleState {
+  return state.get(moduleKeyOf(workspaceId, moduleId)) ?? IDLE
+}
+
+/**
+ * What `getRecords` answers for a switched module: the server's records once
+ * they are here, the fixtures until then. Never both.
+ */
+export function recordsOf(module: ModuleState, fixtures: readonly BusinessRecord[]): BusinessRecord[] {
+  return module.status === "ready" ? module.records : [...fixtures]
+}
+
+/** The problem an unknown failure is reported as; a thrown `ApiProblem` is reported as itself. */
+export function problemOfError(error: unknown): Problem {
+  if (error instanceof ApiProblem) return error.problem
+  return genericProblem(0, error instanceof Error ? error.message : "The request failed")
+}
+
+/** The adapter that owns a record, by the module's own order; undefined for a record no adapter claims. */
+export function adapterFor(module: ServerModule, record: BusinessRecord): ResourceAdapter<Resource> | undefined {
+  return module.resources.find((resource) => resource.owns(record))
+}
+
+/**
+ * A resolver over every loaded module's rows, and over the rows a load has
+ * mapped so far (`extra`), so an adapter listed after another in one module
+ * sees that one's records. Server ids are unique across tables (UUIDv7), so
+ * one map serves every kind.
+ */
+export function resolverOver(state: ServerRecordsState, extra?: { records: readonly BusinessRecord[]; serverIds: ReadonlyMap<string, string> }): Resolver {
+  const modules = [...state.values()].filter((module) => module.status === "ready")
+  const sources = extra === undefined ? modules : [...modules, { records: extra.records, serverIds: extra.serverIds }]
+  return {
+    byServerId: (serverId) => {
+      for (const source of sources) {
+        for (const [webId, id] of source.serverIds) {
+          if (id === serverId) return source.records.find((record) => record.id === webId)
+        }
+      }
+      return undefined
+    },
+    serverIdOf: (webId) => {
+      for (const source of sources) {
+        const found = source.serverIds.get(webId)
+        if (found !== undefined) return found
+      }
+      return undefined
+    },
+  }
+}
+
+/** The web id of the company record, once the organisation module has loaded it; undefined before. */
+export function companyRecordIdOf(state: ServerRecordsState): string | undefined {
+  const organisation = state.get(moduleKeyOf("configure", "organization"))
+  return organisation?.records.find((record) => record.id.startsWith("company-"))?.id
+}
+
+export type LoadResult = { records: BusinessRecord[]; serverIds: Map<string, string> }
+
+export type LoadOptions = {
+  /** The module's fixtures, the seed's origin. */
+  fixtures: readonly BusinessRecord[]
+  /** Everything loaded so far, for the resolver. */
+  state: ServerRecordsState
+  now?: Date
+}
+
+/**
+ * Every row of a module, listed adapter by adapter and mapped in list order,
+ * each mapping resolving against what is loaded and what this load has
+ * mapped before it.
+ */
+export async function loadModule(client: ApiClient, module: ServerModule, { fixtures, state, now }: LoadOptions): Promise<LoadResult> {
+  const records: BusinessRecord[] = []
+  const serverIds = new Map<string, string>()
+  for (const adapter of module.resources) {
+    if (adapter.list === null) continue
+    const resources = await adapter.list(client)
+    const context: MappingContext = { fixtures, resolve: resolverOver(state, { records, serverIds }), companyRecordId: companyRecordIdOf(state), now }
+    for (const resource of resources) {
+      const record = adapter.toRecord(resource, context)
+      records.push(record)
+      serverIds.set(record.id, resource.id)
+    }
+  }
+  return { records, serverIds }
+}
+
+/** The state after a read began. */
+export function loading(module: ModuleState): ModuleState {
+  return { ...module, status: module.status === "ready" ? "ready" : "loading", problem: null }
+}
+
+/** The state after a read answered. */
+export function loaded(result: LoadResult, now: number): ModuleState {
+  return { status: "ready", records: result.records, serverIds: result.serverIds, problem: null, loadedAt: now }
+}
+
+/** The state after a read failed: a module that was ready keeps its rows and notes the problem; one that was not is `failed`. */
+export function loadFailed(module: ModuleState, problem: Problem): ModuleState {
+  return { ...module, status: module.status === "ready" ? "ready" : "failed", problem }
+}
+
+/** The module with one record replaced or, when it is new, put first — the browser store's own order. */
+export function withRecord(module: ModuleState, record: BusinessRecord, serverId?: string): ModuleState {
+  const exists = module.records.some((candidate) => candidate.id === record.id)
+  const records = exists ? module.records.map((candidate) => (candidate.id === record.id ? record : candidate)) : [record, ...module.records]
+  const serverIds = new Map(module.serverIds)
+  if (serverId !== undefined) serverIds.set(record.id, serverId)
+  return { ...module, records, serverIds }
+}
+
+/** The module without a record the API never took: an optimistic create rolled back. */
+export function withoutRecord(module: ModuleState, recordId: string): ModuleState {
+  const serverIds = new Map(module.serverIds)
+  serverIds.delete(recordId)
+  return { ...module, records: module.records.filter((candidate) => candidate.id !== recordId), serverIds }
+}
+
+/**
+ * The module with a record the API has just created: the server's answer,
+ * mapped, under the web id the workspace minted for it. The id stays the
+ * minted one for the rest of the session — the workspace has already put it
+ * in the address bar, selected it and may have linked to it, and the
+ * prototype treats a minted id as canonical — and the adapter's own id (a
+ * fixture's, or `<prefix>-<uuid>`) takes over on the next load, when the
+ * row is read back from the server. The server id is what the row is
+ * written under either way.
+ */
+export function withCreated(module: ModuleState, optimisticId: string, written: BusinessRecord, serverId: string): ModuleState {
+  return withRecord(module, { ...written, id: optimisticId }, serverId)
+}
+
+export type WriteOutcome =
+  | { kind: "created"; record: BusinessRecord; serverId: string; optimisticId: string }
+  | { kind: "updated"; record: BusinessRecord; serverId: string }
+  | { kind: "unchanged"; record: BusinessRecord }
+  | { kind: "refused"; problem: Problem; recordId: string }
+
+/** The 400 a local refusal stands for, in the API's own shape, so a caller reads one. */
+export function refusalProblem(refusal: { path: string; message: string }): Problem {
+  return { type: "about:blank", title: "Bad Request", status: 400, detail: "The request body is invalid", errors: [{ path: refusal.path, message: refusal.message }] }
+}
+
+/**
+ * Writes one record through its adapter: a create when the module holds no
+ * server id for it, a patch of what moved otherwise, nothing when nothing
+ * moved. `before` is the row as the module last had it, for the patch.
+ */
+export async function writeRecord(client: ApiClient, module: ServerModule, current: ModuleState, record: BusinessRecord, options: LoadOptions): Promise<WriteOutcome> {
+  const adapter = adapterFor(module, record)
+  if (adapter === undefined) {
+    return { kind: "refused", recordId: record.id, problem: genericProblem(400, `${module.workspaceId}.${module.moduleId} has no server resource for ${record.id}`) }
+  }
+  const context: MappingContext = { fixtures: options.fixtures, resolve: resolverOver(options.state), companyRecordId: companyRecordIdOf(options.state), now: options.now }
+  const serverId = current.serverIds.get(record.id)
+  try {
+    if (serverId === undefined) {
+      if (adapter.toCreateBody === undefined || adapter.create === undefined) {
+        return { kind: "refused", recordId: record.id, problem: genericProblem(400, `A ${adapter.prefix} is not created here`) }
+      }
+      const body = adapter.toCreateBody(record, context)
+      if (isLocalRefusal(body)) return { kind: "refused", recordId: record.id, problem: refusalProblem(body) }
+      const resource = await adapter.create(client, body)
+      return { kind: "created", record: adapter.toRecord(resource, context), serverId: resource.id, optimisticId: record.id }
+    }
+    const before = current.records.find((candidate) => candidate.id === record.id) ?? record
+    const body = adapter.toPatchBody(before, record, context)
+    if (body === null) return { kind: "unchanged", record }
+    if (isLocalRefusal(body)) return { kind: "refused", recordId: record.id, problem: refusalProblem(body) }
+    const resource = await adapter.update(client, serverId, body)
+    return { kind: "updated", record: adapter.toRecord(resource, context), serverId: resource.id }
+  } catch (error) {
+    return { kind: "refused", recordId: record.id, problem: problemOfError(error) }
+  }
+}
