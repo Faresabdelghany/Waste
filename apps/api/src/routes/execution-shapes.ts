@@ -40,10 +40,7 @@ import { assignedTo, type DriverProfile } from "../auth/driver"
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { problem } from "../problem"
-import { stampsOf, timeOf } from "./shared"
-
-/** The instant of a row's column, as the wire spells it; null stays null. */
-export const instantOf = (value: Date | null): string | null => (value === null ? null : value.toISOString())
+import { instantOf, stampsOf, timeOf } from "./shared"
 
 export const noSuchRoute = (id: string) => problem(404, { detail: `No route ${id} in the projects this account works in` })
 export const noSuchPickup = (id: string) => problem(404, { detail: `No pickup ${id} in the projects this account works in` })

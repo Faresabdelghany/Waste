@@ -23,12 +23,22 @@
 // travels with the event because every Execution row is a project's and the
 // relay groups by company under `withCompany` as `wms_api`, whose fence
 // needs the tenant on every row.
+//
+// Resolution (Issue #109) is the outbox's second writer — `ticket-opened`,
+// `ticket-completed` and `ticket-rejected` on the `ticket` aggregate — and
+// the first whose opening statements run without a request: the worker of
+// part B opens a ticket from an event with no Principal in hand. So `emit`
+// takes the tenant it needs and nothing more, `{ companyId }`, which a
+// Principal satisfies; every office caller passes what it passed, and
+// routes/ticket-writes.ts passes the company alone.
 import type { Tx } from "@waste/db/client"
 import { outboxEvent } from "@waste/db/schema/execution"
 import type { OutboxAggregate, OutboxKind } from "@waste/domain/execution/vocabulary"
 
-import type { Principal } from "./auth/principal"
 import { newId } from "./ids"
+
+/** Whose event it is: the tenant, which is all the row needs of the caller. A Principal is one; so is the worker's job. */
+export type Tenant = { companyId: string }
 
 /** One event as a route or the applier hands it in: what it is about, what happened, the resource as answered, and when. */
 export type OutboxEventDraft = {
@@ -45,11 +55,11 @@ export type OutboxEventDraft = {
   occurredAt: Date
 }
 
-/** Inserts one `outbox_event` row, server-minted id, unpublished, in the request's transaction. */
-export async function emit(tx: Tx, principal: Principal, event: OutboxEventDraft): Promise<void> {
+/** Inserts one `outbox_event` row, server-minted id, unpublished, in the caller's transaction. */
+export async function emit(tx: Tx, tenant: Tenant, event: OutboxEventDraft): Promise<void> {
   await tx.insert(outboxEvent).values({
     id: newId(),
-    companyId: principal.companyId,
+    companyId: tenant.companyId,
     projectId: event.projectId,
     kind: event.kind,
     aggregateKind: event.aggregate,

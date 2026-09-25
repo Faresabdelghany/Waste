@@ -34,7 +34,8 @@
 import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
 import type { Tx } from "@waste/db/client"
-import { userAccount } from "@waste/db/schema/access"
+import { projectAccess, userAccount } from "@waste/db/schema/access"
+import { agreement } from "@waste/db/schema/agreements"
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
 import { customer, property, sharedCollectionPoint } from "@waste/db/schema/customers"
@@ -44,11 +45,13 @@ import { vehicleType } from "@waste/db/schema/fleet-types"
 import { serviceProvider } from "@waste/db/schema/organisation"
 import { depot, unloadingStation, warehouse } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
+import { alert, ticket } from "@waste/db/schema/resolution"
 import type { DriverStatus, VehicleKind, VehicleStatus, WarehouseStatus } from "@waste/domain/resources/vocabulary"
-import { and, eq, inArray, isNull } from "drizzle-orm"
+import { and, eq, exists, inArray, isNull, or, sql } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 
 import { invalidRequest } from "../problem"
+import { alertColumns, type AlertRow } from "./resolution-shapes"
 import { requireRow, requireStatus, rowIssue, type NamedRow, type Refusal, type Target, type TenantTable } from "./shared"
 
 /** What a body is told when it names a customer this company does not have; one sentence, wherever the id sat. */
@@ -79,16 +82,19 @@ const inProject = (table: ProjectTable, scope: Scope, id: string): NamedRow => (
  * to. A Customer is company-wide — the same housing administrator is a
  * customer of every project — so the project does not come into it, and
  * since the fence hides another company's row, "it is not yours" and "it
- * does not exist" are the same answer. Answers the status.
+ * does not exist" are the same answer. Answers the status. A `query` target
+ * is a list filter's (`GET /tickets?customerId=`, the portal's read, Issue
+ * #109), refused on the query string.
  */
 export async function requireCustomer(
   tx: Tx,
   companyId: string,
   id: string | null | undefined,
   path = "customerId",
+  target: Target = "body",
 ): Promise<CustomerStatus | undefined> {
   if (id == null) return undefined
-  return await requireStatus<CustomerStatus>(tx, customer, inCompany(companyId, id), { path, message: NOT_A_CUSTOMER })
+  return await requireStatus<CustomerStatus>(tx, customer, inCompany(companyId, id), { path, message: NOT_A_CUSTOMER }, target)
 }
 
 /** A container type a body names: the company's, since a label is read off a bin anywhere in the company. */
@@ -398,4 +404,100 @@ export async function requirePickup(tx: Tx, scope: RouteScope, id: string | null
 export async function requireSession(tx: Tx, scope: RouteScope, id: string | null | undefined, path = "sessionId", target: Target = "body"): Promise<void> {
   if (id == null) return
   await requireRow(tx, session, { companyId: scope.companyId, id, also: eq(session.routeId, scope.routeId) }, { path, message: NOT_A_SESSION }, target)
+}
+
+// Resolution (Issue #109): what a ticket names, and what names a ticket. A
+// ticket's nine links are the Registry's, Resources' and Execution's rows and
+// read the checks above; three are new here — a parent ticket, an alert and
+// an agreement, each the project's, since every ticket, alert and agreement
+// is a Project's, so all three are `inProject` — and one is a rule on an
+// account rather than a row: the assignee works in the ticket's project,
+// `all_projects` or a Project Access row, since a ticket assigned to someone
+// who cannot see it is a bug and not a choice (#109 §3). No status is
+// answered for a link: a ticket is about whatever it is about — a complaint
+// about an inactive customer's last collection, a defect on a retired
+// container — and #79's gate does not apply to it (§7.13); the one gate, the
+// re-collection route's, is the route's own, and an alert about a ticket
+// names it whatever state either is in. The alert's check answers the row and
+// not only its existence, since what names an alert judges it next: the one
+// function `POST /tickets` and `POST /alerts/:id/link-ticket` share
+// (routes/alert-links.ts) reads its status and the ticket it already names
+// under the alert's lock, and one statement that says all three is better
+// than three. An id that is null or absent names nothing and is no issue, as
+// everywhere here; the overloads say so to the type checker, so a caller with
+// an id in hand reads the row without a guard.
+
+/** What a body is told when it names a ticket of another project, or none. */
+export const NOT_A_TICKET = "Not a ticket of this project"
+
+/** What a body is told when it names an alert of another project, or none. */
+export const NOT_AN_ALERT = "Not an alert of this project"
+
+/** What a body is told when it names an agreement of another project, or none. */
+export const NOT_AN_AGREEMENT = "Not an agreement of this project"
+
+/** What a body is told when the account it names is this company's but works in another project. */
+export const NOT_WORKING_IN_PROJECT = "Not a user account working in this project"
+
+/** A Ticket a body names — as a parent case, or as the ticket an alert answers or is linked to: the project's, through the table's own project key. */
+export async function requireTicket(tx: Tx, scope: Scope, id: string | null | undefined, path = "ticketId"): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, ticket, inProject(ticket, scope, id), { path, message: NOT_A_TICKET })
+}
+
+/**
+ * An Alert a body names: the project's. Answers the row whole, as the link
+ * rule reads it (routes/alert-links.ts: its status, and the one ticket it is
+ * linked to or null) and as the link command answers it once linked, so the
+ * proof it is there is the one read; undefined for an id that named nothing.
+ */
+export async function requireAlert(tx: Tx, scope: Scope, id: string, options?: { path?: string }): Promise<AlertRow>
+export async function requireAlert(tx: Tx, scope: Scope, id: string | null | undefined, options?: { path?: string }): Promise<AlertRow | undefined>
+export async function requireAlert(tx: Tx, scope: Scope, id: string | null | undefined, { path = "alertId" }: { path?: string } = {}): Promise<AlertRow | undefined> {
+  if (id == null) return undefined
+  const [found] = await tx
+    .select(alertColumns)
+    .from(alert)
+    .where(and(eq(alert.companyId, scope.companyId), eq(alert.projectId, scope.projectId), eq(alert.id, id)))
+    .limit(1)
+  if (found === undefined) throw invalidRequest("body", [{ path, message: NOT_AN_ALERT }])
+  return found
+}
+
+/** An Agreement a body names: the project's, since an agreement is made under one project's catalogue. */
+export async function requireAgreement(tx: Tx, scope: Scope, id: string | null | undefined, path = "agreementId"): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, agreement, inProject(agreement, scope, id), { path, message: NOT_AN_AGREEMENT })
+}
+
+/**
+ * A user account a body names as a ticket's assignee: this company's and not
+ * deactivated (`requireUserAccount`, the company half and its sentence), and
+ * working in the ticket's project — `all_projects`, or a Project Access row
+ * naming it. Two statements, the company's first, so an account that is not
+ * here at all is told that and not that it works elsewhere.
+ */
+export async function requireAccountInProject(tx: Tx, scope: Scope, id: string | null | undefined, path = "assigneeUserAccountId"): Promise<void> {
+  if (id == null) return
+  await requireUserAccount(tx, scope.companyId, id, path)
+  const [found] = await tx
+    .select({ id: userAccount.id })
+    .from(userAccount)
+    .where(
+      and(
+        eq(userAccount.companyId, scope.companyId),
+        eq(userAccount.id, id),
+        or(
+          eq(userAccount.allProjects, true),
+          exists(
+            tx
+              .select({ one: sql`1` })
+              .from(projectAccess)
+              .where(and(eq(projectAccess.companyId, scope.companyId), eq(projectAccess.userAccountId, id), eq(projectAccess.projectId, scope.projectId))),
+          ),
+        ),
+      ),
+    )
+    .limit(1)
+  if (found === undefined) throw invalidRequest("body", [{ path, message: NOT_WORKING_IN_PROJECT }])
 }

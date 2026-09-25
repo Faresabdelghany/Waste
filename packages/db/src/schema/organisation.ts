@@ -36,6 +36,12 @@
 // lock is the serialisation, so two runs never share a number and no route
 // is ever renumbered; the prototype hashed the identity and tolerated
 // collisions. It arrived with migration 0008, the first `ALTER TABLE company`.
+// The ticket-number counter (Issue #109) sits beside it on the same rule:
+// `next_ticket_number`, the next `T-<n>`, taken one at a time and not in a
+// block, since a ticket is one create and generation's block was for a run of
+// hundreds; the company's row lock is held for the rest of the request, which
+// tens of tickets a day do not notice. It arrived with migration 0009, the
+// second `ALTER TABLE company`.
 import { DEFAULT_WEEKEND, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, integer, text } from "drizzle-orm/pg-core"
@@ -66,6 +72,8 @@ export const company = wms.table(
     status: text().notNull(),
     /** The route-number counter (Issue #104): the next `RC-<n>` this company mints. Generation allocates a block in one `update … returning`, whose row lock is the serialisation; the default keeps a demo number from reading as a count. */
     nextRouteNumber: integer().notNull().default(1000),
+    /** The ticket-number counter (Issue #109): the next `T-<n>` this company mints, one per ticket in one `update … returning` under the same row lock. */
+    nextTicketNumber: integer().notNull().default(1000),
   },
   (t) => [
     // The registration is the one identity a registry gives a company: once per country.

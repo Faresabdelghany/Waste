@@ -655,7 +655,7 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
       assert.deepEqual(log.map((row) => row.routeId), [a.route, a.route, null], "the seeded arrival, the refused completion, the route nobody assigned")
       const event = { id: a.other, companyId: a.company, projectId: a.project, kind: "pickup-completed", aggregateKind: "pickup", aggregateId: a.pickup, occurredAt: at(6, 25), payload: { id: a.pickup, status: "completed" } } as const
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, kind: "route.started" })), refusedWith("23514", /outbox_event_kind_one_of/), "kebab, not dotted")
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, aggregateKind: "ticket" })), refusedWith("23514", /outbox_event_aggregate_kind_one_of/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, aggregateKind: "alert" })), refusedWith("23514", /outbox_event_aggregate_kind_one_of/), "an alert has no event of its own; a ticket has, since 0009")
       const [written] = await tx.insert(outboxEvent).values(event).returning({ publishedAt: outboxEvent.publishedAt })
       assert.equal(written.publishedAt, null, "unpublished until the relay stamps it")
     }))

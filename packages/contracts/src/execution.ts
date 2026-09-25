@@ -70,11 +70,11 @@ export type DriverCommandKind = z.infer<typeof DriverCommandKind>
 export const CommandOutcome = z.enum(COMMAND_OUTCOMES)
 export type CommandOutcome = z.infer<typeof CommandOutcome>
 
-/** What the outbox tells the other contexts. */
+/** What the outbox tells the other contexts: Execution's twelve kinds and Resolution's three (Issue #109), the tuple being the union of every context's news. */
 export const OutboxKind = z.enum(OUTBOX_KINDS)
 export type OutboxKind = z.infer<typeof OutboxKind>
 
-/** What an outbox event is about. */
+/** What an outbox event is about: a route, a pickup, an unload, a command, or a ticket. */
 export const OutboxAggregate = z.enum(OUTBOX_AGGREGATES)
 export type OutboxAggregate = z.infer<typeof OutboxAggregate>
 
@@ -89,8 +89,19 @@ export const OBJECT_EXTENSIONS = ["jpg", "jpeg", "png", "webp"] as const
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
+/**
+ * The shape of a Storage object's key over the formats a bucket takes: three
+ * lowercase UUIDs, a slash between each, and one of the formats after a dot —
+ * `<companyId>/<routeId>/<commandId>.<ext>` for a proof's object and
+ * `<companyId>/<ticketId>/<objectId>.<ext>` for a ticket's attachment
+ * (`resolution.ts`). The path is spelled once here; the formats are each
+ * bucket's, and are what keep a key of the one from parsing as a key of the
+ * other.
+ */
+export const objectKeyPattern = (extensions: readonly string[]): RegExp => new RegExp(`^${UUID}/${UUID}/${UUID}\\.(${extensions.join("|")})$`)
+
 /** The shape of a Storage object's key: `<companyId>/<routeId>/<commandId>.<ext>`, three lowercase UUIDs and one of the four formats. */
-export const OBJECT_KEY = new RegExp(`^${UUID}/${UUID}/${UUID}\\.(${OBJECT_EXTENSIONS.join("|")})$`)
+export const OBJECT_KEY = objectKeyPattern(OBJECT_EXTENSIONS)
 
 /** What a key of another shape is told. */
 export const OBJECT_KEY_SHAPE = "An object key is <companyId>/<routeId>/<commandId>.<jpg|jpeg|png|webp>"

@@ -49,7 +49,8 @@ import { Id } from "@waste/contracts/ids"
 import { providerShape } from "@waste/contracts/places"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
-import { and, eq, getTableName, sql, type SQL } from "drizzle-orm"
+import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
+import { and, eq, getTableName, gte, lt, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import type { Context } from "hono"
 import { resolver } from "hono-openapi"
@@ -101,6 +102,32 @@ export function created<Body extends { id: string }>(c: Context, collection: `/$
 /** The instants of a row, as the wire spells them. */
 export function stampsOf(row: { createdAt: Date; updatedAt: Date }): { createdAt: string; updatedAt: string } {
   return { createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() }
+}
+
+/** The instant of a row's nullable column, as the wire spells it; null stays null. `stampsOf` is the same over the two stamps every record carries. */
+export const instantOf = (value: Date | null): string | null => (value === null ? null : value.toISOString())
+
+/** The first instant of a `YYYY-MM-DD` day on the UTC calendar. */
+const startOfUtcDay = (day: string): Date => new Date(`${day}T00:00:00Z`)
+
+/** The first instant after a `YYYY-MM-DD` day on the UTC calendar: the exclusive end of a window that takes the whole of that day. */
+export const endOfDayExclusive = (day: string): Date => new Date(startOfUtcDay(day).getTime() + 86_400_000)
+
+/**
+ * The `where` fragment a list filter's `from`/`to` pair of `IsoDate` days
+ * makes over an instant column (Issue #109, at integration): both ends
+ * inclusive, on the UTC calendar day — `from` at its first instant, `to` up
+ * to but not including the midnight after it, so a row at 23:59 on the `to`
+ * day is inside the window and one at 00:00 the day after is not. Spelled
+ * once, because `lte(column, new Date(to))` reads a day as its first midnight
+ * and lists nothing of the day itself. A filter whose bounds are
+ * `IsoDateTime` instants (`GET /unloads`, `GET /stock-movements`) compares
+ * them as instants and does not come here, and one over a `date` column (a
+ * route's operating day) compares days and needs no window. Undefined when
+ * neither end was given, as `and` of nothing is.
+ */
+export function dayWindow(column: PgColumn, from: string | undefined, to: string | undefined): SQL | undefined {
+  return and(from === undefined ? undefined : gte(column, startOfUtcDay(from)), to === undefined ? undefined : lt(column, endOfDayExclusive(to)))
 }
 
 /**
@@ -201,11 +228,13 @@ export async function rowIssue(tx: Tx, table: TenantTable, row: NamedRow, refusa
  * statement proves the row is there and says what state it is in, so a route
  * that gates a new reference on that state (routes/statuses.ts) asks once,
  * and a row that is not there is still the 400 above, before any 409. The
- * caller names the vocabulary the column's check holds the value to.
+ * caller names the vocabulary the column's check holds the value to. A
+ * `query` target refuses on the query string, for a list filter that names a
+ * row (`GET /tickets?customerId=`, Issue #109); a body on the body.
  */
-export async function requireStatus<Status extends string>(tx: Tx, table: StatusTable, row: NamedRow, refusal: Refusal): Promise<Status> {
+export async function requireStatus<Status extends string>(tx: Tx, table: StatusTable, row: NamedRow, refusal: Refusal, target: Target = "body"): Promise<Status> {
   const found = await answering(tx, table, table.status, row)
-  if (found === undefined) throw invalidRequest("body", [refusal])
+  if (found === undefined) throw invalidRequest(target, [refusal])
   return found.answer as Status
 }
 
@@ -314,10 +343,11 @@ export function requireProviderShape(owner: string, body: { serviceProviderId: s
 // Execution (Issue #104, ADR-0004): the clock bounds every recorded instant
 // is held within, and the fourth door. `OCCURRED_AT_SKEW_MS` was the Stock
 // Movement ledger's constant in routes/lifecycle.ts and moved here so the
-// ledger, the driver door and the office's unload capture read one;
-// `COMMAND_BACKDATE_MS` is the lower bound only a device's queue needs, since
-// an office command's instant defaults to the request's clock and a device's
-// may be two days old.
+// ledger, the driver door and the office's unload capture read one, and
+// `requireNotAhead` is the check over it, spelled once since Resolution's
+// review (Issue #109) found it spelled four times; `COMMAND_BACKDATE_MS` is
+// the lower bound only a device's queue needs, since an office command's
+// instant defaults to the request's clock and a device's may be two days old.
 
 /**
  * How far ahead of the request's clock `occurredAt` may run: a driver's
@@ -326,6 +356,21 @@ export function requireProviderShape(owner: string, body: { serviceProviderId: s
  * recorded before it happened.
  */
 export const OCCURRED_AT_SKEW_MS = 5 * 60_000
+
+/**
+ * Holds a recorded instant to the skew: the body's instant — a ticket's or a
+ * movement's `occurredAt`, an unload's, an alert's `detectedAt` — may run
+ * ahead of the request's clock `at` by `OCCURRED_AT_SKEW_MS` and no further,
+ * refused as a 400 at `path` in the domain's words (`RECORDED_AFTER_IT_HAPPENED`),
+ * and has no lower bound here, since the office records a complaint made
+ * yesterday and the ledger a movement found in last week's paperwork; the
+ * forty-eight-hour floor is the driver door's alone (`COMMAND_BACKDATE_MS`,
+ * judged in the domain beside the skew). The ticket create, the alert raise,
+ * the unload capture and the Stock Movement ledger all read this one check.
+ */
+export function requireNotAhead(instant: Date, at: Date, path = "occurredAt"): void {
+  if (instant.getTime() > at.getTime() + OCCURRED_AT_SKEW_MS) throw invalidRequest("body", [{ path, message: RECORDED_AFTER_IT_HAPPENED }])
+}
 
 /**
  * How far behind the request's clock a driver command's `occurredAt` may lie:

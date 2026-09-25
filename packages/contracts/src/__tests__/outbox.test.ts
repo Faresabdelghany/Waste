@@ -27,7 +27,8 @@ describe("OutboxEvent", () => {
     const published = { ...event, publishedAt: "2026-10-05T06:00:05.000Z" }
     assert.deepEqual(OutboxEvent.parse(published), published)
     assert.deepEqual(refusal(OutboxEvent.safeParse({ ...event, kind: "route.started" })).map((issue) => issue.path), ["kind"], "kebab, not dotted")
-    assert.deepEqual(refusal(OutboxEvent.safeParse({ ...event, aggregateKind: "ticket" })).map((issue) => issue.path), ["aggregateKind"])
+    assert.deepEqual(refusal(OutboxEvent.safeParse({ ...event, aggregateKind: "alert" })).map((issue) => issue.path), ["aggregateKind"], "an alert has no event of its own; a ticket has, since Resolution (Issue #109)")
+    assert.equal(OutboxEvent.safeParse({ ...event, kind: "ticket-opened", aggregateKind: "ticket" }).success, true)
     assert.equal(OutboxEvent.safeParse({ ...event, payload: undefined }).success, false, "a payload is always there")
     assert.equal(OutboxEvent.safeParse({ ...event, payload: "a plain string is JSON too" }).success, true)
   })
