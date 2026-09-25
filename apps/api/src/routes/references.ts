@@ -346,7 +346,7 @@ export async function requireUserAccount(tx: Tx, companyId: string, id: string |
   await requireRow(tx, userAccount, { companyId, id, also: isNull(userAccount.deactivatedAt) }, { path, message: NOT_A_USER_ACCOUNT })
 }
 
-// Execution, slice 3 (Issue #104): a route, a pickup and a session are named
+// Execution (Issue #104): a route, a pickup and a session are named
 // by the office's list filters (`?routeId=` on the pickups, sessions and
 // unloads lists) and by the driver door's commands, so their checks are here
 // like every other family's. A route is the project's — or, for a list that

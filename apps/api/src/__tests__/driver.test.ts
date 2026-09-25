@@ -1,17 +1,15 @@
 import assert from "node:assert/strict"
 import { after, before, beforeEach, describe, test } from "node:test"
 
-import { CommandOutcomeRow, DriverCommandReceipt, DriverMe, EACH_COMMAND_ONCE, type CommandResult } from "@waste/contracts/driver-commands"
-import { CommandOutcome, DriverCommandKind as DriverCommandKindSchema, OBJECT_KEY_SHAPE } from "@waste/contracts/execution"
-import { Id } from "@waste/contracts/ids"
+import { CommandOutcomeRow, DriverCommandBatchOutcome, DriverCommandReceipt, DriverMe, EACH_COMMAND_ONCE, type CommandResult } from "@waste/contracts/driver-commands"
+import { OBJECT_KEY_SHAPE } from "@waste/contracts/execution"
 import { Page } from "@waste/contracts/pagination"
-import { Problem } from "@waste/contracts/problem"
 import { ProofOfService } from "@waste/contracts/proofs"
 import { Route, RouteDetail } from "@waste/contracts/routes"
 import { Session } from "@waste/contracts/sessions"
 import { NET_IS_GROSS_LESS_TARE, Unload } from "@waste/contracts/unloads"
 import { createDb, type Database } from "@waste/db/client"
-import { driverCommand, outboxEvent, proofOfService, route as routeTable, session as sessionTable } from "@waste/db/schema/execution"
+import { driverCommand, outboxEvent, proofOfService, session as sessionTable } from "@waste/db/schema/execution"
 import { vehicle as vehicleTable } from "@waste/db/schema/fleet"
 import { withCompany } from "@waste/db/tenant"
 import {
@@ -34,17 +32,17 @@ import { alreadyActive, alreadyDecided, doesNotChange, notActive, notDispatched 
 import type { DriverCommandKind } from "@waste/domain/execution/vocabulary"
 import { and, asc, count, eq, isNull } from "drizzle-orm"
 import { Hono } from "hono"
-import * as z from "zod"
 
 import { createApp } from "../app"
 import { NOT_A_DRIVERS_LOGIN } from "../auth/driver"
 import { authenticate } from "../auth/principal"
 import { errorHandler } from "../problem"
 import { driverDoorRoutes } from "../routes/driver"
+import { routeRoutes } from "../routes/routes"
 import { COMMAND_BACKDATE_MS, OCCURRED_AT_SKEW_MS } from "../routes/shared"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest, ownerUnderTest } from "./database"
-import { dropExecution, OPERATING_DATE, routeFor, seedDriverFixtures, type DriverFixtures, type FixtureRoute, type RouteOptions } from "./driver-fixtures"
+import { FIXTURE_DAY, routeFor, seedDriverFixtures, type DriverFixtures, type FixtureRoute, type RouteOptions } from "./execution-fixtures"
 import { readProblem } from "./read-problem"
 import { seedFleet, seedPlanning, type FleetFixtures } from "./scheme-fixtures"
 import { dropTenant, seedTenant, testId, type Tenant } from "./tenant"
@@ -55,40 +53,13 @@ const database = databaseUnderTest()
 const owner = ownerUnderTest()
 
 const RoutePage = Page(Route)
-/**
- * A receipt as the door answers it. The contracts' `DriverCommandReceipt` still
- * says `routeId: Id` where the column went nullable with the review of slices 1
- * and 2 (a rejection for a route the driver does not reach is recorded without
- * one), so a page is read through this shape and every receipt that names a
- * route is held to the contract as well; the one that does not is the
- * contract's defect, pinned below.
- */
-const Receipt = z.object({
-  id: Id,
-  recordedAt: z.string(),
-  projectId: Id,
-  routeId: Id.nullable(),
-  sessionId: Id.nullable(),
-  pickupId: Id.nullable(),
-  driverId: Id,
-  deviceId: z.string(),
-  kind: DriverCommandKindSchema,
-  occurredAt: z.string(),
-  body: z.json(),
-  outcome: CommandOutcome,
-  problem: Problem.nullable(),
-})
-type Receipt = z.infer<typeof Receipt>
-const ReceiptPage = Page(Receipt).transform((page) => {
-  for (const item of page.items) if (item.routeId !== null) DriverCommandReceipt.parse(item)
-  return page
-})
-const Outcomes = z.object({ outcomes: z.array(CommandOutcomeRow) })
+/** A page of receipts as the door answers it, every item the contract's shape — a rejection for a route the driver does not reach included, its `routeId` null. */
+const ReceiptPage = Page(DriverCommandReceipt)
 
 /** The request's clock: the afternoon of the operating date, pinned, so every instant a command carries (06:30 to 12:30) is behind it; moved by the tests that need it to move. */
-const MORNING = new Date(`${OPERATING_DATE}T14:00:00Z`)
+const MORNING = new Date(`${FIXTURE_DAY}T14:00:00Z`)
 /** An instant of the operating date, UTC. */
-const at = (time: string): string => `${OPERATING_DATE}T${time}:00.000Z`
+const at = (time: string): string => `${FIXTURE_DAY}T${time}:00.000Z`
 /** An instant so many milliseconds from the pinned clock. */
 const fromNow = (ms: number): string => new Date(MORNING.getTime() + ms).toISOString()
 
@@ -144,10 +115,12 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
     theirFleet = await seedFleet(pool, b, await seedPlanning(pool, b))
     fixtures = await seedDriverFixtures(pool, a, fleet)
     theirFixtures = await seedDriverFixtures(pool, b, theirFleet)
-    // The door under test, mounted alone so its log can be read; the whole app is what app.test.ts documents.
+    // The door under test, mounted with its own log so the two things it notes can be read, beside the office's route commands (routes/routes.ts) for the cancel that clears the yard between tests and the one a test sends mid-route; the whole app is what app.test.ts documents.
+    const guard = authenticate({ pool, verifier: keys.verifier })
     const door = new Hono()
     door.onError(errorHandler())
-    door.route("/", driverDoorRoutes(authenticate({ pool, verifier: keys.verifier }), { now: () => now, log: (entry) => logged.push(entry) }))
+    door.route("/", driverDoorRoutes(guard, { now: () => now, log: (entry) => logged.push(entry) }))
+    door.route("/", routeRoutes(guard, { now: () => now }))
     app = door as unknown as ReturnType<typeof createApp>
     mads = callingAs(app, keys, fixtures.accounts.mads, a.companyId)
     ali = callingAs(app, keys, fixtures.accounts.ali, a.companyId)
@@ -162,25 +135,17 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
   /**
    * A driver runs one route at a time (`session_driver_open_idx`), so a
    * session one test leaves open would refuse the next test's `start-route`
-   * for the driver's sake. Before each test the yard is quiet: every open
-   * session of the company is ended and its route cancelled, as the office's
-   * cancel (slice 3) would leave them, written here since that route is not
-   * in this slice.
+   * for the driver's sake. Before each test the yard is quiet: every route of
+   * the company with an open session is cancelled through the office's own
+   * command, which ends the session and closes the open pickups the way a
+   * dispatcher would.
    */
   beforeEach(async () => {
     if (!a) return
-    await withCompany(pool.db, a.companyId, async (tx) => {
-      const open = await tx.select({ id: sessionTable.id, routeId: sessionTable.routeId }).from(sessionTable).where(and(eq(sessionTable.companyId, a.companyId), isNull(sessionTable.endedAt)))
-      for (const found of open) {
-        await tx.update(sessionTable).set({ endedAt: now }).where(and(eq(sessionTable.companyId, a.companyId), eq(sessionTable.id, found.id)))
-        await tx.update(routeTable).set({ status: "cancelled", cancelledAt: now, note: "Cleared by the suite" }).where(and(eq(routeTable.companyId, a.companyId), eq(routeTable.id, found.routeId)))
-      }
-    })
+    const open = await withCompany(pool.db, a.companyId, (tx) => tx.select({ routeId: sessionTable.routeId }).from(sessionTable).where(and(eq(sessionTable.companyId, a.companyId), isNull(sessionTable.endedAt))))
+    for (const found of open) await cancelled(found.routeId, "Cleared by the suite")
   })
   after(async () => {
-    // Slice 3 teaches `dropTenant` the seven Execution tables; until the merge this sweeps them first.
-    if (a) await dropExecution(pool, ownerPool, a.companyId)
-    if (b) await dropExecution(pool, ownerPool, b.companyId)
     if (a) await dropTenant(pool, a.companyId, ownerPool)
     if (b) await dropTenant(pool, b.companyId, ownerPool)
     await pool?.close()
@@ -193,6 +158,11 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
   }
   /** A route of company a, Mads's and ready unless said. */
   const minted = (options: Partial<RouteOptions> = {}) => routeFor(pool, a, fleet, fixtures, { driver: fleet.drivers.mads, ...options })
+  /** The office's cancel (`POST /routes/:id/cancel`) as the dispatcher sends it: the route cancelled with the reason as its note, its open session ended, its open pickups closed. */
+  const cancelled = async (routeId: string, reason: string): Promise<void> => {
+    const response = await olivia(`/routes/${routeId}/cancel`, { method: "POST", body: { reason } })
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+  }
   const detail = async (id: string, call = mads): Promise<RouteDetail> => {
     const response = await call(`/driver/routes/${id}`)
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
@@ -201,7 +171,7 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
   const send = async (commands: unknown[], call = mads): Promise<CommandOutcomeRow[]> => {
     const response = await call("/driver/commands", { method: "POST", body: { commands } })
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
-    return Outcomes.parse(await response.json()).outcomes
+    return DriverCommandBatchOutcome.parse(await response.json()).outcomes
   }
   const one = async (command: Envelope, call = mads): Promise<CommandOutcomeRow> => {
     const [outcome] = await send([command], call)
@@ -346,7 +316,7 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
       )
       assert.deepEqual(found.planned, { vehicleId: fleet.vehicles.wh24.id, driverId: fleet.drivers.mads.id, trailerId: null, serviceProviderId: null, depotId: fleet.depots.nordhavn.id, unloadingStationId: fleet.stations.amager.id })
       assert.equal(found.plannedStartTime, "06:30")
-      assert.equal(found.operatingDate, OPERATING_DATE)
+      assert.equal(found.operatingDate, FIXTURE_DAY)
       const planned = await minted({ status: "planned" })
       assert.equal((await detail(planned.id)).status, "planned", "assigned is assigned, whatever the status")
     })
@@ -448,7 +418,7 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
           [null, a.projects.copenhagen.id, null, null, "rejected", noRouteAssigned(command.routeId), { routeId: command.routeId, body: { vehicleId: fleet.vehicles.wh24.id } }],
           "no route, the driver's project, the claimed id beside the body",
         )
-        assert.equal(DriverCommandReceipt.safeParse(receipt).success, false, "the contract's routeId is not nullable yet: a defect of the contracts, reported with slice 4")
+        assert.deepEqual(DriverCommandReceipt.parse(receipt), receipt, "a receipt without a route is the contract's shape: `routeId` is nullable there as in the column")
         const [rejection] = await events(command.id)
         assert.deepEqual([rejection.kind, rejection.projectId, (rejection.payload as { routeId: unknown }).routeId], ["command-rejected", a.projects.copenhagen.id, null])
       }
@@ -592,11 +562,9 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
     test("end-route on a route the office cancelled meanwhile is applied as nothing, with the reason in the log", async () => {
       const route = await minted()
       const sessionId = await started(route)
-      // What the office's cancel (slice 3) leaves behind, written here since that route is not in this slice: the status, its stamp, the session ended.
-      await withCompany(pool.db, a.companyId, async (tx) => {
-        await tx.update(sessionTable).set({ endedAt: new Date(at("07:00")) }).where(and(eq(sessionTable.companyId, a.companyId), eq(sessionTable.id, sessionId)))
-        await tx.update(routeTable).set({ status: "cancelled", cancelledAt: new Date(at("07:00")), note: "Truck broke down" }).where(and(eq(routeTable.companyId, a.companyId), eq(routeTable.id, route.id)))
-      })
+      // The office's cancel, while the device is out: the route cancelled with the reason as its note, the session ended.
+      await cancelled(route.id, "Truck broke down")
+      assert.equal((await sessionRow(sessionId)).endedAt?.toISOString(), now.toISOString(), "the dispatcher ended the session")
       logged.length = 0
       const end = envelope("end-route", route.id, { note: "Heading home" }, { occurredAt: at("07:30") })
       const outcome = await applied(end)
@@ -604,7 +572,7 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
       assert.deepEqual(logged, [{ commandId: end.id, kind: "end-route", routeId: route.id, note: ROUTE_CANCELLED_NOTHING_TO_END }])
       const [receipt] = (await receipts(`?routeId=${route.id}`)).items.filter((item) => item.id === end.id)
       assert.deepEqual([receipt.outcome, receipt.sessionId, receipt.problem], ["applied", null, null], "recorded as applied, on no open session")
-      assert.deepEqual((await events(route.id)).map((event) => event.kind), ["route-started"], "nothing to tell anyone")
+      assert.deepEqual((await events(route.id)).map((event) => event.kind), ["route-started", "route-cancelled"], "the cancel was the last word; the end has nothing to tell anyone")
       // Anything else on it is the route's refusal.
       await rejected(envelope("arrive", route.id, { pickupId: route.pickupIds[0] }, { occurredAt: at("07:31") }), 409, notActive(route.label))
     })

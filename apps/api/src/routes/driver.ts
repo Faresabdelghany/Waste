@@ -89,9 +89,11 @@
 // the note goes to the log, so the driver is not locked out of a route that
 // no longer exists for them.
 //
-// The wire shapes are routes/driver-shapes.ts's, which slice 3's
-// `execution-shapes.ts` spells identically; the integrator keeps one.
-import { COMMAND_BODIES, CommandOutcomeRow, DriverCommandBatch, DriverCommandReceipt, DriverMe, type CommandResult, type DriverCommandEnvelope } from "@waste/contracts/driver-commands"
+// The wire shapes are routes/execution-shapes.ts's, shared with the office's
+// four modules; the door's own is the scope there (`driverRouteScope`,
+// `findAssignedRoute`, `noSuchAssignedRoute`), whose fence is the assignment
+// where the office's is `inProjects`.
+import { COMMAND_BODIES, CommandOutcomeRow, DriverCommandBatch, DriverCommandBatchOutcome, DriverCommandReceipt, DriverMe, type CommandResult, type DriverCommandEnvelope } from "@waste/contracts/driver-commands"
 import { RouteStatus, routeLabel } from "@waste/contracts/execution"
 import { Id } from "@waste/contracts/ids"
 import { Page, PageRequest } from "@waste/contracts/pagination"
@@ -111,7 +113,6 @@ import { and, asc, eq, gt, inArray, isNull, or, sql, type SQL } from "drizzle-or
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { isDeepStrictEqual } from "node:util"
-import * as z from "zod"
 
 import { resolveDriver, type DriverProfile } from "../auth/driver"
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
@@ -138,11 +139,10 @@ import {
   unloadColumns,
   unloadOf,
   type PickupRow,
-  type Receipt,
   type ReceiptRow,
   type RouteRow,
   type SessionRow,
-} from "./driver-shapes"
+} from "./execution-shapes"
 import { vehicleColumns, vehicleLabel } from "./fleet-lookups"
 import { COMMAND_BACKDATE_MS, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS, primaryKeyOf, replayed } from "./shared"
 
@@ -155,9 +155,6 @@ const DriverRouteListQuery = PageRequest.extend({ status: RouteStatus.optional()
 
 /** `GET /driver/commands`: the page, narrowed to one route's receipts. */
 const DriverReceiptListQuery = PageRequest.extend({ routeId: Id.optional() })
-
-/** What the door answers: one outcome per command, in body order. */
-const BatchOutcome = z.object({ outcomes: z.array(CommandOutcomeRow) })
 
 /** The primary keys a race between two uploads of one batch can meet: the receipt's, and that of the row a command makes with the same id. */
 const REPLAY_KEYS = [primaryKeyOf(driverCommand), primaryKeyOf(session), primaryKeyOf(proofOfService), primaryKeyOf(unload)]
@@ -431,7 +428,7 @@ type ReceiptDraft = {
 } & ({ outcome: "applied" } | { outcome: "rejected"; problem: Problem })
 
 /** Writes the receipt and answers it as the wire spells it; a receipt with no route names no session and no pickup, as its shape check demands. */
-async function writeReceipt(tx: Tx, applier: Applier, draft: ReceiptDraft): Promise<Receipt> {
+async function writeReceipt(tx: Tx, applier: Applier, draft: ReceiptDraft): Promise<DriverCommandReceipt> {
   const { envelope, scope } = draft
   const [row] = await tx
     .insert(driverCommand)
@@ -802,7 +799,7 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
           "The driver door of ADR-0004. The body is one to two hundred commands, each `{ id, kind, routeId, occurredAt, deviceId, body }` with an id the device minted (a UUIDv7, the command's idempotency key and the id of the row it makes), applied in body order, each in its own savepoint, and answered 200 with one outcome per command in order — `applied` with the row it made, `replayed` with the first outcome for an id already received (nothing written, a body that differs logged and ignored), or `rejected` with the problem, which is recorded in the command's receipt as well. A 400 is for a batch that does not parse (an id twice, more than two hundred, an envelope out of shape): then nothing is applied and nothing recorded. A body that fails its kind's schema is one command's rejection, never the batch's. The fourteen kinds and their bodies: `start-route` (`vehicleId`, `trailerId?`, `appVersion?`, `location?`) opens the session and moves the route `ready → active`; `arrive` (`pickupId`, `location?`, `accuracyM?`) appends an arrival and sets the pickup's first `arrivedAt`; `complete-pickup`, `skip-pickup` and `fail-pickup` (`pickupId`, a `reason` for the last two, `note?`, `location?`) append the proof and move the pickup out of `planned`; `report-problem` (`pickupId?`, `reason`, `note`, `location?`) appends a problem and moves nothing; `add-photo` and `add-signature` (`pickupId` — optional for a photo — and `objectKey`) and `add-weight` (`pickupId`, `weightKg`) and `add-note` (`pickupId?`, `note`) append evidence; `record-unload` (`unloadingStationId`, `wasteFractionId`, `netKg`, `grossKg?`, `tareKg?`, `weighbridgeTicket?`, `objectKey?`, `location?`, `note?`) appends an unload; `pause` and `resume` (`{}`) set and clear the session's `pausedAt`, idempotently; `end-route` (`location?`, `note?`) closes every planned pickup as `skipped · route-ended`, moves the route `active → completed` and ends the session. The rules, judged in this order and each answering its sentence: the route is one of this driver's (404, `No route <id> assigned to this driver`); `occurredAt` is at most five minutes ahead of the request's clock (400, `Recorded after it happened`) and at most forty-eight hours behind it (400, `Recorded more than 48 hours after it happened`); `start-route` wants a `ready` route (409, `Route RC-1042 is not dispatched; a driver starts a ready route` / `… is already active` / `… is completed and does not change`), a driver on no other route (409, `Mads Jensen is already on route RC-1039; end it first`), a powered vehicle of the route's project (400 at `body.vehicleId`, `Not a powered vehicle of this project`) and a trailer where one is named (400 at `body.trailerId`), the licence the vehicle requires on the operating date (400 at `body.vehicleId`, `Freja Holm needs a C licence for WH-24`), and a vehicle and trailer in service (409, `WH-99 is retired; a route needs a vehicle in service`); every later command wants an `active` route with this driver's open session on it (409, `Route RC-1042 is not active`) and an instant at or after the session started (400, `Before the session started`); a command naming a pickup wants one of the route's (404, `No pickup <id> on route RC-1042`), and an outcome wants a `planned` one (409, `Pickup 12 is already completed`: the first outcome stands and a second is a rejection, not a change); `record-unload` wants a station and a fraction of the company (400 at `body.unloadingStationId` / `body.wasteFractionId`); an `objectKey` is `<companyId>/<routeId>/<commandId>.<jpg|jpeg|png|webp>` for this command (400 at `body.objectKey`, `The object key names another route or another command`). A vehicle or trailer not in service is refused naming its status (409, `WH-99 is retired; a route needs a vehicle in service`). Every applied command moves the session's `lastSeenAt` to the request's clock and writes its outbox events; every command's receipt is written with the body verbatim — a rejection for a route the driver does not reach is recorded without a route, in the driver's project, the claimed route id kept beside the body as `{ routeId, body }`. An `end-route` on a route the office cancelled meanwhile is applied as nothing, so the device is not locked out.",
         security: BEARER_SECURITY,
         responses: {
-          200: describeJson("One outcome per command, in body order.", BatchOutcome),
+          200: describeJson("One outcome per command, in body order.", DriverCommandBatchOutcome),
           400: describeProblem("The batch does not parse: no commands or more than two hundred, an id named twice, or an envelope out of shape. Nothing was applied or recorded."),
           ...driverProblems("edit"),
         },
@@ -819,7 +816,8 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const applier: Applier = { principal, profile, clock: { now: at.toISOString(), skewAheadMs: OCCURRED_AT_SKEW_MS, backdateMs: COMMAND_BACKDATE_MS }, now: at, log }
         const outcomes: CommandOutcomeRow[] = []
         for (const envelope of commands) outcomes.push(await applyOne(tx, applier, envelope))
-        return c.json({ outcomes })
+        const body: DriverCommandBatchOutcome = { outcomes }
+        return c.json(body)
       },
     )
     .get(
@@ -828,7 +826,7 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         operationId: "listDriverCommands",
         summary: "The driver's receipts",
         description:
-          "One page of the receipts of every command this driver's devices ever sent, applied or rejected, oldest first — ids are time-ordered by the device's clock, so a cursor over them is a cursor over the order the commands were minted in — each with the body as it arrived and, on a rejection, the problem it was refused with. `routeId` narrows the page to one route's. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of the receipts of every command this driver's devices ever sent, applied or rejected, oldest first — ids are time-ordered by the device's clock, so a cursor over them is a cursor over the order the commands were minted in — each with the body as it arrived and, on a rejection, the problem it was refused with. A receipt for a route this driver does not reach carries `routeId` null, the claimed id kept in the body as `{ routeId, body }`. `routeId` narrows the page to one route's. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of receipts.", ReceiptPage),

@@ -9,6 +9,7 @@ import {
   CommandOutcomeRow,
   DriverCommand,
   DriverCommandBatch,
+  DriverCommandBatchOutcome,
   DriverCommandEnvelope,
   DriverCommandReceipt,
   DriverMe,
@@ -180,6 +181,19 @@ describe("what the door answers and stores", () => {
     assert.equal(Object.keys(DriverCommandReceipt.shape).includes("updatedAt"), false)
     const shapeless = { ...rejected, body: { pickupId: THIRD, reason: "lunch" } }
     assert.deepEqual(DriverCommandReceipt.parse(shapeless), shapeless, "a body that failed its kind is kept as it came")
+    // A rejection for a route the driver does not reach is recorded without one: no route, no session, no pickup, the claimed id kept beside the body.
+    const routeless = { ...rejected, routeId: null, sessionId: null, pickupId: null, body: { routeId: THIRD, body: bodies["start-route"] } }
+    assert.deepEqual(DriverCommandReceipt.parse(routeless), routeless, "the column is nullable and so is the contract")
+    assert.deepEqual(refusal(DriverCommandReceipt.safeParse({ ...receipt, routeId: undefined })).map((issue) => issue.path), ["routeId"], "null is a value; absence is not")
+  })
+
+  test("the batch's answer is the outcomes, one per command and as many as the batch carried, and nothing else", () => {
+    const row = { commandId: ID, outcome: "applied" }
+    assert.deepEqual(DriverCommandBatchOutcome.parse({ outcomes: [row] }), { outcomes: [row] })
+    assert.deepEqual(refusal(DriverCommandBatchOutcome.safeParse({ outcomes: [] })).map((issue) => issue.path), ["outcomes"], "a batch has at least one command")
+    assert.equal(DriverCommandBatchOutcome.safeParse({ outcomes: Array.from({ length: BATCH_MAX }, () => row) }).success, true)
+    assert.equal(DriverCommandBatchOutcome.safeParse({ outcomes: Array.from({ length: BATCH_MAX + 1 }, () => row) }).success, false, "no more outcomes than a batch can carry commands")
+    assert.match(refusal(DriverCommandBatchOutcome.safeParse({ outcomes: [row], nextCursor: null }))[0].message, /nextCursor/, "not a page")
   })
 
   test("the driver's start screen is the profile, the open session and today's routes", () => {

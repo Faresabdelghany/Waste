@@ -20,7 +20,8 @@
 // (contracts/unloads.ts: net given, gross and tare together or not at all,
 // and net gross less tare where both are); and `occurredAt` may run ahead of
 // the request's clock by the ledger's skew (`OCCURRED_AT_SKEW_MS`,
-// routes/lifecycle.ts) and no further, in the domain's words. The
+// routes/shared.ts, the one constant the ledger, the driver door and this
+// capture read) and no further, in the domain's words. The
 // `unload-recorded` event is written in the same transaction, carrying the
 // unload as answered.
 //
@@ -43,10 +44,9 @@ import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { findRoute, labelOf, noSuchRoute, noSuchUnload, unloadColumns, unloadOf, unloadScope, type RouteRow } from "./execution-shapes"
-import { OCCURRED_AT_SKEW_MS } from "./lifecycle"
 import { requireRoute, requireUnloadingStation, requireWasteFraction } from "./references"
 import type { ClockOptions } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS } from "./shared"
 
 const MODULE = "route-studio.weights"
 

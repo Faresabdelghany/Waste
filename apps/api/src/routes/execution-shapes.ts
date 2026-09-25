@@ -1,10 +1,11 @@
-// What the four Execution route modules share (Issue #104, slice 3): the
-// rows of `route`, `pickup`, `session`, `proof_of_service`, `unload` and
-// `driver_command` on the wire, the scope every route statement is bounded
-// by, and the two page-wide reads a route carries — its progress and its
-// open session — so routes/routes.ts, routes/pickups.ts, routes/live.ts and
-// routes/unloads.ts each say only which route does what, the way
-// routes/scheme-groups.ts holds Planning's shapes for its two modules.
+// What the Execution route modules share (Issue #104): the rows of `route`,
+// `pickup`, `session`, `proof_of_service`, `unload` and `driver_command` on
+// the wire, the scopes every route statement is bounded by — the office's,
+// the tenant and `inProjects`; the driver door's, the tenant and the
+// assignment — and the two page-wide reads a route carries, its progress and
+// its open session, so routes/routes.ts, routes/pickups.ts, routes/live.ts,
+// routes/unloads.ts and routes/driver.ts each say only which route does what,
+// the way routes/scheme-groups.ts holds Planning's shapes for its two modules.
 //
 // A route's `progress` is derived and never stored (#104 §2): one aggregate
 // over the page's ids, grouped by route and status, folded by the domain's
@@ -28,10 +29,12 @@ import type { Session } from "@waste/contracts/sessions"
 import type { Unload } from "@waste/contracts/unloads"
 import type { Tx } from "@waste/db/client"
 import { driverCommand, pickup, proofOfService, route, session, unload } from "@waste/db/schema/execution"
+import { noRouteAssigned } from "@waste/domain/execution/commands"
 import { progressOf, type PickupCounts } from "@waste/domain/execution/progress"
 import type { CommandOutcome, DriverCommandKind, ExecutionSource, PickupOutcome, PickupReason, PickupStatus, ProofKind, RouteStatus } from "@waste/domain/execution/vocabulary"
 import { and, asc, count, eq, inArray, isNull, type SQL } from "drizzle-orm"
 
+import { assignedTo, type DriverProfile } from "../auth/driver"
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { problem } from "../problem"
@@ -414,16 +417,16 @@ export type ReceiptRow = Pick<typeof driverCommand.$inferSelect, keyof typeof re
 
 /**
  * The receipt on the wire: the command as received and what became of it.
- * The two `jsonb` columns are kept verbatim, the problem being the contracts'
- * own shape. `route_id` is nullable in the table since the review round of
- * slices 1 and 2 — a rejection that named no route the driver reaches — while
- * the contracts' `DriverCommandReceipt.routeId` is not, so a row without one
- * cannot go on the wire in that shape; a route's log (`GET
- * /routes/:id/commands`) selects by route and never meets one, and a read that
- * could is the driver door's to settle with the contracts.
+ * The two `jsonb` columns are kept verbatim — the body as the device sent it,
+ * the problem as the applier answered it. `routeId` is null on a rejection
+ * for a route the driver does not reach (another company's, another
+ * project's, or none), which routes/driver.ts records in the driver's project
+ * with the claimed id kept beside the body as `{ routeId, body }`; the
+ * contract carries the null, so a route's log (`GET /routes/:id/commands`),
+ * which never meets one, and the driver's receipts page, which does, both
+ * answer `DriverCommandReceipt`.
  */
 export function receiptOf(row: ReceiptRow): DriverCommandReceipt {
-  if (row.routeId === null) throw new Error(`receipt ${row.id} names no route, which DriverCommandReceipt cannot carry`)
   return {
     id: row.id,
     recordedAt: row.recordedAt.toISOString(),
@@ -439,4 +442,26 @@ export function receiptOf(row: ReceiptRow): DriverCommandReceipt {
     outcome: row.outcome as CommandOutcome,
     problem: row.problem as Problem | null,
   }
+}
+
+// The driver door's scope (routes/driver.ts): the tenant and the assignment,
+// never `inProjects`. A route reaches a device because the dispatcher assigned
+// it to that driver (auth/driver.ts), and a route outside that is a route that
+// is not there, in the domain's own sentence, so the device learns nothing
+// about routes it was not given.
+
+/** The routes of this company assigned to this driver — planned for them, or started by them: what every driver route statement is bounded by. */
+export const driverRouteScope = (principal: Principal, profile: DriverProfile): SQL | undefined => and(eq(route.companyId, principal.companyId), assignedTo(profile))
+
+/** A route that is not assigned to this driver, or not there: the domain's one sentence. */
+export const noSuchAssignedRoute = (id: string) => problem(404, { detail: noRouteAssigned(id) })
+
+/** One route of this company by id, assigned to this driver; undefined when it is neither. */
+export async function findAssignedRoute(tx: Tx, principal: Principal, profile: DriverProfile, id: string): Promise<RouteRow | undefined> {
+  const [row] = await tx
+    .select(routeColumns)
+    .from(route)
+    .where(and(driverRouteScope(principal, profile), eq(route.id, id)))
+    .limit(1)
+  return row
 }

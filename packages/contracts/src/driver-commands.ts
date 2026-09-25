@@ -9,9 +9,10 @@
 //
 // The door, `POST /driver/commands`, takes `DriverCommandBatch`: one to two
 // hundred envelopes, each id once (`EACH_COMMAND_ONCE`), applied in body
-// order, each in its own savepoint, answering 200 with one
-// `CommandOutcomeRow` per command whenever the envelope parses — a 400 only
-// for an envelope that does not, with nothing applied and nothing recorded.
+// order, each in its own savepoint, answering 200 with
+// `DriverCommandBatchOutcome` — one `CommandOutcomeRow` per command, in body
+// order — whenever the envelope parses, and a 400 only for an envelope that
+// does not, with nothing applied and nothing recorded.
 // So the batch is parsed loosely first, `DriverCommandEnvelope` with `body:
 // z.unknown()`, and each body against its kind's schema afterwards
 // (`COMMAND_BODIES`), a body that fails being a rejection recorded like any
@@ -19,8 +20,10 @@
 // its queue on a shape mistake. The outcome is `applied`, `replayed` — the
 // first outcome answered again for an id already received, stored nowhere —
 // or `rejected`, with the row the command made or the problem the applier
-// answered. `DriverCommandReceipt` is the stored receipt, `DriverMe` the
-// connected client's start screen.
+// answered. `DriverCommandReceipt` is the stored receipt — its `routeId`
+// null on a rejection for a route the driver does not reach, which is
+// recorded in the driver's project with the claimed id kept in `body` as
+// `{ routeId, body }` — and `DriverMe` the connected client's start screen.
 //
 // The rules the bodies hold: a reason is one of the driver's six
 // (`DriverPickupReason`; the system's four are the server's), a
@@ -163,6 +166,12 @@ export const CommandOutcomeRow = z.object({
 })
 export type CommandOutcomeRow = z.infer<typeof CommandOutcomeRow>
 
+/** What `POST /driver/commands` answers: the outcomes, one per command of the batch in body order — as many as the batch carried, so one to `BATCH_MAX` — and nothing else. */
+export const DriverCommandBatchOutcome = z.strictObject({
+  outcomes: z.array(CommandOutcomeRow).min(1).max(BATCH_MAX),
+})
+export type DriverCommandBatchOutcome = z.infer<typeof DriverCommandBatchOutcome>
+
 /** What a receipt with a problem and an applied outcome, or none and a rejected one, is told. */
 export const PROBLEM_WITH_A_REJECTION = "A rejected command carries its problem, and an applied one none"
 const problemWithARejection = { message: PROBLEM_WITH_A_REJECTION, path: ["problem"] }
@@ -172,8 +181,9 @@ export const DriverCommandReceipt = z
   .object({
     ...recorded,
     projectId: Id,
-    routeId: Id,
-    /** What the command named or made; null on a rejected start-route. */
+    /** The route the command named, where the driver reaches it; null on a rejection for one they do not — another company's, another project's, or none — recorded in the driver's project with the claimed id kept in `body` as `{ routeId, body }`. */
+    routeId: Id.nullable(),
+    /** What the command named or made; null on a rejected start-route, and on a receipt without a route. */
     sessionId: Id.nullable(),
     pickupId: Id.nullable(),
     driverId: Id,

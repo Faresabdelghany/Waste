@@ -1,7 +1,8 @@
 // The outbox's one writer (Issue #104, §6). Every office command that
 // changes what another context would hear about — a route dispatched,
-// reassigned or cancelled, a pickup skipped or corrected, an unload recorded —
-// and every applied or rejected driver command inserts its `outbox_event`
+// reassigned or cancelled, a pickup skipped or corrected, an unload recorded
+// (routes/routes.ts, routes/pickups.ts, routes/unloads.ts) — and every applied
+// or rejected driver command (routes/driver.ts) inserts its `outbox_event`
 // rows here, in the request's transaction and after the rows they describe,
 // so the event commits with the change or not at all. The relay (part C)
 // reads the unpublished rows across companies and stamps `published_at`;

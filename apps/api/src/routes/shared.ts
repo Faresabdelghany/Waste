@@ -311,13 +311,13 @@ export function requireProviderShape(owner: string, body: { serviceProviderId: s
   if (issue !== undefined) throw invalidRequest("body", [issue])
 }
 
-// Execution, slice 4 (Issue #104, ADR-0004): the clock bounds every recorded
-// instant is held within, and the fourth door. `OCCURRED_AT_SKEW_MS` was the
-// Stock Movement ledger's constant in routes/lifecycle.ts and moved here so
-// the ledger and the driver door read one (`lifecycle.ts` re-exports it for
-// its callers); `COMMAND_BACKDATE_MS` is the lower bound only a device's queue
-// needs, since an office command's instant defaults to the request's clock
-// and a device's may be two days old.
+// Execution (Issue #104, ADR-0004): the clock bounds every recorded instant
+// is held within, and the fourth door. `OCCURRED_AT_SKEW_MS` was the Stock
+// Movement ledger's constant in routes/lifecycle.ts and moved here so the
+// ledger, the driver door and the office's unload capture read one;
+// `COMMAND_BACKDATE_MS` is the lower bound only a device's queue needs, since
+// an office command's instant defaults to the request's clock and a device's
+// may be two days old.
 
 /**
  * How far ahead of the request's clock `occurredAt` may run: a driver's

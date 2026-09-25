@@ -180,12 +180,6 @@ export const placementAlreadyEnded = (label: string, day: string) => `Container 
 
 // The 400s: a body that says something the ledger cannot take.
 
-/**
- * How far ahead of the request's clock `occurredAt` may run: the one constant
- * the ledger and the driver door share, spelled in routes/shared.ts since
- * Execution (Issue #104) and re-exported here for the ledger's callers.
- */
-export { OCCURRED_AT_SKEW_MS }
 /** `occurredAt` further ahead of the request's clock than a device's clock accounts for. */
 export const RECORDED_AFTER_IT_HAPPENED = "A movement is recorded after it happened"
 /** A transfer to the place the container already stands in. */
