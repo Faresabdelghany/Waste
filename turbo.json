@@ -29,6 +29,16 @@
         "SUPABASE_URL"
       ]
     },
+    "@waste/worker#dev": {
+      "cache": false,
+      "persistent": true,
+      "env": [
+        "HOST",
+        "PORT",
+        "WORKER_DATABASE_URL",
+        "DATABASE_URL"
+      ]
+    },
     "lint": {
       "dependsOn": [
         "^lint"
@@ -53,6 +63,17 @@
         "DATABASE_ADMIN_URL",
         "DATABASE_URL",
         "SUPABASE_URL",
+        "REQUIRE_DATABASE"
+      ]
+    },
+    "@waste/worker#test": {
+      "dependsOn": [
+        "^test"
+      ],
+      "cache": false,
+      "env": [
+        "DATABASE_ADMIN_URL",
+        "DATABASE_URL",
         "REQUIRE_DATABASE"
       ]
     },

@@ -38,13 +38,14 @@ describe("migration 0011, the worker role and pg-boss's schema", { skip: databas
     await fresh?.drop()
   })
 
-  test("created wms_worker BYPASSRLS and NOLOGIN, no superuser, no replication, granted to the owner, with USAGE on wms and extensions and the API role's search path", async () => {
-    const [attributes] = await owner.sql<{ bypassrls: boolean; login: boolean; superuser: boolean; replication: boolean; owner_member: boolean; config: string[] | null }[]>`
-      select r.rolbypassrls as bypassrls, r.rolcanlogin as login, r.rolsuper as superuser, r.rolreplication as replication,
+  test("created wms_worker BYPASSRLS, no superuser, no replication, granted to the owner, with USAGE on wms and extensions and the API role's search path", async () => {
+    // Not asserted: rolcanlogin. Roles are cluster-wide, so a `pnpm db:bootstrap` with WORKER_DATABASE_URL set (CI's, and any workstation's) has already given the role LOGIN when this fresh database sees it; the migration itself says NOLOGIN, which worker-rendering.test.ts pins.
+    const [attributes] = await owner.sql<{ bypassrls: boolean; superuser: boolean; replication: boolean; owner_member: boolean; config: string[] | null }[]>`
+      select r.rolbypassrls as bypassrls, r.rolsuper as superuser, r.rolreplication as replication,
         pg_has_role(current_user, ${WORKER_ROLE}, 'MEMBER') as owner_member,
         (select s.setconfig from pg_db_role_setting s where s.setrole = r.oid and s.setdatabase = 0) as config
       from pg_roles r where r.rolname = ${WORKER_ROLE}`
-    assert.deepEqual(attributes, { bypassrls: true, login: false, superuser: false, replication: false, owner_member: true, config: ["search_path=wms, extensions"] })
+    assert.deepEqual(attributes, { bypassrls: true, superuser: false, replication: false, owner_member: true, config: ["search_path=wms, extensions"] })
     const [schema] = await owner.sql<{ wms: boolean; extensions: boolean; create: boolean }[]>`
       select has_schema_privilege(${WORKER_ROLE}, 'wms', 'USAGE') as wms, has_schema_privilege(${WORKER_ROLE}, 'extensions', 'USAGE') as extensions, has_schema_privilege(${WORKER_ROLE}, 'wms', 'CREATE') as create`
     assert.deepEqual(schema, { wms: true, extensions: true, create: false })
