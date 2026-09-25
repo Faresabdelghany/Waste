@@ -83,7 +83,7 @@ import {
   type GroupRow,
   type Scope,
 } from "./scheme-groups"
-import { describeJson, IdParam, lockRow, refuseDuplicate } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate } from "./shared"
 
 const GroupPage = Page(CollectionGroup)
 
@@ -190,7 +190,7 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Adds one collection group to the scheme the path names; the scheme says the project, so the body names neither. The name is unique within the scheme. The group finds its stops one way: `stopSource: rule` with a rule naming one or more waste fractions of this company, none or more container types of this company and, optionally, a vehicle type, and no containers; or `stopSource: manual` with one or more containers of the scheme's project in stop order and no rule. The service provider, where given, is this company's. The group's days lie within the scheme's service days, and no container it picks may already be picked by another group of the scheme on a day both run — the entry is refused naming that group and the day. The position is where the group stands among the scheme's, after the last when absent; it is not unique, and the first rule group wins a container on a shared day. On a `validated` scheme the structural rules are re-run as the scheme would stand with the group — a rule group needs a planning area to match inside — and every sentence that fails is listed (409). The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The collection group as it was written.", CollectionGroup),
+          201: describeCreated("The collection group as it was written.", CollectionGroup),
           400: describeProblem(
             "The path does not hold an id, or the body is missing a field, names a member the server owns, gives both a rule and containers or neither, runs on a day the scheme does not serve, picks a container another group runs on the same day, or names a waste fraction, container type, container or service provider outside the scope its key allows — each at the entry that is wrong.",
           ),
@@ -241,7 +241,7 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .returning(groupColumns),
         )
         await writeGroupSets(tx, within, [{ id: row.id, rule: values.rule, containerIds: values.containerIds }])
-        return c.json(await groupWithSets(tx, principal.companyId, row), 201)
+        return created(c, "/collection-groups", await groupWithSets(tx, principal.companyId, row))
       },
     )
     .get(

@@ -269,8 +269,8 @@ describe("GET /openapi.json", () => {
     }
     assert.equal(
       creates,
-      16,
-      "the sixteen creates: projects, service providers, users and roles; waste fractions, container types, service frequencies, products, customers, properties, property groups, shared collection points, agreements and containers; and the two nested ones, a subscription under its agreement and a placement under its container",
+      21,
+      "the twenty-one creates: projects, service providers, users and roles; waste fractions, container types, service frequencies, products, customers, properties, property groups, shared collection points, agreements and containers; the two nested ones, a subscription under its agreement and a placement under its container; and Planning's five — planning areas and, under an area, boundary versions, collection calendars, route schemes and, under a scheme, collection groups",
     )
   })
 

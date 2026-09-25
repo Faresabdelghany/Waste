@@ -11,6 +11,7 @@ import * as z from "zod"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
+import { created } from "./created"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { CAIRO_HOLIDAYS, COPENHAGEN_HOLIDAYS, seedPlanning, type PlanningFixtures } from "./scheme-fixtures"
@@ -139,11 +140,8 @@ describe("the route scheme endpoints", { skip: database.skip }, () => {
     ...values,
   })
 
-  const create = async <T>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> => {
-    const response = await call(path, { method: "POST", body: values })
-    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
-    return schema.parse(await response.json())
-  }
+  const create = async <T extends { id: string }>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> =>
+    created(call, path, await call(path, { method: "POST", body: values }), schema)
   const scheme = (name: string, values: Record<string, unknown> = {}) => create(olivia, "/route-schemes", body(name, values), RouteScheme)
   const one = async (call: Call, id: string): Promise<RouteScheme> => {
     const response = await call(`/route-schemes/${id}`)

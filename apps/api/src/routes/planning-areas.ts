@@ -77,7 +77,7 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
-import { describeJson, IdParam, refuseCheck, refuseDuplicate, refuseOverlap, stampsOf, type CheckRefusal } from "./shared"
+import { created, describeCreated, describeJson, IdParam, refuseCheck, refuseDuplicate, refuseOverlap, stampsOf, type Refusal } from "./shared"
 
 const MODULE = "configure.areas"
 const PlanningAreaPage = Page(PlanningArea)
@@ -159,7 +159,7 @@ const BOUNDARY_RUNNING_SENTENCE = "This planning area already has a boundary in 
  */
 const POLYGON_INVALID = "planning_area_boundary_boundary_valid"
 const NOT_A_VALID_POLYGON = "Not a valid polygon"
-const polygonInvalid = (path: string): Record<string, CheckRefusal> => ({
+const polygonInvalid = (path: string): Record<string, Refusal> => ({
   [POLYGON_INVALID]: { path, message: NOT_A_VALID_POLYGON },
 })
 
@@ -269,7 +269,7 @@ export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Registers a planning area in one project, which must be a project the caller works in. The code is the stable reference the rest of the system quotes (`OP-CEN-01`) and is set once; the code and the name are each unique inside the project. `boundary` is the first version, written in the same transaction and answered beside the area (null when none was drawn), so the form that draws an area is one request and learns both ids from it; an area may also be registered first and drawn later through `POST /planning-areas/{id}/boundaries`. Two rules hold the polygon: the ring and the globe are the contracts' — a closed ring of four or more positions with three distinct, holes allowed, no altitude, every ordinate on the globe — refused before the database sees it; whether those rings make a valid polygon is PostGIS's (`st_isvalid`: a ring that crosses itself, a hole outside its shell, rings that touch along a line), refused by the database and answered as a 400 on `boundary.boundary`, \"Not a valid polygon\". The server mints the ids.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The planning area as it was written, with the first boundary version beside it — null when the body drew none.", PlanningAreaCreated),
+          201: describeCreated("The planning area as it was written, with the first boundary version beside it — null when the body drew none.", PlanningAreaCreated),
           400: describeProblem(
             "The body is missing a field, names a member the server owns, names a project this account does not work in, holds a polygon that is not a closed ring on the globe or that PostGIS calls invalid, or gives a first boundary that ends on or before the day it starts.",
           ),
@@ -296,8 +296,8 @@ export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
           boundary === undefined
             ? null
             : await writeBoundary(tx, { companyId: principal.companyId, projectId: row.projectId, id: row.id }, boundary, "boundary.boundary")
-        const created: PlanningAreaCreated = { ...areaOf(row), boundary: version === null ? null : boundaryOf(version) }
-        return c.json(created, 201)
+        const answer: PlanningAreaCreated = { ...areaOf(row), boundary: version === null ? null : boundaryOf(version) }
+        return created(c, "/planning-areas", answer)
       },
     )
     .get(
@@ -416,7 +416,7 @@ export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Adds one version of the area's outline, in force over a half-open period: `validFrom` is the first day in force and `validTo` the first day out of it, absent meaning the version is still running. The area says the project, so the body names neither. One boundary of an area is in force at a time, so a period overlapping another version is refused (409) and a new version begins where the earlier one ends — end the earlier one first through `PATCH /planning-area-boundaries/{id}`. Two rules hold the polygon: the ring and the globe are the contracts' — a closed ring of four or more positions with three distinct, holes allowed, no altitude, every ordinate on the globe — refused before the database sees it; whether those rings make a valid polygon is PostGIS's (`st_isvalid`: a ring that crosses itself, a hole outside its shell, rings that touch along a line), refused by the database and answered as a 400 on `boundary`, \"Not a valid polygon\". The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The boundary version as it was written.", PlanningAreaBoundary),
+          201: describeCreated("The boundary version as it was written.", PlanningAreaBoundary),
           400: describeProblem(
             "The path does not hold an id, or the body is missing a field, names a member the server owns, ends on or before the day it starts, or holds a polygon that is not a closed ring on the globe or that PostGIS calls invalid.",
           ),
@@ -438,7 +438,7 @@ export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const area = await findArea(tx, principal, id)
         if (area === undefined) throw noSuchArea(id)
         const row = await writeBoundary(tx, { companyId: principal.companyId, projectId: area.projectId, id: area.id }, values, "boundary")
-        return c.json(boundaryOf(row), 201)
+        return created(c, "/planning-area-boundaries", boundaryOf(row))
       },
     )
     .get(

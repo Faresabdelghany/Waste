@@ -80,7 +80,7 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { periodAfter, refuseStranded, requireOrdered, type Period } from "./periods"
-import { describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stamp, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stamp, stampsOf } from "./shared"
 
 const MODULE = "configure.calendars"
 const CollectionCalendarPage = Page(CollectionCalendar)
@@ -277,7 +277,7 @@ export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
           "Writes a collection calendar in one project, which must be a project the caller works in. The name is unique inside the project. The period is half-open — `validFrom` is the first day in force and `validTo` the first day out of it, absent meaning the calendar is still running — and a project has one calendar in force at a time, so a period overlapping the project's other calendar is refused (409): the per-year calendars tile the project's timeline, and the next begins where the earlier one ends. `holidays` is the list the calendar starts with, each a day inside the period (400 on `holidays.N.day` otherwise) and each day named once (400 on `holidays`); the name of a holiday may be null. The server mints the ids.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The calendar as it was written, with its holidays by day.", CollectionCalendar),
+          201: describeCreated("The calendar as it was written, with its holidays by day.", CollectionCalendar),
           400: describeProblem(
             "The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, names the same day twice, carries more than 400 holidays, or puts a holiday outside the calendar's period.",
           ),
@@ -303,7 +303,7 @@ export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
           ),
         )
         await writeHolidays(tx, { companyId: principal.companyId, projectId: row.projectId, id: row.id }, holidays)
-        return c.json(calendarOf(row, byDay(holidays)), 201)
+        return created(c, "/collection-calendars", calendarOf(row, byDay(holidays)))
       },
     )
     .get(

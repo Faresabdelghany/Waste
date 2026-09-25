@@ -100,7 +100,7 @@ import {
   writeGroupSets,
   type Scope,
 } from "./scheme-groups"
-import { describeJson, IdParam, lockRow, refuseOverlap, timeOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, timeOf } from "./shared"
 
 const RouteSchemePage = Page(RouteScheme)
 const Occurrences = z.array(Occurrence)
@@ -182,7 +182,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>) {
           ". The planning area, where given, is one of that project's. Every group finds its stops one way: a rule group carries a rule naming one or more waste fractions of this company, none or more container types of this company and, optionally, a vehicle type, and picks no containers; a manual group picks one or more containers of this project in stop order and carries no rule. A group's service provider is this company's. A group's days lie within the scheme's service days, and no container is picked by two groups that run on a shared day — the entry is refused naming the group and the day. Groups take positions 1..n in the body's order where a position is absent. The period is half-open, `validFrom` the first day in force and `validTo` the first day out of it, absent meaning the scheme runs on; one scheme of a name is in force at a time in a project, so a new version of a name starts when the old ends and an overlapping one is refused. The week rotation is given with `every-2-weeks` and with nothing else, and a daily scheme serves every weekday. `status` defaults to `draft`, which accepts partial configuration; a scheme created `validated` is held to the structural rules — every service day has a collection group, a rule group names a waste fraction, a manual group picks a container, and a rule group has a planning area to match inside — and refused with every sentence that fails. A vehicle and a driver per group, and their licence eligibility, wait for Resources and are not held here. The server mints every id.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeJson("The route scheme as it was written, with its collection groups.", RouteScheme),
+          201: describeCreated("The route scheme as it was written, with its collection groups.", RouteScheme),
           400: describeProblem(
             `The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, gives the week rotation with the wrong cadence, leaves a weekday out of a daily scheme, carries no group or more than ${GROUPS_MAX}, names a group twice, runs a group on a day the scheme does not serve, gives a group both a rule and containers or neither, picks a container two groups run on the same day, or names a planning area, waste fraction, container type, container or service provider outside the scope its key allows — each at the entry that is wrong.`,
           ),
@@ -246,7 +246,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>) {
           scope,
           groups.map((group, n) => ({ id: group.id, rule: asked[n].rule, containerIds: asked[n].containerIds })),
         )
-        return c.json(await schemeWithGroups(tx, principal.companyId, row), 201)
+        return created(c, "/route-schemes", await schemeWithGroups(tx, principal.companyId, row))
       },
     )
     .get(

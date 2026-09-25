@@ -10,6 +10,7 @@ import { createDb, type Database } from "@waste/db/client"
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
 import { nextMillisecond } from "./clock"
+import { created } from "./created"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
@@ -132,11 +133,8 @@ describe("the planning area and boundary endpoints", { skip: database.skip }, ()
     ...values,
   })
 
-  const create = async <T>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> => {
-    const response = await call(path, { method: "POST", body: values })
-    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
-    return schema.parse(await response.json())
-  }
+  const create = async <T extends { id: string }>(call: Call, path: string, values: unknown, schema: Schema<T>, readAt?: `/${string}`): Promise<T> =>
+    created(call, path, await call(path, { method: "POST", body: values }), schema, readAt)
   const area = (code: string, values: Record<string, unknown> = {}) => create(olivia, "/planning-areas", body(code, values), PlanningArea)
   const one = async (call: Call, id: string): Promise<PlanningArea> => {
     const response = await call(`/planning-areas/${id}`)
@@ -170,7 +168,7 @@ describe("the planning area and boundary endpoints", { skip: database.skip }, ()
   }
   /** One version of an area: the square from January unless a test says otherwise. */
   const addBoundary = (areaId: string, values: Record<string, unknown> = {}) =>
-    create(olivia, `/planning-areas/${areaId}/boundaries`, { boundary: SQUARE, validFrom: JANUARY, ...values }, PlanningAreaBoundary)
+    create(olivia, `/planning-areas/${areaId}/boundaries`, { boundary: SQUARE, validFrom: JANUARY, ...values }, PlanningAreaBoundary, "/planning-area-boundaries")
   const patchBoundary = async (call: Call, id: string, values: unknown): Promise<PlanningAreaBoundary> => {
     const response = await call(`/planning-area-boundaries/${id}`, { method: "PATCH", body: values })
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))

@@ -154,7 +154,7 @@ export type StatusTable = TenantTable & { status: PgColumn }
 /** The row a body named: this company's, and under whatever else its key demands. */
 export type NamedRow = { companyId: string; id: string; also?: SQL }
 
-/** What a row that is not there is told: a 400 at the field that named it. */
+/** What a body is told about a value it carried — a row that is not there, a check the database refused: a 400 at the field that named it. */
 export type Refusal = { path: string; message: string }
 
 /**
@@ -241,9 +241,6 @@ async function refused<T>(
   }
 }
 
-/** What a check the database ran says about the value it refused: the field the body carried it in, and the sentence. */
-export type CheckRefusal = { path: string; message: string }
-
 /**
  * The third door, one SQLSTATE further along (Issue #97): a check violation
  * (23514) the route named becomes a 400 on the field, in the shape the
@@ -256,7 +253,7 @@ export type CheckRefusal = { path: string; message: string }
  * route did not name is left to the error handler, which answers a 500 and
  * logs the constraint — the signal that a sentence is missing here.
  */
-export async function refuseCheck<T>(sentences: Readonly<Record<string, CheckRefusal>>, write: () => Promise<T>): Promise<T> {
+export async function refuseCheck<T>(sentences: Readonly<Record<string, Refusal>>, write: () => Promise<T>): Promise<T> {
   try {
     return await write()
   } catch (error) {

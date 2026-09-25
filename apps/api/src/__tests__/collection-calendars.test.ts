@@ -9,6 +9,7 @@ import { createDb, type Database } from "@waste/db/client"
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
 import { nextMillisecond } from "./clock"
+import { created } from "./created"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
@@ -85,11 +86,8 @@ describe("the collection calendar endpoints", { skip: database.skip }, () => {
     ...values,
   })
 
-  const create = async (call: Call, values: unknown): Promise<CollectionCalendar> => {
-    const response = await call("/collection-calendars", { method: "POST", body: values })
-    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
-    return CollectionCalendar.parse(await response.json())
-  }
+  const create = async (call: Call, values: unknown): Promise<CollectionCalendar> =>
+    created(call, "/collection-calendars", await call("/collection-calendars", { method: "POST", body: values }), CollectionCalendar)
   const calendar = (y: number, values: Record<string, unknown> = {}) => create(olivia, body(y, values))
   const one = async (call: Call, id: string): Promise<CollectionCalendar> => {
     const response = await call(`/collection-calendars/${id}`)

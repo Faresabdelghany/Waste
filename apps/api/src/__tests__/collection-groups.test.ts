@@ -10,6 +10,7 @@ import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
+import { created } from "./created"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { seedPlanning, type PlanningFixtures } from "./scheme-fixtures"
@@ -106,11 +107,8 @@ describe("the collection group endpoints", { skip: database.skip }, () => {
   const ruleGroup = (name: string, days: string[], values: Record<string, unknown> = {}) => ({ name, days, stopSource: "rule", rule: rule(), ...values })
   const manualGroup = (name: string, days: string[], containerIds: string[], values: Record<string, unknown> = {}) => ({ name, days, stopSource: "manual", containerIds, ...values })
 
-  const create = async <T>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> => {
-    const response = await call(path, { method: "POST", body: values })
-    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
-    return schema.parse(await response.json())
-  }
+  const create = async <T extends { id: string }>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> =>
+    created(call, path, await call(path, { method: "POST", body: values }), schema)
   /** A scheme on Copenhagen Central inside Centrum, Mondays and Thursdays, with the groups given — one rule group over both days unless a test says otherwise. */
   const scheme = (name: string, values: Record<string, unknown> = {}) =>
     create(
