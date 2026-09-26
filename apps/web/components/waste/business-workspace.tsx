@@ -258,6 +258,8 @@ import { SchemeGenerateRoutesDialog } from "@/components/waste/scheme-generate-r
 import { SchemeDetailsPage } from "@/components/waste/scheme-details-page"
 import { SchemePlanAheadRunner } from "@/components/waste/scheme-plan-ahead"
 import { useBusinessRecordStore } from "@/components/waste/business-record-store"
+import { isServerBacked, serverModuleOf } from "@/lib/api/records/modules"
+import { spellsStatus } from "@/lib/api/records/server-records"
 import { useActiveRoutes } from "@/components/waste/active-routes-store"
 import {
   useAssetManagementStore,
@@ -690,6 +692,29 @@ function nextAllowedTransitions(module: ModuleDefinition, status: string): strin
   )
   if (currentIndex < 0) return []
   return module.lifecycle.slice(currentIndex + 1, currentIndex + 3)
+}
+
+/**
+ * The transitions a record's detail view offers: the record's own, else the
+ * lifecycle's next two. On a module the server backs (Issue #81) only those
+ * whose outcome is a status the wire can carry — the store refuses every
+ * other move before the API sees it (`writeRecord`), and a button that is
+ * always refused is no button. An action that leaves the status where it is
+ * (Merge, Create version) is dropped there too: it would change facts alone,
+ * which the wire does not carry.
+ */
+function offeredTransitions(
+  workspaceId: WorkspaceId,
+  module: ModuleDefinition,
+  record: BusinessRecord,
+): string[] {
+  const transitions = record.allowedTransitions ?? module.lifecycle.slice(1, 3)
+  const server = serverModuleOf(workspaceId, module.id)
+  if (server === undefined) return transitions
+  return transitions.filter((action) => {
+    const outcome = actionOutcome(module, action, record.status)
+    return outcome !== record.status && spellsStatus(server, record, outcome)
+  })
 }
 
 function createsCorrection(action: string): boolean {
@@ -1650,7 +1675,12 @@ export function BusinessWorkspace({
     offersRowActions &&
     Boolean(activeModuleFormSchema?.execution) &&
     hasGrant("edit")
-  const canDeleteRecords = offersRowActions && hasGrant("delete")
+  // The API has no delete (Issue #81): a switched module's record is
+  // deactivated or moved to another status, never soft-deleted, so the
+  // action is not offered there — and the store refuses one that arrives
+  // another way.
+  const canDeleteRecords =
+    offersRowActions && hasGrant("delete") && !isServerBacked(workspace.id, activeModule.id)
   const canRunRecordActions = hasGrant("edit")
   // Generate routes (spec FR-6, ticket #7) and the Plan Ahead toggle (FR-11,
   // ticket #8) on a scheme: row menu + detail view, only for schemes whose
@@ -5532,6 +5562,9 @@ export function BusinessWorkspace({
           record={selectedRecord}
           onClose={closeRecord}
           onAction={requestRecordAction}
+          transitions={
+            selectedRecord ? offeredTransitions(workspace.id, activeModule, selectedRecord) : []
+          }
           showDeepLinks={showDeepLinks}
           onEdit={canEditRecords ? openEditRecord : undefined}
           onDelete={canDeleteRecords ? requestRecordDelete : undefined}
@@ -5650,6 +5683,7 @@ function RecordDetailsDialog({
   record,
   onClose,
   onAction,
+  transitions,
   showDeepLinks,
   onEdit,
   onDelete,
@@ -5661,6 +5695,8 @@ function RecordDetailsDialog({
   record: BusinessRecord | null
   onClose: () => void
   onAction: (action: string) => void
+  /** The transitions offered as buttons — `offeredTransitions`, which the parent computes since it knows the workspace. */
+  transitions: string[]
   showDeepLinks: boolean
   onEdit?: (record: BusinessRecord) => void
   onDelete?: (record: BusinessRecord) => void
@@ -5804,7 +5840,7 @@ function RecordDetailsDialog({
                   </Button>
                 ))}
                 {showActions &&
-                  (record.allowedTransitions ?? module.lifecycle.slice(1, 3)).map((action) => (
+                  transitions.map((action) => (
                     <Button
                       key={action}
                       variant={action === "Rejected" || action === "Cancelled" ? "outline" : "default"}
