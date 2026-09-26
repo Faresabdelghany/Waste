@@ -31,7 +31,7 @@ import { and, asc, eq } from "drizzle-orm"
 
 import { JOBS } from "../jobs"
 import { OPEN_TICKETS_QUEUE_OPTIONS, openTicketFor, openTickets, RESOLUTION_KINDS, type OpenTicketsOutcome } from "../jobs/open-tickets"
-import { outboxQueue } from "../outbox/subscribe"
+import { CONSUMED_OUTBOX_QUEUE_OPTIONS, outboxQueue } from "../outbox/subscribe"
 import { at, dropConsumerTenant, outboxJob, pickupPayload, proofPayload, receiptPayload, routePayload, seedConsumerTenant, seedReceipt, seedRoute, testId, type ConsumerTenant } from "./consumer-fixtures"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 
@@ -76,7 +76,7 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     for (const job of openTickets) {
       assert.ok(JOBS.includes(job), job.queue)
       assert.equal(job.schedule, undefined, "sent by the relay, never by a clock")
-      assert.deepEqual(job.queueOptions, OPEN_TICKETS_QUEUE_OPTIONS)
+      assert.deepEqual(job.queueOptions, { ...CONSUMED_OUTBOX_QUEUE_OPTIONS, ...OPEN_TICKETS_QUEUE_OPTIONS }, "the consumer's retry policy over the seam's dead letter and retention")
     }
     assert.deepEqual(OPEN_TICKETS_QUEUE_OPTIONS, { retryLimit: 3, retryDelay: 5, retryBackoff: true })
     assert.ok(!openTickets.some((job) => job.queue === outboxQueue("route-cancelled")), "§7.10: a cancellation makes no ticket of its own")

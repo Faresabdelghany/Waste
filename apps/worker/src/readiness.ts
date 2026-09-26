@@ -24,7 +24,12 @@
 // bounded like the checks; a ready body carries the number, and a count that
 // did not answer in time is left out rather than made a 503, since an event
 // nobody could publish is still an event and the probe is not the place to
-// decide about it.
+// decide about it. A fourth rides on the boss check itself: `deadLetters`,
+// the jobs waiting on `outbox.dead` (the consumers' dead-letter queue,
+// outbox/subscribe.ts) — pg-boss's cached `queuedCount` on that queue's row,
+// read in the same `getQueues` as the failed count when the queue is among
+// the ones asked for — a job that failed past its retries and waits for an
+// operator's redrive; information for the operator, never a reason for a 503.
 import type { ClientOptions, Database } from "@waste/db/client"
 import type { PgBoss } from "pg-boss"
 
@@ -32,7 +37,7 @@ import type { PgBoss } from "pg-boss"
 export const CHECK_TIMEOUT_MS = 2_000
 
 export type DatabaseCheck = "ok" | "unreachable"
-export type BossCheck = { boss: "ok"; failedJobs: number } | { boss: "stopped" } | { boss: "unreachable" }
+export type BossCheck = { boss: "ok"; failedJobs: number; deadLetters?: number } | { boss: "stopped" } | { boss: "unreachable" }
 
 export type CheckOptions = {
   timeoutMs?: number
@@ -74,19 +79,26 @@ export async function checkDatabase(sql: Database["sql"], { timeoutMs = CHECK_TI
   )
 }
 
-/** What the boss probe reads: the instance, the queues the registry put on it, and whether the process has it started right now. */
+/** What the boss probe reads: the instance, the queues the registry put on it, whether the process has it started right now, and, where the worker has one, the dead-letter queue whose waiting jobs a ready body carries as `deadLetters`. */
 export type BossProbe = {
   boss: Pick<PgBoss, "getQueues">
   queues: readonly string[]
   isStarted: () => boolean
+  /** The consumers' dead-letter queue (`outbox.dead`); its waiting count rides on the ready body when named, nothing rides when not. */
+  deadLetterQueue?: string
 }
 
-export async function checkBoss({ boss, queues, isStarted }: BossProbe, { timeoutMs = CHECK_TIMEOUT_MS }: CheckOptions = {}): Promise<BossCheck> {
+export async function checkBoss({ boss, queues, isStarted, deadLetterQueue }: BossProbe, { timeoutMs = CHECK_TIMEOUT_MS }: CheckOptions = {}): Promise<BossCheck> {
   if (!isStarted()) return { boss: "stopped" }
   return bounded<BossCheck>(
     Promise.resolve().then(async () => {
-      const rows = await boss.getQueues([...queues])
-      return { boss: "ok", failedJobs: rows.reduce((count, queue) => count + queue.failedCount, 0) }
+      // One read: the registered queues and, where named, the dead-letter queue beside them (once, should a job ever list it among its own).
+      const asked = deadLetterQueue === undefined || queues.includes(deadLetterQueue) ? [...queues] : [...queues, deadLetterQueue]
+      const rows = await boss.getQueues(asked)
+      const failedJobs = rows.filter((queue) => queues.includes(queue.name)).reduce((count, queue) => count + queue.failedCount, 0)
+      const dead = deadLetterQueue === undefined ? undefined : rows.find((queue) => queue.name === deadLetterQueue)
+      // A dead-letter queue named and not there yet (a first start before the relay published it) carries nothing rather than a zero it cannot vouch for.
+      return dead === undefined ? { boss: "ok", failedJobs } : { boss: "ok", failedJobs, deadLetters: dead.queuedCount }
     }),
     { boss: "unreachable" },
     timeoutMs,

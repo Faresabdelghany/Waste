@@ -5,20 +5,30 @@
 //
 // One tick is one sweep and then one transaction per company. The sweep is
 // the second cross-tenant statement in the system after #97's plan-ahead and
-// the reason `wms_worker` has BYPASSRLS: `select id, company_id from
-// outbox_event where published_at is null order by id limit 100` on the
-// worker role's pool, over the partial index `outbox_event_id_idx` (the one
-// index without the tenant, made for this read). It takes no lock — a role
-// with no write right holds no row lock worth having, and a sweep that locked
-// would hold nothing past its own statement anyway. The lock is taken where
-// the write is: for each company of the sweep, `withCompany(api.db, companyId,
-// …)` opens the fenced transaction as `wms_api`, re-reads the company's rows
-// among the swept ids that are still unpublished with `for update skip
-// locked`, in id order, stamps `published_at = now()` on exactly those rows in
-// one statement whose `returning` is the instant the payload then carries, and
-// sends each to `outbox.<kind>` (outbox/subscribe.ts spells the queue and the
-// payload) with pg-boss's `send` on that same transaction — `{ db:
-// fromDrizzle(tx, sql) }`, pg-boss's own adapter over a Drizzle transaction.
+// the reason `wms_worker` has BYPASSRLS: the unpublished rows in id order,
+// capped per company — `select id, company_id from (select id, company_id,
+// row_number() over (partition by company_id order by id) as rank from
+// outbox_event where published_at is null) ranked where rank <= 100 order by
+// company_id, id` on the worker role's pool, over the partial index
+// `outbox_event_id_idx` (the one index without the tenant, made for this
+// read). The cap is per company and not across them on purpose: a company
+// whose transaction fails every tick — a queue for a kind this worker does
+// not know yet, mid-deploy, or any error of its own — keeps its unpublished
+// rows, and under a cap across companies its backlog, once a hundred rows
+// deep, would be the whole of every sweep and no other company's event would
+// ever be published again; partitioned, each company's oldest hundred are
+// swept whatever the others hold, and the failing one starves only itself.
+// It takes no lock — a role with no write right holds no row lock worth
+// having, and a sweep that locked would hold nothing past its own statement
+// anyway. The lock is taken where the write is: for each company of the
+// sweep, `withCompany(api.db, companyId, …)` opens the fenced transaction as
+// `wms_api`, re-reads the company's rows among the swept ids that are still
+// unpublished with `for update skip locked`, in id order, stamps
+// `published_at = now()` on exactly those rows in one statement whose
+// `returning` is the instant the payload then carries, and sends each to
+// `outbox.<kind>` (outbox/subscribe.ts spells the queue and the payload) with
+// pg-boss's `send` on that same transaction — `{ db: fromDrizzle(tx, sql) }`,
+// pg-boss's own adapter over a Drizzle transaction.
 // Stamp and sends commit together or roll back together, which is the
 // whole point of an outbox; and a second relay running at the same moment
 // (two workers, a deploy overlapping the old process, a test) skips the rows
@@ -38,16 +48,21 @@
 //
 // One door for a consumer, one spelling, `outbox.<kind>`, written in the
 // row's transaction: a job `send` to the queue of that name. The relay owns
-// these queues (`publishes: OUTBOX_QUEUES` has the wiring create one per kind
-// of the vocabulary before any worker starts), so a job waits there under
-// pg-boss's retention for whoever works it, and a consumer is one entry per
-// kind in the registry through `defineOutboxConsumer`, working the queue. The
-// relay does not `publish` as well: pg-boss's fan-out delivers only to the
-// queues subscribed at publish time, so an event relayed before a consumer's
-// first start would reach no subscriber, where the kind's queue keeps it —
-// and a second door would hand a consumer that took both every event twice.
-// Which kinds exist is the domain's `OUTBOX_KINDS`; a kind added there is a
-// queue here with nothing else to change.
+// these queues (`publishes: [OUTBOX_DEAD, ...OUTBOX_QUEUES]` has the wiring
+// create the dead-letter queue and then one queue per kind of the vocabulary
+// before any worker starts; the dead-letter queue first, since a consumer's
+// queue names it and pg-boss refuses a `deadLetter` that does not exist), so
+// a job waits there under pg-boss's retention for whoever works it, and a
+// consumer is one entry per kind in the registry through
+// `defineOutboxConsumer`, working the queue. The relay does not `publish` as
+// well: pg-boss's fan-out delivers only to the queues subscribed at publish
+// time, so an event relayed before a consumer's first start would reach no
+// subscriber, where the kind's queue keeps it — and a second door would hand
+// a consumer that took both every event twice. Which kinds exist is the
+// domain's `OUTBOX_KINDS`; a kind added there is a queue here with nothing
+// else to change. `outbox.dead` is where a consumer's job goes when it has
+// failed past its retries (outbox/subscribe.ts says how and how it comes
+// back); the relay itself never sends there.
 //
 // The tick. pg-boss's schedule is minute-granular (its cron pass runs once a
 // minute and a six-field expression is refused by the registry, boss.ts), and
@@ -60,8 +75,9 @@
 // racing, and a relay that fell over (a failed handler sends no successor) is
 // picked up by the schedule within the minute; `missed: "skip"` keeps a
 // worker down for an hour from ticking sixty times when it is back. A tick
-// that found a full batch (BATCH_SIZE rows) sends its successor at once, so a
-// backlog drains at the pace of the database and not five seconds a hundred.
+// that found a batch's worth (BATCH_SIZE rows or more across companies: some
+// company may be at its cap) sends its successor at once, so a backlog drains
+// at the pace of the database and not five seconds a hundred.
 // The successor is sent after the batch and outside its transactions: a
 // double tick is harmless (an empty sweep, or `skip locked`), a lost one is
 // the schedule's to replace.
@@ -87,15 +103,15 @@ import { OutboxAggregate, OutboxKind } from "@waste/contracts/execution"
 import type { Database, Tx } from "@waste/db/client"
 import { outboxEvent } from "@waste/db/schema/execution"
 import { withCompany } from "@waste/db/tenant"
-import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm"
+import { and, asc, eq, inArray, isNull, lt, lte, sql } from "drizzle-orm"
 import { fromDrizzle, type SendOptions } from "pg-boss"
 
-import { OUTBOX_QUEUES, outboxQueue, type RelayedEvent } from "../outbox/subscribe"
+import { OUTBOX_DEAD, OUTBOX_QUEUES, outboxQueue, type RelayedEvent } from "../outbox/subscribe"
 import { defineJob, type JobContext } from "./definition"
 
 /** The relay's own queue. */
 export const RELAY_QUEUE = "execution.relay-outbox"
-/** How many unpublished rows one tick takes, across companies, in id order. */
+/** How many unpublished rows one tick takes of each company, oldest first: the cap is per company, so one company's backlog never crowds another's rows out of the sweep. */
 export const BATCH_SIZE = 100
 /** How long a tick waits before its successor when the sweep came back short; the cadence the issue asked for. */
 export const RELAY_INTERVAL_SECONDS = 5
@@ -107,7 +123,7 @@ export type RelayOutboxData = {
   source: "schedule" | "successor" | "manual"
 }
 
-/** What one tick did, the job's output: how many unpublished rows the sweep found (at most `BATCH_SIZE`), and how many it published and stamped, across companies. A tick that failed for any company has no output; it throws, and the readiness count sees it. */
+/** What one tick did, the job's output: how many unpublished rows the sweep found (at most `BATCH_SIZE` of each company), and how many it published and stamped, across companies. A tick that failed for any company has no output; it throws, and the readiness count sees it. */
 export type RelayOutcome = {
   swept: number
   published: number
@@ -179,18 +195,29 @@ export async function relayCompany(context: Pick<JobContext, "api" | "send">, co
 
 /**
  * One tick: the cross-tenant sweep as the worker role, then each company's
- * rows published and stamped as the API role under `withCompany`. A company
- * whose transaction fails is counted, logged and left for the next tick; the
- * others are not held up by it. Throws after every company has been tried
- * when any failed, so the tick is a failed job.
+ * rows published and stamped as the API role under `withCompany`. The sweep
+ * takes each company's oldest `BATCH_SIZE` unpublished rows — a window
+ * partitioned by company, so a company with a thousand rows nobody can
+ * publish still leaves every other company its turn — in company then id
+ * order. A company whose transaction fails is counted, logged and left for
+ * the next tick; the others are not held up by it. Throws after every
+ * company has been tried when any failed, so the tick is a failed job.
  */
 export async function relayOnce(context: Pick<JobContext, "api" | "worker" | "send" | "log">): Promise<RelayOutcome> {
-  const swept = await context.worker.db
-    .select({ id: outboxEvent.id, companyId: outboxEvent.companyId })
+  const ranked = context.worker.db
+    .select({
+      id: outboxEvent.id,
+      companyId: outboxEvent.companyId,
+      rank: sql<number>`row_number() over (partition by ${outboxEvent.companyId} order by ${outboxEvent.id})`.as("rank"),
+    })
     .from(outboxEvent)
     .where(isNull(outboxEvent.publishedAt))
-    .orderBy(asc(outboxEvent.id))
-    .limit(BATCH_SIZE)
+    .as("ranked")
+  const swept = await context.worker.db
+    .select({ id: ranked.id, companyId: ranked.companyId })
+    .from(ranked)
+    .where(lte(ranked.rank, BATCH_SIZE))
+    .orderBy(asc(ranked.companyId), asc(ranked.id))
   const byCompany = new Map<string, string[]>()
   for (const row of swept) {
     const ids = byCompany.get(row.companyId)
@@ -237,14 +264,15 @@ export const relayOutbox = defineJob<RelayOutboxData>({
   queueOptions: { policy: "short", retryLimit: 0, deleteAfterSeconds: 60 * 60 },
   // Polled every second, so a successor due in five seconds runs in five and not in up to seven.
   workOptions: { pollingIntervalSeconds: 1 },
-  publishes: OUTBOX_QUEUES,
+  // The dead-letter queue first: a consumer's queue names it, and pg-boss refuses a dead letter that does not exist yet.
+  publishes: [OUTBOX_DEAD, ...OUTBOX_QUEUES],
   handler: async (jobs, context) => {
     const tick = await relayOnce(context).then(
       (outcome) => ({ outcome }),
       (error: unknown) => ({ error }),
     )
-    // The successor, whatever the tick did: a tick that failed is tried again after the interval, a full batch is followed at once. `short` drops the send when one is already queued.
-    const startAfter = "outcome" in tick && tick.outcome.swept === BATCH_SIZE ? 0 : RELAY_INTERVAL_SECONDS
+    // The successor, whatever the tick did: a tick that failed is tried again after the interval, a batch's worth (some company at its cap, or as many rows across companies) is followed at once. `short` drops the send when one is already queued.
+    const startAfter = "outcome" in tick && tick.outcome.swept >= BATCH_SIZE ? 0 : RELAY_INTERVAL_SECONDS
     await context.send(RELAY_QUEUE, { source: "successor" } satisfies RelayOutboxData, { startAfter })
     if ("error" in tick) throw tick.error
     const { published } = tick.outcome

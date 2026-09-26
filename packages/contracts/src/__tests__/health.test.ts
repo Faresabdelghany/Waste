@@ -44,14 +44,18 @@ describe("ReadinessResponse", () => {
 })
 
 describe("WorkerReadinessResponse", () => {
-  test("is ready when both checks pass, and carries the count of failed jobs and, where the worker counted it, the stale outbox rows", () => {
+  test("is ready when both checks pass, and carries the count of failed jobs and, where the worker counted them, the dead letters and the stale outbox rows", () => {
     const body = { status: "ok", checks: { database: "ok", boss: "ok" }, failedJobs: 0 }
     assert.deepEqual(WorkerReadinessResponse.parse(body), body)
     assert.deepEqual(WorkerReadyResponse.parse({ ...body, failedJobs: 12 }).failedJobs, 12)
     assert.deepEqual(WorkerReadyResponse.parse({ ...body, staleOutbox: 3 }), { ...body, staleOutbox: 3 })
+    assert.deepEqual(WorkerReadyResponse.parse({ ...body, deadLetters: 2 }), { ...body, deadLetters: 2 })
     assert.equal(WorkerReadyResponse.parse(body).staleOutbox, undefined, "a worker with no outbox to relay, or a count that did not answer, carries none")
+    assert.equal(WorkerReadyResponse.parse(body).deadLetters, undefined, "a worker with no dead-letter queue, or one not created yet, carries none")
     assert.equal(WorkerReadyResponse.safeParse({ ...body, staleOutbox: -1 }).success, false)
     assert.equal(WorkerReadyResponse.safeParse({ ...body, staleOutbox: 0.5 }).success, false)
+    assert.equal(WorkerReadyResponse.safeParse({ ...body, deadLetters: -1 }).success, false)
+    assert.equal(WorkerReadyResponse.safeParse({ ...body, deadLetters: 1.5 }).success, false)
   })
 
   test("is unavailable when a check did not pass, naming which", () => {

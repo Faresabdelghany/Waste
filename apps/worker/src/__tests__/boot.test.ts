@@ -26,7 +26,7 @@ import { heartbeat } from "../jobs/heartbeat"
 import { OPEN_TICKETS_QUEUE_OPTIONS, openTickets } from "../jobs/open-tickets"
 import { RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, recordBillableEvents } from "../jobs/record-billable-events"
 import { relayOutbox } from "../jobs/relay-outbox"
-import { OUTBOX_QUEUES, outboxQueue, type RelayedEvent } from "../outbox/subscribe"
+import { CONSUMED_RETENTION_SECONDS, DEAD_LETTER_RETENTION_SECONDS, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUES, outboxQueue, UNCONSUMED_RETENTION_SECONDS, type RelayedEvent } from "../outbox/subscribe"
 import { checkBoss } from "../readiness"
 import { ownerUnderTest, withDatabaseName } from "./database"
 import { until } from "./until"
@@ -78,11 +78,11 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     await refused.stop({ graceful: false, close: true, timeout: 1_000 })
   })
 
-  test("starts with migrate: false on the schema 0011 installed, at the pinned version, and registers every job of the registry with the queues it publishes to — a consumer's queue options written over the relay's, a queue nobody consumes keeping them", async () => {
+  test("starts with migrate: false on the schema 0011 installed, at the pinned version, and registers every job of the registry with the queues it publishes to — the dead-letter queue first, a consumer's queue options written over the relay's with the dead letter and the fortnight, a queue nobody consumes keeping the relay's and its ninety days", async () => {
     const boss = createBoss({ url, log: (line) => void errors.push(line), cronWorkerIntervalSeconds: 1, monitorIntervalSeconds: 1, cronMonitorIntervalSeconds: 1 })
     running = await startBoss(boss, JOBS, context(fresh))
     assert.deepEqual(running.queues, JOBS.map((job) => job.queue))
-    assert.deepEqual(running.published, OUTBOX_QUEUES.map((queue) => queue.queue), "the relay's outbox.<kind> queues, each once")
+    assert.deepEqual(running.published, [OUTBOX_DEAD_QUEUE, ...OUTBOX_QUEUES.map((queue) => queue.queue)], "the dead-letter queue and then the relay's outbox.<kind> queues, each once")
     assert.equal(await boss.schemaVersion(), PGBOSS_SCHEMA_VERSION)
     const queues = await boss.getQueues([...running.queues, ...running.published])
     assert.deepEqual(
@@ -96,12 +96,14 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     const relayQueue = queues.find((queue) => queue.name === relayOutbox.queue)
     assert.equal(relayQueue?.policy, "short", "one relay tick queued at a time")
     assert.equal(relayQueue?.retryLimit, 0)
+    const dead = queues.find((queue) => queue.name === OUTBOX_DEAD_QUEUE)
+    assert.deepEqual([dead?.policy, dead?.retryLimit, dead?.retentionSeconds, dead?.deadLetter], ["standard", 0, DEAD_LETTER_RETENTION_SECONDS, null], "the dead-letter queue: no retry, ninety days, no dead letter of its own")
     const unconsumed = queues.find((queue) => queue.name === outboxQueue("route-dispatched"))
-    assert.deepEqual([unconsumed?.policy, unconsumed?.retryLimit, unconsumed?.retryDelay, unconsumed?.retryBackoff], ["standard", 3, 10, true], "a queue no consumer works carries the relay's retry policy")
+    assert.deepEqual([unconsumed?.policy, unconsumed?.retryLimit, unconsumed?.retryDelay, unconsumed?.retryBackoff, unconsumed?.retentionSeconds, unconsumed?.deadLetter], ["standard", 3, 10, true, UNCONSUMED_RETENTION_SECONDS, null], "a queue no consumer works carries the relay's retry policy, keeps a job ninety days for the consumer to come, and dead-letters nowhere: nothing fails on it")
     const resolutions = queues.find((queue) => queue.name === outboxQueue("pickup-failed"))
-    assert.deepEqual([resolutions?.policy, resolutions?.retryLimit, resolutions?.retryDelay, resolutions?.retryBackoff], ["standard", OPEN_TICKETS_QUEUE_OPTIONS.retryLimit, OPEN_TICKETS_QUEUE_OPTIONS.retryDelay, true], "Resolution's queue options written over the relay's, the policy untouched")
+    assert.deepEqual([resolutions?.policy, resolutions?.retryLimit, resolutions?.retryDelay, resolutions?.retryBackoff, resolutions?.retentionSeconds, resolutions?.deadLetter], ["standard", OPEN_TICKETS_QUEUE_OPTIONS.retryLimit, OPEN_TICKETS_QUEUE_OPTIONS.retryDelay, true, CONSUMED_RETENTION_SECONDS, OUTBOX_DEAD_QUEUE], "Resolution's queue options written over the relay's, the policy untouched, the seam's dead letter and fortnight with them")
     const finances = queues.find((queue) => queue.name === outboxQueue("pickup-completed"))
-    assert.deepEqual([finances?.retryLimit, finances?.retryDelay, finances?.deleteAfterSeconds], [RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS.retryLimit, RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS.retryDelay, RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS.deleteAfterSeconds], "Finance's the same")
+    assert.deepEqual([finances?.retryLimit, finances?.retryDelay, finances?.retryDelayMax, finances?.deleteAfterSeconds, finances?.deadLetter], [RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS.retryLimit, RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS.retryDelay, RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS.retryDelayMax, RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS.deleteAfterSeconds, OUTBOX_DEAD_QUEUE], "Finance's the same, its backoff cap among them")
     const schedules = await boss.getSchedules()
     // pg-boss answers the schedules in its own order, not the registry's.
     const byName = (a: [string, ...unknown[]], b: [string, ...unknown[]]) => a[0].localeCompare(b[0])
@@ -221,6 +223,88 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
       const check = await checkBoss({ ...probe, queues: [...running!.queues] })
       return check.boss === "ok" && check.failedJobs === 1
     }, 10_000, "the consumer's failure reaching the probe")
+  })
+
+  test("a consumer's job that fails past its retries is copied to outbox.dead with its RelayedEvent intact and the queue it came from named, where the probe counts it as a dead letter and boss.redrive puts it back on its queue", async () => {
+    const boss = running!.boss
+    // A Finance event naming a pickup that is not there: the handler throws on every attempt (the row is not there, and never will be), which is the poison message — sent with no retry so the test sees the dead letter within its bound; the queue's own policy is five retries.
+    const pickupId = "01a0d3a5-e5e0-7000-8000-000000000203"
+    const event: RelayedEvent = {
+      id: "01a0d3a5-e5e0-7000-8000-000000000201",
+      companyId: "01a0d3a5-e5e0-7000-8000-000000000200",
+      projectId: "01a0d3a5-e5e0-7000-8000-000000000202",
+      kind: "pickup-completed",
+      aggregateKind: "pickup",
+      aggregateId: pickupId,
+      occurredAt: "2026-10-05T06:12:00.000Z",
+      payload: {
+        id: pickupId,
+        createdAt: "2026-10-05T05:00:00.000Z",
+        updatedAt: "2026-10-05T06:12:00.000Z",
+        projectId: "01a0d3a5-e5e0-7000-8000-000000000202",
+        routeId: "01a0d3a5-e5e0-7000-8000-000000000204",
+        containerId: "01a0d3a5-e5e0-7000-8000-000000000205",
+        position: 1,
+        status: "completed",
+        reason: null,
+        note: null,
+        propertyId: "01a0d3a5-e5e0-7000-8000-000000000206",
+        sharedCollectionPointId: null,
+        wasteFractionId: "01a0d3a5-e5e0-7000-8000-000000000207",
+        arrivedAt: "2026-10-05T06:10:00.000Z",
+        outcomeAt: "2026-10-05T06:12:00.000Z",
+        proofs: [],
+      },
+      publishedAt: "2026-10-05T06:12:05.000Z",
+      createdAt: "2026-10-05T06:12:00.000Z",
+      updatedAt: "2026-10-05T06:12:05.000Z",
+    }
+    const queue = outboxQueue("pickup-completed")
+    assert.ok(recordBillableEvents.some((job) => job.queue === queue), "Finance's consumer works the kind's queue")
+    const [before] = await boss.getQueues([queue])
+    assert.equal(before.deadLetter, OUTBOX_DEAD_QUEUE, "the queue names the dead-letter queue")
+    // The test above sent Resolution's queue a job that is not an outbox row, with no retry: it failed, and it is a dead letter already — data intact, however unparseable.
+    const already = await boss.findJobs(OUTBOX_DEAD_QUEUE, {})
+    assert.equal(already.length, 1, "the drifted job of the test above is on the dead-letter queue")
+    assert.deepEqual([already[0].sourceName, already[0].data], [outboxQueue("command-rejected"), { not: "an outbox row" }])
+    const id = await boss.send(queue, event, { retryLimit: 0 })
+    assert.ok(id)
+    await until(async () => (await boss.findJobs(queue, { id: id! }))[0]?.state === "failed", 10_000, "the poison job failing")
+    const [failed] = await boss.findJobs(queue, { id: id! })
+    assert.match(JSON.stringify(failed.output), /names pickup .* which is not in company/)
+
+    // The copy on the dead-letter queue: the same data, the failure's output, and where it came from.
+    const dead = await boss.findJobs<RelayedEvent>(OUTBOX_DEAD_QUEUE, { data: { id: event.id } })
+    assert.equal(dead.length, 1, "one dead letter for the one failed job")
+    const [letter] = dead
+    assert.deepEqual(letter.data, event, "the RelayedEvent travels intact")
+    assert.equal(letter.state, "created", "waiting: nobody works the dead-letter queue")
+    assert.deepEqual([letter.sourceName, letter.sourceId], [queue, id], "the queue it failed on and the job it was, for the redrive")
+    assert.match(JSON.stringify(letter.output), /names pickup .* which is not in company/, "the failure's reason rides along")
+    assert.ok(letter.keepUntil.getTime() - Date.now() > 89 * 86_400_000, "kept ninety days for an operator")
+
+    // The probe: the failed count on the consumer's queue, and the dead letters beside it (this one and the drifted job's) — a number, never a 503.
+    const probe = { boss, queues: [...running!.queues], isStarted: () => true, deadLetterQueue: OUTBOX_DEAD_QUEUE }
+    await until(async () => {
+      await boss.supervise(queue)
+      await boss.supervise(OUTBOX_DEAD_QUEUE)
+      const check = await checkBoss(probe)
+      return check.boss === "ok" && check.deadLetters === 2
+    }, 10_000, "the dead letter reaching the probe")
+    const counted = await checkBoss(probe)
+    assert.ok(counted.boss === "ok" && counted.failedJobs >= 2 && counted.deadLetters === 2, JSON.stringify(counted))
+
+    // The redrive: pg-boss's own door. Previewed first — where the job would go — then moved: a fresh job on the queue it failed on, the dead-letter queue emptied of it; the drifted job, not named, stays.
+    assert.deepEqual(await boss.previewRedrive(OUTBOX_DEAD_QUEUE, { ids: [letter.id] }), { total: 1, destinations: [{ name: queue, count: 1 }], unroutable: 0 })
+    assert.deepEqual(await boss.previewRedrive(OUTBOX_DEAD_QUEUE), { total: 2, destinations: [{ name: outboxQueue("command-rejected"), count: 1 }, { name: queue, count: 1 }], unroutable: 0 }, "unfiltered: every dead letter, by the queue it came from")
+    assert.equal(await boss.redrive(OUTBOX_DEAD_QUEUE, { ids: [letter.id] }), 1)
+    assert.deepEqual(await boss.findJobs(OUTBOX_DEAD_QUEUE, { data: { id: event.id } }), [], "moved off the dead-letter queue")
+    assert.equal((await boss.findJobs(OUTBOX_DEAD_QUEUE, {})).length, 1, "the one not named stays")
+    // Back on its queue — and, the cause not fixed, it fails again under the queue's own policy (five retries), dead-lettered again once they run out; here the retries are what the queue says, so the redriven job is seen queued or retrying, never lost.
+    await until(async () => (await boss.findJobs<RelayedEvent>(queue, { data: { id: event.id } })).some((job) => job.id !== id), 10_000, "the redriven job on its source queue")
+    const redriven = (await boss.findJobs<RelayedEvent>(queue, { data: { id: event.id } })).find((job) => job.id !== id)!
+    assert.deepEqual(redriven.data, event)
+    assert.equal(redriven.retryLimit, RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS.retryLimit, "a redriven job takes the queue's policy as it stands, not the send's `retryLimit: 0`")
   })
 
   test("stop is idempotent and leaves the process with nothing to wait on; a second start converges on the registry", async () => {

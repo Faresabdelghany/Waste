@@ -52,12 +52,14 @@ export const WorkerDatabaseCheck = z.enum(["ok", "unreachable"])
 /** What the worker's pg-boss check answers: started and answering, not started, or started and not answering. */
 export const WorkerBossCheck = z.enum(["ok", "stopped", "unreachable"])
 
-/** The 200 body of the worker's `GET /readyz`: both checks passed, this many failed jobs are retained across its queues, and, where the worker relays an outbox, this many rows have waited unpublished past its stale bound. */
+/** The 200 body of the worker's `GET /readyz`: both checks passed, this many failed jobs are retained across its queues, this many wait on its dead-letter queue where it has one, and, where the worker relays an outbox, this many rows have waited unpublished past its stale bound. */
 export const WorkerReadyResponse = z.object({
   status: z.literal("ok"),
   checks: z.object({ database: z.literal("ok"), boss: z.literal("ok") }),
   /** Failed jobs still retained, a rolling count of recent failures under each queue's retention and not an all-time total; zero is the healthy answer. */
   failedJobs: z.int().min(0),
+  /** Jobs waiting on the consumers' dead-letter queue (`outbox.dead`): each failed past its retries and waits, data intact, for an operator's redrive. Information for an operator, never a reason for a 503; absent where the worker names no dead-letter queue or has not created it yet. */
+  deadLetters: z.int().min(0).optional(),
   /** Outbox rows unpublished for longer than the relay's stale bound (an hour), across companies: a poison event or a relay that has not run. Information for an operator, never a reason for a 503; absent where the worker could not count in time. */
   staleOutbox: z.int().min(0).optional(),
 })

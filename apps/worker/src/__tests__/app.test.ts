@@ -64,6 +64,16 @@ describe("GET /readyz", () => {
       const down = await createApp({ probe, boss: bossOf([0], false), staleOutbox: async () => 4 }).request("/readyz")
       assert.equal(down.status, 503)
       assert.deepEqual(WorkerReadinessResponse.parse(await down.json()), { status: "unavailable", checks: { database: "ok", boss: "stopped" } }, "an unavailable body carries no count")
+      // The dead-letter queue's waiting count rides the same way: information beside the failed count, never a status, and left out where the probe names no queue.
+      const dead: BossProbe = {
+        boss: { getQueues: async () => [{ name: "q.0", failedCount: 1, queuedCount: 7 }, { name: "outbox.dead", failedCount: 0, queuedCount: 2 }] as never },
+        queues: ["q.0"],
+        isStarted: () => true,
+        deadLetterQueue: "outbox.dead",
+      }
+      const lettered = await createApp({ probe, boss: dead, staleOutbox: async () => 0 }).request("/readyz")
+      assert.equal(lettered.status, 200, "dead letters are an operator's number, not a 503")
+      assert.deepEqual(WorkerReadinessResponse.parse(await lettered.json()), { status: "ok", checks: { database: "ok", boss: "ok" }, failedJobs: 1, deadLetters: 2, staleOutbox: 0 })
     } finally {
       await probe.close()
     }

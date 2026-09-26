@@ -33,7 +33,7 @@ import type { PgBoss } from "pg-boss"
 import { createBoss, startBoss, type Boss } from "../boss"
 import { defineJob, type JobContext } from "../jobs"
 import { BATCH_SIZE, OUTBOX_STALE_MS, RELAY_INTERVAL_SECONDS, RELAY_QUEUE, relayOnce, relayOutbox, staleOutboxCount } from "../jobs/relay-outbox"
-import { defineOutboxConsumer, OUTBOX_QUEUES, outboxQueue, RelayedEvent } from "../outbox/subscribe"
+import { DEAD_LETTER_RETENTION_SECONDS, defineOutboxConsumer, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUES, outboxQueue, RelayedEvent } from "../outbox/subscribe"
 import { rolesUnderTest, withDatabaseName } from "./database"
 import { until } from "./until"
 
@@ -149,14 +149,18 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     }
   })
 
-  test("the wiring created every outbox.<kind> queue with the relay's retry policy, before any consumer registered", async () => {
-    assert.deepEqual(running!.published, OUTBOX_QUEUES.map((queue) => queue.queue))
+  test("the wiring created the dead-letter queue and every outbox.<kind> queue with the relay's retry policy, before any consumer registered", async () => {
+    assert.deepEqual(running!.published, [OUTBOX_DEAD_QUEUE, ...OUTBOX_QUEUES.map((queue) => queue.queue)])
     assert.deepEqual(running!.queues, [RELAY_QUEUE, "outbox.pickup-failed"])
     const queues = await boss.getQueues([...running!.published])
-    assert.equal(queues.length, OUTBOX_QUEUES.length)
+    assert.equal(queues.length, OUTBOX_QUEUES.length + 1)
     for (const queue of queues) {
-      const expected = queue.name === "outbox.pickup-failed" ? [10, 0] : [10, 3]
-      assert.deepEqual([queue.retryDelay, queue.retryLimit], expected, `${queue.name}: the relay's policy, the consumer's retryLimit written over it on its own queue`)
+      if (queue.name === OUTBOX_DEAD_QUEUE) {
+        assert.deepEqual([queue.retryLimit, queue.retentionSeconds, queue.deadLetter], [0, DEAD_LETTER_RETENTION_SECONDS, null], "the dead-letter queue: no retry, ninety days, worked by nobody")
+        continue
+      }
+      const expected = queue.name === "outbox.pickup-failed" ? [10, 0, OUTBOX_DEAD_QUEUE] : [10, 3, null]
+      assert.deepEqual([queue.retryDelay, queue.retryLimit, queue.deadLetter], expected, `${queue.name}: the relay's policy, the consumer's retryLimit and the seam's dead letter written over it on its own queue`)
     }
   })
 
@@ -252,6 +256,48 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     )
     assert.equal((await outboxJobs()).length, 8)
     assert.ok((await outbox()).every((row) => row.publishedAt !== null))
+  })
+
+  test("one company's backlog of rows nobody can publish does not starve another's: the sweep caps each company at BATCH_SIZE, so B's one row goes the same tick as A's hundred fail, and A drains a hundred a tick once its queue is back", async () => {
+    // A: a hundred and fifty rows of a kind whose queue is gone — a consumer queue broken, or a kind this worker does not know yet, mid-deploy — so every tick's transaction for A fails and its rows stay unpublished, older than anything B will ever write.
+    await boss.deleteQueue(outboxQueue("ticket-rejected"))
+    const poisoned: string[] = []
+    for (let n = 0; n < 150; n += 1) {
+      poisoned.push(await emit(a, "ticket-rejected", { id: id(0x300 + n), status: "rejected", n }))
+    }
+    // B: one row, younger than all of A's. Under a cap across companies (`order by id limit 100`) the hundred oldest rows are all A's and B's is never swept; under a cap per company it is.
+    const b6 = await emit(b, "pickup-completed", { id: id(0x3a0), status: "completed" })
+    sent.length = 0
+    lines.length = 0
+
+    await assert.rejects(relayOnce(context), (error: Error) => {
+      assert.equal(error.message, "execution.relay-outbox: 1 of 2 companies failed to publish; 1 row published", "A's transaction failed, B's went, in the one tick")
+      return true
+    })
+    // The context's `send` records the attempt before pg-boss refuses it, so A's first row shows there and nowhere else: the jobs table is the word.
+    assert.ok(sent.some((entry) => entry.id === b6), "B's row was sent though A holds a hundred and fifty older ones")
+    assert.equal(lines.length, 1)
+    assert.match(lines[0], new RegExp(`^execution\\.relay-outbox: company ${a.companyId}: ${BATCH_SIZE} rows left unpublished: Queue outbox\\.ticket-rejected does not exist`), "A's part of the tick was its cap, not its whole backlog")
+    const rows = new Map((await outbox()).map((row) => [row.id, row]))
+    assert.ok(rows.get(b6)!.publishedAt !== null, "B's row is stamped")
+    assert.ok(poisoned.every((eventId) => rows.get(eventId)!.publishedAt === null), "none of A's is")
+    const jobs = await outboxJobs()
+    assert.ok(jobs.some((job) => RelayedEvent.parse(job.data).id === b6), "B's job is on its queue")
+    assert.ok(!jobs.some((job) => job.name === outboxQueue("ticket-rejected")), "none of A's survived its transaction")
+
+    // The same again: A still fails, B has nothing, and the tick throws with nothing published — the stale count climbs for A alone.
+    await assert.rejects(relayOnce(context), /1 of 1 company failed to publish; 0 rows published/)
+
+    // A's queue back (a consumer's next start, or the deploy that knows the kind): the first tick takes A's oldest hundred in id order, the second the other fifty, and a job that swept a batch's worth would follow itself at once.
+    await boss.createQueue(outboxQueue("ticket-rejected"), OUTBOX_QUEUE_OPTIONS)
+    sent.length = 0
+    assert.deepEqual(await relayOnce(context), { swept: BATCH_SIZE, published: BATCH_SIZE })
+    assert.deepEqual(sent.map((entry) => entry.id), poisoned.slice(0, BATCH_SIZE), "the oldest hundred, in id order")
+    sent.length = 0
+    assert.deepEqual(await relayOnce(context), { swept: 50, published: 50 })
+    assert.deepEqual(sent.map((entry) => entry.id), poisoned.slice(BATCH_SIZE))
+    assert.ok((await outbox()).every((row) => row.publishedAt !== null))
+    assert.equal((await outboxJobs()).filter((job) => job.name === outboxQueue("ticket-rejected")).length, 150, "one job per row, none twice")
   })
 
   test("a row another transaction holds is skipped, not waited for, and published by the tick after it is released (for update skip locked)", async () => {
@@ -387,16 +433,22 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.equal(BATCH_SIZE, 100)
     assert.equal(RELAY_INTERVAL_SECONDS, 5)
     assert.equal(RELAY_QUEUE, relayOutbox.queue)
-    assert.deepEqual(relayOutbox.publishes, OUTBOX_QUEUES)
+    assert.deepEqual(relayOutbox.publishes, [{ queue: OUTBOX_DEAD_QUEUE, queueOptions: { retryLimit: 0, retentionSeconds: DEAD_LETTER_RETENTION_SECONDS } }, ...OUTBOX_QUEUES])
   })
 
-  test("every outbox row is one of the two companies', and every one was published exactly once", async () => {
+  test("every outbox row is one of the two companies', and every one was published exactly once; the two jobs the consumer refused are dead letters, data intact", async () => {
     const rows = await outbox()
     assert.ok(rows.length >= 20)
     assert.deepEqual([...new Set(rows.map((row) => row.companyId))].sort(), [a.companyId, b.companyId].sort())
-    const publishedIds = await owner.sql.unsafe<{ id: string }[]>(`select data->>'id' as id from ${PGBOSS_SCHEMA}.job where name like 'outbox.%' and data->>'companyId' is not null`)
+    const publishedIds = await owner.sql.unsafe<{ id: string }[]>(`select data->>'id' as id from ${PGBOSS_SCHEMA}.job where name like 'outbox.%' and name <> '${OUTBOX_DEAD_QUEUE}' and data->>'companyId' is not null`)
     const ids = publishedIds.map((row) => row.id).filter((candidate) => rows.some((row) => row.id === candidate))
     assert.equal(ids.length, rows.length + 1, "one job per row, plus the stray job the consumer test sent by hand")
     assert.equal(new Set(ids).size, rows.length, "every outbox row published once, none twice")
+    // The consumer refused two jobs with no retry (a stray kind, and no event at all): both failed, and both are on the dead-letter queue with what they carried and where they came from, for an operator to read and redrive or delete.
+    const dead = await owner.sql.unsafe<{ state: string; source_name: string; data: unknown }[]>(`select state, source_name, data from ${PGBOSS_SCHEMA}.job where name = '${OUTBOX_DEAD_QUEUE}' order by created_on`)
+    assert.equal(dead.length, 2)
+    assert.ok(dead.every((letter) => letter.state === "created" && letter.source_name === "outbox.pickup-failed"))
+    assert.ok(dead.some((letter) => RelayedEvent.safeParse(letter.data).success && RelayedEvent.parse(letter.data).kind === "pickup-completed"), "the stray event, intact")
+    assert.ok(dead.some((letter) => JSON.stringify(letter.data) === JSON.stringify({ not: "an event" })), "the garbage, as sent")
   })
 })

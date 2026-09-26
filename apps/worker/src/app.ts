@@ -1,10 +1,11 @@
 // The worker's HTTP face, two probes and nothing else: `GET /healthz`
 // (liveness: the process answers, with its clock) and `GET /readyz`
 // (readiness: pg-boss is started and answering, the API role's pool answers,
-// this many jobs have failed and, where the composition root hands a count
+// this many jobs have failed, this many wait on the consumers' dead-letter
+// queue where the composition root names it, and, where it hands a count
 // in, this many outbox rows have waited unpublished past the relay's stale
-// bound — a number for an operator, never a reason for a 503, and left out
-// of the body when it did not answer within the bound). No document, no
+// bound — each a number for an operator, never a reason for a 503, and left
+// out of the body when it did not answer within the bound). No document, no
 // authentication, no other
 // route — the worker takes work from pg-boss and never from HTTP, so an
 // unknown path is a plain 404 with no body to speak of. Everything the
@@ -51,7 +52,13 @@ export function createApp({ probe, boss, now = () => new Date(), checkTimeoutMs 
       staleOutbox === undefined ? undefined : countStale(staleOutbox, { timeoutMs: checkTimeoutMs }),
     ])
     if (database === "ok" && bossCheck.boss === "ok") {
-      const body: WorkerReadinessResponse = { status: "ok", checks: { database, boss: "ok" }, failedJobs: bossCheck.failedJobs, ...(stale === undefined ? {} : { staleOutbox: stale }) }
+      const body: WorkerReadinessResponse = {
+        status: "ok",
+        checks: { database, boss: "ok" },
+        failedJobs: bossCheck.failedJobs,
+        ...(bossCheck.deadLetters === undefined ? {} : { deadLetters: bossCheck.deadLetters }),
+        ...(stale === undefined ? {} : { staleOutbox: stale }),
+      }
       return c.json(body, 200)
     }
     const body: WorkerReadinessResponse = { status: "unavailable", checks: { database, boss: bossCheck.boss } }

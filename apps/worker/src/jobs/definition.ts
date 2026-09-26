@@ -53,17 +53,21 @@ export type JobContext = {
  * says otherwise) and the context, and throws to fail them all; what it
  * returns is the jobs' output. `queueOptions` are what `createQueue` is given
  * the first time and `updateQueue` every start after, so a retry policy
- * changed in the file is the policy in the database. `schedule` is a cron
+ * changed in the file is the policy in the database — for the options the
+ * file still names: pg-boss's `updateQueue` keeps a column whose option the
+ * call leaves out, so an option removed from a file stays in the database at
+ * its last value until a file names it again. `schedule` is a cron
  * expression (five fields, UTC unless `scheduleOptions.tz` says otherwise)
  * that sends the job with `scheduleData` on every occurrence; a job without
  * one is sent by someone — the API, another job. `publishes` names the queues
  * the handler sends to that no job of the registry works — the relay's
- * `outbox.<kind>` queues, one per kind of `OUTBOX_KINDS` — each created with
- * its options at start, so a send finds its queue whether or not a consumer
- * has registered yet. A consumer of the outbox is not a job of its own but a
- * worker on one of those queues: `defineOutboxConsumer` (../outbox/subscribe.ts)
- * spells one `JobDefinition` per kind, its `queue` `outbox.<kind>`, spread
- * into the registry, so the relay's `send` is the one door an event takes.
+ * `outbox.<kind>` queues, one per kind of `OUTBOX_KINDS`, and its dead-letter
+ * queue `outbox.dead` — each created with its options at start, so a send
+ * finds its queue whether or not a consumer has registered yet. A consumer of
+ * the outbox is not a job of its own but a worker on one of those queues:
+ * `defineOutboxConsumer` (../outbox/subscribe.ts) spells one `JobDefinition`
+ * per kind, its `queue` `outbox.<kind>`, spread into the registry, so the
+ * relay's `send` is the one door an event takes.
  */
 export type JobDefinition<Data extends object = object> = {
   queue: string
@@ -71,12 +75,17 @@ export type JobDefinition<Data extends object = object> = {
   description: string
   handler: (jobs: Job<Data>[], context: JobContext) => Promise<unknown>
   /**
-   * Retry, expiry and retention of the queue, and its `policy` (`standard`
-   * unless said: the relay is `short`, one queued tick at a time); pg-boss's
-   * defaults otherwise (two retries, 15 minutes to run, kept 7 days once
-   * done). The policy is set when the queue is created and never rewritten —
-   * pg-boss refuses to change one — so a policy changed in the file is an
-   * operator's `deleteQueue` first.
+   * Retry, expiry and retention of the queue, its `policy` (`standard`
+   * unless said: the relay is `short`, one queued tick at a time) and its
+   * `deadLetter` (the queue a job that failed past its retries is copied to,
+   * data and all, for an operator to redrive; the consumers' queues name
+   * `outbox.dead`); pg-boss's defaults otherwise (two retries, 15 minutes to
+   * run, kept 7 days once done, no dead letter). The policy is set when the
+   * queue is created and never rewritten — pg-boss refuses to change one —
+   * so a policy changed in the file is an operator's `deleteQueue` first;
+   * the dead letter is rewritten at every start like any other option, and
+   * must name a queue that exists when the job's own is created, which is
+   * why the relay `publishes` it before any consumer's queue is brought up.
    */
   queueOptions?: JobQueueOptions
   /** Polling and concurrency of this process's worker on the queue; pg-boss's defaults otherwise (one job at a time, polled every two seconds). */
@@ -87,12 +96,12 @@ export type JobDefinition<Data extends object = object> = {
   scheduleData?: Data
   /** `tz`, `key`, `missed` and the send options of a scheduled occurrence. */
   scheduleOptions?: ScheduleOptions
-  /** Queues the handler sends to and nobody in the registry works, created (and brought to their options) at start; `[]` and undefined mean none. */
+  /** Queues the handler sends to and nobody in the registry works, created (and brought to their options) at start, in this order; `[]` and undefined mean none. */
   publishes?: readonly PublishedQueue[]
 }
 
-/** What a queue is created with: pg-boss's `QueueOptions` and, optionally, the `policy`. `partition` and `deadLetter` are not offered: the role may not create a partition, and a dead-letter queue is a decision no job has asked for. */
-export type JobQueueOptions = QueueOptions & Pick<Queue, "policy">
+/** What a queue is created with: pg-boss's `QueueOptions` and, optionally, the `policy` and the `deadLetter`. `partition` is not offered: the role may not create a partition. */
+export type JobQueueOptions = QueueOptions & Pick<Queue, "policy" | "deadLetter">
 
 /** A queue a job sends to without working it: its name and, like a job's own, the options it is created with and brought to. */
 export type PublishedQueue = {
@@ -101,7 +110,7 @@ export type PublishedQueue = {
 }
 
 /** The options `updateQueue` takes: everything but the policy, which pg-boss refuses to change after creation. */
-export function updatableOptions({ policy: _policy, ...options }: JobQueueOptions): QueueOptions {
+export function updatableOptions({ policy: _policy, ...options }: JobQueueOptions): Omit<JobQueueOptions, "policy"> {
   return options
 }
 

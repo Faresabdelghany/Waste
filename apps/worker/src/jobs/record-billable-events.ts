@@ -31,12 +31,16 @@
 // One job, one transaction: the reads and the write commit together, and a
 // handler that throws — a payload that does not parse, a row the event names
 // that is not there, a shape the domain drafted that the table would refuse —
-// fails the job, which pg-boss retries on the queue's policy and then counts
-// on `/readyz`. A row that is not there is thrown and not skipped, since an
-// event about a pickup nobody can find is a relay or a fence gone wrong and
-// never news to drop. The retry policy is two retries with a short backoff,
-// the retention a week, written over the relay's defaults on the three queues
-// at every start.
+// fails the job, which pg-boss retries on the queue's policy, then counts on
+// `/readyz` and copies to `outbox.dead` for an operator to redrive
+// (../outbox/subscribe.ts). A row that is not there is thrown and not skipped,
+// since an event about a pickup nobody can find is a relay or a fence gone
+// wrong and never news to drop. The retry policy is five retries backing off
+// from ten seconds and capped at five minutes — 10, 20, 40, 80 s and then up
+// to the cap, each with pg-boss's jitter, five to ten minutes in all, longer
+// than an ordinary failover of the database, so a job that met one is retried
+// past it and not failed under it — the retention a week, written over the
+// relay's defaults on the three queues at every start.
 import { PickupDetail } from "@waste/contracts/pickups"
 import { Ticket } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
@@ -125,8 +129,8 @@ export async function recordBillableEventFor(event: PublishedEvent, { api, log }
   return outcome
 }
 
-/** The consumer's queue options: two retries with a short backoff, kept a week, written over the relay's defaults on the three queues at every start. */
-export const RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS = { retryLimit: 2, retryDelay: 5, retryBackoff: true, deleteAfterSeconds: 60 * 60 * 24 * 7 } as const
+/** The consumer's queue options: five retries backing off from ten seconds and capped at five minutes (five to ten minutes in all, past an ordinary failover), a finished job kept a week, written over the relay's defaults on the three queues at every start. */
+export const RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS = { retryLimit: 5, retryDelay: 10, retryBackoff: true, retryDelayMax: 5 * 60, deleteAfterSeconds: 60 * 60 * 24 * 7 } as const
 
 /** The three registry entries, one per kind on `outbox.<kind>`; spread into `JOBS`. */
 export const recordBillableEvents = defineOutboxConsumer({

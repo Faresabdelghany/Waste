@@ -22,7 +22,7 @@ import { planAheadJob } from "../jobs/plan-ahead"
 import { FINANCE_EVENT_KINDS, RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, recordBillableEvents } from "../jobs/record-billable-events"
 import { BATCH_SIZE, RELAY_INTERVAL_SECONDS, relayOutbox } from "../jobs/relay-outbox"
 import { runScheduledBilling } from "../jobs/run-billing"
-import { defineOutboxConsumer, OUTBOX_QUEUES, outboxQueue, RelayedEvent } from "../outbox/subscribe"
+import { CONSUMED_OUTBOX_QUEUE_OPTIONS, CONSUMED_RETENTION_SECONDS, DEAD_LETTER_QUEUE_OPTIONS, defineOutboxConsumer, OUTBOX_DEAD, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUES, outboxQueue, RelayedEvent, UNCONSUMED_RETENTION_SECONDS } from "../outbox/subscribe"
 
 describe("the job registry", () => {
   test("names every queue once", () => {
@@ -52,7 +52,7 @@ describe("the job registry", () => {
     }
   })
 
-  test("works every consumer's queue once, each one the relay publishes (`outbox.<kind>`), and schedules no consumer", () => {
+  test("works every consumer's queue once, each one the relay publishes (`outbox.<kind>`), dead-lettering to outbox.dead, and schedules no consumer", () => {
     const published = new Set(OUTBOX_QUEUES.map((queue) => queue.queue))
     const consumed = JOBS.map((job) => job.queue).filter((queue) => queue.startsWith("outbox."))
     assert.deepEqual([...new Set(consumed)], consumed, "a kind is taken by one consumer")
@@ -61,11 +61,14 @@ describe("the job registry", () => {
       assert.ok(published.has(job.queue), `${job.queue}: not a queue the relay publishes`)
       assert.equal(job.schedule, undefined, `${job.queue}: a consumer is sent by the relay and not by a clock`)
       assert.equal(job.publishes, undefined, `${job.queue}: a consumer publishes nothing of its own`)
+      assert.equal(job.queueOptions?.deadLetter, OUTBOX_DEAD_QUEUE, `${job.queue}: a consumer's queue dead-letters to outbox.dead, so a poison job is kept for a redrive and not lost with its retention`)
+      assert.equal(job.queueOptions?.retentionSeconds, CONSUMED_RETENTION_SECONDS, `${job.queue}: a consumed queue keeps a job a fortnight`)
     }
     assert.deepEqual(consumed.sort(), [...RESOLUTION_KINDS, ...FINANCE_EVENT_KINDS].map(outboxQueue).sort(), "the two consumers take Resolution's four and Finance's three, and nothing else is consumed")
+    assert.ok(!consumed.includes(OUTBOX_DEAD_QUEUE), "nobody works the dead-letter queue: an operator redrives it")
   })
 
-  test("holds Resolution's consumer: one entry per kind Resolution reads on outbox.<kind>, not route-cancelled, with its retry policy", () => {
+  test("holds Resolution's consumer: one entry per kind Resolution reads on outbox.<kind>, not route-cancelled, with its retry policy over the seam's", () => {
     assert.deepEqual([...RESOLUTION_KINDS], ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"])
     assert.deepEqual(
       openTickets.map((job) => job.queue),
@@ -73,7 +76,7 @@ describe("the job registry", () => {
     )
     for (const job of openTickets) {
       assert.ok(JOBS.includes(job), job.queue)
-      assert.deepEqual(job.queueOptions, OPEN_TICKETS_QUEUE_OPTIONS)
+      assert.deepEqual(job.queueOptions, { ...CONSUMED_OUTBOX_QUEUE_OPTIONS, ...OPEN_TICKETS_QUEUE_OPTIONS })
       assert.equal(job.schedule, undefined, "sent by the relay, never by a clock")
       assert.match(job.description, /^Opens a Ticket .* \((pickup-failed|pickup-skipped|pickup-problem-reported|command-rejected)\)$/)
     }
@@ -89,11 +92,11 @@ describe("the job registry", () => {
     assert.deepEqual(heartbeat.queueOptions, { retryLimit: 0, deleteAfterSeconds: 86_400 })
   })
 
-  test("holds Planning's two (#97 part B): generate-routes on an exclusive queue keyed by the scheme with two backed-off retries, and plan-ahead nightly at 03:00 UTC, once for every night missed, sent as the schedule's", () => {
+  test("holds Planning's two (#97 part B): generate-routes on an exclusive queue keyed by the scheme with two backed-off retries and an hour to run, and plan-ahead nightly at 03:00 UTC, once for every night missed, sent as the schedule's", () => {
     assert.ok(JOBS.includes(generateRoutes))
     assert.equal(generateRoutes.queue, "planning.generate-routes")
     assert.equal(generateRoutes.schedule, undefined, "sent by the sweep or the API, never scheduled")
-    assert.deepEqual(generateRoutes.queueOptions, { policy: "exclusive", retryLimit: 2, retryDelay: 30, retryBackoff: true, expireInSeconds: 900 })
+    assert.deepEqual(generateRoutes.queueOptions, { policy: "exclusive", retryLimit: 2, retryDelay: 30, retryBackoff: true, expireInSeconds: 3_600 }, "an hour: a full walk over a large project is one transaction, and a job expired mid-run is a spurious retry")
     assert.ok(JOBS.includes(planAheadJob))
     assert.equal(planAheadJob.queue, "planning.plan-ahead")
     assert.equal(planAheadJob.schedule, "0 3 * * *")
@@ -111,7 +114,7 @@ describe("the job registry", () => {
     ])
   })
 
-  test("holds the relay: every minute as the backstop of its five-second successor, UTC, one tick queued at a time, no retry, publishing to one queue per outbox kind", () => {
+  test("holds the relay: every minute as the backstop of its five-second successor, UTC, one tick queued at a time, no retry, publishing the dead-letter queue and then one queue per outbox kind, each kept ninety days for a consumer to come", () => {
     assert.ok(JOBS.includes(relayOutbox))
     assert.equal(relayOutbox.queue, "execution.relay-outbox")
     assert.equal(relayOutbox.schedule, "* * * * *")
@@ -121,50 +124,60 @@ describe("the job registry", () => {
     assert.deepEqual(relayOutbox.workOptions, { pollingIntervalSeconds: 1 })
     assert.equal(RELAY_INTERVAL_SECONDS, 5)
     assert.equal(BATCH_SIZE, 100)
-    assert.deepEqual(relayOutbox.publishes, OUTBOX_QUEUES)
+    assert.deepEqual(relayOutbox.publishes, [OUTBOX_DEAD, ...OUTBOX_QUEUES], "the dead-letter queue first, since a consumer's queue names it and pg-boss refuses a dead letter that does not exist")
+    assert.deepEqual(OUTBOX_DEAD, { queue: "outbox.dead", queueOptions: DEAD_LETTER_QUEUE_OPTIONS })
+    assert.deepEqual(DEAD_LETTER_QUEUE_OPTIONS, { retryLimit: 0, retentionSeconds: 90 * 86_400 })
+    assert.equal(OUTBOX_DEAD_QUEUE, "outbox.dead")
+    assert.match(OUTBOX_DEAD_QUEUE, /^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$/, "spelled like a queue of the registry, and never a kind's (`dead` is no OutboxKind)")
+    assert.ok(!(OUTBOX_KINDS as readonly string[]).includes("dead"))
     assert.deepEqual(
       OUTBOX_QUEUES.map((queue) => queue.queue),
       OUTBOX_KINDS.map((kind) => `outbox.${kind}`),
       "one queue per kind of the vocabulary, in its order",
     )
+    assert.equal(UNCONSUMED_RETENTION_SECONDS, 90 * 86_400)
+    assert.equal(CONSUMED_RETENTION_SECONDS, 14 * 86_400)
     for (const queue of OUTBOX_QUEUES) {
       assert.match(queue.queue, /^outbox\.[a-z][a-z-]*$/, queue.queue)
-      assert.deepEqual(queue.queueOptions, { retryLimit: 3, retryDelay: 10, retryBackoff: true })
+      assert.deepEqual(queue.queueOptions, { retryLimit: 3, retryDelay: 10, retryBackoff: true, retentionSeconds: UNCONSUMED_RETENTION_SECONDS }, `${queue.queue}: the relay's policy and the ninety days a kind waits for its consumer`)
     }
   })
 
-  test("holds Finance's two: the consumer one entry per kind it reads on outbox.<kind>, never scheduled, with its retry policy; the billing run scheduled monthly", () => {
+  test("holds Finance's two: the consumer one entry per kind it reads on outbox.<kind>, never scheduled, with five backed-off retries under a cap over the seam's dead letter; the billing run scheduled monthly at noon UTC", () => {
     assert.deepEqual([...FINANCE_EVENT_KINDS], ["pickup-completed", "pickup-corrected", "ticket-completed"])
     assert.deepEqual(
       recordBillableEvents.map((job) => job.queue),
       ["outbox.pickup-completed", "outbox.pickup-corrected", "outbox.ticket-completed"],
     )
+    assert.deepEqual(RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, { retryLimit: 5, retryDelay: 10, retryBackoff: true, retryDelayMax: 300, deleteAfterSeconds: 604_800 }, "five retries backing off from ten seconds under a five-minute cap: longer than an ordinary failover")
     for (const job of recordBillableEvents) {
       assert.ok(JOBS.includes(job), job.queue)
-      assert.deepEqual(job.queueOptions, RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS)
+      assert.deepEqual(job.queueOptions, { ...CONSUMED_OUTBOX_QUEUE_OPTIONS, ...RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS })
       assert.equal(job.schedule, undefined)
     }
     assert.ok(JOBS.includes(runScheduledBilling))
     assert.equal(runScheduledBilling.queue, "finance.run-billing")
-    assert.equal(runScheduledBilling.schedule, "0 4 1 * *")
+    assert.equal(runScheduledBilling.schedule, "0 12 1 * *", "noon UTC is the first of the month from UTC−11 to UTC+11 at once; 04:00 was the last of the month before in Chicago")
     assert.ok(!runScheduledBilling.queue.startsWith("outbox."), "sent by the schedule, never by the relay")
   })
 
-  test("publishes each queue once, and the queues a job publishes and nobody works are the outbox kinds no consumer takes", () => {
+  test("publishes each queue once, and the queues a job publishes and nobody works are the outbox kinds no consumer takes, and the dead-letter queue", () => {
     const worked = new Set(JOBS.map((job) => job.queue))
     const published = JOBS.flatMap((job) => (job.publishes ?? []).map((queue) => queue.queue))
     assert.deepEqual([...new Set(published)], published, "each published queue once")
-    // A consumer's queue is one of the published ones and is worked by that consumer alone; the rest wait for a consumer under retention.
+    // A consumer's queue is one of the published ones and is worked by that consumer alone; the rest wait for a consumer under retention, and the dead-letter queue for an operator.
     const consumed = published.filter((queue) => worked.has(queue))
     assert.deepEqual(consumed.sort(), [...RESOLUTION_KINDS, ...FINANCE_EVENT_KINDS].map(outboxQueue).sort())
     const waiting = published.filter((queue) => !worked.has(queue))
-    assert.equal(waiting.length, OUTBOX_KINDS.length - RESOLUTION_KINDS.length - FINANCE_EVENT_KINDS.length, "the kinds nobody consumes yet")
+    assert.ok(waiting.includes(OUTBOX_DEAD_QUEUE), "the dead-letter queue is published and worked by nobody")
+    assert.equal(waiting.length - 1, OUTBOX_KINDS.length - RESOLUTION_KINDS.length - FINANCE_EVENT_KINDS.length, "the kinds nobody consumes yet")
   })
 
-  test("updatableOptions drops the policy and nothing else", () => {
+  test("updatableOptions drops the policy and nothing else, the dead letter among what it keeps", () => {
     assert.deepEqual(updatableOptions({ policy: "short", retryLimit: 0, deleteAfterSeconds: 3_600 }), { retryLimit: 0, deleteAfterSeconds: 3_600 })
     assert.deepEqual(updatableOptions({ retryLimit: 3 }), { retryLimit: 3 })
     assert.deepEqual(updatableOptions({ policy: "standard" }), {})
+    assert.deepEqual(updatableOptions({ retryLimit: 3, deadLetter: "outbox.dead", retentionSeconds: 1 }), { retryLimit: 3, deadLetter: "outbox.dead", retentionSeconds: 1 })
   })
 })
 
@@ -193,7 +206,7 @@ describe("the outbox queues and defineOutboxConsumer", () => {
     assert.equal(RelayedEvent.safeParse({ ...event, kind: "pickup.failed" }).success, false)
   })
 
-  test("makes one job per kind, on the kind's queue, with the description and the options given, and no schedule", async () => {
+  test("makes one job per kind, on the kind's queue, with the description and the options given over the seam's dead letter and retention, and no schedule", async () => {
     const seen: [string, string][] = []
     const jobs = defineOutboxConsumer({
       kinds: ["pickup-failed", "command-rejected"],
@@ -208,12 +221,16 @@ describe("the outbox queues and defineOutboxConsumer", () => {
     assert.deepEqual(
       jobs.map((job) => [job.queue, job.description, job.queueOptions, job.workOptions, job.schedule]),
       [
-        ["outbox.pickup-failed", "Opens a ticket. (pickup-failed)", { retryLimit: 5 }, { pollingIntervalSeconds: 0.5 }, undefined],
-        ["outbox.command-rejected", "Opens a ticket. (command-rejected)", { retryLimit: 5 }, { pollingIntervalSeconds: 0.5 }, undefined],
+        ["outbox.pickup-failed", "Opens a ticket. (pickup-failed)", { retentionSeconds: CONSUMED_RETENTION_SECONDS, deadLetter: OUTBOX_DEAD_QUEUE, retryLimit: 5 }, { pollingIntervalSeconds: 0.5 }, undefined],
+        ["outbox.command-rejected", "Opens a ticket. (command-rejected)", { retentionSeconds: CONSUMED_RETENTION_SECONDS, deadLetter: OUTBOX_DEAD_QUEUE, retryLimit: 5 }, { pollingIntervalSeconds: 0.5 }, undefined],
       ],
     )
     const bare = defineOutboxConsumer({ kinds: ["pickup-completed"], description: "Records.", handler: async () => {} })
-    assert.deepEqual(Object.keys(bare[0]).sort(), ["description", "handler", "queue"])
+    assert.deepEqual(Object.keys(bare[0]).sort(), ["description", "handler", "queue", "queueOptions"])
+    assert.deepEqual(bare[0].queueOptions, CONSUMED_OUTBOX_QUEUE_OPTIONS, "a consumer that names no options still dead-letters and keeps a fortnight")
+    // A consumer may say otherwise, and its word stands over the seam's.
+    const [own] = defineOutboxConsumer({ kinds: ["pickup-completed"], description: "Records.", queueOptions: { deadLetter: "test.dead", retentionSeconds: 60 }, handler: async () => {} })
+    assert.deepEqual(own.queueOptions, { deadLetter: "test.dead", retentionSeconds: 60 })
 
     const lines: string[] = []
     const context = { log: (line: string) => void lines.push(line) } as unknown as Parameters<(typeof jobs)[0]["handler"]>[1]

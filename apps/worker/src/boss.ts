@@ -20,18 +20,21 @@
 //
 // Registration is idempotent by construction, so a restart converges on the
 // registry: `createQueue` is a no-op on a queue that exists, `updateQueue`
-// then writes the job's queue options over it, `schedule` upserts by queue
+// then writes the job's queue options over it — each option the file names;
+// pg-boss keeps a column the call leaves out, so an option a file once set
+// and no longer names stays at its last value — `schedule` upserts by queue
 // name, and a queue that lost its `schedule` in the registry is unscheduled.
 // A queue a job `publishes` to without working it (the relay's `outbox.<kind>`
-// queues) is created and brought to its options the same way, before any
-// worker starts, so a handler's send never meets a missing queue and a
-// consumer that registers later finds the rows already there; a consumer's
-// own entries then work those queues, and their `queueOptions` are written
-// over the relay's. pg-boss's fan-out (`subscribe`/`publish`) is not used:
-// the relay's `send` to the kind's queue is the one door, and a consumer is
-// a worker on it. Queues no job names any more are left alone: their rows are
-// evidence and pg-boss's retention removes them in time; an operator deletes
-// the queue.
+// queues and its `outbox.dead`) is created and brought to its options the
+// same way, before any worker starts and in the order the job lists them, so
+// a handler's send never meets a missing queue, a consumer's queue finds the
+// dead-letter queue it names already there, and a consumer that registers
+// later finds the rows already there; a consumer's own entries then work
+// those queues, and their `queueOptions` are written over the relay's.
+// pg-boss's fan-out (`subscribe`/`publish`) is not used: the relay's `send`
+// to the kind's queue is the one door, and a consumer is a worker on it.
+// Queues no job names any more are left alone: their rows are evidence and
+// pg-boss's retention removes them in time; an operator deletes the queue.
 //
 // pg-boss's maintenance runs here with what the grants allow: `supervise` on
 // (expiring, retrying and deleting jobs, the stats the readiness count
