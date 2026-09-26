@@ -401,6 +401,8 @@ export function resolveStops(groups: readonly StopGroup[], candidates: readonly 
     if (group.rule !== null) {
       for (const candidate of candidates) {
         if (candidate.located || !ruleMatches(candidate, group.rule, compatible)) continue
+        // A manual group planned it already, its place looked up by the pick and not by geometry: it has a stop, and is not unlocated for a rule that would have wanted it too.
+        if (claimed.has(candidate.containerId)) continue
         // The rule wants it and nobody can say where it is.
         unlocated.add(candidate.containerId)
       }

@@ -244,14 +244,26 @@ describe("resolveStops", () => {
     assert.deepEqual(stops.get("second-rule"), [], "the first rule group won every match")
   })
 
-  test("a rule match whose place has no location and a pick with no placement valid that day are unlocated, once each, and get no stop", () => {
+  test("a rule match whose place has no location and a pick with no placement valid that day are unlocated, once each, and get no stop — a pick a manual group planned is not among them, though a rule wanted it too", () => {
     const candidates = [candidate("c1", "BIN-1"), candidate("c5", "BIN-5", { located: false, contained: false })]
     const { stops, unlocated } = resolveStops([ruleGroup("residual", 1, residualRule), manualGroup("picked", 2, ["c5", "c7"]), manualGroup("picked-too", 3, ["c7"])], candidates, noCompatibility)
-    assert.deepEqual(unlocated, ["c5", "c7"])
+    assert.deepEqual(unlocated, ["c7"], "c7 has no placement that day and gets no stop; c5 is planned by the pick, so the rule that would have wanted it does not count it unlocated")
     assert.deepEqual(stops.get("residual")?.map((stop) => stop.containerId), ["c1"])
     // A manual pick is planned as picked, the place aside: c5 has a placement that day, so it is a stop.
     assert.deepEqual(stops.get("picked")?.map((stop) => stop.containerId), ["c5"])
     assert.deepEqual(stops.get("picked-too"), [])
+  })
+
+  test("a container a manual group planned is not counted unlocated for a rule group that would have wanted it: it has a stop, written from the pick's place, and the run's count is of containers nobody planned", () => {
+    // c5's place has no geometry; a manual group picks it and a rule group's fraction matches it. One stop on the manual group, nothing unlocated.
+    const candidates = [candidate("c1", "BIN-1"), candidate("c5", "BIN-5", { located: false, contained: false })]
+    const { stops, unlocated } = resolveStops([manualGroup("picked", 1, ["c5"]), ruleGroup("residual", 2, residualRule)], candidates, noCompatibility)
+    assert.deepEqual(stops.get("picked")?.map((stop) => stop.containerId), ["c5"])
+    assert.deepEqual(stops.get("residual")?.map((stop) => stop.containerId), ["c1"])
+    assert.deepEqual(unlocated, [], "planned by the pick, so not unlocated for the rule")
+    // The same container with no manual group wanting it is unlocated as before; group order does not matter, since manual groups claim first whatever their position.
+    assert.deepEqual(resolveStops([ruleGroup("residual", 1, residualRule)], candidates, noCompatibility).unlocated, ["c5"])
+    assert.deepEqual(resolveStops([ruleGroup("residual", 1, residualRule), manualGroup("picked", 2, ["c5"])], candidates, noCompatibility).unlocated, [])
   })
 
   test("a rule group without a rule, or a day nothing is contained on, plans no stops and reports nothing unlocated it can place", () => {

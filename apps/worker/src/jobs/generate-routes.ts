@@ -412,8 +412,8 @@ export async function runGeneration(data: GenerateRoutesData, jobId: string | nu
 export const generateRoutes = defineJob<GenerateRoutesData>({
   queue: GENERATE_ROUTES_QUEUE,
   description: "Turns one validated route scheme's rules into dated routes and pickups over a window, idempotently by (scheme, group, service date), on the generation run the sender wrote.",
-  // One job per scheme queued or active at a time: `singletonKey` is the scheme's id on every send, so a scheme mid-generation is not queued twice and the sender is told so (a null id) rather than given a second run.
-  queueOptions: { policy: "exclusive", retryLimit: 2, retryDelay: 30, retryBackoff: true, expireInSeconds: 15 * 60 },
+  // One job per scheme queued or active at a time: `singletonKey` is the scheme's id on every send, so a scheme mid-generation is not queued twice and the sender is told so (a null id) rather than given a second run. An hour to run: a large project over the full `WALK_CAP_DAYS` walk is one transaction, and a job pg-boss expired while it still ran would be retried into the run's own lock, to find it `succeeded` and log a retry nothing needed.
+  queueOptions: { policy: "exclusive", retryLimit: 2, retryDelay: 30, retryBackoff: true, expireInSeconds: 60 * 60 },
   handler: async (jobs, context) => {
     const outcomes: Array<{ runId: string; outcome: string }> = []
     for (const job of jobs) {
