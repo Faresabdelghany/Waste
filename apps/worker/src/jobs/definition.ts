@@ -51,7 +51,13 @@ export type JobContext = {
  * changed in the file is the policy in the database. `schedule` is a cron
  * expression (five fields, UTC unless `scheduleOptions.tz` says otherwise)
  * that sends the job with `scheduleData` on every occurrence; a job without
- * one is sent by someone — the API, another job.
+ * one is sent by someone — the API, another job, or a `publish` the queue is
+ * `subscriptions` to: pg-boss's fan-out, `boss.subscribe(event, queue)`,
+ * under which every `boss.publish(event, data)` sends one job to every queue
+ * subscribed to the event. A consumer of the outbox names one event per kind
+ * it wants (`outboxQueue(kind)`, src/outbox/queues.ts), and the wiring keeps
+ * the table converged: the events named are subscribed on every start and
+ * an event this queue was subscribed to and no longer names is unsubscribed.
  */
 export type JobDefinition<Data extends object = object> = {
   queue: string
@@ -68,6 +74,8 @@ export type JobDefinition<Data extends object = object> = {
   scheduleData?: Data
   /** `tz`, `key`, `missed` and the send options of a scheduled occurrence. */
   scheduleOptions?: ScheduleOptions
+  /** The pg-boss events this queue is subscribed to, each once; a `publish` of one sends the job here with the published data. */
+  subscriptions?: readonly string[]
 }
 
 /** Spells a job with its data type inferred from the handler, and nothing else: `export const someJob = defineJob({ ... })`. */

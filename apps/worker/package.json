@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "The pg-boss worker (Issue #97 part B, ADR-0007): the second Node process on the database, on which the jobs the contexts owe run — Planning's generation and its nightly plan-ahead, Execution's outbox relay, Resolution's and Finance's consumers of it. This package is the process and the registry the jobs plug into: pg-boss 12 booted on the worker role's session connection with `migrate: false` (the owner installed schema `pgboss` in migration 0011), every job of `src/jobs/index.ts` given its queue, its worker and, where it recurs, its cron schedule; GET /healthz (liveness) and GET /readyz (readiness: pg-boss started and the database answering, with the count of failed jobs) on its own port for the host's probe; and one job, `worker.heartbeat`, as the proof the wiring works.",
+  "description": "The pg-boss worker (Issue #97 part B, ADR-0007): the second Node process on the database, on which the jobs the contexts owe run — Planning's generation and its nightly plan-ahead, Execution's outbox relay, Resolution's and Finance's consumers of it. This package is the process and the registry the jobs plug into: pg-boss 12 booted on the worker role's session connection with `migrate: false` (the owner installed schema `pgboss` in migration 0011), every job of `src/jobs/index.ts` given its queue, its worker and, where it recurs, its cron schedule; GET /healthz (liveness) and GET /readyz (readiness: pg-boss started and the database answering, with the count of failed jobs) on its own port for the host's probe; and two jobs: `worker.heartbeat`, the proof the wiring works, and Resolution's `resolution.open-tickets` (Issue #109 part B), the outbox's first consumer, subscribed through pg-boss's fan-out to the four kinds the relay publishes and opening one Ticket per event through the write statements it shares with the API in `@waste/db/commands`.",
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=../../.env src/main.ts",
     "start": "tsx --env-file-if-exists=../../.env src/main.ts",
@@ -15,6 +15,8 @@
     "@hono/node-server": "^2.1.1",
     "@waste/contracts": "workspace:*",
     "@waste/db": "workspace:*",
+    "@waste/domain": "workspace:*",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.13.8",
     "pg-boss": "^12.34.0",
     "tsx": "^4.23.12",
