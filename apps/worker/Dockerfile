@@ -64,7 +64,9 @@ RUN pnpm install --frozen-lockfile --prod --filter @waste/worker...
 
 # The worker and the packages it runs, deployed to the path the runtime stage
 # keeps, so what pnpm writes into the shims under node_modules/.bin stays
-# true. @waste/db depends on @waste/domain, so it is copied too. `pnpm deploy`
+# true. @waste/domain is a dependency of the worker itself since Issue #109
+# part B (the consumer runs `ticketFor`) as well as of @waste/db, and is
+# copied once. `pnpm deploy`
 # resolves the same lockfile: the tarballs come from the store the install
 # above filled, and only pnpm's supply-chain check goes back to the registry,
 # for release metadata, which is why the step is not --offline. Each workspace

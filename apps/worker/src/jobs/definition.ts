@@ -64,11 +64,18 @@ export type JobContext = {
  * changed in the file is the policy in the database. `schedule` is a cron
  * expression (five fields, UTC unless `scheduleOptions.tz` says otherwise)
  * that sends the job with `scheduleData` on every occurrence; a job without
- * one is sent by someone — the API, another job. `publishes` names the queues
- * the handler sends to that no job of the registry works — the relay's
- * `outbox.<kind>` queues, one per kind of `OUTBOX_KINDS` — each created with
- * its options at start, so a send finds its queue whether or not a consumer
- * has registered yet; a consumer's own queue is its own `queue`.
+ * one is sent by someone — the API, another job, or a `publish` the queue is
+ * `subscriptions` to: pg-boss's fan-out, `boss.subscribe(event, queue)`,
+ * under which every `boss.publish(event, data)` sends one job to every queue
+ * subscribed to the event. A consumer of the outbox names one event per kind
+ * it wants (`outboxQueue(kind)`, src/outbox/queues.ts), and the wiring keeps
+ * the table converged: the events named are subscribed on every start and
+ * an event this queue was subscribed to and no longer names is unsubscribed.
+ * `publishes` names the queues the handler sends to that no job of the
+ * registry works — the relay's `outbox.<kind>` queues, one per kind of
+ * `OUTBOX_KINDS` — each created with its options at start, so a send finds
+ * its queue whether or not a consumer has registered yet; a consumer's own
+ * queue is its own `queue`.
  */
 export type JobDefinition<Data extends object = object> = {
   queue: string
@@ -94,6 +101,8 @@ export type JobDefinition<Data extends object = object> = {
   scheduleOptions?: ScheduleOptions
   /** Queues the handler sends to and nobody in the registry works, created (and brought to their options) at start; `[]` and undefined mean none. */
   publishes?: readonly PublishedQueue[]
+  /** The pg-boss events this queue is subscribed to, each once; a `publish` of one sends the job here with the published data. */
+  subscriptions?: readonly string[]
 }
 
 /** What a queue is created with: pg-boss's `QueueOptions` and, optionally, the `policy`. `partition` and `deadLetter` are not offered: the role may not create a partition, and a dead-letter queue is a decision no job has asked for. */

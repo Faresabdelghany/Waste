@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { PageRequest } from "@waste/contracts/pagination"
+import { refused, RefusedField } from "@waste/db/commands/shared"
 import { Hono } from "hono"
 import { HTTPException } from "hono/http-exception"
 import * as z from "zod"
@@ -67,6 +68,12 @@ describe("errorHandler", () => {
     hono.get("/hono-silent", () => {
       throw new HTTPException(429)
     })
+    hono.get("/refused", () => {
+      throw refused(409, "This alert is linked to ticket T-8831; an alert links to one ticket")
+    })
+    hono.get("/refused-field", () => {
+      throw new RefusedField("alertId", "Not an alert of this project")
+    })
     hono.get("/duplicate", () => {
       const cause = Object.assign(new Error('duplicate key value violates unique constraint "project_name_key"'), {
         code: "23505",
@@ -122,6 +129,17 @@ describe("errorHandler", () => {
     assert.equal(response.status, 409)
     assert.deepEqual(await readProblem(response), { type: "about:blank", title: "Conflict", status: 409, detail: "A project with this name exists" })
     assert.deepEqual(entries, [], "a problem the code raised on purpose is not logged")
+  })
+
+  test("answers a shared write statement's refusal (Issue #109 part B) as the problem of its status: a 409 with the sentence, a RefusedField the validator's 400 at the field", async () => {
+    const { entries, log } = recorder()
+    const conflict = await app(log).request("/refused")
+    assert.equal(conflict.status, 409)
+    assert.deepEqual(await readProblem(conflict), { type: "about:blank", title: "Conflict", status: 409, detail: "This alert is linked to ticket T-8831; an alert links to one ticket" })
+    const field = await app(log).request("/refused-field")
+    assert.equal(field.status, 400)
+    assert.deepEqual(await readProblem(field), { type: "about:blank", title: "Bad Request", status: 400, detail: "The request body is invalid", errors: [{ path: "alertId", message: "Not an alert of this project" }] })
+    assert.deepEqual(entries, [], "a refusal a statement raised on purpose is not logged")
   })
 
   test("turns one of Hono's own exceptions into a problem of its status, the message as detail when there is one", async () => {

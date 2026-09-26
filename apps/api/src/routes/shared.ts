@@ -46,6 +46,12 @@
 //                    (a ticket, an invoice, a credit note) takes it one way
 //                    (`nextNumber`), under the company's row lock.
 //
+// The lock, the number and the two instant spellings (`stampsOf`,
+// `instantOf`) live in `@waste/db` since Issue #109 part B
+// (`commands/shared.ts`, `commands/resolution-rows.ts`), where the write
+// statements both processes run — `openTicket` first — read them; they are
+// re-exported here under the names every route always used.
+//
 // Nothing here knows a table or a resource but the company's row, which every
 // series lives on: what is not shared by every route module stays in the one
 // that owns it.
@@ -53,15 +59,18 @@ import { Id } from "@waste/contracts/ids"
 import { providerShape } from "@waste/contracts/places"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
-import { company } from "@waste/db/schema/organisation"
+import { instantOf, stampsOf } from "@waste/db/commands/resolution-rows"
+import { lockRow, lockRows, nextNumber, type Series, type TenantTable } from "@waste/db/commands/shared"
 import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
-import { and, asc, eq, getTableName, gte, inArray, lt, sql, type SQL } from "drizzle-orm"
+import { and, eq, getTableName, gte, lt, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import type { Context } from "hono"
 import { resolver } from "hono-openapi"
 import * as z from "zod"
 
 import { checkConstraintOf, exclusionConstraintOf, invalidRequest, problem, uniqueConstraintOf } from "../problem"
+
+export { instantOf, lockRow, lockRows, nextNumber, stampsOf, type Series, type TenantTable }
 
 /** The path parameter of every `/<resource>/:id` route. */
 export const IdParam = z.object({ id: Id })
@@ -104,13 +113,7 @@ export function created<Body extends { id: string }>(c: Context, collection: `/$
   return c.json(body, 201, { location: `${collection}/${body.id}` })
 }
 
-/** The instants of a row, as the wire spells them. */
-export function stampsOf(row: { createdAt: Date; updatedAt: Date }): { createdAt: string; updatedAt: string } {
-  return { createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() }
-}
-
-/** The instant of a row's nullable column, as the wire spells it; null stays null. `stampsOf` is the same over the two stamps every record carries. */
-export const instantOf = (value: Date | null): string | null => (value === null ? null : value.toISOString())
+/** The instants of a row, as the wire spells them, and the instant of a nullable column: `stampsOf` and `instantOf`, re-exported above from `@waste/db/commands/resolution-rows`. */
 
 /** The first instant of a `YYYY-MM-DD` day on the UTC calendar. */
 const startOfUtcDay = (day: string): Date => new Date(`${day}T00:00:00Z`)
@@ -179,8 +182,7 @@ export async function refuseOverlap<T>(sentences: Readonly<Record<string, string
   return await refused(exclusionConstraintOf, sentences, write)
 }
 
-/** A table a row can be looked up in the way every table of this system can be: by its own id, inside a company. */
-export type TenantTable = PgTable & { id: PgColumn; companyId: PgColumn }
+/** A table a row can be looked up in the way every table of this system can be: by its own id, inside a company. `TenantTable`, re-exported above from `@waste/db/commands/shared`. */
 
 /** A table whose rows carry a status beside the key: every Registry record that is not effective-dated. */
 export type StatusTable = TenantTable & { status: PgColumn }
@@ -254,50 +256,13 @@ async function answering(tx: Tx, table: TenantTable, column: PgColumn, row: Name
 }
 
 /**
- * Takes the row lock of the record a rule hangs off, inside the request's
- * one transaction, and reads nothing back: `select … for update`.
- *
- * A rule the database holds — a key, a period that overlaps — needs none of
- * this. A rule the API holds does: containment (routes/periods.ts) is read
- * first and written after, so without a lock a transaction shortening a
- * parent and a transaction adding a child both read the state the other has
- * not written yet and both pass. Taking the parent's lock before the read
- * makes the second transaction wait and then see what the first wrote.
- *
- * A route locks the parent before it reads it, and where it locks two rows
- * it takes them from the top down — the agreement before the subscription —
- * so two requests can never hold half of each other's pair. A row that is
- * not there locks nothing, and the read that follows answers the 404.
+ * The row lock (`lockRow`) and the lock over several rows (`lockRows`): a
+ * rule the API holds rather than the database is only held per transaction,
+ * so a route takes the parent's lock before it reads (routes/periods.ts says
+ * which rule and which parent), from the top down where it locks two. Both
+ * live in `@waste/db/commands/shared` since the write statements the worker
+ * runs too take them, and are re-exported above.
  */
-export async function lockRow(tx: Tx, table: TenantTable, row: { companyId: string; id: string }): Promise<void> {
-  await tx
-    .select({ id: table.id })
-    .from(table)
-    .where(and(eq(table.companyId, row.companyId), eq(table.id, row.id)))
-    .limit(1)
-    .for("update")
-}
-
-/**
- * The same for several rows of one table, taken in id order in one statement
- * (`order by id for update`: Postgres sorts first and locks as it returns the
- * rows, so two transactions naming overlapping sets take them in the same
- * order and neither waits on the other's second row). For a rule held across
- * rows a body names rather than under one parent — the one-award rule of
- * routes/service-areas.ts, which every planning area a body names is a party
- * to — where locking the rows the check finds would leave a check that finds
- * nothing holding nothing. An id that is not there locks nothing; the check
- * that follows answers for it. Nothing to lock is nothing to do.
- */
-export async function lockRows(tx: Tx, table: TenantTable, companyId: string, ids: readonly string[]): Promise<void> {
-  if (ids.length === 0) return
-  await tx
-    .select({ id: table.id })
-    .from(table)
-    .where(and(eq(table.companyId, companyId), inArray(table.id, [...ids])))
-    .orderBy(asc(table.id))
-    .for("update")
-}
 
 /** What the two above share: run the write, and answer the sentence the route wrote for the constraint it hit. */
 async function refused<T>(
@@ -451,18 +416,6 @@ export async function replayed<T>(keys: readonly string[], write: () => Promise<
 // numbered at once take turns, and a transaction that fails rolls its number
 // back with its rows, the series unbroken. The route's counter is the
 // generation worker's to take (#97 part B), in blocks, and is not taken here.
-
-/** The counters a company's row carries, one per document series. */
-export type Series = "nextInvoiceNumber" | "nextTicketNumber" | "nextRouteNumber"
-
-/** The next number of a company's series, never renumbered: the one the counter had, the counter stepped past it in the database as an expression over its own column. */
-export async function nextNumber(tx: Tx, companyId: string, series: Series): Promise<number> {
-  const column = company[series]
-  const [row] = await tx
-    .update(company)
-    .set({ [series]: sql`${column} + 1` } as Partial<Record<Series, SQL>>)
-    .where(eq(company.id, companyId))
-    .returning({ next: column })
-  if (row === undefined) throw new Error(`no company ${companyId} to number a document in`)
-  return row.next - 1
-}
+// `Series` and `nextNumber` live in `@waste/db/commands/shared` since Issue
+// #109 part B — `openTicket` takes a ticket's number there for the API and
+// the worker alike — and are re-exported above.

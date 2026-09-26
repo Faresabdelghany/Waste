@@ -1,26 +1,26 @@
 // The registry held to what the wiring assumes of it, without a database:
 // every queue named once and spelled the way pg-boss accepts a queue name,
 // every cron expression one pg-boss's scheduler parses, every scheduled job
-// carrying the data its occurrences send, every job saying what it is for.
-// A job file that breaks one of these fails here, where the message names
-// the job, and not at the worker's start(). The relay's shape and the outbox
-// queues' spelling are held here too, since a consumer of another slice
-// subscribes by that spelling (`outbox.<kind>`, `defineOutboxConsumer`).
+// carrying the data its occurrences send, every subscription an outbox kind
+// spelled as the relay publishes it and named once, every job saying what it
+// is for. A job file that breaks one of these fails here, where the message
+// names the job, and not at the worker's start(). The relay's shape and the
+// outbox queues' spelling are held here too, since a consumer subscribes by
+// that spelling (`outbox.<kind>`, `defineOutboxConsumer`).
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { OutboxKind } from "@waste/contracts/execution"
+import { OUTBOX_KINDS, type OutboxKind } from "@waste/domain/execution/vocabulary"
 
 import { isCronExpression } from "../boss"
 import { defineJob, JOBS } from "../jobs"
 import { updatableOptions } from "../jobs/definition"
 import { generateRoutes } from "../jobs/generate-routes"
 import { heartbeat } from "../jobs/heartbeat"
+import { openTickets, RESOLUTION_KINDS } from "../jobs/open-tickets"
 import { planAheadJob } from "../jobs/plan-ahead"
 import { BATCH_SIZE, RELAY_INTERVAL_SECONDS, relayOutbox } from "../jobs/relay-outbox"
 import { defineOutboxConsumer, OUTBOX_QUEUES, outboxQueue, RelayedEvent } from "../outbox/subscribe"
-
-const OUTBOX_KINDS = OutboxKind.options
 
 describe("the job registry", () => {
   test("names every queue once", () => {
@@ -48,6 +48,26 @@ describe("the job registry", () => {
       assert.ok(isCronExpression(job.schedule), `${job.queue}: "${job.schedule}" is not a cron expression pg-boss accepts`)
       assert.notEqual(job.scheduleData, undefined, `${job.queue}: a scheduled job says what its occurrences carry`)
     }
+  })
+
+  test("subscribes each queue to every event once, spelled as the relay publishes an outbox kind (`outbox.<kind>`), and no queue to both a schedule and an event", () => {
+    for (const job of JOBS) {
+      const subscriptions = job.subscriptions ?? []
+      assert.deepEqual([...new Set(subscriptions)], [...subscriptions], `${job.queue}: an event named twice`)
+      for (const event of subscriptions) {
+        const kind = event.replace(/^outbox\./, "")
+        assert.ok(event.startsWith("outbox.") && (OUTBOX_KINDS as readonly string[]).includes(kind), `${job.queue}: "${event}" is not outboxQueue(<an outbox kind>)`)
+        assert.equal(event, outboxQueue(kind as OutboxKind))
+      }
+      if (subscriptions.length > 0) assert.equal(job.schedule, undefined, `${job.queue}: a consumer is sent by the relay and not by a clock`)
+    }
+  })
+
+  test("holds the consumer: resolution.open-tickets, subscribed to the four kinds Resolution reads and not to route-cancelled", () => {
+    assert.ok(JOBS.includes(openTickets))
+    assert.equal(openTickets.queue, "resolution.open-tickets")
+    assert.deepEqual(openTickets.subscriptions, ["outbox.pickup-failed", "outbox.pickup-skipped", "outbox.pickup-problem-reported", "outbox.command-rejected"])
+    assert.deepEqual([...RESOLUTION_KINDS], ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"])
   })
 
   test("holds the heartbeat: every minute, UTC, no retry, kept a day, sent as the schedule's", () => {
