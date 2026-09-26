@@ -74,6 +74,7 @@
       "env": [
         "DATABASE_ADMIN_URL",
         "DATABASE_URL",
+        "WORKER_DATABASE_URL",
         "REQUIRE_DATABASE"
       ]
     },

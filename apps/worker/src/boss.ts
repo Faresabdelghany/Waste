@@ -97,7 +97,11 @@ export async function startBoss(boss: PgBoss, jobs: readonly AnyJob[], context: 
   const queues: string[] = []
   for (const job of jobs) {
     await boss.createQueue(job.queue, job.queueOptions)
-    if (job.queueOptions) await boss.updateQueue(job.queue, job.queueOptions)
+    if (job.queueOptions) {
+      // The policy and the partitioning are set at creation and pg-boss refuses them on an update; the rest converges.
+      const { policy: _policy, partition: _partition, ...updatable } = job.queueOptions
+      if (Object.keys(updatable).length > 0) await boss.updateQueue(job.queue, updatable)
+    }
     await boss.work(job.queue, job.workOptions ?? {}, (batch) => job.handler(batch, context))
     if (job.schedule !== undefined) {
       await boss.schedule(job.queue, job.schedule, job.scheduleData ?? null, job.scheduleOptions)
