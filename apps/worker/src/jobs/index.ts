@@ -5,14 +5,18 @@
 // holds the list: every queue named once, every cron expression one pg-boss
 // accepts, every scheduled job carrying its data.
 //
-// What will join, as the issues have it: `planning.generate` and the nightly
-// `planning.plan-ahead` (#97 part B), `execution.relay-outbox` (#104 part C),
+// Planning's two are here (#97 part B): `planning.generate-routes`, one run
+// of generation over a scheme and a window, and the nightly
+// `planning.plan-ahead`, which sweeps for the schemes to run it over. What
+// will join, as the issues have it: `execution.relay-outbox` (#104 part C),
 // `resolution.open-tickets` (#109 part B), `finance.record-billable-events`
 // and the scheduled billing run (#112 part B).
 import type { AnyJob } from "./definition"
+import { generateRoutes } from "./generate-routes"
 import { heartbeat } from "./heartbeat"
+import { planAheadJob } from "./plan-ahead"
 
-export const JOBS: readonly AnyJob[] = [heartbeat]
+export const JOBS: readonly AnyJob[] = [heartbeat, generateRoutes, planAheadJob]
 
 export type { AnyJob, JobContext, JobDefinition } from "./definition"
 export { defineJob } from "./definition"

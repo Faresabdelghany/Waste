@@ -100,9 +100,13 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     assert.equal(heartbeatQueue?.retryLimit, 0)
     assert.equal(heartbeatQueue?.deleteAfterSeconds, 86_400)
     const schedules = await boss.getSchedules()
+    // pg-boss answers the schedules in its own order, not the registry's.
+    const byName = (a: [string, ...unknown[]], b: [string, ...unknown[]]) => a[0].localeCompare(b[0])
     assert.deepEqual(
-      schedules.map((schedule) => [schedule.name, schedule.cron, schedule.timezone, schedule.data]),
-      JOBS.filter((job) => job.schedule !== undefined).map((job) => [job.queue, job.schedule, job.scheduleOptions?.tz ?? "UTC", job.scheduleData ?? null]),
+      schedules.map((schedule): [string, ...unknown[]] => [schedule.name, schedule.cron, schedule.timezone, schedule.data]).sort(byName),
+      JOBS.filter((job) => job.schedule !== undefined)
+        .map((job): [string, ...unknown[]] => [job.queue, job.schedule, job.scheduleOptions?.tz ?? "UTC", job.scheduleData ?? null])
+        .sort(byName),
     )
     assert.deepEqual(errors, [])
   })

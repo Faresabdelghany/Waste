@@ -9,13 +9,15 @@ import { describe, test } from "node:test"
 
 import { isCronExpression } from "../boss"
 import { defineJob, JOBS } from "../jobs"
+import { generateRoutes } from "../jobs/generate-routes"
 import { heartbeat } from "../jobs/heartbeat"
+import { planAheadJob } from "../jobs/plan-ahead"
 
 describe("the job registry", () => {
   test("names every queue once", () => {
     const queues = JOBS.map((job) => job.queue)
     assert.deepEqual([...new Set(queues)], queues)
-    assert.ok(queues.length >= 1, "at least the heartbeat")
+    assert.ok(queues.length >= 3, "at least the heartbeat and Planning's two")
   })
 
   test("spells every queue <context>.<verb>, in pg-boss's alphabet: letters, digits, underscore, hyphen, period", () => {
@@ -46,6 +48,20 @@ describe("the job registry", () => {
     assert.deepEqual(heartbeat.scheduleData, { source: "schedule" })
     assert.deepEqual(heartbeat.scheduleOptions, { tz: "UTC", missed: "skip" })
     assert.deepEqual(heartbeat.queueOptions, { retryLimit: 0, deleteAfterSeconds: 86_400 })
+  })
+
+  test("holds Planning's two (#97 part B): generate-routes on an exclusive queue keyed by the scheme with two backed-off retries, and plan-ahead nightly at 03:00 UTC, once for every night missed, sent as the schedule's", () => {
+    assert.ok(JOBS.includes(generateRoutes))
+    assert.equal(generateRoutes.queue, "planning.generate-routes")
+    assert.equal(generateRoutes.schedule, undefined, "sent by the sweep or the API, never scheduled")
+    assert.deepEqual(generateRoutes.queueOptions, { policy: "exclusive", retryLimit: 2, retryDelay: 30, retryBackoff: true, expireInSeconds: 900 })
+    assert.ok(JOBS.includes(planAheadJob))
+    assert.equal(planAheadJob.queue, "planning.plan-ahead")
+    assert.equal(planAheadJob.schedule, "0 3 * * *")
+    assert.deepEqual(planAheadJob.scheduleData, { source: "schedule" })
+    assert.deepEqual(planAheadJob.scheduleOptions, { tz: "UTC", missed: "once" })
+    assert.deepEqual(planAheadJob.queueOptions, { retryLimit: 1, retryDelay: 60, deleteAfterSeconds: 604_800 })
+    assert.deepEqual(JOBS.map((job) => job.queue), ["worker.heartbeat", "planning.generate-routes", "planning.plan-ahead"])
   })
 })
 

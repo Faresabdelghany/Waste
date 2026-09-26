@@ -7,7 +7,7 @@
 // naming one. Nothing here knows pg-boss's connection: a handler gets what it
 // needs from the context, so a test runs it with pools of its own.
 import type { Database } from "@waste/db/client"
-import type { Job, QueueOptions, ScheduleOptions, SendOptions, WorkOptions } from "pg-boss"
+import type { Job, Queue, ScheduleOptions, SendOptions, WorkOptions } from "pg-boss"
 
 /** What a handler runs with. Built once per process by main.ts, handed to every job; a test builds its own. */
 export type JobContext = {
@@ -58,8 +58,8 @@ export type JobDefinition<Data extends object = object> = {
   /** What the job is for, one sentence, for the person reading the registry. */
   description: string
   handler: (jobs: Job<Data>[], context: JobContext) => Promise<unknown>
-  /** Retry, expiry and retention of the queue; pg-boss's defaults otherwise (two retries, 15 minutes to run, kept 7 days once done). */
-  queueOptions?: QueueOptions
+  /** Retry, expiry and retention of the queue, and its `policy` (`standard` unless said; `exclusive` for one job per key queued or active); pg-boss's defaults otherwise (two retries, 15 minutes to run, kept 7 days once done). The policy is set when the queue is created and never changed after, which pg-boss refuses. */
+  queueOptions?: Omit<Queue, "name">
   /** Polling and concurrency of this process's worker on the queue; pg-boss's defaults otherwise (one job at a time, polled every two seconds). */
   workOptions?: WorkOptions
   /** A cron expression; the job recurs on it. */
