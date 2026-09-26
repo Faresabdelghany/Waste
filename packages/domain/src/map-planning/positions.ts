@@ -14,7 +14,7 @@
 // library, no store.
 
 import type { BusinessRecord } from "../prototype-record"
-import { cleanFact } from "../record-values"
+import { cleanFact, typedString } from "../record-values"
 import { avalancheHash } from "../route-schemes/hash"
 import { offsetMetres, type LngLat, type LngLatBounds } from "./geo"
 
@@ -134,4 +134,19 @@ export function containerLocation(record: BusinessRecord, gazetteer: Gazetteer):
   const key = containerPropertyKey(record)
   if (!key) return null
   return addressLocation(cleanFact(record.facts.Address) ?? key, gazetteer, key)
+}
+
+/**
+ * Where a depot or an unloading station sits, or null when nothing places it
+ * (Issue #39): its typed coordinates — the location form requires them —
+ * else its address on a gazetteer street. Never a hashed spot: every route
+ * of a scheme starts and ends here, and a base drawn where it is not would
+ * bend every road on the map.
+ */
+export function placeLocation(record: BusinessRecord, gazetteer: Gazetteer): LngLat | null {
+  const lat = typedCoordinate(record, "latitude", -90, 90)
+  const lng = typedCoordinate(record, "longitude", -180, 180)
+  if (lat !== null && lng !== null) return { lng, lat }
+  const address = cleanFact(record.facts.Address) ?? typedString(record.submittedValues, "address")
+  return address ? knownAddressLocation(address, gazetteer) : null
 }

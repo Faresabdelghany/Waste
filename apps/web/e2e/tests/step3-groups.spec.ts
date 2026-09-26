@@ -80,13 +80,15 @@ test("a complete group clears step 3 and the Containers cell carries no +/− co
   const row = root.getByRole("row").filter({ hasText: "Residual · bins" })
   await expect(row).toBeVisible()
   await expect(root.getByText(/\+\d+ \/ −\d+/)).toHaveCount(0)
-  // No column-level estimate qualifier on step 3; the flag is per row — the
-  // baseline's 140 L bins have no catalogue weight, so this row carries it.
+  // No column-level estimate qualifier on step 3; the flag is per row — and
+  // since #39 the catalogue weighs every seeded type, the 140 L bins among
+  // them, so the baseline row carries no Fallback weight either.
   await expect(root.getByText("Estimate", { exact: true })).toHaveCount(0)
-  await expect(row.getByText("Fallback weight")).toBeVisible()
+  await expect(row.getByText("Fallback weight")).toHaveCount(0)
   await row.getByRole("button", { name: "Edit Residual · bins" }).click()
   const editor = groupEditor(page)
-  await expect(editor.getByText("Fallback weight")).toBeVisible()
+  await expect(editor.getByText("Matching containers")).toBeVisible()
+  await expect(editor.getByText("Fallback weight")).toHaveCount(0)
   await editor.getByRole("button", { name: "Cancel" }).click()
   await expect(root.getByRole("alert")).toHaveCount(0)
   await nextStep(page)

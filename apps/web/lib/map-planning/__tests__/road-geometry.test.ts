@@ -4,6 +4,8 @@ import { describe, test } from "node:test"
 import { worldPoint, type LngLat } from "@waste/domain/map-planning/geo"
 import {
   ROAD_GEOMETRY_CACHE_MAX,
+  ROAD_ORIGIN,
+  ROAD_REF_ZOOM,
   chevronsAlong,
   chunkStops,
   fetchRoadGeometry,
@@ -13,6 +15,8 @@ import {
   parseRoadGeometryCache,
   rememberRoadGeometry,
   roadGeometryKey,
+  roadOverlay,
+  roadOverlayPath,
   roadPath,
   serializeRoadGeometryCache,
   type RoadGeometry,
@@ -212,6 +216,41 @@ describe("localPathData", () => {
       `M${fmt(a.x - o.x)} ${fmt(a.y - o.y)}L${fmt(b.x - o.x)} ${fmt(b.y - o.y)}`,
     )
     assert.equal(localPathData([], 16, origin), "")
+  })
+})
+
+describe("roadOverlay", () => {
+  /** A north-up camera at `zoom`, its centre `centre` at screen (400, 300). */
+  const camera = (centre: LngLat, zoom: number) => (lngLat: LngLat) => {
+    const c = worldPoint(centre, zoom)
+    const p = worldPoint(lngLat, zoom)
+    return { x: 400 + (p.x - c.x), y: 300 + (p.y - c.y) }
+  }
+
+  test("at the reference zoom the scale is 1 and the transform lands the origin at its screen point", () => {
+    const overlay = roadOverlay(camera(ROAD_ORIGIN, ROAD_REF_ZOOM))
+    assert.ok(overlay)
+    assert.ok(Math.abs(overlay.scale - 1) < 1e-9)
+    assert.equal(overlay.transform, `translate(400 300) scale(${overlay.scale})`)
+  })
+
+  test("two zoom levels out the scale is a quarter, and a path built once lands where the camera projects it", () => {
+    const zoom = ROAD_REF_ZOOM - 2
+    const project = camera(stops[2], zoom)
+    const overlay = roadOverlay(project)
+    assert.ok(overlay)
+    assert.ok(Math.abs(overlay.scale - 0.25) < 1e-9)
+    // The path's first vertex, run through the group transform, is the projected stop.
+    const match = /^M(-?[\d.]+) (-?[\d.]+)/.exec(roadOverlayPath([stops[1], stops[2]]))
+    assert.ok(match)
+    const origin = project(ROAD_ORIGIN)
+    const onScreen = { x: origin.x + Number(match[1]) * overlay.scale, y: origin.y + Number(match[2]) * overlay.scale }
+    const expected = project(stops[1])
+    assert.ok(Math.abs(onScreen.x - expected.x) < 0.01 && Math.abs(onScreen.y - expected.y) < 0.01, JSON.stringify({ onScreen, expected }))
+  })
+
+  test("no projection yet means no overlay", () => {
+    assert.equal(roadOverlay(() => null), null)
   })
 })
 

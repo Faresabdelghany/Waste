@@ -581,7 +581,15 @@ function addMinutes(time: string, minutes: number): string {
 }
 
 const MINUTES_PER_STOP = 7
-const CLOSEOUT_MINUTES = 45
+/**
+ * The minutes a route's time window allows past its last stop — the drive
+ * back and the turnaround at the depot. The estimate's road basis charges
+ * the same allowance on top of the routed drive time and the stops
+ * (`estimates.ts`, Issue #39), so a routed route and a heuristic one are
+ * comparable, and the route stays honest about what a routed leg through
+ * the stops leaves out.
+ */
+export const CLOSEOUT_MINUTES = 45
 
 function generatedPickupId(routeId: string, containerId: string): string {
   return `${routeId}-p-${containerId}`

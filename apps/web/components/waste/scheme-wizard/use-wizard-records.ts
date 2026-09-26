@@ -2,8 +2,10 @@
 
 // The records the guided setup reads, in one hook: fixture data merged with
 // user-created records from the record store, the Settings waste fractions,
-// plus the fleet profiles and the container-weight resolver
-// (asset-management catalogue first, fallback table second) the estimates need.
+// plus the fleet profiles and the two catalogue resolvers the estimates need
+// — the container weight (asset-management catalogue first, fallback table
+// second) and, since Issue #39, the container type's emptying time, which
+// the road basis adds to the routed drive time.
 
 import { useMemo } from "react"
 
@@ -12,7 +14,11 @@ import { useModuleRecords } from "@/components/waste/scheme-route-map"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
-import { fallbackContainerWeight, type ContainerWeightResolver } from "@waste/domain/route-schemes/estimates"
+import {
+  fallbackContainerWeight,
+  type ContainerWeightResolver,
+  type StopMinutesResolver,
+} from "@waste/domain/route-schemes/estimates"
 import {
   collectionVehicles,
   driverProfile,
@@ -38,6 +44,8 @@ export type WizardRecords = {
   vehicleProfiles: VehicleProfile[]
   driverProfiles: DriverProfile[]
   weightKg: ContainerWeightResolver
+  /** The catalogue's emptying time per container type, minutes; null for a type it does not list. */
+  stopMinutes: StopMinutesResolver
 }
 
 const locationType = (record: BusinessRecord): "depot" | "unloading" | "unknown" => {
@@ -63,17 +71,36 @@ export function useWizardRecords(): WizardRecords {
   const allocations = useModuleRecords("fleet", "vehicle-planning")
   const { containerTypes, wasteFractions } = useAssetManagementStore()
 
-  const weightKg = useMemo<ContainerWeightResolver>(() => {
-    const byName = new Map(containerTypes.map((type) => [type.name.toLowerCase(), type]))
-    return (containerType, fraction) => {
+  const byName = useMemo(
+    () => new Map(containerTypes.map((type) => [type.name.toLowerCase(), type])),
+    [containerTypes],
+  )
+
+  const weightKg = useMemo<ContainerWeightResolver>(
+    () => (containerType, fraction) => {
       const catalogued = containerType ? byName.get(containerType.toLowerCase()) : undefined
       const weight =
         catalogued && fraction ? catalogued.wasteFractionWeights[fraction.toLowerCase()] : undefined
       return typeof weight === "number" && weight > 0
         ? { kg: weight, fallback: false }
         : fallbackContainerWeight(containerType, fraction)
-    }
-  }, [containerTypes])
+    },
+    [byName],
+  )
+
+  // The catalogue's emptying time, the seconds override when the type is timed that finely.
+  const stopMinutes = useMemo<StopMinutesResolver>(
+    () => (containerType) => {
+      const catalogued = containerType ? byName.get(containerType.toLowerCase()) : undefined
+      if (!catalogued) return null
+      const minutes =
+        catalogued.customizeEmptyingTime && catalogued.emptyingTimeSeconds > 0
+          ? catalogued.emptyingTimeSeconds / 60
+          : catalogued.emptyingTimeMinutes
+      return Number.isFinite(minutes) && minutes > 0 ? minutes : null
+    },
+    [byName],
+  )
 
   const vehicles = collectionVehicles(fleet)
   // Projects are the organisation records with a project context; the
@@ -97,5 +124,6 @@ export function useWizardRecords(): WizardRecords {
     vehicleProfiles: vehicles.map(vehicleProfile),
     driverProfiles: drivers.map(driverProfile),
     weightKg,
+    stopMinutes,
   }
 }
