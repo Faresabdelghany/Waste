@@ -213,7 +213,7 @@ async function factsOf(tx: Tx, event: OutboxJob): Promise<EventFacts> {
       return { kind: event.kind, routeId: receipt.routeId, pickupId: receipt.pickupId, driverId: receipt.driverId, detail: receipt.problem?.detail ?? receipt.problem?.title ?? "The command was refused" }
     }
     default:
-      // A kind the queue is not subscribed to: the two pickup events Finance reads are news here whatever their payload, and every other kind the domain reads the kind of and nothing else.
+      // A kind of another consumer's (reaching here only when a test calls the handler directly, since the seam refuses another kind's event on a queue): the two pickup events Finance reads are news here whatever their payload, and every other kind the domain reads the kind of and nothing else.
       return { kind: event.kind as OtherEventFacts["kind"] }
   }
 }

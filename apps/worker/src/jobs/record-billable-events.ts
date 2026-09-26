@@ -64,7 +64,7 @@ export type Recorded = { event: string; kind: OutboxKind; did: "recorded" | "can
 /**
  * The facts of one event, read under the company's fence: the payload
  * parsed with its kind's schema for the ids it names, the rows those ids
- * name read as they stand now. A kind the queue is subscribed to and the
+ * name read as they stand now. A kind this consumer takes and the
  * domain reads as news answers `OtherEventFacts`, so the rule says nothing
  * and the job completes with nothing.
  */

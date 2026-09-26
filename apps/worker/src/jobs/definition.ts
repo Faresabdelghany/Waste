@@ -64,10 +64,6 @@ export type JobContext = {
  * worker on one of those queues: `defineOutboxConsumer` (../outbox/subscribe.ts)
  * spells one `JobDefinition` per kind, its `queue` `outbox.<kind>`, spread
  * into the registry, so the relay's `send` is the one door an event takes.
- * one is sent by someone — the API, another job, or the relay through
- * `subscribes`: the outbox kinds whose published events the queue takes
- * (`../outbox/queues.ts` says what arrives), each `subscribe`d on every start,
- * so a kind dropped from the list is unsubscribed on the next.
  */
 export type JobDefinition<Data extends object = object> = {
   queue: string

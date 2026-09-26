@@ -325,7 +325,7 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     await assert.rejects(openTicketFor({ kind: "pickup-failed" }, context()), /Invalid|invalid|expected/i, "and so is a job that is not an outbox row")
   })
 
-  test("a kind the queue is not subscribed to is news and not a case, whatever its payload", async () => {
+  test("a kind of another consumer's, handed to the handler directly, is news and not a case, whatever its payload", async () => {
     const event = outboxJob(tenant, { kind: "route-cancelled", aggregateKind: "route", aggregateId: testId(), payload: { anything: true } })
     assert.deepEqual(await openTicketFor(event, context()), { outcome: "nothing" })
     const completed = outboxJob(tenant, { kind: "pickup-completed", aggregateKind: "pickup", aggregateId: testId(), payload: { anything: true } })
