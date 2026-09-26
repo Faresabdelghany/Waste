@@ -45,15 +45,24 @@
 //   a number       — a document numbered from one of the company's series
 //                    (a ticket, an invoice, a credit note) takes it one way
 //                    (`nextNumber`), under the company's row lock.
+//   a command      — a write the worker runs as well as a route (Issue #112
+//                    part B: `recordBillableEvent`, `issueInvoice`,
+//                    `runBilling` under `@waste/db/commands/`) has no request
+//                    and refuses with a `CommandRefused` carrying its status
+//                    and its sentence; a route runs it through
+//                    `refusedByCommand`, which rethrows that as the problem it
+//                    would have been, and lets everything else through.
 //
 // Nothing here knows a table or a resource but the company's row, which every
 // series lives on: what is not shared by every route module stays in the one
-// that owns it.
+// that owns it. `lockRow` and `nextNumber` are the commands' now
+// (`@waste/db/commands/shared`), re-exported here so every route reads them
+// from the path it did.
 import { Id } from "@waste/contracts/ids"
 import { providerShape } from "@waste/contracts/places"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
-import { company } from "@waste/db/schema/organisation"
+import { CommandRefused } from "@waste/db/commands/shared"
 import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
 import { and, asc, eq, getTableName, gte, inArray, lt, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
@@ -63,8 +72,25 @@ import * as z from "zod"
 
 import { checkConstraintOf, exclusionConstraintOf, invalidRequest, problem, uniqueConstraintOf } from "../problem"
 
+export { lockRow, nextNumber, type Series } from "@waste/db/commands/shared"
+
 /** The path parameter of every `/<resource>/:id` route. */
 export const IdParam = z.object({ id: Id })
+
+/**
+ * Runs a command the worker runs too, and answers its refusal as the problem
+ * it would have been inside a request: a `CommandRefused` becomes a problem
+ * of its status with its sentence as the detail; anything else is left as it
+ * is. So a route and a job meet the same refusal in their own words.
+ */
+export async function refusedByCommand<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run()
+  } catch (error) {
+    if (error instanceof CommandRefused) throw problem(error.status, { detail: error.message })
+    throw error
+  }
+}
 
 type Schema = Parameters<typeof resolver>[0]
 
@@ -253,30 +279,13 @@ async function answering(tx: Tx, table: TenantTable, column: PgColumn, row: Name
   return found
 }
 
-/**
- * Takes the row lock of the record a rule hangs off, inside the request's
- * one transaction, and reads nothing back: `select … for update`.
- *
- * A rule the database holds — a key, a period that overlaps — needs none of
- * this. A rule the API holds does: containment (routes/periods.ts) is read
- * first and written after, so without a lock a transaction shortening a
- * parent and a transaction adding a child both read the state the other has
- * not written yet and both pass. Taking the parent's lock before the read
- * makes the second transaction wait and then see what the first wrote.
- *
- * A route locks the parent before it reads it, and where it locks two rows
- * it takes them from the top down — the agreement before the subscription —
- * so two requests can never hold half of each other's pair. A row that is
- * not there locks nothing, and the read that follows answers the 404.
- */
-export async function lockRow(tx: Tx, table: TenantTable, row: { companyId: string; id: string }): Promise<void> {
-  await tx
-    .select({ id: table.id })
-    .from(table)
-    .where(and(eq(table.companyId, row.companyId), eq(table.id, row.id)))
-    .limit(1)
-    .for("update")
-}
+// `lockRow` — the row lock of the record a rule hangs off, `select … for
+// update` and nothing read back — is the commands' now
+// (`@waste/db/commands/shared`, re-exported above): a rule the API holds
+// rather than the database is held per transaction, so a route takes the
+// parent's lock first and reads afterwards, from the top down where it locks
+// two rows (the agreement before the subscription), and a row that is not
+// there locks nothing, the read that follows answering the 404.
 
 /**
  * The same for several rows of one table, taken in id order in one statement
@@ -446,23 +455,11 @@ export async function replayed<T>(keys: readonly string[], write: () => Promise<
 // route's, a ticket's and an invoice's number each come off a counter on the
 // company's row (`next_route_number`, `next_ticket_number`,
 // `next_invoice_number`; packages/db's organisation schema), and the ticket
-// and the invoice took theirs in two spellings of one statement. This is the
-// one: `update … returning` under the company's row lock, so two documents
-// numbered at once take turns, and a transaction that fails rolls its number
-// back with its rows, the series unbroken. The route's counter is the
-// generation worker's to take (#97 part B), in blocks, and is not taken here.
-
-/** The counters a company's row carries, one per document series. */
-export type Series = "nextInvoiceNumber" | "nextTicketNumber" | "nextRouteNumber"
-
-/** The next number of a company's series, never renumbered: the one the counter had, the counter stepped past it in the database as an expression over its own column. */
-export async function nextNumber(tx: Tx, companyId: string, series: Series): Promise<number> {
-  const column = company[series]
-  const [row] = await tx
-    .update(company)
-    .set({ [series]: sql`${column} + 1` } as Partial<Record<Series, SQL>>)
-    .where(eq(company.id, companyId))
-    .returning({ next: column })
-  if (row === undefined) throw new Error(`no company ${companyId} to number a document in`)
-  return row.next - 1
-}
+// and the invoice took theirs in two spellings of one statement before there
+// was one — `nextNumber`, `update … returning` under the company's row lock,
+// so two documents numbered at once take turns, and a transaction that fails
+// rolls its number back with its rows, the series unbroken. It is the
+// commands' now (`@waste/db/commands/shared`, re-exported above), since the
+// worker's scheduled billing run numbers invoices with no request in hand.
+// The route's counter is the generation worker's to take (#97 part B), in
+// blocks, and is not taken here.

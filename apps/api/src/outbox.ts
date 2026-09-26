@@ -1,70 +1,9 @@
-// The outbox's one writer (Issue #104, §6). Every office command that
-// changes what another context would hear about — a route dispatched,
-// reassigned or cancelled, a pickup skipped or corrected, an unload recorded
-// (routes/routes.ts, routes/pickups.ts, routes/unloads.ts) — and every applied
-// or rejected driver command (routes/driver.ts) inserts its `outbox_event`
-// rows here, in the request's transaction and after the rows they describe,
-// so the event commits with the change or not at all. The relay (part C)
-// reads the unpublished rows across companies and stamps `published_at`;
-// nothing here reads them back.
-//
-// The payload is the wire resource as the route would answer it at that
-// instant — a `Route`, a `PickupDetail` with the proof the command made, an
-// `Unload`, a `DriverCommandReceipt` — so a consumer reads what the API
-// would have answered and never the tables. One event carries a little
-// more: a route-level `report-problem` (no pickup named) writes
-// `pickup-problem-reported` on the route aggregate with the `Route` plus
-// `proofs`, the problem proof the command made, the way a stop's problem
-// travels inside its `PickupDetail`, so the `reason` and the `note` reach
-// Resolution whichever aggregate the problem was reported on and a consumer
-// reads `proofs[0]` either way. `occurredAt` is the command's
-// instant and not the request's: the day a cancelled route was cancelled,
-// the instant a pickup left `planned`, when the truck tipped. `projectId`
-// travels with the event because every Execution row is a project's and the
-// relay groups by company under `withCompany` as `wms_api`, whose fence
-// needs the tenant on every row.
-//
-// Resolution (Issue #109) is the outbox's second writer — `ticket-opened`,
-// `ticket-completed` and `ticket-rejected` on the `ticket` aggregate — and
-// the first whose opening statements run without a request: the worker of
-// part B opens a ticket from an event with no Principal in hand. So `emit`
-// takes the tenant it needs and nothing more, `{ companyId }`, which a
-// Principal satisfies; every office caller passes what it passed, and
-// routes/ticket-writes.ts passes the company alone.
-import type { Tx } from "@waste/db/client"
-import { outboxEvent } from "@waste/db/schema/execution"
-import type { OutboxAggregate, OutboxKind } from "@waste/domain/execution/vocabulary"
-
-import { newId } from "./ids"
-
-/** Whose event it is: the tenant, which is all the row needs of the caller. A Principal is one; so is the worker's job. */
-export type Tenant = { companyId: string }
-
-/** One event as a route or the applier hands it in: what it is about, what happened, the resource as answered, and when. */
-export type OutboxEventDraft = {
-  /** What the event is about: a route, a pickup, an unload or a command. */
-  aggregate: OutboxAggregate
-  /** The id of that route, pickup, unload or command; a soft id, joined by nobody. */
-  aggregateId: string
-  kind: OutboxKind
-  /** The wire resource as the write left it. */
-  payload: unknown
-  /** The project the aggregate belongs to. */
-  projectId: string
-  /** The command's instant, not the request's. */
-  occurredAt: Date
-}
-
-/** Inserts one `outbox_event` row, server-minted id, unpublished, in the caller's transaction. */
-export async function emit(tx: Tx, tenant: Tenant, event: OutboxEventDraft): Promise<void> {
-  await tx.insert(outboxEvent).values({
-    id: newId(),
-    companyId: tenant.companyId,
-    projectId: event.projectId,
-    kind: event.kind,
-    aggregateKind: event.aggregate,
-    aggregateId: event.aggregateId,
-    occurredAt: event.occurredAt,
-    payload: event.payload,
-  })
-}
+// The outbox's one writer, as the API imports it. `emit` and its two types
+// moved to `@waste/db/commands/outbox` with the commands the worker runs
+// (Issue #112 part B) — `issueInvoice` emits `invoice-issued` inside a
+// billing run the worker schedules, with no request in hand — and every
+// route here reads it from this path as it did (routes/routes.ts,
+// routes/pickups.ts, routes/unloads.ts, routes/driver.ts, routes/tickets.ts,
+// routes/settlements.ts, routes/ticket-writes.ts). The header of
+// `packages/db/src/commands/outbox.ts` says what an event carries and why.
+export { emit, type OutboxEventDraft, type Tenant } from "@waste/db/commands/outbox"
