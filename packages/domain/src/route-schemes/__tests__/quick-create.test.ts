@@ -85,6 +85,13 @@ describe("seedSchemeEditValues: the fraction and service type selects", () => {
     assert.equal(seeded.serviceType, "")
     assert.equal(seeded.stopSelection, "manual")
   })
+
+  test("the stored edit policy seeds as it is, and a record that predates it leaves the select to the schema default (issue #38)", () => {
+    assert.equal(seedSchemeEditValues({ containerIds: "c1", editPolicy: "single" }).editPolicy, "single")
+    assert.equal(seedSchemeEditValues({ containerIds: "c1", editPolicy: "future" }).editPolicy, "future")
+    // Undefined entries are dropped, so the dialog's schema default ("ask") speaks for a pre-#38 record.
+    assert.equal("editPolicy" in seedSchemeEditValues({ containerIds: "c1" }), false)
+  })
 })
 
 describe("applySchemeWasteFraction: the edit-save writes the scheme's fraction where the readers look", () => {

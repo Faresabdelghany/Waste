@@ -49,7 +49,7 @@ test("step 5 offers the running-scheme edit policy, asking by default, and creat
     "This collection only",
   ])
   await pickOption(page, root, "Changes to a running scheme", "This collection only")
-  await expect(root.getByText("Every edit applies to the next collection only", { exact: false })).toBeVisible()
+  await expect(root.getByText("applies to the next collection only", { exact: false })).toBeVisible()
   await expect(root.getByText("Danish public holidays")).toBeVisible()
   await expect(root.getByText("Waste fraction")).toBeVisible()
   await expect(root.getByText("Service type")).toBeVisible()

@@ -196,6 +196,19 @@ describe("editChangesGeneration", () => {
       false,
     )
   })
+
+  test("an absent boolean and the value its readers take for it are the same value", () => {
+    // sameAllDays is read `!== false` everywhere: a record that never stored
+    // it IS same-all-days, so the `true` the groups editor writes is no
+    // change — and neither is an absent key against an explicit true.
+    const { sameAllDays: _absent, ...rest } = stored.submittedValues ?? {}
+    const never = { ...stored, submittedValues: rest }
+    assert.equal(editChangesGeneration(never, { ...stored, submittedValues: { ...rest, sameAllDays: true } }), false)
+    assert.equal(editChangesGeneration({ ...stored, submittedValues: { ...rest, sameAllDays: true } }, never), false)
+    // Only an explicit false is the other value.
+    assert.equal(editChangesGeneration(never, { ...stored, submittedValues: { ...rest, sameAllDays: false } }), true)
+    assert.equal(editChangesGeneration(stored, edited(stored, { sameAllDays: false })), true)
+  })
 })
 
 /* ------------------------------ the next collection ------------------------------ */
@@ -239,6 +252,89 @@ describe("nextCollectionDate and thisCollectionWindow", () => {
       thisCollectionWindow(TODAY, scheme({ effectiveTo: TODAY }), scheme({ effectiveTo: TODAY }), NO_CALENDAR),
       null,
     )
+  })
+
+  test("the one-off window walks each record against its own calendar when given two", () => {
+    const holiday: SchemeCalendar = { holidays: new Map([["2026-09-28", "Test day"]]), weekend: DEFAULT_WEEKEND }
+    const stored = scheme()
+    const same = startAt(stored, "08:00")
+    // One calendar for both, as before.
+    assert.deepEqual(thisCollectionWindow(TODAY, stored, same, holiday), { from: TOMORROW, to: "2026-09-30" })
+    // The stored scheme's Monday is a holiday only on ITS project: its next is Wed 30 Sep, the edit's Mon 28 Sep — the window reaches the later.
+    assert.deepEqual(thisCollectionWindow(TODAY, stored, same, { stored: holiday, edited: NO_CALENDAR }), {
+      from: TOMORROW,
+      to: "2026-09-30",
+    })
+    assert.deepEqual(thisCollectionWindow(TODAY, stored, same, { stored: NO_CALENDAR, edited: holiday }), {
+      from: TOMORROW,
+      to: "2026-09-30",
+    })
+    assert.deepEqual(thisCollectionWindow(TODAY, stored, same, { stored: NO_CALENDAR, edited: NO_CALENDAR }), {
+      from: TOMORROW,
+      to: "2026-09-28",
+    })
+  })
+})
+
+/* ------------------------- each record against its own project's calendar ------------------------- */
+
+const stub = (id: string, name: string, extra: Partial<BusinessRecord> = {}): BusinessRecord => ({
+  id,
+  name,
+  context: "Project",
+  status: "Active",
+  owner: "",
+  value: "",
+  updated: "",
+  description: "",
+  facts: {},
+  related: [],
+  source: "",
+  freshness: "",
+  allowedTransitions: [],
+  ...extra,
+})
+
+/** Two projects: one with no holiday list, one whose list skips Mon 28 Sep — the scheme's next Monday. */
+const PROJECT_CALENDARS = {
+  projectRecords: [
+    stub("project-open", "Open"),
+    stub("project-holiday", "Holiday", { submittedValues: { holidayList: "Test days" } }),
+  ],
+  calendarRecords: [
+    stub("cal-holiday", "Holiday 2026", {
+      context: "Collection calendar",
+      projectIds: ["project-holiday"],
+      submittedValues: { holidayDates: "2026-09-28" },
+    }),
+  ],
+}
+
+describe("edit policy · a scheme moved to another project", () => {
+  test("a one-off's window still reaches the stored scheme's next collection, judged by the stored project's calendar", () => {
+    // Stored where Mon 28 Sep is skipped, so its next collection is Wed 30
+    // Sep; the edit moves it where Monday collects, so the edit's is Mon 28
+    // Sep. The window reaches the later of the two — which only the stored
+    // project's calendar knows.
+    const stored = scheme({ editPolicy: "single", projectId: "project-holiday" })
+    const { routes, pickups } = generated(stored)
+    const plan = planSchemeEditReconciliation(
+      input(stored, edited(stored, { projectId: "project-open" })),
+      { ...related(stored, routes, pickups), ...PROJECT_CALENDARS },
+    )
+    assert.equal(plan.outcome, "single")
+    assert.deepEqual(plan.window, { from: TOMORROW, to: "2026-09-30" })
+  })
+
+  test("the question's next collection is the stored scheme's Monday, which its own calendar collects on", () => {
+    const stored = scheme({ projectId: "project-open" })
+    const { routes, pickups } = generated(stored)
+    const plan = planSchemeEditReconciliation(
+      input(stored, edited(stored, { projectId: "project-holiday" })),
+      { ...related(stored, routes, pickups), ...PROJECT_CALENDARS },
+    )
+    assert.equal(plan.outcome, "ask")
+    assert.equal(plan.question?.nextCollectionDate, "2026-09-28")
   })
 })
 
@@ -441,16 +537,58 @@ describe("edit policy · single", () => {
     assert.equal(plan.routes[0].facts["Time window"], "08:00–08:59")
   })
 
-  test("the policy picked in the same save is the one that applies: switching to future and editing applies to the future", () => {
+  test("the stored policy decides; the one picked in the same save is an edit that lands for next time", () => {
+    // Stored `single`, switched to `future` while the start time changes: the
+    // save is a one-off — the scheme cannot be flipped and reshaped whole in
+    // one go — and the new policy lands on the scheme for the edit after.
     const stored = scheme({ editPolicy: "single" })
     const { routes, pickups } = generated(stored)
     const plan = planSchemeEditReconciliation(
       input(stored, edited(stored, { plannedStartTime: "08:00", editPolicy: "future" })),
       related(stored, routes, pickups),
     )
-    assert.equal(plan.outcome, "reconciled")
+    assert.equal(plan.outcome, "single")
+    assert.deepEqual(dates(plan.routes), ["2026-09-28"])
     assert.equal(plan.scheme.submittedValues?.editPolicy, "future")
+    assert.equal(plan.scheme.submittedValues?.plannedStartTime, undefined)
+    // The next shaping edit is then judged by the saved `future`.
+    const next = planSchemeEditReconciliation(
+      input(plan.scheme, startAt(plan.scheme, "09:00")),
+      related(plan.scheme, routes.map((route) => plan.routes.find((written) => written.id === route.id) ?? route), pickups),
+    )
+    assert.equal(next.outcome, "reconciled")
+    assert.equal(next.routes.length, 4)
+  })
+
+  test("a scheme stored as ask asks even when the same save switches it off asking", () => {
+    const stored = scheme()
+    const { routes, pickups } = generated(stored)
+    const plan = planSchemeEditReconciliation(
+      input(stored, edited(stored, { plannedStartTime: "08:00", editPolicy: "future" })),
+      related(stored, routes, pickups),
+    )
+    assert.equal(plan.outcome, "ask")
+    assert.deepEqual(plan.routes, [])
+    // The answer saves the edit, the new policy with it.
+    const answered = planSchemeEditReconciliation(
+      { ...input(stored, edited(stored, { plannedStartTime: "08:00", editPolicy: "future" })), apply: "future" },
+      related(stored, routes, pickups),
+    )
+    assert.equal(answered.outcome, "reconciled")
+    assert.equal(answered.scheme.submittedValues?.editPolicy, "future")
+  })
+
+  test("a scheme stored as future is reshaped whole even when the same save switches it to single", () => {
+    const stored = scheme({ editPolicy: "future" })
+    const { routes, pickups } = generated(stored)
+    const plan = planSchemeEditReconciliation(
+      input(stored, edited(stored, { plannedStartTime: "08:00", editPolicy: "single" })),
+      related(stored, routes, pickups),
+    )
+    assert.equal(plan.outcome, "reconciled")
     assert.equal(plan.routes.length, 4)
+    assert.equal(plan.scheme.submittedValues?.editPolicy, "single")
+    assert.equal(plan.scheme.submittedValues?.plannedStartTime, "08:00")
   })
 
   test("a later run — Plan Ahead included — leaves the held route as edited and reshapes the rest from the scheme", () => {
@@ -642,7 +780,7 @@ describe("edit policy · single", () => {
     assert.equal(kept.submittedValues?.planAhead, false)
   })
 
-  test("thisCollectionOnlyRoute stacks the deviation after a holiday note; releaseThisCollectionOnly is scoped to the scheme and, with a date, to it", () => {
+  test("thisCollectionOnlyRoute stacks the deviation after a holiday note; releaseThisCollectionOnly is scoped to the scheme and, with a window, to it", () => {
     const { routes } = generated()
     const shifted: BusinessRecord = {
       ...routes[0],
@@ -657,12 +795,15 @@ describe("edit policy · single", () => {
     const released = releaseThisCollectionOnly("scheme-38", [...held, other])
     assert.equal(released.filter(routeEditedForThisCollectionOnly).length, 1)
     assert.equal(released[released.length - 1], other)
-    const oneDate = releaseThisCollectionOnly("scheme-38", held, "2026-09-30")
+    // One call over the whole list, the window inside: both ends inclusive,
+    // routes outside it untouched and the same objects.
+    const windowed = releaseThisCollectionOnly("scheme-38", held, { from: "2026-09-30", to: "2026-10-05" })
     assert.deepEqual(
-      oneDate.filter((route) => !routeEditedForThisCollectionOnly(route)).map((route) => route.submittedValues?.serviceDate),
-      ["2026-09-30"],
+      windowed.filter((route) => !routeEditedForThisCollectionOnly(route)).map((route) => route.submittedValues?.serviceDate).sort(),
+      ["2026-09-30", "2026-10-05"],
     )
-    assert.equal(oneDate[0], held[0], "an unreleased route is the same object")
+    assert.equal(windowed[0], held[0], "an unreleased route is the same object")
+    assert.equal(windowed[3], held[3])
   })
 })
 

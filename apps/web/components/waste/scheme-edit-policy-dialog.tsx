@@ -39,61 +39,86 @@ export function SchemeEditPolicyDialog({
   onClose: () => void
   onChoose: (apply: SchemeEditApplication) => void
 }) {
-  const [choice, setChoice] = useState<SchemeEditApplication>("future")
   const open = schemeName !== null && question !== null
-
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="sm:max-w-lg">
         {open && (
-          <>
-            <DialogHeader className="text-left">
-              <DialogTitle>How should this change apply?</DialogTitle>
-              <DialogDescription>
-                {schemeName} is running: {count(question.futureRoutes, "future route")}{" "}
-                {question.futureRoutes === 1 ? "is" : "are"} planned and can still follow this edit
-                {question.nextCollectionDate
-                  ? `; the next collection is ${formatServiceDate(question.nextCollectionDate)}.`
-                  : "."}
-              </DialogDescription>
-            </DialogHeader>
-            <RadioGroup
-              value={choice}
-              onValueChange={(value) => setChoice(value as SchemeEditApplication)}
-              className="gap-3 py-2"
-            >
-              {CHOICES.map((value) => {
-                const option = question.options[value]
-                const id = `scheme-edit-apply-${value}`
-                return (
-                  <Label
-                    key={value}
-                    htmlFor={id}
-                    className={cn(
-                      "flex cursor-pointer items-start gap-3 rounded-xl border border-border p-4 font-normal",
-                      choice === value && "border-primary bg-primary/5",
-                    )}
-                  >
-                    <RadioGroupItem value={value} id={id} className="mt-0.5" />
-                    <span className="space-y-1">
-                      <span className="block text-sm font-medium">{option.label}</span>
-                      <span className="block text-xs leading-5 text-muted-foreground">
-                        {option.description}
-                      </span>
-                    </span>
-                  </Label>
-                )
-              })}
-            </RadioGroup>
-            <DialogFooter>
-              <Button variant="outline" onClick={onClose}>
-                Back to the edit
-              </Button>
-              <Button onClick={() => onChoose(choice)}>Save changes</Button>
-            </DialogFooter>
-          </>
+          // Mounted only while open and keyed on the question, so each edit
+          // that asks starts from the default choice — never from the answer
+          // to the previous one, even when one question replaces another.
+          <SchemeEditPolicyQuestion
+            key={`${schemeName}:${question.futureRoutes}:${question.nextCollectionDate ?? ""}`}
+            schemeName={schemeName}
+            question={question}
+            onClose={onClose}
+            onChoose={onChoose}
+          />
         )}
       </DialogContent>
     </Dialog>
+  )
+}
+
+function SchemeEditPolicyQuestion({
+  schemeName,
+  question,
+  onClose,
+  onChoose,
+}: {
+  schemeName: string
+  question: SchemeEditQuestion
+  onClose: () => void
+  onChoose: (apply: SchemeEditApplication) => void
+}) {
+  const [choice, setChoice] = useState<SchemeEditApplication>("future")
+
+  return (
+    <>
+      <DialogHeader className="text-left">
+        <DialogTitle>How should this change apply?</DialogTitle>
+        <DialogDescription>
+          {schemeName} is running: {count(question.futureRoutes, "future route")}{" "}
+          {question.futureRoutes === 1 ? "is" : "are"} planned and can still follow this edit
+          {question.nextCollectionDate
+            ? `; the next collection is ${formatServiceDate(question.nextCollectionDate)}.`
+            : "."}
+        </DialogDescription>
+      </DialogHeader>
+      <RadioGroup
+        value={choice}
+        onValueChange={(value) => setChoice(value as SchemeEditApplication)}
+        className="gap-3 py-2"
+      >
+        {CHOICES.map((value) => {
+          const option = question.options[value]
+          const id = `scheme-edit-apply-${value}`
+          return (
+            <Label
+              key={value}
+              htmlFor={id}
+              className={cn(
+                "flex cursor-pointer items-start gap-3 rounded-xl border border-border p-4 font-normal",
+                choice === value && "border-primary bg-primary/5",
+              )}
+            >
+              <RadioGroupItem value={value} id={id} className="mt-0.5" />
+              <span className="space-y-1">
+                <span className="block text-sm font-medium">{option.label}</span>
+                <span className="block text-xs leading-5 text-muted-foreground">
+                  {option.description}
+                </span>
+              </span>
+            </Label>
+          )
+        })}
+      </RadioGroup>
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose}>
+          Back to the edit
+        </Button>
+        <Button onClick={() => onChoose(choice)}>Save changes</Button>
+      </DialogFooter>
+    </>
   )
 }

@@ -225,23 +225,26 @@ export function thisCollectionOnlyRoute(route: BusinessRecord): BusinessRecord {
 /**
  * The scheme's routes with their one-off holds released, for a run that must
  * reshape them — every hold for a scheme edit applied to every future
- * collection, or the one date's for a new one-off on a date that already
- * carries one (the later edit wins). A copy; other schemes' routes, unheld
- * routes and, with a date given, other dates' routes come back as they are.
- * The release only matters to the plan: a route the run then refreshes or
- * resurrects is rewritten whole and loses the marker with it, and one the run
- * leaves alone — outside the window, not planned — is not written and keeps it.
+ * collection, or the holds inside the window a new one-off reshapes (the
+ * later edit wins). A copy; other schemes' routes, unheld routes and, with a
+ * window given, routes outside it come back as they are. The release only
+ * matters to the plan: a route the run then refreshes or resurrects is
+ * rewritten whole and loses the marker with it, and one the run leaves alone
+ * — outside the window, not planned — is not written and keeps it.
  */
 export function releaseThisCollectionOnly(
   schemeId: string,
   routes: readonly BusinessRecord[],
-  serviceDate?: string,
+  window?: GenerationWindow,
 ): BusinessRecord[] {
   return routes.map((route) => {
     if (stringValueOf(route, "schemeId") !== schemeId || !routeEditedForThisCollectionOnly(route)) {
       return route
     }
-    if (serviceDate !== undefined && stringValueOf(route, "serviceDate") !== serviceDate) return route
+    if (window) {
+      const serviceDate = stringValueOf(route, "serviceDate")
+      if (!serviceDate || serviceDate < window.from || serviceDate > window.to) return route
+    }
     const { thisCollectionOnly: _released, ...submittedValues } = route.submittedValues ?? {}
     return { ...route, submittedValues }
   })

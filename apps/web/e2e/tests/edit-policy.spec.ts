@@ -3,7 +3,7 @@
 // dialog, "This collection only" pins the next collection and leaves the
 // scheme's configuration alone, and an edit that shapes no collection — a
 // rename — saves without a question.
-import { expect, test } from "../fixtures"
+import { ROUTE_SCHEMES_URL, expect, test } from "../fixtures"
 import {
   buildBaselineScheme,
   createButton,
@@ -62,8 +62,8 @@ test("ask each time: a shaping edit raises the question, and 'This collection on
   // route — and only that one — carries the deviation.
   await page.getByRole("button", { name: `Open ${name}` }).click()
   const recurrenceCard = page
-    .getByText("Recurrence", { exact: true })
-    .locator("xpath=ancestor::*[contains(@class,'rounded')][1]")
+    .getByRole("heading", { name: "Recurrence", exact: true })
+    .locator("xpath=ancestor::section[1]")
   await expect(recurrenceCard).toContainText("06:30")
   await expect(recurrenceCard).not.toContainText("08:15")
   await expect(page.getByText("Ask each time", { exact: true })).toBeVisible()
@@ -80,4 +80,43 @@ test("a rename of a running scheme under ask saves without a question", async ({
   await expect(page.getByRole("dialog", { name: "How should this change apply?" })).toHaveCount(0)
   await expect(dialog).toBeHidden()
   await expect(toasts(page)).toContainText(`${name} renamed updated`)
+})
+
+test("the stored policy decides: switching a scheme off 'Ask each time' in the same save still asks, and the new policy lands for next time", async ({
+  page,
+}) => {
+  const name = `Ask stored ${Date.now().toString(36)}`
+  await createRunningScheme(page, name)
+  const dialog = await openEditDialog(page, name)
+  // The schema dialog's select carries the required asterisk in its
+  // accessible name, so the wizard's exact-label helper does not reach it.
+  const policySelect = dialog.getByLabel("Changes to a running scheme")
+  await expect(policySelect).toContainText("Ask each time")
+  await policySelect.click()
+  await page.getByRole("option", { name: "Apply to future collections", exact: true }).click()
+  await expect(policySelect).toContainText("Apply to future collections")
+  await dialog.getByLabel("Planned start time").fill("08:15")
+  await dialog.getByRole("button", { name: "Save changes" }).click()
+
+  // Stored as "ask", so the save asks — the select's new value is one of
+  // the edits, not the rule this save is judged by.
+  const question = page.getByRole("dialog", { name: "How should this change apply?" })
+  await expect(question).toBeVisible()
+  await question.getByRole("button", { name: "Save changes" }).click()
+  await expect(question).toBeHidden()
+  await expect(dialog).toBeHidden()
+  await expect(toasts(page)).toContainText(`${name} updated`)
+
+  // The new policy is saved; the next shaping edit does not ask.
+  await page.getByRole("button", { name: `Open ${name}` }).click()
+  await expect(page.getByText("Apply to future collections", { exact: true })).toBeVisible()
+  await page.goto(ROUTE_SCHEMES_URL)
+  await page.getByRole("tab", { name: "Route Schemes", selected: true }).waitFor()
+  const again = await openEditDialog(page, name)
+  await expect(again.getByLabel("Changes to a running scheme")).toContainText("Apply to future collections")
+  await again.getByLabel("Planned start time").fill("09:15")
+  await again.getByRole("button", { name: "Save changes" }).click()
+  await expect(page.getByRole("dialog", { name: "How should this change apply?" })).toHaveCount(0)
+  await expect(again).toBeHidden()
+  await expect(toasts(page)).toContainText(`${name} updated`)
 })

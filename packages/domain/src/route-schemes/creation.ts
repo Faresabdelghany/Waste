@@ -75,11 +75,11 @@ export const SCHEME_EDIT_POLICY_LABELS: Record<SchemeEditPolicy, string> = {
   future: "Apply to future collections",
   single: "This collection only",
 }
-/** What each choice does, for the review step and the quick form's field description. */
+/** What each choice does, for the review step and the quick form's field description. The stored choice is the rule for the next edit; changing it is itself an edit that lands for the time after. */
 export const SCHEME_EDIT_POLICY_DESCRIPTIONS: Record<SchemeEditPolicy, string> = {
   ask: "Every edit that shapes a collection asks whether it applies to every future collection or to the next one only.",
   future: "Every edit is saved on the scheme and every future planned route follows it.",
-  single: "Every edit applies to the next collection only; the scheme keeps its configuration.",
+  single: "Every edit that shapes a collection applies to the next collection only; the scheme keeps its configuration. A new choice here takes effect from the following edit.",
 }
 export const isSchemeEditPolicy = (value: unknown): value is SchemeEditPolicy =>
   typeof value === "string" && (SCHEME_EDIT_POLICIES as readonly string[]).includes(value)

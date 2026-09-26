@@ -18,6 +18,7 @@ import { CONTAINER_TYPE_VOCABULARY } from "@waste/domain/route-schemes/matching"
 import {
   GROUP_OWNED_SCHEME_FIELD_IDS,
   QUICK_SCHEME_DRAFT_FIELD_IDS,
+  seedSchemeEditValues,
 } from "@waste/domain/route-schemes/quick-create"
 import { SCHEME_SERVICE_TYPES, allowedContainerTypes } from "@waste/domain/route-schemes/scope"
 
@@ -100,5 +101,18 @@ describe("route-studio.schemes is in step with Guided Setup step 1", () => {
     }
     // The scheme's, not a group's: the edit dialog of a multi-group scheme keeps it.
     assert.equal(GROUP_OWNED_SCHEME_FIELD_IDS.has("editPolicy"), false)
+  })
+
+  test("the edit dialog seeds the select from the stored policy (issue #38)", () => {
+    // The dialog merges seedSchemeEditValues over the schema defaults: a
+    // stored choice wins, and a pre-#38 record without one falls to the
+    // field's default, which is the creation default.
+    const editPolicy = field("editPolicy")
+    for (const stored of SCHEME_EDIT_POLICIES) {
+      assert.equal(seedSchemeEditValues({ containerIds: "c1", editPolicy: stored }).editPolicy, stored)
+    }
+    const legacy = seedSchemeEditValues({ containerIds: "c1" })
+    assert.equal("editPolicy" in legacy, false)
+    assert.equal({ editPolicy: editPolicy.defaultValue, ...legacy }.editPolicy, DEFAULT_SCHEME_EDIT_POLICY)
   })
 })

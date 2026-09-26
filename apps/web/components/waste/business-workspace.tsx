@@ -69,11 +69,6 @@ import { NO_HOLIDAY_LIST_LABEL, resolveProjectCalendar } from "@waste/domain/rou
 import { HOLIDAY_POLICY_LABELS } from "@waste/domain/route-schemes/occurrences"
 import { planSchemeDeletion } from "@waste/domain/route-schemes/deletion"
 import {
-  planSchemeEditReconciliation,
-  type SchemeEditApplication,
-  type SchemeEditQuestion,
-} from "@waste/domain/route-schemes/edit"
-import {
   schemeAttention,
   schemeCanGenerateRoutes,
   withEffectiveSchemeStatus,
@@ -244,6 +239,7 @@ import {
 } from "@/components/waste/business-record-views"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { SchemeEditPolicyDialog } from "@/components/waste/scheme-edit-policy-dialog"
+import { useSchemeEditCommit } from "@/components/waste/use-scheme-edit-commit"
 import {
   RouteCreateEntry,
   type GuidedRouteData,
@@ -347,17 +343,6 @@ type AuditEvent = {
 type PendingAction = {
   record: BusinessRecord
   action: string
-}
-
-/**
- * A scheme edit the planner answered with a question (issue #38): the edit
- * dialog stays open underneath, the question is shown, and `resume` plans
- * and applies the save again with the answer.
- */
-type PendingSchemeEdit = {
-  schemeName: string
-  question: SchemeEditQuestion
-  resume: (apply: SchemeEditApplication) => void
 }
 
 function localDateInputValue(date = new Date()) {
@@ -1162,10 +1147,14 @@ export function BusinessWorkspace({
     useState<BusinessRecord | null>(null)
   const [groupsEditorScheme, setGroupsEditorScheme] =
     useState<BusinessRecord | null>(null)
-  const [pendingSchemeEdit, setPendingSchemeEdit] = useState<PendingSchemeEdit | null>(null)
   const [relatedCreateTarget, setRelatedCreateTarget] =
     useState<RelatedCreateTarget | null>(null)
   const [auditEvents, setAuditEvents] = useState<Record<string, AuditEvent[]>>({})
+  // The one edit-save of a route scheme (issue #33; the edit policy of issue
+  // #38) — both edit doors save through it, and the "Ask each time" question
+  // it may raise is answered by the commit of the render that answers.
+  const { commitSchemeEdit, pendingSchemeEdit, answerPendingSchemeEdit, dismissPendingSchemeEdit } =
+    useSchemeEditCommit({ moduleRecords, upsertRecord, setAuditEvents, setSelectedRecord, actorName })
 
   const activeModule =
     workspace.modules.find((module) => module.id === activeModuleId) ?? workspace.modules[0]
@@ -2973,95 +2962,6 @@ export function BusinessWorkspace({
     },
     [formSchema, getRecords, projectRecords, projectScope],
   )
-
-  /**
-   * The one edit-save of a route scheme (issue #33, D31; the edit policy of
-   * issue #38): runs the lifecycle seam over the stored record and the edited
-   * one and applies what it returns — the scheme, the routes, the pickups,
-   * the audit event, the toast. Under "Ask each time" the planner may answer
-   * with a question instead of writes; then the question is shown and this
-   * runs again with the answer, the edit dialog still open underneath so
-   * "Back to the edit" loses nothing. A one-off that fails validation is
-   * refused whole and the dialog stays open on the refusal. Both edit doors —
-   * the schema dialog and the collection groups editor — save through here.
-   */
-  const commitSchemeEdit = (
-    before: BusinessRecord,
-    after: BusinessRecord,
-    audit: { id: string; action: string; reason: string; evidence: (scheme: BusinessRecord) => string },
-    onSaved: (scheme: BusinessRecord) => void,
-    apply?: SchemeEditApplication,
-  ) => {
-    const schemeEdit = planSchemeEditReconciliation(
-      {
-        before,
-        after,
-        today: todayIso(),
-        actorName,
-        ...(apply ? { apply } : {}),
-      },
-      {
-        schemes: moduleRecords("route-studio", "schemes"),
-        existingRoutes: moduleRecords("route-studio", "routes"),
-        existingPickups: moduleRecords("route-studio", "pickups"),
-        containers: moduleRecords("resources", "containers"),
-        vehicles: moduleRecords("fleet", "vehicles"),
-        allocations: moduleRecords("fleet", "vehicle-planning"),
-        calendarRecords: moduleRecords(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId),
-        projectRecords: moduleRecords("configure", "organization"),
-      },
-    )
-    if (schemeEdit.outcome === "ask" && schemeEdit.question) {
-      setPendingSchemeEdit({
-        schemeName: after.name,
-        question: schemeEdit.question,
-        resume: (answer) => {
-          setPendingSchemeEdit(null)
-          commitSchemeEdit(before, after, audit, onSaved, answer)
-        },
-      })
-      return
-    }
-    if (schemeEdit.outcome === "refused") {
-      toast.error(`${after.name} not saved`, { description: schemeEdit.message })
-      return
-    }
-    const scheme = schemeEdit.scheme
-    const editEvent: AuditEvent = {
-      id: audit.id,
-      action: audit.action,
-      actor: actorName,
-      at: "Now",
-      reason: audit.reason,
-      before: before.status,
-      after: scheme.status,
-      evidence: audit.evidence(scheme),
-    }
-    upsertRecord("route-studio", "schemes", scheme)
-    for (const route of schemeEdit.routes) {
-      upsertRecord("route-studio", "routes", route)
-    }
-    for (const pickup of schemeEdit.pickups) {
-      upsertRecord("route-studio", "pickups", pickup)
-    }
-    setAuditEvents((current) => ({
-      ...current,
-      [scheme.id]: [editEvent, ...(current[scheme.id] ?? [])],
-    }))
-    if (selectedRecord?.id === scheme.id) setSelectedRecord(scheme)
-    onSaved(scheme)
-    // The reconciliation consequence line replaces the generic edit toast
-    // (issue #33): saving IS the action that reshaped future routes.
-    if (schemeEdit.outcome === "draft") {
-      toast.warning(`${scheme.name} saved as Draft`, { description: schemeEdit.message })
-    } else if (schemeEdit.outcome === "generation-failed") {
-      toast.warning(`${scheme.name} updated`, { description: schemeEdit.message })
-    } else if (schemeEdit.outcome === "single") {
-      toast.success(`${scheme.name} — this collection only`, { description: schemeEdit.message })
-    } else {
-      toast.success(`${scheme.name} updated`, { description: schemeEdit.message })
-    }
-  }
 
   const handleFormSubmit = (values: BusinessFormValues) => {
     // One clock read per submission, shared by the audit event id and the
@@ -5601,10 +5501,10 @@ export function BusinessWorkspace({
       {/* "Ask each time" (issue #38): the question a scheme edit raised, over
           whichever edit door raised it — the door stays open underneath. */}
       <SchemeEditPolicyDialog
-        schemeName={pendingSchemeEdit?.schemeName ?? null}
+        schemeName={pendingSchemeEdit?.after.name ?? null}
         question={pendingSchemeEdit?.question ?? null}
-        onClose={() => setPendingSchemeEdit(null)}
-        onChoose={(apply) => pendingSchemeEdit?.resume(apply)}
+        onClose={dismissPendingSchemeEdit}
+        onChoose={answerPendingSchemeEdit}
       />
       <ActionDecisionDialog
         module={activeModule}

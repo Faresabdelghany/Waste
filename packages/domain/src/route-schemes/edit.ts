@@ -17,10 +17,15 @@
 //
 // The edit policy (issue #38) — "Changes to a running scheme", stored on the
 // scheme as `submittedValues.editPolicy` — decides how far an edit of a
-// running scheme reaches. A scheme is running once it has generated and is
-// not Draft (schemeGenerationRecorded); before that every edit is D31's, and
-// so is an edit that shapes no collection — a rename, the policy itself,
-// Plan Ahead — whatever the policy says, since there is nothing to apply.
+// running scheme reaches. The STORED policy decides, the one on `before`: a
+// policy picked in the same save is itself an edit, saved for the next time
+// like a rename, never the rule the save it arrives in is judged by — so a
+// scheme stored as `ask` asks even when the same dialog switches it to
+// `future`, and a scheme stored as `single` cannot be flipped and reshaped
+// whole in one save. A scheme is running once it has generated and is not
+// Draft (schemeGenerationRecorded); before that every edit is D31's, and so
+// is an edit that shapes no collection — a rename, the policy itself, Plan
+// Ahead — whatever the policy says, since there is nothing to apply.
 //
 //   future  Apply to future collections: the scheme is saved as edited and
 //           the window above is regenerated from it, every one-off hold
@@ -141,16 +146,32 @@ const SHAPING_FACT_KEYS = [
 ] as const
 
 /**
+ * A shaping value as generation reads it. The one boolean among the shaping
+ * keys, `sameAllDays`, is read `!== false` by every reader (matching.ts,
+ * validation.ts): a record that never stored it IS same-all-days, so the
+ * `true` the groups editor writes for it (collectionGroupsToValues) is no
+ * change. Every other key is a string, and an absent one is "".
+ */
+function shapingValue(
+  values: Record<string, string | boolean | undefined>,
+  key: (typeof SHAPING_VALUE_KEYS)[number],
+): string | boolean {
+  if (key === "sameAllDays") return values[key] !== false
+  return values[key] ?? ""
+}
+
+/**
  * Whether the edit changed anything that shapes a collection — the diff-aware
  * refinement D31 left room for. Compares the shaping values and the facts
  * generation copies onto routes; the name, the notes and the policy fields
- * are not among them. An absent value and an empty one are the same value.
+ * are not among them. An absent value and an empty one are the same value,
+ * and an absent boolean is the value its readers take for it.
  */
 export function editChangesGeneration(before: BusinessRecord, after: BusinessRecord): boolean {
   const beforeValues = before.submittedValues ?? {}
   const afterValues = after.submittedValues ?? {}
   for (const key of SHAPING_VALUE_KEYS) {
-    if ((beforeValues[key] ?? "") !== (afterValues[key] ?? "")) return true
+    if (shapingValue(beforeValues, key) !== shapingValue(afterValues, key)) return true
   }
   for (const key of SHAPING_FACT_KEYS) {
     if ((before.facts[key] ?? "") !== (after.facts[key] ?? "")) return true
@@ -213,16 +234,23 @@ export function editReconciliationWindow(
  * collection of the scheme as stored or as edited, whichever is later — so a
  * collection moved to another day is cancelled where the scheme had it and
  * created where the edit puts it, and a collection taken out is cancelled.
- * Null when neither plans a collection the engine can reach.
+ * Each record is walked against its own project's calendar (an edit may move
+ * the scheme to another project); one calendar serves for both when the
+ * project did not change. Null when neither plans a collection the engine
+ * can reach.
  */
 export function thisCollectionWindow(
   today: string,
   stored: BusinessRecord,
   edited: BusinessRecord,
-  calendar: SchemeCalendar,
+  calendar: SchemeCalendar | { stored: SchemeCalendar; edited: SchemeCalendar },
 ): GenerationWindow | null {
+  const calendars = "stored" in calendar ? calendar : { stored: calendar, edited: calendar }
   const from = addDays(today, 1)
-  const dates = [nextCollectionDate(stored, from, calendar), nextCollectionDate(edited, from, calendar)]
+  const dates = [
+    nextCollectionDate(stored, from, calendars.stored),
+    nextCollectionDate(edited, from, calendars.edited),
+  ]
     .filter((date): date is string => date !== null)
     .sort()
   if (dates.length === 0) return null
@@ -284,8 +312,9 @@ export type SchemeEditReconciliationInput = {
   /**
    * The answer to the "ask" question (issue #38): how the edit applies. Set
    * by the caller after the person chose in the dialog; it outranks the
-   * stored policy. Absent, the stored policy decides — and an "ask" scheme
-   * with something to ask about comes back with the question and no writes.
+   * stored policy. Absent, the policy stored on `before` decides — and an
+   * "ask" scheme with something to ask about comes back with the question
+   * and no writes.
    */
   apply?: SchemeEditApplication
 }
@@ -438,16 +467,20 @@ export function planSchemeEditReconciliation(
   }
 
   // The edit policy (issue #38) speaks for a running scheme and an edit that
-  // shapes a collection; everything else is D31's save. The caller's answer
-  // outranks the stored choice.
+  // shapes a collection; everything else is D31's save. The STORED policy —
+  // `before`'s — is the rule; a policy the same save picks is one of its
+  // edits and lands for next time (schemeAfterOneOff carries it too). The
+  // caller's answer outranks the stored choice.
   const running = before.status !== "Draft" && schemeGenerationRecorded(before)
   const shaping = editChangesGeneration(before, after)
   const application: SchemeEditApplication | "ask" | null =
-    running && shaping ? (input.apply ?? schemeEditPolicy(after.submittedValues)) : null
-  const calendar = schemeGenerationCalendar(after, {
-    projects: related.projectRecords,
-    calendars: related.calendarRecords,
-  })
+    running && shaping ? (input.apply ?? schemeEditPolicy(before.submittedValues)) : null
+  // Each record is walked against its own project's calendar: a shaping edit
+  // may move the scheme to another project, whose weekend and holidays say
+  // nothing about where the stored scheme's next collection falls.
+  const calendarRecords = { projects: related.projectRecords, calendars: related.calendarRecords }
+  const beforeCalendar = schemeGenerationCalendar(before, calendarRecords)
+  const calendar = schemeGenerationCalendar(after, calendarRecords)
 
   if (validation.issues.length > 0) {
     if (application === "single") {
@@ -511,7 +544,10 @@ export function planSchemeEditReconciliation(
     const futureRoutes = futureRefreshableRoutes(after.id, today, related.existingRoutes)
     if (futureRoutes.length > 0) {
       const from = addDays(today, 1)
-      const nextDates = [nextCollectionDate(before, from, calendar), nextCollectionDate(validated, from, calendar)]
+      const nextDates = [
+        nextCollectionDate(before, from, beforeCalendar),
+        nextCollectionDate(validated, from, calendar),
+      ]
         .filter((date): date is string => date !== null)
         .sort()
       return {
@@ -534,7 +570,7 @@ export function planSchemeEditReconciliation(
 
   const single = application === "single"
   const window = single
-    ? thisCollectionWindow(today, before, validated, calendar)
+    ? thisCollectionWindow(today, before, validated, { stored: beforeCalendar, edited: calendar })
     : editReconciliationWindow(today, after.id, related.existingRoutes)
   const failed = (): SchemeEditReconciliationPlan => ({
     scheme: single ? schemeAfterOneOff(before, validated) : validated,
@@ -574,12 +610,7 @@ export function planSchemeEditReconciliation(
       application === "future"
         ? releaseThisCollectionOnly(after.id, related.existingRoutes)
         : single
-          ? related.existingRoutes.map((route) => {
-              const serviceDate = stringValueOf(route, "serviceDate")
-              return serviceDate && serviceDate >= window.from && serviceDate <= window.to
-                ? releaseThisCollectionOnly(after.id, [route], serviceDate)[0]
-                : route
-            })
+          ? releaseThisCollectionOnly(after.id, related.existingRoutes, window)
           : related.existingRoutes
     const plan = planSchemeGeneration({
       scheme: validated,
