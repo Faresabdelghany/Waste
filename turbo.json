@@ -29,6 +29,41 @@
         "SUPABASE_URL"
       ]
     },
+    "@waste/worker#dev": {
+      "cache": false,
+      "persistent": true,
+      "env": [
+        "HOST",
+        "PORT",
+        "WORKER_DATABASE_URL",
+        "DATABASE_URL"
+      ]
+    },
+    "@waste/web#dev": {
+      "cache": false,
+      "persistent": true,
+      "env": [
+        "WASTE_API_ORIGIN",
+        "NEXT_PUBLIC_WASTE_API_URL",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+      ]
+    },
+    "@waste/web#build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**"
+      ],
+      "env": [
+        "WASTE_API_ORIGIN",
+        "NEXT_PUBLIC_WASTE_API_URL",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+      ]
+    },
     "lint": {
       "dependsOn": [
         "^lint"
@@ -53,6 +88,18 @@
         "DATABASE_ADMIN_URL",
         "DATABASE_URL",
         "SUPABASE_URL",
+        "REQUIRE_DATABASE"
+      ]
+    },
+    "@waste/worker#test": {
+      "dependsOn": [
+        "^test"
+      ],
+      "cache": false,
+      "env": [
+        "DATABASE_ADMIN_URL",
+        "DATABASE_URL",
+        "WORKER_DATABASE_URL",
         "REQUIRE_DATABASE"
       ]
     },

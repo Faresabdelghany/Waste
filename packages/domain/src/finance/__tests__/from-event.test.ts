@@ -116,6 +116,14 @@ describe("billableFor a completed pickup", () => {
     // But no placement at all is a block, since the product is not known.
     assert.equal(billableFor(pickupEvent("pickup-completed", { placement: null }))?.action, "record")
   })
+
+  test("is nothing when the pickup no longer stands completed or already has a live event: a completion delivered late or twice charges once, and the correction that moved the pickup decides", () => {
+    for (const outcome of PICKUP_OUTCOMES.filter((candidate) => candidate !== "completed")) {
+      assert.equal(billableFor(pickupEvent("pickup-completed", { outcome })), undefined, `${outcome}: the correction's own event decides`)
+    }
+    assert.equal(billableFor(pickupEvent("pickup-completed", { liveEvent: live() })), undefined, "already charged for")
+    assert.equal(billableFor(pickupEvent("pickup-completed", { liveEvent: live({ price: null }) })), undefined, "a blocked live event is still the pickup's event")
+  })
 })
 
 describe("billableFor a corrected pickup", () => {
@@ -182,6 +190,14 @@ describe("billableFor a completed ticket", () => {
     const bare = billableFor(completedTicket({ agreement: { id: AGREEMENT, subscriptionId: null } }))
     assert.equal(bare?.action === "record" ? bare.draft.subscriptionId : undefined, null)
     assert.equal(bare?.action === "record" ? bare.draft.agreementId : undefined, AGREEMENT)
+  })
+
+  test("for a ticket reopened since its completion was published — no resolution, no closing day as the worker read the row — is nothing: stale news, never a failure, its next completion its own event", () => {
+    assert.equal(billableFor(completedTicket({ resolution: null, closedOn: null })), undefined)
+    // The two go together under `ticket_closed_shape`; either alone is still nothing, since a day cannot be billed without a resolution nor a resolution without a day.
+    assert.equal(billableFor(completedTicket({ resolution: null })), undefined)
+    assert.equal(billableFor(completedTicket({ closedOn: null })), undefined)
+    assert.equal(billableFor(completedTicket())?.action, "record", "and a ticket that stands completed records as before")
   })
 })
 

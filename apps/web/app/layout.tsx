@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { AppThemeProvider } from "@/components/app-theme-provider"
 import { ThemeBootstrapScript } from "@/components/theme-bootstrap-script"
 import { BusinessRecordStoreProvider } from "@/components/waste/business-record-store"
+import { ApiSessionProvider } from "@/components/waste/api-session-store"
 import { ActiveRoutesStoreProvider } from "@/components/waste/active-routes-store"
 import { OrganizationStoreProvider } from "@/components/settings/organization-store"
 import { AssetManagementStoreProvider } from "@/components/settings/asset-management-store"
@@ -55,19 +56,21 @@ export default function RootLayout({
       >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <AppThemeProvider>
-            <OrganizationStoreProvider>
-              <AssetManagementStoreProvider>
-                <CommercialRegistriesStoreProvider>
-                  <BusinessRecordStoreProvider>
-                    <ActiveRoutesStoreProvider>
-                      {children}
-                      <Analytics />
-                      <Toaster richColors closeButton />
-                    </ActiveRoutesStoreProvider>
-                  </BusinessRecordStoreProvider>
-                </CommercialRegistriesStoreProvider>
-              </AssetManagementStoreProvider>
-            </OrganizationStoreProvider>
+            <ApiSessionProvider>
+              <OrganizationStoreProvider>
+                <AssetManagementStoreProvider>
+                  <CommercialRegistriesStoreProvider>
+                    <BusinessRecordStoreProvider>
+                      <ActiveRoutesStoreProvider>
+                        {children}
+                        <Analytics />
+                        <Toaster richColors closeButton />
+                      </ActiveRoutesStoreProvider>
+                    </BusinessRecordStoreProvider>
+                  </CommercialRegistriesStoreProvider>
+                </AssetManagementStoreProvider>
+              </OrganizationStoreProvider>
+            </ApiSessionProvider>
           </AppThemeProvider>
         </ThemeProvider>
       </body>

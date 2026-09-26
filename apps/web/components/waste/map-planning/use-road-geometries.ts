@@ -6,54 +6,58 @@
 // the session and in the browser, a refusal is remembered for the session
 // so the demo server is not hammered, and a route whose road is pending or
 // refused is drawn straight and dashed by the map. Keyed by the stop
-// sequence, so two routes over the same stops share one request.
+// sequence, so two routes over the same stops share one request — and the
+// planning map's dated routes and the guided setup's drafted routes (Issue
+// #39) share one cache, since both are just stops in order. The cache itself
+// — one request per key however many consumers hold it, the abort when the
+// last one lets go, deferred a tick past React's development double-mount —
+// is lib/map-planning/road-geometry-cache.ts, tested there without React;
+// this hook holds the module's one instance for as long as it is mounted
+// with the routes it was given, and redraws when a road it asked for lands.
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import type { LngLat } from "@waste/domain/map-planning/geo"
 import {
   fetchRoadGeometry,
   parseRoadGeometryCache,
-  rememberRoadGeometry,
   roadGeometryKey,
   serializeRoadGeometryCache,
   type RoadGeometry,
 } from "@/lib/map-planning/road-geometry"
+import { createRoadGeometryCache, type RoadGeometryState } from "@/lib/map-planning/road-geometry-cache"
 import { readPersisted, ROAD_GEOMETRY_STORAGE_KEY } from "@/lib/storage-keys"
-import type { AreaRoute } from "@waste/domain/map-planning/routes"
 
-export type RoadGeometryState =
-  | { status: "pending" }
-  | { status: "ready"; geometry: RoadGeometry }
-  | { status: "failed" }
+export type { RoadGeometryState } from "@/lib/map-planning/road-geometry-cache"
 
-const MAX_IN_FLIGHT = 3
+/** Anything the road is asked for: a dated route's located stops, or a drafted route's preview stops. */
+export type RoadRoute = { id: string; stops: readonly { lngLat: LngLat }[] }
 
+/** The session's roads: seeded from the browser's store on the first mount, written back as each road lands. */
 const memory = new Map<string, RoadGeometry>()
-const refused = new Set<string>()
-const inFlight = new Map<string, Promise<void>>()
 let hydrated = false
 
-function hydrate() {
+const roads = createRoadGeometryCache({
+  fetchRoad: (stops, signal) => fetchRoadGeometry(stops, { signal }),
+  memory,
+  onRemembered: (remembered) => {
+    try {
+      globalThis.localStorage?.setItem(ROAD_GEOMETRY_STORAGE_KEY, serializeRoadGeometryCache(remembered))
+    } catch {
+      // Storage full or blocked — the session cache still works.
+    }
+  },
+})
+
+/** Reads the browser's store into the session once. In an effect, never in render: readPersisted may move a legacy key. */
+function hydrate(): void {
   if (hydrated) return
   hydrated = true
   try {
-    const cached = parseRoadGeometryCache(
-      readPersisted(globalThis.localStorage, ROAD_GEOMETRY_STORAGE_KEY),
-    )
-    for (const [key, geometry] of cached) {
-      memory.set(key, geometry)
-    }
+    const cached = parseRoadGeometryCache(readPersisted(globalThis.localStorage, ROAD_GEOMETRY_STORAGE_KEY))
+    for (const [key, geometry] of cached) memory.set(key, geometry)
   } catch {
     // No storage — the session cache still works.
-  }
-}
-
-function persist() {
-  try {
-    globalThis.localStorage?.setItem(ROAD_GEOMETRY_STORAGE_KEY, serializeRoadGeometryCache(memory))
-  } catch {
-    // Storage full or blocked — the session cache still works.
   }
 }
 
@@ -65,19 +69,8 @@ const noRoad = (stops: readonly LngLat[]): RoadGeometry => ({
   durationSeconds: 0,
 })
 
-export function useRoadGeometries(routes: readonly AreaRoute[]): ReadonlyMap<string, RoadGeometryState> {
+export function useRoadGeometries(routes: readonly RoadRoute[]): ReadonlyMap<string, RoadGeometryState> {
   const [version, setVersion] = useState(0)
-  const controllerRef = useRef<AbortController | null>(null)
-  const mountedRef = useRef(false)
-
-  useEffect(() => {
-    mountedRef.current = true
-    controllerRef.current = new AbortController()
-    return () => {
-      mountedRef.current = false
-      controllerRef.current?.abort()
-    }
-  }, [])
 
   const wanted = useMemo(() => {
     const byKey = new Map<string, readonly LngLat[]>()
@@ -89,37 +82,16 @@ export function useRoadGeometries(routes: readonly AreaRoute[]): ReadonlyMap<str
     return byKey
   }, [routes])
 
+  // Hold the wanted roads while these routes are shown; the release on the
+  // way out lets the cache abort a request nobody else holds. A road settled
+  // by the time the hold is taken — hydrated, or landed between render and
+  // effect — is redrawn once here, since the hold will not report it.
   useEffect(() => {
+    const bump = () => setVersion((current) => current + 1)
     hydrate()
-    const bump = () => {
-      if (mountedRef.current) setVersion((current) => current + 1)
-    }
-    // Roads already on their way (asked for by an earlier route set) redraw us when they land.
-    for (const [key] of wanted) inFlight.get(key)?.then(bump)
-    const queue = [...wanted].filter(([key]) => !memory.has(key) && !refused.has(key) && !inFlight.has(key))
-    const start = () => {
-      while (inFlight.size < MAX_IN_FLIGHT && queue.length > 0) {
-        const [key, stops] = queue.shift()!
-        const signal = controllerRef.current?.signal
-        const task = fetchRoadGeometry(stops, { signal })
-          .then(
-            (geometry) => {
-              rememberRoadGeometry(memory, key, geometry)
-              persist()
-            },
-            () => {
-              if (!signal?.aborted) refused.add(key)
-            },
-          )
-          .finally(() => {
-            inFlight.delete(key)
-            bump()
-            start()
-          })
-        inFlight.set(key, task)
-      }
-    }
-    start()
+    const release = roads.hold(wanted, bump)
+    if ([...wanted.keys()].some((key) => roads.stateOf(key).status !== "pending")) bump()
+    return release
   }, [wanted])
 
   return useMemo(() => {
@@ -128,11 +100,7 @@ export function useRoadGeometries(routes: readonly AreaRoute[]): ReadonlyMap<str
       routes.map((route): [string, RoadGeometryState] => {
         const stops = route.stops.map((stop) => stop.lngLat)
         if (stops.length < 2) return [route.id, { status: "ready", geometry: noRoad(stops) }]
-        const key = roadGeometryKey(stops)
-        const known = memory.get(key)
-        if (known) return [route.id, { status: "ready", geometry: known }]
-        if (refused.has(key)) return [route.id, { status: "failed" }]
-        return [route.id, { status: "pending" }]
+        return [route.id, roads.stateOf(roadGeometryKey(stops))]
       }),
     )
   }, [routes, version])

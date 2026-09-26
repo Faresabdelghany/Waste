@@ -9,6 +9,7 @@
 
 import { avalancheHash } from "@waste/domain/route-schemes/hash"
 import { simplifyPath, worldPoint, type LngLat } from "@waste/domain/map-planning/geo"
+import { COPENHAGEN_CENTER } from "@waste/domain/map-planning/positions"
 import type { Position } from "@waste/contracts/geojson"
 
 export const OSRM_BASE_URL = "https://router.project-osrm.org"
@@ -249,6 +250,44 @@ export function rememberRoadGeometry(
 
 /* ------------------------------- rendering ------------------------------- */
 
+/** Road paths are built once in world pixels at this zoom and moved by one group transform. */
+export const ROAD_REF_ZOOM = 16
+/** The origin every road path is local to — the city centre the maps open on. */
+export const ROAD_ORIGIN: LngLat = COPENHAGEN_CENTER
+/** A second fixed point: its screen distance from the origin gives the live scale. */
+const ROAD_PROBE: LngLat = { lng: ROAD_ORIGIN.lng + 0.01, lat: ROAD_ORIGIN.lat }
+const ROAD_PROBE_WORLD_DX = worldPoint(ROAD_PROBE, ROAD_REF_ZOOM).x - worldPoint(ROAD_ORIGIN, ROAD_REF_ZOOM).x
+
+export type ScreenPoint = { x: number; y: number }
+
+export type RoadOverlay = {
+  /** The SVG group transform that puts every road path on screen for the current camera. */
+  transform: string
+  /** Screen pixels per world pixel at ROAD_REF_ZOOM — 1 at that zoom, doubling per level. */
+  scale: number
+}
+
+/**
+ * The one transform the road overlay needs per frame: translate to the
+ * origin's screen position, scale by the ratio of the live zoom to the
+ * reference zoom, read off the probe's screen distance. Null until the map
+ * projects. Right only on a north-up, flat map — a rotated or pitched camera
+ * would need a full re-projection — which is why both maps keep rotation and
+ * pitch disabled.
+ */
+export function roadOverlay(project: (lngLat: LngLat) => ScreenPoint | null): RoadOverlay | null {
+  const origin = project(ROAD_ORIGIN)
+  const probe = project(ROAD_PROBE)
+  if (!origin || !probe) return null
+  const scale = (probe.x - origin.x) / ROAD_PROBE_WORLD_DX
+  return { transform: `translate(${origin.x} ${origin.y}) scale(${scale})`, scale }
+}
+
+/** The SVG path of a road in the overlay's own space — localPathData at ROAD_REF_ZOOM, relative to ROAD_ORIGIN. */
+export function roadOverlayPath(points: readonly LngLat[]): string {
+  return localPathData(points, ROAD_REF_ZOOM, ROAD_ORIGIN)
+}
+
 /**
  * An SVG path through `points` in web-mercator world pixels at `refZoom`,
  * relative to `origin` — the map draws it inside one group whose transform
@@ -267,7 +306,6 @@ export function localPathData(points: readonly LngLat[], refZoom: number, origin
     .join("")
 }
 
-export type ScreenPoint = { x: number; y: number }
 export type Chevron = { x: number; y: number; angle: number }
 
 const round2 = (value: number) => Math.round(value * 100) / 100

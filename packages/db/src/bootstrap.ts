@@ -1,7 +1,8 @@
-// The migrations create the two service roles NOLOGIN — the API role in the
-// foundation, the sync role in 0008 (Issue #104) — because a password does
-// not belong in a migration. Giving a role LOGIN and a password is a
-// per-environment step: `planLocalBootstrap` and `planSyncBootstrap` decide
+// The migrations create the three service roles NOLOGIN — the API role in the
+// foundation, the sync role in 0008 (Issue #104), the worker role in 0011
+// (Issue #97 part B) — because a password does not belong in a migration.
+// Giving a role LOGIN and a password is a per-environment step:
+// `planLocalBootstrap`, `planSyncBootstrap` and `planWorkerBootstrap` decide
 // it from the URLs and `grantLogin` does it, for the local stack and CI
 // (scripts/bootstrap-local.ts), and an operator runs the same ALTER ROLE once
 // on a hosted project. The password travels as a query parameter into a
@@ -9,7 +10,7 @@
 // inside the database, so no client-side quoting is involved.
 import { createDb } from "./client"
 import { isLocalHost } from "./local-host"
-import { API_ROLE, SYNC_ROLE } from "./roles"
+import { API_ROLE, SYNC_ROLE, WORKER_ROLE } from "./roles"
 
 export type GrantLoginOptions = {
   /** A plain identifier: lowercase letters, digits and underscores. */
@@ -75,3 +76,7 @@ export const planLocalBootstrap = ({ adminUrl, appUrl }: { adminUrl: string; app
 /** The sync role's login from `SYNC_DATABASE_URL` (Issue #104): the plan an environment with a PowerSync instance runs beside the API's. */
 export const planSyncBootstrap = ({ adminUrl, syncUrl }: { adminUrl: string; syncUrl: string }): LocalBootstrapPlan<typeof SYNC_ROLE> =>
   planLocalLogin({ adminUrl, url: syncUrl, role: SYNC_ROLE, variable: "SYNC_DATABASE_URL" })
+
+/** The worker role's login from `WORKER_DATABASE_URL` (Issue #97 part B): the plan an environment that runs `apps/worker` runs beside the API's. */
+export const planWorkerBootstrap = ({ adminUrl, workerUrl }: { adminUrl: string; workerUrl: string }): LocalBootstrapPlan<typeof WORKER_ROLE> =>
+  planLocalLogin({ adminUrl, url: workerUrl, role: WORKER_ROLE, variable: "WORKER_DATABASE_URL" })

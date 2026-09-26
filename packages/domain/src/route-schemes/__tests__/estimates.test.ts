@@ -1,23 +1,28 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { CLOSEOUT_MINUTES } from "../generation"
 import {
+  STOP_MINUTES,
   estimateLoad,
   estimateRoute,
+  estimateServiceMinutes,
   fallbackContainerWeight,
   fallbackContainerWeightKg,
+  formatKilometres,
   routeEstimateAdapter,
   formatMinutes,
   type ContainerWeightResolver,
 } from "../estimates"
 
 describe("estimateRoute", () => {
-  test("prototype coefficients: 381 stops → 43 km, 7 h 41 min", () => {
+  test("prototype coefficients: 381 stops → 43 km, 7 h 41 min, on the estimate basis", () => {
     const estimate = estimateRoute({ stops: 381, loadT: 3.8, capacityT: 10 })
     assert.equal(estimate.km, 43)
     assert.equal(formatMinutes(estimate.mins), "7 h 41 min")
     assert.equal(estimate.pct, 38)
     assert.equal(estimate.status, "within")
+    assert.equal(estimate.basis, "estimate")
   })
 
   test("verdict precedence: over capacity beats over shift beats tight", () => {
@@ -32,6 +37,60 @@ describe("estimateRoute", () => {
     assert.equal(estimate.pct, 0)
     assert.equal(estimate.overCapacity, false)
     assert.equal(estimate.capacityT, 0)
+  })
+
+  test("with the road: its distance to a tenth of a kilometre, its drive time plus the time at the stops plus the closeout", () => {
+    const routed = estimateRoute({
+      stops: 3,
+      loadT: 0.1,
+      capacityT: 10,
+      road: { distanceMetres: 12_340, durationSeconds: 1_800 },
+      serviceMinutes: 9,
+    })
+    assert.equal(routed.basis, "road")
+    assert.equal(routed.km, 12.3)
+    // 30 min of driving, 9 at the stops, and generation's 45 past the last stop.
+    assert.equal(CLOSEOUT_MINUTES, 45)
+    assert.equal(routed.mins, 84)
+    assert.equal(routed.status, "within")
+  })
+
+  test("the road basis charges the same closeout generation writes into a route's time window — a routed leg ends at the last stop", () => {
+    const bare = estimateRoute({ stops: 0, loadT: 0, capacityT: 10, road: { distanceMetres: 0, durationSeconds: 0 }, serviceMinutes: 0 })
+    assert.equal(bare.mins, CLOSEOUT_MINUTES)
+  })
+
+  test("without service minutes the road basis charges the allowance per stop; a null road is the estimate", () => {
+    const routed = estimateRoute({ stops: 4, loadT: 0, capacityT: 10, road: { distanceMetres: 0, durationSeconds: 600 } })
+    assert.equal(routed.mins, Math.round(10 + 4 * STOP_MINUTES + CLOSEOUT_MINUTES))
+    assert.equal(estimateRoute({ stops: 4, loadT: 0, capacityT: 10, road: null }).basis, "estimate")
+  })
+
+  test("the shift verdict reads the road's minutes", () => {
+    const long = estimateRoute({
+      stops: 2,
+      loadT: 1,
+      capacityT: 10,
+      road: { distanceMetres: 400_000, durationSeconds: 8 * 3600 },
+      serviceMinutes: 1,
+    })
+    assert.equal(long.overShift, true)
+    assert.equal(long.status, "over-shift")
+  })
+})
+
+describe("estimateServiceMinutes", () => {
+  test("sums the catalogue's emptying time per stop, the allowance where it has none", () => {
+    const containers = [
+      { containerType: "Two-wheel bin · 240 L" },
+      { containerType: "Two-wheel bin · 240 L" },
+      { containerType: "Igloo · 2,500 L" },
+      { containerType: undefined },
+    ]
+    const minutesFor = (type: string | undefined) => (type === "Two-wheel bin · 240 L" ? 2 : null)
+    assert.ok(Math.abs(estimateServiceMinutes(containers, minutesFor) - (4 + 2 * STOP_MINUTES)) < 1e-9)
+    assert.ok(Math.abs(estimateServiceMinutes(containers) - 4 * STOP_MINUTES) < 1e-9)
+    assert.equal(estimateServiceMinutes([]), 0)
   })
 })
 
@@ -83,17 +142,32 @@ describe("formatMinutes", () => {
   })
 })
 
+describe("formatKilometres", () => {
+  test("whole and decimal kilometres, a float sum rounded back to a tenth", () => {
+    assert.equal(formatKilometres(43), "43 km")
+    assert.equal(formatKilometres(12.3), "12.3 km")
+    assert.equal(formatKilometres(0.1 + 0.2), "0.3 km")
+    assert.equal(formatKilometres(1234.56), "1,234.6 km")
+  })
+})
+
 describe("routeEstimateAdapter", () => {
-  test("labels its numbers as estimates and delegates to the heuristics", () => {
-    assert.equal(routeEstimateAdapter.label, "Estimate")
+  test("labels each basis and delegates to the heuristics and the road alike", () => {
+    assert.deepEqual(routeEstimateAdapter.labels, { estimate: "Estimate", road: "Road" })
     assert.deepEqual(
       routeEstimateAdapter.route({ stops: 381, loadT: 3.8, capacityT: 10 }),
       estimateRoute({ stops: 381, loadT: 3.8, capacityT: 10 }),
+    )
+    const road = { distanceMetres: 5_000, durationSeconds: 600 }
+    assert.deepEqual(
+      routeEstimateAdapter.route({ stops: 3, loadT: 0.1, capacityT: 10, road, serviceMinutes: 6 }),
+      estimateRoute({ stops: 3, loadT: 0.1, capacityT: 10, road, serviceMinutes: 6 }),
     )
     assert.deepEqual(routeEstimateAdapter.load([], fallbackContainerWeight), {
       loadT: 0,
       fallbackWeight: false,
     })
+    assert.equal(routeEstimateAdapter.serviceMinutes([{ containerType: "x" }], () => 3), 3)
   })
 
   test("verdicts are information only — the estimate carries no blocking flag", () => {

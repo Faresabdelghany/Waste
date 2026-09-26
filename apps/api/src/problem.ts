@@ -6,6 +6,12 @@
 // that, and anything else that escapes a handler, into a response:
 //
 //   a ProblemError          → its own body and headers (a 401 carries WWW-Authenticate)
+//   a Refused               → the problem of its status: a shared write
+//                             statement (`@waste/db/commands/*`, which the
+//                             worker runs too and which therefore throws no
+//                             ProblemError) refused a rule — a 409 with its
+//                             sentence, or a 400 at the field the value came
+//                             in, the shape the validator's own 400s take
 //   one of Hono's own       → a problem of its status, the message as detail
 //   SQLSTATE 23505 or 23P01 → 409, since a key already taken and a period
 //                             already covered are the database errors a client
@@ -38,6 +44,8 @@
 import { STATUS_CODES } from "node:http"
 
 import { BLANK_PROBLEM_TYPE, PROBLEM_MEDIA_TYPE, Problem, type ProblemFieldError } from "@waste/contracts/problem"
+import { Refused } from "@waste/db/commands/shared"
+import { checkConstraintOf, EXCLUSION_VIOLATION, exclusionConstraintOf, sqlstate, UNIQUE_VIOLATION, uniqueConstraintOf } from "@waste/db/sqlstate"
 import type { ErrorHandler, NotFoundHandler } from "hono"
 import { HTTPException } from "hono/http-exception"
 import type { ClientErrorStatusCode, ServerErrorStatusCode } from "hono/utils/http-status"
@@ -108,66 +116,31 @@ export function problem(status: ProblemStatus, options: ProblemOptions = {}): Pr
   return new ProblemError(status, options)
 }
 
-// The SQLSTATEs with a meaning on the wire. Both are the database saying "a
-// row already there says otherwise", which is a 409 and not a 500: the
-// request was well-formed and would be fine against another key or another
-// period. A unique violation is two rows with the same key (23505); an
-// exclusion violation is two rows whose periods overlap (23P01, the Registry's
-// effective-dated tables, Issue #78). Everything else the database refuses is
-// ours to have prevented, so it is a 500 with the error logged.
-const UNIQUE_VIOLATION = "23505"
-const EXCLUSION_VIOLATION = "23P01"
-// A check violation (23514) is different news: the row is alone and its own
-// value will not do. Where the API could run the check itself it does, and
-// the caller reads a 400 before any write; where only the database can (the
-// Planning context's `st_isvalid` on a polygon, Issue #97), the route names
-// the constraint and reads it through `checkConstraintOf` to answer that same
-// 400 on the field (routes/shared.ts, `refuseCheck`). It is not in CONFLICTS
-// below: a check nobody foresaw is ours to have prevented, so it stays a 500,
-// which is the signal that a sentence is missing.
-const CHECK_VIOLATION = "23514"
+// The SQLSTATEs with a meaning on the wire, read through `@waste/db/sqlstate`
+// since Issue #109 part B, where the worker reads them too (a unique
+// violation on `ticket_source_event_id_idx` is an event handled before). Both
+// are the database saying "a row already there says otherwise", which is a
+// 409 and not a 500: the request was well-formed and would be fine against
+// another key or another period. A unique violation is two rows with the
+// same key (23505); an exclusion violation is two rows whose periods overlap
+// (23P01, the Registry's effective-dated tables, Issue #78). Everything else
+// the database refuses is ours to have prevented, so it is a 500 with the
+// error logged. A check violation (23514) is different news: the row is
+// alone and its own value will not do. Where the API could run the check
+// itself it does, and the caller reads a 400 before any write; where only
+// the database can (the Planning context's `st_isvalid` on a polygon, Issue
+// #97), the route names the constraint and reads it through
+// `checkConstraintOf` to answer that same 400 on the field (routes/shared.ts,
+// `refuseCheck`). It is not in CONFLICTS below: a check nobody foresaw is
+// ours to have prevented, so it stays a 500, which is the signal that a
+// sentence is missing. The three readers are re-exported under the names the
+// routes and their tests always used.
+export { checkConstraintOf, exclusionConstraintOf, uniqueConstraintOf }
 
 /** What a conflict says when no route foresaw it; the constraint's name is appended where Postgres gave one. */
 const CONFLICTS: Readonly<Record<string, string>> = {
   [UNIQUE_VIOLATION]: "A record with the same key already exists",
   [EXCLUSION_VIOLATION]: "A record overlapping this one already exists",
-}
-
-/** The SQLSTATE of a failed statement, through Drizzle's wrapper (`cause`) or straight from postgres.js. */
-function sqlstate(error: unknown): { code: string; constraint?: string } | undefined {
-  for (const candidate of [error, (error as { cause?: unknown } | null)?.cause]) {
-    if (typeof candidate !== "object" || candidate === null) continue
-    const { code, constraint_name: constraint } = candidate as { code?: unknown; constraint_name?: unknown }
-    if (typeof code === "string") return { code, ...(typeof constraint === "string" ? { constraint } : {}) }
-  }
-  return undefined
-}
-
-/** The constraint a failed statement names, when it failed this way and Postgres named one. */
-function constraintOf(error: unknown, code: string): string | undefined {
-  const failed = sqlstate(error)
-  return failed?.code === code ? failed.constraint : undefined
-}
-
-/**
- * The constraint a unique violation names, when that is what the error is and
- * Postgres named it. A route that can foresee a collision reads this and
- * answers a sentence of its own (routes/shared.ts), which keeps constraint
- * names off the wire; the mapping below stays the backstop for the ones
- * nobody foresaw.
- */
-export function uniqueConstraintOf(error: unknown): string | undefined {
-  return constraintOf(error, UNIQUE_VIOLATION)
-}
-
-/** The same for an exclusion violation: which `EXCLUDE USING gist` refused the period, for the route that foresaw it. */
-export function exclusionConstraintOf(error: unknown): string | undefined {
-  return constraintOf(error, EXCLUSION_VIOLATION)
-}
-
-/** The same for a check violation: which `CHECK` refused the value, for the route that foresaw it and could not run the check itself. */
-export function checkConstraintOf(error: unknown): string | undefined {
-  return constraintOf(error, CHECK_VIOLATION)
 }
 
 /** How far down a `cause` chain the projection below goes; Drizzle wraps postgres.js, which wraps nothing. */
@@ -198,6 +171,21 @@ export function loggable(error: unknown, depth: number = LOG_CAUSE_DEPTH): unkno
 }
 
 /**
+ * The problem a shared write statement's refusal answers (Issue #109 part B):
+ * a 409 with the sentence, or — for a value the body carried that will not
+ * do — the 400 `invalidRequest` answers, one error at the field the value
+ * came in, so a client reads the same shape whether a route or a statement
+ * both processes run noticed. The statements throw `Refused` and never a
+ * `ProblemError`, since the worker runs them too and has no response to put
+ * one in.
+ */
+export function refusedProblem(error: Refused): ProblemError {
+  return error.status === 400 ? invalidRequest("body", [{ path: error.path ?? "", message: error.message }]) : problem(error.status, { detail: error.message })
+}
+
+const refusedResponse = (error: Refused): Response => refusedProblem(error).getResponse()
+
+/**
  * Hono's error handler: the mapping in the header. `log` receives what became
  * a 500, as the projection above; console.error unless the composition root
  * or a test says otherwise.
@@ -205,6 +193,7 @@ export function loggable(error: unknown, depth: number = LOG_CAUSE_DEPTH): unkno
 export function errorHandler(log: (error: unknown) => void = console.error): ErrorHandler {
   return (error) => {
     if (error instanceof ProblemError) return error.getResponse()
+    if (error instanceof Refused) return refusedResponse(error)
     if (error instanceof HTTPException) {
       return problemResponse(isProblemStatus(error.status) ? error.status : 500, error.message === "" ? {} : { detail: error.message })
     }

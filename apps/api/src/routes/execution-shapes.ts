@@ -18,8 +18,9 @@
 //
 // The route's `label` is `routeLabel(number)`, the contracts' one spelling of
 // `RC-1042`, and every sentence of the four modules names a route by it.
-// `generationRunId` is null throughout: the column arrives with #97 B's
-// `generation_run` table and its key, and until then no route carries one.
+// `generationRunId` is the column since migration 0012 (#97 part B): the run
+// that last wrote the route, null on one no run has — every route of part A's
+// fixtures, and any the office will one day make by hand.
 import type { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import { routeLabel } from "@waste/contracts/execution"
 import type { WeightReviewState } from "@waste/contracts/finance"
@@ -61,6 +62,7 @@ export const routeColumns = {
   status: route.status,
   note: route.note,
   cancelledByGeneration: route.cancelledByGeneration,
+  generationRunId: route.generationRunId,
   plannedStartTime: route.plannedStartTime,
   plannedVehicleId: route.plannedVehicleId,
   plannedDriverId: route.plannedDriverId,
@@ -98,7 +100,7 @@ export function routeOf(row: RouteRow, progress: RouteProgress): Route {
     status: row.status as RouteStatus,
     note: row.note,
     cancelledByGeneration: row.cancelledByGeneration,
-    generationRunId: null,
+    generationRunId: row.generationRunId,
     plannedStartTime: row.plannedStartTime === null ? null : timeOf(row.plannedStartTime),
     planned: {
       vehicleId: row.plannedVehicleId,

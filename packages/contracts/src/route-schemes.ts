@@ -239,7 +239,7 @@ const RouteSchemeFields = {
   /** A time on the project's clock; carried, not used in the date math. */
   plannedStartTime: IsoTime.nullable(),
   holidayPolicy: HolidayPolicy,
-  /** Stored so the choice survives; nothing consumes it yet (#38). */
+  /** How a later edit of the running scheme applies (#38): ask each time, apply to future collections, or this collection only. */
   editPolicy: SchemeEditPolicy,
   /** Whether the nightly job keeps the coming week planned. */
   planAhead: z.boolean(),
@@ -267,7 +267,7 @@ export const RouteSchemeCreate = z
     weekRotation: WeekRotation.nullable().optional(),
     plannedStartTime: IsoTime.nullable().optional(),
     holidayPolicy: HolidayPolicy.default("skip").describe("Defaults to skip when absent: a collection on a holiday is dropped."),
-    editPolicy: SchemeEditPolicy.default("ask").describe("Defaults to ask when absent; stored, consumed by nothing yet."),
+    editPolicy: SchemeEditPolicy.default("ask").describe("Defaults to ask when absent: an edit of the running scheme asks whether it applies to every future collection or to the next one only."),
     planAhead: z.boolean().default(true).describe("Defaults to true when absent: the nightly job keeps the coming week planned."),
     status: RouteSchemeStatus.default("draft").describe("Defaults to draft when absent: a draft accepts partial configuration, a validated scheme is held to the structural rules."),
     /** A depot of the project (Issue #101). */

@@ -1,3 +1,8 @@
+import {
+  DEFAULT_SCHEME_EDIT_POLICY,
+  SCHEME_EDIT_POLICIES,
+  SCHEME_EDIT_POLICY_LABELS,
+} from "@waste/domain/route-schemes/creation"
 import { LICENCE_CLASSES } from "@waste/domain/route-schemes/fleet-profiles"
 import { CONTAINER_TYPE_VOCABULARY } from "@waste/domain/route-schemes/matching"
 import { SCHEME_SERVICE_TYPES, allowedContainerTypes } from "@waste/domain/route-schemes/scope"
@@ -17,6 +22,12 @@ const LICENCE_CLASS_OPTIONS: readonly BusinessFormOption[] = LICENCE_CLASSES.map
 
 /** An option whose label is its value — the display vocabularies are stored as shown. */
 const labelOption = (value: string): BusinessFormOption => ({ value, label: value })
+
+/** "Changes to a running scheme" (issue #38): the domain's three policies, in its order, each labelled as the wizard labels it. */
+const SCHEME_EDIT_POLICY_OPTIONS: readonly BusinessFormOption[] = SCHEME_EDIT_POLICIES.map((value) => ({
+  value,
+  label: SCHEME_EDIT_POLICY_LABELS[value],
+}))
 
 /**
  * The waste fractions the quick scheme form offers (issue #43) — the fixture
@@ -1189,6 +1200,21 @@ export const operationsBusinessFormSchemas = [
             label: "Unloading station",
             type: "select",
             relation: { workspaceId: "resources", moduleId: "depots" },
+          },
+          {
+            // Guided Setup's step 5 choice (issue #38): how an edit of the
+            // running scheme applies — asked each time, to every future
+            // collection, or to the next collection only. The edit-save
+            // planner (@waste/domain/route-schemes/edit) reads it off the
+            // stored record, and the edit dialog changes it here too.
+            id: "editPolicy",
+            label: "Changes to a running scheme",
+            type: "select",
+            required: true,
+            defaultValue: DEFAULT_SCHEME_EDIT_POLICY,
+            description:
+              "How an edit applies once the scheme has generated routes: asked each time, to every future collection, or to the next collection only.",
+            options: SCHEME_EDIT_POLICY_OPTIONS,
           },
         ],
       },

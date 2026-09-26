@@ -90,7 +90,7 @@ export type GenerateOccurrencesInput = {
 
 export type OccurrencePreview = {
   rows: Occurrence[]
-  /** No effective-to: the preview covers 12 months from effective-from. */
+  /** No effective-to: the preview covers PREVIEW_HORIZON_MONTHS from effective-from. */
   ongoing: boolean
   /** Last date the preview covers; null when the window is unusable. */
   horizon: string | null
@@ -98,6 +98,10 @@ export type OccurrencePreview = {
   count: number
 }
 
+/**
+ * How far an open-ended preview reaches from its start, in months. Exported
+ * so the copy that names the span ("the next 12 months") spells it once.
+ */
 export const PREVIEW_HORIZON_MONTHS = 12
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -215,17 +219,25 @@ const EMPTY = (ongoing: boolean, horizon: string | null): OccurrencePreview => (
 
 /**
  * The guided setup's next-dates table: generateOccurrences over the scheme's
- * effective window, or over 12 months from effective-from when open-ended.
+ * effective window, or over PREVIEW_HORIZON_MONTHS from effective-from when
+ * open-ended. `from` (today, for a simulation of a scheme that already runs)
+ * starts the walk later than the effective-from — never earlier — and an
+ * open-ended horizon follows it.
  */
-export function occurrencePreview(input: OccurrencePreviewInput): OccurrencePreview {
+export function occurrencePreview(input: OccurrencePreviewInput, from?: string): OccurrencePreview {
   const { recurrence, holidayPolicy, calendar } = input
-  const from = recurrence.effectiveFrom
   const ongoing = !recurrence.effectiveTo
-  if (!isIsoDate(from) || recurrence.serviceDays.length === 0) return EMPTY(ongoing, null)
-  const to = ongoing ? addMonths(from, PREVIEW_HORIZON_MONTHS) : recurrence.effectiveTo
-  if (!isIsoDate(to) || to < from) return EMPTY(ongoing, isIsoDate(to) ? to : null)
+  if (!isIsoDate(recurrence.effectiveFrom) || recurrence.serviceDays.length === 0) {
+    return EMPTY(ongoing, null)
+  }
+  const start =
+    from !== undefined && isIsoDate(from) && from > recurrence.effectiveFrom
+      ? from
+      : recurrence.effectiveFrom
+  const to = ongoing ? addMonths(start, PREVIEW_HORIZON_MONTHS) : recurrence.effectiveTo
+  if (!isIsoDate(to) || to < start) return EMPTY(ongoing, isIsoDate(to) ? to : null)
 
-  const rows = generateOccurrences({ recurrence, window: { from, to }, holidayPolicy, calendar })
+  const rows = generateOccurrences({ recurrence, window: { from: start, to }, holidayPolicy, calendar })
   return {
     rows,
     ongoing,

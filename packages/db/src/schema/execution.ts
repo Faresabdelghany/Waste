@@ -25,8 +25,9 @@
 // had done, since cancelling an active route is evidence and not erasure —
 // and `route_actual_shape` says a route that started has the driver, the
 // vehicle and, where one went out, the trailer that started it, and one that
-// did not has none. `generation_run_id` is not here: it arrives with
-// `generation_run` in #97 B's file, with its key.
+// did not has none. `generation_run_id` arrived with `generation_run` in #97
+// B's file, migration 0012, with its key: the run that last wrote the route,
+// null on a route no run has written.
 //
 // `pickup` carries the place and the fraction on the service date as keys
 // (#104 §7.11): a placement that moves next month must not move a pickup
@@ -107,6 +108,7 @@ import { id, projectScoped, recorded, timestamps } from "./columns"
 import { container } from "./containers"
 import { property, sharedCollectionPoint } from "./customers"
 import { driver, vehicle } from "./fleet"
+import { generationRun } from "./generation"
 import { geometry, validGeometry } from "./geometry"
 import { company, project, serviceProvider } from "./organisation"
 import { depot, unloadingStation } from "./places"
@@ -133,6 +135,8 @@ export const route = wms.table(
     cancelledByGeneration: boolean().notNull().default(false),
     /** The deviation note: the holiday note, the regeneration sentence, or the dispatcher's cancel reason. */
     note: text(),
+    /** The generation run that last wrote the route (#97 part B, migration 0012); null on a route no run has written. */
+    generationRunId: uuid(),
     /** The display number, `RC-1042` on the wire; from the company's counter, never renumbered. */
     number: integer().notNull(),
     /** Copied from the scheme at creation; a time on the project's clock. */
@@ -169,6 +173,7 @@ export const route = wms.table(
     projectReference(t, [t.actualVehicleId], vehicle),
     projectReference(t, [t.actualTrailerId], vehicle),
     projectReference(t, [t.actualDriverId], driver),
+    projectReference(t, [t.generationRunId], generationRun),
     // ADR-0002's identity: one route per scheme, group and service date. Named for what it is, the way #97 spelled it.
     unique(tableObjectName(t.companyId.table, "generation_key", "route")).on(t.companyId, t.routeSchemeId, t.collectionGroupId, t.serviceDate),
     tenantUnique(t, t.number),
@@ -196,6 +201,7 @@ export const route = wms.table(
     tenantIndex(t, t.unloadingStationId),
     tenantIndex(t, t.actualVehicleId),
     tenantIndex(t, t.actualTrailerId),
+    tenantIndex(t, t.generationRunId),
   ],
 )
 

@@ -2,7 +2,12 @@
 // opens with. The frequency options are the product's four cadences mapped
 // onto the engine's (frequency, weekRotation) pair.
 
-import { SCHEME_CREATE_AS_LABELS } from "@waste/domain/route-schemes/creation"
+import {
+  DEFAULT_SCHEME_EDIT_POLICY,
+  SCHEME_CREATE_AS_LABELS,
+  SCHEME_EDIT_POLICIES,
+  SCHEME_EDIT_POLICY_LABELS,
+} from "@waste/domain/route-schemes/creation"
 import { HOLIDAY_POLICIES, HOLIDAY_POLICY_LABELS } from "@waste/domain/route-schemes/occurrences"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { SCHEME_SERVICE_TYPES } from "@waste/domain/route-schemes/scope"
@@ -88,7 +93,13 @@ export const CREATE_AS_OPTIONS: readonly SelectOption[] = Object.entries(SCHEME_
   ([value, label]) => ({ value, label }),
 )
 
-/** A blank draft: today as effective-from, weekly, 06:30, holidays skipped. */
+/** "Changes to a running scheme" (issue #38), in the vocabulary's order: ask, future, single. */
+export const EDIT_POLICY_OPTIONS: readonly SelectOption[] = SCHEME_EDIT_POLICIES.map((value) => ({
+  value,
+  label: SCHEME_EDIT_POLICY_LABELS[value],
+}))
+
+/** A blank draft: today as effective-from, weekly, 06:30, holidays skipped, edits asked about. */
 export function initialSchemeDraft(): GuidedSchemeData {
   return {
     schemeName: "",
@@ -102,6 +113,7 @@ export function initialSchemeDraft(): GuidedSchemeData {
     plannedStartTime: "06:30",
     holidayPolicy: "skip",
     createAs: "validated",
+    editPolicy: DEFAULT_SCHEME_EDIT_POLICY,
     groups: [],
   }
 }

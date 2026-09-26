@@ -8,6 +8,7 @@ import {
   BUSINESS_RECORDS_STORAGE_KEY,
   LEGACY_STORAGE_KEYS,
   READ_PERSISTED_SOURCE,
+  STORAGE_KEYS_WITHOUT_A_LEGACY_NAME,
   persistedKeys,
   readPersisted,
 } from "../storage-keys"
@@ -137,19 +138,32 @@ describe("the key map", () => {
     }
   })
 
-  test("every exported key constant has an entry", () => {
+  test("every exported key constant has an entry, or is listed as born without a legacy name", () => {
     const exported = Object.entries(storageKeys).filter(([name]) =>
       name.endsWith("_STORAGE_KEY"),
     )
-    // A twelfth key added without a legacy entry fails here rather than
-    // silently reading nothing on a browser that holds the old one.
-    assert.equal(exported.length, Object.keys(LEGACY_STORAGE_KEYS).length)
+    // A key added without a legacy entry and without being listed as needing
+    // none fails here rather than silently reading nothing on a browser that
+    // holds the old one.
+    assert.equal(
+      exported.length,
+      Object.keys(LEGACY_STORAGE_KEYS).length + STORAGE_KEYS_WITHOUT_A_LEGACY_NAME.length,
+    )
     for (const [name, key] of exported) {
       assert.equal(typeof key, "string", `${name} is not a key string`)
       assert.ok(
-        Object.prototype.hasOwnProperty.call(LEGACY_STORAGE_KEYS, key as string),
-        `${name} (${String(key)}) has no LEGACY_STORAGE_KEYS entry`,
+        Object.prototype.hasOwnProperty.call(LEGACY_STORAGE_KEYS, key as string) ||
+          STORAGE_KEYS_WITHOUT_A_LEGACY_NAME.includes(key as string),
+        `${name} (${String(key)}) has no LEGACY_STORAGE_KEYS entry and is not listed as born without one`,
       )
+    }
+  })
+
+  test("a key born without a legacy name carries the working name and has no legacy entry", () => {
+    for (const key of STORAGE_KEYS_WITHOUT_A_LEGACY_NAME) {
+      assert.ok(key.startsWith("waste-") || key.startsWith("waste."), `${key} does not carry the working name`)
+      assert.ok(!Object.prototype.hasOwnProperty.call(LEGACY_STORAGE_KEYS, key), `${key} is listed both ways`)
+      assert.deepEqual(persistedKeys(key), [key])
     }
   })
 

@@ -5,6 +5,7 @@ import { danishHolidayName } from "../holiday-names"
 import { holidayListFromDates } from "../holidays"
 import {
   NO_HOLIDAYS,
+  PREVIEW_HORIZON_MONTHS,
   addMonths,
   formatClockTime,
   formatOccurrenceDate,
@@ -229,6 +230,35 @@ describe("occurrencePreview — window edge cases", () => {
       preview.rows.map((row) => row.date),
       ["2026-10-13", "2026-11-10", "2026-12-08"],
     )
+  })
+
+  test("a later `from` (today) starts the walk there and carries an open-ended horizon with it", () => {
+    const fromToday = occurrencePreview({ recurrence: weekdays, holidayPolicy: "skip", calendar }, "2026-12-21")
+    assert.equal(fromToday.rows[0]?.date, "2026-12-21")
+    assert.equal(fromToday.horizon, addMonths("2026-12-21", PREVIEW_HORIZON_MONTHS))
+    // The cadence keeps its anchor: every 4 weeks from Wed 16 Sep still lands
+    // on the same Tuesdays when read from a later date.
+    const anchored = occurrencePreview(
+      {
+        recurrence: { frequency: "every-4-weeks", serviceDays: ["tuesday"], effectiveFrom: "2026-09-16", effectiveTo: "2026-12-31" },
+        holidayPolicy: "skip",
+        calendar,
+      },
+      "2026-11-01",
+    )
+    assert.deepEqual(anchored.rows.map((row) => row.date), ["2026-11-10", "2026-12-08"])
+    assert.equal(anchored.horizon, "2026-12-31")
+    // A `from` before the start, or not a date, leaves the preview as it was.
+    const untouched = occurrencePreview({ recurrence: weekdays, holidayPolicy: "skip", calendar })
+    assert.deepEqual(occurrencePreview({ recurrence: weekdays, holidayPolicy: "skip", calendar }, "2026-01-01"), untouched)
+    assert.deepEqual(occurrencePreview({ recurrence: weekdays, holidayPolicy: "skip", calendar }, ""), untouched)
+    // Past the effective-to there is nothing left.
+    const over = occurrencePreview(
+      { recurrence: { ...weekdays, effectiveTo: "2026-12-23" }, holidayPolicy: "skip", calendar },
+      "2027-01-04",
+    )
+    assert.equal(over.rows.length, 0)
+    assert.equal(over.horizon, "2026-12-23")
   })
 })
 

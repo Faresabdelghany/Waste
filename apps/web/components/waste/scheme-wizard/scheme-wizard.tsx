@@ -3,8 +3,10 @@
 // Route Studio › Route Schemes › Create route scheme › Guided setup
 // (2026-09-16 redesign). A large shadcn Dialog with a five-step rail; every
 // step derives what it shows from one model (wizard-model.ts) built over the
-// draft and the live records. Completion hands the draft to onCreate, which
-// owns record creation.
+// draft and the live records. Step 2 carries the next-dates View all dialog
+// and the occurrence simulation, step 5 the What changed diff against the
+// draft the person last reviewed (Issue #40). Completion hands the draft to
+// onCreate, which owns record creation.
 
 import { useCallback, useMemo, useState } from "react"
 import { Check, ChevronLeft, ChevronRight } from "lucide-react"
@@ -58,6 +60,10 @@ export function SchemeWizard({
     ...initialSchemeDraft(),
     ...initialData,
   }))
+  // The What changed baselines (step 5): the draft the wizard opened with,
+  // and the draft as it stood when the person last left the review step.
+  const [initial] = useState<GuidedSchemeData>(data)
+  const [reviewed, setReviewed] = useState<GuidedSchemeData | null>(null)
   const [conflictOpen, setConflictOpen] = useState(false)
 
   const records = useWizardRecords()
@@ -68,6 +74,7 @@ export function SchemeWizard({
   }, [])
 
   const setStep = (target: WizardStepId) => {
+    if (step === 5 && target !== 5) setReviewed(data)
     setStepRaw(target)
     setMaxStep((reached) => (target > reached ? target : reached))
   }
@@ -166,7 +173,15 @@ export function SchemeWizard({
             )}
             {step === 4 && <StepRouteMap data={data} model={model} records={records} />}
             {step === 5 && (
-              <StepReview data={data} update={update} model={model} records={records} go={setStep} />
+              <StepReview
+                data={data}
+                update={update}
+                model={model}
+                records={records}
+                go={setStep}
+                initial={initial}
+                reviewed={reviewed}
+              />
             )}
           </div>
           <footer className="flex items-center justify-between gap-3 border-t border-border px-8 py-5">

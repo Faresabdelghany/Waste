@@ -2,9 +2,14 @@
 // pure function: the recurrence and next dates, the resolved collection
 // groups with their estimates, the step-3 issues (product rules plus the
 // engine's remaining blocking issues), the gates, and the rail summaries.
-// Steps render this; nothing here touches React or the store.
+// Steps render this; nothing here touches React or the store. The one thing
+// the model cannot know is the road: a routed route's numbers come from
+// `routesOn(day, roads)`, which re-estimates each route over the road the
+// step fetched for it (Issue #39) — the estimate's basis says which it got.
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
+import { FIXTURE_GAZETTEER } from "@/lib/data/street-gazetteer"
+import { routePreview, type RoutePreview } from "@waste/domain/map-planning/route-preview"
 import {
   resolveProjectCalendar,
   schemeCalendarOf,
@@ -12,6 +17,7 @@ import {
 } from "@waste/domain/route-schemes/project-calendar"
 import {
   draftGroups,
+  draftOccurrenceInput,
   draftRecurrence,
   resolvedDraftGroups,
   validateGuidedScheme,
@@ -20,6 +26,7 @@ import {
   routeEstimateAdapter,
   type ContainerWeightResolver,
   type RouteEstimate,
+  type RouteMeasure,
 } from "@waste/domain/route-schemes/estimates"
 import type { DriverProfile, VehicleProfile } from "@waste/domain/route-schemes/fleet-profiles"
 import {
@@ -43,6 +50,8 @@ import {
   formatClockTime,
   occurrencePreview,
   type OccurrencePreview,
+  type OccurrencePreviewInput,
+  type SchemeCalendar,
 } from "@waste/domain/route-schemes/occurrences"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import {
@@ -77,7 +86,14 @@ export type WizardRoute = {
   plan: CollectionGroupDayPlan
   estimate: RouteEstimate
   loadT: number
+  /** Where the route's stops are — depot, containers in generation's order, station — for the map and the road. */
+  preview: RoutePreview
+  /** The id the road is asked for under: one group on one day. */
+  routeId: string
 }
+
+/** The road each route was answered with, by `WizardRoute.routeId`; a route not in the map has none yet. */
+export type RouteRoads = ReadonlyMap<string, RouteMeasure | null>
 
 export type WizardIssue = {
   kind: GroupCheckKind | "engine"
@@ -89,11 +105,16 @@ export type WizardIssue = {
 export type WizardModel = {
   /** The project's calendar — holiday list (null when it has none) and weekend — the next dates are judged against. */
   calendar: ProjectCalendar
+  /** The same calendar as generateOccurrences takes it — what a step 2 simulation judges its candidate against. */
+  schemeCalendar: SchemeCalendar
   recurrence: SchemeRecurrence | null
+  /** What the draft hands generateOccurrences; null while it has no recurrence. The preview and a simulation's current side read it. */
+  occurrenceInput: OccurrencePreviewInput | null
   occurrences: OccurrencePreview
   resolution: CollectionGroupResolution
   groups: WizardGroupSummary[]
-  routesOn: (day: ServiceDay) => WizardRoute[]
+  /** The day's routes; with `roads`, each route the road answered for is estimated over it. */
+  routesOn: (day: ServiceDay, roads?: RouteRoads) => WizardRoute[]
   issues: WizardIssue[]
   validation: SchemeValidationResult
   totalContainers: number
@@ -114,9 +135,14 @@ export function groupColor(index: number): string {
   return SCHEME_GROUP_COLORS[index % SCHEME_GROUP_COLORS.length]
 }
 
+/** The id a drafted route's road is asked for under. */
+export const wizardRouteId = (groupId: string, day: ServiceDay) => `${groupId}\u0001${day}`
+
 export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords): WizardModel {
   const nameOf = (list: readonly BusinessRecord[], id: string | undefined) =>
     id ? list.find((record) => record.id === id)?.name : undefined
+  const recordOf = (list: readonly BusinessRecord[], id: string | undefined) =>
+    id ? (list.find((record) => record.id === id) ?? null) : null
   // The calendar follows the project (holiday model 2026-09-16, round 3):
   // its explicit holiday list, read from the per-year calendar records scoped
   // to it, and its weekend — one input. No list = every date is a working
@@ -127,12 +153,10 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
   })
   const recurrence = draftRecurrence(data)
   const serviceDays = sortServiceDays(data.serviceDays)
-  const occurrences = recurrence
-    ? occurrencePreview({
-        recurrence,
-        holidayPolicy: data.holidayPolicy,
-        calendar: schemeCalendarOf(calendar),
-      })
+  const schemeCalendar = schemeCalendarOf(calendar)
+  const occurrenceInput = draftOccurrenceInput(data, schemeCalendar)
+  const occurrences = occurrenceInput
+    ? occurrencePreview(occurrenceInput)
     : { rows: [], ongoing: !data.effectiveTo, horizon: null, count: 0 }
 
   const vehicles = new Map(records.vehicleProfiles.map((profile) => [profile.id, profile]))
@@ -149,6 +173,8 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
 
   const resolution = resolvedDraftGroups(data, records.containers)
   const projectIds = data.projectId ? [data.projectId] : undefined
+  const depot = recordOf(records.depots, data.depotId)
+  const station = recordOf(records.stations, data.unloadingStationId)
 
   // Groups inherit the scheme's waste fraction (step 1) — one source of truth.
   const groups: WizardGroupSummary[] = draftGroups(data).map((group, index) => {
@@ -190,23 +216,50 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
   })
   const summaryById = new Map(groups.map((summary) => [summary.group.id, summary]))
 
-  const routesOn = (day: ServiceDay): WizardRoute[] =>
+  // Each day plan's preview once: the stops do not move between renders, the road does.
+  const previews = new Map<string, RoutePreview>()
+  const previewOf = (plan: CollectionGroupDayPlan): RoutePreview => {
+    const id = wizardRouteId(plan.groupId, plan.day)
+    let preview = previews.get(id)
+    if (!preview) {
+      preview = routePreview({
+        containerIds: plan.containerIds,
+        containers: records.containers,
+        depot,
+        station,
+        gazetteer: FIXTURE_GAZETTEER,
+      })
+      previews.set(id, preview)
+    }
+    return preview
+  }
+
+  const routesOn = (day: ServiceDay, roads?: RouteRoads): WizardRoute[] =>
     resolution.plans
       .filter((plan) => plan.day === day)
       .flatMap((plan) => {
         const summary = summaryById.get(plan.groupId)
         if (!summary) return []
-        const { loadT } = routeEstimateAdapter.load(profilesOf(plan.containerIds), records.weightKg)
+        const stopProfiles = profilesOf(plan.containerIds)
+        const { loadT } = routeEstimateAdapter.load(stopProfiles, records.weightKg)
+        const routeId = wizardRouteId(plan.groupId, day)
+        const road = roads?.get(routeId) ?? null
         return [
           {
             day,
             summary,
             plan,
             loadT,
+            preview: previewOf(plan),
+            routeId,
             estimate: routeEstimateAdapter.route({
               stops: plan.containerIds.length,
               loadT,
               capacityT: summary.vehicle?.capacityT,
+              road,
+              serviceMinutes: road
+                ? routeEstimateAdapter.serviceMinutes(stopProfiles, records.stopMinutes)
+                : undefined,
             }),
           },
         ]
@@ -278,7 +331,9 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
 
   return {
     calendar,
+    schemeCalendar,
     recurrence,
+    occurrenceInput,
     occurrences,
     resolution,
     groups,

@@ -1,0 +1,11 @@
+{
+  // The worker is a Node process (run through tsx, see package.json): Node's
+  // types from the base config, ECMAScript only, no DOM.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["esnext"],
+    "target": "es2022",
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"]
+}

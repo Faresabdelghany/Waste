@@ -50,7 +50,7 @@ export type WeekRotation = z.infer<typeof WeekRotation>
 export const HolidayPolicy = z.enum(HOLIDAY_POLICIES)
 export type HolidayPolicy = z.infer<typeof HolidayPolicy>
 
-/** How a later edit of a scheme with generated routes applies; stored, consumed by nothing yet (#38). */
+/** How a later edit of a scheme with generated routes applies: ask each time, apply to future collections, or this collection only (#38). */
 export const SchemeEditPolicy = z.enum(SCHEME_EDIT_POLICIES)
 export type SchemeEditPolicy = z.infer<typeof SchemeEditPolicy>
 

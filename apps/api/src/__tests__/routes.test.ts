@@ -170,7 +170,7 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
       assert.deepEqual([detail.sessions[0].id, detail.sessions[0].driverId, detail.sessions[0].vehicleId, detail.sessions[0].endedAt], [ex.routes.completed.sessionId, fleet.drivers.mads.id, fleet.vehicles.wh24.id, at(ex.day, "13:00").toISOString()])
       assert.deepEqual(detail.unloads, [])
       assert.deepEqual([detail.dispatchedAt, detail.startedAt, detail.completedAt, detail.cancelledAt], [at(ex.day, "05:30").toISOString(), at(ex.day, "06:00").toISOString(), at(ex.day, "13:00").toISOString(), null])
-      assert.equal(detail.generationRunId, null, "#97 B's column is not here yet")
+      assert.equal(detail.generationRunId, null, "a route the fixtures wrote by hand names no run (#97 B's column, since 0012)")
 
       const active = await fresh({ status: "active", ...mads(), paused: true })
       const running = await read(active.id)

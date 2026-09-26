@@ -16,8 +16,11 @@
 // reference every context before it, and which the Registry's agreements.ts
 // imports back for the list an agreement is priced under, a cycle drizzle
 // tolerates since every reference is read inside a table's extra-config
-// callback and never at a module's top level. What is exported here is what
-// `pnpm db:generate` sees and what the hand-written gate
+// callback and never at a module's top level — then Generation (Issue #97
+// part B, migration 0012), one file of two tables that reference Planning's
+// scheme and group, and whose run Execution's `route` names back, which is
+// an import in execution.ts and no reordering here. What is exported here is
+// what `pnpm db:generate` sees and what the hand-written gate
 // (__tests__/hand-written.test.ts) holds to its fence and trigger, or to its
 // fence and revoke for a ledger.
 export * from "./wms"
@@ -38,3 +41,4 @@ export * from "./allocations"
 export * from "./execution"
 export * from "./resolution"
 export * from "./finance"
+export * from "./generation"

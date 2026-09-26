@@ -1,0 +1,31 @@
+{
+  "name": "@waste/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The pg-boss worker (Issue #97 part B, ADR-0007): the second Node process on the database, on which the jobs the contexts owe run — Planning's generation and its nightly plan-ahead, Execution's outbox relay, Resolution's and Finance's consumers of it. This package is the process and the registry the jobs plug into: pg-boss 12 booted on the worker role's session connection with `migrate: false` (the owner installed schema `pgboss` in migration 0011), every job of `src/jobs/index.ts` given its queue, its worker and, where it recurs, its cron schedule; GET /healthz (liveness) and GET /readyz (readiness: pg-boss started and the database answering, with the count of failed jobs) on its own port for the host's probe; and the jobs it hosts: `worker.heartbeat`, the proof the wiring works; Planning's `planning.generate-routes` and its nightly `planning.plan-ahead` sweep (Issue #97 part B); Execution's `execution.relay-outbox` (Issue #104 part C), which publishes every outbox row to its kind's `outbox.<kind>` queue and stamps it in the same transaction; Resolution's consumer (Issue #109 part B), which opens one Ticket per `pickup-failed`, `pickup-skipped`, `pickup-problem-reported` and `command-rejected` through the write statements it shares with the API in `@waste/db/commands`; and Finance's two (Issue #112 part B) — its consumer, recording, cancelling or reversing a Billable Event per `pickup-completed`, `pickup-corrected` and `ticket-completed` as `wms_api` under `withCompany`, one row per outbox event, and `finance.run-billing`, the scheduled billing run, which sweeps the active projects as `wms_worker` on the first of each month and runs `runBilling` over the month before per company as `wms_api`.",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/main.ts",
+    "start": "tsx --env-file-if-exists=../../.env src/main.ts",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test": "node --env-file-if-exists=../../.env --import tsx --test --test-timeout=120000 \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.1",
+    "@waste/contracts": "workspace:*",
+    "@waste/db": "workspace:*",
+    "@waste/domain": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.8",
+    "pg-boss": "12.34.0",
+    "tsx": "^4.23.12",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "@waste/tooling": "workspace:*",
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
+  }
+}

@@ -46,6 +46,7 @@ import {
 } from "@waste/db/schema/finance"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
 import { containerTypeVehicleType, vehicleType } from "@waste/db/schema/fleet-types"
+import { generationMatch, generationRun } from "@waste/db/schema/generation"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "@waste/db/schema/places"
 import { stockMovement } from "@waste/db/schema/stock"
 import {
@@ -296,7 +297,10 @@ export async function grantRole(pool: Database, companyId: string, roleId: strin
  * `service_area` before `planning_area` and `service_provider`, and
  * `price_list_row` before the planning areas, products, container types,
  * fractions and customers its conditions name; `price_list` alone goes later,
- * after `agreement` (which names the list) and before `product`.
+ * after `agreement` (which names the list) and before `product`. Generation's
+ * two (Issue #97 part B) go with Execution's: `generation_match` before
+ * `route` (both name a run) and `generation_run` after `route` (a route names
+ * the run that wrote it) and before `route_scheme` (a run names its scheme).
  */
 export async function dropTenant(pool: Database, companyId: string, owner?: Database): Promise<void> {
   if (owner !== undefined) {
@@ -328,7 +332,9 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(outboxEvent).where(eq(outboxEvent.companyId, companyId))
     await tx.delete(session).where(eq(session.companyId, companyId))
     await tx.delete(pickup).where(eq(pickup.companyId, companyId))
+    await tx.delete(generationMatch).where(eq(generationMatch.companyId, companyId))
     await tx.delete(route).where(eq(route.companyId, companyId))
+    await tx.delete(generationRun).where(eq(generationRun.companyId, companyId))
     await tx.delete(collectionGroupContainer).where(eq(collectionGroupContainer.companyId, companyId))
     await tx.delete(collectionGroupContainerType).where(eq(collectionGroupContainerType.companyId, companyId))
     await tx.delete(collectionGroupFraction).where(eq(collectionGroupFraction.companyId, companyId))
