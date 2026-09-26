@@ -13,6 +13,16 @@
 // question is whether this process's wiring boots, schedules and runs. The
 // owner URL is the local stack's by rule, so a hosted host is refused.
 //
+// The relay test (relay-outbox.test.ts) needs all three logins: the owner to
+// create and migrate a database of its own, and the two application roles
+// as the process runs them — the sweep as `wms_worker` on `WORKER_DATABASE_URL`,
+// the stamp as `wms_api` on `DATABASE_URL` — since what it proves is that
+// division of labour. A login is cluster-wide, so the two roles reach the
+// fresh database with the passwords bootstrap gave them on the shared stack
+// (the URLs' database name is swapped, `withDatabaseName`); the sweep is a
+// cross-tenant read, and a relay on the shared database would stamp every
+// other suite's events under it, which is why the relay never runs there.
+//
 // The probe tests need the API role (`DATABASE_URL`), as the process reads
 // it, for the one check that asks the API role's pool to answer.
 //
@@ -55,4 +65,39 @@ export function ownerUnderTest(env: Readonly<Record<string, string | undefined>>
     throw new Error(`DATABASE_ADMIN_URL points at ${new URL(url).hostname}: the owner's URL is for the local stack only`)
   }
   return { skip: found.skip, url }
+}
+
+export type RolesUnderTest = {
+  skip: string | false
+  /** The owner's, to create, migrate and drop the test's database. */
+  adminUrl: string
+  /** `wms_api`'s, the pool every write runs fenced on. */
+  apiUrl: string
+  /** `wms_worker`'s, the pool the sweep reads across tenants on and pg-boss runs on. */
+  workerUrl: string
+}
+
+/** All three logins, for the relay test; same skip/fail rule, every one loopback only, since the test creates and drops a database beside them. */
+export function rolesUnderTest(env: Readonly<Record<string, string | undefined>> = process.env): RolesUnderTest {
+  const found = variablesUnderTest(["DATABASE_ADMIN_URL", "DATABASE_URL", "WORKER_DATABASE_URL"], { hint: LOCAL_STACK_HINT, env })
+  const { DATABASE_ADMIN_URL: adminUrl, DATABASE_URL: apiUrl, WORKER_DATABASE_URL: workerUrl } = found.urls
+  if (!found.skip) {
+    for (const [name, url] of [
+      ["DATABASE_ADMIN_URL", adminUrl],
+      ["DATABASE_URL", apiUrl],
+      ["WORKER_DATABASE_URL", workerUrl],
+    ] as const) {
+      if (!isLocalHost(url)) {
+        throw new Error(`${name} points at ${new URL(url).hostname}: the relay test creates and drops a database, so it runs against the local stack only`)
+      }
+    }
+  }
+  return { skip: found.skip, adminUrl, apiUrl, workerUrl }
+}
+
+/** The same server and credentials, another database. */
+export function withDatabaseName(url: string, name: string): string {
+  const parsed = new URL(url)
+  parsed.pathname = `/${name}`
+  return parsed.toString()
 }

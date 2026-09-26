@@ -19,28 +19,14 @@ import { PgBoss } from "pg-boss"
 import { createBoss, startBoss, STOP_TIMEOUT_MS, type Boss } from "../boss"
 import { defineJob, JOBS, type JobContext } from "../jobs"
 import { heartbeat } from "../jobs/heartbeat"
+import { relayOutbox } from "../jobs/relay-outbox"
+import { OUTBOX_QUEUES } from "../outbox/subscribe"
 import { checkBoss } from "../readiness"
-import { ownerUnderTest } from "./database"
+import { ownerUnderTest, withDatabaseName } from "./database"
+import { until } from "./until"
 import { REFUSED_URL } from "./unreachable"
 
 const owner = ownerUnderTest()
-
-/** Waits for `condition` to hold, asking every 100 ms, for at most `ms`. */
-async function until(condition: () => boolean | Promise<boolean>, ms: number, what: string): Promise<void> {
-  const deadline = Date.now() + ms
-  while (Date.now() < deadline) {
-    if (await condition()) return
-    await new Promise((resolve) => setTimeout(resolve, 100))
-  }
-  assert.fail(`${what} did not happen within ${ms} ms`)
-}
-
-/** The same server and credentials, another database. */
-const withDatabaseName = (url: string, name: string): string => {
-  const parsed = new URL(url)
-  parsed.pathname = `/${name}`
-  return parsed.toString()
-}
 
 describe("the worker booted against a migrated database", { skip: owner.skip }, () => {
   const name = `waste_worker_boot_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
@@ -57,6 +43,7 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     now: () => new Date("2026-09-25T12:00:00Z"),
     log: (message) => void lines.push(message),
     send: (queue, data, options) => running!.boss.send(queue, data, options),
+    publish: (event, data, options) => running!.boss.publish(event, data, options),
   })
 
   before(async () => {
@@ -86,19 +73,25 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     await refused.stop({ graceful: false, close: true, timeout: 1_000 })
   })
 
-  test("starts with migrate: false on the schema 0011 installed, at the pinned version, and registers every job of the registry", async () => {
+  test("starts with migrate: false on the schema 0011 installed, at the pinned version, and registers every job of the registry with the queues it publishes to", async () => {
     const boss = createBoss({ url, log: (line) => void errors.push(line), cronWorkerIntervalSeconds: 1, monitorIntervalSeconds: 1 })
     running = await startBoss(boss, JOBS, context(fresh))
     assert.deepEqual(running.queues, JOBS.map((job) => job.queue))
+    assert.deepEqual(running.published, OUTBOX_QUEUES.map((queue) => queue.queue), "the relay's outbox.<kind> queues, each once")
     assert.equal(await boss.schemaVersion(), PGBOSS_SCHEMA_VERSION)
-    const queues = await boss.getQueues([...running.queues])
+    const queues = await boss.getQueues([...running.queues, ...running.published])
     assert.deepEqual(
-      queues.map((queue) => queue.name),
-      JOBS.map((job) => job.queue),
+      queues.map((queue) => queue.name).sort(),
+      [...JOBS.map((job) => job.queue), ...running.published].sort(),
     )
     const heartbeatQueue = queues.find((queue) => queue.name === heartbeat.queue)
     assert.equal(heartbeatQueue?.retryLimit, 0)
     assert.equal(heartbeatQueue?.deleteAfterSeconds, 86_400)
+    const relayQueue = queues.find((queue) => queue.name === relayOutbox.queue)
+    assert.equal(relayQueue?.policy, "short", "one relay tick queued at a time")
+    assert.equal(relayQueue?.retryLimit, 0)
+    const published = queues.find((queue) => queue.name === "outbox.pickup-failed")
+    assert.deepEqual([published?.policy, published?.retryLimit, published?.retryDelay, published?.retryBackoff], ["standard", 3, 10, true], "a consumer's queue carries the relay's retry policy")
     const schedules = await boss.getSchedules()
     // pg-boss answers the schedules in its own order, not the registry's.
     const byName = (a: [string, ...unknown[]], b: [string, ...unknown[]]) => a[0].localeCompare(b[0])
@@ -118,6 +111,16 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     const [row] = await fresh.sql.unsafe<{ state: string; output: { beats: number } | null }[]>(`select state, output from ${PGBOSS_SCHEMA}.job where name = '${heartbeat.queue}' and state = 'completed' limit 1`)
     assert.ok(row, "the beat is a completed row in pg-boss's table")
     assert.deepEqual(row.output, { beats: 1 })
+  })
+
+  test("the relay's schedule fired in the same minute and the tick chained: a completed occurrence of the schedule's, a completed successor five seconds on, and at most one tick queued at any moment", async () => {
+    const ticks = () => fresh.sql.unsafe<{ state: string; source: string }[]>(`select state, data->>'source' as source from ${PGBOSS_SCHEMA}.job where name = '${relayOutbox.queue}' order by created_on`)
+    await until(async () => (await ticks()).some((tick) => tick.source === "schedule" && tick.state === "completed"), 10_000, "the scheduled tick completing")
+    await until(async () => (await ticks()).some((tick) => tick.source === "successor" && tick.state === "completed"), 10_000, "a successor completing")
+    const seen = await ticks()
+    assert.ok(seen.every((tick) => tick.state !== "failed"), `no tick failed on an empty outbox: ${JSON.stringify(seen)}`)
+    assert.ok(seen.filter((tick) => tick.state === "created").length <= 1, "the short policy: one queued tick at a time")
+    assert.deepEqual(lines.filter((line) => line.startsWith("execution.relay-outbox")), [], "an empty outbox logs nothing")
   })
 
   test("a heartbeat sent by hand through the context runs the same way", async () => {
@@ -157,14 +160,18 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     assert.equal(running!.stop(2_000), first)
     await first
     assert.deepEqual(await checkBoss({ boss: running!.boss, queues: running!.queues, isStarted: () => false }), { boss: "stopped" })
-    // A registry with the heartbeat's retry policy changed and its schedule dropped: the second start rewrites the one and unschedules the other.
+    // A registry with the heartbeat's retry policy changed and its schedule dropped, and the relay's published queues brought to a changed retry policy: the second start rewrites the one, unschedules the other, and updates the third without touching its policy.
     const changed = defineJob({ ...heartbeat, queueOptions: { retryLimit: 2, deleteAfterSeconds: 3_600 }, schedule: undefined })
+    const republished = defineJob({ ...relayOutbox, publishes: [{ queue: "outbox.pickup-failed", queueOptions: { retryLimit: 5 } }] })
     const boss: PgBoss = createBoss({ url, log: (line) => void errors.push(line) })
-    running = await startBoss(boss, [changed], context(fresh))
+    running = await startBoss(boss, [changed, republished], context(fresh))
     const [queue] = await boss.getQueues([heartbeat.queue])
     assert.equal(queue.retryLimit, 2)
     assert.equal(queue.deleteAfterSeconds, 3_600)
     assert.deepEqual(await boss.getSchedules(heartbeat.queue), [])
+    assert.deepEqual(running.published, ["outbox.pickup-failed"])
+    const [pickupFailed] = await boss.getQueues(["outbox.pickup-failed"])
+    assert.deepEqual([pickupFailed.policy, pickupFailed.retryLimit], ["standard", 5])
     assert.equal(STOP_TIMEOUT_MS, 10_000)
     await running.stop(2_000)
     assert.deepEqual(errors, [])
