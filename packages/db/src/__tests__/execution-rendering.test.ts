@@ -29,7 +29,12 @@
 // company's ALTER TABLE is diffed from 0002's spelling to 0008's rather than
 // to today's, the way planning-rendering.test.ts holds 0006 to its own day.
 // resolution-rendering.test.ts and finance-rendering.test.ts pin the
-// replacements themselves.
+// replacements themselves. Migration 0012 (Issue #97 part B) changed `route`
+// once more: the run that last wrote it, `generation_run_id`, with its key
+// into `generation_run` and its index, so `CHANGED_IN_0012` maps the route's
+// CREATE TABLE as drizzle-kit writes it now onto what 0008 says and
+// `ADDED_IN_0012` is left out of the comparison; generation-rendering.test.ts
+// pins the three statements themselves.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -186,7 +191,8 @@ const CHANGED_IN_0010 = new Map([
   [unloadTable(true), unloadTable(false)],
 ])
 
-const expected = [
+/** route as drizzle-kit writes it today — with the run that last wrote it, which 0012 added (Issue #97 part B) — and as it wrote it as of 0008, without. */
+const routeTable = (generation: boolean): string =>
   createTable("route", "project", [
     '"route_scheme_id" uuid NOT NULL',
     '"collection_group_id" uuid NOT NULL',
@@ -195,6 +201,7 @@ const expected = [
     `"status" text DEFAULT 'planned' NOT NULL`,
     '"cancelled_by_generation" boolean DEFAULT false NOT NULL',
     '"note" text',
+    ...(generation ? ['"generation_run_id" uuid'] : []),
     '"number" integer NOT NULL',
     '"planned_start_time" time',
     '"planned_vehicle_id" uuid',
@@ -216,7 +223,16 @@ const expected = [
     oneOfCheck("route", "status", "planned", "ready", "active", "completed", "cancelled"),
     `CONSTRAINT "route_actual_shape" CHECK ((${ref("route", "actual_driver_id")} is not null) = (${ref("route", "started_at")} is not null) and (${ref("route", "actual_vehicle_id")} is not null) = (${ref("route", "started_at")} is not null) and (${ref("route", "actual_trailer_id")} is null or ${ref("route", "started_at")} is not null))`,
     stampsShape,
-  ]),
+  ])
+
+/** What 0012 changed on one of the seven (Issue #97 part B): the route's CREATE TABLE as drizzle-kit generates it now onto what 0008 says. */
+const CHANGED_IN_0012 = new Map([[routeTable(true), routeTable(false)]])
+
+/** What 0012 added to the route beside the column: its key into the run and its index. 0008 begins with the generated statements less these. */
+const ADDED_IN_0012 = [projectFkTo("route", "generation_run_id", "generation_run"), index("route", "route_generation_run_id_idx", "company_id", "generation_run_id")]
+
+const expected = [
+  routeTable(true),
   createTable("pickup", "project", [
     '"route_id" uuid NOT NULL',
     '"container_id" uuid NOT NULL',
@@ -311,6 +327,7 @@ const expected = [
   projectFkTo("route", "actual_vehicle_id", "vehicle"),
   projectFkTo("route", "actual_trailer_id", "vehicle"),
   projectFkTo("route", "actual_driver_id", "driver"),
+  projectFkTo("route", "generation_run_id", "generation_run"),
   companyFk("pickup"),
   projectFk("pickup"),
   projectFkTo("pickup", "route_id", "route"),
@@ -357,6 +374,7 @@ const expected = [
   index("route", "route_unloading_station_id_idx", "company_id", "unloading_station_id"),
   index("route", "route_actual_vehicle_id_idx", "company_id", "actual_vehicle_id"),
   index("route", "route_actual_trailer_id_idx", "company_id", "actual_trailer_id"),
+  index("route", "route_generation_run_id_idx", "company_id", "generation_run_id"),
   index("pickup", "pickup_project_id_idx", "company_id", "project_id"),
   index("pickup", "pickup_container_id_idx", "company_id", "container_id"),
   index("pickup", "pickup_property_id_idx", "company_id", "property_id"),
@@ -434,9 +452,13 @@ const companyAltered = [`ALTER TABLE "wms"."company" ADD COLUMN "next_route_numb
 /** What the seven tables owe their migration file, in the order migrations/README.md lays out: fence and trigger, or fence and revoke, table by table; then the sync role and the publication. */
 const handWritten = [...Object.values(tables).flatMap((table) => handWrittenStatements(table)), ...powersyncStatements()]
 
-/** Everything drizzle-kit wrote at the head of 0008: the seven tables as they were generated as of 0008 — the outbox in its earlier spelling — and the company altered from 0002's spelling to 0008's. */
+/** Everything drizzle-kit wrote at the head of 0008: the seven tables as they were generated as of 0008 — the outbox and the unload in their earlier spelling, the route without the run that last wrote it, what 0012 added left out — and the company altered from 0002's spelling to 0008's. */
 const generatedHead = async (): Promise<string[]> => [
-  ...(await statementsFor(tables)).map((statement) => CHANGED_IN_0010.get(statement) ?? statement).map((statement) => CHANGED_IN_0009.get(statement) ?? statement),
+  ...(await statementsFor(tables))
+    .filter((statement) => !ADDED_IN_0012.includes(statement))
+    .map((statement) => CHANGED_IN_0012.get(statement) ?? statement)
+    .map((statement) => CHANGED_IN_0010.get(statement) ?? statement)
+    .map((statement) => CHANGED_IN_0009.get(statement) ?? statement),
   ...(await statementsBetween({ company: companyAsOf0002 }, { company: companyAsOf0008 })),
 ]
 
@@ -457,11 +479,14 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     const generated = (await generatedHead()).map(normalised).sort()
     assert.equal(generated.length, 98, "seven CREATE TABLE, one ADD COLUMN, forty-seven foreign keys, forty-three indexes")
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
-    // The statement 0010 changed is one the schema generates today, and the one 0009 changed is what 0010 maps back to, so each mapping maps something.
+    // The statement 0010 changed is one the schema generates today, and the one 0009 changed is what 0010 maps back to, so each mapping maps something; the same for 0012's.
     const today = await statementsFor(tables)
+    for (const statement of CHANGED_IN_0012.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of ADDED_IN_0012) assert.ok(today.includes(statement), statement)
     for (const statement of CHANGED_IN_0010.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0009.keys()) assert.ok([...CHANGED_IN_0010.values()].includes(statement), statement.split("\n")[0])
     assert.equal(CHANGED_IN_0010.size, 2, "the outbox's vocabulary and the unload's key")
+    assert.equal(CHANGED_IN_0012.size, 1, "the route's run")
   })
 
   test("and carries below them the fence and trigger, or revoke, of each table, then the sync role, its grants and the publication: 7 x 3 + 3 + 17 + 1 = 42 statements", async () => {
