@@ -16,8 +16,18 @@ import {
   FIXTURE_CONTAINER_TYPES,
   FIXTURE_CREATED_AT,
   type ContainerType,
-  type LifecycleStatus,
 } from "@/lib/data/asset-catalogue"
+import {
+  hydrateAssetManagementState,
+  type AssetManagementState,
+  type ContainerImportJob,
+  type KeyType,
+  type MeasurementSetting,
+  type PartType,
+  type PropertyEquipment,
+  type SparePart,
+  type WasteFraction,
+} from "@/lib/data/asset-management-state"
 import { FIXTURE_PROJECT_IDS } from "@/lib/data/business-modules"
 import {
   ASSET_MANAGEMENT_STORAGE_KEY,
@@ -25,125 +35,20 @@ import {
 } from "@/lib/storage-keys"
 
 // The container type and its lifecycle vocabulary live beside the fixture
-// catalogue in lib/data/asset-catalogue.ts (Issue #39) and are re-exported
-// here, where every consumer already reads them.
+// catalogue in lib/data/asset-catalogue.ts (Issue #39), the rest of the
+// state's shape and its hydration in lib/data/asset-management-state.ts;
+// both are re-exported here, where every consumer already reads them.
 export type { ContainerKind, ContainerType, LifecycleStatus } from "@/lib/data/asset-catalogue"
-
-export type WasteFraction = {
-  id: string
-  name: string
-  projectIds: string[]
-  wasteSubstance: string
-  disposalMethod: string
-  wasteType: string
-  weightToVolumeRatio: number
-  status: LifecycleStatus
-  ewcCode: string
-  rdCode: string
-  hazardous: boolean
-  recyclable: boolean
-  mustIncludeVat: boolean
-  recyclingPercent: number
-  energyRecoveryPercent: number
-  materialRecoveryPercent: number
-  emptyingIntervalMinDays: number
-  emptyingIntervalMaxDays: number
-  style: string
-  color: string
-  createdAt: string
-  updatedAt: string
-}
-
-export type PartType = {
-  id: string
-  name: string
-  seeded: boolean
-  active: boolean
-  createdAt: string
-}
-
-export type SparePart = {
-  id: string
-  name: string
-  containerTypeId: string
-  additionalContainerTypeIds: string[]
-  partTypeId: string
-  sku: string
-  description: string
-  active: boolean
-  createdAt: string
-  updatedAt: string
-}
-
-export type PropertyEquipment = {
-  id: string
-  name: string
-  system: boolean
-  active: boolean
-  description: string
-  createdAt: string
-  updatedAt: string
-}
-
-export type KeyType = {
-  id: string
-  name: string
-  system: boolean
-  active: boolean
-  chargeableByDefault: boolean
-  feeProduct: string
-  deposit: number
-  instructions: string
-  createdAt: string
-  updatedAt: string
-}
-
-export type MeasurementSetting = {
-  id: string
-  projectId: string
-  name: string
-  transmitHours: number[]
-  transmitExcludeDays: number[]
-  useRecommendedSettings: boolean
-  measurementHours: number[]
-  measurementsPerHour: number
-  measurementExcludeDays: number[]
-  active: boolean
-  createdAt: string
-  updatedAt: string
-}
-
-export type ContainerImportJob = {
-  id: string
-  kind: "containers" | "weights"
-  projectId: string
-  fileName: string
-  delimiter: string
-  shouldCreate?: boolean
-  shouldUpdate?: boolean
-  shouldUpdateGeocodeLocation?: boolean
-  status: "Completed" | "Completed with warnings" | "Failed"
-  rowCount: number
-  warningCount: number
-  createdAt: string
-}
-
-export type AssetManagementState = {
-  containerTypes: ContainerType[]
-  wasteFractions: WasteFraction[]
-  partTypes: PartType[]
-  spareParts: SparePart[]
-  propertyEquipment: PropertyEquipment[]
-  keyTypes: KeyType[]
-  measurementSettings: MeasurementSetting[]
-  importJobs: ContainerImportJob[]
-  locksmithEmail: string
-  features: {
-    inventoryEnabled: boolean
-    wastewaterTreatmentEnabled: boolean
-    physicalKeysEnabled: boolean
-  }
-}
+export type {
+  AssetManagementState,
+  ContainerImportJob,
+  KeyType,
+  MeasurementSetting,
+  PartType,
+  PropertyEquipment,
+  SparePart,
+  WasteFraction,
+} from "@/lib/data/asset-management-state"
 
 type EntityWithId = { id: string }
 
@@ -187,6 +92,7 @@ const partTypeNames = [
 
 const defaultState: AssetManagementState = {
   containerTypes: [...FIXTURE_CONTAINER_TYPES],
+  seededContainerTypeIds: FIXTURE_CONTAINER_TYPES.map((type) => type.id),
   wasteFractions: [
     ["residual", "Residual", "20 03 01", "D10", "Disposal", "Municipal waste", "#64748b"],
     ["organic", "Organic", "20 01 08", "R3", "Composting", "Biowaste", "#16a34a"],
@@ -373,31 +279,6 @@ const serverSnapshot: AssetManagementSnapshot = {
 const AssetManagementStoreContext =
   createContext<AssetManagementStoreHandle | null>(null)
 
-function isAssetManagementState(value: unknown): value is AssetManagementState {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false
-  const candidate = value as Partial<AssetManagementState>
-  return (
-    Array.isArray(candidate.containerTypes) &&
-    Array.isArray(candidate.wasteFractions) &&
-    Array.isArray(candidate.partTypes) &&
-    Array.isArray(candidate.spareParts) &&
-    Array.isArray(candidate.propertyEquipment) &&
-    Array.isArray(candidate.keyTypes) &&
-    Array.isArray(candidate.measurementSettings) &&
-    Array.isArray(candidate.importJobs) &&
-    typeof candidate.locksmithEmail === "string" &&
-    Boolean(candidate.features)
-  )
-}
-
-function mergeStoredState(stored: AssetManagementState): AssetManagementState {
-  return {
-    ...defaultState,
-    ...stored,
-    features: { ...defaultState.features, ...stored.features },
-  }
-}
-
 function upsert<T extends EntityWithId>(items: T[], value: T) {
   return items.some((item) => item.id === value.id)
     ? items.map((item) => (item.id === value.id ? value : item))
@@ -488,20 +369,19 @@ export function AssetManagementStoreProvider({ children }: { children: ReactNode
   const [store] = useState(createAssetManagementStore)
 
   useEffect(() => {
-    let parsed: unknown = null
+    // The stored state over the defaults, seeded with the fixture container
+    // types it has never been given (lib/data/asset-management-state.ts).
+    let stored: AssetManagementState | null = null
     try {
-      const raw = readPersisted(
-        window.localStorage,
-        ASSET_MANAGEMENT_STORAGE_KEY,
+      stored = hydrateAssetManagementState(
+        readPersisted(window.localStorage, ASSET_MANAGEMENT_STORAGE_KEY),
+        defaultState,
       )
-      parsed = raw ? JSON.parse(raw) : null
     } catch {
       // Safe fixture configuration remains available when storage is unavailable.
     }
     store.set((current) =>
-      isAssetManagementState(parsed)
-        ? { ...mergeStoredState(parsed), hydrated: true }
-        : { ...current, hydrated: true },
+      stored ? { ...stored, hydrated: true } : { ...current, hydrated: true },
     )
     const persist = () => {
       const { hydrated: _hydrated, ...persistable } = store.getSnapshot()

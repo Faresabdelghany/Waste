@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { CLOSEOUT_MINUTES } from "../generation"
 import {
   STOP_MINUTES,
   estimateLoad,
@@ -38,7 +39,7 @@ describe("estimateRoute", () => {
     assert.equal(estimate.capacityT, 0)
   })
 
-  test("with the road: its distance to a tenth of a kilometre, its drive time plus the time at the stops", () => {
+  test("with the road: its distance to a tenth of a kilometre, its drive time plus the time at the stops plus the closeout", () => {
     const routed = estimateRoute({
       stops: 3,
       loadT: 0.1,
@@ -48,13 +49,20 @@ describe("estimateRoute", () => {
     })
     assert.equal(routed.basis, "road")
     assert.equal(routed.km, 12.3)
-    assert.equal(routed.mins, 39)
+    // 30 min of driving, 9 at the stops, and generation's 45 past the last stop.
+    assert.equal(CLOSEOUT_MINUTES, 45)
+    assert.equal(routed.mins, 84)
     assert.equal(routed.status, "within")
+  })
+
+  test("the road basis charges the same closeout generation writes into a route's time window — a routed leg ends at the last stop", () => {
+    const bare = estimateRoute({ stops: 0, loadT: 0, capacityT: 10, road: { distanceMetres: 0, durationSeconds: 0 }, serviceMinutes: 0 })
+    assert.equal(bare.mins, CLOSEOUT_MINUTES)
   })
 
   test("without service minutes the road basis charges the allowance per stop; a null road is the estimate", () => {
     const routed = estimateRoute({ stops: 4, loadT: 0, capacityT: 10, road: { distanceMetres: 0, durationSeconds: 600 } })
-    assert.equal(routed.mins, Math.round(10 + 4 * STOP_MINUTES))
+    assert.equal(routed.mins, Math.round(10 + 4 * STOP_MINUTES + CLOSEOUT_MINUTES))
     assert.equal(estimateRoute({ stops: 4, loadT: 0, capacityT: 10, road: null }).basis, "estimate")
   })
 

@@ -17,6 +17,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr"
 
 import { cn } from "@/lib/utils"
+import { containerWeightSource } from "@/lib/data/asset-catalogue"
 import { getWorkspaceDefinition } from "@/lib/data/business-modules"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -844,11 +845,28 @@ function ContainerTypeDialog({
               </>
             )}
           </DialogSection>
-          <DialogSection title="Waste fraction weight table" description="Expected full weight by compatible waste fraction." >
+          <DialogSection title="Waste fraction weight table" description="Expected full weight by compatible waste fraction. A derived weight is a planning default computed from the residual weight; saving a number here makes it the catalogue's.">
             {assets.wasteFractions.filter((fraction) => fraction.status === "Active").map((fraction) => (
-              <Field key={fraction.id} label={fraction.name}>
+              <Field
+                key={fraction.id}
+                label={fraction.name}
+                description={draft.wasteFractionWeights[fraction.id] !== undefined && containerWeightSource(draft, fraction.id) === "derived" ? "Derived planning default" : undefined}
+              >
                 <div className="relative">
-                  <Input type="number" min={0} value={draft.wasteFractionWeights[fraction.id] ?? ""} onChange={(event) => update("wasteFractionWeights", { ...draft.wasteFractionWeights, [fraction.id]: parseNumber(event.target.value) })} className="pr-10" />
+                  <Input
+                    type="number"
+                    min={0}
+                    value={draft.wasteFractionWeights[fraction.id] ?? ""}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        wasteFractionWeights: { ...current.wasteFractionWeights, [fraction.id]: parseNumber(event.target.value) },
+                        // A number typed here is the catalogue's from now on, whatever it was derived from.
+                        wasteFractionWeightSources: { ...current.wasteFractionWeightSources, [fraction.id]: "catalogue" },
+                      }))
+                    }
+                    className="pr-10"
+                  />
                   <span className="absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">kg</span>
                 </div>
               </Field>

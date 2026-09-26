@@ -11,9 +11,14 @@
 // ADR-0002): the distance as routed, and the drive time plus the time at the
 // stops — each container type's emptying time from the asset catalogue (the
 // caller passes that resolver), the prototype's allowance where the catalogue
-// has none. Until the road is known they are heuristics (the prototype's
-// coefficients). `basis` on the estimate says which, and the adapter's
-// `labels` spell it for the route map. Container weights come from the asset
+// has none — plus the closeout generation allows a route past its last stop
+// (`CLOSEOUT_MINUTES` in generation.ts, the drive back and the turnaround at
+// the depot), since the routed leg runs through the stops only and a route
+// read without it would look forty-five minutes shorter than the time window
+// generation writes for it. Until the road is known they are heuristics (the
+// prototype's coefficients, their own flat allowance among them). `basis` on
+// the estimate says which, and the adapter's `labels` spell it for the route
+// map. Container weights come from the asset
 // catalogue where it weighs the type for the fraction — every fixture
 // container type since Issue #39 — and from the fallback table below
 // otherwise; each weight says which it was, so a group whose containers use
@@ -25,6 +30,7 @@
 // it through that adapter — the single place a real optimiser response plugs
 // in (see the adapter's doc). The verdicts never gate Next or Create.
 
+import { CLOSEOUT_MINUTES } from "./generation"
 import type { ContainerMatchProfile } from "./matching"
 
 export const SHIFT_HOURS = 8
@@ -180,16 +186,18 @@ export type RouteEstimateInput = {
 
 /**
  * Distance, duration, and verdicts for one route. With the road: its
- * distance as routed and its drive time plus the time at the stops. Without:
- * the prototype's coefficients over the stop count. The capacity and shift
- * verdicts read the same whichever the basis.
+ * distance as routed and its drive time plus the time at the stops plus the
+ * closeout generation allows (`CLOSEOUT_MINUTES`) — the routed leg ends at
+ * the last stop. Without: the prototype's coefficients over the stop count,
+ * their own flat allowance included. The capacity and shift verdicts read
+ * the same whichever the basis.
  */
 export function estimateRoute(input: RouteEstimateInput): RouteEstimate {
   const stops = Math.max(0, input.stops)
   const road = input.road ?? null
   const km = road ? Math.round(road.distanceMetres / 100) / 10 : Math.round(11 + stops * 0.085)
   const mins = road
-    ? Math.round(road.durationSeconds / 60 + (input.serviceMinutes ?? stops * STOP_MINUTES))
+    ? Math.round(road.durationSeconds / 60 + (input.serviceMinutes ?? stops * STOP_MINUTES) + CLOSEOUT_MINUTES)
     : Math.round(stops * STOP_MINUTES + (km / 24) * 60 + 30)
   const capacityT = input.capacityT ?? 0
   const pct = capacityT > 0 ? Math.round((input.loadT / capacityT) * 100) : 0

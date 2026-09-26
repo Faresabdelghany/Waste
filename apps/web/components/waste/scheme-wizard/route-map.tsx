@@ -52,8 +52,15 @@ const styleOf = (baseMap: BaseMapId) => baseMapById(baseMap).style as string | S
 
 const toPoints = (screen: readonly ScreenPoint[]) => screen.map((point) => `${point.x},${point.y}`).join(" ")
 
+/** The bounds as their identity: four corners to five decimals (about a metre), or "" for none. */
 const boundsKey = (bounds: LngLatBounds | null) =>
   bounds ? [bounds.west, bounds.south, bounds.east, bounds.north].map((n) => n.toFixed(5)).join(",") : ""
+
+const parseBoundsKey = (key: string): LngLatBounds | null => {
+  if (!key) return null
+  const [west, south, east, north] = key.split(",").map(Number)
+  return { west, south, east, north }
+}
 
 /** How a stop is drawn: bases as squares, containers as dots. */
 function StopMark({ stop, at, color, emphasised }: { stop: PreviewStop; at: ScreenPoint; color: string; emphasised: boolean }) {
@@ -80,10 +87,6 @@ export function RouteMap({ routes, roads, selected, day, baseMap, bounds }: Rout
   const [mapInstance, setMapInstance] = useState<MapLibreMap | null>(null)
   const [, setFrame] = useState(0)
   const [baseMapFailed, setBaseMapFailed] = useState(false)
-
-  // MapLibre only runs animation frames once a style has loaded; without a
-  // base map (offline, blocked tiles) the camera jumps instead of easing.
-  const animationMs = (ms: number) => (loadedRef.current ? ms : 0)
 
   useEffect(() => {
     const container = containerRef.current
@@ -117,7 +120,6 @@ export function RouteMap({ routes, roads, selected, day, baseMap, bounds }: Rout
       console.warn("[route-map]", event.error?.message ?? event)
       if (!loadedRef.current) setBaseMapFailed(true)
     })
-    ;(container as HTMLDivElement & { __routeMap?: MapLibreMap }).__routeMap = map
     const onMove = () => setFrame((frame) => frame + 1)
     map.on("move", onMove)
     map.on("resize", onMove)
@@ -147,23 +149,25 @@ export function RouteMap({ routes, roads, selected, day, baseMap, bounds }: Rout
   }, [baseMap])
 
   // Frame the day's routes whenever the set of drawn stops changes, and a
-  // picked route alone while one is picked.
+  // picked route alone while one is picked. The frame is one value per
+  // corner set, parsed back from its key, so a render that rebuilds the
+  // same bounds object does not refit the camera.
   const selectedRoute = selected ? routes.find((route) => route.summary.group.id === selected) : undefined
-  const frame = selectedRoute?.preview.bounds ?? bounds
-  const frameKey = `${selected ?? ""}|${boundsKey(frame)}`
+  const frameKey = boundsKey(selectedRoute?.preview.bounds ?? bounds)
+  const frame = useMemo(() => parseBoundsKey(frameKey), [frameKey])
   useEffect(() => {
     const map = mapRef.current
     if (!map || !frame) return
+    // MapLibre only runs animation frames once a style has loaded; without a
+    // base map (offline, blocked tiles) the camera jumps instead of easing.
     map.fitBounds(
       [
         [frame.west, frame.south],
         [frame.east, frame.north],
       ],
-      { padding: FIT_PADDING_PX, duration: animationMs(500), maxZoom: FIT_MAX_ZOOM },
+      { padding: FIT_PADDING_PX, duration: loadedRef.current ? 500 : 0, maxZoom: FIT_MAX_ZOOM },
     )
-    // frameKey is the frame's identity; the object is rebuilt every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frameKey, mapInstance])
+  }, [frame, mapInstance])
 
   const project = useCallback(
     (lngLat: LngLat): ScreenPoint | null => {

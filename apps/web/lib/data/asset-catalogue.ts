@@ -8,16 +8,28 @@
 // Issue #39 the 140 L bin, the igloo and the underground unit were not here
 // at all, and the four that were weighed one to three fractions each, so
 // most groups carried "Fallback weight". Weights are one emptying of the
-// type per fraction in kg: the numbers the catalogue already had are kept,
-// the rest derived from each type's residual weight by the fraction density
-// factors the fallback table uses (organic 1.2, paper 0.6, cardboard 0.5,
-// glass 1.5, plastic 0.3, metal 0.8, mixed 1). Emptying times are minutes.
-// Planning defaults the Settings pane can correct; the store persists what
-// the browser holds and seeds from here on a first visit.
-// lib/data/__tests__/asset-catalogue.test.ts holds this table to the registry.
+// type per fraction in kg, and each says where it came from
+// (`wasteFractionWeightSources`): "catalogue" for the numbers the catalogue
+// had before the issue — 240 L residual/organic/paper, 660 L residual/mixed,
+// 1,100 L residual/cardboard, the wastewater tank — and "derived" for the
+// rest, each type's residual weight times the fraction density factor the
+// fallback table uses (organic 1.2, paper 0.6, cardboard 0.5, glass 1.5,
+// plastic 0.3, metal 0.8, mixed 1), rounded; a weight the Settings pane
+// saves is "catalogue" from then on. The derived weights are planning
+// defaults, and they changed what a group weighs: a fraction the four older
+// types were not weighed for used to take the fallback table's kilograms
+// (which start from a lighter base — 10 kg for the 240 L bin against the
+// catalogue's 18), so the load of every group over such a pair reads
+// higher since Issue #39, and is no longer flagged. Emptying times are
+// minutes. The store persists what the browser holds and seeds from here
+// on a first visit, and appends what a stored catalogue lacks
+// (asset-management-state.ts). lib/data/__tests__/asset-catalogue.test.ts
+// holds this table to the registry and every weight to its source.
 
 export type LifecycleStatus = "Active" | "Inactive"
 export type ContainerKind = "waste-collection" | "wastewater"
+/** Where a container type's weight for a fraction came from — see `ContainerType.wasteFractionWeightSources`. */
+export type ContainerWeightSource = "catalogue" | "derived"
 
 export type ContainerType = {
   id: string
@@ -39,6 +51,14 @@ export type ContainerType = {
   diameterCm: number
   /** kg for one emptying of the type, by waste fraction id (lower-case name). */
   wasteFractionWeights: Record<string, number>
+  /**
+   * Where each weight came from, by the same id: "catalogue" for one the
+   * catalogue records or the Settings pane saved, "derived" for a planning
+   * default computed from the type's residual weight by the fallback table's
+   * density factor (Issue #39). A weight with no entry counts as the
+   * catalogue's — stores written before the field have none.
+   */
+  wasteFractionWeightSources?: Record<string, ContainerWeightSource>
   color: string
   icon: string
   lidType: string
@@ -52,6 +72,27 @@ export type ContainerType = {
 export const FIXTURE_CREATED_AT = "2026-01-01T00:00:00.000Z"
 
 const fixtureCreatedAt = FIXTURE_CREATED_AT
+
+/** The source of a type's weight for a fraction: the catalogue's unless the type says it was derived. */
+export function containerWeightSource(type: Pick<ContainerType, "wasteFractionWeightSources">, fraction: string): ContainerWeightSource {
+  return type.wasteFractionWeightSources?.[fraction.toLowerCase()] ?? "catalogue"
+}
+
+/**
+ * A type's weight table with its sources: the fractions in `catalogue` are
+ * the catalogue's own numbers, every other fraction in `derived` a planning
+ * default derived from the residual weight (the module doc says how).
+ */
+const weighed = (
+  catalogue: Record<string, number>,
+  derived: Record<string, number> = {},
+): Pick<ContainerType, "wasteFractionWeights" | "wasteFractionWeightSources"> => ({
+  wasteFractionWeights: { ...catalogue, ...derived },
+  wasteFractionWeightSources: {
+    ...Object.fromEntries(Object.keys(catalogue).map((fraction) => [fraction, "catalogue" as const])),
+    ...Object.fromEntries(Object.keys(derived).map((fraction) => [fraction, "derived" as const])),
+  },
+})
 
 export const FIXTURE_CONTAINER_TYPES: readonly ContainerType[] = [
     {
@@ -72,7 +113,7 @@ export const FIXTURE_CONTAINER_TYPES: readonly ContainerType[] = [
       lengthCm: 74,
       widthCm: 58,
       diameterCm: 0,
-      wasteFractionWeights: { residual: 18, organic: 22, paper: 12, cardboard: 9, glass: 27, plastic: 5, metal: 14, mixed: 18 },
+      ...weighed({ residual: 18, organic: 22, paper: 12 }, { cardboard: 9, glass: 27, plastic: 5, metal: 14, mixed: 18 }),
       color: "#2563eb",
       icon: "bin",
       lidType: "Hinged",
@@ -100,7 +141,7 @@ export const FIXTURE_CONTAINER_TYPES: readonly ContainerType[] = [
       lengthCm: 137,
       widthCm: 78,
       diameterCm: 0,
-      wasteFractionWeights: { residual: 49, organic: 59, paper: 29, cardboard: 25, glass: 74, plastic: 15, metal: 39, mixed: 45 },
+      ...weighed({ residual: 49, mixed: 45 }, { organic: 59, paper: 29, cardboard: 25, glass: 74, plastic: 15, metal: 39 }),
       color: "#0f766e",
       icon: "dumpster",
       lidType: "Flat",
@@ -128,7 +169,7 @@ export const FIXTURE_CONTAINER_TYPES: readonly ContainerType[] = [
       lengthCm: 137,
       widthCm: 107,
       diameterCm: 0,
-      wasteFractionWeights: { residual: 75, organic: 90, paper: 45, cardboard: 58, glass: 113, plastic: 23, metal: 60, mixed: 75 },
+      ...weighed({ residual: 75, cardboard: 58 }, { organic: 90, paper: 45, glass: 113, plastic: 23, metal: 60, mixed: 75 }),
       color: "#475569",
       icon: "dumpster",
       lidType: "Domed",
@@ -163,7 +204,7 @@ export const FIXTURE_CONTAINER_TYPES: readonly ContainerType[] = [
       lengthCm: 55,
       widthCm: 48,
       diameterCm: 0,
-      wasteFractionWeights: { residual: 11, organic: 13, paper: 7, cardboard: 6, glass: 17, plastic: 4, metal: 9, mixed: 11 },
+      ...weighed({}, { residual: 11, organic: 13, paper: 7, cardboard: 6, glass: 17, plastic: 3, metal: 9, mixed: 11 }),
       color: "#1d4ed8",
       icon: "bin",
       lidType: "Hinged",
@@ -191,7 +232,7 @@ export const FIXTURE_CONTAINER_TYPES: readonly ContainerType[] = [
       lengthCm: 0,
       widthCm: 0,
       diameterCm: 180,
-      wasteFractionWeights: { residual: 400, organic: 480, paper: 240, cardboard: 200, glass: 600, plastic: 120, metal: 320, mixed: 400 },
+      ...weighed({}, { residual: 400, organic: 480, paper: 240, cardboard: 200, glass: 600, plastic: 120, metal: 320, mixed: 400 }),
       color: "#0e7490",
       icon: "igloo",
       lidType: "Drop slot",
@@ -219,7 +260,7 @@ export const FIXTURE_CONTAINER_TYPES: readonly ContainerType[] = [
       lengthCm: 200,
       widthCm: 150,
       diameterCm: 0,
-      wasteFractionWeights: { residual: 650, organic: 780, paper: 390, cardboard: 325, glass: 975, plastic: 195, metal: 520, mixed: 650 },
+      ...weighed({}, { residual: 650, organic: 780, paper: 390, cardboard: 325, glass: 975, plastic: 195, metal: 520, mixed: 650 }),
       color: "#334155",
       icon: "underground",
       lidType: "Pillar insert",
@@ -247,7 +288,7 @@ export const FIXTURE_CONTAINER_TYPES: readonly ContainerType[] = [
       lengthCm: 0,
       widthCm: 0,
       diameterCm: 140,
-      wasteFractionWeights: { wastewater: 3000 },
+      ...weighed({ wastewater: 3000 }),
       color: "#0891b2",
       icon: "tank",
       lidType: "Inspection cover",

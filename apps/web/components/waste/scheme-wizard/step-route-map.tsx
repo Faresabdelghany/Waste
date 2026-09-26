@@ -7,9 +7,10 @@
 // and the line between them the road a routing engine answered with, fetched
 // through the same hook and cache as the planning map's dated routes. Every
 // number says what it is: a route whose road is known shows the routed
-// distance and the drive time plus the catalogue's emptying times (Road); a
-// route still waiting for the road, or refused one, shows the prototype's
-// heuristic (Estimate). The stop order is generation's — the optimiser is
+// distance and the drive time plus the catalogue's emptying times plus the
+// closeout generation allows past the last stop (Road); a route still
+// waiting for the road, or refused one, shows the prototype's heuristic
+// (Estimate). The stop order is generation's — the optimiser is
 // a later job (ADR-0002) — and the footer says so. Regenerate re-stamps the
 // numbers. There is no in-wizard route editing yet, so there is no "keep
 // edited routes" switch and no Edited lock — nothing to protect.

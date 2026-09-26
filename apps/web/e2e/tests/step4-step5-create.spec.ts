@@ -82,12 +82,13 @@ test("step 4 draws the routes on a real map along the road and labels the number
   await expect(line.locator("circle")).toHaveCount(2)
   await expect(root.getByTestId("route-map-unplaced")).toHaveCount(0)
 
-  // The numbers are the road's: one leg of the stubbed road, 500 m, 90 s plus two catalogue emptyings.
+  // The numbers are the road's: one leg of the stubbed road, 500 m; 90 s of driving plus two catalogue
+  // emptyings (2 min each) plus generation's 45-minute closeout past the last stop — 51 min.
   const card = root.locator("[data-route-basis]")
   await expect(card).toHaveAttribute("data-route-basis", "road")
   await expect(card.getByTestId("route-basis")).toHaveText("Road")
   await expect(card).toContainText("0.5 km")
-  await expect(card).toContainText("6 min")
+  await expect(card).toContainText("51 min")
   await expect(root.getByTestId("route-map-basis")).toContainText("Road · Stops in generation order, not optimised")
   await expect(root.getByText("Estimate", { exact: true })).toHaveCount(0)
   // Every fixture container type is weighed by the catalogue since #39: no Fallback weight anywhere.
