@@ -18,6 +18,13 @@
 // process is starting up or going down, and nothing about the database is
 // known) and "unreachable" (started, and the read did not answer). The
 // contracts type (`WorkerReadinessResponse`) spells the same words on the wire.
+// A third read rides beside the two checks and decides nothing: the relay's
+// `staleOutboxCount` (jobs/relay-outbox.ts), the rows unpublished for longer
+// than an hour across companies, handed in by the composition root and
+// bounded like the checks; a ready body carries the number, and a count that
+// did not answer in time is left out rather than made a 503, since an event
+// nobody could publish is still an event and the probe is not the place to
+// decide about it.
 import type { ClientOptions, Database } from "@waste/db/client"
 import type { PgBoss } from "pg-boss"
 
@@ -47,6 +54,15 @@ async function bounded<T>(probe: Promise<T>, failed: T, timeoutMs: number): Prom
   } finally {
     clearTimeout(timer)
   }
+}
+
+/** The stale count, bounded: the number, or undefined where the read failed or the bound overtook it, so a ready body carries nothing rather than a guess. */
+export async function countStale(count: () => Promise<number>, { timeoutMs = CHECK_TIMEOUT_MS }: CheckOptions = {}): Promise<number | undefined> {
+  return bounded<number | undefined>(
+    Promise.resolve().then(() => count()),
+    undefined,
+    timeoutMs,
+  )
 }
 
 export async function checkDatabase(sql: Database["sql"], { timeoutMs = CHECK_TIMEOUT_MS }: CheckOptions = {}): Promise<DatabaseCheck> {

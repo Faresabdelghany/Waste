@@ -31,7 +31,7 @@
     "@typescript/native": "npm:typescript@^7.0.2",
     "@waste/tooling": "workspace:*",
     "drizzle-kit": "^0.31.10",
-    "pg-boss": "^12.34.0",
+    "pg-boss": "12.34.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2"
   }
 }

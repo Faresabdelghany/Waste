@@ -19,13 +19,17 @@
 // process that is about to exit, and `/healthz` answers only for one that
 // took its queues. A host that probes `/healthz` before the bind sees a
 // refused connection, which is the same answer as a process still loading
-// its modules, and waits.
+// its modules, and waits. A boot that fails — the schema missing, the role
+// refused, the port taken — is printed and exits 1 in so many words, rather
+// than left to Node's unhandled-rejection report of a top-level await, so a
+// host's log names the reason and its restart policy sees a clean exit code.
 import { createDb } from "@waste/db/client"
 
 import { createApp } from "./app"
 import { createBoss, startBoss } from "./boss"
 import { parseEnv } from "./env"
 import { JOBS } from "./jobs"
+import { staleOutboxCount } from "./jobs/relay-outbox"
 import { listen } from "./listen"
 import { CHECK_TIMEOUT_MS, probePoolOptions } from "./readiness"
 
@@ -35,17 +39,28 @@ const worker = createDb(env.WORKER_DATABASE_URL)
 const probe = createDb(env.DATABASE_URL, probePoolOptions(CHECK_TIMEOUT_MS))
 const boss = createBoss({ url: env.WORKER_DATABASE_URL })
 let started = false
-const running = await startBoss(boss, JOBS, {
-  api,
-  worker,
-  now: () => new Date(),
-  log: (message) => console.log(message),
-  send: (name, data, options) => boss.send(name, data, options),
-})
-started = true
-const listening = await listen(createApp({ probe, boss: { boss, queues: running.queues, isStarted: () => started }, checkTimeoutMs: CHECK_TIMEOUT_MS }), {
-  host: env.HOST,
-  port: env.PORT,
+
+/** pg-boss started with every job, and the probes bound; a failure of either is the process's exit. */
+async function boot() {
+  const running = await startBoss(boss, JOBS, {
+    api,
+    worker,
+    now: () => new Date(),
+    log: (message) => console.log(message),
+    send: (name, data, options) => boss.send(name, data, options),
+  })
+  started = true
+  const listening = await listen(createApp({ probe, boss: { boss, queues: running.queues, isStarted: () => started }, checkTimeoutMs: CHECK_TIMEOUT_MS, staleOutbox: () => staleOutboxCount(worker, new Date()) }), {
+    host: env.HOST,
+    port: env.PORT,
+  })
+  return { running, listening }
+}
+
+const { running, listening } = await boot().catch(async (error: unknown) => {
+  console.error(`@waste/worker failed to start: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
+  await Promise.allSettled([boss.stop({ graceful: false, close: true, timeout: 1_000 }), probe.close(), api.close(), worker.close()])
+  process.exit(1)
 })
 console.log(`@waste/worker running ${running.queues.length} ${running.queues.length === 1 ? "queue" : "queues"} (${running.queues.join(", ")}), probes on ${listening.url}`)
 

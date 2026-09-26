@@ -484,7 +484,7 @@ importers:
         specifier: ^4.13.8
         version: 4.13.8
       pg-boss:
-        specifier: ^12.34.0
+        specifier: 12.34.0
         version: 12.34.0
       tsx:
         specifier: ^4.23.12
@@ -562,7 +562,7 @@ importers:
         specifier: ^0.31.10
         version: 0.31.10
       pg-boss:
-        specifier: ^12.34.0
+        specifier: 12.34.0
         version: 12.34.0
       typescript:
         specifier: npm:@typescript/typescript6@^6.0.2

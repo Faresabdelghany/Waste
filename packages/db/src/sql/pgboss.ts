@@ -31,6 +31,10 @@
 // that moves its schema version is a new migration file carrying
 // `getMigrationPlans(PGBOSS_SCHEMA, <the version 0011 installed>)` through
 // `pgbossStatementsOf`, and the rendering test says so when the two drift.
+// The pin is exact — `"pg-boss": "12.34.0"` in this package and in
+// `apps/worker`, no caret — so a `pnpm update` cannot move the library, and
+// with it the plan and `PGBOSS_SCHEMA_VERSION`, without someone writing the
+// migration first; a bump is a deliberate edit of both package.json files.
 // The plan comes wrapped in pg-boss's own transaction — `BEGIN`, two `SET
 // LOCAL`s, an advisory lock, `COMMIT` — which the migrator must not run: it
 // applies every file in one transaction of its own, and a `COMMIT` inside it

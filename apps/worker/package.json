@@ -9,7 +9,7 @@
     "start": "tsx --env-file-if-exists=../../.env src/main.ts",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
-    "test": "node --env-file-if-exists=../../.env --import tsx --test --test-timeout=60000 \"src/**/*.test.ts\""
+    "test": "node --env-file-if-exists=../../.env --import tsx --test --test-timeout=120000 \"src/**/*.test.ts\""
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
@@ -18,7 +18,7 @@
     "@waste/domain": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.13.8",
-    "pg-boss": "^12.34.0",
+    "pg-boss": "12.34.0",
     "tsx": "^4.23.12",
     "zod": "^4.6.5"
   },

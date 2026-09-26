@@ -49,6 +49,26 @@ describe("GET /readyz", () => {
     }
   })
 
+  test("carries the relay's stale count on a ready body as information, leaves it out when the count did not answer within the bound, and never lets it decide the status", { skip: database.skip }, async () => {
+    const probe = createDb(database.url, probePoolOptions())
+    try {
+      const counted = await createApp({ probe, boss: bossOf([0]), staleOutbox: async () => 4 }).request("/readyz")
+      assert.equal(counted.status, 200)
+      assert.deepEqual(WorkerReadinessResponse.parse(await counted.json()), { status: "ok", checks: { database: "ok", boss: "ok" }, failedJobs: 0, staleOutbox: 4 })
+      const hung = await createApp({ probe, boss: bossOf([0]), checkTimeoutMs: 300, staleOutbox: () => new Promise(() => undefined) }).request("/readyz")
+      assert.equal(hung.status, 200, "a count that hangs is not a failed check")
+      assert.deepEqual(WorkerReadinessResponse.parse(await hung.json()), { status: "ok", checks: { database: "ok", boss: "ok" }, failedJobs: 0 })
+      const failed = await createApp({ probe, boss: bossOf([0]), staleOutbox: () => Promise.reject(new Error("42501")) }).request("/readyz")
+      assert.equal(failed.status, 200, "nor is one that throws")
+      assert.deepEqual(WorkerReadinessResponse.parse(await failed.json()), { status: "ok", checks: { database: "ok", boss: "ok" }, failedJobs: 0 })
+      const down = await createApp({ probe, boss: bossOf([0], false), staleOutbox: async () => 4 }).request("/readyz")
+      assert.equal(down.status, 503)
+      assert.deepEqual(WorkerReadinessResponse.parse(await down.json()), { status: "unavailable", checks: { database: "ok", boss: "stopped" } }, "an unavailable body carries no count")
+    } finally {
+      await probe.close()
+    }
+  })
+
   test("answers 503 naming the database unreachable when its dial is refused, the boss check still answering", async () => {
     const response = await createApp({ probe: idle, boss: bossOf([0]), checkTimeoutMs: 500 }).request("/readyz")
     assert.equal(response.status, 503)
