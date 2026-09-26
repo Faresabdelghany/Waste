@@ -34,15 +34,16 @@ export type JobContext = {
   /**
    * `boss.send(name, data, options)` as this process is connected: how a
    * handler enqueues another job. A handler that must enqueue in its own
-   * transaction passes `{ db }` in the options with an adapter over its `Tx`;
-   * that adapter arrives with the first job that needs it.
+   * transaction passes `{ db: inTransaction(tx) }` in the options
+   * (./transaction.ts, pg-boss's own Drizzle adapter), as the plan-ahead
+   * sweep does for the run and its job.
    */
   send: (name: string, data: object | null, options?: SendOptions) => Promise<string | null>
 }
 
 /**
  * One job. `queue` is its name in pg-boss (`<context>.<verb>`:
- * `planning.generate`, `execution.relay-outbox`, `resolution.open-tickets`),
+ * `planning.generate-routes`, `execution.relay-outbox`, `resolution.open-tickets`),
  * unique across the registry, which the registry test holds. `handler`
  * receives the batch pg-boss fetched (one job unless `workOptions.batchSize`
  * says otherwise) and the context, and throws to fail them all; what it
