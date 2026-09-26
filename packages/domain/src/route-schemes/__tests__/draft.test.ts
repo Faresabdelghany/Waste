@@ -1,9 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { draftGroups, validateGuidedScheme } from "../draft"
+import { candidateIssue, draftGroups, validateGuidedScheme } from "../draft"
 import type { CollectionGroup } from "../groups"
 import { quickSchemeDraftFromValues, type GuidedSchemeData } from "../quick-create"
+import { recurrenceIssues } from "../validation"
 
 const group = (id: string, fractions: string[]): CollectionGroup => ({
   id,
@@ -120,5 +121,43 @@ describe("a route scheme plans one waste fraction", () => {
         false,
       )
     }
+  })
+})
+
+describe("a step 2 simulation's candidate (issue #40)", () => {
+  const today = "2026-09-26"
+  const fields = draft("Residual", [])
+
+  test("the draft's own recurrence, starting today or later, may be applied", () => {
+    assert.equal(candidateIssue({ ...fields, effectiveFrom: today }, today), null)
+    assert.equal(candidateIssue({ ...fields, effectiveFrom: "2026-12-21", effectiveTo: "2027-03-31" }, today), null)
+  })
+
+  test("a start before today is refused — the step 2 form's own bound", () => {
+    assert.deepEqual(candidateIssue({ ...fields, effectiveFrom: "2026-09-14" }, today), {
+      field: "effectiveFrom",
+      text: "Effective from cannot be before today",
+    })
+    // The draft the wizard opened with may already start in the past; only
+    // today's bound is judged, so a caller without a today refuses nothing.
+    assert.equal(candidateIssue({ ...fields, effectiveFrom: "2026-09-14" }, ""), null)
+  })
+
+  test("the engine's recurrence checks come first, spelled as validateScheme spells them", () => {
+    const noDays = { ...fields, serviceDays: [] }
+    assert.equal(candidateIssue(noDays, today)?.text, "Pick at least one service day")
+    assert.deepEqual(recurrenceIssues(noDays), [{ field: "serviceDays", text: "Pick at least one service day" }])
+    assert.deepEqual(candidateIssue({ ...fields, effectiveFrom: "" }, today), {
+      field: "effectiveFrom",
+      text: "Set the effective from date",
+    })
+    const ended = { ...fields, effectiveFrom: "2026-12-21", effectiveTo: "2026-12-01" }
+    assert.deepEqual(candidateIssue(ended, today), {
+      field: "effectiveTo",
+      text: "Effective to must be on or after effective from",
+    })
+    assert.deepEqual(validateGuidedScheme(ended, [], [], [], []).issues.slice(0, 1), [
+      "Effective to must be on or after effective from",
+    ])
   })
 })

@@ -20,10 +20,12 @@ import { schemesInPlanning } from "./lifecycle"
 import { vehicleTypeOfRecord } from "./matching"
 import type { OccurrencePreviewInput, SchemeCalendar } from "./occurrences"
 import type { GuidedSchemeData } from "./quick-create"
-import type { SchemeRecurrence } from "./recurrence"
+import { isIsoDate, type SchemeRecurrence } from "./recurrence"
 import {
   allocationConflictSources,
+  recurrenceIssues,
   validateScheme,
+  type RecurrenceIssue,
   type SchemeDayPlan,
   type SchemeFrequencyPromise,
   type SchemeValidationResult,
@@ -172,4 +174,27 @@ export function draftOccurrenceInput(
 ): OccurrencePreviewInput | null {
   const recurrence = draftRecurrence(data)
   return recurrence ? { recurrence, holidayPolicy: data.holidayPolicy, calendar } : null
+}
+
+/**
+ * Why a step 2 simulation's candidate may not be applied to the draft, or
+ * null when it may: the engine's recurrence checks (validation.ts
+ * recurrenceIssues — a service day, a start, an end no earlier than it) and
+ * the step 2 form's own bound, a start no earlier than today. The panel
+ * reads it to refuse Apply and point at the field, so a candidate the
+ * simulation can show is one the draft can hold.
+ */
+export function candidateIssue(
+  candidate: DraftRecurrenceFields,
+  today: string,
+): RecurrenceIssue | null {
+  const [issue] = recurrenceIssues(candidate)
+  if (issue) return issue
+  if (!isIsoDate(candidate.effectiveFrom)) {
+    return { field: "effectiveFrom", text: "Set the effective from date" }
+  }
+  if (isIsoDate(today) && candidate.effectiveFrom < today) {
+    return { field: "effectiveFrom", text: "Effective from cannot be before today" }
+  }
+  return null
 }

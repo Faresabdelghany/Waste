@@ -53,13 +53,20 @@ export function groupStopsLabel(group: CollectionGroup): string {
   return types.length > 0 ? types.join(", ") : "Any container type"
 }
 
+/** A group's vehicle or driver: the id read as a name, or the display name a stored group carries when it has no id. */
+const groupResource = (
+  resolve: ((id: string) => string | undefined) | undefined,
+  id: string | undefined,
+  name: string | undefined,
+): string => (id ? named(resolve, id) : or(name))
+
 /** "Mon, Wed · WH-31 · Freja Nielsen · 240 L, 140 L" — the group in one line. */
 export function groupSummaryLabel(group: CollectionGroup, names: SchemeDraftNames): string {
   return [
     serviceDaysRangeLabel(group.days) || NO_VALUE,
-    named(names.vehicle, group.vehicleId ?? group.vehicleName),
+    groupResource(names.vehicle, group.vehicleId, group.vehicleName),
     group.driverId || group.driverName
-      ? named(names.driver, group.driverId ?? group.driverName)
+      ? groupResource(names.driver, group.driverId, group.driverName)
       : "Unassigned",
     groupStopsLabel(group),
   ].join(" · ")

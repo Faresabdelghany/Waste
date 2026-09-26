@@ -1,3 +1,6 @@
+import { PREVIEW_HORIZON_MONTHS } from "@waste/domain/route-schemes/occurrences"
+import { todayIso } from "@waste/domain/route-schemes/recurrence"
+
 import { expect, test } from "../fixtures"
 import {
   BASELINE_SERVICE_TYPE,
@@ -46,7 +49,11 @@ test("View all opens every next date in its own dialog, beyond the table's first
   await root.getByRole("button", { name: "View all", exact: true }).click()
   const dialog = page.getByRole("dialog", { name: "All next dates" })
   await expect(dialog).toBeVisible()
-  await expect(dialog.getByText(/^\d{3} collections · the next 12 months · \d+ skipped holidays$/)).toBeVisible()
+  await expect(
+    dialog.getByText(
+      new RegExp(`^\\d{3} collections · the next ${PREVIEW_HORIZON_MONTHS} months · \\d+ skipped holidays$`),
+    ),
+  ).toBeVisible()
   const rows = dialog.getByRole("row").filter({ has: page.locator("td") })
   expect(await rows.count()).toBeGreaterThan(200)
   // The rows are the preview's rows: the first is Mon 21 Dec, and the
@@ -67,6 +74,19 @@ test("Simulate next N occurrences shows the delta of a candidate change and appl
   await expect(panel).toBeVisible()
   await expect(panel.getByText("Change something above to compare")).toBeVisible()
   await expect(panel.getByTestId("simulation-summary")).toHaveText(/10 collections10 collections/)
+
+  // A candidate keeps step 2's bounds: its start may not be before today. The
+  // simulation still shows what such a change would do, but Apply refuses
+  // and says why; Reset drops the candidate and the reason with it.
+  const candidateFrom = panel.getByLabel("Effective from", { exact: true })
+  await expect(candidateFrom).toHaveAttribute("min", todayIso())
+  await candidateFrom.fill("2020-01-06")
+  await expect(panel.getByTestId("simulation-issue")).toHaveText("Effective from cannot be before today")
+  await expect(candidateFrom).toHaveAttribute("aria-invalid", "true")
+  await expect(panel.getByRole("button", { name: "Apply to draft" })).toBeDisabled()
+  await panel.getByRole("button", { name: "Reset to draft" }).click()
+  await expect(panel.getByTestId("simulation-issue")).toHaveCount(0)
+  await expect(candidateFrom).toHaveValue("2026-12-21")
 
   // Skip → shift-next: the fixture list holds Christmas Day (Fri 25 Dec) and
   // New Year's Day (Fri 1 Jan) inside the first ten collections; both become

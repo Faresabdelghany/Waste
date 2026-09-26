@@ -76,6 +76,51 @@ describe("simulateOccurrences — the horizon", () => {
     const simulation = simulateOccurrences({ current, candidate: current, count: 0 })
     assert.deepEqual(simulation.window, { from: "2026-12-21", to: "2026-12-21" })
   })
+
+  test("a draft that started last year simulates from today, not from its start", () => {
+    // Mon–Fri weekly since 4 Jan 2026; today is Mon 21 Dec 2026. The next ten
+    // collections run from today — the four winter holidays are skipped, so
+    // the tenth is Thu 7 Jan 2027, exactly as for a draft that starts today.
+    const sinceLastYear = { ...weekdays, effectiveFrom: "2026-01-05" }
+    const current = { recurrence: sinceLastYear, holidayPolicy: "skip" as const, calendar }
+    const candidate = { ...current, holidayPolicy: "shift-next" as const }
+    const simulation = simulateOccurrences({ current, candidate, count: 10, from: "2026-12-21" })
+    assert.deepEqual(simulation.window, { from: "2026-12-21", to: "2027-01-07" })
+    assert.equal(simulation.rows[0]?.plannedDate, "2026-12-21")
+    assert.equal(simulation.before, 10)
+    assert.equal(simulation.added, 4)
+    // The same change judged from the start would span the first ten
+    // collections of January 2026 and find nothing to move.
+    const fromStart = simulateOccurrences({ current, candidate, count: 10 })
+    assert.deepEqual(fromStart.window, { from: "2026-01-05", to: "2026-01-16" })
+    assert.equal(fromStart.added, 0)
+  })
+
+  test("today never pulls the window before a start that is still ahead", () => {
+    const current = { recurrence: december, holidayPolicy: "collect" as const, calendar }
+    const simulation = simulateOccurrences({ current, candidate: current, count: 5, from: "2026-09-26" })
+    assert.deepEqual(simulation.window, { from: "2026-12-21", to: "2026-12-25" })
+    // A start that today has passed opens the window at today, and a
+    // candidate that starts later still measures from the earlier side.
+    const running = { ...current, recurrence: { ...december, effectiveFrom: "2026-12-14" } }
+    const sinceWednesday = simulateOccurrences({ current: running, candidate: current, count: 5, from: "2026-12-16" })
+    assert.deepEqual(sinceWednesday.window, { from: "2026-12-16", to: "2026-12-22" })
+    assert.deepEqual(
+      sinceWednesday.rows.map((row) => row.change),
+      ["removed", "removed", "removed", "unchanged", "unchanged"],
+    )
+  })
+
+  test("a scheme that ended before today has nothing left to simulate", () => {
+    const ended = {
+      recurrence: { ...december, effectiveTo: "2026-12-23" },
+      holidayPolicy: "skip" as const,
+      calendar,
+    }
+    const simulation = simulateOccurrences({ current: ended, candidate: ended, count: 10, from: "2027-01-04" })
+    assert.equal(simulation.window, null)
+    assert.deepEqual(simulation.rows, [])
+  })
 })
 
 describe("simulateOccurrences — the delta", () => {

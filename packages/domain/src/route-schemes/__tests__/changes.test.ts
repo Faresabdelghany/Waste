@@ -151,5 +151,21 @@ describe("schemeDraftChanges", () => {
       driverName: "Mads Sørensen",
     }
     assert.equal(groupSummaryLabel(stored, {}), "Mon, Wed · WH-24 · Mads Sørensen · 240 L, 140 L")
+    // The display name is never offered to the id lookup — only an id is.
+    const asked: string[] = []
+    const spying: SchemeDraftNames = {
+      vehicle: (id) => {
+        asked.push(id)
+        return undefined
+      },
+      driver: (id) => {
+        asked.push(id)
+        return undefined
+      },
+    }
+    assert.equal(groupSummaryLabel(stored, spying), "Mon, Wed · WH-24 · Mads Sørensen · 240 L, 140 L")
+    assert.deepEqual(asked, [])
+    groupSummaryLabel(bins, spying)
+    assert.deepEqual(asked, ["vehicle-wh-31", "driver-freja"])
   })
 })

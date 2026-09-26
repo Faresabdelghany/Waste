@@ -11,6 +11,7 @@ import {
   generateOccurrences,
   occurrencePreview,
   type Occurrence,
+  type OccurrencePreview,
   type OccurrencePreviewInput,
   type OccurrenceWindow,
 } from "./occurrences"
@@ -42,9 +43,11 @@ export type OccurrenceSimulation = {
   /** Every recurrence date either side yields inside the window, in date order. */
   rows: SimulatedOccurrence[]
   /**
-   * The span compared: from the earlier effective-from to the current draft's
-   * Nth collection (the candidate's when the draft has none, the preview
-   * horizon when neither reaches N); null when neither side yields a date.
+   * The span compared: from the earlier effective-from — or from `from`
+   * (today) when the scheme already runs — to the current draft's Nth
+   * collection from there (the candidate's when the draft has none, the
+   * preview horizon when neither reaches N); null when neither side yields
+   * a date.
    */
   window: OccurrenceWindow | null
   /** Collections (skipped rows excluded) the draft as it stands makes inside the window. */
@@ -63,6 +66,13 @@ export type SimulateOccurrencesInput = {
   candidate: OccurrencePreviewInput | null
   /** How many collections of the current draft the comparison spans. */
   count: number
+  /**
+   * The first date the comparison may cover — today, so a scheme that
+   * started in the past simulates its *next* N collections, not its first N.
+   * The window never starts before either side's effective-from; omitted or
+   * not an ISO date, the window starts at the earlier effective-from.
+   */
+  from?: string
 }
 
 const EMPTY_SIMULATION: OccurrenceSimulation = {
@@ -78,11 +88,21 @@ const EMPTY_SIMULATION: OccurrenceSimulation = {
 const collects = (row: Occurrence | null): row is Occurrence =>
   row !== null && row.status !== "skipped"
 
-/** The recurrence date of a side's Nth collection, or null when it makes fewer. */
-function nthPlannedDate(side: OccurrencePreviewInput | null, count: number): string | null {
+const later = (a: string, b: string) => (a > b ? a : b)
+const earlier = (a: string, b: string) => (a < b ? a : b)
+
+/**
+ * One side's preview from the window's start — its rows over the effective
+ * window, or PREVIEW_HORIZON_MONTHS from there when open-ended — walked once;
+ * the window's `to` reads the Nth collection and the horizon from it.
+ */
+type Side = { input: OccurrencePreviewInput; preview: OccurrencePreview }
+
+/** The recurrence date of the side's Nth collection, or null when it makes fewer. */
+function nthPlannedDate(side: Side | null, count: number): string | null {
   if (!side) return null
-  const dates = occurrencePreview(side)
-    .rows.filter(collects)
+  const dates = side.preview.rows
+    .filter(collects)
     .map((row) => row.plannedDate)
     .sort()
   return dates[count - 1] ?? null
@@ -95,35 +115,43 @@ function nthPlannedDate(side: OccurrencePreviewInput | null, count: number): str
  */
 export function simulateOccurrences(input: SimulateOccurrencesInput): OccurrenceSimulation {
   const count = Math.max(1, Math.floor(input.count))
-  const sides = [input.current, input.candidate]
-  const starts = sides
+  const inputs = [input.current, input.candidate]
+  const starts = inputs
     .map((side) => side?.recurrence.effectiveFrom)
     .filter((start): start is string => typeof start === "string" && isIsoDate(start))
   if (starts.length === 0) return EMPTY_SIMULATION
 
-  const horizons = sides
-    .map((side) => (side ? occurrencePreview(side).horizon : null))
+  // The window opens at the earlier start, or today when the scheme already
+  // runs — "next" counts from now, not from a start in the past.
+  const earliestStart = starts.reduce(earlier)
+  const from =
+    input.from !== undefined && isIsoDate(input.from) ? later(earliestStart, input.from) : earliestStart
+
+  const [current, candidate] = inputs.map(
+    (side): Side | null => (side ? { input: side, preview: occurrencePreview(side, from) } : null),
+  )
+  const horizons = [current, candidate]
+    .map((side) => side?.preview.horizon ?? null)
     .filter((horizon): horizon is string => horizon !== null)
   const to =
-    nthPlannedDate(input.current, count) ??
-    nthPlannedDate(input.candidate, count) ??
-    (horizons.length > 0 ? horizons.reduce((a, b) => (a > b ? a : b)) : null)
-  if (to === null) return EMPTY_SIMULATION
-  const from = starts.reduce((a, b) => (a < b ? a : b))
+    nthPlannedDate(current, count) ??
+    nthPlannedDate(candidate, count) ??
+    (horizons.length > 0 ? horizons.reduce(later) : null)
+  if (to === null || to < from) return EMPTY_SIMULATION
   const window: OccurrenceWindow = { from, to }
 
-  const rowsOf = (side: OccurrencePreviewInput | null) =>
+  const rowsOf = (side: Side | null) =>
     new Map(
-      (side ? generateOccurrences({ ...side, window }) : []).map((row) => [row.plannedDate, row]),
+      (side ? generateOccurrences({ ...side.input, window }) : []).map((row) => [row.plannedDate, row]),
     )
-  const current = rowsOf(input.current)
-  const candidate = rowsOf(input.candidate)
+  const currentRows = rowsOf(current)
+  const candidateRows = rowsOf(candidate)
 
-  const rows: SimulatedOccurrence[] = [...new Set([...current.keys(), ...candidate.keys()])]
+  const rows: SimulatedOccurrence[] = [...new Set([...currentRows.keys(), ...candidateRows.keys()])]
     .sort()
     .map((plannedDate) => {
-      const before = current.get(plannedDate) ?? null
-      const after = candidate.get(plannedDate) ?? null
+      const before = currentRows.get(plannedDate) ?? null
+      const after = candidateRows.get(plannedDate) ?? null
       const change: OccurrenceChange =
         collects(before) && collects(after)
           ? before.date === after.date

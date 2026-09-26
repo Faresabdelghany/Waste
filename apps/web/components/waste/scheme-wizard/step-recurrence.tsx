@@ -24,6 +24,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { holidaySettingsHref } from "@/lib/data/business-links"
 import { projectCalendarLabel } from "@waste/domain/route-schemes/project-calendar"
 import {
+  PREVIEW_HORIZON_MONTHS,
   formatClockTime,
   formatOccurrenceDate,
 } from "@waste/domain/route-schemes/occurrences"
@@ -34,6 +35,7 @@ import {
   SERVICE_DAY_SHORT_LABELS,
   serviceDayOf,
   sortServiceDays,
+  todayIso,
   type ServiceDay,
 } from "@waste/domain/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
@@ -203,7 +205,7 @@ export function StepRecurrence({
             <span className="text-xs text-muted-foreground">
               {occurrences.count.toLocaleString("en-GB")} collections
               {occurrences.ongoing
-                ? " · next 12 months"
+                ? ` · next ${PREVIEW_HORIZON_MONTHS} months`
                 : occurrences.horizon
                   ? ` · until ${formatOccurrenceDate(occurrences.horizon)}`
                   : ""}
@@ -276,7 +278,12 @@ export function StepRecurrence({
         )}
       </div>
 
-      <SimulationPanel data={data} model={model} onApply={(candidate) => update(candidate)} />
+      <SimulationPanel
+        data={data}
+        model={model}
+        today={todayIso()}
+        onApply={(candidate) => update(candidate)}
+      />
 
       <AllDatesDialog
         open={allDatesOpen}

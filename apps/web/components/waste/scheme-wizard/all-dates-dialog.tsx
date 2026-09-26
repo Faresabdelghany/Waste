@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/table"
 import { count } from "@waste/domain/text"
 import {
+  PREVIEW_HORIZON_MONTHS,
   formatOccurrenceDate,
   type OccurrencePreview,
 } from "@waste/domain/route-schemes/occurrences"
@@ -44,7 +45,7 @@ export function AllDatesDialog({
   startTime: string
 }) {
   const span = occurrences.ongoing
-    ? "the next 12 months"
+    ? `the next ${PREVIEW_HORIZON_MONTHS} months`
     : occurrences.horizon
       ? `until ${formatOccurrenceDate(occurrences.horizon)}`
       : ""

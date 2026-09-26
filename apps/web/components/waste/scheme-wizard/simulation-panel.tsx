@@ -9,6 +9,10 @@
 // same generateOccurrences the next-dates table and route generation use, so
 // what the simulation says would happen is what generation would write.
 // "Apply" writes the candidate into the draft; the table above then shows it.
+// The step hands the panel today: the window counts the *next* N collections
+// from it, and a candidate keeps step 2's bounds (a start no earlier than
+// today, an end no earlier than the start) so what it simulates is a draft
+// the wizard can hold — Apply refuses otherwise, and says why.
 
 import { useMemo, useState } from "react"
 import { ArrowRight, FlaskConical } from "lucide-react"
@@ -28,6 +32,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { count } from "@waste/domain/text"
 import {
+  candidateIssue,
   draftOccurrenceInput,
   type DraftRecurrenceFields,
 } from "@waste/domain/route-schemes/draft"
@@ -111,10 +116,13 @@ function ChangeBadge({ change }: { change: OccurrenceChange }) {
 export function SimulationPanel({
   data,
   model,
+  today,
   onApply,
 }: {
   data: GuidedSchemeData
   model: WizardModel
+  /** Today as ISO — where "next" starts counting, and the earliest start a candidate may take. */
+  today: string
   /** Writes the candidate's recurrence fields into the draft. */
   onApply: (candidate: DraftRecurrenceFields) => void
 }) {
@@ -128,6 +136,9 @@ export function SimulationPanel({
   const fields = candidate ?? candidateFieldsOf(data)
   const setField = (patch: Partial<DraftRecurrenceFields>) => setCandidate({ ...fields, ...patch })
   const daily = fields.frequency === "daily"
+  // Step 2's bounds on the candidate: the draft's own start is never refused
+  // — the wizard may have opened on a scheme that already runs.
+  const issue = candidate ? candidateIssue(candidate, today) : null
 
   const simulation = useMemo(
     () =>
@@ -135,8 +146,9 @@ export function SimulationPanel({
         current: model.occurrenceInput,
         candidate: draftOccurrenceInput(fields, model.schemeCalendar),
         count: countValue,
+        from: today,
       }),
-    [model.occurrenceInput, model.schemeCalendar, fields, countValue],
+    [model.occurrenceInput, model.schemeCalendar, fields, countValue, today],
   )
   const changed = simulation.rows.filter((row) => row.change !== "unchanged")
   const rows: SimulatedOccurrence[] = changedOnly ? changed : simulation.rows
@@ -226,6 +238,8 @@ export function SimulationPanel({
             type="date"
             className="h-10 rounded-xl"
             value={fields.effectiveFrom}
+            min={today}
+            aria-invalid={issue?.field === "effectiveFrom" || undefined}
             onChange={(event) =>
               setField({
                 effectiveFrom: event.target.value,
@@ -242,7 +256,8 @@ export function SimulationPanel({
             type="date"
             className="h-10 rounded-xl"
             value={fields.effectiveTo}
-            min={fields.effectiveFrom || undefined}
+            min={fields.effectiveFrom || today}
+            aria-invalid={issue?.field === "effectiveTo" || undefined}
             onChange={(event) => setField({ effectiveTo: event.target.value })}
           />
         </Field>
@@ -373,7 +388,16 @@ export function SimulationPanel({
         >
           Close simulation
         </Button>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {issue && (
+            <span
+              role="status"
+              data-testid="simulation-issue"
+              className="text-xs text-red-700"
+            >
+              {issue.text}
+            </span>
+          )}
           <Button
             variant="outline"
             className="rounded-xl"
@@ -384,7 +408,7 @@ export function SimulationPanel({
           </Button>
           <Button
             className="rounded-xl"
-            disabled={!candidate}
+            disabled={!candidate || issue !== null}
             onClick={() => {
               onApply(fields)
               setCandidate(null)
