@@ -1,20 +1,22 @@
 "use client"
 
 // Step 5 — Ready to create this scheme? Four sections with Change links
-// back to their steps, then the two create options: "Create as" and
-// "Changes to a running scheme" (issue #38), the edit policy the edit-save
-// planner reads once the scheme has generated.
+// back to their steps, what changed since the last review (Issue #40), then
+// the two create options: "Create as" and "Changes to a running scheme"
+// (issue #38), the edit policy the edit-save planner reads once the scheme
+// has generated.
 
 import type { ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
 import { projectCalendarLabel } from "@waste/domain/route-schemes/project-calendar"
 import { SCHEME_EDIT_POLICY_DESCRIPTIONS } from "@waste/domain/route-schemes/creation"
-import { HOLIDAY_POLICY_LABELS, formatClockTime, formatOccurrenceDate } from "@waste/domain/route-schemes/occurrences"
+import { HOLIDAY_POLICY_LABELS, PREVIEW_HORIZON_MONTHS, formatClockTime, formatOccurrenceDate } from "@waste/domain/route-schemes/occurrences"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { recurrenceCadenceLabel, serviceDaysRangeLabel } from "@waste/domain/route-schemes/recurrence"
 
 import type { WizardRecords } from "./use-wizard-records"
+import { WhatChanged } from "./what-changed"
 import type { WizardModel } from "./wizard-model"
 import { CREATE_AS_OPTIONS, EDIT_POLICY_OPTIONS, type WizardStepId } from "./wizard-options"
 import { Field, SimpleSelect } from "./wizard-fields"
@@ -60,12 +62,18 @@ export function StepReview({
   model,
   records,
   go,
+  initial,
+  reviewed,
 }: {
   data: GuidedSchemeData
   update: (patch: Partial<GuidedSchemeData>) => void
   model: WizardModel
   records: WizardRecords
   go: (step: WizardStepId) => void
+  /** The draft the wizard opened with — the What changed baseline before any review. */
+  initial: GuidedSchemeData
+  /** The draft as it stood when this step was last left; null on the first visit. */
+  reviewed: GuidedSchemeData | null
 }) {
   const { occurrences, recurrence, groups } = model
   const first = occurrences.rows.find((row) => row.n !== null)
@@ -100,7 +108,7 @@ export function StepReview({
           <ReviewRow
             label="Collections"
             value={`${occurrences.count.toLocaleString("en-GB")}${
-              occurrences.ongoing ? " in the next 12 months" : ""
+              occurrences.ongoing ? ` in the next ${PREVIEW_HORIZON_MONTHS} months` : ""
             }`}
           />
           <ReviewRow label="Holiday list" value={projectCalendarLabel(model.calendar)} />
@@ -122,6 +130,7 @@ export function StepReview({
         <ReviewRow label="Per week" value={`${model.routesPerWeek} routes`} />
         <ReviewRow label="Attention" value={attention.length > 0 ? attention.join(", ") : "None"} />
       </ReviewSection>
+      <WhatChanged data={data} initial={initial} reviewed={reviewed} model={model} records={records} />
       <div className="grid gap-6 pt-2 md:grid-cols-2">
         <Field id="scheme-create-as" label="Create as">
           <SimpleSelect

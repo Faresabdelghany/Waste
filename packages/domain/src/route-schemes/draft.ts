@@ -18,11 +18,14 @@ import {
 } from "./groups"
 import { schemesInPlanning } from "./lifecycle"
 import { vehicleTypeOfRecord } from "./matching"
+import type { OccurrencePreviewInput, SchemeCalendar } from "./occurrences"
 import type { GuidedSchemeData } from "./quick-create"
-import type { SchemeRecurrence } from "./recurrence"
+import { isIsoDate, type SchemeRecurrence } from "./recurrence"
 import {
   allocationConflictSources,
+  recurrenceIssues,
   validateScheme,
+  type RecurrenceIssue,
   type SchemeDayPlan,
   type SchemeFrequencyPromise,
   type SchemeValidationResult,
@@ -134,8 +137,20 @@ export function validateGuidedScheme(
   return result
 }
 
+/** The draft's recurrence fields — what the step 2 simulation (simulation.ts) lets a candidate change. */
+export type DraftRecurrenceFields = Pick<
+  GuidedSchemeData,
+  | "frequency"
+  | "weekRotation"
+  | "serviceDays"
+  | "effectiveFrom"
+  | "effectiveTo"
+  | "plannedStartTime"
+  | "holidayPolicy"
+>
+
 /** The draft's recurrence, or null while it has no service days or start date. */
-export function draftRecurrence(data: GuidedSchemeData): SchemeRecurrence | null {
+export function draftRecurrence(data: DraftRecurrenceFields): SchemeRecurrence | null {
   if (data.serviceDays.length === 0 || !data.effectiveFrom) return null
   return {
     frequency: data.frequency,
@@ -145,4 +160,41 @@ export function draftRecurrence(data: GuidedSchemeData): SchemeRecurrence | null
     effectiveTo: data.effectiveTo,
     startTime: data.plannedStartTime,
   }
+}
+
+/**
+ * What the draft hands generateOccurrences: its recurrence, holiday policy,
+ * and the project's calendar — or null while it has no recurrence. The
+ * wizard's next-dates preview and both sides of a simulation build their
+ * input here, so a candidate is judged exactly as the draft is.
+ */
+export function draftOccurrenceInput(
+  data: DraftRecurrenceFields,
+  calendar: SchemeCalendar,
+): OccurrencePreviewInput | null {
+  const recurrence = draftRecurrence(data)
+  return recurrence ? { recurrence, holidayPolicy: data.holidayPolicy, calendar } : null
+}
+
+/**
+ * Why a step 2 simulation's candidate may not be applied to the draft, or
+ * null when it may: the engine's recurrence checks (validation.ts
+ * recurrenceIssues — a service day, a start, an end no earlier than it) and
+ * the step 2 form's own bound, a start no earlier than today. The panel
+ * reads it to refuse Apply and point at the field, so a candidate the
+ * simulation can show is one the draft can hold.
+ */
+export function candidateIssue(
+  candidate: DraftRecurrenceFields,
+  today: string,
+): RecurrenceIssue | null {
+  const [issue] = recurrenceIssues(candidate)
+  if (issue) return issue
+  if (!isIsoDate(candidate.effectiveFrom)) {
+    return { field: "effectiveFrom", text: "Set the effective from date" }
+  }
+  if (isIsoDate(today) && candidate.effectiveFrom < today) {
+    return { field: "effectiveFrom", text: "Effective from cannot be before today" }
+  }
+  return null
 }

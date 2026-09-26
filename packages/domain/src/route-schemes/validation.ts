@@ -365,6 +365,37 @@ const assignmentClusters = (
 const ruleKey = (group: SchemeGroupValidationInput): string =>
   `${[...group.fractions].map((f) => f.toLowerCase()).sort().join(",")}|${group.ruleVehicleType ?? ""}`
 
+/** One of FR-5's recurrence checks, attributed to the field that fails it. */
+export type RecurrenceIssue = {
+  field: "serviceDays" | "effectiveFrom" | "effectiveTo"
+  text: string
+}
+
+/**
+ * FR-5 (a) and (b) over the recurrence alone: ≥1 service day, effective from
+ * set, and effective to — optional (issue #28, D23) — no earlier than from.
+ * Spelled once here for validateScheme and for the step 2 simulation's
+ * candidate (draft.ts candidateIssue), so the panel refuses exactly what
+ * the engine would, and can point at the field.
+ */
+export function recurrenceIssues(
+  input: Pick<SchemeValidationInput, "serviceDays" | "effectiveFrom" | "effectiveTo">,
+): RecurrenceIssue[] {
+  const issues: RecurrenceIssue[] = []
+  if (input.serviceDays.length === 0) {
+    issues.push({ field: "serviceDays", text: "Pick at least one service day" })
+  }
+
+  // effectiveTo is optional (issue #28, D23): an omitted To means the scheme
+  // runs open-ended until explicitly ended or expired by later configuration.
+  if (!input.effectiveFrom) {
+    issues.push({ field: "effectiveFrom", text: "Set the effective from date" })
+  } else if (input.effectiveTo && input.effectiveTo < input.effectiveFrom) {
+    issues.push({ field: "effectiveTo", text: "Effective to must be on or after effective from" })
+  }
+  return issues
+}
+
 /**
  * The blocking checks of FR-5, in spec order and extended for collection
  * groups (D33–D35): (a) ≥1 service day, (b) effective from set — effective to
@@ -398,15 +429,7 @@ export function validateScheme(
   const nameById = new Map(groups.map((group) => [group.id, group.name]))
   const labelOf = (id: string) => nameById.get(id) ?? id
 
-  if (input.serviceDays.length === 0) issues.push("Pick at least one service day")
-
-  // effectiveTo is optional (issue #28, D23): an omitted To means the scheme
-  // runs open-ended until explicitly ended or expired by later configuration.
-  if (!input.effectiveFrom) {
-    issues.push("Set the effective from date")
-  } else if (input.effectiveTo && input.effectiveTo < input.effectiveFrom) {
-    issues.push("Effective to must be on or after effective from")
-  }
+  issues.push(...recurrenceIssues(input).map((issue) => issue.text))
 
   /* ---- coverage (D33): every service day has ≥1 group, none run elsewhere ---- */
 
