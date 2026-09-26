@@ -19,10 +19,12 @@
 // caller's `company_id` and its role's grant (the API's auth/principal.ts,
 // auth/require.ts), so holding one buys nothing.
 //
-// It lived in apps/api/src/ids.ts from Issue #64 until Issue #109 part B,
-// when the worker became the second process writing rows: the shared write
-// statements (src/commands/*) mint their ids here, and each process's own
-// `newId` is this module's, one sequence per process. apps/api/src/ids.ts
+// It lived in apps/api/src/ids.ts from Issue #64 until the worker became the
+// second process writing rows (Issue #109 part B and #112 part B): the shared
+// write statements (src/commands/* — `openTicket`, `recordBillableEvent`,
+// `issueInvoice`, `runBilling`, the outbox's `emit`) mint their ids here, and
+// `newId` is the one sequence of whichever process imports it, so a route and
+// the command it calls count up from the same last id. apps/api/src/ids.ts
 // re-exports it, so a route reads `newId` where it always did.
 import { ID_RANDOM_BYTES, mintId, nextId } from "@waste/domain/ids"
 

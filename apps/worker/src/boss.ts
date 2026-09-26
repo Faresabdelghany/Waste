@@ -44,6 +44,7 @@ import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { PgBoss } from "pg-boss"
 
 import { updatableOptions, type AnyJob, type JobContext, type JobQueueOptions } from "./jobs/definition"
+import { outboxEventName } from "./outbox/queues"
 
 export type BossOptions = {
   /** The worker role's URL, a session connection; env.ts has refused the transaction pooler. */
@@ -129,7 +130,8 @@ export async function startBoss(boss: PgBoss, jobs: readonly AnyJob[], context: 
     } else {
       await boss.unschedule(job.queue)
     }
-    const wanted = job.subscriptions ?? []
+    // The two spellings of a subscription the registry carries today: `subscriptions`, pg-boss event names, and `subscribes`, outbox kinds under `outboxEventName`; both converged onto the one table.
+    const wanted = [...(job.subscriptions ?? []), ...(job.subscribes ?? []).map(outboxEventName)]
     for (const event of await subscribedEvents(boss, job.queue)) {
       if (!wanted.includes(event)) await boss.unsubscribe(event, job.queue)
     }
@@ -150,6 +152,9 @@ export async function subscribedEvents(boss: Pick<PgBoss, "getDb">, queue: strin
   const { rows } = await boss.getDb().executeSql(`select event from ${PGBOSS_SCHEMA}.subscription where name = $1 order by event`, [queue])
   return (rows as { event: string }[]).map((row) => row.event)
 }
+
+/** The same read under the name Finance's suite uses. */
+export const subscriptionsOf = subscribedEvents
 
 /**
  * Whether an expression is one the registry accepts as a schedule: five

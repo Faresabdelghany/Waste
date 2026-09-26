@@ -45,12 +45,21 @@
 //   a number       — a document numbered from one of the company's series
 //                    (a ticket, an invoice, a credit note) takes it one way
 //                    (`nextNumber`), under the company's row lock.
+//   a command      — a write the worker runs as well as a route (Issue #109
+//                    part B's `openTicket`, Issue #112 part B's
+//                    `recordBillableEvent`, `issueInvoice` and `runBilling`,
+//                    under `@waste/db/commands/`) has no request and refuses
+//                    with a `Refused` carrying its status and its sentence,
+//                    which the API's error handler (problem.ts,
+//                    `refusedProblem`) answers as the 409 or the 400 the route
+//                    always answered; a route calls the command and catches
+//                    nothing.
 //
 // The lock, the number and the two instant spellings (`stampsOf`,
 // `instantOf`) live in `@waste/db` since Issue #109 part B
 // (`commands/shared.ts`, `commands/resolution-rows.ts`), where the write
-// statements both processes run — `openTicket` first — read them; they are
-// re-exported here under the names every route always used.
+// statements both processes run — `openTicket` first, Finance's after — read
+// them; they are re-exported here under the names every route always used.
 //
 // Nothing here knows a table or a resource but the company's row, which every
 // series lives on: what is not shared by every route module stays in the one

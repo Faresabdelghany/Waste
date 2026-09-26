@@ -1,7 +1,11 @@
-// What every shared write statement repeats, once (Issue #109 part B). The
-// statements under this directory are the ones both processes run — the API
-// inside a request's transaction, the worker inside a job's — and they agree
-// on three things the API's routes/shared.ts spelled for its routes alone:
+// What every shared write statement repeats, once (Issue #109 part B, Issue
+// #112 part B; #109 §7.24's question — where do the shared write statements
+// live once `apps/worker` exists — answered: here). The statements under this
+// directory are the ones both processes run — the API inside a request's
+// transaction, the worker inside a job's — and a statement is a function over
+// `tx` that takes no Principal and no Context, so either process may run it.
+// What it needs of the request layer is exactly this file, and the three
+// things the API's routes/shared.ts spelled for its routes alone:
 //
 //   a row lock   — a rule the caller holds rather than the database is only
 //                  held per transaction, and two transactions that read the
@@ -25,12 +29,22 @@
 //                  the sentence and the status the API would answer, and
 //                  never a `ProblemError`, which is Hono's and the API's
 //                  (the worker has no response to put it in); the API's
-//                  transaction middleware maps a `Refused` to the problem of
-//                  its status, so a route that calls a shared statement
-//                  answers what it always answered.
+//                  error handler maps a `Refused` to the problem of its
+//                  status (`refusedProblem`), so a route that calls a shared
+//                  statement answers what it always answered. A refusal the
+//                  database gives — a unique or exclusion violation the
+//                  statement foresaw and gave a sentence to — goes through
+//                  `refuseDuplicate` and `refuseOverlap`, the commands' two
+//                  doors, which read the constraint's name off the SQLSTATE
+//                  (`../sqlstate`) and throw the sentence as a 409 `Refused`;
+//                  a constraint the statement did not name is left to the
+//                  caller, which for the API is still a 409 with the
+//                  constraint's name — the signal that a sentence is missing.
 //
 // The API's routes/shared.ts re-exports `lockRow`, `lockRows` and
-// `nextNumber` from here, so a route reads them where it always did. Nothing
+// `nextNumber` from here, so a route reads them where it always did; its own
+// `refuseDuplicate` and `refuseOverlap` stay the routes' doors, answering a
+// `ProblemError` directly, since a route has the request in hand. Nothing
 // here knows a table or a resource but the company's row, which every series
 // lives on.
 import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm"
@@ -38,6 +52,13 @@ import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 
 import type { Tx } from "../client"
 import { company } from "../schema/organisation"
+import { exclusionConstraintOf, uniqueConstraintOf } from "../sqlstate"
+
+// The SQLSTATE readers live in ../sqlstate, where the API's problem.ts and
+// the worker's consumers read them too; they are re-exported here as well,
+// since a duplicate met inside a command is read the same way as one met by
+// a route, and a consumer that imports the commands has them in one place.
+export { checkConstraintOf, constraintOf, EXCLUSION_VIOLATION, exclusionConstraintOf, sqlstate, UNIQUE_VIOLATION, uniqueConstraintOf } from "../sqlstate"
 
 /** A table a row can be looked up in the way every table of this system can be: by its own id, inside a company. */
 export type TenantTable = PgTable & { id: PgColumn; companyId: PgColumn }
@@ -75,11 +96,40 @@ export class RefusedField extends Refused {
   }
 }
 
+/** What the two doors below share: run the write, and raise the sentence the statement wrote for the constraint it hit as a 409 `Refused`. */
+async function refusing<T>(constraintNamed: (error: unknown) => string | undefined, sentences: Readonly<Record<string, string>>, write: () => Promise<T>): Promise<T> {
+  try {
+    return await write()
+  } catch (error) {
+    const constraint = constraintNamed(error)
+    const detail = constraint === undefined ? undefined : sentences[constraint]
+    if (detail === undefined) throw error
+    throw refused(409, detail)
+  }
+}
+
+/**
+ * Runs a write, and turns a unique violation the statement named into a
+ * `Refused` 409 with that sentence. A constraint the statement did not name
+ * is left to the caller, which for the API is still a 409 with the
+ * constraint's name — the signal that a sentence is missing here.
+ */
+export async function refuseDuplicate<T>(sentences: Readonly<Record<string, string>>, write: () => Promise<T>): Promise<T> {
+  return await refusing(uniqueConstraintOf, sentences, write)
+}
+
+/** The same for an exclusion constraint: a row whose period overlaps one already there. */
+export async function refuseOverlap<T>(sentences: Readonly<Record<string, string>>, write: () => Promise<T>): Promise<T> {
+  return await refusing(exclusionConstraintOf, sentences, write)
+}
+
 /**
  * Takes the row lock of the record a rule hangs off, inside the caller's one
  * transaction, and reads nothing back: `select … for update`. A rule the
  * database holds — a key, a period that overlaps — needs none of this; a
- * rule the caller holds does, since it is read first and written after.
+ * rule the caller holds does, since it is read first and written after, and
+ * without the lock two transactions both read the state the other has not
+ * written yet and both pass.
  */
 export async function lockRow(tx: Tx, table: TenantTable, row: { companyId: string; id: string }): Promise<void> {
   await tx

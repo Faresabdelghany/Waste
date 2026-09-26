@@ -18,11 +18,12 @@ env:
   # The worker role's login (migration 0011); `pnpm db:bootstrap` gives it below.
   # The worker's suites read it: the generation test (#97 part B) logs in as
   # this role, pointed at a database of its own, for the sweep that reads
-  # across companies, and the relay test (#104 part C) runs the sweep as this
+  # across companies; the relay test (#104 part C) runs the sweep as this
   # role and the stamp as the API role on another, reaching both with these
-  # cluster-wide logins; the boot test runs pg-boss as the owner on its own
-  # database. `pnpm test` reads it, and REQUIRE_DATABASE below makes its
-  # absence a failure.
+  # cluster-wide logins; the `run-billing` suite (#112 part B) sweeps the
+  # active projects on this role's pool, the way the process does; the boot
+  # test runs pg-boss as the owner on its own database. `pnpm test` reads it,
+  # and REQUIRE_DATABASE below makes its absence a failure.
   WORKER_DATABASE_URL: postgresql://wms_worker:wms_worker@127.0.0.1:54322/postgres
   # A database test may not skip here.
   REQUIRE_DATABASE: "1"

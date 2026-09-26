@@ -19,7 +19,9 @@ import { generateRoutes } from "../jobs/generate-routes"
 import { heartbeat } from "../jobs/heartbeat"
 import { openTickets, RESOLUTION_KINDS } from "../jobs/open-tickets"
 import { planAheadJob } from "../jobs/plan-ahead"
+import { recordBillableEvents } from "../jobs/record-billable-events"
 import { BATCH_SIZE, RELAY_INTERVAL_SECONDS, relayOutbox } from "../jobs/relay-outbox"
+import { runScheduledBilling } from "../jobs/run-billing"
 import { defineOutboxConsumer, OUTBOX_QUEUES, outboxQueue, RelayedEvent } from "../outbox/subscribe"
 
 describe("the job registry", () => {
@@ -90,7 +92,7 @@ describe("the job registry", () => {
     assert.deepEqual(planAheadJob.scheduleData, { source: "schedule" })
     assert.deepEqual(planAheadJob.scheduleOptions, { tz: "UTC", missed: "once" })
     assert.deepEqual(planAheadJob.queueOptions, { retryLimit: 1, retryDelay: 60, deleteAfterSeconds: 604_800 })
-    assert.deepEqual(JOBS.map((job) => job.queue), ["worker.heartbeat", "planning.generate-routes", "planning.plan-ahead", "execution.relay-outbox"])
+    assert.deepEqual(JOBS.map((job) => job.queue), ["worker.heartbeat", "planning.generate-routes", "planning.plan-ahead", "execution.relay-outbox", "resolution.open-tickets", "finance.record-billable-events", "finance.run-billing"])
   })
 
   test("holds the relay: every minute as the backstop of its five-second successor, UTC, one tick queued at a time, no retry, publishing to one queue per outbox kind", () => {
@@ -112,6 +114,23 @@ describe("the job registry", () => {
     for (const queue of OUTBOX_QUEUES) {
       assert.match(queue.queue, /^outbox\.[a-z][a-z-]*$/, queue.queue)
       assert.deepEqual(queue.queueOptions, { retryLimit: 3, retryDelay: 10, retryBackoff: true })
+    }
+  })
+
+  test("holds Finance's two: the consumer subscribed to the three kinds it reads and never scheduled, the billing run scheduled monthly and subscribed to nothing", () => {
+    assert.ok(JOBS.includes(recordBillableEvents))
+    assert.ok(JOBS.includes(runScheduledBilling))
+    assert.deepEqual([...(recordBillableEvents.subscribes ?? [])], ["pickup-completed", "pickup-corrected", "ticket-completed"])
+    assert.equal(recordBillableEvents.schedule, undefined)
+    assert.equal(runScheduledBilling.schedule, "0 4 1 * *")
+    assert.equal(runScheduledBilling.subscribes, undefined)
+  })
+
+  test("subscribes only to kinds of the outbox, each once per job", () => {
+    for (const job of JOBS) {
+      const kinds = job.subscribes ?? []
+      assert.deepEqual([...new Set(kinds)], [...kinds], `${job.queue}: a kind once`)
+      for (const kind of kinds) assert.ok((OUTBOX_KINDS as readonly string[]).includes(kind), `${job.queue}: ${kind} is not an outbox kind`)
     }
   })
 

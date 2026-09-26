@@ -9,6 +9,7 @@
 // here knows pg-boss's connection: a handler gets what it needs from the
 // context, so a test runs it with pools of its own.
 import type { Database } from "@waste/db/client"
+import type { OutboxKind } from "@waste/domain/execution/vocabulary"
 import type { Job, Queue, QueueOptions, ScheduleOptions, SendOptions, WorkOptions } from "pg-boss"
 
 /** What a handler runs with. Built once per process by main.ts, handed to every job; a test builds its own. */
@@ -76,6 +77,10 @@ export type JobContext = {
  * `OUTBOX_KINDS` — each created with its options at start, so a send finds
  * its queue whether or not a consumer has registered yet; a consumer's own
  * queue is its own `queue`.
+ * one is sent by someone — the API, another job, or the relay through
+ * `subscribes`: the outbox kinds whose published events the queue takes
+ * (`../outbox/queues.ts` says what arrives), each `subscribe`d on every start,
+ * so a kind dropped from the list is unsubscribed on the next.
  */
 export type JobDefinition<Data extends object = object> = {
   queue: string
@@ -103,6 +108,8 @@ export type JobDefinition<Data extends object = object> = {
   publishes?: readonly PublishedQueue[]
   /** The pg-boss events this queue is subscribed to, each once; a `publish` of one sends the job here with the published data. */
   subscriptions?: readonly string[]
+  /** The outbox kinds the queue is subscribed to: the relay's `publish(kind, event)` lands on it as a job whose data is the published event. */
+  subscribes?: readonly OutboxKind[]
 }
 
 /** What a queue is created with: pg-boss's `QueueOptions` and, optionally, the `policy`. `partition` and `deadLetter` are not offered: the role may not create a partition, and a dead-letter queue is a decision no job has asked for. */

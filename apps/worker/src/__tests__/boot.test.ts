@@ -1,13 +1,17 @@
 // The wiring end to end, on a database of this file's own (database.ts says
 // why the owner runs it): migration 0011 installed pg-boss's schema, `startBoss`
 // registers every job of the registry — the queue with its options, the
-// worker, the schedule — the heartbeat's schedule fires and its handler runs
-// with the context it was given, a job sent by hand runs the same way, a
-// handler that throws is a failed job the readiness count sees, and a second
-// start converges: the queue options rewritten, the schedule kept once, a
-// schedule dropped from the registry unscheduled. pg-boss's cron pass is asked
-// every second here rather than every minute, so the beat is seen inside the
-// test's timeout; the expression itself stays the registry's.
+// worker, the schedule, the subscriptions — the heartbeat's schedule fires and
+// its handler runs with the context it was given, a job sent by hand runs the
+// same way, the relay's `publish` of a subscribed kind lands on the consumer's
+// queue as a job whose data is the event (the handshake `outbox/queues.ts`
+// assumes, proved against pg-boss's own fan-out), a handler that throws is a
+// failed job the readiness count sees, and a second start converges: the queue
+// options rewritten, the schedule kept once, a schedule dropped from the
+// registry unscheduled, a subscription dropped from it unsubscribed. pg-boss's
+// cron pass is asked every second here rather than every minute, so the beat
+// is seen inside the test's timeout; the expression itself stays the
+// registry's.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
@@ -20,8 +24,9 @@ import { createBoss, startBoss, STOP_TIMEOUT_MS, subscribedEvents, type Boss } f
 import { defineJob, JOBS, type JobContext } from "../jobs"
 import { heartbeat } from "../jobs/heartbeat"
 import { openTickets } from "../jobs/open-tickets"
+import { recordBillableEvents } from "../jobs/record-billable-events"
 import { relayOutbox } from "../jobs/relay-outbox"
-import { outboxQueue } from "../outbox/queues"
+import { outboxEventName, outboxQueue } from "../outbox/queues"
 import { OUTBOX_QUEUES } from "../outbox/subscribe"
 import { checkBoss } from "../readiness"
 import { ownerUnderTest, withDatabaseName } from "./database"
@@ -104,7 +109,7 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
         .sort(byName),
     )
     for (const job of JOBS) {
-      assert.deepEqual(await subscribedEvents(boss, job.queue), [...(job.subscriptions ?? [])].sort(), `${job.queue}'s subscriptions are the registry's`)
+      assert.deepEqual(await subscribedEvents(boss, job.queue), [...(job.subscriptions ?? []), ...(job.subscribes ?? []).map(outboxEventName)].sort(), `${job.queue}'s subscriptions are the registry's`)
     }
     assert.deepEqual(errors, [])
   })
@@ -135,6 +140,22 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     await boss.publish(outboxQueue("route-cancelled"), row)
     await new Promise((resolve) => setTimeout(resolve, 500))
     assert.equal((await boss.findJobs(openTickets.queue, {})).length, 1, "an event the queue is not subscribed to sends nothing here (§7.10)")
+  })
+
+  test("the relay's publish of a subscribed kind lands on the consumer's queue as a job whose data is the published event, and an unsubscribed kind lands nowhere", async () => {
+    const boss = running!.boss
+    // The consumer's own handler would read the tenant's rows; here the fan-out is what is proved, so the queue's worker is stopped and the job is read off the table.
+    await boss.offWork(recordBillableEvents.queue)
+    const event = { id: "01a0d3a5-e5e0-7000-8000-00000000abcd", companyId: "01a0d3a5-e5e0-7000-8000-000000000000", projectId: "01a0d3a5-e5e0-7000-8000-000000000001", kind: "pickup-completed", aggregateKind: "pickup", aggregateId: "01a0d3a5-e5e0-7000-8000-000000000002", occurredAt: "2026-10-05T04:45:00.000Z", payload: { id: "01a0d3a5-e5e0-7000-8000-000000000002" }, publishedAt: null, createdAt: "2026-10-05T04:45:00.000Z", updatedAt: "2026-10-05T04:45:00.000Z" }
+    await boss.publish(outboxEventName("pickup-completed"), event)
+    await until(async () => (await boss.findJobs(recordBillableEvents.queue, {})).length === 1, 10_000, "the published event on the consumer's queue")
+    const [job] = await boss.findJobs(recordBillableEvents.queue, {})
+    assert.deepEqual(job.data, event, "the job's data is the event as published")
+    assert.equal(job.state, "created")
+    // A kind nobody subscribed to fans out to no queue and is not an error.
+    await boss.publish(outboxEventName("route-dispatched"), event)
+    assert.equal((await boss.findJobs(recordBillableEvents.queue, {})).length, 1)
+    await boss.deleteJob(recordBillableEvents.queue, job.id)
   })
 
   test("the heartbeat's schedule fires and its handler runs with the context: one line with the pinned clock and the schedule as its source", async () => {
@@ -207,8 +228,9 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     const changed = defineJob({ ...heartbeat, queueOptions: { retryLimit: 2, deleteAfterSeconds: 3_600 }, schedule: undefined })
     const republished = defineJob({ ...relayOutbox, publishes: [{ queue: "outbox.pickup-failed", queueOptions: { retryLimit: 5 } }] })
     const narrowed = defineJob({ ...openTickets, subscriptions: [outboxQueue("pickup-failed"), outboxQueue("command-rejected")] })
+    const narrowedFinance = defineJob({ ...recordBillableEvents, subscribes: ["pickup-completed", "ticket-completed"] })
     const boss: PgBoss = createBoss({ url, log: (line) => void errors.push(line) })
-    running = await startBoss(boss, [changed, republished, narrowed], context(fresh))
+    running = await startBoss(boss, [changed, republished, narrowed, narrowedFinance], context(fresh))
     const [queue] = await boss.getQueues([heartbeat.queue])
     assert.equal(queue.retryLimit, 2)
     assert.equal(queue.deleteAfterSeconds, 3_600)
@@ -217,6 +239,7 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     const [pickupFailed] = await boss.getQueues(["outbox.pickup-failed"])
     assert.deepEqual([pickupFailed.policy, pickupFailed.retryLimit], ["standard", 5])
     assert.deepEqual(await subscribedEvents(boss, openTickets.queue), ["outbox.command-rejected", "outbox.pickup-failed"], "the two dropped events are unsubscribed, the two kept stay")
+    assert.deepEqual(await subscribedEvents(boss, recordBillableEvents.queue), ["pickup-completed", "ticket-completed"], "pickup-corrected unsubscribed")
     assert.equal(STOP_TIMEOUT_MS, 10_000)
     await running.stop(2_000)
     assert.deepEqual(errors, [])

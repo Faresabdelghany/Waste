@@ -19,13 +19,17 @@
 // fence needs the tenant on every row.
 //
 // It lived in apps/api/src/outbox.ts until the worker became the second
-// process that writes the outbox — Resolution's consumer opens a ticket from
-// an event with no request in hand and emits `ticket-opened` like the office's
-// create does — so it moved to the package both processes consume, beside
-// the write statements that call it (`commands/open-ticket.ts`); the API's
-// module re-exports it, so a route reads `emit` where it always did. It takes
-// the tenant it needs and nothing more, `{ companyId }`, which a `Principal`
-// satisfies and a job's event carries.
+// process that writes the outbox (Issue #109 part B and #112 part B) —
+// Resolution's consumer opens a ticket from an event with no request in hand
+// and emits `ticket-opened` like the office's create does, and Finance's
+// billing run issues invoices on a schedule and emits `invoice-issued` — so it
+// moved to the package both processes consume, beside the write statements
+// that call it (`commands/open-ticket.ts`, `commands/invoice-writes.ts`); the
+// API's module re-exports it, so a route reads `emit` where it always did. It
+// takes the tenant it needs and nothing more, `{ companyId }`, which a
+// `Principal` satisfies and a job's event carries: the API's routes pass what
+// they passed, the commands pass the company alone, and the worker's jobs pass
+// the event's.
 import type { OutboxAggregate, OutboxKind } from "@waste/domain/execution/vocabulary"
 
 import type { Tx } from "../client"
