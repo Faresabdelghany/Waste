@@ -1,19 +1,22 @@
 "use client"
 
 // Step 5 — Ready to create this scheme? Four sections with Change links
-// back to their steps, then the create option.
+// back to their steps, then the two create options: "Create as" and
+// "Changes to a running scheme" (issue #38), the edit policy the edit-save
+// planner reads once the scheme has generated.
 
 import type { ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
 import { projectCalendarLabel } from "@waste/domain/route-schemes/project-calendar"
+import { SCHEME_EDIT_POLICY_DESCRIPTIONS } from "@waste/domain/route-schemes/creation"
 import { HOLIDAY_POLICY_LABELS, formatClockTime, formatOccurrenceDate } from "@waste/domain/route-schemes/occurrences"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { recurrenceCadenceLabel, serviceDaysRangeLabel } from "@waste/domain/route-schemes/recurrence"
 
 import type { WizardRecords } from "./use-wizard-records"
 import type { WizardModel } from "./wizard-model"
-import { CREATE_AS_OPTIONS, type WizardStepId } from "./wizard-options"
+import { CREATE_AS_OPTIONS, EDIT_POLICY_OPTIONS, type WizardStepId } from "./wizard-options"
 import { Field, SimpleSelect } from "./wizard-fields"
 
 function ReviewRow({ label, value }: { label: string; value: ReactNode }) {
@@ -128,6 +131,16 @@ export function StepReview({
             options={CREATE_AS_OPTIONS}
             placeholder="Select"
           />
+        </Field>
+        <Field id="scheme-edit-policy" label="Changes to a running scheme">
+          <SimpleSelect
+            id="scheme-edit-policy"
+            value={data.editPolicy}
+            onChange={(value) => update({ editPolicy: value as GuidedSchemeData["editPolicy"] })}
+            options={EDIT_POLICY_OPTIONS}
+            placeholder="Select"
+          />
+          <p className="text-xs text-muted-foreground">{SCHEME_EDIT_POLICY_DESCRIPTIONS[data.editPolicy]}</p>
         </Field>
       </div>
     </div>

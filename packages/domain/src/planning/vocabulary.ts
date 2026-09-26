@@ -39,7 +39,7 @@ export const WEEK_ROTATIONS = ["odd", "even"] as const
 export const HOLIDAY_POLICIES = ["shift-next", "shift-prev", "skip", "collect"] as const
 /** What a recurrence date became under the holiday policy: a reading `generateOccurrences` answers, never stored. */
 export const OCCURRENCE_STATUSES = ["planned", "shifted", "skipped", "holiday"] as const
-/** How a later edit of a scheme with generated routes applies; stored, consumed by nothing yet (#38). */
+/** How a later edit of a scheme with generated routes applies: ask each time, apply to future collections, or this collection only (route-schemes/edit.ts, #38). */
 export const SCHEME_EDIT_POLICIES = ["ask", "future", "single"] as const
 /** What kind of work a Route Scheme plans. */
 export const SERVICE_TYPES = ["container-collection", "underground-collection", "kerbside-collection", "crane-collection", "tank-emptying"] as const

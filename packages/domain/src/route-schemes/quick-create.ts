@@ -8,7 +8,13 @@
 // there is no second create path to drift.
 
 import { typedString } from "../record-values"
-import { isSchemeCreateAs, type SchemeCreateAs } from "./creation"
+import {
+  DEFAULT_SCHEME_EDIT_POLICY,
+  isSchemeCreateAs,
+  isSchemeEditPolicy,
+  type SchemeCreateAs,
+  type SchemeEditPolicy,
+} from "./creation"
 import {
   driverIneligibilityReason,
   driverOptions,
@@ -74,6 +80,12 @@ export interface GuidedSchemeData {
   holidayPolicy: HolidayPolicy
   /** Review step: create Validated (no generation) or Effective (generate + Plan Ahead). */
   createAs: SchemeCreateAs
+  /**
+   * Review step, and the quick form's last field: how a later edit of the
+   * running scheme applies (issue #38) — the edit-save planner (edit.ts)
+   * reads it off the stored record.
+   */
+  editPolicy: SchemeEditPolicy
   serviceProviderId?: string
   plannedVehicleId?: string
   plannedDriverId?: string
@@ -119,6 +131,7 @@ export const QUICK_SCHEME_DRAFT_FIELD_IDS: ReadonlySet<string> = new Set([
   "plannedStartTime",
   "holidayPolicy",
   "createAs",
+  "editPolicy",
   "serviceProviderId",
   "plannedVehicleId",
   "plannedDriverId",
@@ -179,6 +192,7 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
   }
   const holidayPolicy = values.holidayPolicy
   const createAs = values.createAs
+  const editPolicy = values.editPolicy
   return {
     schemeName,
     projectId: optionalId(values, "projectId"),
@@ -199,6 +213,8 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
     // initial window generated on create (the pre-2026-09-16 default).
     holidayPolicy: isHolidayPolicy(holidayPolicy) ? holidayPolicy : "skip",
     createAs: isSchemeCreateAs(createAs) ? createAs : "effective",
+    // The form's own select (issue #38); a form without a pick asks, the default.
+    editPolicy: isSchemeEditPolicy(editPolicy) ? editPolicy : DEFAULT_SCHEME_EDIT_POLICY,
     depotId: optionalId(values, "depotId"),
     unloadingStationId: optionalId(values, "unloadingStationId"),
     groups: [group],
