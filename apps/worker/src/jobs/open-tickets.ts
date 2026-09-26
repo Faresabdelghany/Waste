@@ -1,17 +1,19 @@
-// The outbox's first consumer (Issue #109 part B, §3, ADR-0004): the queue
-// `resolution.open-tickets`, subscribed to the four kinds Resolution reads —
-// `pickup-failed`, `pickup-skipped`, `pickup-problem-reported` and
-// `command-rejected` — whose handler turns an execution event into a Ticket,
-// or into nothing. `route-cancelled` is not among them on purpose (§7.10): a
+// The outbox's first consumer (Issue #109 part B, §3, ADR-0004): the four
+// `outbox.<kind>` queues of the kinds Resolution reads — `pickup-failed`,
+// `pickup-skipped`, `pickup-problem-reported` and `command-rejected` — taken
+// through `defineOutboxConsumer` (../outbox/subscribe.ts), one registry entry
+// per kind, whose handler turns an execution event into a Ticket, or into
+// nothing. `route-cancelled` is not among them on purpose (§7.10): a
 // cancellation makes no ticket of its own, since each stop it closed arrives
 // as its own `pickup-skipped · route-cancelled`. The relay (#104 part C)
-// publishes each `outbox_event` row under `outboxQueue(kind)` and stamps
-// `published_at` in its own transaction; this job consumes what pg-boss
-// fans out and never reads the outbox table (src/outbox/queues.ts holds
-// that one assumption).
+// sends each `outbox_event` row to its kind's queue and stamps `published_at`
+// in the same transaction; this consumer works those queues and never reads
+// the outbox table.
 //
-// Per job, in order. The event is parsed with the contracts — `OutboxJob`
-// first, then the kind's payload: a `Pickup` with the proof the command made
+// Per job, in order. The event is parsed with the contracts — `RelayedEvent`
+// first (the seam does that before the handler is called; `openTicketFor`
+// parses again for the tests that call it with raw data), then the kind's
+// payload: a `Pickup` with the proof the command made
 // (`PickupDetail`, the proofs optional since the office's cancellation writes
 // a bare `Pickup`), a `Route` with its `proofs` for a problem reported on the
 // route alone, a `DriverCommandReceipt` for a rejection — and a payload that
@@ -64,7 +66,6 @@
 // at a time in this process; a batch would put two events in one handler
 // and their failures together.
 import { DriverCommandReceipt } from "@waste/contracts/driver-commands"
-import { OutboxEvent } from "@waste/contracts/outbox"
 import { Pickup } from "@waste/contracts/pickups"
 import { ProofOfService } from "@waste/contracts/proofs"
 import { routeFields } from "@waste/contracts/routes"
@@ -87,15 +88,15 @@ import { OPEN_TICKET_STATUSES, type TicketStatus } from "@waste/domain/resolutio
 import { and, asc, eq, inArray } from "drizzle-orm"
 import * as z from "zod"
 
-import { outboxQueue, type OutboxJob } from "../outbox/queues"
-import { defineJob, type JobContext } from "./definition"
+import { defineOutboxConsumer, RelayedEvent } from "../outbox/subscribe"
+import type { JobContext } from "./definition"
 
-/** The kinds Resolution consumes (#104 §6, #109 §3): what the queue is subscribed to. `route-cancelled` is not one (§7.10). */
+/** The kinds Resolution consumes (#104 §6, #109 §3): the queues the consumer works. `route-cancelled` is not one (§7.10). */
 export const RESOLUTION_KINDS = ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"] as const satisfies readonly OutboxKind[]
 export type ResolutionKind = (typeof RESOLUTION_KINDS)[number]
 
-/** The job's data as the relay publishes it: the contracts' outbox row with its tenant beside it. */
-export const OutboxJobData = OutboxEvent.extend({ companyId: z.uuid() })
+/** The job's data as the relay sends it: the contracts' outbox row with its tenant beside it — the seam's `RelayedEvent`, under the name this module always used. */
+export type OutboxJob = RelayedEvent
 
 /** A pickup's event as the applier emits it: the `Pickup`, with the proof the command made where the door wrote one (the office's cancellation writes none). */
 const PickupPayload = Pickup.extend({ proofs: z.array(ProofOfService).optional() })
@@ -278,7 +279,7 @@ async function readBack(api: Database, event: OutboxJob): Promise<string | undef
 
 /** One job's event to its outcome: parsed, consumed, and a duplicate met at a key read back. */
 export async function openTicketFor(data: unknown, { api, now, log }: Pick<JobContext, "api" | "now" | "log">): Promise<OpenTicketsOutcome> {
-  const event = OutboxJobData.parse(data) as OutboxJob
+  const event: OutboxJob = RelayedEvent.parse(data)
   try {
     const outcome = await consume(api, event, now)
     log(`resolution.open-tickets: ${event.kind} ${event.id} → ${outcome.outcome}${"ticketId" in outcome ? ` (ticket ${outcome.ticketId})` : ""}`)
@@ -293,14 +294,13 @@ export async function openTicketFor(data: unknown, { api, now, log }: Pick<JobCo
   }
 }
 
-export const openTickets = defineJob<OutboxJob>({
-  queue: "resolution.open-tickets",
+/** The consumer's queue options: three retries with a short backoff, written over the relay's defaults on the four queues at every start. */
+export const OPEN_TICKETS_QUEUE_OPTIONS = { retryLimit: 3, retryDelay: 5, retryBackoff: true } as const
+
+/** The four registry entries, one per kind on `outbox.<kind>`; spread into `JOBS`. */
+export const openTickets = defineOutboxConsumer({
+  kinds: RESOLUTION_KINDS,
   description: "Opens a Ticket from each execution event that is a case — a failed stop, a stop closed unserved, a reported problem, a rejected command — one per event, a rejection folding into the driver's open one.",
-  subscriptions: RESOLUTION_KINDS.map(outboxQueue),
-  queueOptions: { retryLimit: 3, retryDelay: 5, retryBackoff: true },
-  handler: async (jobs, context) => {
-    const outcomes: OpenTicketsOutcome[] = []
-    for (const job of jobs) outcomes.push(await openTicketFor(job.data, context))
-    return outcomes.length === 1 ? outcomes[0] : outcomes
-  },
+  queueOptions: OPEN_TICKETS_QUEUE_OPTIONS,
+  handler: (event, context) => openTicketFor(event, context),
 })

@@ -218,9 +218,6 @@ describe("generation against a migrated database", { skip }, () => {
       if (running === undefined) return `sent-${sent.length}`
       return running.boss.send(queue, data, options)
     },
-    publish: async (event, data, options) => {
-      if (running !== undefined) await running.boss.publish(event, data, options)
-    },
   })
 
   /** A run row of company a's scheme over the window, written as the owner, answering its id. */

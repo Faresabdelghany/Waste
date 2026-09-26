@@ -9,7 +9,6 @@
 // here knows pg-boss's connection: a handler gets what it needs from the
 // context, so a test runs it with pools of its own.
 import type { Database } from "@waste/db/client"
-import type { OutboxKind } from "@waste/domain/execution/vocabulary"
 import type { Job, Queue, QueueOptions, ScheduleOptions, SendOptions, WorkOptions } from "pg-boss"
 
 /** What a handler runs with. Built once per process by main.ts, handed to every job; a test builds its own. */
@@ -44,14 +43,6 @@ export type JobContext = {
    * or not at all.
    */
   send: (name: string, data: object | null, options?: SendOptions) => Promise<string | null>
-  /**
-   * `boss.publish(event, data, options)` as this process is connected:
-   * pg-boss's fan-out, one job on every queue `subscribe`d to the event and
-   * none where none is — which is why the relay sends to the kind's own
-   * queue first and publishes after, so an event is never dropped for want of
-   * a subscriber. Takes `{ db }` like `send`.
-   */
-  publish: (event: string, data: object, options?: SendOptions) => Promise<void>
 }
 
 /**
@@ -65,18 +56,14 @@ export type JobContext = {
  * changed in the file is the policy in the database. `schedule` is a cron
  * expression (five fields, UTC unless `scheduleOptions.tz` says otherwise)
  * that sends the job with `scheduleData` on every occurrence; a job without
- * one is sent by someone — the API, another job, or a `publish` the queue is
- * `subscriptions` to: pg-boss's fan-out, `boss.subscribe(event, queue)`,
- * under which every `boss.publish(event, data)` sends one job to every queue
- * subscribed to the event. A consumer of the outbox names one event per kind
- * it wants (`outboxQueue(kind)`, src/outbox/queues.ts), and the wiring keeps
- * the table converged: the events named are subscribed on every start and
- * an event this queue was subscribed to and no longer names is unsubscribed.
- * `publishes` names the queues the handler sends to that no job of the
- * registry works — the relay's `outbox.<kind>` queues, one per kind of
- * `OUTBOX_KINDS` — each created with its options at start, so a send finds
- * its queue whether or not a consumer has registered yet; a consumer's own
- * queue is its own `queue`.
+ * one is sent by someone — the API, another job. `publishes` names the queues
+ * the handler sends to that no job of the registry works — the relay's
+ * `outbox.<kind>` queues, one per kind of `OUTBOX_KINDS` — each created with
+ * its options at start, so a send finds its queue whether or not a consumer
+ * has registered yet. A consumer of the outbox is not a job of its own but a
+ * worker on one of those queues: `defineOutboxConsumer` (../outbox/subscribe.ts)
+ * spells one `JobDefinition` per kind, its `queue` `outbox.<kind>`, spread
+ * into the registry, so the relay's `send` is the one door an event takes.
  * one is sent by someone — the API, another job, or the relay through
  * `subscribes`: the outbox kinds whose published events the queue takes
  * (`../outbox/queues.ts` says what arrives), each `subscribe`d on every start,
@@ -106,10 +93,6 @@ export type JobDefinition<Data extends object = object> = {
   scheduleOptions?: ScheduleOptions
   /** Queues the handler sends to and nobody in the registry works, created (and brought to their options) at start; `[]` and undefined mean none. */
   publishes?: readonly PublishedQueue[]
-  /** The pg-boss events this queue is subscribed to, each once; a `publish` of one sends the job here with the published data. */
-  subscriptions?: readonly string[]
-  /** The outbox kinds the queue is subscribed to: the relay's `publish(kind, event)` lands on it as a job whose data is the published event. */
-  subscribes?: readonly OutboxKind[]
 }
 
 /** What a queue is created with: pg-boss's `QueueOptions` and, optionally, the `policy`. `partition` and `deadLetter` are not offered: the role may not create a partition, and a dead-letter queue is a decision no job has asked for. */

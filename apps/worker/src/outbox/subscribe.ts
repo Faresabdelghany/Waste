@@ -28,17 +28,14 @@
 // (`OUTBOX_QUEUES`, created before any worker starts) and a job waits for
 // whoever works it, under pg-boss's retention (fourteen days for a job nobody
 // took, after which the row is dropped and the stamped outbox row is the
-// record). The relay also `publish`es every event under the same name,
-// pg-boss's own fan-out, so a consumer that would rather `subscribe` a queue
-// of its own to `outbox.<kind>` (`boss.subscribe("outbox.pickup-failed",
-// "resolution.open-tickets")`) receives a copy there — a copy, so a consumer
-// takes one door and not both; and the fan-out delivers only to the queues
-// subscribed when the relay ran, so an event before a consumer's first start
-// reaches it through the kind's queue and not this way. Delivery order is
-// pg-boss's — `created_on`, then unordered within one company's batch, which
-// the relay writes in one transaction — so a consumer relies on `id` and on
-// its own rows, never on one event arriving before another; the outbox table
-// is the ordered record.
+// record). This is the one door: the relay does not `publish` as well, since
+// pg-boss's fan-out delivers only to the queues subscribed when the relay
+// ran, so an event before a consumer's first start would be stamped and
+// lost, and a consumer that took both doors would hear every event twice.
+// Delivery order is pg-boss's — `created_on`, then unordered within one
+// company's batch, which the relay writes in one transaction — so a consumer
+// relies on `id` and on its own rows, never on one event arriving before
+// another; the outbox table is the ordered record.
 //
 // The queue's retry policy is `OUTBOX_QUEUE_OPTIONS`, set by the relay when it
 // creates the queue; a consumer that names `queueOptions` of its own has them

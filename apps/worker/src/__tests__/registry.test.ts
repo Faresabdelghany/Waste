@@ -1,25 +1,25 @@
 // The registry held to what the wiring assumes of it, without a database:
 // every queue named once and spelled the way pg-boss accepts a queue name,
 // every cron expression one pg-boss's scheduler parses, every scheduled job
-// carrying the data its occurrences send, every subscription an outbox kind
-// spelled as the relay publishes it and named once, every job saying what it
+// carrying the data its occurrences send, every consumer's queue one the
+// relay publishes and worked by that consumer alone, every job saying what it
 // is for. A job file that breaks one of these fails here, where the message
 // names the job, and not at the worker's start(). The relay's shape and the
-// outbox queues' spelling are held here too, since a consumer subscribes by
+// outbox queues' spelling are held here too, since a consumer takes a kind by
 // that spelling (`outbox.<kind>`, `defineOutboxConsumer`).
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { OUTBOX_KINDS, type OutboxKind } from "@waste/domain/execution/vocabulary"
+import { OUTBOX_KINDS } from "@waste/domain/execution/vocabulary"
 
 import { isCronExpression } from "../boss"
 import { defineJob, JOBS } from "../jobs"
 import { updatableOptions } from "../jobs/definition"
 import { generateRoutes } from "../jobs/generate-routes"
 import { heartbeat } from "../jobs/heartbeat"
-import { openTickets, RESOLUTION_KINDS } from "../jobs/open-tickets"
+import { OPEN_TICKETS_QUEUE_OPTIONS, openTickets, RESOLUTION_KINDS } from "../jobs/open-tickets"
 import { planAheadJob } from "../jobs/plan-ahead"
-import { recordBillableEvents } from "../jobs/record-billable-events"
+import { FINANCE_EVENT_KINDS, RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, recordBillableEvents } from "../jobs/record-billable-events"
 import { BATCH_SIZE, RELAY_INTERVAL_SECONDS, relayOutbox } from "../jobs/relay-outbox"
 import { runScheduledBilling } from "../jobs/run-billing"
 import { defineOutboxConsumer, OUTBOX_QUEUES, outboxQueue, RelayedEvent } from "../outbox/subscribe"
@@ -52,24 +52,32 @@ describe("the job registry", () => {
     }
   })
 
-  test("subscribes each queue to every event once, spelled as the relay publishes an outbox kind (`outbox.<kind>`), and no queue to both a schedule and an event", () => {
+  test("works every consumer's queue once, each one the relay publishes (`outbox.<kind>`), and schedules no consumer", () => {
+    const published = new Set(OUTBOX_QUEUES.map((queue) => queue.queue))
+    const consumed = JOBS.map((job) => job.queue).filter((queue) => queue.startsWith("outbox."))
+    assert.deepEqual([...new Set(consumed)], consumed, "a kind is taken by one consumer")
     for (const job of JOBS) {
-      const subscriptions = job.subscriptions ?? []
-      assert.deepEqual([...new Set(subscriptions)], [...subscriptions], `${job.queue}: an event named twice`)
-      for (const event of subscriptions) {
-        const kind = event.replace(/^outbox\./, "")
-        assert.ok(event.startsWith("outbox.") && (OUTBOX_KINDS as readonly string[]).includes(kind), `${job.queue}: "${event}" is not outboxQueue(<an outbox kind>)`)
-        assert.equal(event, outboxQueue(kind as OutboxKind))
-      }
-      if (subscriptions.length > 0) assert.equal(job.schedule, undefined, `${job.queue}: a consumer is sent by the relay and not by a clock`)
+      if (!job.queue.startsWith("outbox.")) continue
+      assert.ok(published.has(job.queue), `${job.queue}: not a queue the relay publishes`)
+      assert.equal(job.schedule, undefined, `${job.queue}: a consumer is sent by the relay and not by a clock`)
+      assert.equal(job.publishes, undefined, `${job.queue}: a consumer publishes nothing of its own`)
     }
+    assert.deepEqual(consumed.sort(), [...RESOLUTION_KINDS, ...FINANCE_EVENT_KINDS].map(outboxQueue).sort(), "the two consumers take Resolution's four and Finance's three, and nothing else is consumed")
   })
 
-  test("holds the consumer: resolution.open-tickets, subscribed to the four kinds Resolution reads and not to route-cancelled", () => {
-    assert.ok(JOBS.includes(openTickets))
-    assert.equal(openTickets.queue, "resolution.open-tickets")
-    assert.deepEqual(openTickets.subscriptions, ["outbox.pickup-failed", "outbox.pickup-skipped", "outbox.pickup-problem-reported", "outbox.command-rejected"])
+  test("holds Resolution's consumer: one entry per kind Resolution reads on outbox.<kind>, not route-cancelled, with its retry policy", () => {
     assert.deepEqual([...RESOLUTION_KINDS], ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"])
+    assert.deepEqual(
+      openTickets.map((job) => job.queue),
+      ["outbox.pickup-failed", "outbox.pickup-skipped", "outbox.pickup-problem-reported", "outbox.command-rejected"],
+    )
+    for (const job of openTickets) {
+      assert.ok(JOBS.includes(job), job.queue)
+      assert.deepEqual(job.queueOptions, OPEN_TICKETS_QUEUE_OPTIONS)
+      assert.equal(job.schedule, undefined, "sent by the relay, never by a clock")
+      assert.match(job.description, /^Opens a Ticket .* \((pickup-failed|pickup-skipped|pickup-problem-reported|command-rejected)\)$/)
+    }
+    assert.ok(!openTickets.some((job) => job.queue === outboxQueue("route-cancelled")), "§7.10: a cancellation makes no ticket of its own")
   })
 
   test("holds the heartbeat: every minute, UTC, no retry, kept a day, sent as the schedule's", () => {
@@ -92,7 +100,15 @@ describe("the job registry", () => {
     assert.deepEqual(planAheadJob.scheduleData, { source: "schedule" })
     assert.deepEqual(planAheadJob.scheduleOptions, { tz: "UTC", missed: "once" })
     assert.deepEqual(planAheadJob.queueOptions, { retryLimit: 1, retryDelay: 60, deleteAfterSeconds: 604_800 })
-    assert.deepEqual(JOBS.map((job) => job.queue), ["worker.heartbeat", "planning.generate-routes", "planning.plan-ahead", "execution.relay-outbox", "resolution.open-tickets", "finance.record-billable-events", "finance.run-billing"])
+    assert.deepEqual(JOBS.map((job) => job.queue), [
+      "worker.heartbeat",
+      "planning.generate-routes",
+      "planning.plan-ahead",
+      "execution.relay-outbox",
+      ...RESOLUTION_KINDS.map(outboxQueue),
+      ...FINANCE_EVENT_KINDS.map(outboxQueue),
+      "finance.run-billing",
+    ])
   })
 
   test("holds the relay: every minute as the backstop of its five-second successor, UTC, one tick queued at a time, no retry, publishing to one queue per outbox kind", () => {
@@ -117,29 +133,32 @@ describe("the job registry", () => {
     }
   })
 
-  test("holds Finance's two: the consumer subscribed to the three kinds it reads and never scheduled, the billing run scheduled monthly and subscribed to nothing", () => {
-    assert.ok(JOBS.includes(recordBillableEvents))
-    assert.ok(JOBS.includes(runScheduledBilling))
-    assert.deepEqual([...(recordBillableEvents.subscribes ?? [])], ["pickup-completed", "pickup-corrected", "ticket-completed"])
-    assert.equal(recordBillableEvents.schedule, undefined)
-    assert.equal(runScheduledBilling.schedule, "0 4 1 * *")
-    assert.equal(runScheduledBilling.subscribes, undefined)
-  })
-
-  test("subscribes only to kinds of the outbox, each once per job", () => {
-    for (const job of JOBS) {
-      const kinds = job.subscribes ?? []
-      assert.deepEqual([...new Set(kinds)], [...kinds], `${job.queue}: a kind once`)
-      for (const kind of kinds) assert.ok((OUTBOX_KINDS as readonly string[]).includes(kind), `${job.queue}: ${kind} is not an outbox kind`)
+  test("holds Finance's two: the consumer one entry per kind it reads on outbox.<kind>, never scheduled, with its retry policy; the billing run scheduled monthly", () => {
+    assert.deepEqual([...FINANCE_EVENT_KINDS], ["pickup-completed", "pickup-corrected", "ticket-completed"])
+    assert.deepEqual(
+      recordBillableEvents.map((job) => job.queue),
+      ["outbox.pickup-completed", "outbox.pickup-corrected", "outbox.ticket-completed"],
+    )
+    for (const job of recordBillableEvents) {
+      assert.ok(JOBS.includes(job), job.queue)
+      assert.deepEqual(job.queueOptions, RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS)
+      assert.equal(job.schedule, undefined)
     }
+    assert.ok(JOBS.includes(runScheduledBilling))
+    assert.equal(runScheduledBilling.queue, "finance.run-billing")
+    assert.equal(runScheduledBilling.schedule, "0 4 1 * *")
+    assert.ok(!runScheduledBilling.queue.startsWith("outbox."), "sent by the schedule, never by the relay")
   })
 
-  test("names no published queue as a job's own, and no queue twice across jobs and their published queues", () => {
+  test("publishes each queue once, and the queues a job publishes and nobody works are the outbox kinds no consumer takes", () => {
     const worked = new Set(JOBS.map((job) => job.queue))
     const published = JOBS.flatMap((job) => (job.publishes ?? []).map((queue) => queue.queue))
     assert.deepEqual([...new Set(published)], published, "each published queue once")
-    // A consumer's queue is one of the published ones and is worked by that consumer alone: the registry carries no consumer yet, so none overlaps today.
-    assert.deepEqual(published.filter((queue) => worked.has(queue)), [])
+    // A consumer's queue is one of the published ones and is worked by that consumer alone; the rest wait for a consumer under retention.
+    const consumed = published.filter((queue) => worked.has(queue))
+    assert.deepEqual(consumed.sort(), [...RESOLUTION_KINDS, ...FINANCE_EVENT_KINDS].map(outboxQueue).sort())
+    const waiting = published.filter((queue) => !worked.has(queue))
+    assert.equal(waiting.length, OUTBOX_KINDS.length - RESOLUTION_KINDS.length - FINANCE_EVENT_KINDS.length, "the kinds nobody consumes yet")
   })
 
   test("updatableOptions drops the policy and nothing else", () => {

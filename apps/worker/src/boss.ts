@@ -21,17 +21,17 @@
 // Registration is idempotent by construction, so a restart converges on the
 // registry: `createQueue` is a no-op on a queue that exists, `updateQueue`
 // then writes the job's queue options over it, `schedule` upserts by queue
-// name, a queue that lost its `schedule` in the registry is unscheduled, and
-// the queue's `subscriptions` are converged the same way — each event named
-// is `subscribe`d (an upsert on `pgboss.subscription`), and an event the
-// queue was subscribed to and no longer names is `unsubscribe`d, read off the
-// table first (`subscribedEvents`), since pg-boss keeps the table and offers
-// no read of it. A queue a job `publishes` to without working it (the relay's
-// `outbox.<kind>` queues) is created and brought to its options the same way,
-// before any worker starts, so a handler's send never meets a missing queue
-// and a consumer that registers later finds the rows already there. Queues no
-// job names any more are left alone: their rows are evidence and pg-boss's
-// retention removes them in time; an operator deletes the queue.
+// name, and a queue that lost its `schedule` in the registry is unscheduled.
+// A queue a job `publishes` to without working it (the relay's `outbox.<kind>`
+// queues) is created and brought to its options the same way, before any
+// worker starts, so a handler's send never meets a missing queue and a
+// consumer that registers later finds the rows already there; a consumer's
+// own entries then work those queues, and their `queueOptions` are written
+// over the relay's. pg-boss's fan-out (`subscribe`/`publish`) is not used:
+// the relay's `send` to the kind's queue is the one door, and a consumer is
+// a worker on it. Queues no job names any more are left alone: their rows are
+// evidence and pg-boss's retention removes them in time; an operator deletes
+// the queue.
 //
 // pg-boss's maintenance runs here with what the grants allow: `supervise` on
 // (expiring, retrying and deleting jobs, the stats the readiness count
@@ -44,7 +44,6 @@ import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { PgBoss } from "pg-boss"
 
 import { updatableOptions, type AnyJob, type JobContext, type JobQueueOptions } from "./jobs/definition"
-import { outboxEventName } from "./outbox/queues"
 
 export type BossOptions = {
   /** The worker role's URL, a session connection; env.ts has refused the transaction pooler. */
@@ -53,7 +52,9 @@ export type BossOptions = {
   max?: number
   /** Where pg-boss's own errors and warnings go; console.error unless a test wants to look. */
   log?: (line: string) => void
-  /** How often pg-boss looks at the clock for schedules, in seconds: 60 in production, less in a test that waits for a beat. */
+  /** How often pg-boss's cron pass runs — reads the clock and sends the occurrences due — in seconds: pg-boss's 30 in production, 1 in a test that waits for a beat. */
+  cronMonitorIntervalSeconds?: number
+  /** How often the worker that forwards a due occurrence onto its queue polls, in seconds: pg-boss's 5 in production, 1 in a test that waits for a beat. */
   cronWorkerIntervalSeconds?: number
   /** How often the queues' counts (the failed count /readyz reads) are refreshed, in seconds. */
   monitorIntervalSeconds?: number
@@ -73,7 +74,7 @@ export type Boss = {
 /** How long stop() lets a handler in flight finish before it is failed and the pool closed. */
 export const STOP_TIMEOUT_MS = 10_000
 
-export function createBoss({ url, max = 3, log = (line) => console.error(line), cronWorkerIntervalSeconds, monitorIntervalSeconds }: BossOptions): PgBoss {
+export function createBoss({ url, max = 3, log = (line) => console.error(line), cronMonitorIntervalSeconds, cronWorkerIntervalSeconds, monitorIntervalSeconds }: BossOptions): PgBoss {
   const boss = new PgBoss({
     connectionString: url,
     schema: PGBOSS_SCHEMA,
@@ -86,6 +87,7 @@ export function createBoss({ url, max = 3, log = (line) => console.error(line), 
     persistQueueStats: false,
     persistWarnings: false,
     useListenNotify: false,
+    ...(cronMonitorIntervalSeconds === undefined ? {} : { cronMonitorIntervalSeconds }),
     ...(cronWorkerIntervalSeconds === undefined ? {} : { cronWorkerIntervalSeconds }),
     ...(monitorIntervalSeconds === undefined ? {} : { monitorIntervalSeconds }),
   })
@@ -99,11 +101,10 @@ export function createBoss({ url, max = 3, log = (line) => console.error(line), 
  * Starts pg-boss and registers every job: the queues the jobs publish to
  * created or brought to their options first, then, per job, the queue
  * created or brought to the job's options, the worker with the job's handler
- * over the context, the schedule set or removed, and the subscriptions
- * converged. The registry test has already held the list to unique queues,
- * valid cron expressions and each subscription named once, so what fails
- * here is the database: the schema missing or at another version (`start()`
- * says which), or the role unable to reach it.
+ * over the context, and the schedule set or removed. The registry test has
+ * already held the list to unique queues and valid cron expressions, so what
+ * fails here is the database: the schema missing or at another version
+ * (`start()` says which), or the role unable to reach it.
  */
 export async function startBoss(boss: PgBoss, jobs: readonly AnyJob[], context: JobContext): Promise<Boss> {
   await boss.start()
@@ -130,12 +131,6 @@ export async function startBoss(boss: PgBoss, jobs: readonly AnyJob[], context: 
     } else {
       await boss.unschedule(job.queue)
     }
-    // The two spellings of a subscription the registry carries today: `subscriptions`, pg-boss event names, and `subscribes`, outbox kinds under `outboxEventName`; both converged onto the one table.
-    const wanted = [...(job.subscriptions ?? []), ...(job.subscribes ?? []).map(outboxEventName)]
-    for (const event of await subscribedEvents(boss, job.queue)) {
-      if (!wanted.includes(event)) await boss.unsubscribe(event, job.queue)
-    }
-    for (const event of wanted) await boss.subscribe(event, job.queue)
     queues.push(job.queue)
   }
   let stopping: Promise<void> | undefined
@@ -146,15 +141,6 @@ export async function startBoss(boss: PgBoss, jobs: readonly AnyJob[], context: 
     stop: (timeoutMs = STOP_TIMEOUT_MS) => (stopping ??= boss.stop({ graceful: true, timeout: timeoutMs, close: true })),
   }
 }
-
-/** The events a queue is subscribed to, off pg-boss's own table: the read pg-boss keeps the table for and does not offer. */
-export async function subscribedEvents(boss: Pick<PgBoss, "getDb">, queue: string): Promise<string[]> {
-  const { rows } = await boss.getDb().executeSql(`select event from ${PGBOSS_SCHEMA}.subscription where name = $1 order by event`, [queue])
-  return (rows as { event: string }[]).map((row) => row.event)
-}
-
-/** The same read under the name Finance's suite uses. */
-export const subscriptionsOf = subscribedEvents
 
 /**
  * Whether an expression is one the registry accepts as a schedule: five

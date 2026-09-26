@@ -41,7 +41,6 @@ const running = await startBoss(boss, JOBS, {
   now: () => new Date(),
   log: (message) => console.log(message),
   send: (name, data, options) => boss.send(name, data, options),
-  publish: (event, data, options) => boss.publish(event, data, options),
 })
 started = true
 const listening = await listen(createApp({ probe, boss: { boss, queues: running.queues, isStarted: () => started }, checkTimeoutMs: CHECK_TIMEOUT_MS }), {

@@ -1,25 +1,29 @@
 // The scheduled billing run against Postgres (Issue #112 part B): the handler
 // of `finance.run-billing` run directly with pools of this suite's own — the
 // worker role's for the sweep, as the process hands it, and the API role's
-// for the runs — over a tenant minted here (finance-tenant.ts). The sweep
-// finds the tenant's active project and not its `onboarding` one; the run
-// bills the calendar month before the day on the project's clock, issuing one
-// invoice per payer and currency through the same `runBilling` the API's
-// `POST /billing-runs` runs, with `requested_by` and `issued_by` null; a
-// second sweep over the same month issues nothing, which is what makes a
-// retry safe; a run sent by hand names one project and a day; and a project
-// whose run refuses is one failure among the others' successes, the job
-// failing at the end with the project named. Skipped with the reason when
+// for the runs — over a tenant minted here (finance-tenant.ts) on a database
+// of this file's own, since the sweep crosses every company and a sweep on
+// the shared local database would bill every other suite's projects out from
+// under it (the relay test's reason, database.ts; the two application roles
+// reach the fresh database with the cluster-wide logins bootstrap gave them).
+// The sweep finds the tenant's active project and not its `onboarding` one;
+// the run bills the calendar month before the day on the project's clock,
+// issuing one invoice per payer and currency through the same `runBilling`
+// the API's `POST /billing-runs` runs, with `requested_by` and `issued_by`
+// null; a second sweep over the same month issues nothing, which is what
+// makes a retry safe; a run sent by hand names one project and a day; and a
+// project whose run refuses is one failure among the others' successes, the
+// job failing at the end with the project named. Skipped with the reason when
 // `DATABASE_URL`, `WORKER_DATABASE_URL` or `DATABASE_ADMIN_URL` is unset,
 // failed under `REQUIRE_DATABASE`.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
-import { databaseUnderTest as variablesUnderTest, LOCAL_STACK_HINT } from "@waste/tooling/database-under-test"
 import { createDb, type Database } from "@waste/db/client"
 import { eventOf, eventsFrom, invoiceColumns, runColumns } from "@waste/db/commands/billing-shapes"
 import { recordBillableEvent } from "@waste/db/commands/billable-writes"
 import { newId } from "@waste/db/ids"
+import { migrateDatabase } from "@waste/db/migrate"
 import { outboxEvent } from "@waste/db/schema/execution"
 import { billableEvent, billingRun, invoice } from "@waste/db/schema/finance"
 import { withCompany } from "@waste/db/tenant"
@@ -29,17 +33,17 @@ import { and, asc, eq } from "drizzle-orm"
 
 import type { JobContext } from "../jobs"
 import { runScheduledBilling, type ProjectRun, type RunBillingData } from "../jobs/run-billing"
-import { ownerUnderTest } from "./database"
-import { dropFinanceTenant, seedFinanceTenant, testId, type FinanceTenant } from "./finance-tenant"
+import { rolesUnderTest, withDatabaseName } from "./database"
+import { seedFinanceTenant, testId, type FinanceTenant } from "./finance-tenant"
 
-const found = variablesUnderTest(["DATABASE_URL", "WORKER_DATABASE_URL"], { hint: LOCAL_STACK_HINT })
-const owner = ownerUnderTest()
-const skip = found.skip || owner.skip
+const roles = rolesUnderTest()
+const skip = roles.skip
 
 /** The first of October at 04:00 UTC, the schedule's own instant: 06:00 on Copenhagen's clock, so the day there is the first and the month before is September. */
 const FIRST_OF_OCTOBER = new Date("2026-10-01T04:00:00Z")
 
 describe("finance.run-billing against Postgres", { skip }, () => {
+  const name = `waste_worker_billing_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
   let api: Database
   let worker: Database
   let admin: Database
@@ -52,20 +56,24 @@ describe("finance.run-billing against Postgres", { skip }, () => {
     now: () => now,
     log: (message) => void lines.push(message),
     send: async () => null,
-    publish: async () => undefined,
   })
 
   before(async () => {
-    api = createDb(found.urls.DATABASE_URL, { max: 4 })
-    worker = createDb(found.urls.WORKER_DATABASE_URL, { max: 2 })
-    admin = createDb(owner.url, { max: 1 })
+    admin = createDb(roles.adminUrl, { max: 1 })
+    await admin.sql.unsafe(`create database "${name}"`)
+    await migrateDatabase(withDatabaseName(roles.adminUrl, name))
+    api = createDb(withDatabaseName(roles.apiUrl, name), { max: 4 })
+    worker = createDb(withDatabaseName(roles.workerUrl, name), { max: 2 })
     tenant = await seedFinanceTenant(api)
   })
   after(async () => {
-    await dropFinanceTenant(api, admin, tenant.companyId)
-    await api.close()
-    await worker.close()
-    await admin.close()
+    await api?.close()
+    await worker?.close()
+    try {
+      await admin.sql.unsafe(`drop database if exists "${name}" with (force)`)
+    } finally {
+      await admin.close()
+    }
   })
 
   /** Runs the handler over one job, as pg-boss would hand it in, and answers the project runs it made. */
@@ -101,7 +109,7 @@ describe("finance.run-billing against Postgres", { skip }, () => {
     assert.equal(runScheduledBilling.schedule, "0 4 1 * *")
     assert.deepEqual(runScheduledBilling.scheduleData, { projectId: null, on: null })
     assert.deepEqual(runScheduledBilling.scheduleOptions, { tz: "UTC", missed: "once" })
-    assert.equal(runScheduledBilling.subscribes, undefined, "sent by the schedule, never by the relay")
+    assert.ok(!runScheduledBilling.queue.startsWith("outbox."), "sent by the schedule, never by the relay")
   })
 
   test("the sweep bills every active project over the calendar month before the day on its clock — one invoice per payer, nobody's request — and skips an onboarding project; a second sweep over the month issues nothing", async () => {
@@ -111,8 +119,9 @@ describe("finance.run-billing against Postgres", { skip }, () => {
     const before = (await runs()).length
 
     const outcomes = await handle({ projectId: null, on: null })
-    // The sweep crosses every company on the shared database; this tenant's project is among them, and its onboarding one is not.
+    // The sweep crosses every company on the database; this suite's is the one there, and its onboarding project is not among the runs.
     const own = outcomes.filter((run) => run.companyId === tenant.companyId)
+    assert.equal(outcomes.length, 1, "the database holds this suite's tenant alone")
     assert.equal(own.length, 1, "the active project, and never the onboarding one")
     const [run] = own
     assert.deepEqual([run.projectId, run.periodFrom, run.periodTo, run.outcome], [tenant.projects.copenhagen.id, "2026-09-01", "2026-09-30", "completed"])
@@ -147,7 +156,7 @@ describe("finance.run-billing against Postgres", { skip }, () => {
   test("a run sent by hand names one project and a day, and bills the month before that day", async () => {
     const august = await ready(tenant.agreements.housing.id, "2026-08-03", 5_000)
     const outcomes = await handle({ projectId: tenant.projects.copenhagen.id, on: "2026-09-01" })
-    assert.equal(outcomes.length, 1, "one project, whatever the other companies on the database hold")
+    assert.equal(outcomes.length, 1, "one project, named")
     const [run] = outcomes
     assert.deepEqual([run.companyId, run.projectId, run.periodFrom, run.periodTo, run.outcome], [tenant.companyId, tenant.projects.copenhagen.id, "2026-08-01", "2026-08-31", "completed"])
     assert.ok(run.outcome === "completed" && run.eventCount === 1 && run.invoiceCount === 1)

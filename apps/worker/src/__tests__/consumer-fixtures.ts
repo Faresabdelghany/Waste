@@ -42,7 +42,7 @@ import { withCompany } from "@waste/db/tenant"
 import type { PickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
 import { eq } from "drizzle-orm"
 
-import type { OutboxJob } from "../outbox/queues"
+import type { OutboxJob } from "../jobs/open-tickets"
 
 /** Ids that count up from the wall clock: a UUIDv7 the contracts accept, one sequence for the suite. */
 export const testId = createIdMinter()

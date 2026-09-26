@@ -74,7 +74,6 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
       if (data && "id" in data && typeof data.id === "string") sent.push({ queue, id: data.id })
       return boss.send(queue, data, options)
     },
-    publish: (event, data, options) => boss.publish(event, data, options),
   }
 
   const a: Tenant = { companyId: id(1, 0xa), projectId: id(2, 0xa) }
@@ -309,7 +308,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.ok((await outbox()).find((row) => row.id === stale)!.publishedAt !== null)
   })
 
-  test("a queue subscribed to outbox.<kind> by pg-boss's own fan-out receives a copy in the same transaction, the kind's own queue its job as ever", async () => {
+  test("the kind's queue is the one door: a queue subscribed to outbox.<kind> through pg-boss's fan-out receives nothing, since the relay sends and does not publish", async () => {
     const subscribed = "test.subscribed"
     await boss.createQueue(subscribed)
     await boss.subscribe(outboxQueue("route-reassigned"), subscribed)
@@ -317,18 +316,11 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     sent.length = 0
     assert.deepEqual(await relayOnce(context), { swept: 1, published: 1 })
     assert.deepEqual(sent.map((entry) => [entry.queue, entry.id]), [["outbox.route-reassigned", a8]], "the kind's own queue, through send")
-    const copies = await boss.findJobs(subscribed, {})
-    assert.equal(copies.length, 1, "and one copy on the subscribed queue, through publish")
-    const copy = RelayedEvent.parse(copies[0].data)
-    assert.equal(copy.id, a8)
-    assert.equal(copy.companyId, a.companyId)
+    assert.deepEqual(await boss.findJobs(subscribed, {}), [], "no copy on the subscribed queue: one door, so a consumer that also subscribed would not hear an event twice")
     const own = (await outboxJobs()).filter((job) => job.name === "outbox.route-reassigned")
-    assert.equal(own.length, 1, "the kind's queue has the one job; the fan-out added nothing there")
-    // Unsubscribed, the next event of the kind reaches the kind's queue alone: pg-boss's subscription table (cascading from the queue's row) is the fan-out's whole memory.
+    assert.equal(own.length, 1, "the kind's queue has the one job")
+    assert.equal(RelayedEvent.parse(own[0].data).id, a8)
     await boss.unsubscribe(outboxQueue("route-reassigned"), subscribed)
-    await emit(a, "route-reassigned", { id: id(0x241), status: "planned" })
-    assert.deepEqual(await relayOnce(context), { swept: 1, published: 1 })
-    assert.equal((await boss.findJobs(subscribed, {})).length, 1, "no second copy")
     await boss.deleteQueue(subscribed)
   })
 

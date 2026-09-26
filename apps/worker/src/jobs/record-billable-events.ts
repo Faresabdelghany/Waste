@@ -1,11 +1,12 @@
-// The outbox's second consumer (Issue #112 §3, part B): one pg-boss queue,
-// `finance.record-billable-events`, subscribed to the kinds the relay
-// publishes that Finance reads — `pickup-completed`, `pickup-corrected` and
-// `ticket-completed` (`unload-recorded` waits for the tonnage component that
-// reads a weight, §1) — whose handler parses the job's event with the
-// contracts, reads the facts beside the payload in one statement each under
-// `withCompany` (finance-facts.ts), hands the plain facts to the domain's
-// `billableFor`, and does what it answers: records the draft through
+// The outbox's second consumer (Issue #112 §3, part B): the `outbox.<kind>`
+// queues of the kinds the relay publishes that Finance reads —
+// `pickup-completed`, `pickup-corrected` and `ticket-completed`
+// (`unload-recorded` waits for the tonnage component that reads a weight, §1)
+// — taken through `defineOutboxConsumer` (../outbox/subscribe.ts), one
+// registry entry per kind, whose handler takes the job's event parsed with the
+// contracts (`RelayedEvent`), reads the facts beside the payload in one
+// statement each under `withCompany` (finance-facts.ts), hands the plain facts
+// to the domain's `billableFor`, and does what it answers: records the draft through
 // `recordBillableEvent` with no person and the event's id, cancels the
 // pickup's live event with the consumer's reason, records the reversal of an
 // invoiced one, or nothing. Every write runs as `wms_api` under `withCompany`
@@ -16,8 +17,8 @@
 // pg-boss delivers at least once, so the handler is idempotent by the
 // event's id: every row it writes carries `source_event_id = event.id` under
 // `billable_event_source_event_id_idx`, and a redelivery meets the index —
-// `refuseDuplicate` on that one constraint — reads the row it wrote the first
-// time (`eventBySource`) and completes. A correction that stamps rather than
+// `uniqueConstraintOf` on that one constraint — reads the row it wrote the
+// first time (`eventBySource`) and completes. A correction that stamps rather than
 // writes reads the pickup's live event under its row lock (`liveEventOf`) and
 // finds the cancellation already there, or no live event at all, and does
 // nothing; and a reversal is a row with the correction's id, so a second
@@ -33,26 +34,29 @@
 // fails the job, which pg-boss retries on the queue's policy and then counts
 // on `/readyz`. A row that is not there is thrown and not skipped, since an
 // event about a pickup nobody can find is a relay or a fence gone wrong and
-// never news to drop. The retry policy is pg-boss's default (two retries,
-// with a short backoff spelled here), the retention a week.
+// never news to drop. The retry policy is two retries with a short backoff,
+// the retention a week, written over the relay's defaults on the three queues
+// at every start.
 import { PickupDetail } from "@waste/contracts/pickups"
 import { Ticket } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
 import { cancelLiveEvent, eventBySource, ONE_ROW_PER_SOURCE_EVENT, recordBillableEvent } from "@waste/db/commands/billable-writes"
 import { eventOf } from "@waste/db/commands/billing-shapes"
-import { uniqueConstraintOf } from "@waste/db/commands/shared"
+import { uniqueConstraintOf } from "@waste/db/sqlstate"
 import { newId } from "@waste/db/ids"
 import { withCompany } from "@waste/db/tenant"
 import type { OutboxKind } from "@waste/domain/execution/vocabulary"
 import { billableFor, PICKUP_EVENT_KINDS, type BillableAction, type EventFacts } from "@waste/domain/finance/from-event"
-import type { Job } from "pg-boss"
 
-import { PublishedEvent } from "../outbox/queues"
-import { defineJob, type JobContext } from "./definition"
+import { defineOutboxConsumer, type RelayedEvent } from "../outbox/subscribe"
+import type { JobContext } from "./definition"
 import { pickupFacts, pickupRow, ticketFacts, ticketRow } from "./finance-facts"
 
-/** The kinds this queue is subscribed to: what Finance's consumer reads of the outbox (§3's table; `unload-recorded` is the deferred tonnage component's). */
+/** The kinds this consumer takes, one queue each: what Finance reads of the outbox (§3's table; `unload-recorded` is the deferred tonnage component's). */
 export const FINANCE_EVENT_KINDS = [...PICKUP_EVENT_KINDS, "ticket-completed"] as const satisfies readonly OutboxKind[]
+
+/** The job's data as the relay sends it: the seam's `RelayedEvent`, under the name this module always used. */
+export type PublishedEvent = RelayedEvent
 
 /** What one job answered, for the log and the job's output. */
 export type Recorded = { event: string; kind: OutboxKind; did: "recorded" | "cancelled" | "reversed" | "nothing" | "replayed"; billableEventId: string | null }
@@ -111,23 +115,23 @@ async function act(tx: Tx, event: PublishedEvent, action: BillableAction | undef
   }
 }
 
-export const recordBillableEvents = defineJob<PublishedEvent>({
-  queue: "finance.record-billable-events",
+/** One event to what was done with it: the facts read and the write made in one fenced transaction as the tenant. */
+export async function recordBillableEventFor(event: PublishedEvent, { api, log }: Pick<JobContext, "api" | "log">): Promise<Recorded> {
+  const outcome = await withCompany(api.db, event.companyId, async (tx) => {
+    const { facts, live } = await factsOf(tx, event)
+    return await act(tx, event, billableFor(facts), live)
+  })
+  log(`finance.record-billable-events: ${outcome.kind} ${outcome.event} → ${outcome.did}${outcome.billableEventId === null ? "" : ` (billable event ${outcome.billableEventId})`}`)
+  return outcome
+}
+
+/** The consumer's queue options: two retries with a short backoff, kept a week, written over the relay's defaults on the three queues at every start. */
+export const RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS = { retryLimit: 2, retryDelay: 5, retryBackoff: true, deleteAfterSeconds: 60 * 60 * 24 * 7 } as const
+
+/** The three registry entries, one per kind on `outbox.<kind>`; spread into `JOBS`. */
+export const recordBillableEvents = defineOutboxConsumer({
+  kinds: FINANCE_EVENT_KINDS,
   description: "Records a Billable Event from each pickup-completed, pickup-corrected and ticket-completed the relay publishes, or cancels or reverses the pickup's live event on a correction; one row per outbox event however often it is delivered.",
-  subscribes: FINANCE_EVENT_KINDS,
-  queueOptions: { retryLimit: 2, retryDelay: 5, retryBackoff: true, deleteAfterSeconds: 60 * 60 * 24 * 7 },
-  handler: async (jobs: Job<PublishedEvent>[], { api, log }: JobContext) => {
-    const outcomes: Recorded[] = []
-    for (const job of jobs) {
-      // A payload that does not parse fails the job with zod's reasons: the relay sent something this consumer does not read, and nothing is written from it.
-      const event = PublishedEvent.parse(job.data)
-      const outcome = await withCompany(api.db, event.companyId, async (tx) => {
-        const { facts, live } = await factsOf(tx, event)
-        return await act(tx, event, billableFor(facts), live)
-      })
-      log(`finance.record-billable-events: ${outcome.kind} ${outcome.event} → ${outcome.did}${outcome.billableEventId === null ? "" : ` (billable event ${outcome.billableEventId})`} (job ${job.id})`)
-      outcomes.push(outcome)
-    }
-    return { outcomes }
-  },
+  queueOptions: RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS,
+  handler: (event, context) => recordBillableEventFor(event, context),
 })

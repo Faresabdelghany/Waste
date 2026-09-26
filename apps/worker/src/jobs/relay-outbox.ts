@@ -36,22 +36,18 @@
 // and a migration with no number reserved for it, and would have made the
 // relay the one writer in the system outside the fence.
 //
-// Two doors for a consumer, one spelling, `outbox.<kind>`, both written in
-// the row's transaction. The first is a job `send` to the queue of that name:
-// the relay owns these queues (`publishes: OUTBOX_QUEUES` has the wiring
-// create one per kind of the vocabulary before any worker starts), so a job
-// waits there under pg-boss's retention for whoever works it, and a consumer
-// is one line in the registry through `defineOutboxConsumer`. The second is
-// pg-boss's own fan-out, `publish` under the same name: a consumer that
-// `subscribe`d its own queue to `outbox.<kind>` (#109 B's spelling) receives
-// a copy on that queue, and where nothing has subscribed the publish is a
-// read of pg-boss's subscription table and nothing more. The first door is
-// the durable one — a fan-out delivers only to the queues subscribed at
-// publish time, so an event relayed before a consumer's first start reaches
-// no subscriber, where the kind's queue keeps it — and a consumer takes one
-// door and not both, or it hears every event twice. Which kinds exist is the
-// domain's `OUTBOX_KINDS`; a kind added there is a queue here with nothing
-// else to change.
+// One door for a consumer, one spelling, `outbox.<kind>`, written in the
+// row's transaction: a job `send` to the queue of that name. The relay owns
+// these queues (`publishes: OUTBOX_QUEUES` has the wiring create one per kind
+// of the vocabulary before any worker starts), so a job waits there under
+// pg-boss's retention for whoever works it, and a consumer is one entry per
+// kind in the registry through `defineOutboxConsumer`, working the queue. The
+// relay does not `publish` as well: pg-boss's fan-out delivers only to the
+// queues subscribed at publish time, so an event relayed before a consumer's
+// first start would reach no subscriber, where the kind's queue keeps it —
+// and a second door would hand a consumer that took both every event twice.
+// Which kinds exist is the domain's `OUTBOX_KINDS`; a kind added there is a
+// queue here with nothing else to change.
 //
 // The tick. pg-boss's schedule is minute-granular (its cron pass runs once a
 // minute and a six-field expression is refused by the registry, boss.ts), and
@@ -146,7 +142,7 @@ const onTransaction = (tx: Tx): SendOptions => ({ db: fromDrizzle(tx, sql) })
  * order, on this same transaction. Stamp and sends commit together or not at
  * all. Answers how many.
  */
-export async function relayCompany(context: Pick<JobContext, "api" | "send" | "publish">, companyId: string, ids: readonly string[]): Promise<number> {
+export async function relayCompany(context: Pick<JobContext, "api" | "send">, companyId: string, ids: readonly string[]): Promise<number> {
   return withCompany(context.api.db, companyId, async (tx) => {
     const rows = await tx
       .select()
@@ -174,10 +170,8 @@ export async function relayCompany(context: Pick<JobContext, "api" | "send" | "p
       const stamp = stamps.get(row.id)
       if (!stamp) throw new Error(`execution.relay-outbox: row ${row.id} was locked and not stamped`)
       const event = toRelayed(row, stamp)
-      const name = outboxQueue(event.kind)
-      // Two doors, one spelling, one transaction: the job on the kind's own queue, and pg-boss's fan-out to every queue subscribed to the same name (none, until a consumer subscribes one).
-      await context.send(name, event, options)
-      await context.publish(name, event, options)
+      // One door, one transaction: the job on the kind's own queue, which the consumer of that kind works.
+      await context.send(outboxQueue(event.kind), event, options)
     }
     return rows.length
   })
@@ -190,7 +184,7 @@ export async function relayCompany(context: Pick<JobContext, "api" | "send" | "p
  * others are not held up by it. Throws after every company has been tried
  * when any failed, so the tick is a failed job.
  */
-export async function relayOnce(context: Pick<JobContext, "api" | "worker" | "send" | "publish" | "log">): Promise<RelayOutcome> {
+export async function relayOnce(context: Pick<JobContext, "api" | "worker" | "send" | "log">): Promise<RelayOutcome> {
   const swept = await context.worker.db
     .select({ id: outboxEvent.id, companyId: outboxEvent.companyId })
     .from(outboxEvent)

@@ -14,9 +14,9 @@
 // reads the right facts, writes through `openTicket` fenced as the tenant,
 // and is idempotent by the event's id. The handler is called directly with
 // the job's data, since what pg-boss does with a queue is boot.test.ts's to
-// prove; the one wiring fact this file holds is the registry's line and its
-// four subscriptions, and boot.test.ts holds that `startBoss` subscribes
-// them.
+// prove; the one wiring fact this file holds is the registry's four entries,
+// one per kind on the queue the relay publishes, and boot.test.ts holds that
+// a `RelayedEvent` sent there is worked by them.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
@@ -30,8 +30,8 @@ import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq } from "drizzle-orm"
 
 import { JOBS } from "../jobs"
-import { openTicketFor, openTickets, RESOLUTION_KINDS, type OpenTicketsOutcome } from "../jobs/open-tickets"
-import { outboxQueue } from "../outbox/queues"
+import { OPEN_TICKETS_QUEUE_OPTIONS, openTicketFor, openTickets, RESOLUTION_KINDS, type OpenTicketsOutcome } from "../jobs/open-tickets"
+import { outboxQueue } from "../outbox/subscribe"
 import { at, dropConsumerTenant, outboxJob, pickupPayload, proofPayload, receiptPayload, routePayload, seedConsumerTenant, seedReceipt, seedRoute, testId, type ConsumerTenant } from "./consumer-fixtures"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 
@@ -67,14 +67,19 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
   const outboxAbout = async (ticketId: string) => withCompany(pool.db, tenant.companyId, (tx) => tx.select().from(outboxEvent).where(and(eq(outboxEvent.companyId, tenant.companyId), eq(outboxEvent.aggregateId, ticketId))).orderBy(asc(outboxEvent.id)))
   const ticketById = async (id: string) => withCompany(pool.db, tenant.companyId, async (tx) => (await tx.select().from(ticket).where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, id))))[0])
 
-  test("is in the registry, subscribed to the four kinds Resolution reads and not to route-cancelled, with a retry policy", () => {
-    assert.ok(JOBS.includes(openTickets))
-    assert.equal(openTickets.queue, "resolution.open-tickets")
+  test("is in the registry, one entry per kind Resolution reads on the queue the relay publishes and none for route-cancelled, with a retry policy", () => {
     assert.deepEqual(RESOLUTION_KINDS, ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"])
-    assert.deepEqual(openTickets.subscriptions, ["outbox.pickup-failed", "outbox.pickup-skipped", "outbox.pickup-problem-reported", "outbox.command-rejected"])
-    assert.ok(!openTickets.subscriptions?.includes(outboxQueue("route-cancelled")), "§7.10: a cancellation makes no ticket of its own")
-    assert.equal(openTickets.schedule, undefined, "sent by the relay, never by a clock")
-    assert.deepEqual(openTickets.queueOptions, { retryLimit: 3, retryDelay: 5, retryBackoff: true })
+    assert.deepEqual(
+      openTickets.map((job) => job.queue),
+      ["outbox.pickup-failed", "outbox.pickup-skipped", "outbox.pickup-problem-reported", "outbox.command-rejected"],
+    )
+    for (const job of openTickets) {
+      assert.ok(JOBS.includes(job), job.queue)
+      assert.equal(job.schedule, undefined, "sent by the relay, never by a clock")
+      assert.deepEqual(job.queueOptions, OPEN_TICKETS_QUEUE_OPTIONS)
+    }
+    assert.deepEqual(OPEN_TICKETS_QUEUE_OPTIONS, { retryLimit: 3, retryDelay: 5, retryBackoff: true })
+    assert.ok(!openTickets.some((job) => job.queue === outboxQueue("route-cancelled")), "§7.10: a cancellation makes no ticket of its own")
   })
 
   test("a pickup-failed opens one missed-collection ticket, high, from the driver app, naming the stop, its container, its address and the route's actual driver, with created_by null and the event's id, a created row and a ticket-opened event", async () => {
