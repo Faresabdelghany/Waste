@@ -1,15 +1,20 @@
 // The registry held to what the wiring assumes of it, without a database:
 // every queue named once and spelled the way pg-boss accepts a queue name,
 // every cron expression one pg-boss's scheduler parses, every scheduled job
-// carrying the data its occurrences send, every job saying what it is for.
-// A job file that breaks one of these fails here, where the message names
-// the job, and not at the worker's start().
+// carrying the data its occurrences send, every subscription a kind of the
+// outbox named once, every job saying what it is for. A job file that breaks
+// one of these fails here, where the message names the job, and not at the
+// worker's start().
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
+
+import { OUTBOX_KINDS } from "@waste/domain/execution/vocabulary"
 
 import { isCronExpression } from "../boss"
 import { defineJob, JOBS } from "../jobs"
 import { heartbeat } from "../jobs/heartbeat"
+import { recordBillableEvents } from "../jobs/record-billable-events"
+import { runScheduledBilling } from "../jobs/run-billing"
 
 describe("the job registry", () => {
   test("names every queue once", () => {
@@ -46,6 +51,23 @@ describe("the job registry", () => {
     assert.deepEqual(heartbeat.scheduleData, { source: "schedule" })
     assert.deepEqual(heartbeat.scheduleOptions, { tz: "UTC", missed: "skip" })
     assert.deepEqual(heartbeat.queueOptions, { retryLimit: 0, deleteAfterSeconds: 86_400 })
+  })
+
+  test("holds Finance's two: the consumer subscribed to the three kinds it reads and never scheduled, the billing run scheduled monthly and subscribed to nothing", () => {
+    assert.ok(JOBS.includes(recordBillableEvents))
+    assert.ok(JOBS.includes(runScheduledBilling))
+    assert.deepEqual([...(recordBillableEvents.subscribes ?? [])], ["pickup-completed", "pickup-corrected", "ticket-completed"])
+    assert.equal(recordBillableEvents.schedule, undefined)
+    assert.equal(runScheduledBilling.schedule, "0 4 1 * *")
+    assert.equal(runScheduledBilling.subscribes, undefined)
+  })
+
+  test("subscribes only to kinds of the outbox, each once per job", () => {
+    for (const job of JOBS) {
+      const kinds = job.subscribes ?? []
+      assert.deepEqual([...new Set(kinds)], [...kinds], `${job.queue}: a kind once`)
+      for (const kind of kinds) assert.ok((OUTBOX_KINDS as readonly string[]).includes(kind), `${job.queue}: ${kind} is not an outbox kind`)
+    }
   })
 })
 

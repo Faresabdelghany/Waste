@@ -7,6 +7,7 @@
 // naming one. Nothing here knows pg-boss's connection: a handler gets what it
 // needs from the context, so a test runs it with pools of its own.
 import type { Database } from "@waste/db/client"
+import type { OutboxKind } from "@waste/domain/execution/vocabulary"
 import type { Job, QueueOptions, ScheduleOptions, SendOptions, WorkOptions } from "pg-boss"
 
 /** What a handler runs with. Built once per process by main.ts, handed to every job; a test builds its own. */
@@ -51,7 +52,10 @@ export type JobContext = {
  * changed in the file is the policy in the database. `schedule` is a cron
  * expression (five fields, UTC unless `scheduleOptions.tz` says otherwise)
  * that sends the job with `scheduleData` on every occurrence; a job without
- * one is sent by someone — the API, another job.
+ * one is sent by someone — the API, another job, or the relay through
+ * `subscribes`: the outbox kinds whose published events the queue takes
+ * (`../outbox/queues.ts` says what arrives), each `subscribe`d on every start,
+ * so a kind dropped from the list is unsubscribed on the next.
  */
 export type JobDefinition<Data extends object = object> = {
   queue: string
@@ -68,6 +72,8 @@ export type JobDefinition<Data extends object = object> = {
   scheduleData?: Data
   /** `tz`, `key`, `missed` and the send options of a scheduled occurrence. */
   scheduleOptions?: ScheduleOptions
+  /** The outbox kinds the queue is subscribed to: the relay's `publish(kind, event)` lands on it as a job whose data is the published event. */
+  subscribes?: readonly OutboxKind[]
 }
 
 /** Spells a job with its data type inferred from the handler, and nothing else: `export const someJob = defineJob({ ... })`. */

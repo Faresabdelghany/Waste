@@ -21,9 +21,13 @@
 // Registration is idempotent by construction, so a restart converges on the
 // registry: `createQueue` is a no-op on a queue that exists, `updateQueue`
 // then writes the job's queue options over it, `schedule` upserts by queue
-// name, and a queue that lost its `schedule` in the registry is unscheduled.
-// Queues no job names any more are left alone: their rows are evidence and
-// pg-boss's retention removes them in time; an operator deletes the queue.
+// name, a queue that lost its `schedule` in the registry is unscheduled, and
+// a queue's subscriptions (`subscribes`, the outbox kinds the relay's
+// `publish` fans out to it — Issue #112 part B, the first consumer) are
+// upserted one by one and the kinds it no longer names are unsubscribed, read
+// off pg-boss's `subscription` table for the queue. Queues no job names any
+// more are left alone: their rows are evidence and pg-boss's retention removes
+// them in time; an operator deletes the queue.
 //
 // pg-boss's maintenance runs here with what the grants allow: `supervise` on
 // (expiring, retrying and deleting jobs, the stats the readiness count
@@ -33,9 +37,11 @@
 // and `useListenNotify` off (polling is enough for a handful of queues, and
 // the listener is a fourth connection).
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
+import type { OutboxKind } from "@waste/domain/execution/vocabulary"
 import { PgBoss } from "pg-boss"
 
 import type { AnyJob, JobContext } from "./jobs/definition"
+import { outboxEventName } from "./outbox/queues"
 
 export type BossOptions = {
   /** The worker role's URL, a session connection; env.ts has refused the transaction pooler. */
@@ -86,11 +92,12 @@ export function createBoss({ url, max = 3, log = (line) => console.error(line), 
 
 /**
  * Starts pg-boss and registers every job: the queue created or brought to
- * the job's options, the worker with the job's handler over the context, and
- * the schedule set or removed. The registry test has already held the list
- * to unique queues and valid cron expressions, so what fails here is the
- * database: the schema missing or at another version (`start()` says which),
- * or the role unable to reach it.
+ * the job's options, the worker with the job's handler over the context, the
+ * schedule set or removed, and the subscriptions brought to the job's list.
+ * The registry test has already held the list to unique queues and valid
+ * cron expressions, so what fails here is the database: the schema missing
+ * or at another version (`start()` says which), or the role unable to reach
+ * it.
  */
 export async function startBoss(boss: PgBoss, jobs: readonly AnyJob[], context: JobContext): Promise<Boss> {
   await boss.start()
@@ -104,6 +111,7 @@ export async function startBoss(boss: PgBoss, jobs: readonly AnyJob[], context: 
     } else {
       await boss.unschedule(job.queue)
     }
+    await subscribeQueue(boss, job.queue, job.subscribes ?? [])
     queues.push(job.queue)
   }
   let stopping: Promise<void> | undefined
@@ -112,6 +120,20 @@ export async function startBoss(boss: PgBoss, jobs: readonly AnyJob[], context: 
     queues,
     stop: (timeoutMs = STOP_TIMEOUT_MS) => (stopping ??= boss.stop({ graceful: true, timeout: timeoutMs, close: true })),
   }
+}
+
+/** The events a queue is subscribed to, off pg-boss's own table: `subscribe` upserts and `unsubscribe` deletes, and pg-boss reads the table back for nobody, so this does. */
+export async function subscriptionsOf(boss: PgBoss, queue: string): Promise<string[]> {
+  const { rows } = await boss.getDb().executeSql(`select event from ${PGBOSS_SCHEMA}.subscription where name = $1 order by event`, [queue])
+  return rows.map((row: { event: string }) => row.event)
+}
+
+/** Brings a queue's subscriptions to the list given: each kind named subscribed (an upsert), each one on the table and not in the list unsubscribed. */
+async function subscribeQueue(boss: PgBoss, queue: string, kinds: readonly OutboxKind[]): Promise<void> {
+  const current = await subscriptionsOf(boss, queue)
+  const wanted = kinds.map(outboxEventName)
+  for (const event of wanted) await boss.subscribe(event, queue)
+  for (const stale of current.filter((event) => !wanted.includes(event))) await boss.unsubscribe(stale, queue)
 }
 
 /**

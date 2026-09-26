@@ -35,6 +35,16 @@
 // pickup events, the unload and the two Finance publishes are nothing here.
 // A credit for a missed collection is never the consumer's (§7.11).
 //
+// Two of the facts are the table's word and not the payload's, because
+// pg-boss delivers at least once and in no promised order (part B): the
+// `outcome` is the pickup's status as the worker read it beside the payload,
+// and `liveEvent` is read for a completion as for a correction. So a
+// `pickup-completed` whose pickup no longer stands `completed` — a correction
+// has moved it since, and that correction's own event decides — is stale news
+// and records nothing, and a completion of a pickup that already has a live
+// event is nothing too: the pickup is charged for once, whichever of its
+// events arrives first or twice.
+//
 // What the draft does not carry is the writer's: `createdBy` null,
 // `sourceEventId` the event's id (`billable_event_origin_shape` ties the two),
 // the stamps, and the row's own id.
@@ -66,9 +76,10 @@ export type PlacementFacts<Row extends PriceRow = PriceRow> = {
 /** The pickup's live `pickup` event — not cancelled, not reversed — as the worker read it, with whether an invoice line names it. */
 export type LiveEventFacts = {
   id: string
-  agreementId: string
+  /** What the event was under; null with the price on an event blocked `no-subscription`, which a correction cancels and never reverses. */
+  agreementId: string | null
   subscriptionId: string | null
-  productId: string
+  productId: string | null
   quantity: number
   /** The frozen price, or null while the event is blocked. */
   price: PricedAmounts | null
@@ -88,7 +99,7 @@ export type PickupEventFacts<Row extends PriceRow = PriceRow> = {
   containerTypeId: string
   /** The pickup's fraction on the day. */
   wasteFractionId: string
-  /** The pickup's status after the event: `completed` on a completion, the outcome on a correction. */
+  /** The pickup's status as the worker read it beside the payload — the table's word now, not the payload's then: `completed` on a completion still standing, the outcome a correction gave. */
   outcome: PickupOutcome
   /** The placement of the container valid on the service date, or null when none was. */
   placement: PlacementFacts<Row> | null
@@ -208,6 +219,8 @@ function correctionOf(live: LiveEventFacts | null): BillableAction | undefined {
 export function billableFor<Row extends PriceRow>(event: EventFacts<Row>, labels: PriceLabels = {}): BillableAction | undefined {
   switch (event.kind) {
     case "pickup-completed": {
+      // Stale news: a correction moved the pickup since, and its own event decides. Already charged for: the pickup's live event stands, whichever of its events arrived first.
+      if (event.outcome !== "completed" || event.liveEvent !== null) return undefined
       const draft = pickupDraft(event, labels)
       return draft === undefined ? undefined : { action: "record", draft }
     }

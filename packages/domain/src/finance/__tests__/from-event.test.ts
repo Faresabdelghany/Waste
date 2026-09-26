@@ -116,6 +116,14 @@ describe("billableFor a completed pickup", () => {
     // But no placement at all is a block, since the product is not known.
     assert.equal(billableFor(pickupEvent("pickup-completed", { placement: null }))?.action, "record")
   })
+
+  test("is nothing when the pickup no longer stands completed or already has a live event: a completion delivered late or twice charges once, and the correction that moved the pickup decides", () => {
+    for (const outcome of PICKUP_OUTCOMES.filter((candidate) => candidate !== "completed")) {
+      assert.equal(billableFor(pickupEvent("pickup-completed", { outcome })), undefined, `${outcome}: the correction's own event decides`)
+    }
+    assert.equal(billableFor(pickupEvent("pickup-completed", { liveEvent: live() })), undefined, "already charged for")
+    assert.equal(billableFor(pickupEvent("pickup-completed", { liveEvent: live({ price: null }) })), undefined, "a blocked live event is still the pickup's event")
+  })
 })
 
 describe("billableFor a corrected pickup", () => {
