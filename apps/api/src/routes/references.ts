@@ -46,13 +46,14 @@ import { vehicleType } from "@waste/db/schema/fleet-types"
 import { serviceProvider } from "@waste/db/schema/organisation"
 import { depot, unloadingStation, warehouse } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
-import { alert, ticket } from "@waste/db/schema/resolution"
+import { ticket } from "@waste/db/schema/resolution"
 import type { DriverStatus, VehicleKind, VehicleStatus, WarehouseStatus } from "@waste/domain/resources/vocabulary"
 import { and, eq, exists, inArray, isNull, or, sql } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 
 import { invalidRequest } from "../problem"
-import { alertColumns, type AlertRow } from "./resolution-shapes"
+import { findAlert, NOT_AN_ALERT } from "./alert-links"
+import type { AlertRow } from "./resolution-shapes"
 import { requireRow, requireStatus, rowIssue, type NamedRow, type Refusal, type Target, type TenantTable } from "./shared"
 
 /** What a body is told when it names a customer this company does not have; one sentence, wherever the id sat. */
@@ -434,8 +435,8 @@ export async function requireSession(tx: Tx, scope: RouteScope, id: string | nul
 /** What a body is told when it names a ticket of another project, or none. */
 export const NOT_A_TICKET = "Not a ticket of this project"
 
-/** What a body is told when it names an alert of another project, or none. */
-export const NOT_AN_ALERT = "Not an alert of this project"
+/** What a body is told when it names an alert of another project, or none: the shared statement's sentence (`@waste/db/commands/alert-links`), since `openTicket` answers it too. */
+export { NOT_AN_ALERT }
 
 /** What a body is told when it names an agreement of another project, or none. */
 export const NOT_AN_AGREEMENT = "Not an agreement of this project"
@@ -459,11 +460,7 @@ export async function requireAlert(tx: Tx, scope: Scope, id: string, options?: {
 export async function requireAlert(tx: Tx, scope: Scope, id: string | null | undefined, options?: { path?: string }): Promise<AlertRow | undefined>
 export async function requireAlert(tx: Tx, scope: Scope, id: string | null | undefined, { path = "alertId" }: { path?: string } = {}): Promise<AlertRow | undefined> {
   if (id == null) return undefined
-  const [found] = await tx
-    .select(alertColumns)
-    .from(alert)
-    .where(and(eq(alert.companyId, scope.companyId), eq(alert.projectId, scope.projectId), eq(alert.id, id)))
-    .limit(1)
+  const found = await findAlert(tx, scope, id)
   if (found === undefined) throw invalidRequest("body", [{ path, message: NOT_AN_ALERT }])
   return found
 }
