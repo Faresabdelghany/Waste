@@ -22,8 +22,12 @@
 // registry: `createQueue` is a no-op on a queue that exists, `updateQueue`
 // then writes the job's queue options over it, `schedule` upserts by queue
 // name, and a queue that lost its `schedule` in the registry is unscheduled.
-// Queues no job names any more are left alone: their rows are evidence and
-// pg-boss's retention removes them in time; an operator deletes the queue.
+// A queue a job `publishes` to without working it (the relay's `outbox.<kind>`
+// queues) is created and brought to its options the same way, before any
+// worker starts, so a handler's send never meets a missing queue and a
+// consumer that registers later finds the rows already there. Queues no job
+// names any more are left alone: their rows are evidence and pg-boss's
+// retention removes them in time; an operator deletes the queue.
 //
 // pg-boss's maintenance runs here with what the grants allow: `supervise` on
 // (expiring, retrying and deleting jobs, the stats the readiness count
@@ -35,7 +39,7 @@
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { PgBoss } from "pg-boss"
 
-import type { AnyJob, JobContext } from "./jobs/definition"
+import { updatableOptions, type AnyJob, type JobContext, type JobQueueOptions } from "./jobs/definition"
 
 export type BossOptions = {
   /** The worker role's URL, a session connection; env.ts has refused the transaction pooler. */
@@ -55,6 +59,8 @@ export type Boss = {
   boss: PgBoss
   /** The queues registered, in registry order. */
   queues: readonly string[]
+  /** The queues the jobs publish to and none of them works, in registry order, each once. */
+  published: readonly string[]
   /** Stops the workers, lets handlers in flight finish within `timeoutMs`, and closes the pool. Idempotent. */
   stop: (timeoutMs?: number) => Promise<void>
 }
@@ -85,19 +91,33 @@ export function createBoss({ url, max = 3, log = (line) => console.error(line), 
 }
 
 /**
- * Starts pg-boss and registers every job: the queue created or brought to
- * the job's options, the worker with the job's handler over the context, and
- * the schedule set or removed. The registry test has already held the list
- * to unique queues and valid cron expressions, so what fails here is the
- * database: the schema missing or at another version (`start()` says which),
- * or the role unable to reach it.
+ * Starts pg-boss and registers every job: the queues the jobs publish to
+ * created or brought to their options first, then, per job, the queue
+ * created or brought to the job's options, the worker with the job's handler
+ * over the context, and the schedule set or removed. The registry test has
+ * already held the list to unique queues and valid cron expressions, so what
+ * fails here is the database: the schema missing or at another version
+ * (`start()` says which), or the role unable to reach it.
  */
 export async function startBoss(boss: PgBoss, jobs: readonly AnyJob[], context: JobContext): Promise<Boss> {
   await boss.start()
+  const bring = async (queue: string, options: JobQueueOptions | undefined) => {
+    await boss.createQueue(queue, options)
+    if (options) {
+      const updatable = updatableOptions(options)
+      if (Object.keys(updatable).length > 0) await boss.updateQueue(queue, updatable)
+    }
+  }
+  const published: string[] = []
+  for (const job of jobs) {
+    for (const target of job.publishes ?? []) {
+      await bring(target.queue, target.queueOptions)
+      if (!published.includes(target.queue)) published.push(target.queue)
+    }
+  }
   const queues: string[] = []
   for (const job of jobs) {
-    await boss.createQueue(job.queue, job.queueOptions)
-    if (job.queueOptions) await boss.updateQueue(job.queue, job.queueOptions)
+    await bring(job.queue, job.queueOptions)
     await boss.work(job.queue, job.workOptions ?? {}, (batch) => job.handler(batch, context))
     if (job.schedule !== undefined) {
       await boss.schedule(job.queue, job.schedule, job.scheduleData ?? null, job.scheduleOptions)
@@ -110,6 +130,7 @@ export async function startBoss(boss: PgBoss, jobs: readonly AnyJob[], context: 
   return {
     boss,
     queues,
+    published,
     stop: (timeoutMs = STOP_TIMEOUT_MS) => (stopping ??= boss.stop({ graceful: true, timeout: timeoutMs, close: true })),
   }
 }

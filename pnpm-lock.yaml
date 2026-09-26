@@ -474,6 +474,9 @@ importers:
       '@waste/db':
         specifier: workspace:*
         version: link:../../packages/db
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(pg@8.23.0)(postgres@3.4.9)
       hono:
         specifier: ^4.13.8
         version: 4.13.8
