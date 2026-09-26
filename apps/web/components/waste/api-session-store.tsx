@@ -3,8 +3,8 @@
 // The API session (Issue #81): who the browser is signed in as, kept where
 // the server-backed record store can find it. One external store, like the
 // other providers (lib/external-store.ts says why the context carries the
-// handle and not the state): the session read from localStorage after
-// hydration, refreshed through Supabase Auth a minute before its access
+// handle and not the state): the session read from the browser's storage
+// after hydration, refreshed through Supabase Auth a minute before its access
 // token expires (lib/api/auth.ts), and dropped on sign-out or when Auth no
 // longer honours the refresh token.
 //
@@ -13,17 +13,29 @@
 // the adapter is off (no `NEXT_PUBLIC_WASTE_API_URL`) or nobody is signed in
 // — in which case every module reads its fixtures, as before this issue.
 //
-// The session's storage key is `API_SESSION_STORAGE_KEY`; the tokens are
-// what a browser session holds in every Supabase app, and the domain schema
-// is not reachable with them (ADR-0001: the API is the one door, and it
-// looks the caller's grants up on every request).
+// Where the session lives. The two tokens are kept apart, since they are not
+// the same kind of secret (lib/api/session-storage.ts does the reading and
+// writing). The access token, its expiry, the e-mail and the user id go to
+// localStorage under `API_SESSION_STORAGE_KEY`, shared by every tab so a
+// second tab is signed in too; an access token is an hour's credential and
+// the domain schema is not reachable with it (ADR-0001: the API is the one
+// door, and it looks the caller's grants up on every request). The refresh
+// token goes to sessionStorage under `API_REFRESH_TOKEN_STORAGE_KEY`, this
+// tab's alone: it is the one long-lived credential, and this app carries
+// surfaces script can reach (the legacy dashboard's `dangerouslySetInnerHTML`,
+// tiptap), so it is kept where only the tab that signed in can read it and
+// where closing the tab ends it. A tab that did not sign in itself therefore
+// has the access token's remaining life and no refresh: `refreshToken` is
+// null there, and when the token expires that tab reads fixtures until it
+// signs in. This is the prototype's answer, revisited with the real login
+// (Issue 5).
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react"
 
 import { isExpired, refreshSession, signInWithPassword, SignInRefused, type ApiSession } from "@/lib/api/auth"
 import type { ApiClient } from "@/lib/api/client"
 import { API_CONFIG, AUTH_CONFIG, type ApiConfig, type AuthConfig } from "@/lib/api/config"
+import { readStoredSession, writeStoredSession } from "@/lib/api/session-storage"
 import { createExternalStore, type ExternalStore } from "@/lib/external-store"
-import { API_SESSION_STORAGE_KEY, readPersisted } from "@/lib/storage-keys"
 
 export type ApiSessionSnapshot = {
   session: ApiSession | null
@@ -41,17 +53,6 @@ const ApiSessionContext = createContext<ApiSessionStore | null>(null)
 // The server, and every hydrating component, sees nobody signed in.
 const SERVER_SNAPSHOT: ApiSessionSnapshot = { session: null, hydrated: false }
 
-function isSession(value: unknown): value is ApiSession {
-  if (typeof value !== "object" || value === null) return false
-  const candidate = value as Record<string, unknown>
-  return (
-    typeof candidate.accessToken === "string" &&
-    typeof candidate.refreshToken === "string" &&
-    typeof candidate.expiresAt === "number" &&
-    (candidate.email === null || typeof candidate.email === "string")
-  )
-}
-
 /** How often the provider looks at the clock to see whether the token is about to expire. */
 const REFRESH_TICK_MS = 30_000
 
@@ -59,48 +60,35 @@ export function ApiSessionProvider({ children, api = API_CONFIG, auth = AUTH_CON
   const [store] = useState<ApiSessionStore>(() => ({ ...createExternalStore<ApiSessionSnapshot>(SERVER_SNAPSHOT), api, auth }))
 
   useEffect(() => {
-    let parsed: unknown = null
-    try {
-      const raw = readPersisted(window.localStorage, API_SESSION_STORAGE_KEY)
-      parsed = raw ? JSON.parse(raw) : null
-    } catch {
-      // A corrupt store is nobody signed in.
-    }
-    store.set({ session: isSession(parsed) ? parsed : null, hydrated: true })
-    const persist = () => {
-      const { session } = store.getSnapshot()
-      try {
-        if (session === null) window.localStorage.removeItem(API_SESSION_STORAGE_KEY)
-        else window.localStorage.setItem(API_SESSION_STORAGE_KEY, JSON.stringify(session))
-      } catch {
-        // The session stays usable for this tab when persistence is blocked.
-      }
-    }
+    store.set({ session: readStoredSession(window.localStorage, window.sessionStorage), hydrated: true })
+    const persist = () => writeStoredSession(window.localStorage, window.sessionStorage, store.getSnapshot().session)
+    // Written back once on load, so a shared half in an older shape takes this one — and a refresh token it carried leaves localStorage.
+    persist()
     return store.subscribe(persist)
   }, [store])
 
   // Refresh a minute before the access token expires, so a request sent then
   // does not arrive with a token the API refuses; a refresh Auth refuses is a
   // session that is over, and so is an expired session nobody can refresh
-  // (no identity provider configured).
+  // (no identity provider configured, or a tab without the refresh token).
   useEffect(() => {
     const auth = store.auth
     let refreshing = false
     const tick = async () => {
       const { session, hydrated } = store.getSnapshot()
       if (!hydrated || session === null || refreshing || !isExpired(session)) return
-      if (auth === null) {
+      if (auth === null || session.refreshToken === null) {
         store.set((current) => (current.session === session ? { ...current, session: null } : current))
         return
       }
       refreshing = true
       try {
         const next = await refreshSession(auth, session.refreshToken)
-        store.set((current) => (current.session?.refreshToken === session.refreshToken ? { ...current, session: next } : current))
+        store.set((current) => (current.session === session ? { ...current, session: next } : current))
       } catch (error) {
         // A refresh Auth refused ends the session; a refresh the network lost is tried again next tick.
         if (error instanceof SignInRefused && error.status !== 0) {
-          store.set((current) => (current.session?.refreshToken === session.refreshToken ? { ...current, session: null } : current))
+          store.set((current) => (current.session === session ? { ...current, session: null } : current))
         }
       } finally {
         refreshing = false
@@ -156,7 +144,8 @@ export function useApiSession(): ApiSessionValue {
  * The client the record store calls the API with: the configured base and
  * the session's access token; null while the adapter is off, nobody is
  * signed in, or the token has expired and not yet been refreshed. A new
- * client per token, so a consumer keyed on it reloads when the token moves.
+ * object per token — a consumer that must not reload on a refresh keys on
+ * `useApiSessionIdentity` instead and reads the client at call time.
  */
 export function useApiClient(): ApiClient | null {
   const store = useApiSessionStore()
@@ -165,4 +154,25 @@ export function useApiClient(): ApiClient | null {
     if (store.api === null || snapshot.session === null || isExpired(snapshot.session)) return null
     return { baseUrl: store.api.baseUrl, token: snapshot.session.accessToken }
   }, [store.api, snapshot.session])
+}
+
+/**
+ * What a session *is*, apart from its tokens: the API it reaches and whom it
+ * reaches it as. Stable across a token refresh, which changes neither, and
+ * different across a sign-out, a sign-in as someone else, and an expiry
+ * nobody refreshed (null then), so a consumer that loads once per session —
+ * the record store's switched modules — keys on this and not on the client.
+ * The user id when Auth sent one (it always does), else the e-mail; a
+ * session with neither falls back on the access token and so reloads on a
+ * refresh, which is the old behaviour and never the worse one.
+ */
+export type ApiSessionIdentity = { baseUrl: string; who: string }
+
+export function useApiSessionIdentity(): ApiSessionIdentity | null {
+  const store = useApiSessionStore()
+  const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot)
+  const baseUrl = store.api?.baseUrl
+  const session = snapshot.session
+  const who = session === null || isExpired(session) ? null : (session.userId ?? session.email ?? session.accessToken)
+  return useMemo(() => (baseUrl === undefined || who === null ? null : { baseUrl, who }), [baseUrl, who])
 }

@@ -45,7 +45,7 @@ import {
   readPersisted,
 } from "@/lib/storage-keys"
 
-import { useApiClient } from "./api-session-store"
+import { useApiClient, useApiSessionIdentity } from "./api-session-store"
 
 /**
  * Key renames specific to this store's records, on top of the shared map in
@@ -91,12 +91,18 @@ type BusinessRecordStores = {
    * `workspace.module`, keyed like the records above, each the server's rows
    * as the prototype shows them once its read has landed. Empty while the
    * adapter is off or nobody is signed in, so every module reads the
-   * browser's own path then — and a write made in that window goes to the
-   * browser's bucket, which a switched module stops reading once the
-   * server has answered.
+   * browser's own path then. Until a module is `ready` — the load pending,
+   * or failed — `getRecords` answers its fixtures alone: the browser's own
+   * bucket for that module is not shown in that window, and a write made in
+   * it goes to that bucket, which the module stops reading once the server
+   * has answered. Never a mixture.
    */
   server: ExternalStore<ServerRecordsState>
-  /** The client the writes go through; null when there is none. Held here so `upsertRecord` reads the current one when it runs. */
+  /**
+   * The client the writes go through; null when there is none. Held here so
+   * `upsertRecord` and a load in flight read the current one when they run:
+   * it follows every token refresh, while the load below does not.
+   */
   client: ExternalStore<ApiClient | null>
   /**
    * Writes in flight, by web id, so a second save of a row whose first has
@@ -158,6 +164,13 @@ export function BusinessRecordStoreProvider({
     pendingWrites: new Map(),
   }))
   const client = useApiClient()
+  const identity = useApiSessionIdentity()
+
+  // The current client, whatever token it carries, for a write or a load
+  // that reads it when it runs.
+  useEffect(() => {
+    stores.client.set(client)
+  }, [client, stores])
 
   useEffect(() => {
     const store = stores.records
@@ -197,43 +210,54 @@ export function BusinessRecordStoreProvider({
     return store.subscribe(persist)
   }, [stores])
 
-  // The server-backed modules follow the client: a new token reloads them,
-  // and no client (signed out, adapter off) empties them, so every module
-  // reads the browser's own path again. The switched modules load in
-  // SERVER_MODULES' order, one after the other, since a later module's
-  // mapping resolves the earlier ones' rows (a user names its role and its
-  // projects); each lands as it arrives, and a module that fails is reported
-  // once and left on its fixtures.
+  // The server-backed modules follow the session, not the token: they load
+  // once when a person is signed in against an API, and again only when the
+  // API or the person changes (`useApiSessionIdentity`) — a token refresh,
+  // which happens every hour, changes neither and reloads nothing, since a
+  // request in flight reads the current client from `stores.client` at the
+  // moment it is sent. No session (signed out, adapter off, expired and not
+  // refreshed) empties them, so every module reads the browser's own path
+  // again. The switched modules load in SERVER_MODULES' order, one after the
+  // other, since a later module's mapping resolves the earlier ones' rows (a
+  // user names its role and its projects); each lands as it arrives, and a
+  // module that fails is reported once and left on its fixtures. A load the
+  // session outlives — the person signs out mid-way — is aborted, not left
+  // to finish into a store that no longer wants it.
   useEffect(() => {
     const server = stores.server
-    stores.client.set(client)
-    if (client === null) {
+    if (identity === null) {
       server.set(NO_SERVER_MODULES)
       return
     }
-    let cancelled = false
+    const controller = new AbortController()
+    const initial = stores.client.getSnapshot()
+    if (initial === null) return
     const run = async () => {
       for (const module of SERVER_MODULES) {
-        if (cancelled) return
+        if (controller.signal.aborted) return
+        // The token as it stands when this module's read is sent; the one the
+        // effect began with if the session lapsed under it, so the read goes
+        // out and the API's refusal is reported rather than nothing at all.
+        const client: ApiClient = { ...(stores.client.getSnapshot() ?? initial), signal: controller.signal }
         const key = moduleKey(module.workspaceId, module.moduleId)
-        server.set((current) => new Map(current).set(key, loading(current.get(key) ?? IDLE)))
+        server.set((state) => new Map(state).set(key, loading(state.get(key) ?? IDLE)))
         try {
           const result = await loadModule(client, module, { fixtures: fixturesOf(module.workspaceId, module.moduleId), state: server.getSnapshot() })
-          if (cancelled) return
-          server.set((current) => new Map(current).set(key, loaded(result, Date.now())))
+          if (controller.signal.aborted) return
+          server.set((state) => new Map(state).set(key, loaded(result, Date.now())))
         } catch (error) {
-          if (cancelled) return
+          if (controller.signal.aborted) return
           const problem = problemOfError(error)
-          server.set((current) => new Map(current).set(key, loadFailed(current.get(key) ?? IDLE, problem)))
+          server.set((state) => new Map(state).set(key, loadFailed(state.get(key) ?? IDLE, problem)))
           reportProblem(`${key} could not be read from the API`, problem)
         }
       }
     }
     void run()
     return () => {
-      cancelled = true
+      controller.abort()
     }
-  }, [client, stores])
+  }, [identity, stores])
 
   return (
     <BusinessRecordStoreContext.Provider value={stores}>

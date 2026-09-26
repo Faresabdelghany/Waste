@@ -6,6 +6,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { softDeletedRecord } from "@waste/domain/record-visibility"
+
 import type { BusinessRecord } from "../../data/business-modules"
 import type { ApiClient } from "../client"
 import { genericProblem } from "../problem"
@@ -22,6 +24,7 @@ import {
   recordsOf,
   refusalProblem,
   resolverOver,
+  spellsStatus,
   withCreated,
   withRecord,
   withoutRecord,
@@ -49,19 +52,25 @@ const record = (id: string, name: string, overrides: Partial<BusinessRecord> = {
 
 type Thing = Resource & { name: string; parentId?: string }
 
-/** An adapter over a scripted list: `things` in, records out, writes recorded. */
+/** An adapter over a scripted list: `things` in, records out, writes recorded. A thing's status is `active` or `inactive` on the wire. */
 function thingAdapter(prefix: string, things: Thing[], calls: string[] = []): ResourceAdapter<Thing> & { calls: string[] } {
   return {
     prefix,
     calls,
     owns: (candidate) => candidate.id.startsWith(`${prefix}-`),
+    statuses: ["active", "inactive"],
     list: async () => things,
     toRecord: (thing, context) => {
       const parent = thing.parentId === undefined ? undefined : context.resolve.byServerId(thing.parentId)
       return record(`${prefix}-${thing.id}`, thing.name, { facts: parent ? { Parent: parent.name } : {}, updated: context.now?.toISOString() ?? "" })
     },
     toCreateBody: (candidate) => (candidate.name === "" ? { path: "name", message: "A thing needs a name" } : { name: candidate.name }),
-    toPatchBody: (before, after) => (before.name === after.name ? null : { name: after.name }),
+    toPatchBody: (before, after) => {
+      const body: Record<string, string> = {}
+      if (before.name !== after.name) body.name = after.name
+      if (before.status !== after.status) body.status = after.status.toLowerCase()
+      return Object.keys(body).length === 0 ? null : body
+    },
     create: async (_client, body) => {
       calls.push(`create ${JSON.stringify(body)}`)
       return { id: "new-1", createdAt: "2026-09-25T00:00:00Z", updatedAt: "2026-09-25T00:00:00Z", name: (body as { name: string }).name }
@@ -178,10 +187,19 @@ describe("the resolver", () => {
     assert.equal(NOTHING_RESOLVED.byServerId("1"), undefined)
   })
 
-  test("the company record's id is read off the organisation module once it is ready", () => {
-    const state: ServerRecordsState = new Map([["configure.organization", loaded({ records: [record("project-x", "X"), record("company-kystbyen-dk", "K")], serverIds: new Map() }, 1)]])
+  test("the company record's id is read off the organisation module once it is ready, by kind and not by the prefix a customer organisation shares", () => {
+    const tenant = record("company-kystbyen-dk", "K", { recordKind: "Company" })
+    const state: ServerRecordsState = new Map([[
+      "configure.organization",
+      loaded({ records: [record("project-x", "X", { recordKind: "Project" }), tenant], serverIds: new Map() }, 1),
+    ]])
     assert.equal(companyRecordIdOf(state), "company-kystbyen-dk")
     assert.equal(companyRecordIdOf(new Map()), undefined)
+    const customerFirst: ServerRecordsState = new Map([[
+      "configure.organization",
+      loaded({ records: [record("company-osterbro-housing", "Østerbro Housing", { recordKind: "Contact or Customer Organization" }), tenant], serverIds: new Map() }, 1),
+    ]])
+    assert.equal(companyRecordIdOf(customerFirst), "company-kystbyen-dk", "a customer organisation's company- record is not the tenant")
   })
 })
 
@@ -207,6 +225,56 @@ describe("writing a record", () => {
     const outcome = await writeRecord(client, module(resource), current, record("t-1", "One renamed"), options())
     assert.equal(outcome.kind, "updated")
     assert.deepEqual(resource.calls, ['update 1 {"name":"One renamed"}'])
+  })
+
+  test("a move to a status the wire has a word for is a patch", async () => {
+    const resource = adapter()
+    const current = loaded({ records: [record("t-1", "One")], serverIds: new Map([["t-1", "1"]]) }, 1)
+    const outcome = await writeRecord(client, module(resource), current, record("t-1", "One", { status: "Inactive" }), options())
+    assert.equal(outcome.kind, "updated")
+    assert.deepEqual(resource.calls, ['update 1 {"status":"inactive"}'])
+  })
+
+  test("a status the wire has no word for is refused, not unchanged: the row is rolled back and the person told, nothing sent", async () => {
+    const resource = adapter()
+    const current = loaded({ records: [record("t-1", "One")], serverIds: new Map([["t-1", "1"]]) }, 1)
+    const outcome = await writeRecord(client, module(resource), current, record("t-1", "One", { status: "Archived" }), options())
+    assert.equal(outcome.kind, "refused")
+    if (outcome.kind !== "refused") return
+    assert.equal(outcome.recordId, "t-1")
+    assert.equal(outcome.problem.status, 400)
+    assert.deepEqual(outcome.problem.errors, [{ path: "status", message: 'The API has no status "Archived" for a t; it knows active, inactive' }])
+    assert.deepEqual(resource.calls, [])
+  })
+
+  test("a kind whose status the API does not take refuses every status move and says so", async () => {
+    const resource: ResourceAdapter<Thing> = { ...adapter(), statuses: undefined }
+    const current = loaded({ records: [record("t-1", "One")], serverIds: new Map([["t-1", "1"]]) }, 1)
+    const outcome = await writeRecord(client, module(resource), current, record("t-1", "One", { status: "Inactive" }), options())
+    assert.equal(outcome.kind, "refused")
+    if (outcome.kind !== "refused") return
+    assert.deepEqual(outcome.problem.errors, [{ path: "status", message: "The API does not change a t's status" }])
+  })
+
+  test("a soft delete of an owned record is refused: the API has no delete, and the marker is a fact that travels nowhere", async () => {
+    const resource = adapter()
+    const current = loaded({ records: [record("t-1", "One")], serverIds: new Map([["t-1", "1"]]) }, 1)
+    const deleted = softDeletedRecord(record("t-1", "One"), { reason: "Duplicate", actorName: "Olivia", deletionLogId: "audit-1" })
+    const outcome = await writeRecord(client, module(resource), current, deleted, options())
+    assert.equal(outcome.kind, "refused")
+    if (outcome.kind !== "refused") return
+    assert.match(outcome.problem.detail ?? "", /The API has no delete: a t is deactivated or moved to another status, not deleted/)
+    assert.deepEqual(resource.calls, [])
+  })
+
+  test("spellsStatus is the same rule for the workspace: the wire's statuses as lifecycle labels, nothing for a kind without them or a record nobody owns", () => {
+    const withStatuses = module(adapter())
+    assert.ok(spellsStatus(withStatuses, record("t-1", "One"), "Inactive"))
+    assert.ok(spellsStatus(withStatuses, record("t-1", "One"), "Active"))
+    assert.ok(!spellsStatus(withStatuses, record("t-1", "One"), "Archived"))
+    assert.ok(!spellsStatus(withStatuses, record("t-1", "One"), "Merged"))
+    assert.ok(!spellsStatus(module({ ...adapter(), statuses: undefined }), record("t-1", "One"), "Inactive"))
+    assert.ok(!spellsStatus(withStatuses, record("elsewhere-1", "X"), "Inactive"))
   })
 
   test("nothing moved, nothing sent", async () => {

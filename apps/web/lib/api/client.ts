@@ -33,6 +33,8 @@ export type ApiClient = {
   /** The Supabase access token the requests carry. */
   token: string
   fetch?: typeof fetch
+  /** Aborting it ends every request in flight with a problem of status 0; the store aborts a load it no longer wants. */
+  signal?: AbortSignal
 }
 
 export type Page<Item> = { items: Item[]; nextCursor: string | null }
@@ -86,6 +88,7 @@ async function request(client: ApiClient, method: string, path: string, body?: u
         ...(body === undefined ? {} : { "content-type": "application/json" }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      ...(client.signal === undefined ? {} : { signal: client.signal }),
     })
   } catch (cause) {
     throw new ApiProblem(

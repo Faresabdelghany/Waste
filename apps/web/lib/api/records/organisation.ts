@@ -62,6 +62,8 @@ const refusal = (path: string, message: string): LocalRefusal => ({ path, messag
 export const companyAdapter: ResourceAdapter<Company> = {
   prefix: "company",
   owns: hasPrefix("company"),
+  // `CompanyPatch` (`@waste/contracts/organisation`) has no status member: the API states the company's status, so every move is refused by the store and the workspace offers none.
+  statuses: undefined,
   list: async (client) => [await get<Company>(client, "/company")],
   toRecord: (company, context) => {
     const fixture = fixtureNamed(context.fixtures, "company", [company.legalName, company.name])
@@ -98,11 +100,19 @@ export const companyAdapter: ResourceAdapter<Company> = {
     patchOf(before, after, (record) => ({
       name: typed(record, "name"),
       legalName: typed(record, "legalName") ?? record.name,
-      registrationNumber: typed(record, "registrationNumber") ?? record.facts.CVR,
+      // The form seeds `registrationNumber` from the read above, so it is always typed; a fact is presentation and never read back.
+      registrationNumber: typed(record, "registrationNumber"),
       country: typed(record, "country") === undefined ? undefined : countryCode(typed(record, "country") as string),
     })),
   update: (client, _serverId, body) => patch<Company>(client, "/company", body),
 }
+
+/**
+ * The tenant's own record among the organisation module's: the company
+ * adapter's row, by its `owns` and its kind — the `company-` prefix alone is
+ * a customer organisation's too (registry.ts).
+ */
+export const isCompanyRecord = (record: BusinessRecord): boolean => companyAdapter.owns(record) && record.recordKind === "Company"
 
 // ---------------------------------------------------------------------------
 // Projects
@@ -118,6 +128,7 @@ export const projectAdapter: ResourceAdapter<Project> = {
   prefix: "project",
   // A fixture's or a `webIdOf`, or a row the workspace just made under the organisation module's form (`recordKind: "Project"`).
   owns: ofKind("project", ["Project"]),
+  statuses: PROJECT_STATUSES,
   list: (client) => listAll<Project>(client, "/projects"),
   toRecord: (project, context) => {
     const fixture = fixtureNamed(context.fixtures, "project", [project.name])
@@ -238,6 +249,8 @@ export const serviceProviderAdapter: ResourceAdapter<ServiceProvider> = {
   prefix: "service-provider",
   // Other modules' records carry the prefix too (`service-provider-access-…`); here the prefix is the provider row's own, and a new row is the form's `recordKind`.
   owns: (record) => (hasPrefix("service-provider")(record) && !PROVIDER_CHILD_PREFIXES.some((prefix) => record.id.startsWith(prefix))) || record.recordKind === "Service provider company",
+  // A provider has no status on the wire; the record's is the fixture's and moves nowhere.
+  statuses: undefined,
   list: (client) => listAll<ServiceProvider>(client, "/service-providers"),
   toRecord: (provider, context) => {
     const fixture = fixtureNamed(context.fixtures, "service-provider", [provider.legalName])
@@ -331,6 +344,8 @@ export function grantsOfRecord(record: Pick<BusinessRecord, "submittedValues">):
 export const roleAdapter: ResourceAdapter<Role> = {
   prefix: "role",
   owns: ofKind("role", ["Role"]),
+  // A role has no status on the wire.
+  statuses: undefined,
   list: (client) => listAll<Role>(client, "/roles"),
   toRecord: (role, context) => {
     const fixture = fixtureNamed(context.fixtures, "role", [role.name])
@@ -408,6 +423,8 @@ function projectAccessLabel(user: User, projectName: (projectId: string) => stri
 export const userAdapter: ResourceAdapter<User> = {
   prefix: "user",
   owns: ofKind("user", ["User", "Service provider user"]),
+  // A user's status is derived on the wire (`invited`, `active`, `deactivated`) and `UserPatch` has no member for it; deactivation is its own command, not yet an adapter's.
+  statuses: undefined,
   list: (client) => listAll<User>(client, "/users"),
   toRecord: (user, context) => {
     const fixture = fixtureNamed(context.fixtures, "user", [user.fullName])
@@ -434,8 +451,11 @@ export const userAdapter: ResourceAdapter<User> = {
         ...(user.primaryAdministrator ? { "Primary administrator": "Yes" } : {}),
       },
       companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
-      // A user with Project Access is scoped to those projects; one with every project or with a provider is company-wide, like the fixture.
-      projectIds: user.allProjects || user.projectIds.length === 0 ? fixture?.projectIds : projectWebIds,
+      // A user with Project Access is scoped to those projects by web id. One
+      // with every project, none yet, or a provider is company-wide: no
+      // project at all, which `isInProjectScope` shows in every scope —
+      // whatever two projects the fixture happened to be filed under.
+      projectIds: user.allProjects || user.projectIds.length === 0 ? undefined : projectWebIds,
       serviceProviderId: provider?.id,
       recordKind: "User",
       submittedValues: {

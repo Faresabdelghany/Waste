@@ -47,8 +47,11 @@ export const ASSET_MANAGEMENT_STORAGE_KEY = "waste.asset-management.v1"
 /** The commercial registries settings store. */
 export const COMMERCIAL_REGISTRIES_STORAGE_KEY = "waste.commercial-registries.v1"
 
-/** The API session: the Supabase tokens the server-backed record store calls the API with (Issue #81). Never carried a legacy name. */
+/** The API session's tab-shared half: the Supabase access token, its expiry, the e-mail and the user id the server-backed record store calls the API as (Issue #81). Never carried a legacy name. */
 export const API_SESSION_STORAGE_KEY = "waste.api-session.v1"
+
+/** The API session's tab-scoped half, in sessionStorage: the refresh token, the one long-lived credential (Issue #81; api-session-store.tsx says why it is kept apart). Never carried a legacy name. */
+export const API_REFRESH_TOKEN_STORAGE_KEY = "waste.api-session.refresh-token.v1"
 
 /** The selected app theme (a preset id or "custom"). */
 export const APP_THEME_SELECTION_STORAGE_KEY = "waste.theme.selection.v1"
@@ -93,7 +96,7 @@ export const LEGACY_STORAGE_KEYS: Readonly<
  * every key constant to a `LEGACY_STORAGE_KEYS` entry accepts a key here
  * instead, so a key added without deciding either way still fails it.
  */
-export const STORAGE_KEYS_WITHOUT_A_LEGACY_NAME: readonly string[] = [API_SESSION_STORAGE_KEY]
+export const STORAGE_KEYS_WITHOUT_A_LEGACY_NAME: readonly string[] = [API_SESSION_STORAGE_KEY, API_REFRESH_TOKEN_STORAGE_KEY]
 
 /**
  * The keys to try for one store, current first. `readPersisted` walks this

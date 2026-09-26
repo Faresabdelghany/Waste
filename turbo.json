@@ -33,7 +33,10 @@
       "cache": false,
       "persistent": true,
       "env": [
-        "WASTE_API_ORIGIN"
+        "WASTE_API_ORIGIN",
+        "NEXT_PUBLIC_WASTE_API_URL",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY"
       ]
     },
     "@waste/web#build": {
@@ -45,7 +48,10 @@
         "!.next/cache/**"
       ],
       "env": [
-        "WASTE_API_ORIGIN"
+        "WASTE_API_ORIGIN",
+        "NEXT_PUBLIC_WASTE_API_URL",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY"
       ]
     },
     "lint": {

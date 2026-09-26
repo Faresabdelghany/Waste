@@ -13,16 +13,22 @@
 // `getFormRelationOptions`: a `customerId` field offers `company-` records,
 // a `…ContactId` field `contact-` ones), so a server customer takes the
 // prefix of its kind, and a fixture is matched by name within the module.
+// The `company-` prefix is shared with the tenant's own record in
+// `configure.organization` (`company-kystbyen-dk`): the glossary keeps the
+// two apart — a Company is the tenant, never a customer (CONTEXT.md) — and so
+// does the code: `owns` here is asked of the customers module's records
+// only, and the tenant's row is found by the company adapter's `owns` and
+// its `recordKind` (`isCompanyRecord`, organisation.ts), never by the prefix.
 //
 // The form (`customers.contacts`) says more than the wire carries: a
 // relationship role, a connected property and company, effective dates, a
 // project scope. Those describe a `property_party` row (Issue #78) and land
 // with the Properties module; here they stay on the record's typed values
 // for the day that module is switched, and only the Customer's own fields
-// travel. The status is the wire's two (`active`, `inactive`); the module's
-// lifecycle also lists Merged and Archived, which the API has no column for,
-// and a controlled action that moves a customer there is refused with the
-// API's own 400.
+// travel. The status is the wire's two (`active`, `inactive`), listed as the
+// adapter's `statuses`; the module's lifecycle also lists Merged and
+// Archived, which the API has no column for, so the store refuses a move
+// there before the API sees it and the workspace offers neither.
 import type { Customer } from "@waste/contracts/customers"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
@@ -89,6 +95,7 @@ export const customerAdapter: ResourceAdapter<Customer> = {
   prefix: "customer",
   // Both fixture prefixes, and nothing else the module could hold.
   owns: (record) => customerKindOf(record) !== undefined,
+  statuses: CUSTOMER_STATUSES,
   list: (client) => listAll<Customer>(client, "/customers"),
   toRecord: (customer, context) => {
     const prefix = CUSTOMER_PREFIXES[customer.kind]

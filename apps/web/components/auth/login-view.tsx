@@ -13,8 +13,13 @@ import { Label } from "@/components/ui/label"
 import { SignInRefused } from "@/lib/api/auth"
 import { DEMO_ACCOUNTS } from "@/lib/data/demo-accounts"
 
-/** Where a signed-in person lands: the operations workspace, as the first demo account does. */
-const SIGNED_IN_HOME = "/performance"
+/**
+ * Where a signed-in person lands: the first demo account's home, the
+ * operations workspace. Provisional — the landing follows `/me`'s role once
+ * the personas leave fixtures (Issue 5); until then every signed-in account
+ * is shown the operator's shell.
+ */
+const SIGNED_IN_HOME = DEMO_ACCOUNTS[0].homePath
 
 // The account picker stays as it was: a demo account signs in without a
 // password and every module reads its fixtures. Beside it, when the web is

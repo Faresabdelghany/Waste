@@ -71,6 +71,14 @@ export type ResourceAdapter<R extends Resource> = {
   prefix: string
   /** Whether a record of the module is one of this kind; the composed module asks each adapter in turn. */
   owns: (record: BusinessRecord) => boolean
+  /**
+   * The wire's status tokens a patch may carry (`active`, `inactive`). A
+   * record moved to a status not listed is refused by the store before the
+   * API sees it, and the workspace offers no transition that lands there
+   * (`spellsStatus` in server-records.ts). Absent for a kind whose status
+   * the API does not take on a patch: every status move is then refused.
+   */
+  statuses?: readonly string[]
   /** Every row the caller reaches, whole; null for a kind the module lists through another adapter. */
   list: ((client: Client) => Promise<R[]>) | null
   /** The resource as the prototype shows it. */
@@ -167,8 +175,10 @@ const DAY_MS = 86_400_000
 /**
  * How long ago an instant was, as the fixtures spell it: "Just now" inside
  * the hour, "Today", "Yesterday", "N days ago", then weeks and months. Days
- * are counted on the calendar of the clock's own timezone, so an edit at
- * 23:50 read at 00:10 is "Yesterday" and not "Today".
+ * are counted on the calendar of the clock's own timezone — the browser's,
+ * not a project's: a stamp is presentation only, and every date rule proper
+ * (`projectToday`, `dayInTimezone`) is the project's — so an edit at 23:50
+ * read at 00:10 is "Yesterday" and not "Today".
  */
 export function relativeDay(iso: string, now = new Date()): string {
   const then = new Date(iso)

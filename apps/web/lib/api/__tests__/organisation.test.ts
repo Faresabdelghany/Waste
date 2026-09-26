@@ -12,7 +12,7 @@ import { CompanyPatch, ProjectCreate, ProjectPatch, ServiceProviderCreate, Servi
 import { resolveProjectCalendar } from "@waste/domain/route-schemes/project-calendar"
 
 import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, FIXTURE_SERVICE_PROVIDER_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
-import { isProjectRecordId, projectRecordsOf } from "../../data/project-scope"
+import { isInProjectScope, isProjectRecordId, projectRecordsOf } from "../../data/project-scope"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import {
   accessMapOf,
@@ -21,6 +21,7 @@ import {
   companyAdapter,
   grantsOf,
   grantsOfRecord,
+  isCompanyRecord,
   organisationModule,
   projectAdapter,
   roleAdapter,
@@ -30,6 +31,7 @@ import {
   userAdapter,
   weekendLabel,
 } from "../records/organisation"
+import { customerAdapter } from "../records/registry"
 
 const NOW = new Date("2026-09-25T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
@@ -127,6 +129,32 @@ describe("the company", () => {
     assert.equal(companyAdapter.toPatchBody(before, before, context(fixtures)), null, "nothing moved, nothing sent")
   })
 
+  test("the registration number travels from the typed value alone; a fact is presentation and is never read back", () => {
+    const before = companyAdapter.toRecord(company, context(fixtures))
+    assert.equal(before.submittedValues?.registrationNumber, "12345678", "the read seeds the form, so the value is always typed")
+    const factOnly = { ...before, facts: { ...before.facts, CVR: "99999999" } }
+    assert.equal(companyAdapter.toPatchBody(before, factOnly, context(fixtures)), null, "a changed fact moves nothing")
+    const typedChange = { ...before, submittedValues: { ...before.submittedValues, registrationNumber: "87654321" } }
+    assert.deepEqual(companyAdapter.toPatchBody(before, typedChange, context(fixtures)), { registrationNumber: "87654321" })
+  })
+
+  test("the company's status is the API's to state: the adapter lists no status a patch may carry", () => {
+    assert.equal(companyAdapter.statuses, undefined)
+  })
+
+  test("the tenant's record is told from a customer organisation by kind, not by the company- prefix both carry", () => {
+    const tenant = companyAdapter.toRecord(company, context(fixtures))
+    assert.ok(isCompanyRecord(tenant))
+    const customerFixtures = getModuleDefinition({ workspaceId: "customers", moduleId: "contacts" })?.records ?? []
+    const osterbro = customerAdapter.toRecord(
+      { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: null, phone: null, billingAddress: null, serviceMessagesAllowed: true, status: "active" },
+      context(customerFixtures),
+    )
+    assert.equal(osterbro.id, "company-osterbro-housing", "the customer organisation's fixture id carries company- too")
+    assert.ok(companyAdapter.owns(osterbro), "by prefix alone the company adapter would claim it")
+    assert.ok(!isCompanyRecord(osterbro), "by kind it does not")
+  })
+
   test("the company is not created here", () => {
     assert.equal(companyAdapter.toCreateBody, undefined)
     assert.equal(companyAdapter.create, undefined)
@@ -212,11 +240,13 @@ describe("the projects", () => {
     assert.ok(ProjectPatch.safeParse(body).success)
   })
 
-  test("a controlled action that moved the status is a status patch; one to a status the wire has no word for says nothing", () => {
+  test("a controlled action that moved the status is a status patch; the adapter lists exactly the statuses the wire has, so the store refuses the rest before a patch is built", () => {
     const before = projectAdapter.toRecord(harbor, context(fixtures))
     const body = projectAdapter.toPatchBody(before, { ...before, status: "Active" }, context(fixtures))
     assert.deepEqual(body, { status: "active" })
     assert.ok(ProjectPatch.safeParse(body).success)
+    assert.deepEqual(projectAdapter.statuses, ["active", "onboarding"])
+    // A patch to a status the wire has no word for says nothing — which is why writeRecord refuses it first (server-records.test.ts).
     assert.equal(projectAdapter.toPatchBody(before, { ...before, status: "Suspended" }, context(fixtures)), null)
   })
 
@@ -319,10 +349,12 @@ describe("the users", () => {
     assert.equal(record.facts["Primary administrator"], "Yes")
     assert.equal(record.submittedValues?.roleId, "role-company-administrator")
     assert.equal(record.submittedValues?.role, "Company Administrator")
-    assert.deepEqual(record.projectIds, [FIXTURE_PROJECT_IDS.copenhagen, FIXTURE_PROJECT_IDS.harbor], "all projects is company-wide, as the fixture is scoped")
+    assert.equal(record.projectIds, undefined, "all projects is company-wide: no project at all, whatever the fixture was filed under")
+    assert.ok(isInProjectScope(record, "project-cairo"), "so the administrator shows in a project the fixture never named")
+    assert.ok(isInProjectScope(record, FIXTURE_PROJECT_IDS.copenhagen))
   })
 
-  test("a provider's user carries the provider and an invited status", () => {
+  test("a provider's user carries the provider and an invited status, and is company-wide too", () => {
     const record = userAdapter.toRecord(lars, context(fixtures, resolve))
     assert.equal(record.status, "Invited")
     assert.equal(record.facts.Identity, "Invitation pending")
@@ -330,6 +362,7 @@ describe("the users", () => {
     assert.equal(record.serviceProviderId, FIXTURE_SERVICE_PROVIDER_IDS.nordren)
     assert.equal(record.submittedValues?.serviceProvider, "NordRen ApS")
     assert.equal(record.context, "NordRen ApS · service provider")
+    assert.equal(record.projectIds, undefined)
   })
 
   test("a user with Project Access is scoped to those projects by web id", () => {
@@ -338,6 +371,8 @@ describe("the users", () => {
     assert.deepEqual(record.projectIds, [FIXTURE_PROJECT_IDS.copenhagen])
     assert.equal(record.facts.Projects, "Copenhagen Central")
     assert.equal(record.facts.Roles, "Night Dispatch")
+    assert.ok(isInProjectScope(record, FIXTURE_PROJECT_IDS.copenhagen))
+    assert.ok(!isInProjectScope(record, "project-cairo"), "and hidden from a project it does not work in")
   })
 
   test("a role the resolver does not know reads as Role and keeps the server id, so the row still shows", () => {

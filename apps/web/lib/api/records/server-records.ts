@@ -31,12 +31,22 @@
 //   controlled action made, a soft delete's marked copy — has no route. The
 //   API has no delete (a company deactivates, a project's status moves), so
 //   such a write is refused here with a sentence and the row stays as the
-//   server has it.
+//   server has it. Two more writes are refused before the API sees them,
+//   since the API would take them as nothing and the row would show what
+//   the next load reverts: a record moved to a status the adapter does not
+//   list in `statuses` (the lifecycle's Merged, Archived, Suspended — the
+//   wire has no word for them), and a soft delete of an owned record (the
+//   marker is a fact, and a fact travels nowhere). `spellsStatus` is the
+//   same rule read the other way, for the workspace to offer no transition
+//   that would be refused.
+import { isSoftDeleted } from "@waste/domain/record-visibility"
+
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 
 import type { ApiClient } from "../client"
 import { ApiProblem, genericProblem, type Problem } from "../problem"
-import { isLocalRefusal, moduleKeyOf, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, moduleKeyOf, statusToken, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isCompanyRecord } from "./organisation"
 
 export type ModuleStatus = "idle" | "loading" | "ready" | "failed"
 
@@ -108,10 +118,16 @@ export function resolverOver(state: ServerRecordsState, extra?: { records: reado
   }
 }
 
-/** The web id of the company record, once the organisation module has loaded it; undefined before. */
+/**
+ * The web id of the company record, once the organisation module has loaded
+ * it; undefined before. Asked of the company adapter's own `owns` and the
+ * record's kind, not of the id prefix alone: a customer organisation carries
+ * `company-` too (registry.ts), and the tenant is the one row that is a
+ * Company.
+ */
 export function companyRecordIdOf(state: ServerRecordsState): string | undefined {
   const organisation = state.get(moduleKeyOf("configure", "organization"))
-  return organisation?.records.find((record) => record.id.startsWith("company-"))?.id
+  return organisation?.records.find(isCompanyRecord)?.id
 }
 
 export type LoadResult = { records: BusinessRecord[]; serverIds: Map<string, string> }
@@ -202,14 +218,39 @@ export function refusalProblem(refusal: { path: string; message: string }): Prob
 }
 
 /**
+ * Whether the adapter that owns a record can say a status on the wire: the
+ * lifecycle's label as the wire's token (`Inactive` → `inactive`) is one of
+ * the adapter's `statuses`. False for a record no adapter owns and for a
+ * kind whose status the API does not take on a patch.
+ */
+export function spellsStatus(module: ServerModule, record: BusinessRecord, status: string): boolean {
+  const adapter = adapterFor(module, record)
+  return adapter?.statuses?.includes(statusToken(status)) ?? false
+}
+
+/** The refusal a status move the wire cannot spell gets, naming the field and the words it has. */
+function statusRefusal(adapter: ResourceAdapter<Resource>, status: string): Problem {
+  const words = adapter.statuses ?? []
+  return refusalProblem({
+    path: "status",
+    message: words.length === 0 ? `The API does not change a ${adapter.prefix}'s status` : `The API has no status "${status}" for a ${adapter.prefix}; it knows ${words.join(", ")}`,
+  })
+}
+
+/**
  * Writes one record through its adapter: a create when the module holds no
  * server id for it, a patch of what moved otherwise, nothing when nothing
- * moved. `before` is the row as the module last had it, for the patch.
+ * moved. `before` is the row as the module last had it, for the patch. A
+ * soft delete and a move to a status the adapter cannot spell are refused
+ * before anything is sent (the header says why).
  */
 export async function writeRecord(client: ApiClient, module: ServerModule, current: ModuleState, record: BusinessRecord, options: LoadOptions): Promise<WriteOutcome> {
   const adapter = adapterFor(module, record)
   if (adapter === undefined) {
     return { kind: "refused", recordId: record.id, problem: genericProblem(400, `${module.workspaceId}.${module.moduleId} has no server resource for ${record.id}`) }
+  }
+  if (isSoftDeleted(record)) {
+    return { kind: "refused", recordId: record.id, problem: genericProblem(400, `The API has no delete: a ${adapter.prefix} is deactivated or moved to another status, not deleted`) }
   }
   const context: MappingContext = { fixtures: options.fixtures, resolve: resolverOver(options.state), companyRecordId: companyRecordIdOf(options.state), now: options.now }
   const serverId = current.serverIds.get(record.id)
@@ -224,6 +265,9 @@ export async function writeRecord(client: ApiClient, module: ServerModule, curre
       return { kind: "created", record: adapter.toRecord(resource, context), serverId: resource.id, optimisticId: record.id }
     }
     const before = current.records.find((candidate) => candidate.id === record.id) ?? record
+    if (before.status !== record.status && !spellsStatus(module, record, record.status)) {
+      return { kind: "refused", recordId: record.id, problem: statusRefusal(adapter, record.status) }
+    }
     const body = adapter.toPatchBody(before, record, context)
     if (body === null) return { kind: "unchanged", record }
     if (isLocalRefusal(body)) return { kind: "refused", recordId: record.id, problem: refusalProblem(body) }

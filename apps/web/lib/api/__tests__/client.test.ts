@@ -6,6 +6,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { PAGE_LIMIT_MAX as CONTRACTS_PAGE_LIMIT_MAX } from "@waste/contracts/pagination"
+
 import { command, create, get, listAll, listPage, patch, PAGE_LIMIT_MAX, put, UNREACHABLE_STATUS, withQuery, type ApiClient } from "../client"
 import { ApiProblem, genericProblem, isApiProblem, PROBLEM_MEDIA_TYPE, problemOf, problemSentence } from "../problem"
 
@@ -44,6 +46,10 @@ describe("withQuery", () => {
 })
 
 describe("the client", () => {
+  test("the page size is the contracts' own ceiling, re-spelled here so no zod reaches the bundle and held equal so the two cannot drift", () => {
+    assert.equal(PAGE_LIMIT_MAX, CONTRACTS_PAGE_LIMIT_MAX)
+  })
+
   test("every request carries the bearer token and asks for JSON", async () => {
     const { fetch, calls } = scripted([() => json({ id: "x" })])
     await get(clientOver(fetch), "/company")
@@ -53,6 +59,28 @@ describe("the client", () => {
     assert.equal(headers.authorization, "Bearer t0k3n")
     assert.equal(headers.accept, "application/json")
     assert.equal(headers["content-type"], undefined)
+    assert.equal(calls[0].init.signal, undefined, "no signal unless the client carries one")
+  })
+
+  test("a client's signal reaches every fetch, and an aborted one is a problem of status 0 like any failed fetch", async () => {
+    const controller = new AbortController()
+    const { fetch, calls } = scripted([() => json({ items: [], nextCursor: null })])
+    await listAll({ ...clientOver(fetch), signal: controller.signal }, "/projects")
+    assert.equal(calls[0].init.signal, controller.signal)
+
+    const aborting = (async (_input: RequestInfo | URL, init: RequestInit = {}) => {
+      init.signal?.throwIfAborted()
+      throw new Error("unreachable")
+    }) as typeof fetch
+    controller.abort()
+    await assert.rejects(
+      () => get({ ...clientOver(aborting), signal: controller.signal }, "/company"),
+      (error: unknown) => {
+        if (!isApiProblem(error)) throw error
+        assert.equal(error.status, UNREACHABLE_STATUS)
+        return true
+      },
+    )
   })
 
   test("listPage asks for the API's maximum page and hands the page back as it came", async () => {

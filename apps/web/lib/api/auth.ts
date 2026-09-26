@@ -20,11 +20,18 @@ import type { AuthConfig } from "./config"
 
 export type ApiSession = {
   accessToken: string
-  refreshToken: string
+  /**
+   * What gets the next access token; null in a tab that did not sign in
+   * itself — the refresh token is kept tab-scoped (api-session-store.tsx),
+   * so such a tab has the access token's remaining life and then signs in.
+   */
+  refreshToken: string | null
   /** The instant the access token stops being accepted, in epoch milliseconds. */
   expiresAt: number
   /** Whose session this is, as Auth spelled it; shown, never trusted for anything else. */
   email: string | null
+  /** Auth's id for the account (`user.id`), the same across every refresh: what a consumer keys on to know the person has not changed. */
+  userId: string | null
 }
 
 /** A sign-in the identity provider refused, in its own words. */
@@ -54,7 +61,7 @@ type TokenResponse = {
   refresh_token?: unknown
   expires_in?: unknown
   expires_at?: unknown
-  user?: { email?: unknown } | null
+  user?: { id?: unknown; email?: unknown } | null
 }
 
 /** The session a token response stands for, or null when the body is not one. */
@@ -71,7 +78,8 @@ export function sessionOf(body: unknown, now = Date.now()): ApiSession | null {
         : null
   if (expiresAt === null) return null
   const email = token.user && typeof token.user.email === "string" ? token.user.email : null
-  return { accessToken: token.access_token, refreshToken: token.refresh_token, expiresAt, email }
+  const userId = token.user && typeof token.user.id === "string" ? token.user.id : null
+  return { accessToken: token.access_token, refreshToken: token.refresh_token, expiresAt, email, userId }
 }
 
 /**

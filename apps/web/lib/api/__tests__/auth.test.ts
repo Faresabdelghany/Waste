@@ -21,15 +21,17 @@ function scripted(answer: (url: string, init: RequestInit) => Response): { fetch
 }
 
 describe("sessionOf", () => {
-  test("reads Auth's token body, the expiry from expires_at in seconds or expires_in from now", () => {
-    assert.deepEqual(sessionOf({ access_token: "a", refresh_token: "r", expires_at: 1_800_000_003, user: { email: "x@y.example" } }, NOW), {
+  test("reads Auth's token body, the expiry from expires_at in seconds or expires_in from now, and whose session it is", () => {
+    assert.deepEqual(sessionOf({ access_token: "a", refresh_token: "r", expires_at: 1_800_000_003, user: { id: "u-1", email: "x@y.example" } }, NOW), {
       accessToken: "a",
       refreshToken: "r",
       expiresAt: 1_800_000_003_000,
       email: "x@y.example",
+      userId: "u-1",
     })
     assert.equal(sessionOf({ access_token: "a", refresh_token: "r", expires_in: 3600 }, NOW)?.expiresAt, NOW + 3_600_000)
     assert.equal(sessionOf({ access_token: "a", refresh_token: "r", expires_in: 3600 }, NOW)?.email, null)
+    assert.equal(sessionOf({ access_token: "a", refresh_token: "r", expires_in: 3600 }, NOW)?.userId, null)
   })
 
   test("refuses what is not a session", () => {
