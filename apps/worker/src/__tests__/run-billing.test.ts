@@ -20,14 +20,17 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { createDb, type Database } from "@waste/db/client"
-import { eventOf, eventsFrom, invoiceColumns, runColumns } from "@waste/db/commands/billing-shapes"
 import { recordBillableEvent } from "@waste/db/commands/billable-writes"
+import { runBilling } from "@waste/db/commands/billing-runs"
+import { eventOf, eventsFrom, invoiceColumns, runColumns } from "@waste/db/commands/billing-shapes"
+import { dayInTimezone } from "@waste/db/commands/days"
 import { newId } from "@waste/db/ids"
 import { migrateDatabase } from "@waste/db/migrate"
 import { outboxEvent } from "@waste/db/schema/execution"
 import { billableEvent, billingRun, invoice } from "@waste/db/schema/finance"
 import { withCompany } from "@waste/db/tenant"
 import type { BillableEventDraft } from "@waste/domain/finance/from-event"
+import { monthBefore } from "@waste/domain/finance/periods"
 import type { Job } from "pg-boss"
 import { and, asc, eq } from "drizzle-orm"
 
@@ -39,8 +42,8 @@ import { seedFinanceTenant, testId, type FinanceTenant } from "./finance-tenant"
 const roles = rolesUnderTest()
 const skip = roles.skip
 
-/** The first of October at 04:00 UTC, the schedule's own instant: 06:00 on Copenhagen's clock, so the day there is the first and the month before is September. */
-const FIRST_OF_OCTOBER = new Date("2026-10-01T04:00:00Z")
+/** The first of October at 12:00 UTC, the schedule's own instant: 14:00 on Copenhagen's clock, 07:00 in Chicago, so the day is the first on both and the month before is September. */
+const FIRST_OF_OCTOBER = new Date("2026-10-01T12:00:00Z")
 
 describe("finance.run-billing against Postgres", { skip }, () => {
   const name = `waste_worker_billing_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
@@ -104,12 +107,24 @@ describe("finance.run-billing against Postgres", { skip }, () => {
   const invoices = () => withCompany(api.db, tenant.companyId, (tx) => tx.select(invoiceColumns).from(invoice).where(eq(invoice.companyId, tenant.companyId)).orderBy(asc(invoice.id)))
   const statusOf = (id: string) => withCompany(api.db, tenant.companyId, async (tx) => eventOf((await eventsFrom(tx, tenant.companyId).query.where(and(eq(billableEvent.companyId, tenant.companyId), eq(billableEvent.id, id))))[0]).status)
 
-  test("is scheduled on the first of each month at 04:00 UTC, missed occurrences run once, and the schedule's data is the whole sweep", () => {
+  test("is scheduled on the first of each month at noon UTC — the first of the month on every clock from UTC−11 to UTC+11 at once — missed occurrences run once, and the schedule's data is the whole sweep", () => {
     assert.equal(runScheduledBilling.queue, "finance.run-billing")
-    assert.equal(runScheduledBilling.schedule, "0 4 1 * *")
+    assert.equal(runScheduledBilling.schedule, "0 12 1 * *")
     assert.deepEqual(runScheduledBilling.scheduleData, { projectId: null, on: null })
     assert.deepEqual(runScheduledBilling.scheduleOptions, { tz: "UTC", missed: "once" })
     assert.ok(!runScheduledBilling.queue.startsWith("outbox."), "sent by the schedule, never by the relay")
+    // The schedule's instant read on each clock: the first everywhere the system could serve, so `monthBefore` is the month that just ended. At 04:00 UTC (the earlier schedule) Chicago still read the 30th of September and would have billed August.
+    const noon = new Date("2026-10-01T12:00:00Z")
+    for (const timezone of ["Pacific/Pago_Pago", "America/Anchorage", "America/Chicago", "America/New_York", "Europe/Copenhagen", "Asia/Kolkata", "Asia/Tokyo", "Pacific/Noumea"]) {
+      assert.equal(dayInTimezone(noon, timezone), "2026-10-01", `${timezone}: the first`)
+      assert.deepEqual(monthBefore(dayInTimezone(noon, timezone)), { periodFrom: "2026-09-01", periodTo: "2026-09-30" }, `${timezone}: September`)
+    }
+    assert.equal(dayInTimezone(new Date("2026-10-01T04:00:00Z"), "America/Chicago"), "2026-09-30", "the case the reviewer computed: 04:00Z is 23:00 CDT on the 30th")
+    assert.deepEqual(monthBefore(dayInTimezone(new Date("2026-10-01T04:00:00Z"), "America/Chicago")), { periodFrom: "2026-08-01", periodTo: "2026-08-31" }, "and would have billed a month late")
+    assert.equal(dayInTimezone(new Date("2026-12-01T04:00:00Z"), "America/New_York"), "2026-11-30", "New York in winter too")
+    // Beyond UTC+11 noon is already the second, which `monthBefore` reads the same way.
+    assert.equal(dayInTimezone(noon, "Pacific/Auckland"), "2026-10-02")
+    assert.deepEqual(monthBefore(dayInTimezone(noon, "Pacific/Auckland")), { periodFrom: "2026-09-01", periodTo: "2026-09-30" })
   })
 
   test("the sweep bills every active project over the calendar month before the day on its clock — one invoice per payer, nobody's request — and skips an onboarding project; a second sweep over the month issues nothing", async () => {
@@ -146,11 +161,30 @@ describe("finance.run-billing against Postgres", { skip }, () => {
     const published = await withCompany(api.db, tenant.companyId, (tx) => tx.select({ kind: outboxEvent.kind, aggregateId: outboxEvent.aggregateId }).from(outboxEvent).where(eq(outboxEvent.companyId, tenant.companyId)))
     assert.deepEqual(published.map((event) => event.kind), ["invoice-issued", "invoice-issued"])
 
-    // Again: nothing ready in September, a completed run of zero invoices, and nobody invoiced twice.
+    // Again: the schedule already ran over September for this project, so the retry (or the next occurrence) skips it — `already-run`, the first run named, no second row — and nobody is invoiced twice.
     const again = (await handle({ projectId: tenant.projects.copenhagen.id, on: null })).filter((run) => run.companyId === tenant.companyId)
     assert.equal(again.length, 1)
-    assert.ok(again[0].outcome === "completed" && again[0].eventCount === 0 && again[0].invoiceCount === 0)
+    assert.deepEqual(again[0], { companyId: tenant.companyId, projectId: tenant.projects.copenhagen.id, periodFrom: "2026-09-01", periodTo: "2026-09-30", outcome: "already-run", runId: written.id })
+    assert.equal((await runs()).length, before + 1, "no second run row for a project the schedule already covered")
     assert.equal((await invoices()).length, 2)
+    assert.match(lines.at(-1) ?? "", new RegExp(`finance\\.run-billing: project ${tenant.projects.copenhagen.id} 2026-09-01\\.\\.2026-09-30 → already-run \\(run ${written.id}; job `))
+  })
+
+  test("a person's run over the month is not the schedule's record: the schedule still runs once after it, writing its own completed run of zero invoices, and skips only its own", async () => {
+    // The office ran November's billing by hand on the first of December (`requested_by` set), before the schedule fired.
+    const november = await ready(tenant.agreements.housing.id, "2026-11-12", 7_000)
+    const office = await withCompany(api.db, tenant.companyId, (tx) => runBilling(tx, { companyId: tenant.companyId, projectId: tenant.projects.copenhagen.id, periodFrom: "2026-11-01", periodTo: "2026-11-30", note: "By hand", requestedBy: tenant.users.olivia.id, newId, now: () => new Date("2026-12-01T09:00:00Z") }))
+    assert.equal(office.run.invoiceCount, 1)
+    assert.equal(await statusOf(november), "invoiced")
+    const before = (await runs()).length
+    // The schedule at noon on the first of December: it has no run of its own over November, so it runs — and finds nothing ready, a completed run of zero invoices, the record that it looked.
+    const [scheduled] = await handle({ projectId: tenant.projects.copenhagen.id, on: null }, new Date("2026-12-01T12:00:00Z"))
+    assert.ok(scheduled.outcome === "completed" && scheduled.eventCount === 0 && scheduled.invoiceCount === 0, JSON.stringify(scheduled))
+    assert.equal((await runs()).length, before + 1)
+    // Its retry: its own row is there now, so it skips.
+    const [retried] = await handle({ projectId: tenant.projects.copenhagen.id, on: null }, new Date("2026-12-01T12:01:00Z"))
+    assert.deepEqual([retried.outcome, retried.outcome === "already-run" ? retried.runId : null], ["already-run", scheduled.outcome === "completed" ? scheduled.runId : null])
+    assert.equal((await runs()).length, before + 1, "still the one scheduled row beside the office's")
   })
 
   test("a run sent by hand names one project and a day, and bills the month before that day", async () => {

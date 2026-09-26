@@ -30,7 +30,9 @@
 // `reprice`, on the day the ticket closed on the project's clock — the worker
 // renders the day, since this module has no clock and no timezone — when an
 // agreement is reachable through the ticket or its pickup's placement, and
-// nothing otherwise: a ticket about nothing billable makes no money row.
+// nothing otherwise: a ticket about nothing billable makes no money row; and
+// nothing again for a ticket `reopen`ed since — its resolution and closing
+// day cleared, the completion stale news, its next completion its own event.
 // `answered`, `no-action` and `duplicate`, the route's events, the other
 // pickup events, the unload and the two Finance publishes are nothing here.
 // A credit for a missed collection is never the consumer's (§7.11).
@@ -107,15 +109,16 @@ export type PickupEventFacts<Row extends PriceRow = PriceRow> = {
   liveEvent: LiveEventFacts | null
 }
 
-/** A completed ticket as the worker reads it: what it ended in, the agreement it reaches, and the day it closed on the project's clock. */
+/** A completed ticket as the worker reads it: what it ended in, the agreement it reaches, and the day it closed on the project's clock — or, for a ticket reopened since its completion was published, no resolution and no day, which is stale news and nothing here. */
 export type TicketCompletedFacts = {
   kind: "ticket-completed"
   ticketId: string
-  resolution: TicketResolution
+  /** The ticket's resolution as it stands now; null once `reopen` cleared it, which makes the completion stale news. */
+  resolution: TicketResolution | null
   /** The ticket's own agreement, or the one its pickup's placement ran under on the route's service date, with that placement's subscription; null when none is reachable. */
   agreement: { id: string; subscriptionId: string | null } | null
-  /** The ticket's `closedAt` rendered as a `YYYY-MM-DD` day in the project's timezone by the worker: this module has no clock and no timezone. */
-  closedOn: string
+  /** The ticket's `closedAt` rendered as a `YYYY-MM-DD` day in the project's timezone by the worker: this module has no clock and no timezone. Null where the ticket stands open again and has no closing instant. */
+  closedOn: string | null
 }
 
 /** Every other event, which this module reads the kind of and nothing else. */
@@ -234,6 +237,8 @@ export function billableFor<Row extends PriceRow>(event: EventFacts<Row>, labels
       return correctionOf(event.liveEvent)
     }
     case "ticket-completed": {
+      // Stale news: the ticket was reopened after its completion was published, and stands open with no resolution and no closing day; its next completion is its own event.
+      if (event.resolution === null || event.closedOn === null) return undefined
       if (!isBillableResolution(event.resolution) || event.agreement === null) return undefined
       return {
         action: "record",

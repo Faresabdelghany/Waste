@@ -191,6 +191,14 @@ describe("billableFor a completed ticket", () => {
     assert.equal(bare?.action === "record" ? bare.draft.subscriptionId : undefined, null)
     assert.equal(bare?.action === "record" ? bare.draft.agreementId : undefined, AGREEMENT)
   })
+
+  test("for a ticket reopened since its completion was published — no resolution, no closing day as the worker read the row — is nothing: stale news, never a failure, its next completion its own event", () => {
+    assert.equal(billableFor(completedTicket({ resolution: null, closedOn: null })), undefined)
+    // The two go together under `ticket_closed_shape`; either alone is still nothing, since a day cannot be billed without a resolution nor a resolution without a day.
+    assert.equal(billableFor(completedTicket({ resolution: null })), undefined)
+    assert.equal(billableFor(completedTicket({ closedOn: null })), undefined)
+    assert.equal(billableFor(completedTicket())?.action, "record", "and a ticket that stands completed records as before")
+  })
 })
 
 describe("billableFor every other kind", () => {

@@ -24,13 +24,17 @@
 // `REQUIRE_DATABASE`.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
+import { setTimeout as sleep } from "node:timers/promises"
 
 import type { BillableEvent } from "@waste/contracts/billable-events"
 import { createDb, type Database } from "@waste/db/client"
 import { eventOf, eventsFrom } from "@waste/db/commands/billing-shapes"
 import { issueInvoice } from "@waste/db/commands/invoice-writes"
+import { lockRow } from "@waste/db/commands/shared"
 import { newId } from "@waste/db/ids"
+import { pickup } from "@waste/db/schema/execution"
 import { billableEvent, billingRun } from "@waste/db/schema/finance"
+import { ticket } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
 import type { OutboxKind } from "@waste/domain/execution/vocabulary"
 import type { Job } from "pg-boss"
@@ -141,11 +145,11 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     return found
   }
 
-  /** Runs the handler over one published event, as pg-boss would hand it in on the kind's queue, and answers what it did. */
-  const handle = async (event: PublishedEvent): Promise<Recorded> => {
+  /** Runs the handler over one published event, as pg-boss would hand it in on the kind's queue — over the suite's context, or another worker's — and answers what it did. */
+  const handle = async (event: PublishedEvent, on: JobContext = context()): Promise<Recorded> => {
     const consumer = consumerOf(event.kind)
     const job: Job<PublishedEvent> = { id: testId(), name: consumer.queue, data: event, expireInSeconds: 900, heartbeatSeconds: null, signal: new AbortController().signal }
-    const output = (await consumer.handler([job], context())) as { events: string[] }
+    const output = (await consumer.handler([job], on)) as { events: string[] }
     assert.deepEqual(output.events, [event.id], "the seam answers the events it handled")
     const line = lines.findLast((candidate) => candidate.includes(` ${event.id} → `))
     assert.ok(line, "the consumer logged the event")
@@ -320,6 +324,40 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     assert.equal((await eventsOfPickup(pickupId)).length, 1)
   })
 
+  test("two different events of one pickup that both say record — the driver's completion and the office's correction to completed — under two workers at once charge the pickup once: the handler waits on the pickup's row lock, and the second reads the first's live event", async () => {
+    // The lock, shown by itself: a transaction holding the pickup's row keeps the handler waiting, and the handler goes on the instant it lets go.
+    const held = await placeBin(pool, tenant, "BIN-LOCK-1", { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id })
+    const heldRoute = await seedCompletedRoute(pool, tenant, [{ containerId: held.containerId, propertyId: held.propertyId }])
+    const [heldPickup] = heldRoute.pickupIds
+    let racing: Promise<Recorded> | undefined
+    await withCompany(pool.db, tenant.companyId, async (holding) => {
+      await lockRow(holding, pickup, { companyId: tenant.companyId, id: heldPickup })
+      racing = handle(published("pickup-completed", heldPickup, pickupPayload(heldRoute.id, heldPickup, held.containerId)))
+      const first = await Promise.race([racing.then(() => "recorded" as const), sleep(500).then(() => "waiting" as const)])
+      assert.equal(first, "waiting", "the handler takes the pickup's lock before it reads, so it waits on a transaction holding the row")
+    })
+    assert.equal((await racing!).did, "recorded", "and records once the row is let go")
+
+    // The race the lock is for: E1 the driver's `pickup-completed`, E2 the office's `correct-outcome` to `completed` again minutes later (the same outcome with a new note is allowed), two events with two ids on two queues, both saying `record` over a pickup with no live event. On two pools, as two workers. Three pickups, since a race is a matter of chance and a lock a matter of fact.
+    const other = createDb(database.url, { max: 2 })
+    try {
+      for (const n of [1, 2, 3]) {
+        const bin = await placeBin(pool, tenant, `BIN-RACE-${n}`, { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id })
+        const seeded = await seedCompletedRoute(pool, tenant, [{ containerId: bin.containerId, propertyId: bin.propertyId }])
+        const [pickupId] = seeded.pickupIds
+        const completion = published("pickup-completed", pickupId, pickupPayload(seeded.id, pickupId, bin.containerId))
+        const correction = published("pickup-corrected", pickupId, pickupPayload(seeded.id, pickupId, bin.containerId))
+        const [one, two] = await Promise.all([handle(completion), handle(correction, { ...context(), api: other })])
+        assert.deepEqual([one.did, two.did].sort(), ["nothing", "recorded"], `pickup ${n}: one worker records, the other reads the live event it left and does nothing — never two rows for two ids`)
+        const events = await eventsOfPickup(pickupId)
+        assert.equal(events.length, 1, `pickup ${n}: one live event`)
+        assert.deepEqual([events[0].status, events[0].netMinor, events[0].sourceEventId], ["ready", 13_500, (one.did === "recorded" ? one : two).event])
+      }
+    } finally {
+      await other.close()
+    }
+  })
+
   test("a ticket-completed with recollected records a no-product ticket event on the day the ticket closed on the project's clock, through its agreement or its pickup's placement; with no-action, or no agreement reachable, nothing", async () => {
     // 23:30 CEST on the 7th is 21:30Z: the day is the 7th on Copenhagen's clock and would be the 7th in UTC too, so a closing at 00:30 CEST on the 8th (22:30Z on the 7th) is what tells the two apart.
     const closedAt = new Date("2026-10-07T22:30:00Z")
@@ -358,6 +396,26 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     const noAction = await seedTicket(pool, tenant, { resolution: "no-action", agreementId: tenant.agreements.housing.id })
     assert.equal((await handle(published("ticket-completed", noAction.id, ticketPayload(noAction.id, 4, "no-action", closedAt, { agreementId: tenant.agreements.housing.id })))).did, "nothing")
     assert.equal((await allEvents()).filter((event) => event.kind === "ticket").length, 3)
+  })
+
+  test("a ticket-completed for a ticket reopened since is stale news and nothing, not a failed job: the row stands open with no resolution and no closing instant, and its next completion is its own event", async () => {
+    const closedAt = new Date("2026-10-07T22:30:00Z")
+    const reopened = await seedTicket(pool, tenant, { resolution: "recollected", agreementId: tenant.agreements.housing.id, closedAt })
+    const completion = published("ticket-completed", reopened.id, ticketPayload(reopened.id, 6, "recollected", closedAt, { agreementId: tenant.agreements.housing.id }))
+    // The office reopens before the consumer runs: `reopen` clears the three closing columns together (`ticket_closed_shape`), which is the row the consumer then reads.
+    await withCompany(pool.db, tenant.companyId, (tx) => tx.update(ticket).set({ status: "open", resolution: null, recollectionRouteId: null, closedAt: null }).where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, reopened.id))))
+    const before = (await allEvents()).length
+    const stale = await handle(completion)
+    assert.deepEqual([stale.did, stale.billableEventId], ["nothing", null], "the payload says completed; the table says open, and the table's word stands")
+    assert.equal((await allEvents()).length, before, "nothing written")
+    // Completed again: the second completion's own event records, on the day it closed this time.
+    const again = new Date("2026-10-09T10:00:00Z")
+    await withCompany(pool.db, tenant.companyId, (tx) => tx.update(ticket).set({ status: "completed", resolution: "serviced", closedAt: again }).where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, reopened.id))))
+    const second = await handle(published("ticket-completed", reopened.id, ticketPayload(reopened.id, 6, "serviced", again, { agreementId: tenant.agreements.housing.id })))
+    assert.equal(second.did, "recorded")
+    const recorded = (await allEvents()).find((event) => event.id === second.billableEventId)
+    assert.deepEqual([recorded?.kind, recorded?.serviceDate, recorded?.links.ticketId], ["ticket", "2026-10-09", reopened.id])
+    assert.equal((await allEvents()).filter((event) => event.links.ticketId === reopened.id).length, 1, "the stale completion left no row; the real one left one")
   })
 
   test("a payload that does not parse, or one naming a row that is not there, fails the job and writes nothing", async () => {

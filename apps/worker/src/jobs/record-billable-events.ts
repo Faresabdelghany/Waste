@@ -22,7 +22,14 @@
 // writes reads the pickup's live event under its row lock (`liveEventOf`) and
 // finds the cancellation already there, or no live event at all, and does
 // nothing; and a reversal is a row with the correction's id, so a second
-// delivery of the correction is the same 23505 read back. The facts are the
+// delivery of the correction is the same 23505 read back. Two different
+// events of one pickup are another matter — the driver's completion and the
+// office's correction to `completed` minutes later are two ids, on two
+// queues, and the index holds one row per id — so every pickup's event
+// begins with the pickup's own row lock (`pickupRow` with `lock`,
+// finance-facts.ts): two workers on two events of one pickup take turns, the
+// second reads the first's live event, and the pickup is charged for once. A
+// ticket's event takes the ticket's lock the same way. The facts are the
 // table's word and not the payload's — the pickup's status now, the live
 // event now — so a completion delivered after the correction that undid it
 // records nothing (from-event.ts says why); the payload is parsed for the
@@ -77,7 +84,8 @@ async function factsOf(tx: Tx, event: PublishedEvent) {
     case "pickup-completed":
     case "pickup-corrected": {
       const detail = PickupDetail.parse(event.payload)
-      const found = await pickupRow(tx, event.companyId, detail.routeId, detail.id)
+      // The pickup's row lock first: two Finance events of one pickup — its completion and a correction to `completed`, on two queues, under two workers — would otherwise both read no live event and both record, and the source-event index holds one row per event, not per pickup.
+      const found = await pickupRow(tx, event.companyId, detail.routeId, detail.id, { lock: true })
       if (found === undefined) throw new Error(`${event.kind} ${event.id} names pickup ${detail.id} of route ${detail.routeId}, which is not in company ${event.companyId}`)
       return await pickupFacts(tx, event.companyId, event.kind, found, detail.id)
     }
