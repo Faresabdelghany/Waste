@@ -1,0 +1,5 @@
+# age recipient (public key) the Pilot database backups are encrypted to by
+# .github/workflows/pilot-database.yml (#133, #152). The matching identity lives
+# in the owner's password manager and in the `pilot` environment secret
+# PILOT_BACKUP_AGE_KEY, nowhere else. Generated 2026-09-29 with age-keygen 1.3.2.
+age18y7kxp0j56xscpwwllxdft8tgqnj553d55fw284yvzq0nnqk237q9kaaga
