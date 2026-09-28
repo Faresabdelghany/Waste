@@ -7,7 +7,7 @@ const QUERY_SETTINGS: Record<string, string> = { sslmode: "PGSSLMODE", applicati
 
 export function libpqEnvironment(url: string, applicationName = "waste-pilot-database"): Record<string, string> {
   const parsed = new URL(url)
-  if (parsed.protocol !== "postgresql:" && parsed.protocol !== "postgres:") throw new Error("DATABASE_ADMIN_URL is not a postgresql:// URL")
+  if (parsed.protocol !== "postgresql:" && parsed.protocol !== "postgres:") throw new Error("the connection URL is not a postgresql:// URL")
   const environment: Record<string, string> = {
     PGHOST: parsed.hostname.replace(/^\[(.*)\]$/, "$1"),
     PGPORT: parsed.port === "" ? "5432" : parsed.port,
@@ -18,7 +18,7 @@ export function libpqEnvironment(url: string, applicationName = "waste-pilot-dat
   }
   for (const [key, value] of parsed.searchParams) {
     const variable = QUERY_SETTINGS[key]
-    if (variable === undefined) throw new Error(`DATABASE_ADMIN_URL carries a setting the scripts do not pass on: ${key}`)
+    if (variable === undefined) throw new Error(`the connection URL carries a setting the scripts do not pass on: ${key}`)
     environment[variable] = value
   }
   return environment

@@ -39,9 +39,18 @@ import type { Notice, ReservedSql } from "postgres"
 
 import { createDb, type Db } from "./client"
 import { assertJournal, checkJournal, MIGRATIONS_SCHEMA, MIGRATIONS_TABLE, readAppliedMigrations, readMigrationFolder, type JournalReport } from "./journal-check"
+import { wms } from "./schema/wms"
+import { PGBOSS_SCHEMA } from "./sql/pgboss"
 
 export { MIGRATIONS_SCHEMA, MIGRATIONS_TABLE }
 export const MIGRATIONS_FOLDER = fileURLToPath(new URL("../migrations", import.meta.url))
+
+/**
+ * The schemas the migrations own whole, in the order a restore lays them
+ * down: the domain's, the journal's and pg-boss's (Issue #152). The
+ * fingerprint covers them, a backup dumps them and a restore replaces them.
+ */
+export const OWNED_SCHEMAS: readonly string[] = [wms.schemaName, MIGRATIONS_SCHEMA, PGBOSS_SCHEMA]
 
 /** Any constant will do for pg_advisory_lock; this one spells "wms". */
 const MIGRATION_LOCK = 0x77_6d_73
@@ -70,7 +79,7 @@ export async function withMigrationLock<T>(
 ): Promise<T> {
   if (new URL(url).port === TRANSACTION_POOLER_PORT) {
     throw new Error(
-      `migrateDatabase: ${new URL(url).hostname}:${TRANSACTION_POOLER_PORT} is the transaction pooler; migrations need a session (the direct connection or the session pooler on port 5432)`,
+      `${new URL(url).hostname}:${TRANSACTION_POOLER_PORT} is the transaction pooler; migrations need a session to hold their lock (the direct connection or the session pooler on port 5432)`,
     )
   }
   // One connection runs the work, one holds the lock.
@@ -90,7 +99,7 @@ export async function withMigrationLock<T>(
       const [{ released }] = await lock<{ released: boolean }[]>`select pg_advisory_unlock(${MIGRATION_LOCK}) as released`
       if (failure !== undefined) throw failure
       if (!released) {
-        throw new Error("migrateDatabase: the migration lock was not held by the connection that tried to release it; is the URL a pooler in transaction mode?")
+        throw new Error("The migration lock was not held by the connection that tried to release it; is the URL a pooler in transaction mode?")
       }
       return result as T
     } finally {

@@ -23,10 +23,10 @@ import { createDb } from "../client"
 import { compareFingerprints, fingerprintDatabase } from "../fingerprint"
 import { readAppliedMigrations } from "../journal-check"
 import { isLocalHost } from "../local-host"
-import { checkDatabaseJournal } from "../migrate"
-import { checkRestoreTarget, FINGERPRINT_COPY, majorOf, verifyBackup } from "./backup"
+import { checkDatabaseJournal, OWNED_SCHEMAS } from "../migrate"
+import { checkRestoreTarget, DROP_OWNED_SCHEMAS, FINGERPRINT_COPY, majorOf, verifyBackup } from "./backup"
+import { barrierOpen, closeBarrier, openLogins, planRecovery, readLogins, spellLogins } from "./barrier"
 import { databaseIdentity } from "./identity"
-import { closeBarrier, openLogins, planRecovery, readLogins, spellLogins } from "./logins"
 
 const SCRIPTS = fileURLToPath(new URL("../../scripts", import.meta.url))
 
@@ -76,8 +76,8 @@ export async function rehearseRestore(url: string, { barrier = false, log = () =
     const pilot = { DATABASE_ADMIN_URL: url, PILOT_SUPABASE_REF: "", GITHUB_RUN_ID: "rehearsal", GITHUB_RUN_ATTEMPT: "1", GITHUB_SHA: "0".repeat(40) }
     run("bash", [path.join(SCRIPTS, "pilot-backup.sh")], { ...pilot, BACKUP_OUTPUT: archive, BACKUP_RECIPIENT_FILE: path.join(work, "recipient.txt") }, log)
 
-    await owner.sql`drop schema if exists pgboss, drizzle, wms cascade`
-    log("rehearsal: dropped pgboss, drizzle and wms")
+    await owner.sql.unsafe(DROP_OWNED_SCHEMAS)
+    log(`rehearsal: dropped ${OWNED_SCHEMAS.join(", ")}`)
 
     const restore = path.join(work, "restore")
     run("bash", [path.join(SCRIPTS, "pilot-restore.sh"), "decrypt"], { BACKUP_FILE: archive, AGE_IDENTITY: readFileSync(path.join(work, "identity.txt"), "utf8"), RESTORE_DIR: restore }, log)
@@ -85,6 +85,7 @@ export async function rehearseRestore(url: string, { barrier = false, log = () =
     checkRestoreTarget(manifest, { identity })
 
     const recorded = barrier ? await readLogins(owner.sql) : undefined
+    if (recorded !== undefined) barrierOpen(recorded)
     if (barrier) log(`rehearsal: barrier closed, ${(await closeBarrier(owner.sql)).terminated} session(s) ended; recorded ${spellLogins(recorded ?? {})}`)
     run("bash", [path.join(SCRIPTS, "pilot-restore.sh"), "apply"], { ...pilot, RESTORE_DIR: restore }, log)
 

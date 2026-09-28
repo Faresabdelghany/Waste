@@ -100,7 +100,7 @@ WORKDIR /app/apps/api
 ARG SOURCE_COMMIT=""
 LABEL org.opencontainers.image.revision="${SOURCE_COMMIT}"
 RUN if [ -n "$SOURCE_COMMIT" ]; then \
-      printf "%s" "$SOURCE_COMMIT" | grep -Eqx "[0-9a-f]{40}|[0-9a-f]{64}" \
+      printf "%s" "$SOURCE_COMMIT" | grep -Eqx "[0-9a-f]{40}" \
         || { echo "SOURCE_COMMIT is not a full commit id: $SOURCE_COMMIT" >&2; exit 1; }; \
       printf "{\"commit\":\"%s\"}\n" "$SOURCE_COMMIT" > build.json; \
     fi

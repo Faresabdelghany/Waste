@@ -22,11 +22,12 @@
 // Pending entries whose files are there pass: that is what a migration is for.
 // The file's hash is computed exactly as the migrator computes it (the text
 // read as UTF-8 and hashed as a string), so the two agree on every file.
-import { createHash } from "node:crypto"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 
 import type { ReservedSql, Sql } from "postgres"
+
+import { sha256 } from "./sha256"
 
 /** Where drizzle-orm's migrator keeps its journal: schema `drizzle`, table `__drizzle_migrations`. */
 export const MIGRATIONS_SCHEMA = "drizzle"
@@ -70,7 +71,7 @@ export function readMigrationFolder(folder: string): MigrationFolder {
 
 /** The hash the migrator records for a file: sha256 of its text read as a UTF-8 string. */
 export function sha256OfMigration(file: string): string {
-  return createHash("sha256").update(readFileSync(file).toString()).digest("hex")
+  return sha256(readFileSync(file).toString())
 }
 
 /** The database's journal rows by id, or none where the journal table does not exist yet. Reads, never creates. */
@@ -83,7 +84,8 @@ export async function readAppliedMigrations(sql: Sql | ReservedSql): Promise<App
   return rows.map(({ id, hash, created_at }) => ({ id, hash, createdAt: created_at }))
 }
 
-const both = (tags: readonly string[]) => (tags.length === 2 ? `${tags[0]} and ${tags[1]}` : `${tags.slice(0, -1).join(", ")} and ${tags.at(-1)}`)
+/** Two or more tags as a sentence lists them: `a and b`, `a, b and c`. */
+const listing = (tags: readonly string[]) => `${tags.slice(0, -1).join(", ")} and ${tags.at(-1)}`
 
 /** The rules of the journal check over plain shapes: what the folder says against what the database recorded. */
 export function checkJournal(folder: MigrationFolder, rows: readonly AppliedMigration[]): JournalReport {
@@ -98,7 +100,7 @@ export function checkJournal(folder: MigrationFolder, rows: readonly AppliedMigr
   const byWhen = new Map<number, MigrationFile[]>()
   for (const file of files) byWhen.set(file.when, [...(byWhen.get(file.when) ?? []), file])
   for (const [when, shared] of byWhen) {
-    if (shared.length > 1) problems.push(`${both(shared.map((file) => file.tag))} share the journal timestamp ${when}`)
+    if (shared.length > 1) problems.push(`${listing(shared.map((file) => file.tag))} share the journal timestamp ${when}`)
   }
   files.forEach((file, index) => {
     const previous = files[index - 1]
@@ -128,7 +130,7 @@ export function checkJournal(folder: MigrationFolder, rows: readonly AppliedMigr
       continue
     }
     if (matches.length > 1) {
-      problems.push(`Journal row ${row.id} (${when}) maps to more than one migration: ${both(matches.map((file) => file.tag))}`)
+      problems.push(`Journal row ${row.id} (${when}) maps to more than one migration: ${listing(matches.map((file) => file.tag))}`)
       continue
     }
     const [file] = matches

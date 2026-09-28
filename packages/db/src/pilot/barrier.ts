@@ -17,14 +17,19 @@
 // in answers 503, which is better than one writing into a half-restored
 // database. The recovery refuses a role that can log in now but could not
 // when the barrier closed, since then somebody has changed it since, and the
-// record no longer says what is right.
+// record no longer says what is right. And a barrier is never closed over
+// one already closed: while wms_api cannot log in, recording would record the
+// closed state, and a later recovery from that record would restore nothing
+// (a restore re-run after one that failed is exactly that), so `barrierOpen`
+// refuses and says to recover first.
 import type { Sql } from "postgres"
 
-import { API_ROLE, WORKER_ROLE } from "../roles"
+import { textList } from "../query/text-list"
+import { API_ROLE, PLAIN_ROLE, WORKER_ROLE } from "../roles"
+import { COMMIT_ID, type RunRef } from "./github"
 
 /** The roles the barrier closes: the two the Pilot's processes log in as. */
 export const BARRIER_ROLES = [API_ROLE, WORKER_ROLE] as const
-export type BarrierRole = string
 
 /** The operations that close the barrier, and the only ones whose record `recover-logins` accepts. */
 export const BARRIER_OPERATIONS = ["restore", "reset-to-seed"] as const
@@ -35,26 +40,22 @@ export const LOGIN_RECORD_SCHEMA = "waste.pilot.login-state/1"
 export type LoginRecord = {
   schema: typeof LOGIN_RECORD_SCHEMA
   operation: BarrierOperation
-  run: { id: string; attempt: string }
+  run: RunRef
   commit: string
   recordedAt: string
   identity: string
   logins: Record<string, boolean>
 }
 
-const PLAIN_ROLE = /^[a-z_][a-z0-9_]*$/
-
 function plain(roles: readonly string[]): readonly string[] {
   for (const role of roles) if (!PLAIN_ROLE.test(role)) throw new Error(`"${role}" is not a plain role name`)
   return roles
 }
 
-const list = (sql: Sql, values: readonly string[]) => sql`array(select json_array_elements_text(${JSON.stringify(values)}::json))`
-
 /** Whether each role can log in now; a role that does not exist is an error, not a state. */
 export async function readLogins(sql: Sql, roles: readonly string[] = BARRIER_ROLES): Promise<Record<string, boolean>> {
   const rows = await sql<{ name: string; login: boolean }[]>`
-    select rolname as name, rolcanlogin as login from pg_roles where rolname = any(${list(sql, plain(roles))})`
+    select rolname as name, rolcanlogin as login from pg_roles where rolname = any(${textList(sql, plain(roles))})`
   const logins: Record<string, boolean> = {}
   for (const role of roles) {
     const row = rows.find((candidate) => candidate.name === role)
@@ -67,12 +68,30 @@ export async function readLogins(sql: Sql, roles: readonly string[] = BARRIER_RO
 /** Whether each role can log in now, or null for a role that does not exist yet (wms_worker before migration 0011). */
 export async function readLoginsIfPresent(sql: Sql, roles: readonly string[]): Promise<Record<string, boolean | null>> {
   const rows = await sql<{ name: string; login: boolean }[]>`
-    select rolname as name, rolcanlogin as login from pg_roles where rolname = any(${list(sql, plain(roles))})`
+    select rolname as name, rolcanlogin as login from pg_roles where rolname = any(${textList(sql, plain(roles))})`
   return Object.fromEntries(roles.map((role) => [role, rows.find((row) => row.name === role)?.login ?? null]))
 }
 
 export function loginRecord(input: Omit<LoginRecord, "schema">): LoginRecord {
   return { schema: LOGIN_RECORD_SCHEMA, ...input }
+}
+
+/** Refuses to close a barrier while one is closed: wms_api NOLOGIN is an earlier run's barrier, never a state worth recording. */
+export function barrierOpen(logins: Record<string, boolean>): void {
+  if (logins[API_ROLE] !== true) {
+    throw new Error(
+      "wms_api cannot log in: an earlier restore or reset closed the write barrier and never opened it. Run recover-logins with that run's id first; a record taken now would record the closed state and restore nothing.",
+    )
+  }
+}
+
+/** Holds a record to the run, the commit and the database it must be of. */
+export function checkRecord(record: LoginRecord, { identity, run, commit }: { identity: string; run: RunRef; commit?: string }): void {
+  if (record.run.id !== run.id || record.run.attempt !== run.attempt) {
+    throw new Error(`the login record is of run ${record.run.id} attempt ${record.run.attempt}, not run ${run.id} attempt ${run.attempt}`)
+  }
+  if (commit !== undefined && record.commit !== commit) throw new Error(`the login record names commit ${record.commit}, not its run's ${commit}`)
+  if (record.identity !== identity) throw new Error(`the login record is of ${record.identity}, not ${identity}`)
 }
 
 /** Reads a login-state.json, refusing anything that is not exactly the record this workflow writes. */
@@ -95,7 +114,7 @@ export function parseLoginRecord(text: string): LoginRecord {
   if (typeof record.run?.id !== "string" || !/^\d+$/.test(record.run.id) || typeof record.run.attempt !== "string" || !/^\d+$/.test(record.run.attempt)) {
     refuse("names no run")
   }
-  if (typeof record.commit !== "string" || !/^[0-9a-f]{40}$/.test(record.commit)) refuse("names no commit")
+  if (typeof record.commit !== "string" || !COMMIT_ID.test(record.commit)) refuse("names no commit")
   if (typeof record.recordedAt !== "string" || Number.isNaN(Date.parse(record.recordedAt))) refuse("has no time")
   if (typeof record.identity !== "string" || record.identity === "") refuse("names no database")
   const logins = record.logins
@@ -115,12 +134,12 @@ export async function closeBarrier(sql: Sql, roles: readonly string[] = BARRIER_
   for (const role of plain(roles)) await sql`alter role ${sql(role)} nologin`
   const [{ terminated }] = await sql<{ terminated: number }[]>`
     select count(*)::int as terminated from (
-      select pg_terminate_backend(pid) from pg_stat_activity where usename = any(${list(sql, roles)}) and pid <> pg_backend_pid()
+      select pg_terminate_backend(pid) from pg_stat_activity where usename = any(${textList(sql, roles)}) and pid <> pg_backend_pid()
     ) terminations`
   const deadline = Date.now() + timeoutMs
   for (;;) {
     const [{ remaining }] = await sql<{ remaining: number }[]>`
-      select count(*)::int as remaining from pg_stat_activity where usename = any(${list(sql, roles)}) and pid <> pg_backend_pid()`
+      select count(*)::int as remaining from pg_stat_activity where usename = any(${textList(sql, roles)}) and pid <> pg_backend_pid()`
     if (remaining === 0) return { terminated }
     if (Date.now() > deadline) throw new Error(`${remaining} session(s) of ${roles.join(" or ")} remain after the barrier closed`)
     await new Promise((resolve) => setTimeout(resolve, 200))

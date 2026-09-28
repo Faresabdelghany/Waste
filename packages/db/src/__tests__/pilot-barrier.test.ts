@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto"
 import { describe, test } from "node:test"
 
 import { createDb } from "../client"
-import { BARRIER_ROLES, closeBarrier, loginRecord, openLogins, parseLoginRecord, planRecovery, readLogins, readLoginsIfPresent, spellLogins } from "../pilot/logins"
+import { BARRIER_ROLES, barrierOpen, checkRecord, closeBarrier, loginRecord, openLogins, parseLoginRecord, planRecovery, readLogins, readLoginsIfPresent, spellLogins } from "../pilot/barrier"
 import { databaseUnderTest, withUser } from "./database"
 
 const COMMIT = "5f1501d6a2b3c4d5e6f708192a3b4c5d6e7f8091"
@@ -46,6 +46,22 @@ describe("a login-state record", () => {
     for (const [value, reason] of refusals) {
       assert.throws(() => parseLoginRecord(typeof value === "string" ? value : JSON.stringify(value)), reason, JSON.stringify(value))
     }
+  })
+})
+
+describe("barrierOpen and checkRecord", () => {
+  test("refuse to close a barrier over one already closed, since the record would restore nothing", () => {
+    assert.doesNotThrow(() => barrierOpen({ wms_api: true, wms_worker: false }))
+    assert.throws(() => barrierOpen({ wms_api: false, wms_worker: false }), /wms_api cannot log in: an earlier restore or reset closed the write barrier and never opened it\. Run recover-logins/)
+  })
+
+  test("hold a record to its run, its commit and its database", () => {
+    const expected = { identity: record.identity, run: record.run, commit: COMMIT }
+    assert.doesNotThrow(() => checkRecord(record, expected))
+    assert.doesNotThrow(() => checkRecord(record, { identity: record.identity, run: record.run }), "a close checks the run and the database, not a commit")
+    assert.throws(() => checkRecord(record, { ...expected, run: { id: record.run.id, attempt: "2" } }), /is of run 18000000001 attempt 1, not run 18000000001 attempt 2/)
+    assert.throws(() => checkRecord(record, { ...expected, commit: "0".repeat(40) }), /names commit 5f1501d6a2b3c4d5e6f708192a3b4c5d6e7f8091, not its run's 0{40}/)
+    assert.throws(() => checkRecord(record, { ...expected, identity: "local/postgres" }), /is of supabase:ztmisreemxepvjxelbql\/postgres, not local\/postgres/)
   })
 })
 

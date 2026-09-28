@@ -1,13 +1,15 @@
 // `grant-logins` (Issue #152): the app roles' hosted logins, from the `pilot`
 // environment's three URL secrets and nothing else. Before any statement runs,
 // every URL is held to what it must be — the Pilot's session pooler on 5432,
-// the `postgres` database, the user `<role>.<ref>` of the role it is for — and
-// every password is handed back for the workflow to mask, so a secret pasted
-// into the wrong variable, or pointed at another Supabase project, is refused
-// by name and never printed. The grant itself is `grantLogin` (bootstrap.ts),
-// the statement the local bootstrap runs, for exactly the two roles; the
-// bootstrap plans keep refusing any host that is not this machine.
+// the `postgres` database, the user `<role>.<ref>` of the role it is for and
+// of the Pilot's Supabase project — and every password is handed back for the
+// workflow to mask, so a secret pasted into the wrong variable, or pointed at
+// another Supabase project, is refused by name and never printed. The grant
+// itself is `grantLogin` (bootstrap.ts), the statement the local bootstrap
+// runs, for exactly the two roles; the bootstrap plans keep refusing any host
+// that is not this machine.
 import { API_ROLE, WORKER_ROLE } from "../roles"
+import { poolerUser } from "./identity"
 
 /** The session pooler's port: migrations, pg-boss and the API all need a session (migrate.ts). */
 const SESSION_POOLER_PORT = "5432"
@@ -36,10 +38,9 @@ function passwordOf(variable: string, raw: string, role: string, { ref, host }: 
   if (url.port !== SESSION_POOLER_PORT) throw new Error(`${variable}: port ${url.port || "(none)"} is not the session pooler's ${SESSION_POOLER_PORT}`)
   if (url.pathname !== "/postgres") throw new Error(`${variable}: database is not postgres`)
   const user = decodeURIComponent(url.username)
-  const dot = user.lastIndexOf(".")
-  const [name, project] = dot === -1 ? [user, ""] : [user.slice(0, dot), user.slice(dot + 1)]
-  if (name !== role) throw new Error(`${variable}: logs in as ${name}, not ${role}`)
-  if (project !== ref) throw new Error(`${variable}: names another Supabase project`)
+  const pooled = poolerUser(user)
+  if ((pooled?.role ?? user) !== role) throw new Error(`${variable}: logs in as ${pooled?.role ?? user}, not ${role}`)
+  if (pooled?.ref !== ref) throw new Error(`${variable}: names another Supabase project`)
   const password = decodeURIComponent(url.password)
   if (password === "") throw new Error(`${variable}: carries no password`)
   return password

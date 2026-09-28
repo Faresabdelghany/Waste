@@ -6,7 +6,7 @@
 // (scripts/repairs/index.ts), a map of static imports, so no path or command
 // is ever built from what an operator typed.
 //
-// A repair exports its issue, a description and three steps, run here in one
+// A repair module exports `issue`, `description` and three steps, run here in one
 // owner transaction under the migration lock, so no migration runs beside it:
 //
 //   precondition  holds while the repair is needed
@@ -30,7 +30,7 @@ export type Repair = {
   postcondition(tx: Tx): Promise<boolean>
 }
 
-/** The committed allow-list: an id and the module's import, spelled out. */
+/** The committed allow-list: an id and the import of the module whose named exports are the repair, spelled out. */
 export type RepairManifest = Readonly<Record<string, () => Promise<Repair>>>
 
 export type RepairOutcome = "applied" | "already-applied"

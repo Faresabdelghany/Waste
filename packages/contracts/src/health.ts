@@ -32,8 +32,8 @@ import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
 
-/** A full git commit id, as a build records it: forty lowercase hex digits (sixty-four for a SHA-256 repository). */
-export const CommitId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/, "a full commit id in lowercase hex")
+/** A full commit id, as a build records it and GitHub names it: forty lowercase hex digits. */
+export const CommitId = z.string().regex(/^[0-9a-f]{40}$/, "a full commit id: forty lowercase hex digits")
 
 /** What an image says about its own build: the commit it was built from. */
 export const BuildInfo = z.object({ commit: CommitId })

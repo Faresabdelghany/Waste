@@ -33,7 +33,7 @@
 // - the journal's `id`, a serial a hand replay left gaps in, is left out;
 // - a role's LOGIN, password and validity are left out: the Pilot's app roles
 //   log in with their own credentials and the local stack's with bootstrap's,
-//   and the LOGIN state is a check of its own (pilot/logins.ts);
+//   and the LOGIN state is a check of its own (scripts/pilot/state.ts);
 // - an extension's version and a sequence's current value are left out.
 //
 // Every definition is deparsed by Postgres itself (`pg_get_constraintdef`,
@@ -41,31 +41,30 @@
 // `format_type`, `pg_get_expr`) inside one read-only snapshot whose
 // search_path is empty, so every name outside pg_catalog is qualified and the
 // text does not depend on the connecting role's settings.
-import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 
 import type { PendingQuery, Row, Sql } from "postgres"
 
 import { createDb } from "./client"
-import { MIGRATIONS_FOLDER } from "./migrate"
+import { MIGRATIONS_FOLDER, MIGRATIONS_SCHEMA, MIGRATIONS_TABLE, OWNED_SCHEMAS } from "./migrate"
+import { textList } from "./query/text-list"
 import { API_ROLE, SYNC_ROLE, WORKER_ROLE } from "./roles"
+import { sha256 } from "./sha256"
+import { PGBOSS_SCHEMA } from "./sql/pgboss"
+import { PUBLICATION } from "./sql/publication"
 
 /** The committed fingerprint of a database migrated from this checkout's files. `_`-prefixed: drizzle-kit reads every other file of `meta/` as a snapshot. */
 export const FINGERPRINT_FILE = path.join(MIGRATIONS_FOLDER, "meta", "_fingerprint.txt")
 
-/** The schemas the migrations own, whole. */
-export const FINGERPRINT_SCHEMAS = ["drizzle", "pgboss", "wms"] as const
 /** The service roles the migrations create. */
 export const FINGERPRINT_ROLES = [API_ROLE, SYNC_ROLE, WORKER_ROLE] as const
 /** The extensions the foundation installs into `extensions`. */
 const EXTENSIONS = ["btree_gist", "postgis"] as const
-/** The publication 0008 creates for the sync service. */
-const PUBLICATION = "powersync"
 /** The functions the migrations put outside their own schemas, as `schema.name`. */
 const OUTSIDE_FUNCTIONS = ["public.custom_access_token_hook"] as const
 /** The partitioned table whose partitions pg-boss names by date. */
-const DATED_PARTITIONS_OF = "pgboss.queue_stats"
+const DATED_PARTITIONS_OF = `${PGBOSS_SCHEMA}.queue_stats`
 
 const HEADER = [
   "# The database objects the migrations own (Issue #152), one per line: packages/db/src/fingerprint.ts says what is covered and what is normalised.",
@@ -76,7 +75,6 @@ type Fragment = PendingQuery<Row[]>
 type AclItem = { grantor: string; grantee: string; privilege: string; grantable: boolean }
 
 const parse = <T>(text: string | null): T | null => (text === null ? null : (JSON.parse(text) as T))
-const sha256 = (text: string) => createHash("sha256").update(text).digest("hex")
 
 /** Reads the fingerprint of the database at `url`, as the text `_fingerprint.txt` holds. */
 export async function fingerprintDatabase(url: string): Promise<string> {
@@ -108,13 +106,20 @@ export type FingerprintDifference = {
   unexpected: string[]
 }
 
-/** What differs between two fingerprints, line by line, each list in its own text's order. */
+/** What differs between two fingerprints, line by line and counting repeats, each list in its own text's order. */
 export function compareFingerprints(expected: string, actual: string): FingerprintDifference {
+  const beyond = (lines: readonly string[], other: readonly string[]) => {
+    const available = new Map<string, number>()
+    for (const line of other) available.set(line, (available.get(line) ?? 0) + 1)
+    return lines.filter((line) => {
+      const left = available.get(line) ?? 0
+      if (left > 0) available.set(line, left - 1)
+      return left === 0
+    })
+  }
   const want = fingerprintLines(expected)
   const have = fingerprintLines(actual)
-  const wanted = new Set(want)
-  const had = new Set(have)
-  return { missing: want.filter((line) => !had.has(line)), unexpected: have.filter((line) => !wanted.has(line)) }
+  return { missing: beyond(want, have), unexpected: beyond(have, want) }
 }
 
 /** The committed fingerprint, as `--write` last wrote it. */
@@ -144,11 +149,8 @@ function spellAcl(items: readonly AclItem[], role: (name: string) => string, { g
 
 /** Every line of the fingerprint, read inside the caller's snapshot. */
 async function readFingerprint(sql: Sql): Promise<string[]> {
-  // A constant list, bound as one JSON parameter: the client's serialisers
-  // take no JS array.
-  const list = (values: readonly string[]): Fragment => sql`array(select json_array_elements_text(${JSON.stringify(values)}::json))`
-  const schemas = list(FINGERPRINT_SCHEMAS)
-  const roles = list(FINGERPRINT_ROLES)
+  const schemas = textList(sql, OWNED_SCHEMAS)
+  const roles = textList(sql, FINGERPRINT_ROLES)
   // An ACL column exploded where it is read, a default (null) one expanded first.
   const exploded = (acl: Fragment, type: Fragment, owner: Fragment): Fragment => sql`(
     select coalesce(json_agg(json_build_object(
@@ -176,11 +178,11 @@ async function readFingerprint(sql: Sql): Promise<string[]> {
     lines.push(`schema ${schema.name} owner=${role(schema.owner)} acl=${acl(schema.acl)}`)
   }
   const [extensionsSchema] = await sql<{ acl: string }[]>`
-    select (select coalesce(json_agg(json_build_object('grantor', pg_get_userbyid(a.grantor), 'grantee', pg_get_userbyid(a.grantee), 'privilege', a.privilege_type, 'grantable', a.is_grantable))::text, '[]')
-            from aclexplode(coalesce(n.nspacl, acldefault('n', n.nspowner))) a
-            where a.grantee <> 0 and pg_get_userbyid(a.grantee) = any(${roles})) as acl
-    from pg_namespace n where n.nspname = 'extensions'`
-  lines.push(extensionsSchema === undefined ? "schema extensions missing" : `schema extensions service-role-grants=${acl(extensionsSchema.acl, { grantor: false })}`)
+    select ${exploded(sql`n.nspacl`, sql`'n'::"char"`, sql`n.nspowner`)} as acl from pg_namespace n where n.nspname = 'extensions'`
+  const serviceRoleGrants = (text: string) => (parse<AclItem[]>(text) ?? []).filter((item) => (FINGERPRINT_ROLES as readonly string[]).includes(item.grantee))
+  lines.push(
+    extensionsSchema === undefined ? "schema extensions missing" : `schema extensions service-role-grants=${spellAcl(serviceRoleGrants(extensionsSchema.acl), role, { grantor: false })}`,
+  )
   for (const name of EXTENSIONS) {
     const [extension] = await sql<{ schema: string }[]>`select extnamespace::regnamespace::text as schema from pg_extension where extname = ${name}`
     lines.push(extension === undefined ? `extension ${name} missing` : `extension ${name} schema=${extension.schema}`)
@@ -338,7 +340,7 @@ async function readFingerprint(sql: Sql): Promise<string[]> {
            ${exploded(sql`p.proacl`, sql`'f'::"char"`, sql`p.proowner`)} as acl,
            case when p.prokind in ('f', 'p') then pg_get_functiondef(p.oid) end as definition
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace join pg_language l on l.oid = p.prolang
-    where (n.nspname = any(${schemas}) or n.nspname || '.' || p.proname = any(${list(OUTSIDE_FUNCTIONS)}))
+    where (n.nspname = any(${schemas}) or n.nspname || '.' || p.proname = any(${textList(sql, OUTSIDE_FUNCTIONS)}))
       and not exists (select from pg_depend d where d.classid = 'pg_proc'::regclass and d.objid = p.oid and d.deptype = 'e')
     order by n.nspname, p.proname, pg_get_function_identity_arguments(p.oid)`) {
     const config = parse<string[]>(fn.config)
@@ -401,15 +403,15 @@ async function readFingerprint(sql: Sql): Promise<string[]> {
   }
 
   const [{ journal, version }] = await sql<{ journal: boolean; version: boolean }[]>`
-    select to_regclass('drizzle.__drizzle_migrations') is not null as journal, to_regclass('pgboss.version') is not null as version`
+    select to_regclass(${`${MIGRATIONS_SCHEMA}.${MIGRATIONS_TABLE}`}) is not null as journal, to_regclass(${`${PGBOSS_SCHEMA}.version`}) is not null as version`
   if (journal) {
     for (const entry of await sql<{ created_at: string | null; hash: string }[]>`
-      select created_at::text as created_at, hash from drizzle.__drizzle_migrations order by created_at nulls first, hash`) {
+      select created_at::text as created_at, hash from ${sql(MIGRATIONS_SCHEMA)}.${sql(MIGRATIONS_TABLE)} order by created_at nulls first, hash`) {
       lines.push(`journal ${entry.created_at ?? "null"} ${entry.hash}`)
     }
   }
   if (version) {
-    for (const entry of await sql<{ version: string }[]>`select version::text as version from pgboss.version order by 1`) lines.push(`pgboss-version ${entry.version}`)
+    for (const entry of await sql<{ version: string }[]>`select version::text as version from ${sql(PGBOSS_SCHEMA)}.version order by 1`) lines.push(`pgboss-version ${entry.version}`)
   }
   return lines
 }

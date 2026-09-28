@@ -9,6 +9,7 @@ import path from "node:path"
 import { describe, test } from "node:test"
 
 import { checkRestoreTarget, majorOf, restorePlan, verifyBackup, writeManifest, type BackupManifest } from "../pilot/backup"
+import { createDb } from "../client"
 import { migrateDatabase } from "../migrate"
 import { libpqEnvironment, shellExports } from "../pilot/pg-env"
 import { databaseUnderTest, withFreshDatabase } from "./database"
@@ -71,6 +72,13 @@ describe("a backup's manifest", { skip: database.skip }, () => {
   test("records the dumps, the journal and the fingerprint, and verifies until one byte changes", () =>
     withFreshDatabase(database.adminUrl, "waste_backup_manifest", async (url) => {
       await migrateDatabase(url)
+      // A database from before migration 0011, which has no pg-boss schema to back up.
+      const owner = createDb(url, { max: 1 })
+      try {
+        await owner.sql`drop schema pgboss cascade`
+      } finally {
+        await owner.close()
+      }
       const dir = mkdtempSync(path.join(tmpdir(), "waste-backup-"))
       try {
         writeFileSync(path.join(dir, "wms-schema.sql"), "CREATE SCHEMA wms;\nCREATE TABLE wms.company (id uuid);\n")
@@ -84,7 +92,7 @@ describe("a backup's manifest", { skip: database.skip }, () => {
           clientVersion: "pg_dump (PostgreSQL) 17.11",
           now: () => new Date("2026-09-29T08:00:00Z"),
         })
-        assert.deepEqual(manifest.schemas, ["wms", "drizzle"], "pgboss is left out where its dumps are")
+        assert.deepEqual(manifest.schemas, ["wms", "drizzle"], "pgboss is left out where the database has none")
         assert.equal(manifest.client.major, 17)
         assert.equal(manifest.server.major, 17)
         assert.match(manifest.identity, /^local\/waste_backup_manifest_/)
@@ -108,18 +116,23 @@ describe("a backup's manifest", { skip: database.skip }, () => {
       }
     }))
 
-  test("refuses dumps that cannot be a backup: a schema missing, an empty file, a wms schema with no table", () =>
+  test("refuses what cannot be a backup: a database without the domain, a dump the database's schemas want and do not have, an empty file, a wms schema with no table", () =>
     withFreshDatabase(database.adminUrl, "waste_backup_refused", async (url) => {
       const dir = mkdtempSync(path.join(tmpdir(), "waste-backup-"))
       const input = { url, run: { id: "1", attempt: "1" }, commit: COMMIT, clientVersion: "pg_dump (PostgreSQL) 17.11" }
       try {
+        await assert.rejects(writeManifest(dir, input), /the backup holds no wms schema/, "a database the migrations never ran on")
+        await migrateDatabase(url)
         writeFileSync(path.join(dir, "wms-schema.sql"), "CREATE SCHEMA wms;\n")
         writeFileSync(path.join(dir, "wms-data.sql"), "-- rows\n")
-        await assert.rejects(writeManifest(dir, input), /the backup holds no drizzle schema/)
+        await assert.rejects(writeManifest(dir, input), /drizzle-schema\.sql is missing from the backup/)
         writeFileSync(path.join(dir, "drizzle-schema.sql"), "CREATE SCHEMA drizzle;\n")
-        writeFileSync(path.join(dir, "drizzle-data.sql"), "")
-        await assert.rejects(writeManifest(dir, input), /drizzle-data\.sql is empty/)
         writeFileSync(path.join(dir, "drizzle-data.sql"), "-- rows\n")
+        await assert.rejects(writeManifest(dir, input), /pgboss-schema\.sql is missing from the backup/, "the database has pg-boss's schema, so its dump is owed")
+        writeFileSync(path.join(dir, "pgboss-schema.sql"), "CREATE SCHEMA pgboss;\n")
+        writeFileSync(path.join(dir, "pgboss-data.sql"), "")
+        await assert.rejects(writeManifest(dir, input), /pgboss-data\.sql is empty/)
+        writeFileSync(path.join(dir, "pgboss-data.sql"), "-- rows\n")
         await assert.rejects(writeManifest(dir, input), /wms-schema\.sql defines no table/)
       } finally {
         rmSync(dir, { recursive: true, force: true })

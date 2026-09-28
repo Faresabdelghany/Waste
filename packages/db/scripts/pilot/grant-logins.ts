@@ -1,15 +1,15 @@
-// The `grant-logins` operation (src/pilot/credentials.ts): LOGIN for exactly
+// The `grant-logins` operation (src/pilot/grant-logins.ts): LOGIN for exactly
 // wms_api and wms_worker, with the passwords the `pilot` environment's
 // PILOT_DATABASE_URL and PILOT_WORKER_DATABASE_URL carry, through the owner's
 // DATABASE_ADMIN_URL. Every URL is held to the Pilot's session pooler
-// (PILOT_DATABASE_HOST), the project (PILOT_SUPABASE_REF), the database and its
+// (PILOT_DATABASE_HOST), the Supabase project (PILOT_SUPABASE_REF), the database and its
 // own role before anything runs, and every password is masked in the log
 // first. Runs inside GitHub Actions only, since masking is a runner's command.
 import { grantLogin } from "../../src/bootstrap"
 import { createDb } from "../../src/client"
-import { planPilotLogins } from "../../src/pilot/credentials"
+import { planPilotLogins } from "../../src/pilot/grant-logins"
 import { expectPilot } from "../../src/pilot/identity"
-import { readLogins, spellLogins } from "../../src/pilot/logins"
+import { readLogins, spellLogins } from "../../src/pilot/barrier"
 import { required, step, summary } from "./step"
 
 await step(async () => {

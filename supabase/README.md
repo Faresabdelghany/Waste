@@ -1,6 +1,6 @@
 # The Pilot's Supabase project
 
-This directory holds the local stack's configuration (`config.toml`, read by `pnpm db:start`) and the age recipient the Pilot's backups are encrypted to (`pilot-backup.pub`). This file is the operator's runbook for the **Pilot** — the hosted environment on the one Supabase project, `waste-pilot` — and its sections are the procedures an operator follows by hand. A Project in this file is the Supabase project unless it says otherwise; the domain's Project is never meant.
+This directory holds the local stack's configuration (`config.toml`, read by `pnpm db:start`) and the age recipient the Pilot's backups are encrypted to (`pilot-backup.pub`). This file is the operator's runbook for the **Pilot** — the hosted environment on the one Supabase project, `waste-pilot` — and its sections are the procedures an operator follows by hand. The infrastructure unit is always written the Supabase project here: a bare Project is the domain's (`CONTEXT.md`).
 
 ## The database door
 
@@ -23,7 +23,7 @@ No input is SQL, a shell command or a path; a run id and a repair id are validat
 - **Environment `pilot`**: deployment branch `main` only; required reviewer the repository owner; self-review prevention **off**, since one person dispatches and approves — this is a one-person approval boundary, not a two-person control; no wait timer.
 - **Secrets** (environment): `PILOT_DATABASE_ADMIN_URL` — the `postgres` role's Session pooler string from the dashboard's Connect dialog (host copied, never derived; user `postgres.<ref>`, port 5432, the password percent-encoded, `?sslmode=require`); `PILOT_BACKUP_AGE_KEY` — the age identity whose recipient is `pilot-backup.pub`; `PILOT_RENDER_DEPLOY_HOOK` — Render's deploy hook, once the hosting issue (#149) creates the service; `PILOT_DATABASE_URL` and `PILOT_WORKER_DATABASE_URL` — the app roles' session-pooler URLs, the ones Render runs with.
 - **Variable** (repository): `PILOT_API_URL`, the API's public origin, read by `release` to prove a deployment live (and by the keep-alive).
-- **Constants** (in the workflow, reviewed with it): the project ref, the pooler host and the GHCR package. Every script holds the secret URL to the ref before it connects, so a secret pasted from another Supabase project is refused by name.
+- **Constants** (in the workflow, reviewed with it): the Supabase project ref, the pooler host and the GHCR package. Every script holds the secret URL to the ref before it connects, so a secret pasted from another Supabase project is refused by name.
 
 A secret reaches only the step that needs it, as that step's environment; it is never printed, written to an artifact or put on a command line (`pg_dump` and `psql` read libpq's environment). A pull request or a fork never sees any of it: the workflow runs on dispatch only, and an environment secret is read only after approval.
 
@@ -49,7 +49,7 @@ The run's summary and the failed step's log say where it stopped. Stopped at 1�
 
 ### A paused Supabase project
 
-A Free project is paused after a week without activity. A connection that fails with the database unreachable means the Free project may be paused: resume it in the dashboard (Project › Restore) and re-run the workflow. The keep-alive of the hosting issue keeps the Pilot awake once it is deployed.
+A Free Supabase project is paused after a week without activity. When a connection fails with the database unreachable, the scripts say so: the Free Supabase project may be paused; resume it in the dashboard (the paused Supabase project's Restore button) and re-run the workflow. The keep-alive of the hosting issue keeps the Pilot awake once it is deployed.
 
 ## Backups
 
@@ -65,7 +65,7 @@ A restore replaces the Pilot's `wms`, `drizzle` and `pgboss` schemas with a back
 2. **Find the backup**: the id of the run that took it — a `release`, or an earlier `restore`'s safety backup — from the run's URL (`…/actions/runs/<id>`). Its artifact must not have expired.
 3. **Dispatch** `restore` with `source_run_id` and `services_suspended` on, and approve it.
 
-The job: checks the source run is a dispatched run of this workflow on `main`; downloads its newest backup artifact; takes a **safety backup** of the Pilot as it is (restorable later by this run's id); decrypts and verifies the backup — every file's sha256, the manifest's run and commit against the source run's, and its identity against this database; then the **write barrier**: records `wms_api`'s and `wms_worker`'s LOGIN in `login-state.json` (no credential), stores it as the artifact `login-state-<run>-<attempt>` for 90 days, reads it back and checks its digest, and only then sets both roles NOLOGIN, ends their sessions and waits until none remain. One `psql` then drops the three schemas and restores the backup in a single transaction — the schemas, the publication's tables, the data — and any error rolls the whole of it back. The journal check and the backup's own fingerprint prove the result, and only after every check do the recorded LOGIN states come back.
+The job: checks the source run is a dispatched run of this workflow on `main`; downloads its newest backup artifact, the download refusing one whose digest differs from the artifact store's (the package's checksum); takes a **safety backup** of the Pilot as it is, restorable later by this run's id — and stops on any failure but one: a database that has lost a schema a backup requires cannot be backed up whole, and the restore goes on without a safety backup, saying so; decrypts and verifies the backup — every file's sha256, the manifest's run and commit against the source run's, and its identity against this database; then the **write barrier**: refuses to close over a barrier already closed (while `wms_api` cannot log in, recording would record the closed state and a recovery from it would restore nothing: run `recover-logins` for the earlier run first), records `wms_api`'s and `wms_worker`'s LOGIN in `login-state.json` (no credential), stores it as the artifact `login-state-<run>-<attempt>` for 90 days, reads it back and checks its digest, and only then sets both roles NOLOGIN, ends their sessions and waits until none remain. One `psql` then drops the three schemas and restores the backup in a single transaction — the schemas, the publication's tables, the data — and any error rolls the whole of it back. The journal check and the backup's own fingerprint prove the result, and only after every check do the recorded LOGIN states come back.
 
 4. **Resume the services**, and run `check`.
 

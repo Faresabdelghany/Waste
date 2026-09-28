@@ -5,6 +5,8 @@
 // argument an operator typed ever reaches a statement.
 import { appendFileSync } from "node:fs"
 
+import { unreachableHint } from "../../src/pilot/identity"
+
 export function required(name: string): string {
   const value = process.env[name]
   if (value === undefined || value === "") {
@@ -29,12 +31,18 @@ export function summary(line: string): void {
   if (file !== undefined && file !== "") appendFileSync(file, `${line}\n`)
 }
 
-/** Runs a script's body, printing a failure's message alone — never a stack a secret could sit in — and exiting 1. */
+/**
+ * Runs a script's body, printing a failure's message alone — never a stack a
+ * secret could sit in — with the paused-Supabase-project hint where the Pilot could
+ * not be reached, and exiting 1.
+ */
 export async function step(body: () => Promise<void>): Promise<void> {
   try {
     await body()
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error))
+    const hint = unreachableHint(process.env.DATABASE_ADMIN_URL ?? "", error)
+    if (hint !== undefined) console.error(hint)
     process.exit(1)
   }
 }

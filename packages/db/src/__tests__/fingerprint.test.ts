@@ -23,6 +23,13 @@ describe("a fingerprint's text", () => {
     })
   })
 
+  test("counts a line that appears twice, so a journal row recorded twice is a difference", () => {
+    const once = fingerprintText(["journal 1000 aaa", "journal 2000 bbb"])
+    const twice = fingerprintText(["journal 1000 aaa", "journal 1000 aaa", "journal 2000 bbb"])
+    assert.deepEqual(compareFingerprints(once, twice), { missing: [], unexpected: ["journal 1000 aaa"] })
+    assert.deepEqual(compareFingerprints(twice, once), { missing: ["journal 1000 aaa"], unexpected: [] })
+  })
+
   test("digests its object lines only, so a reworded comment is the same fingerprint", () => {
     assert.equal(fingerprintDigest("# one header\nschema wms\n"), fingerprintDigest("# another\n\nschema wms\n"))
     assert.notEqual(fingerprintDigest("schema wms\n"), fingerprintDigest("schema pgboss\n"))

@@ -20,7 +20,7 @@ describe("HealthResponse", () => {
 
   test("says the build or says null, and a build is one full commit id (Issue #152)", () => {
     assert.equal(HealthResponse.safeParse({ status: "ok", time: "2026-09-17T13:41:00Z" }).success, false)
-    for (const commit of [COMMIT.slice(0, 7), COMMIT.toUpperCase(), `${COMMIT}\n`, "main", ""]) {
+    for (const commit of [COMMIT.slice(0, 7), COMMIT.toUpperCase(), `${COMMIT}\n`, "main", "", "a".repeat(64)]) {
       assert.equal(HealthResponse.safeParse({ status: "ok", time: "2026-09-17T13:41:00Z", build: { commit } }).success, false, JSON.stringify(commit))
     }
     assert.deepEqual(BuildInfo.parse({ commit: COMMIT }), { commit: COMMIT })

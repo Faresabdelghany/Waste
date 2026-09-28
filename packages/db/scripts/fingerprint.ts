@@ -4,8 +4,8 @@
 //
 //   pnpm db:fingerprint                 prints it
 //   pnpm db:fingerprint --write         regenerates migrations/meta/_fingerprint.txt;
-//                                       run it on a freshly migrated local
-//                                       database whenever a migration is added
+//                                       run it on a local database the
+//                                       migrations built whenever one is added
 //   pnpm db:fingerprint --check [file]  compares the database with the
 //                                       committed file (or with `file`, a
 //                                       backup's recorded fingerprint) and
@@ -16,33 +16,30 @@
 import { readFileSync, writeFileSync } from "node:fs"
 
 import { compareFingerprints, committedFingerprint, FINGERPRINT_FILE, fingerprintDatabase, fingerprintDigest } from "../src/fingerprint"
+import { required, step } from "./pilot/step"
 
-const url = process.env.DATABASE_ADMIN_URL
-if (!url) {
-  console.error("DATABASE_ADMIN_URL is not set (see .env.example at the repository root)")
-  process.exit(1)
-}
-const [mode, file] = process.argv.slice(2)
-const actual = await fingerprintDatabase(url)
-if (mode === undefined) {
-  process.stdout.write(actual)
-} else if (mode === "--write") {
-  writeFileSync(FINGERPRINT_FILE, actual)
-  console.log(`@waste/db: wrote ${FINGERPRINT_FILE} (sha256 ${fingerprintDigest(actual)})`)
-} else if (mode === "--check") {
-  const expected = file === undefined ? committedFingerprint() : readFileSync(file, "utf8")
-  const { missing, unexpected } = compareFingerprints(expected, actual)
-  const against = file === undefined ? "the committed fingerprint" : file
-  if (missing.length === 0 && unexpected.length === 0) {
-    console.log(`@waste/db: ${new URL(url).hostname} matches ${against} (sha256 ${fingerprintDigest(actual)})`)
+await step(async () => {
+  const url = required("DATABASE_ADMIN_URL")
+  const [mode, file] = process.argv.slice(2)
+  if (mode !== undefined && mode !== "--write" && mode !== "--check") throw new Error(`Unknown argument ${mode}: pnpm db:fingerprint [--write | --check [file]]`)
+  const actual = await fingerprintDatabase(url)
+  if (mode === undefined) {
+    process.stdout.write(actual)
+  } else if (mode === "--write") {
+    writeFileSync(FINGERPRINT_FILE, actual)
+    console.log(`@waste/db: wrote ${FINGERPRINT_FILE} (sha256 ${fingerprintDigest(actual)})`)
   } else {
-    console.error(`@waste/db: ${new URL(url).hostname} differs from ${against} (expected sha256 ${fingerprintDigest(expected)}, found ${fingerprintDigest(actual)}):`)
+    const expected = file === undefined ? committedFingerprint() : readFileSync(file, "utf8")
+    const against = file === undefined ? "the committed fingerprint" : file
+    const { missing, unexpected } = compareFingerprints(expected, actual)
+    if (missing.length === 0 && unexpected.length === 0) {
+      console.log(`@waste/db: ${new URL(url).hostname} matches ${against} (sha256 ${fingerprintDigest(actual)})`)
+      return
+    }
     for (const line of missing) console.error(`- ${line}`)
     for (const line of unexpected) console.error(`+ ${line}`)
-    console.error(`${missing.length} line(s) expected and missing (-), ${unexpected.length} found and not expected (+)`)
-    process.exit(1)
+    throw new Error(
+      `@waste/db: ${new URL(url).hostname} differs from ${against} (expected sha256 ${fingerprintDigest(expected)}, found ${fingerprintDigest(actual)}): ${missing.length} line(s) expected and missing (-), ${unexpected.length} found and not expected (+)`,
+    )
   }
-} else {
-  console.error(`Unknown argument ${mode}: pnpm db:fingerprint [--write | --check [file]]`)
-  process.exit(2)
-}
+})

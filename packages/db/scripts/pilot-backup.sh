@@ -24,6 +24,10 @@
 #     file checked non-empty.
 # The plaintext lives in a directory of its own, mode 700, and is deleted on
 # every exit; the workflow's always-running cleanup step deletes it again.
+#
+# Exit 3 means a schema a backup requires (wms, drizzle) is not there, so the
+# database cannot be backed up whole — the one refusal a restore's safety
+# backup may go on without; any other failure is exit 1.
 # libpq reads the connection from its environment (scripts/pilot/pg-env.ts),
 # so the password is never on a command line, and nothing here prints the URL.
 set -euo pipefail
@@ -37,6 +41,10 @@ repository="$(dirname "$(dirname "$package")")"
 fail() {
   echo "pilot-backup: $*" >&2
   exit 1
+}
+incomplete() {
+  echo "pilot-backup: $*" >&2
+  exit 3
 }
 absolute() { (cd "$(dirname "$1")" && printf "%s/%s" "$(pwd)" "$(basename "$1")"); }
 output="$(absolute "$BACKUP_OUTPUT")"
@@ -57,16 +65,19 @@ unset libpq
 client_version="$(pg_dump --version)"
 client_major="$(printf '%s' "$client_version" | sed -E 's/^[^0-9]*([0-9]+).*/\1/')"
 [ "$client_major" = 17 ] || fail "pg_dump is major $client_major ($client_version); the workflow pins PostgreSQL client 17"
-server_number="$(psql -X -A -t -c 'show server_version_num')"
+server_number="$(psql -X -A -t -c 'show server_version_num')" \
+  || fail "cannot reach the database (a Free Supabase project may be paused: resume it in the dashboard and re-run the workflow)"
 server_major=$((server_number / 10000))
 [ "$client_major" -ge "$server_major" ] || fail "pg_dump $client_major is older than the server's $server_major: move the pinned client first"
 echo "pilot-backup: pg_dump $client_major against server $server_major"
 
-# 2. The dumps, one schema at a time.
+# 2. The dumps, one schema at a time: the schemas src/migrate.ts's
+# OWNED_SCHEMAS names, in its order (the manifest step refuses a backup that
+# left out one the database has).
 for schema in wms drizzle pgboss; do
   present="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from pg_namespace where nspname = '$schema'")"
   if [ "$present" = 0 ]; then
-    [ "$schema" = pgboss ] || fail "the database has no $schema schema"
+    [ "$schema" = pgboss ] || incomplete "the database has no $schema schema, so it cannot be backed up whole"
     echo "pilot-backup: no pgboss schema yet (before migration 0011): not dumped"
     continue
   fi
@@ -81,4 +92,7 @@ CLIENT_VERSION="$client_version" BACKUP_DIR="$plain" node --import tsx scripts/p
 tar -C "$plain" -cf "$work/backup.tar" .
 age --encrypt --recipients-file "$recipient" --output "$output" "$work/backup.tar"
 [ -s "$output" ] || fail "the encrypted backup is empty"
-echo "pilot-backup: $(basename "$output"), $(wc -c < "$output" | tr -d ' ') bytes, encrypted to $(basename "$recipient")"
+# The package's digest, for the run's log: the artifact store records its own
+# digest of what is uploaded and download-artifact refuses a mismatch, and age
+# refuses a ciphertext that was altered, so a restore reads back these bytes.
+echo "pilot-backup: $(basename "$output"), $(wc -c < "$output" | tr -d ' ') bytes, sha256 $(sha256sum "$output" 2>/dev/null | cut -d' ' -f1 || shasum -a 256 "$output" | cut -d' ' -f1), encrypted to $(basename "$recipient")"

@@ -17,6 +17,8 @@
 // stale or unmoved clock, a cached or non-ready answer — resets the count, so
 // a release is proven by the new process answering steadily and not by one
 // lucky answer from an old one or a cache.
+import type { HealthResponse } from "@waste/contracts/health"
+
 export const OBSERVATIONS_NEEDED = 3
 export const OBSERVE_INTERVAL_MS = 10_000
 export const OBSERVE_TIMEOUT_MS = 600_000
@@ -27,9 +29,9 @@ export type ProbeAnswer = { status: number; cacheControl: string | null; body: u
 export type Observation = { at: string; healthz: ProbeAnswer; readyz: ProbeAnswer }
 export type Verdict = { ok: true; time: string } | { ok: false; reason: string }
 
-type Health = { status: "ok"; time: string; build: { commit: string } | null }
-const isHealth = (body: unknown): body is Health => {
-  const value = body as Partial<Health> | null
+/** The contracts' body, read structurally: this package runs no zod (schema/geometry.ts says why), so the shape is checked here. */
+const isHealth = (body: unknown): body is HealthResponse => {
+  const value = body as Partial<HealthResponse> | null
   return value !== null && typeof value === "object" && value.status === "ok" && typeof value.time === "string" && "build" in value
 }
 

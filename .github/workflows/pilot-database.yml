@@ -6,7 +6,8 @@
 # reviewed script below, and adding one is a reviewed change to this file.
 #
 #   check           the journal check, the fingerprint against the committed
-#                   file, the service roles' LOGIN state; writes nothing
+#                   file (once nothing is pending), the service roles' LOGIN
+#                   state and the publication's tables; writes nothing
 #   release         a Pilot release, one approved run: the image resolved by
 #                   digest, the journal checked, an encrypted backup, the
 #                   migrations, the seed on request, the journal and the
@@ -115,7 +116,7 @@ jobs:
         env:
           PENDING: ${{ steps.journal.outputs.pending }}
         run: echo "$PENDING migration(s) pending, so the committed fingerprint (the head's) does not apply yet; a release compares it after migrating." | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Identity and logins
+      - name: Identity, logins and the publication
         working-directory: packages/db
         env:
           DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
@@ -275,6 +276,9 @@ jobs:
           SOURCE_RUN_ID: ${{ inputs.source_run_id }}
           ARTIFACT_PREFIX: pilot-backup
         run: node --import tsx scripts/pilot/select-artifact.ts
+      # The package's checksum: the artifact store's digest of what the
+      # backup's run uploaded, which the download refuses to differ from; the
+      # manifest's checksums are the dumps', verified after decryption.
       - name: Download the backup
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
@@ -282,25 +286,31 @@ jobs:
           run-id: ${{ inputs.source_run_id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/pilot-source
+          digest-mismatch: error
       # A safety backup of the database as it is, restorable later by this
-      # run's id — when it can be taken: a database that lost a schema, the
-      # case a restore is for, cannot be backed up whole, and the restore goes
-      # on without one, saying so.
+      # run's id. Any failure stops the restore, but one: a database that lost
+      # a schema the backup requires (pilot-backup.sh's exit 3), the case a
+      # restore is for, cannot be backed up whole, and the restore goes on
+      # without one, saying so.
       - name: Back up the database as it is
         id: safety
-        continue-on-error: true
         env:
           DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
           BACKUP_OUTPUT: ${{ runner.temp }}/pilot-backup/pilot-backup-${{ github.run_id }}-${{ github.run_attempt }}.tar.age
         run: |
           mkdir -p "$(dirname "$BACKUP_OUTPUT")"
-          bash packages/db/scripts/pilot-backup.sh
-      - name: Say there is no safety backup
-        if: steps.safety.outcome != 'success'
-        run: |
-          echo "No safety backup: the database could not be backed up as it is (the step above says why). The restore goes on." | tee -a "$GITHUB_STEP_SUMMARY"
+          status=0
+          bash packages/db/scripts/pilot-backup.sh || status=$?
+          if [ "$status" = 3 ]; then
+            echo "No safety backup: the database lacks a schema a backup requires, so it cannot be backed up whole. The restore goes on." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "taken=false" >> "$GITHUB_OUTPUT"
+          elif [ "$status" != 0 ]; then
+            exit "$status"
+          else
+            echo "taken=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Upload the safety backup
-        if: steps.safety.outcome == 'success'
+        if: steps.safety.outputs.taken == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: pilot-backup-${{ github.run_id }}-${{ github.run_attempt }}
@@ -347,6 +357,7 @@ jobs:
         with:
           name: login-state-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/login-state-copy
+          digest-mismatch: error
       - name: Close the barrier
         working-directory: packages/db
         env:
@@ -440,6 +451,7 @@ jobs:
           run-id: ${{ inputs.source_run_id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/login-state-source
+          digest-mismatch: error
       - name: Restore the recorded logins
         working-directory: packages/db
         env:

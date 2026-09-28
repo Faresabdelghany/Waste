@@ -10,7 +10,7 @@
 // inside the database, so no client-side quoting is involved.
 import { createDb } from "./client"
 import { isLocalHost } from "./local-host"
-import { API_ROLE, SYNC_ROLE, WORKER_ROLE } from "./roles"
+import { API_ROLE, PLAIN_ROLE, SYNC_ROLE, WORKER_ROLE } from "./roles"
 
 export type GrantLoginOptions = {
   /** A plain identifier: lowercase letters, digits and underscores. */
@@ -19,7 +19,7 @@ export type GrantLoginOptions = {
 }
 
 export async function grantLogin(adminUrl: string, { role, password }: GrantLoginOptions): Promise<void> {
-  if (!/^[a-z_][a-z0-9_]*$/.test(role)) {
+  if (!PLAIN_ROLE.test(role)) {
     throw new Error(`grantLogin: "${role}" is not a plain role name`)
   }
   if (password.length === 0) {

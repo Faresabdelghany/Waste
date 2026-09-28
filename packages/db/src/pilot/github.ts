@@ -8,6 +8,12 @@
 // GitHub API is read with the job's token (`actions: read`).
 import type { Fetch } from "./release"
 
+/** One attempt of one workflow run, as a backup, a login record and an artifact's name carry it. */
+export type RunRef = { id: string; attempt: string }
+
+/** A commit as GitHub names it, and as a run's `head_sha` spells it. */
+export const COMMIT_ID = /^[0-9a-f]{40}$/
+
 export type WorkflowRun = {
   id: number
   path: string
