@@ -36,3 +36,6 @@ packages/db/reference
 apps/api/Dockerfile
 apps/worker/Dockerfile
 .dockerignore
+apps/pilot/Dockerfile
+apps/pilot/*.test.mjs
+apps/pilot/prove.sh

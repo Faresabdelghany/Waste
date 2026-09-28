@@ -1,0 +1,13 @@
+# apps/pilot — PROTOTYPE, throwaway (#134)
+
+The Pilot image of the worker-shape decision ([#128](https://github.com/Faresabdelghany/Waste/issues/128)): the API and the worker as two child processes in one container under a small Node supervisor, built here roughly to answer ticket [#134](https://github.com/Faresabdelghany/Waste/issues/134)'s gates. **Not the implementation** — [#149](https://github.com/Faresabdelghany/Waste/issues/149) writes `@waste/pilot` properly (`src/supervise.ts` in the turbo gates, the worker's env knobs, CI publish, `render.yaml`, ADR-0008) after this prototype has been reacted to. No `package.json` on purpose: nothing here joins the workspace or the lockfile.
+
+The prototype skill's two shapes (an HTML logic demo, UI variants) do not fit an infrastructure question, so its rules are applied instead: throwaway and marked, one command to run, state surfaced (the supervisor logs every start, exit, restart delay and its own exit), captured on the branch `prototype/134-pilot-image` with a pointer from the ticket.
+
+- `supervise.mjs` — the supervisor (plain ESM, no tsx of its own: it is the third process in 512 MB). Rules: Render's `PORT` to the API, `WORKER_PORT` (3002, loopback) to the worker; each child's lines prefixed; the worker restarted with backoff 5 s → 5 min, reset after 10 min up; the container exits with the API's code when the API exits; SIGTERM/SIGINT forwarded to both and both waited for, a child still up after 20 s killed.
+- `supervise.test.mjs` — the rules over fake children with small timings: `node --test apps/pilot/supervise.test.mjs`.
+- `Dockerfile` — both closures through `pnpm deploy`, the two existing recipes in one: `docker build -f apps/pilot/Dockerfile -t waste-pilot:proto .`
+- `prove.sh` — the local proofs that need no hosted database, published image or Render: proof A against a database nobody answers on (liveness 200, readiness 503, the worker child restarted with 5 s then 10 s backoff, a clean stop), proof B against the local Supabase stack (both up, per-process RSS idle and after a burst, a clean stop). `apps/pilot/prove.sh`, or `apps/pilot/prove.sh A`.
+- Running the supervisor on a workstation without Docker: `PILOT_API_DIR=$PWD/apps/api PILOT_WORKER_DIR=$PWD/apps/worker PORT=3101 node apps/pilot/supervise.mjs` with the `.env` variables exported.
+
+What this does **not** prove: the hosted gates of #134 — RSS under realistic load on Render, egress at the 30 s poll, connection usage on the pooler, the self-ping against spin-down, the GHCR pull and the deploy hook — which wait on the Pilot database door ([#152](https://github.com/Faresabdelghany/Waste/issues/152)) applying 0010–0012 and a Render service made with the owner present.
