@@ -15,6 +15,8 @@
     "test": "node --env-file-if-exists=../../.env --import tsx --test --test-timeout=120000 \"src/**/*.test.ts\"",
     "generate": "drizzle-kit generate",
     "migrate": "node --env-file-if-exists=../../.env --import tsx scripts/migrate.ts",
+    "check": "node --env-file-if-exists=../../.env --import tsx scripts/check.ts",
+    "fingerprint": "node --env-file-if-exists=../../.env --import tsx scripts/fingerprint.ts",
     "bootstrap": "node --env-file-if-exists=../../.env --import tsx scripts/bootstrap-local.ts",
     "seed": "node --env-file-if-exists=../../.env --import tsx scripts/seed-demo.ts",
     "pgboss-plan": "node --import tsx scripts/pgboss-plan.ts"
