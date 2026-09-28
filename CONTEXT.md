@@ -13,7 +13,7 @@ A municipality, contract, region, or business unit that defines an operating sco
 _Avoid_: Workspace, tenant
 
 **Company Administrator**:
-A company-scoped user responsible for the tenant and authorized across all of its current and future projects.
+A company-scoped user responsible for the tenant and authorized across all of its current and future projects. One Company Administrator is the primary administrator, the company's protected last way in: it cannot be deactivated or narrowed, and the flag moves to another active account that reaches every project.
 _Avoid_: Company manager, company owner, master user
 
 **Project Access**:
@@ -23,6 +23,18 @@ _Avoid_: Company membership, active project
 **Service Provider Access**:
 An explicit grant that permits a service provider's user to work within the Service Areas currently assigned to that provider, for the operations the grant's role allows. It originates from the Service Area relationship, never from company membership.
 _Avoid_: Project access (for provider users), contractor login, company membership
+
+**User Account**:
+A company's record of a person who may work in Waste, carrying their role and their Project Access or Service Provider Access.
+_Avoid_: User, member, login
+
+**Login**:
+The identity a person signs in with, bound to exactly one User Account. In the Pilot, that binding is established on first sign-in.
+_Avoid_: Account, credentials, auth user
+
+**Invitation**:
+A User Account no Login is bound to yet.
+_Avoid_: Pending user, unconfirmed account
 
 **Customer**:
 A person or organization that receives or finances a service.
