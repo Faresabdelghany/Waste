@@ -149,24 +149,32 @@ One stop-level service action generated inside a dated Route. It exists from pla
 _Avoid_: Pickup history, separate service event, property, route
 
 **Stop**:
-The route-line presentation of a Pickup — one position (#) within a dated Route's stop list. Presentation only: the Pickup remains the persisted record. Stops exist only once routes are generated; Stop Matching Rule matches are a preview and are never presented as Stops.
+The route-line presentation of a Pickup — one position (#) within a dated Route's stop list: the Route's active Plan's order where one exists, else the generated order. Presentation only: the Pickup remains the persisted record. Stops exist only once routes are generated; Stop Matching Rule matches are a preview and are never presented as Stops.
 _Avoid_: Pickup (as the stored record), matched container, stop preview
 
 **Fact**:
 A presentation-only label-and-value line shown on a record in the prototype. The platform stores no Facts: their content lives in typed fields, status, Proof of Service, and Unload records.
 _Avoid_: Attribute (as a stored field), event, proof of service
 
+**Driver App**:
+The driver's restricted surface for assigned Routes: starting and ending a Session, recording each Pickup's outcome and Proof of Service, and recording Unloads. It shows a driver only their assigned Routes and none of the office's navigation. In the pilot it is a browser page; the term never implies a native application.
+_Avoid_: Driver workspace, mobile app (as a promise of a native application), Operate
+
 **Session**:
 A driver-app work session on an assigned route, tracking the driver's device state, connectivity, queued actions, and proof progress from assignment to completion. It is created by starting an assigned Route and ended by ending it; a driver has one open Session at a time, and so does a Route.
 _Avoid_: Route, actual assignment, pickup
 
+**Command Queue**:
+The durable, ordered queue on a driver's device of the commands their actions produce, each kept until the server has answered it. It carries actions through a loss of connectivity and is never the source of truth: the server's records and its receipts are.
+_Avoid_: Outbox (the server-side outbox that publishes events between contexts), offline mode, cache
+
 **Scenario**:
-An editable planning hypothesis containing selected assumptions and constraints.
+An editable planning hypothesis containing selected assumptions and constraints, from which Plans are calculated and compared. A flagged future capability, not part of the current model: until it exists, a Plan records its own inputs.
 _Avoid_: Plan, production configuration
 
 **Plan**:
-An immutable result calculated from a scenario.
-_Avoid_: Scenario, route scheme
+An immutable calculated result for one dated Route — the order its Pickups are executed in, the legs between them and the distance and duration of each — computed from inputs recorded on the Plan itself, whether by an optimiser, by a dispatcher reordering the stops or by measuring the generated order. A Route has at most one active Plan, and without one the generated order stands. A Plan never changes what work the Route holds, and its order is frozen once a Session has started on the Route.
+_Avoid_: Scenario, route scheme, optimisation (as the stored result), stop order (as a record of its own)
 
 **Promotion / Go-live**:
 The controlled process that turns an approved plan into production configuration.
