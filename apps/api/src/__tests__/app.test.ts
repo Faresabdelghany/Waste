@@ -50,11 +50,18 @@ const schemaOf = (spec: Spec, path: string, status: string) => spec.paths[path].
 const spec_ = (spec: Spec) => spec.paths["/readyz"].get.description ?? ""
 
 describe("GET /healthz", () => {
-  test("answers ok with the server's clock, as JSON", async () => {
+  test("answers ok with the server's clock and no build, as JSON nobody may cache", async () => {
     const response = await app.request("/healthz")
     assert.equal(response.status, 200)
     assert.match(response.headers.get("content-type") ?? "", /^application\/json/)
-    assert.deepEqual(HealthResponse.parse(await response.json()), { status: "ok", time: "2026-09-17T13:41:00.000Z" })
+    assert.equal(response.headers.get("cache-control"), "no-store")
+    assert.deepEqual(HealthResponse.parse(await response.json()), { status: "ok", time: "2026-09-17T13:41:00.000Z", build: null })
+  })
+
+  test("names the build it was given, the commit a release proves live (Issue #152)", async () => {
+    const commit = "21e7e2c0c8f1b4d9a3e5f6a7b8c9d0e1f2a3b4c5"
+    const response = await createApp({ ...deps, now: () => at, build: { commit } }).request("/healthz")
+    assert.deepEqual(HealthResponse.parse(await response.json()), { status: "ok", time: "2026-09-17T13:41:00.000Z", build: { commit } })
   })
 })
 
@@ -65,6 +72,7 @@ describe("GET /readyz", () => {
       const response = await createApp({ ...deps, probe: connected }).request("/readyz")
       assert.equal(response.status, 200)
       assert.match(response.headers.get("content-type") ?? "", /^application\/json/)
+      assert.equal(response.headers.get("cache-control"), "no-store")
       assert.deepEqual(ReadinessResponse.parse(await response.json()), { status: "ok", checks: { database: "ok" } })
     } finally {
       await connected.close()
@@ -77,6 +85,7 @@ describe("GET /readyz", () => {
       const response = await createApp({ ...deps, probe: refused }).request("/readyz")
       assert.equal(response.status, 503)
       assert.match(response.headers.get("content-type") ?? "", /^application\/json/)
+      assert.equal(response.headers.get("cache-control"), "no-store")
       assert.deepEqual(ReadinessResponse.parse(await response.json()), { status: "unavailable", checks: { database: "unreachable" } })
     } finally {
       await refused.close()
@@ -294,7 +303,7 @@ describe("GET /openapi.json", () => {
     ])
     assert.equal(document.paths["/healthz"].get.operationId, "getHealth")
     const health = schemaOf(document, "/healthz", "200")
-    assert.deepEqual(health.required, ["status", "time"])
+    assert.deepEqual(health.required, ["status", "time", "build"])
     assert.deepEqual(health.properties?.status, { type: "string", const: "ok" })
     assert.equal(health.properties?.time.format, "date-time")
   })

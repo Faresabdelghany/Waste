@@ -33,7 +33,8 @@ describe("GET /healthz", () => {
   test("answers 200 with the contracts' HealthResponse and the injected clock, whatever the database and pg-boss are doing", async () => {
     const response = await createApp({ probe: idle, boss: bossOf(new Error("down"), false), now: () => pinned }).request("/healthz")
     assert.equal(response.status, 200)
-    assert.deepEqual(HealthResponse.parse(await response.json()), { status: "ok", time: "2026-09-25T10:00:00.000Z" })
+    assert.equal(response.headers.get("cache-control"), "no-store")
+    assert.deepEqual(HealthResponse.parse(await response.json()), { status: "ok", time: "2026-09-25T10:00:00.000Z", build: null })
   })
 })
 
@@ -43,6 +44,7 @@ describe("GET /readyz", () => {
     try {
       const response = await createApp({ probe, boss: bossOf([1, 0, 2]) }).request("/readyz")
       assert.equal(response.status, 200)
+      assert.equal(response.headers.get("cache-control"), "no-store")
       assert.deepEqual(WorkerReadinessResponse.parse(await response.json()), { status: "ok", checks: { database: "ok", boss: "ok" }, failedJobs: 3 })
     } finally {
       await probe.close()
@@ -63,6 +65,7 @@ describe("GET /readyz", () => {
       assert.deepEqual(WorkerReadinessResponse.parse(await failed.json()), { status: "ok", checks: { database: "ok", boss: "ok" }, failedJobs: 0 })
       const down = await createApp({ probe, boss: bossOf([0], false), staleOutbox: async () => 4 }).request("/readyz")
       assert.equal(down.status, 503)
+      assert.equal(down.headers.get("cache-control"), "no-store")
       assert.deepEqual(WorkerReadinessResponse.parse(await down.json()), { status: "unavailable", checks: { database: "ok", boss: "stopped" } }, "an unavailable body carries no count")
       // The dead-letter queue's waiting count rides the same way: information beside the failed count, never a status, and left out where the probe names no queue.
       const dead: BossProbe = {

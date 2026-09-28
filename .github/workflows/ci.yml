@@ -64,6 +64,17 @@ jobs:
       # idempotency; seed.test.ts proves that, on a database of its own.
       - run: pnpm db:seed
 
+      # The Pilot's backup and restore (#152), rehearsed on this stack with
+      # the client the protected workflow uses: the migrated and seeded
+      # database backed up by pilot-backup.sh, its three schemas dropped,
+      # restored by pilot-restore.sh inside the write barrier, and proved by
+      # the journal check and its own fingerprint. The suites below then run
+      # against the restored database, which makes every one of them a smoke
+      # test of the restore. Client 17 is required here: its absence fails
+      # the rehearsal and, through REQUIRE_DATABASE, pilot-rehearsal.test.ts.
+      - uses: ./.github/actions/postgres-client
+      - run: pnpm --filter @waste/db rehearse-restore
+
       - run: pnpm test
       - run: pnpm build
 
@@ -79,7 +90,9 @@ jobs:
       # its layers cache in GitHub's cache between runs: the install layer
       # is redone when a manifest or the lockfile changes, not when source
       # does. Loaded into the runner's Docker and pushed nowhere, since the
-      # host is not chosen (docs/architecture/backend-architecture.md).
+      # host is not chosen (docs/architecture/backend-architecture.md). The
+      # commit goes in as SOURCE_COMMIT (#152): the image labels itself with
+      # it and bakes it into build.json, which GET /healthz names.
       - uses: docker/setup-buildx-action@v4
       - uses: docker/build-push-action@v7
         with:
@@ -88,6 +101,7 @@ jobs:
           push: false
           load: true
           tags: waste-api:ci
+          build-args: SOURCE_COMMIT=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -120,6 +134,13 @@ jobs:
           echo "GET /healthz -> $healthz $(body /healthz)"
           echo "GET /readyz -> $readyz $(body /readyz)"
           test "$healthz" = 200 && test "$readyz" = 503
+          # The build the image says it is (#152): the commit in the body, the
+          # same commit on the label, and neither probe cacheable.
+          body /healthz | jq --exit-status --arg commit "$GITHUB_SHA" '.build.commit == $commit'
+          test "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' waste-api:ci)" = "$GITHUB_SHA"
+          for probe in /healthz /readyz; do
+            curl --silent --output /dev/null --dump-header - "http://127.0.0.1:3001$probe" | tr -d '\r' | grep -qix 'cache-control: no-store'
+          done
       - name: Container logs
         if: always()
         run: docker logs api || true

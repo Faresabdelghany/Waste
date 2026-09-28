@@ -11,26 +11,30 @@
 // is the same as one that goes down later, and both are the balancer's to
 // route around). The verifier holds the project's remote key set: jose
 // fetches it on the first token, caches it, and refetches when a token names
-// a key it has not seen, so key rotation needs no restart.
+// a key it has not seen, so key rotation needs no restart. The build /healthz
+// names is the image's own file, read once here (build-info.ts): an image
+// whose file says nothing usable stops before it binds.
 import { createDb } from "@waste/db/client"
 import { createRemoteJWKSet } from "jose"
 
 import { createApp } from "./app"
 import { createVerifier, supabaseAuth } from "./auth/verify"
+import { readBuildInfo } from "./build-info"
 import { parseEnv } from "./env"
 import { listen } from "./listen"
 import { DATABASE_CHECK_TIMEOUT_MS, probePoolOptions } from "./readiness"
 
 const env = parseEnv(process.env)
+const build = readBuildInfo()
 const probe = createDb(env.DATABASE_URL, probePoolOptions(DATABASE_CHECK_TIMEOUT_MS))
 const pool = createDb(env.DATABASE_URL)
 const auth = supabaseAuth(env.SUPABASE_URL)
 const verifier = createVerifier({ keySet: createRemoteJWKSet(auth.jwks), issuer: auth.issuer })
-const listening = await listen(createApp({ probe, pool, verifier, databaseTimeoutMs: DATABASE_CHECK_TIMEOUT_MS }), {
+const listening = await listen(createApp({ probe, pool, verifier, databaseTimeoutMs: DATABASE_CHECK_TIMEOUT_MS, build }), {
   host: env.HOST,
   port: env.PORT,
 })
-console.log(`@waste/api listening on ${listening.url}, verifying tokens from ${auth.issuer}`)
+console.log(`@waste/api listening on ${listening.url}, verifying tokens from ${auth.issuer}, build ${build?.commit ?? "none"}`)
 
 // Shutdown: the listener drains and the probe pool closes together, since a
 // probe is not a request and 503 is the right answer to one that arrives

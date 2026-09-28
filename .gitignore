@@ -47,3 +47,7 @@ playwright-report/
 
 # Turborepo
 .turbo/
+
+# An image's build metadata (Issue #152): written inside the image from its
+# build argument, never in a checkout.
+apps/*/build.json

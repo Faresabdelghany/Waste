@@ -18,7 +18,12 @@
 // checks `/healthz`, since `/readyz` answering 503 while the database is
 // down is the worker's own answer for an operator to read and never a reason
 // to restart a process that will reconnect on its next poll.
-import { HealthResponse, type WorkerReadinessResponse } from "@waste/contracts/health"
+//
+// Both probes answer Cache-Control: no-store, the API's convention (Issue
+// #152). `/healthz` names no build yet (`build: null`): the worker's image
+// bakes its commit in the way the API's does when its deployment lands, and
+// until then says so rather than guessing.
+import { type BuildInfo, HealthResponse, type WorkerReadinessResponse } from "@waste/contracts/health"
 import type { Database } from "@waste/db/client"
 import { Hono } from "hono"
 
@@ -35,14 +40,19 @@ export type AppOptions = {
   checkTimeoutMs?: number
   /** The relay's stale count (`staleOutboxCount` over the worker role's pool), read beside the checks and carried on a ready body as information; omitted where the worker has no outbox to relay, as a test's may not. */
   staleOutbox?: () => Promise<number>
+  /** The build /healthz names; null until the worker's image records one. */
+  build?: BuildInfo | null
 }
 
-export function createApp({ probe, boss, now = () => new Date(), checkTimeoutMs = CHECK_TIMEOUT_MS, staleOutbox }: AppOptions) {
+/** What both probes answer beside their body: a probe is the process, never a cache's copy. */
+const PROBE_HEADERS = { "Cache-Control": "no-store" }
+
+export function createApp({ probe, boss, now = () => new Date(), checkTimeoutMs = CHECK_TIMEOUT_MS, staleOutbox, build = null }: AppOptions) {
   const app = new Hono()
 
   app.get("/healthz", (c) => {
-    const body: HealthResponse = { status: "ok", time: now().toISOString() }
-    return c.json(body)
+    const body: HealthResponse = { status: "ok", time: now().toISOString(), build }
+    return c.json(body, 200, PROBE_HEADERS)
   })
 
   app.get("/readyz", async (c) => {
@@ -59,10 +69,10 @@ export function createApp({ probe, boss, now = () => new Date(), checkTimeoutMs 
         ...(bossCheck.deadLetters === undefined ? {} : { deadLetters: bossCheck.deadLetters }),
         ...(stale === undefined ? {} : { staleOutbox: stale }),
       }
-      return c.json(body, 200)
+      return c.json(body, 200, PROBE_HEADERS)
     }
     const body: WorkerReadinessResponse = { status: "unavailable", checks: { database, boss: bossCheck.boss } }
-    return c.json(body, 503)
+    return c.json(body, 503, PROBE_HEADERS)
   })
 
   return app

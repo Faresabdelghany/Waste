@@ -1,0 +1,29 @@
+name: PostgreSQL client 17 and age
+description: >-
+  The Pilot's backup and restore tools (Issue #152): postgresql-client-17 from
+  the official PGDG repository, first on PATH, and age from Ubuntu. Used by the
+  protected pilot-database workflow and by CI's restore rehearsal, so both run
+  the same client.
+runs:
+  using: composite
+  steps:
+    - name: Install postgresql-client-17 and age
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo install -d /usr/share/postgresql-common/pgdg
+        sudo curl --fail --silent --show-error --location \
+          --output /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+          https://www.postgresql.org/media/keys/ACCC4CF8.asc
+        . /etc/os-release
+        echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+          | sudo tee /etc/apt/sources.list.d/pgdg-waste.list > /dev/null
+        sudo apt-get update -qq
+        sudo apt-get install --yes --quiet --no-install-recommends postgresql-client-17 age
+        echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+    - name: Say which
+      shell: bash
+      run: |
+        /usr/lib/postgresql/17/bin/pg_dump --version
+        /usr/lib/postgresql/17/bin/psql --version
+        age --version

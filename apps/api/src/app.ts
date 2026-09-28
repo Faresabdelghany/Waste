@@ -8,8 +8,11 @@
 // unique violation, an unknown path and an unexpected error all answer in the
 // one shape.
 //
-// Two probes: /healthz is liveness (the process answers, with its clock) and
-// /readyz is readiness (the database answers, within readiness.ts's bound).
+// Two probes: /healthz is liveness (the process answers, with its clock and
+// the build it runs, build-info.ts) and /readyz is readiness (the database
+// answers, within readiness.ts's bound). Both answer Cache-Control: no-store,
+// since the Pilot's release reads them to prove a deployment live (Issue
+// #152) and a cached answer would prove nothing.
 // Two pools come in from the composition root and the app connects on
 // neither by itself: the probe pool, the probe's own (readiness.ts says why),
 // and the request pool, on which every authenticated request runs as one
@@ -22,7 +25,7 @@
 // is a 404, not a 401. The verifier is injected: server.ts builds it over the
 // project's remote key set, a test over a local one, and the app never reads
 // SUPABASE_URL itself.
-import { HealthResponse, ReadinessResponse, ReadyResponse, UnavailableResponse } from "@waste/contracts/health"
+import { type BuildInfo, HealthResponse, ReadinessResponse, ReadyResponse, UnavailableResponse } from "@waste/contracts/health"
 import type { Database } from "@waste/db/client"
 import { Hono } from "hono"
 import { describeRoute, openAPIRouteHandler, resolver } from "hono-openapi"
@@ -87,9 +90,14 @@ export type AppOptions = {
   databaseTimeoutMs?: number
   /** Where the cause of a 500 goes; console.error unless a test wants to look. */
   log?: (error: unknown) => void
+  /** The build /healthz names: server.ts reads the image's build file (build-info.ts); null from a checkout. */
+  build?: BuildInfo | null
 }
 
-export function createApp({ probe, pool, verifier, now = () => new Date(), databaseTimeoutMs = DATABASE_CHECK_TIMEOUT_MS, log }: AppOptions) {
+/** What both probes answer beside their body: a probe is the process, never a cache's copy. */
+const PROBE_HEADERS = { "Cache-Control": "no-store" }
+
+export function createApp({ probe, pool, verifier, now = () => new Date(), databaseTimeoutMs = DATABASE_CHECK_TIMEOUT_MS, log, build = null }: AppOptions) {
   const app = new Hono()
   app.onError(errorHandler(log))
   app.notFound(notFound)
@@ -99,17 +107,18 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
     describeRoute({
       operationId: "getHealth",
       summary: "Is the API up?",
-      description: "Liveness: the process answers, and this is its clock. Says nothing about the database; that is GET /readyz.",
+      description:
+        "Liveness: the process answers, this is its clock, and this is the build it runs — the commit its image was built from, or null where it runs from a checkout. Says nothing about the database; that is GET /readyz. Never cached (Cache-Control: no-store).",
       responses: {
         200: {
-          description: "The API is up, and this is its clock.",
+          description: "The API is up, this is its clock, and this is its build.",
           content: { "application/json": { schema: resolver(HealthResponse) } },
         },
       },
     }),
     (c) => {
-      const body: HealthResponse = { status: "ok", time: now().toISOString() }
-      return c.json(body)
+      const body: HealthResponse = { status: "ok", time: now().toISOString(), build }
+      return c.json(body, 200, PROBE_HEADERS)
     },
   )
 
@@ -118,7 +127,7 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
     describeRoute({
       operationId: "getReadiness",
       summary: "Can the API serve a request right now?",
-      description: `Readiness: the database answers a probe within ${databaseTimeoutMs} ms. A balancer takes the instance out of rotation on 503 and back in on 200; the process itself stays up.`,
+      description: `Readiness: the database answers a probe within ${databaseTimeoutMs} ms. A balancer takes the instance out of rotation on 503 and back in on 200; the process itself stays up. Never cached (Cache-Control: no-store).`,
       responses: {
         200: {
           description: "Every check passed: the database answers.",
@@ -134,10 +143,10 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
       const database = await checkDatabase(probe.sql, { timeoutMs: databaseTimeoutMs })
       if (database === "ok") {
         const body: ReadinessResponse = { status: "ok", checks: { database } }
-        return c.json(body, 200)
+        return c.json(body, 200, PROBE_HEADERS)
       }
       const body: ReadinessResponse = { status: "unavailable", checks: { database } }
-      return c.json(body, 503)
+      return c.json(body, 503, PROBE_HEADERS)
     },
   )
 

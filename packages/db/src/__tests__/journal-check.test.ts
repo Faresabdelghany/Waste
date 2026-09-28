@@ -199,7 +199,9 @@ describe("the journal check on a database", { skip: database.skip }, () => {
 
   test("a migrated database has every migration applied and none pending", () =>
     withFreshDatabase(database.adminUrl, "waste_journal_migrated", async (url) => {
-      await migrateDatabase(url)
+      const { applied } = await migrateDatabase(url)
+      assert.equal(applied.at(0), "0000_wms", "the first run applies the whole journal and says so")
+      assert.deepEqual((await migrateDatabase(url)).applied, [], "the second applies nothing")
       const report = await checkDatabaseJournal(url)
       assert.deepEqual(report.problems, [])
       assert.deepEqual(report.pending, [])

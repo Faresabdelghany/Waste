@@ -106,15 +106,21 @@ async function journalUnderLock(lock: ReservedSql): Promise<JournalReport> {
   return checkJournal(readMigrationFolder(MIGRATIONS_FOLDER), await readAppliedMigrations(lock))
 }
 
-/** Applies every pending migration, after the journal check has passed; a refused journal throws `JournalError` and nothing is written. */
-export async function migrateDatabase(url: string, options: MigrateOptions = {}): Promise<void> {
-  await withMigrationLock(url, options, async ({ db, lock }) => {
-    assertJournal(await journalUnderLock(lock))
+/**
+ * Applies every pending migration, after the journal check has passed, and
+ * answers the ones it applied; a refused journal throws `JournalError` and
+ * nothing is written.
+ */
+export async function migrateDatabase(url: string, options: MigrateOptions = {}): Promise<{ applied: string[] }> {
+  return withMigrationLock(url, options, async ({ db, lock }) => {
+    const report = await journalUnderLock(lock)
+    assertJournal(report)
     await migrate(db, {
       migrationsFolder: MIGRATIONS_FOLDER,
       migrationsSchema: MIGRATIONS_SCHEMA,
       migrationsTable: MIGRATIONS_TABLE,
     })
+    return { applied: report.pending }
   })
 }
 

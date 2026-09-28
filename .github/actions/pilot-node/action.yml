@@ -1,0 +1,17 @@
+name: Node and the database package
+description: >-
+  pnpm at the version package.json pins, Node at .nvmrc's, and the
+  dependencies of @waste/db and nothing else, from the frozen lockfile, for a
+  job of the protected pilot-database workflow (Issue #152). No dependency
+  cache: the job goes on to hold the owner's secret, so it installs from the
+  lockfile's integrity hashes and restores nothing another run saved.
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      with:
+        node-version-file: .nvmrc
+    - name: Install @waste/db's dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile --filter "@waste/db..."
