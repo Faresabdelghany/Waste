@@ -6,17 +6,14 @@
 //
 // Derived, not imported: `packages/db` may not depend on the web (ADR-0001 runs
 // the other way, and the web may not depend on this package either), so the
-// explicit fixture records are copied here as literals and the two generated
+// explicit fixture records are copied here as literals. The two generated
 // sets — the fifty seeded properties and the hundred seeded containers — are
-// rebuilt from the same literal tables and the same arithmetic as the web's
-// `buildSeededPropertyRecords` and `buildSeededContainerRecords`, index by
-// index, so `property-seed-101` here is the Ryesgade 3 the prototype shows and
-// `asset-seed-91001` is BIN-91001 standing at it. The copy is deliberate and
-// temporary: the generator's tables and arithmetic and the gazetteer are now
-// spelled twice, here and in the web, with nothing holding them together, and
-// their one home is `@waste/domain` (pure, imported by both), which a
-// follow-up issue moves them to; until then a change to the web's generator
-// does not reach here by itself, and the header of that file says so too.
+// not: their tables and arithmetic are `@waste/domain/fixtures/seeded-registry`
+// (issue #99), the one spelling the web's `buildSeededPropertyRecords` and
+// `buildSeededContainerRecords` read too, so `property-seed-101` here is the
+// Ryesgade 3 the prototype shows, `asset-seed-91001` is BIN-91001 standing at
+// it, and a change to the generator reaches both.
+// `__tests__/seed-registry-generator.test.ts` holds these rows to it.
 // REGISTRY_IDS keys every row by the prototype's record id (`asset-82014`,
 // `property-seed-101`, `AGR-2408`) so the adapter can map one onto the other
 // without a lookup table of its own.
@@ -88,12 +85,13 @@
 //   one whose cadence differs carries its own.
 //
 //   Points. A property on a gazetteer street is located where the map places
-//   it: `knownAddressLocation` from @waste/domain over a literal copy of the
-//   web's FIXTURE_GAZETTEER, rounded to six decimals (about a decimetre), so
-//   the stored point is the derived one. Dock 4's own service address is not
-//   on a gazetteer street; it is placed as its container BIN-77104 is, by the
-//   container's Address fact "Harbor Offices, Dock 4" with the container's
-//   Property fact, "Harbor Offices", as the seed — not the property's name.
+//   it: `knownAddressLocation` from @waste/domain over its FIXTURE_GAZETTEER,
+//   the table the web's map places through, rounded to six decimals (about a
+//   decimetre), so the stored point is the derived one. Dock 4's own service
+//   address is not on a gazetteer street; it is placed as its container
+//   BIN-77104 is, by the container's Address fact "Harbor Offices, Dock 4"
+//   with the container's Property fact, "Harbor Offices", as the seed — not
+//   the property's name.
 //   The two shared points have no fixture coordinates and need one: Kongens
 //   Nytorv is at the square itself (12.5855, 55.6805), the Nordhavn dock point
 //   at the gazetteer's Sandkaj anchor (12.5965, 55.7085), and both take the
@@ -129,7 +127,17 @@
 // `requiredSpec`, so a key misspelled here is this file's own sentence and
 // not a 23502 from the database or a TypeError from a Map.
 import type { Point } from "@waste/contracts/geojson"
-import { knownAddressLocation, type Gazetteer } from "@waste/domain/map-planning/positions"
+import { FIXTURE_GAZETTEER } from "@waste/domain/fixtures/gazetteer"
+import {
+  SEEDED_CONTAINER_COUNT,
+  SEEDED_PROPERTY_COUNT,
+  seededContainer,
+  seededProperty,
+  type SeededOwnership,
+  type SeededPropertyStatus,
+  type SeededPropertyType,
+} from "@waste/domain/fixtures/seeded-registry"
+import { knownAddressLocation } from "@waste/domain/map-planning/positions"
 import type {
   AgreementStatus,
   ContainerOwnership,
@@ -348,42 +356,11 @@ const PRODUCT_BY_FRACTION: Partial<Record<WasteFractionKey, string>> = {
 
 /* ----------------------------- who and where ------------------------------ */
 
-// The web's FIXTURE_GAZETTEER (apps/web/lib/data/street-gazetteer.ts), copied:
-// the anchor of each fixture street's low-number end and the bearing the
-// numbers grow along. Keys are lower-cased NFC street names as
-// knownAddressLocation parses them.
-const GAZETTEER: Gazetteer = Object.fromEntries(
-  Object.entries({
-    ryesgade: { start: { lng: 12.5605, lat: 55.6905 }, bearing: 45 },
-    blegdamsvej: { start: { lng: 12.5615, lat: 55.6935 }, bearing: 50 },
-    jagtvej: { start: { lng: 12.5445, lat: 55.6935 }, bearing: 45 },
-    amagerbrogade: { start: { lng: 12.5985, lat: 55.6685 }, bearing: 165 },
-    istedgade: { start: { lng: 12.5615, lat: 55.6725 }, bearing: 250 },
-    godthåbsvej: { start: { lng: 12.5405, lat: 55.6865 }, bearing: 260 },
-    "falkoner allé": { start: { lng: 12.5335, lat: 55.6765 }, bearing: 10 },
-    strandboulevarden: { start: { lng: 12.5865, lat: 55.7105 }, bearing: 200 },
-    tagensvej: { start: { lng: 12.5575, lat: 55.6975 }, bearing: 320 },
-    enghavevej: { start: { lng: 12.5475, lat: 55.6705 }, bearing: 180 },
-    østerbrogade: { start: { lng: 12.5735, lat: 55.6975 }, bearing: 30 },
-    "vigerslev allé": { start: { lng: 12.5195, lat: 55.6595 }, bearing: 265 },
-    sandkaj: { start: { lng: 12.5965, lat: 55.7085 }, bearing: 60 },
-    orientkaj: { start: { lng: 12.6025, lat: 55.7115 }, bearing: 70 },
-    sundkrogsgade: { start: { lng: 12.5905, lat: 55.7065 }, bearing: 40 },
-    trelleborggade: { start: { lng: 12.5985, lat: 55.7125 }, bearing: 90 },
-    helsinkigade: { start: { lng: 12.6005, lat: 55.7095 }, bearing: 80 },
-    parkvej: { start: { lng: 12.5745, lat: 55.7025 }, bearing: 60 },
-    sundbyvej: { start: { lng: 12.6035, lat: 55.6575 }, bearing: 100 },
-    nørrebrogade: { start: { lng: 12.5565, lat: 55.6865 }, bearing: 315 },
-    vesterbrogade: { start: { lng: 12.5655, lat: 55.6745 }, bearing: 245 },
-    "harbor offices": { start: { lng: 12.5975, lat: 55.7085 }, bearing: 60 },
-  }).map(([street, anchor]) => [street.normalize("NFC"), anchor]),
-)
-
 const round6 = (value: number): number => Math.round(value * 1e6) / 1e6
 
 /** Where the map places an address, as the point the column stores; null off the gazetteer. */
 function placedAt(address: string, seed: string): Point | null {
-  const at = knownAddressLocation(address, GAZETTEER, seed)
+  const at = knownAddressLocation(address, FIXTURE_GAZETTEER, seed)
   return at ? { type: "Point", coordinates: [round6(at.lng), round6(at.lat)] } : null
 }
 
@@ -494,63 +471,38 @@ const SUNDBYVEJ_91: PropertySpec = {
 
 const EXPLICIT_PROPERTIES: readonly PropertySpec[] = [PARKVEJ_18, DOCK_4, SUNDBYVEJ_91]
 
-// The web's seeded-property generator (business-modules.ts,
-// seededPropertyProfile and buildSeededPropertyRecords), index for index.
-const SEEDED_COPENHAGEN_STREETS: ReadonlyArray<readonly [string, string]> = [
-  ["Ryesgade", "2200 København N"],
-  ["Blegdamsvej", "2100 København Ø"],
-  ["Jagtvej", "2200 København N"],
-  ["Amagerbrogade", "2300 København S"],
-  ["Istedgade", "1650 København V"],
-  ["Godthåbsvej", "2000 Frederiksberg"],
-  ["Falkoner Allé", "2000 Frederiksberg"],
-  ["Strandboulevarden", "2100 København Ø"],
-  ["Tagensvej", "2400 København NV"],
-  ["Enghavevej", "1674 København V"],
-  ["Østerbrogade", "2100 København Ø"],
-  ["Vigerslev Allé", "2500 Valby"],
-]
-const SEEDED_HARBOR_STREETS: ReadonlyArray<readonly [string, string]> = [
-  ["Sandkaj", "2150 Nordhavn"],
-  ["Orientkaj", "2150 Nordhavn"],
-  ["Sundkrogsgade", "2150 Nordhavn"],
-  ["Trelleborggade", "2150 Nordhavn"],
-  ["Helsinkigade", "2150 Nordhavn"],
-]
-const SEEDED_PROPERTY_OWNERS = ["Østerbro Housing", "KAB Bolig", "Jeudan A/S", "DEAS Ejendomme", PRIVATE, "By & Havn"] as const
-const SEEDED_PROPERTY_KINDS: readonly PropertyKind[] = ["residential", "commercial", "mixed"] // Residential, Commercial, Mixed use
-const SEEDED_PROPERTY_COUNT = 50
-const SEEDED_PROPERTY_COPENHAGEN_COUNT = 35
-const SEEDED_CONTAINER_COUNT = 100
-const SEEDED_CONTAINER_COPENHAGEN_COUNT = 70
+// The seeded properties, read from @waste/domain's generator: the type the
+// prototype shows is the kind by name, and a status is read as "Statuses and
+// kinds" above says — Active is active, Prospect and On hold inactive.
+const SEEDED_PROPERTY_KINDS = {
+  Residential: "residential",
+  Commercial: "commercial",
+  "Mixed use": "mixed",
+} as const satisfies Record<SeededPropertyType, PropertyKind>
+const SEEDED_PROPERTY_STATUSES = {
+  Active: "active",
+  Prospect: "inactive",
+  "On hold": "inactive",
+} as const satisfies Record<SeededPropertyStatus, PropertyStatus>
 
-const seededPropertyKey = (index: number): string => `property-seed-${101 + index}`
-const seededAgreementNumber = (index: number): string => `AGR-${2600 + index}`
-const isProspect = (index: number): boolean => index % 12 === 7
-const isOnHold = (index: number): boolean => index % 12 === 10
-
-function seededProperty(index: number): PropertySpec {
-  const inCopenhagen = index < SEEDED_PROPERTY_COPENHAGEN_COUNT
-  const streets = inCopenhagen ? SEEDED_COPENHAGEN_STREETS : SEEDED_HARBOR_STREETS
-  const [street, postal] = streets[index % streets.length]
-  const name = `${street} ${3 + ((index * 7) % 120)}`
-  const owner = SEEDED_PROPERTY_OWNERS[index % SEEDED_PROPERTY_OWNERS.length]
+function seededPropertySpec(index: number): PropertySpec {
+  const seeded = seededProperty(index)
   return {
-    key: seededPropertyKey(index),
-    project: inCopenhagen ? "copenhagen" : "harbor",
-    name,
-    address: `${name}, ${postal}`,
-    registryId: `CPH-9${1000 + index}`,
-    kind: SEEDED_PROPERTY_KINDS[index % SEEDED_PROPERTY_KINDS.length],
-    status: isProspect(index) || isOnHold(index) ? "inactive" : "active",
+    key: seeded.recordId,
+    project: seeded.project,
+    name: seeded.name,
+    address: seeded.address,
+    registryId: seeded.propertyNumber,
+    kind: SEEDED_PROPERTY_KINDS[seeded.propertyType],
+    status: SEEDED_PROPERTY_STATUSES[seeded.status],
     notes: null,
-    owner,
-    payer: index % 4 === 3 ? "Municipal payer" : owner,
+    owner: seeded.owner,
+    payer: seeded.payer,
   }
 }
 
-/** The explicit properties, then the fifty seeded ones: `PROPERTIES[EXPLICIT_PROPERTIES.length + index]` is `seededProperty(index)`. */
-const PROPERTIES: readonly PropertySpec[] = [...EXPLICIT_PROPERTIES, ...Array.from({ length: SEEDED_PROPERTY_COUNT }, (_, index) => seededProperty(index))]
+/** The explicit properties, then the fifty seeded ones: `PROPERTIES[EXPLICIT_PROPERTIES.length + index]` is `seededPropertySpec(index)`. */
+const PROPERTIES: readonly PropertySpec[] = [...EXPLICIT_PROPERTIES, ...Array.from({ length: SEEDED_PROPERTY_COUNT }, (_, index) => seededPropertySpec(index))]
 const SEEDED_PROPERTIES: readonly PropertySpec[] = PROPERTIES.slice(EXPLICIT_PROPERTIES.length)
 
 /** The person a `Private` owner is: one Customer per privately owned property. */
@@ -680,17 +632,18 @@ const AGREEMENTS: readonly AgreementSpec[] = [
   { number: "AGR-2188", project: "copenhagen", customer: privateOwnerKey(SUNDBYVEJ_91), payer: "customer-amager-district", status: "active", validFrom: "2026-01-01", validTo: null },
   // One per seeded property, from its "Agreement AGR-n" fact; the property's
   // owner is the customer and its payer the payer.
-  ...SEEDED_PROPERTIES.map(
-    (spec, index): AgreementSpec => ({
-      number: seededAgreementNumber(index),
+  ...SEEDED_PROPERTIES.map((spec, index): AgreementSpec => {
+    const { agreementNumber, status } = seededProperty(index)
+    return {
+      number: agreementNumber,
       project: spec.project,
       customer: customerKeyOf(spec.owner, spec),
       payer: customerKeyOf(spec.payer ?? spec.owner, spec),
-      status: isProspect(index) ? "draft" : "active",
-      validFrom: isProspect(index) ? "2026-10-01" : "2026-01-01",
+      status: status === "Prospect" ? "draft" : "active",
+      validFrom: status === "Prospect" ? "2026-10-01" : "2026-01-01",
       validTo: null,
-    }),
-  ),
+    }
+  }),
 ]
 
 /** The subscriptions a fixture agreement names without a container under them. */
@@ -732,8 +685,6 @@ type ContainerSpec = {
   /** Where its map places it, or null for one the map does not place: in storage, in transit or ended. */
   mapped: MappedSpec | null
 }
-const SEEDED_WASTE_FRACTIONS: readonly WasteFractionKey[] = ["residual", "organic", "paper", "cardboard", "glass", "plastic", "metal"]
-const SEEDED_CONTAINER_TYPES: readonly ContainerTypeKey[] = ["two-wheel-140", "two-wheel-240", "four-wheel-660", "four-wheel-1100", "igloo-2500", "underground-5000"]
 
 const EXPLICIT_CONTAINERS: readonly ContainerSpec[] = [
   {
@@ -824,53 +775,57 @@ const EXPLICIT_CONTAINERS: readonly ContainerSpec[] = [
   },
 ]
 
-/** The planning areas the web's generator rotates a Copenhagen container through, by index; a Harbor one is always in the harbor's. */
-const SEEDED_COPENHAGEN_AREAS = ["area-indreby", "area-osterbro-contract", "area-amager-1"] as const
-const SEEDED_HARBOR_AREA = "area-harbor-1"
+// The seeded containers, read from @waste/domain's generator: the property
+// it stands at and that property's agreement, its fraction and type found by
+// the names the catalogue above spells, its ownership, its frequency promise,
+// whether the prototype's status cycle puts it in storage (unplaced, off the
+// map) or in the future, and, in service, the planning area it files under
+// and the address the map places it at, its property's.
+const SEEDED_OWNERSHIPS = {
+  "Company owned": "company",
+  "Customer owned": "customer",
+} as const satisfies Record<SeededOwnership, ContainerOwnership>
 
-// The web's buildSeededContainerRecords, index for index: the property it
-// stands at, its fraction and type, its frequency promise, whether the
-// prototype's status cycle puts it in storage (unplaced) or in the future,
-// and, in service, the planning area it rotates into and the address the map
-// places it at, its property's.
-function seededContainer(index: number): ContainerSpec {
-  const inCopenhagen = index < SEEDED_CONTAINER_COPENHAGEN_COUNT
-  const propertyIndex = inCopenhagen
-    ? index % SEEDED_PROPERTY_COPENHAGEN_COUNT
-    : SEEDED_PROPERTY_COPENHAGEN_COUNT + ((index - SEEDED_CONTAINER_COPENHAGEN_COUNT) % (SEEDED_PROPERTY_COUNT - SEEDED_PROPERTY_COPENHAGEN_COUNT))
-  const binNumber = 91001 + index
-  const cycle = index % 20
-  const inStorage = cycle === 17
-  const standsAt = seededProperty(propertyIndex)
+/** A waste fraction's key by the name the catalogue spells: `Residual` is `residual`. */
+function wasteFractionKeyNamed(name: string): WasteFractionKey {
+  const found = WASTE_FRACTIONS.find(([, fractionName]) => fractionName === name)
+  if (!found) throw new Error(`registry seed: no waste fraction is named ${name}`)
+  return found[0]
+}
+
+/** A container type's key by the name the catalogue spells: `Two-wheel bin · 140 L` is `two-wheel-140`. */
+function containerTypeKeyNamed(name: string): ContainerTypeKey {
+  const key = CONTAINER_TYPE_KEYS[name]
+  if (!key) throw new Error(`registry seed: no container type is named ${name}`)
+  return key
+}
+
+function seededContainerSpec(index: number): ContainerSpec {
+  const seeded = seededContainer(index)
+  const standsAt = seededProperty(seeded.propertyIndex)
   return {
-    key: `asset-seed-${binNumber}`,
-    project: inCopenhagen ? "copenhagen" : "harbor",
-    label: `BIN-${binNumber}`,
-    containerType: SEEDED_CONTAINER_TYPES[index % SEEDED_CONTAINER_TYPES.length],
-    barcode: `WH${binNumber}`,
-    rfid: index % 4 === 3 ? null : `E200${binNumber}`,
-    serialNumber: `SEED-26-${binNumber}`,
-    ownership: index % 5 === 4 ? "customer" : "company",
-    stands: inStorage
-      ? null
-      : {
-          property: seededPropertyKey(propertyIndex),
-          agreement: seededAgreementNumber(propertyIndex),
-          fraction: SEEDED_WASTE_FRACTIONS[index % SEEDED_WASTE_FRACTIONS.length],
-          frequency: index % 2 === 0 ? "freq-every-2-weeks" : "freq-weekly",
-          future: cycle === 8,
-        },
-    mapped: inStorage
-      ? null
-      : {
-          area: inCopenhagen ? SEEDED_COPENHAGEN_AREAS[index % SEEDED_COPENHAGEN_AREAS.length] : SEEDED_HARBOR_AREA,
-          address: standsAt.address,
-          seed: standsAt.name,
-        },
+    key: seeded.recordId,
+    project: seeded.project,
+    label: seeded.label,
+    containerType: containerTypeKeyNamed(seeded.containerType),
+    barcode: seeded.barcode,
+    rfid: seeded.rfid,
+    serialNumber: seeded.serialNumber,
+    ownership: SEEDED_OWNERSHIPS[seeded.ownership],
+    stands: seeded.inService
+      ? {
+          property: standsAt.recordId,
+          agreement: standsAt.agreementNumber,
+          fraction: wasteFractionKeyNamed(seeded.fraction),
+          frequency: seeded.serviceFrequencyId,
+          future: seeded.status === "Future",
+        }
+      : null,
+    mapped: seeded.planningArea ? { area: seeded.planningArea.id, address: standsAt.address, seed: standsAt.name } : null,
   }
 }
 
-const CONTAINERS: readonly ContainerSpec[] = [...EXPLICIT_CONTAINERS, ...Array.from({ length: SEEDED_CONTAINER_COUNT }, (_, index) => seededContainer(index))]
+const CONTAINERS: readonly ContainerSpec[] = [...EXPLICIT_CONTAINERS, ...Array.from({ length: SEEDED_CONTAINER_COUNT }, (_, index) => seededContainerSpec(index))]
 
 /** The day a placement the prototype marks Future starts. */
 const FUTURE_PLACEMENT_FROM = "2026-10-01"
