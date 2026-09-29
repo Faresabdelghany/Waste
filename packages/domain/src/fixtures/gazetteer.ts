@@ -1,0 +1,51 @@
+// Where the fixture streets are (written 2026-09-16 in @waste/domain, moved
+// to the web 2026-09-17 by issue #58, back here 2026-09-30 by issue #99 so
+// the web and the seed read one table). Container and property fixtures
+// carry no coordinates, so a position is derived from the address through
+// ../map-planning/positions, which places an address only on a street the
+// caller's table lists; the web's map and `pnpm db:seed` both pass this one.
+//
+// The table mirrors the demo registry: the streets of the seeded properties
+// (./seeded-registry) plus those of the explicit fixture records in
+// apps/web/lib/data/business-modules.ts, which the seed copies. It
+// deliberately does NOT mirror the fixture pickups' streets: a pickup at no
+// registry container is placed by its address only on a listed street, and
+// most fixture stops are on unlisted ones, so a fixture route day is drawable
+// through its one or two stops on a listed street (RC-1042, RC-1044, RC-1048)
+// or not at all (RC-1058, whose depot is on Gammel Køge Landevej — listing it
+// would add an awaiting route to the Routes layer, a fixture decision, not a
+// gazetteer one).
+//
+// Keys are lower-cased, NFC-composed street names as the domain parses them;
+// anchors are approximate real coordinates of the low-number end, with the
+// bearing the numbers grow along — the picture only has to be plausible and
+// stable. ./__tests__/gazetteer.test.ts holds the table and the generator
+// together, and apps/web/lib/data/__tests__/street-gazetteer.test.ts the
+// table and the explicit fixtures: a fixture street without an anchor fails
+// in one of them.
+import type { Gazetteer } from "../map-planning/positions"
+
+export const FIXTURE_GAZETTEER: Gazetteer = {
+  ryesgade: { start: { lng: 12.5605, lat: 55.6905 }, bearing: 45 },
+  blegdamsvej: { start: { lng: 12.5615, lat: 55.6935 }, bearing: 50 },
+  jagtvej: { start: { lng: 12.5445, lat: 55.6935 }, bearing: 45 },
+  amagerbrogade: { start: { lng: 12.5985, lat: 55.6685 }, bearing: 165 },
+  istedgade: { start: { lng: 12.5615, lat: 55.6725 }, bearing: 250 },
+  "godthåbsvej": { start: { lng: 12.5405, lat: 55.6865 }, bearing: 260 },
+  "falkoner allé": { start: { lng: 12.5335, lat: 55.6765 }, bearing: 10 },
+  strandboulevarden: { start: { lng: 12.5865, lat: 55.7105 }, bearing: 200 },
+  tagensvej: { start: { lng: 12.5575, lat: 55.6975 }, bearing: 320 },
+  enghavevej: { start: { lng: 12.5475, lat: 55.6705 }, bearing: 180 },
+  "østerbrogade": { start: { lng: 12.5735, lat: 55.6975 }, bearing: 30 },
+  "vigerslev allé": { start: { lng: 12.5195, lat: 55.6595 }, bearing: 265 },
+  sandkaj: { start: { lng: 12.5965, lat: 55.7085 }, bearing: 60 },
+  orientkaj: { start: { lng: 12.6025, lat: 55.7115 }, bearing: 70 },
+  sundkrogsgade: { start: { lng: 12.5905, lat: 55.7065 }, bearing: 40 },
+  trelleborggade: { start: { lng: 12.5985, lat: 55.7125 }, bearing: 90 },
+  helsinkigade: { start: { lng: 12.6005, lat: 55.7095 }, bearing: 80 },
+  parkvej: { start: { lng: 12.5745, lat: 55.7025 }, bearing: 60 },
+  sundbyvej: { start: { lng: 12.6035, lat: 55.6575 }, bearing: 100 },
+  "nørrebrogade": { start: { lng: 12.5565, lat: 55.6865 }, bearing: 315 },
+  vesterbrogade: { start: { lng: 12.5655, lat: 55.6745 }, bearing: 245 },
+  "harbor offices": { start: { lng: 12.5975, lat: 55.7085 }, bearing: 60 },
+}

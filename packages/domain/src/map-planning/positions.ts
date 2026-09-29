@@ -8,9 +8,10 @@
 // that carries typed `latitude` / `longitude` submitted values wins outright.
 //
 // The gazetteer is the caller's (issue #58): it mirrors whatever registry
-// the addresses come from — today the web app's fixture streets — and this
-// package cannot see that registry, so it takes the table as an input the
-// way statistics.ts takes the asset catalogue. Pure data logic — no map
+// the addresses come from — today the demo registry's streets,
+// ../fixtures/gazetteer, which the web and the seed pass in — and this code
+// cannot see that registry, so it takes the table as an input the way
+// statistics.ts takes the asset catalogue. Pure data logic — no map
 // library, no store.
 
 import type { BusinessRecord } from "../prototype-record"
