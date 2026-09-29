@@ -10,7 +10,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { judgeObservation, observeRelease, releaseToDeployBranch, type Observation } from "../pilot/release"
+import { judgeChecks, judgeObservation, observeRelease, releaseToDeployBranch, requireChecks, type CheckRun, type Observation } from "../pilot/release"
 
 const COMMIT = "5f1501d6a2b3c4d5e6f708192a3b4c5d6e7f8091"
 const OLD = "21e7e2c0c8f1b4d9a3e5f6a7b8c9d0e1f2a3b4c5"
@@ -122,6 +122,7 @@ describe("releaseToDeployBranch", () => {
   const base = { repository: "faresabdelghany/waste", branch: "pilot", sha: COMMIT, token: TOKEN }
   const TREE = "d7a1e2b3c4d5e6f708192a3b4c5d6e7f80912345"
   const RELEASE_TREE = "e8b2f3c4d5e6f708192a3b4c5d6e7f8091234567"
+  const OTHER_TREE = "1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f70819203"
   const P1 = "f9c3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5"
   const P2 = "0ad4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6"
   type Call = { url: string; method: string; headers: Record<string, string>; body: unknown }
@@ -138,12 +139,13 @@ describe("releaseToDeployBranch", () => {
     return { calls, fetch, left: () => script.length }
   }
   const ref = (sha: string) => ({ ref: "refs/heads/pilot", object: { sha, type: "commit" } })
-  const contents = (commit: string) => ({ encoding: "base64", content: Buffer.from(`${JSON.stringify({ commit })}\n`).toString("base64") })
+  const commitWithTree = (sha: string, tree: string) => ({ status: 200, body: { sha, tree: { sha: tree } } })
   const api = "https://api.github.com/repos/faresabdelghany/waste"
+  const RELEASE_TREE_BODY = { base_tree: TREE, tree: [{ path: "apps/pilot/release.json", mode: "100644", type: "blob", content: `{"commit":"${COMMIT}"}\n` }] }
 
-  test("the first release: reads main's tree, writes one commit with that tree plus apps/pilot/release.json naming the released commit, and creates the branch on it", async () => {
-    const gh = github([{ status: 404 }, { status: 200, body: { sha: COMMIT, tree: { sha: TREE } } }, { status: 201, body: { sha: RELEASE_TREE } }, { status: 201, body: { sha: P2 } }, { status: 201, body: ref(P2) }])
-    assert.deepEqual(await releaseToDeployBranch({ ...base, fetch: gh.fetch }), { moved: true, previous: null, head: P2, commit: COMMIT })
+  test("the first release: reads main's tree, writes the release tree — that tree plus apps/pilot/release.json naming the commit — and one commit on it, and creates the branch there", async () => {
+    const gh = github([{ status: 404 }, commitWithTree(COMMIT, TREE), { status: 201, body: { sha: RELEASE_TREE } }, { status: 201, body: { sha: P2 } }, { status: 201, body: ref(P2) }])
+    assert.deepEqual(await releaseToDeployBranch({ ...base, fetch: gh.fetch }), { moved: true, from: null, head: P2, commit: COMMIT })
     assert.deepEqual(
       gh.calls.map((call) => [call.method, call.url]),
       [
@@ -154,7 +156,7 @@ describe("releaseToDeployBranch", () => {
         ["POST", `${api}/git/refs`],
       ],
     )
-    assert.deepEqual(gh.calls[2].body, { base_tree: TREE, tree: [{ path: "apps/pilot/release.json", mode: "100644", type: "blob", content: `{"commit":"${COMMIT}"}\n` }] })
+    assert.deepEqual(gh.calls[2].body, RELEASE_TREE_BODY)
     const commit = gh.calls[3].body as { message: string; tree: string; parents: string[] }
     assert.equal(commit.tree, RELEASE_TREE)
     assert.deepEqual(commit.parents, [COMMIT], "on main's commit alone: the branch starts here")
@@ -168,16 +170,16 @@ describe("releaseToDeployBranch", () => {
     assert.equal(gh.left(), 0)
   })
 
-  test("a later release: the new commit has the branch's head and the released commit as parents — a fast-forward for the branch, main's history kept — and the ref moves without force", async () => {
-    const gh = github([{ status: 200, body: ref(P1) }, { status: 200, body: contents(OLD) }, { status: 200, body: { sha: COMMIT, tree: { sha: TREE } } }, { status: 201, body: { sha: RELEASE_TREE } }, { status: 201, body: { sha: P2 } }, { status: 200, body: ref(P2) }])
-    assert.deepEqual(await releaseToDeployBranch({ ...base, fetch: gh.fetch }), { moved: true, previous: OLD, head: P2, commit: COMMIT })
+  test("a later release: the branch's head has another tree, so the new commit has that head and the released commit as parents — a fast-forward for the branch, main's history kept — and the ref moves without force", async () => {
+    const gh = github([{ status: 200, body: ref(P1) }, commitWithTree(COMMIT, TREE), { status: 201, body: { sha: RELEASE_TREE } }, commitWithTree(P1, OTHER_TREE), { status: 201, body: { sha: P2 } }, { status: 200, body: ref(P2) }])
+    assert.deepEqual(await releaseToDeployBranch({ ...base, fetch: gh.fetch }), { moved: true, from: P1, head: P2, commit: COMMIT })
     assert.deepEqual(
       gh.calls.map((call) => [call.method, call.url]),
       [
         ["GET", `${api}/git/ref/heads/pilot`],
-        ["GET", `${api}/contents/apps/pilot/release.json?ref=${P1}`],
         ["GET", `${api}/git/commits/${COMMIT}`],
         ["POST", `${api}/git/trees`],
+        ["GET", `${api}/git/commits/${P1}`],
         ["POST", `${api}/git/commits`],
         ["PATCH", `${api}/git/refs/heads/pilot`],
       ],
@@ -187,16 +189,22 @@ describe("releaseToDeployBranch", () => {
     assert.equal(gh.left(), 0)
   })
 
-  test("a release dispatched again leaves a branch already naming the released commit alone", async () => {
-    const gh = github([{ status: 200, body: ref(P1) }, { status: 200, body: contents(COMMIT) }])
-    assert.deepEqual(await releaseToDeployBranch({ ...base, fetch: gh.fetch }), { moved: false, previous: COMMIT, head: P1, commit: COMMIT })
-    assert.equal(gh.calls.length, 2)
+  test("a release dispatched again leaves a branch whose head already has the release tree alone", async () => {
+    const gh = github([{ status: 200, body: ref(P1) }, commitWithTree(COMMIT, TREE), { status: 201, body: { sha: RELEASE_TREE } }, commitWithTree(P1, RELEASE_TREE)])
+    assert.deepEqual(await releaseToDeployBranch({ ...base, fetch: gh.fetch }), { moved: false, from: P1, head: P1, commit: COMMIT })
+    assert.equal(gh.left(), 0)
   })
 
-  test("a branch made by hand, without release.json, is released over like any other: the tree is main's whatever the branch held", async () => {
-    const gh = github([{ status: 200, body: ref(P1) }, { status: 404, body: { message: "Not Found" } }, { status: 200, body: { sha: COMMIT, tree: { sha: TREE } } }, { status: 201, body: { sha: RELEASE_TREE } }, { status: 201, body: { sha: P2 } }, { status: 200, body: ref(P2) }])
-    assert.deepEqual(await releaseToDeployBranch({ ...base, fetch: gh.fetch }), { moved: true, previous: null, head: P2, commit: COMMIT })
-    assert.deepEqual((gh.calls[4].body as { parents: string[] }).parents, [P1, COMMIT])
+  test("a commit pushed onto the branch by hand — release.json still naming the commit, the tree another — is released over when the commit is dispatched again: the trees decide, not the file", async () => {
+    const gh = github([{ status: 200, body: ref(P1) }, commitWithTree(COMMIT, TREE), { status: 201, body: { sha: RELEASE_TREE } }, commitWithTree(P1, OTHER_TREE), { status: 201, body: { sha: P2 } }, { status: 200, body: ref(P2) }])
+    assert.deepEqual(await releaseToDeployBranch({ ...base, fetch: gh.fetch }), { moved: true, from: P1, head: P2, commit: COMMIT })
+  })
+
+  test("a branch made by hand from main's tip — its head the released commit itself — gets the release commit on that commit alone, never two parents the same", async () => {
+    const gh = github([{ status: 200, body: ref(COMMIT) }, commitWithTree(COMMIT, TREE), { status: 201, body: { sha: RELEASE_TREE } }, commitWithTree(COMMIT, TREE), { status: 201, body: { sha: P2 } }, { status: 200, body: ref(P2) }])
+    assert.deepEqual(await releaseToDeployBranch({ ...base, fetch: gh.fetch }), { moved: true, from: COMMIT, head: P2, commit: COMMIT })
+    assert.deepEqual((gh.calls[4].body as { parents: string[] }).parents, [COMMIT])
+    assert.deepEqual(gh.calls[5].body, { sha: P2, force: false })
   })
 
   test("refuses a released commit the repository does not have, before writing anything", async () => {
@@ -230,12 +238,61 @@ describe("releaseToDeployBranch", () => {
     }
     const denied = { status: 403, body: { message: "Resource not accessible by integration" } }
     await step([denied], /GitHub answered 403 reading refs\/heads\/pilot: Resource not accessible by integration/)
-    await step([{ status: 404 }, { status: 200, body: { sha: COMMIT, tree: { sha: TREE } } }, denied], /GitHub answered 403 writing the release tree: Resource not accessible/)
-    await step([{ status: 404 }, { status: 200, body: { sha: COMMIT, tree: { sha: TREE } } }, { status: 201, body: { sha: RELEASE_TREE } }, denied], /GitHub answered 403 writing the release commit: Resource not accessible/)
-    await step([{ status: 404 }, { status: 200, body: { sha: COMMIT, tree: { sha: TREE } } }, { status: 201, body: { sha: RELEASE_TREE } }, { status: 201, body: { sha: P2 } }, denied], /GitHub answered 403 creating refs\/heads\/pilot: Resource not accessible/)
+    await step([{ status: 404 }, commitWithTree(COMMIT, TREE), denied], /GitHub answered 403 writing the release tree: Resource not accessible/)
+    await step([{ status: 404 }, commitWithTree(COMMIT, TREE), { status: 201, body: { sha: RELEASE_TREE } }, denied], /GitHub answered 403 writing the release commit: Resource not accessible/)
+    await step([{ status: 404 }, commitWithTree(COMMIT, TREE), { status: 201, body: { sha: RELEASE_TREE } }, { status: 201, body: { sha: P2 } }, denied], /GitHub answered 403 creating refs\/heads\/pilot: Resource not accessible/)
+    await step([{ status: 200, body: ref(P1) }, commitWithTree(COMMIT, TREE), { status: 201, body: { sha: RELEASE_TREE } }, denied], /GitHub answered 403 reading refs\/heads\/pilot's head f9c3a4b5/)
     await step(
-      [{ status: 200, body: ref(P1) }, { status: 404 }, { status: 200, body: { sha: COMMIT, tree: { sha: TREE } } }, { status: 201, body: { sha: RELEASE_TREE } }, { status: 201, body: { sha: P2 } }, { status: 422, body: { message: "Update is not a fast forward" } }],
+      [{ status: 200, body: ref(P1) }, commitWithTree(COMMIT, TREE), { status: 201, body: { sha: RELEASE_TREE } }, commitWithTree(P1, OTHER_TREE), { status: 201, body: { sha: P2 } }, { status: 422, body: { message: "Update is not a fast forward" } }],
       /GitHub answered 422 moving refs\/heads\/pilot: Update is not a fast forward/,
     )
+  })
+})
+
+describe("judgeChecks", () => {
+  const NAMES = ["Install, typecheck, lint, test, build", "Build pilot image"]
+  const run = (name: string, status = "completed", conclusion: string | null = "success"): CheckRun => ({ name, status, conclusion, html_url: `https://github.com/x/y/runs/${name.length}` })
+
+  test("passes when every required run is completed with success, whatever else ran", () => {
+    assert.deepEqual(judgeChecks([run("End-to-end (web, Playwright)", "in_progress", null), run(NAMES[1]), run(NAMES[0])], NAMES), { ok: true })
+  })
+
+  test("refuses a missing run, an unfinished one and a failed one, each saying which and why", () => {
+    assert.deepEqual(judgeChecks([run(NAMES[0])], NAMES), { ok: false, reason: 'no check run named "Build pilot image": CI did not run on this commit (a change under docs/ or *.md alone skips it, and a commit off main has none); release a commit CI ran on' })
+    assert.deepEqual(judgeChecks([run(NAMES[0]), run(NAMES[1], "in_progress", null)], NAMES), { ok: false, reason: '"Build pilot image" is in_progress, not completed: wait for CI' })
+    assert.deepEqual(judgeChecks([run(NAMES[0], "completed", "failure"), run(NAMES[1])], NAMES), { ok: false, reason: '"Install, typecheck, lint, test, build" concluded failure, not success (https://github.com/x/y/runs/37)' })
+    assert.deepEqual(judgeChecks([run(NAMES[0], "completed", null), run(NAMES[1])], NAMES), { ok: false, reason: '"Install, typecheck, lint, test, build" concluded nothing, not success (https://github.com/x/y/runs/37)' })
+  })
+
+  test("judges a re-run name by its newest run, which GitHub lists first", () => {
+    assert.deepEqual(judgeChecks([run(NAMES[1]), run(NAMES[1], "completed", "failure"), run(NAMES[0])], NAMES), { ok: true })
+  })
+})
+
+describe("requireChecks", () => {
+  const TOKEN = "ghs_s3cr3tT0ken"
+  const base = { repository: "faresabdelghany/waste", sha: COMMIT, names: ["Build pilot image"], token: TOKEN }
+  const github = (status: number, body: unknown) => {
+    const calls: { url: string; headers: Record<string, string> }[] = []
+    const fetch = async (input: URL | string, init?: RequestInit) => {
+      calls.push({ url: String(input), headers: Object.fromEntries(new Headers(init?.headers).entries()) })
+      return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
+    }
+    return { calls, fetch }
+  }
+
+  test("reads the commit's check runs under the token and passes a green commit", async () => {
+    const gh = github(200, { total_count: 1, check_runs: [{ name: "Build pilot image", status: "completed", conclusion: "success" }] })
+    assert.deepEqual(await requireChecks({ ...base, fetch: gh.fetch }), { names: ["Build pilot image"] })
+    assert.equal(gh.calls[0].url, `https://api.github.com/repos/faresabdelghany/waste/commits/${COMMIT}/check-runs?per_page=100`)
+    assert.equal(gh.calls[0].headers.authorization, `Bearer ${TOKEN}`)
+  })
+
+  test("refuses a commit CI has not proved, naming the commit and the reason, and an answer that is not GitHub's", async () => {
+    await assert.rejects(requireChecks({ ...base, fetch: github(200, { total_count: 0, check_runs: [] }).fetch }), /Commit 5f1501d6a2b3c4d5e6f708192a3b4c5d6e7f8091 is not released: no check run named "Build pilot image"/)
+    await assert.rejects(requireChecks({ ...base, fetch: github(200, { check_runs: [{ name: "Build pilot image", status: "queued", conclusion: null }] }).fetch }), /is queued, not completed/)
+    await assert.rejects(requireChecks({ ...base, fetch: github(403, { message: "Resource not accessible by integration" }).fetch }), /GitHub answered 403 reading the check runs of 5f1501d6/)
+    await assert.rejects(requireChecks({ ...base, fetch: github(200, { nothing: true }).fetch }), /GitHub answered no check runs for/)
+    await assert.rejects(requireChecks({ ...base, token: "", fetch: github(200, {}).fetch }), /GITHUB_TOKEN is not set/)
   })
 })

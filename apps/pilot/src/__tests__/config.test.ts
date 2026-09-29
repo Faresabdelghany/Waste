@@ -5,7 +5,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { childSpecs, memoryLogSeconds } from "../config"
+import { childSpecs, MAX_TIMER_SECONDS, memoryLogSeconds } from "../config"
 
 const bundled = (path: string) => path.endsWith(".mjs")
 const nothing = () => false
@@ -56,10 +56,13 @@ describe("childSpecs", () => {
 })
 
 describe("memoryLogSeconds", () => {
-  test("is the period in seconds where PILOT_MEMORY_LOG_SECONDS is a positive number, and undefined — off — otherwise", () => {
+  test("is the period in seconds where PILOT_MEMORY_LOG_SECONDS is a positive number Node's timers can take, and undefined — off — otherwise", () => {
     assert.equal(memoryLogSeconds({ PILOT_MEMORY_LOG_SECONDS: "60" }), 60)
     assert.equal(memoryLogSeconds({ PILOT_MEMORY_LOG_SECONDS: "0.5" }), 0.5)
-    for (const value of [undefined, "", "0", "-5", "abc", "Infinity"]) {
+    assert.equal(MAX_TIMER_SECONDS, 2_147_483)
+    assert.equal(memoryLogSeconds({ PILOT_MEMORY_LOG_SECONDS: String(MAX_TIMER_SECONDS) }), MAX_TIMER_SECONDS)
+    // Past the cap a setInterval would overflow to firing every millisecond: off instead.
+    for (const value of [undefined, "", "0", "-5", "abc", "Infinity", "2147484", "9999999"]) {
       assert.equal(memoryLogSeconds({ PILOT_MEMORY_LOG_SECONDS: value }), undefined, String(value))
     }
   })

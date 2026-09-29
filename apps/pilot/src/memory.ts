@@ -1,14 +1,17 @@
 // The memory line (#134, gate 1): one line of the container's memory — the
 // cgroup's own numbers (what a memory limit is enforced on, each page counted
-// once) beside each process's RSS and peak RSS (VmHWM) from /proc, the API
-// and the worker found among the supervisor's children by their entry file,
-// a child's own children summed beside it (tsx's esbuild service, where an
-// app runs from source) — and the container's byte counters on every
-// interface but loopback, since a host may meter nothing. RSS counts a
-// shared page once per process, so the processes add up to more than the
-// cgroup. Printed by main.ts every PILOT_MEMORY_LOG_SECONDS, off unless set;
-// the reading the ADR's figures were taken with.
+// once) beside each process's RSS and peak RSS (VmHWM) from /proc: the
+// supervisor's own, and the API's and the worker's by the pids the
+// supervisor reported (supervise.ts's `children`), each child's own children
+// summed beside it (tsx's esbuild service, where an app runs from source) —
+// and the container's byte counters on every interface but loopback, since a
+// host may meter nothing. RSS counts a shared page once per process, so the
+// processes add up to more than the cgroup. Printed by main.ts every
+// PILOT_MEMORY_LOG_SECONDS, off unless set; the reading the ADR's figures
+// were taken with.
 import { readdirSync, readFileSync } from "node:fs"
+
+import type { ChildPids } from "./supervise"
 
 /** The two reads the line makes; the real procfs by default, a scripted one in a test. */
 export type ProcFs = {
@@ -34,12 +37,6 @@ export const PROCFS: ProcFs = {
     }
   },
 }
-
-/** Which child is which: the entry file each app's bundle (or source) is run from. */
-const CHILDREN: readonly [name: string, entry: string][] = [
-  ["api", "src/server."],
-  ["worker", "src/main."],
-]
 
 const MIB = 1024 * 1024
 const mib = (bytes: number) => `${(bytes / MIB).toFixed(1)}MiB`
@@ -82,9 +79,17 @@ function netBytes(fs: ProcFs): { tx: number; rx: number } {
   return { tx, rx }
 }
 
-type Row = { ppid: number; rss: number; hwm: number; cmdline: string }
+type Row = { ppid: number; rss: number; hwm: number }
 
-export function memoryLine({ pid = process.pid, fs = PROCFS }: { pid?: number; fs?: ProcFs } = {}): string {
+export type MemoryLineOptions = {
+  /** The supervisor's own pid. */
+  pid?: number
+  /** The children's pids as the supervisor last reported them; a child without one is down. */
+  children: ChildPids
+  fs?: ProcFs
+}
+
+export function memoryLine({ pid = process.pid, children, fs = PROCFS }: MemoryLineOptions): string {
   const table = new Map<number, Row>()
   for (const entry of fs.listProc()) {
     if (!/^\d+$/.test(entry)) continue
@@ -94,7 +99,6 @@ export function memoryLine({ pid = process.pid, fs = PROCFS }: { pid?: number; f
       ppid: Number(status.match(/^PPid:\s+(\d+)/m)?.[1]),
       rss: statusKiB(status, "VmRSS") * 1024,
       hwm: statusKiB(status, "VmHWM") * 1024,
-      cmdline: (fs.readText(`/proc/${entry}/cmdline`) ?? "").replaceAll("\0", " "),
     })
   }
   const descendantsRss = (parent: number): number => {
@@ -105,9 +109,10 @@ export function memoryLine({ pid = process.pid, fs = PROCFS }: { pid?: number; f
   const parts: string[] = []
   const self = table.get(pid)
   if (self !== undefined) parts.push(`supervisor=${mib(self.rss)}(hwm ${mib(self.hwm)})`)
-  for (const [name, entry] of CHILDREN) {
-    const found = [...table].find(([, row]) => row.ppid === pid && row.cmdline.includes(entry))
-    parts.push(found === undefined ? `${name}=down` : `${name}=${mib(found[1].rss)}(hwm ${mib(found[1].hwm)}, children ${mib(descendantsRss(found[0]))})`)
+  for (const name of ["api", "worker"] as const) {
+    const childPid = children[name]
+    const row = childPid === undefined ? undefined : table.get(childPid)
+    parts.push(childPid === undefined || row === undefined ? `${name}=down` : `${name}=${mib(row.rss)}(hwm ${mib(row.hwm)}, children ${mib(descendantsRss(childPid))})`)
   }
   let total = 0
   for (const row of table.values()) total += row.rss

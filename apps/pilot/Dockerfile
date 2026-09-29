@@ -64,12 +64,11 @@ COPY packages/routing/package.json packages/routing/
 COPY packages/tooling/package.json packages/tooling/
 RUN pnpm install --frozen-lockfile --prod --filter @waste/api... --filter @waste/worker... --filter @waste/pilot...
 
-# The three apps and the packages they run; .dockerignore keeps tests and
+# The two apps and the packages they run; .dockerignore keeps tests and
 # reference data out. Each app is deployed to the path the runtime stage
 # keeps, and tsconfig.base.json sits two levels above each, so every
 # `"extends": "../../tsconfig.base.json"` resolves there as on a workstation.
 COPY apps/api apps/api
-COPY apps/pilot apps/pilot
 COPY apps/worker apps/worker
 COPY packages/contracts packages/contracts
 COPY packages/db packages/db
@@ -79,6 +78,11 @@ COPY tsconfig.base.json ./
 RUN pnpm --filter @waste/api deploy --prod /app/apps/api \
  && pnpm --filter @waste/worker deploy --prod /app/apps/worker
 COPY tsconfig.base.json /app/tsconfig.base.json
+
+# This package after the deploys, since every release commit changes its
+# release.json and nothing of it reaches either deploy: the two layers above
+# survive a release whose app source did not change.
+COPY apps/pilot apps/pilot
 
 # The bundles: each entry resolved from its own app in the installed
 # workspace, with the app's tsconfig, written beside the deployed source.
@@ -112,18 +116,20 @@ COPY --from=build --chown=node:node /app /app
 # The commit the image is built from (Issue #152): build.json beside the
 # API's package.json, which its GET /healthz reads as build.commit — what a
 # Pilot release proves live — and, where the build argument is given, the OCI
-# revision label as apps/api/Dockerfile carries it. Two sources, the argument
-# first: CI passes SOURCE_COMMIT; Suga passes no commit into a build (its
-# build arguments are values typed into the service's form), so on the Pilot
-# the commit is the one apps/pilot/release.json names, the file the release
-# wrote into the deploy branch's tree (packages/db/src/pilot/release.ts) and
-# the build stage kept above — there the label stays empty and the file is
-# the truth. Neither on a local build from main, and /healthz names no build;
-# anything but a full lowercase commit id fails the build.
+# revision label as apps/api/Dockerfile carries it. Two sources, the file
+# first: on the deploy branch apps/pilot/release.json names the released
+# commit of main — the release wrote it into the branch's tree
+# (packages/db/src/pilot/release.ts) and the build stage kept it above — and
+# that is what /healthz must name, whoever builds the commit; Suga passes no
+# commit into a build anyway (its build arguments are values typed into the
+# service's form), so there the label stays empty and the file is the truth.
+# Without the file, the argument: CI passes SOURCE_COMMIT for main's commits.
+# Neither on a local build from main, and /healthz names no build; anything
+# but a full lowercase commit id fails the build.
 ARG SOURCE_COMMIT=""
 LABEL org.opencontainers.image.revision="${SOURCE_COMMIT}"
 RUN commit="$SOURCE_COMMIT"; \
-    if [ -z "$commit" ] && [ -f /app/apps/pilot/release.json ]; then \
+    if [ -f /app/apps/pilot/release.json ]; then \
       commit="$(node -p "JSON.parse(require('fs').readFileSync('/app/apps/pilot/release.json', 'utf8')).commit")"; \
     fi; \
     if [ -n "$commit" ]; then \

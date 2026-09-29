@@ -16,7 +16,10 @@
 //     stopping the worker: the host's restart policy answers that;
 //   - SIGTERM and SIGINT are forwarded to both children and both are waited
 //     for, so each runs its own shutdown (the API's drain, the worker's
-//     handler grace); a child still up after `killAfterMs` is killed.
+//     handler grace); a child still up after `killAfterMs` is killed;
+//   - a child is over when its output has been relayed (`close`, not
+//     `exit`), so the line saying why it stopped is in the log before the
+//     container exits; a child that never spawned counts as exited 1.
 //
 // Nothing here knows a port, a path or a database: main.ts composes the two
 // `ChildSpec`s from the environment, and a test hands in `node -e` scripts
@@ -67,6 +70,8 @@ export type SuperviseOptions = {
   out?: Sink
   err?: Sink
   now?: () => number
+  /** Told the children's pids whenever one starts or ends; main.ts hands them to the memory line. */
+  children?: (pids: ChildPids) => void
 }
 
 type Exit = { code: number | null; signal: NodeJS.Signals | null }
@@ -94,14 +99,28 @@ const hasExited = (child: ChildProcess): boolean => child.exitCode !== null || c
 /** A signalled process exits as the shell would report it: 128 + the signal's number. */
 const exitCodeOf = ({ code, signal }: Exit): number => code ?? (signal !== null ? 128 + (osConstants.signals[signal] ?? 0) : 1)
 
-const waitExit = (child: ChildProcess): Promise<Exit> =>
-  hasExited(child)
-    ? Promise.resolve({ code: child.exitCode, signal: child.signalCode })
-    : new Promise((resolve) => child.once("exit", (code, signal) => resolve({ code, signal })))
+/** A child as the supervisor holds it: the process, when it started, and the one promise that settles when it is over. */
+type Running = {
+  child: ChildProcess
+  startedAt: number
+  /**
+   * Settles once the child is over and its output relayed: on `close`, which
+   * Node fires after the process exited and both pipes ended — where `exit`
+   * may fire with the last lines still unread, and a `process.exit` on that
+   * would drop them from the log — or on `error`, which a process that
+   * never spawned (ENOENT on the command, a missing directory) emits in
+   * place of any exit, taken as an exit with code 1.
+   */
+  ended: Promise<Exit>
+}
+
+/** Which children are up right now, by pid: what the memory line reads. */
+export type ChildPids = { api?: number; worker?: number }
 
 /**
  * Runs both children until the API exits or a signal arrives; resolves with
- * the code the container should exit with.
+ * the code the container should exit with. `children`, where given, hears
+ * the two pids whenever one starts or ends.
  */
 export function supervise({
   api,
@@ -112,16 +131,22 @@ export function supervise({
   out = process.stdout,
   err = process.stderr,
   now = Date.now,
+  children,
 }: SuperviseOptions): Promise<number> {
   return new Promise((resolve) => {
     const log = (line: string) => out.write(`[pilot] ${line}\n`)
     let shuttingDown = false
     let apiExit: Exit | undefined
-    let workerChild: ChildProcess | undefined
+    let running: Running | undefined
     let restartTimer: ReturnType<typeof setTimeout> | undefined
     let backoffMs = timings.backoffInitialMs
+    const pids: ChildPids = {}
+    const report = (name: "api" | "worker", pid: number | undefined) => {
+      pids[name] = pid
+      children?.({ ...pids })
+    }
 
-    const start = (spec: ChildSpec) => {
+    const start = (spec: ChildSpec, name: "api" | "worker"): Running => {
       const child = spawn(spec.command, [...spec.args], {
         cwd: spec.cwd,
         env: { ...process.env, ...spec.env },
@@ -129,14 +154,24 @@ export function supervise({
       })
       relay(child.stdout, spec.name, out)
       relay(child.stderr, spec.name, err)
-      log(`${spec.name} started pid=${child.pid}`)
-      return { child, startedAt: now() }
+      const ended = new Promise<Exit>((settle) => {
+        child.once("close", (code, signal) => settle({ code, signal }))
+        child.once("error", (error) => {
+          log(`${spec.name} failed to start: ${error.message}`)
+          settle({ code: 1, signal: null })
+        })
+      })
+      if (child.pid !== undefined) log(`${spec.name} started pid=${child.pid}`)
+      report(name, child.pid)
+      void ended.then(() => report(name, undefined))
+      return { child, startedAt: now(), ended }
     }
 
-    /** Sends `signal`, escalates to SIGKILL after `killAfterMs`, answers the exit; undefined for a worker never started. */
-    const terminate = async (child: ChildProcess | undefined, name: string, signal: NodeJS.Signals): Promise<Exit | undefined> => {
-      if (child === undefined) return undefined
-      if (hasExited(child)) return waitExit(child)
+    /** Sends `signal`, escalates to SIGKILL after `killAfterMs`, answers the exit once the child is over and relayed; undefined for a worker never started. */
+    const terminate = async (target: Running | undefined, name: string, signal: NodeJS.Signals): Promise<Exit | undefined> => {
+      if (target === undefined) return undefined
+      const { child, ended } = target
+      if (hasExited(child)) return ended
       child.kill(signal)
       const timer = setTimeout(() => {
         if (!hasExited(child)) {
@@ -144,18 +179,18 @@ export function supervise({
           child.kill("SIGKILL")
         }
       }, timings.killAfterMs)
-      const exit = await waitExit(child)
+      const exit = await ended
       clearTimeout(timer)
       log(`${name} exited code=${exit.code} signal=${exit.signal}`)
       return exit
     }
 
     const runWorker = () => {
-      const { child, startedAt } = start(worker)
-      workerChild = child
-      child.once("exit", (code, signal) => {
+      const started = start(worker, "worker")
+      running = started
+      void started.ended.then(({ code, signal }) => {
         if (shuttingDown) return
-        const upMs = now() - startedAt
+        const upMs = now() - started.startedAt
         if (upMs >= timings.healthyAfterMs) backoffMs = timings.backoffInitialMs
         const delay = backoffMs
         backoffMs = Math.min(backoffMs * 2, timings.backoffMaxMs)
@@ -167,23 +202,23 @@ export function supervise({
     }
 
     // The API first, so the worker's own dial finds nothing this process should have started before it; the API's exit handler and the signal handlers below share one shutdown.
-    const apiChild = start(api).child
+    const apiRunning = start(api, "api")
 
     const shutdown = async (reason: string, signal: NodeJS.Signals) => {
       if (shuttingDown) return
       shuttingDown = true
       clearTimeout(restartTimer)
       log(reason)
-      const [apiTerminated] = await Promise.all([terminate(apiChild, "api", signal), terminate(workerChild, "worker", signal)])
+      const [apiTerminated] = await Promise.all([terminate(apiRunning, "api", signal), terminate(running, "worker", signal)])
       const code = exitCodeOf(apiExit ?? apiTerminated ?? { code: 0, signal: null })
       log(`exiting with ${code}`)
       resolve(code)
     }
 
-    apiChild.once("exit", (code, signal) => {
-      apiExit = { code, signal }
+    void apiRunning.ended.then((exit) => {
+      apiExit = exit
       if (shuttingDown) return
-      void shutdown(`api exited code=${code} signal=${signal}; stopping the worker and exiting with the api's code`, "SIGTERM")
+      void shutdown(`api exited code=${exit.code} signal=${exit.signal}; stopping the worker and exiting with the api's code`, "SIGTERM")
     })
     runWorker()
 

@@ -13,14 +13,16 @@
 // commit id into its builds (its build arguments are values typed into the
 // service's form), and `build.commit` on /healthz — what the proof below
 // reads — has to come from the tree the host builds; the image's Dockerfile
-// writes the file into build.json where CI's SOURCE_COMMIT is absent. The
-// ref update is never forced, so the branch fast-forwards by construction
-// (its head is a parent) and main's history is in its ancestry; a branch
-// that does not exist yet is created (the first release), and one that
-// already names the commit is left alone (a release dispatched again).
-// Whatever the branch held before is not in the new tree, so a branch moved
-// by hand never reaches the image. The token reaches this step alone and
-// appears in no message.
+// writes the file into build.json wherever it is present, and CI's
+// SOURCE_COMMIT otherwise. The ref update is never forced, so the branch
+// fast-forwards by construction (its head is a parent) and main's history is
+// in its ancestry; a branch that does not exist yet is created (the first
+// release), and one whose head already has the release tree is left alone
+// (a release dispatched again). Whatever the branch held before is not in
+// the new tree, so a branch moved by hand never reaches the image past the
+// next release. Before any of it, `requireChecks` holds the commit to CI's
+// proof, what the resolved image proved in the old step 2. The token
+// reaches these steps alone and appears in no message.
 //
 // The proof is three consecutive observations ten seconds apart within ten
 // minutes, each one GET /healthz answering 200 with `build.commit` the
@@ -155,6 +157,31 @@ const BRANCH = /^[A-Za-z0-9_.-]+$/
 /** Where the release commit names the released commit: the file the Pilot image reads into build.json (apps/pilot/Dockerfile). Absent on main; present on every commit of the deploy branch. */
 export const RELEASE_FILE = "apps/pilot/release.json"
 
+/** What every call to GitHub carries: the job's token, GitHub's media type and API version. */
+const githubHeaders = (token: string) => ({ authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "content-type": "application/json" })
+
+/** GitHub's `message` from an error body, where it gave one. */
+const githubSaid = async (response: Response): Promise<string> => {
+  try {
+    const body = (await response.json()) as { message?: unknown } | null
+    return typeof body?.message === "string" ? body.message : `status ${response.status}`
+  } catch {
+    return `status ${response.status}`
+  }
+}
+
+type GitHubCall = (path: string, init: { method: string; body?: unknown }) => Promise<Response>
+
+/** A caller on one repository's API under one token; every path is relative to the repository. */
+const githubRepository = (repository: string, token: string, apiUrl: string, fetch: Fetch): GitHubCall => {
+  const headers = githubHeaders(token)
+  return (path, init) => fetch(new URL(`/repos/${repository}${path}`, apiUrl), { method: init.method, headers, body: init.body === undefined ? undefined : JSON.stringify(init.body), redirect: "manual", signal: AbortSignal.timeout(30_000) })
+}
+
+const refuse = async (response: Response, doing: string): Promise<never> => {
+  throw new Error(`GitHub answered ${response.status} ${doing}: ${await githubSaid(response)}`)
+}
+
 export type DeployBranchOptions = {
   /** `<owner>/<name>`: GITHUB_REPOSITORY. */
   repository: string
@@ -170,24 +197,14 @@ export type DeployBranchOptions = {
 }
 
 export type DeployBranchRelease = {
-  /** Whether this call wrote a release commit; false where the branch already named the released commit. */
+  /** Whether this call wrote a release commit; false where the branch's tree was already the release tree. */
   moved: boolean
-  /** The commit the branch named before, or null where it named none (no branch, or one without the file). */
-  previous: string | null
+  /** The branch's head before: a commit, or null where the branch did not exist. */
+  from: string | null
   /** The branch's head after: the release commit, or the head as found where nothing moved. */
   head: string
-  /** The released commit, as the file on the branch now names it. */
+  /** The released commit, as the file on the branch names it. */
   commit: string
-}
-
-/** GitHub's `message` from an error body, where it gave one. */
-const githubSaid = async (response: Response): Promise<string> => {
-  try {
-    const body = (await response.json()) as { message?: unknown } | null
-    return typeof body?.message === "string" ? body.message : `status ${response.status}`
-  } catch {
-    return `status ${response.status}`
-  }
 }
 
 /**
@@ -198,9 +215,12 @@ const githubSaid = async (response: Response): Promise<string> => {
  * never forced), main's history is in its ancestry, and whatever the branch
  * held before is not in its tree. Suga builds the branch's head, and the
  * image writes the file into build.json, which is how /healthz on the Pilot
- * names the released commit when the host injects none. A branch that
- * already names the commit is left alone; one that does not exist is
- * created. Answers what the branch named before and names now.
+ * names the released commit when the host injects none. Whether anything
+ * needs writing is read off the trees: a branch whose head already has the
+ * release tree is left alone (a release dispatched again), one with any
+ * other tree — a hand-pushed commit on top of the last release included — is
+ * released over, and one that does not exist is created. Answers where the
+ * branch was and is.
  */
 export async function releaseToDeployBranch({ repository, branch, sha, token, apiUrl = "https://api.github.com", fetch = globalThis.fetch }: DeployBranchOptions): Promise<DeployBranchRelease> {
   if (!REPOSITORY.test(repository)) throw new Error(`GITHUB_REPOSITORY is not <owner>/<name>: ${repository}`)
@@ -208,60 +228,44 @@ export async function releaseToDeployBranch({ repository, branch, sha, token, ap
   if (!COMMIT_ID.test(sha)) throw new Error(`RELEASE_COMMIT is not a full commit id: ${sha}`)
   if (token === "") throw new Error("GITHUB_TOKEN is not set")
   const ref = `refs/heads/${branch}`
-  const headers = { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "content-type": "application/json" }
-  const call = (path: string, init: { method: string; body?: unknown }) =>
-    fetch(new URL(`/repos/${repository}${path}`, apiUrl), { method: init.method, headers, body: init.body === undefined ? undefined : JSON.stringify(init.body), redirect: "manual", signal: AbortSignal.timeout(30_000) })
-  const refuse = async (response: Response, doing: string): Promise<never> => {
-    throw new Error(`GitHub answered ${response.status} ${doing}: ${await githubSaid(response)}`)
-  }
+  const call = githubRepository(repository, token, apiUrl, fetch)
   const shaOf = async (response: Response, what: string): Promise<string> => {
     const value = ((await response.json()) as { sha?: unknown }).sha
     if (typeof value !== "string" || !COMMIT_ID.test(value)) throw new Error(`GitHub answered no id for ${what}`)
     return value
   }
+  const treeOf = async (commit: string, what: string): Promise<string> => {
+    const response = await call(`/git/commits/${commit}`, { method: "GET" })
+    if (!response.ok) await refuse(response, `reading ${what}`)
+    const tree = ((await response.json()) as { tree?: { sha?: unknown } }).tree?.sha
+    if (typeof tree !== "string" || !COMMIT_ID.test(tree)) throw new Error(`GitHub answered no tree for ${what}`)
+    return tree
+  }
 
-  // Where the branch is, and which commit it names.
+  // Where the branch is.
   const current = await call(`/git/ref/heads/${branch}`, { method: "GET" })
   let head: string | null = null
-  let previous: string | null = null
   if (current.status !== 404) {
     if (!current.ok) await refuse(current, `reading ${ref}`)
     const object = ((await current.json()) as { object?: { sha?: unknown } }).object?.sha
     if (typeof object !== "string" || !COMMIT_ID.test(object)) throw new Error(`GitHub answered no commit for ${ref}`)
     head = object
-    const file = await call(`/contents/${RELEASE_FILE}?ref=${head}`, { method: "GET" })
-    if (file.ok) {
-      const body = (await file.json()) as { content?: unknown; encoding?: unknown }
-      if (typeof body.content === "string" && body.encoding === "base64") {
-        try {
-          const named = (JSON.parse(Buffer.from(body.content, "base64").toString("utf8")) as { commit?: unknown }).commit
-          if (typeof named === "string" && COMMIT_ID.test(named)) previous = named
-        } catch {
-          previous = null
-        }
-      }
-    } else if (file.status !== 404) {
-      await refuse(file, `reading ${RELEASE_FILE} on ${ref}`)
-    }
-    if (previous === sha) return { moved: false, previous, head, commit: sha }
   }
 
-  // The released commit's tree, plus the file naming it.
-  const released = await call(`/git/commits/${sha}`, { method: "GET" })
-  if (!released.ok) await refuse(released, `reading commit ${sha}`)
-  const baseTree = ((await released.json()) as { tree?: { sha?: unknown } }).tree?.sha
-  if (typeof baseTree !== "string" || !COMMIT_ID.test(baseTree)) throw new Error(`GitHub answered no tree for commit ${sha}`)
+  // The release tree: the released commit's, plus the file naming it. Writing a tree that exists answers the same id, so this also asks whether the branch already has it.
+  const baseTree = await treeOf(sha, `commit ${sha}`)
   const tree = await call("/git/trees", { method: "POST", body: { base_tree: baseTree, tree: [{ path: RELEASE_FILE, mode: "100644", type: "blob", content: `${JSON.stringify({ commit: sha })}\n` }] } })
   if (!tree.ok) await refuse(tree, "writing the release tree")
   const releaseTree = await shaOf(tree, "the release tree")
+  if (head !== null && (await treeOf(head, `${ref}'s head ${head}`)) === releaseTree) return { moved: false, from: head, head, commit: sha }
 
-  // The release commit: on the branch's head and the released commit, so the branch fast-forwards and main's history is in its ancestry.
+  // The release commit: on the branch's head and the released commit, so the branch fast-forwards and main's history is in its ancestry; on the released commit alone where there is no branch, or where the branch stands on that very commit (made by hand from main's tip).
   const commit = await call("/git/commits", {
     method: "POST",
     body: {
       message: `Release ${sha} to the Pilot\n\nThe tree of ${sha} on main plus ${RELEASE_FILE}, which names it: the commit Suga builds the Pilot image from (.github/workflows/pilot-database.yml, release step 8).`,
       tree: releaseTree,
-      parents: head === null ? [sha] : [head, sha],
+      parents: head === null || head === sha ? [sha] : [head, sha],
     },
   })
   if (!commit.ok) await refuse(commit, "writing the release commit")
@@ -275,5 +279,57 @@ export async function releaseToDeployBranch({ repository, branch, sha, token, ap
     const moved = await call(`/git/refs/heads/${branch}`, { method: "PATCH", body: { sha: releaseCommit, force: false } })
     if (!moved.ok) await refuse(moved, `moving ${ref}`)
   }
-  return { moved: true, previous, head: releaseCommit, commit: sha }
+  return { moved: true, from: head, head: releaseCommit, commit: sha }
+}
+
+export type RequireChecksOptions = {
+  /** `<owner>/<name>`: GITHUB_REPOSITORY. */
+  repository: string
+  /** The released commit: RELEASE_COMMIT. */
+  sha: string
+  /** The check runs that must have completed with success on it: CI's job names. */
+  names: readonly string[]
+  /** The job's token, with `checks: read`: GITHUB_TOKEN. */
+  token: string
+  apiUrl?: string
+  fetch?: Fetch
+}
+
+export type CheckRun = { name: string; status: string; conclusion: string | null; html_url?: string }
+
+/**
+ * Judges the check runs GitHub lists for the released commit against the
+ * names a release requires: every one present, completed and successful,
+ * else one sentence naming what is not. Pure. A name with several runs (a
+ * re-run) is judged by its newest, which GitHub lists first.
+ */
+export function judgeChecks(runs: readonly CheckRun[], names: readonly string[]): { ok: true } | { ok: false; reason: string } {
+  for (const name of names) {
+    const run = runs.find((candidate) => candidate.name === name)
+    if (run === undefined) return { ok: false, reason: `no check run named "${name}": CI did not run on this commit (a change under docs/ or *.md alone skips it, and a commit off main has none); release a commit CI ran on` }
+    if (run.status !== "completed") return { ok: false, reason: `"${name}" is ${run.status}, not completed: wait for CI` }
+    if (run.conclusion !== "success") return { ok: false, reason: `"${name}" concluded ${run.conclusion ?? "nothing"}, not success${run.html_url === undefined ? "" : ` (${run.html_url})`}` }
+  }
+  return { ok: true }
+}
+
+/**
+ * Refuses a release of a commit CI has not proved: reads the commit's check
+ * runs and holds them to `judgeChecks`. The old door resolved a published
+ * image here and refused where CI had built none; with Suga building the
+ * image itself this is what keeps a red or unfinished commit from being
+ * migrated for and pushed to the deploy branch.
+ */
+export async function requireChecks({ repository, sha, names, token, apiUrl = "https://api.github.com", fetch = globalThis.fetch }: RequireChecksOptions): Promise<{ names: readonly string[] }> {
+  if (!REPOSITORY.test(repository)) throw new Error(`GITHUB_REPOSITORY is not <owner>/<name>: ${repository}`)
+  if (!COMMIT_ID.test(sha)) throw new Error(`RELEASE_COMMIT is not a full commit id: ${sha}`)
+  if (token === "") throw new Error("GITHUB_TOKEN is not set")
+  const call = githubRepository(repository, token, apiUrl, fetch)
+  const response = await call(`/commits/${sha}/check-runs?per_page=100`, { method: "GET" })
+  if (!response.ok) await refuse(response, `reading the check runs of ${sha}`)
+  const runs = ((await response.json()) as { check_runs?: unknown }).check_runs
+  if (!Array.isArray(runs)) throw new Error(`GitHub answered no check runs for ${sha}`)
+  const verdict = judgeChecks(runs as CheckRun[], names)
+  if (!verdict.ok) throw new Error(`Commit ${sha} is not released: ${verdict.reason}`)
+  return { names }
 }

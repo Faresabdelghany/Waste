@@ -49,8 +49,11 @@ export function childSpecs(env: Environment, host: Host): { api: ChildSpec; work
   }
 }
 
-/** The memory line's period in seconds, or undefined — off — unless PILOT_MEMORY_LOG_SECONDS is a positive finite number. */
+/** The longest delay Node's timers take, in seconds (2^31 − 1 ms); a longer one would overflow to firing every millisecond. */
+export const MAX_TIMER_SECONDS = Math.floor(2_147_483_647 / 1000)
+
+/** The memory line's period in seconds, or undefined — off — unless PILOT_MEMORY_LOG_SECONDS is a positive number Node's timers can take. */
 export function memoryLogSeconds(env: Environment): number | undefined {
   const value = Number(env.PILOT_MEMORY_LOG_SECONDS)
-  return Number.isFinite(value) && value > 0 ? value : undefined
+  return Number.isFinite(value) && value > 0 && value <= MAX_TIMER_SECONDS ? value : undefined
 }
