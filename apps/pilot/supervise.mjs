@@ -245,7 +245,17 @@ export function memoryLine() {
   let total = 0
   for (const row of table.values()) total += row.rss
   const cg = cgroupMemory()
-  return `memory cgroup(v${cg.version}) current=${mib(cg.current)} peak=${mib(cg.peak)} max=${mib(cg.max)} anon=${mib(cg.anon)} file=${mib(cg.file)} | rss ${parts.join(" ")} processes=${table.size} sum=${mib(total)}`
+  // PROTOTYPE, gate 2 of #134: the container's own byte counters, every interface but loopback, since a host may meter nothing.
+  let tx = 0
+  let rx = 0
+  for (const line of (readText("/proc/net/dev") ?? "").split("\n").slice(2)) {
+    const [name, data] = line.split(":")
+    if (data === undefined || name.trim() === "lo") continue
+    const fields = data.trim().split(/\s+/).map(Number)
+    rx += fields[0]
+    tx += fields[8]
+  }
+  return `memory cgroup(v${cg.version}) current=${mib(cg.current)} peak=${mib(cg.peak)} max=${mib(cg.max)} anon=${mib(cg.anon)} file=${mib(cg.file)} | rss ${parts.join(" ")} processes=${table.size} sum=${mib(total)} | net tx=${tx} rx=${rx}`
 }
 
 // Run directly (the image's CMD): the two children as their own images run
