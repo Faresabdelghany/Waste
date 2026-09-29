@@ -27,8 +27,9 @@
 // `published_at = now()` on exactly those rows in one statement whose
 // `returning` is the instant the payload then carries, and sends each to
 // `outbox.<kind>` (outbox/subscribe.ts spells the queue and the payload) with
-// pg-boss's `send` on that same transaction — `{ db: fromDrizzle(tx, sql) }`,
-// pg-boss's own adapter over a Drizzle transaction.
+// pg-boss's `send` on that same transaction — `{ db: inTransaction(tx) }`,
+// pg-boss's own adapter over a Drizzle transaction as `@waste/db/jobs`
+// spells it for every sender.
 // Stamp and sends commit together or roll back together, which is the
 // whole point of an outbox; and a second relay running at the same moment
 // (two workers, a deploy overlapping the old process, a test) skips the rows
@@ -101,10 +102,11 @@
 // contracts, so a drift between the row and the wire fails there and loudly.
 import { OutboxAggregate, OutboxKind } from "@waste/contracts/execution"
 import type { Database, Tx } from "@waste/db/client"
+import { inTransaction } from "@waste/db/jobs"
 import { outboxEvent } from "@waste/db/schema/execution"
 import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq, inArray, isNull, lt, lte, sql } from "drizzle-orm"
-import { fromDrizzle, type SendOptions } from "pg-boss"
+import type { SendOptions } from "pg-boss"
 
 import { OUTBOX_DEAD, OUTBOX_QUEUES, outboxQueue, type RelayedEvent } from "../outbox/subscribe"
 import { defineJob, type JobContext } from "./definition"
@@ -148,7 +150,8 @@ function toRelayed(row: typeof outboxEvent.$inferSelect, stamp: { publishedAt: D
 }
 
 /** How `send` enqueues on the transaction the stamp runs in: pg-boss's adapter over the Drizzle transaction. */
-const onTransaction = (tx: Tx): SendOptions => ({ db: fromDrizzle(tx, sql) })
+/** The sends of one relay pass on the pass's own transaction: `@waste/db/jobs`'s adapter, the one spelling the sweep and the API's trigger use too. */
+const onTransaction = (tx: Tx): SendOptions => ({ db: inTransaction(tx) })
 
 /**
  * One company's part of a tick, in its fenced transaction: the swept rows

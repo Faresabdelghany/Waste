@@ -28,6 +28,7 @@
 import { type BuildInfo, HealthResponse, PROBE_HEADERS, ReadinessResponse, ReadyResponse, UnavailableResponse } from "@waste/contracts/health"
 import { NO_ACTIVE_ACCOUNT } from "@waste/contracts/problem"
 import type { Database } from "@waste/db/client"
+import { createJobSender, type JobSender } from "@waste/db/jobs"
 import { Hono } from "hono"
 import { describeRoute, openAPIRouteHandler, resolver } from "hono-openapi"
 
@@ -94,9 +95,20 @@ export type AppOptions = {
   log?: (error: unknown) => void
   /** The build /healthz names: server.ts reads the image's build file (build-info.ts); null from a checkout. */
   build?: BuildInfo | null
+  /**
+   * pg-boss's `send` for this process, which runs no pg-boss (Issue #168):
+   * the generation trigger sends the worker its job through it, inside the
+   * request's transaction. Built over the probe pool when absent
+   * (`createJobSender`, `@waste/db/jobs`): an instance never started, whose
+   * one read is the queue's row — through the probe pool and never the
+   * request pool, since a request holds its own connection while it sends,
+   * and a cold cache under `max` such requests would wait for a connection
+   * none of them can free.
+   */
+  jobs?: JobSender
 }
 
-export function createApp({ probe, pool, verifier, now = () => new Date(), databaseTimeoutMs = DATABASE_CHECK_TIMEOUT_MS, log, build = null }: AppOptions) {
+export function createApp({ probe, pool, verifier, now = () => new Date(), databaseTimeoutMs = DATABASE_CHECK_TIMEOUT_MS, log, build = null, jobs = createJobSender(probe) }: AppOptions) {
   const app = new Hono()
   app.onError(errorHandler(log))
   app.notFound(notFound)
@@ -171,7 +183,7 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   // Planning's group rules judge a driver on "today" on the project's clock, so the two take the app's `now` as the ledger routes do.
   app.route("/", routeSchemeRoutes(guard, { now }))
   app.route("/", collectionGroupRoutes(guard, { now }))
-  app.route("/", generationRoutes(guard))
+  app.route("/", generationRoutes(guard, { jobs }))
   app.route("/", vehicleTypeRoutes(guard))
   app.route("/", warehouseRoutes(guard))
   app.route("/", depotRoutes(guard))

@@ -7,15 +7,20 @@
 // transaction as `wms_api`; a second click while a job of the scheme is in
 // flight answering that run and writing nothing; a new run once the job has
 // left the queue; a draft's 409 writing nothing; the window's 400s; and the
-// fence. The job is read through pg-boss's own `findJobs`, the worker's side
-// of the queue; nobody works the queue here, so what was sent stays sent, and
-// the file removes its own jobs as the owner in `after`.
+// fence; and, from #168's hardening, the run answered on a second click
+// being the one whose job pg-boss still holds and not the newest row, a
+// held job with no run to show for it a 409, a run whose job is gone
+// blocking nothing, and a database with no queue a 503. The job is read
+// through pg-boss's own `findJobs`, the worker's side of the queue; nobody
+// works the queue here, so what was sent stays sent, and the file removes
+// its own jobs as the owner in `after`.
 //
 // The queue is the worker's to create when it starts (apps/worker/src/boss.ts,
 // `exclusive` as its job definition says and its registry test pins); a
 // database no worker has started against has none, so the suite creates it the
 // same way, idempotently, before it sends.
 import assert from "node:assert/strict"
+import { randomUUID } from "node:crypto"
 import { after, before, describe, test } from "node:test"
 
 import { WasteFraction } from "@waste/contracts/catalogue"
@@ -24,6 +29,7 @@ import { Page } from "@waste/contracts/pagination"
 import { WINDOW_AT_MOST_A_YEAR, WINDOW_ORDERED, RouteScheme } from "@waste/contracts/route-schemes"
 import { createDb, type Database } from "@waste/db/client"
 import { GENERATE_ROUTES_QUEUE } from "@waste/db/commands/generation"
+import { QueueMissing } from "@waste/db/jobs"
 import { generationRun } from "@waste/db/schema/generation"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { withCompany } from "@waste/db/tenant"
@@ -31,7 +37,7 @@ import { eq, inArray, sql } from "drizzle-orm"
 import { PgBoss } from "pg-boss"
 
 import { createApp } from "../app"
-import { DRAFT_GENERATES_NOTHING } from "../routes/generation"
+import { DRAFT_GENERATES_NOTHING, GENERATION_ALREADY_QUEUED, WORKER_QUEUE_MISSING } from "../routes/generation"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -289,5 +295,77 @@ describe("the generation endpoints", { skip: database.skip || owner.skip }, () =
     const seen = await withCompany(pool.db, b.companyId, async (tx) => (await tx.select({ id: generationRun.id }).from(generationRun)).length)
     assert.equal(seen, 0)
     assert.deepEqual(bossErrors, [], "pg-boss reported nothing of its own")
+  })
+
+  // #168's hardening of the second click and its neighbours. The scheme's
+  // state here: `second` queued with its job on the queue, `first` succeeded.
+  describe("the run a second click answers is the one whose job pg-boss holds", () => {
+    /** Copenhagen's run whose job waits on the queue, as the tests above left it. */
+    const held = async () => {
+      const queued = (await runsOf(olivia, scheme.id, "?status=queued")).items
+      assert.equal(queued.length, 1)
+      return queued[0]
+    }
+    const jobIdOf = async (runId: string) => {
+      const [row] = await ownerPool.db.select({ jobId: generationRun.jobId }).from(generationRun).where(eq(generationRun.id, runId))
+      return row.jobId as string
+    }
+
+    test("not the scheme's newest row: a newer run whose job is gone is passed over for the one still held", async () => {
+      const live = await held()
+      // A run written after it whose job pg-boss never had: a worker that died before its first attempt, a row put back by hand.
+      const [orphan] = await ownerPool.db
+        .insert(generationRun)
+        .values({ companyId: a.companyId, projectId: a.projects.copenhagen.id, routeSchemeId: scheme.id, trigger: "on-demand", windowFrom: "2026-12-07", windowTo: "2026-12-13", status: "queued", jobId: randomUUID() })
+        .returning({ id: generationRun.id })
+      const answered200 = await answered(await generate(olivia, scheme.id), 200)
+      assert.equal(answered200.id, live.id, "the held run, though the orphan is newer")
+      assert.notEqual(answered200.id, orphan.id)
+      await ownerPool.db.delete(generationRun).where(eq(generationRun.id, orphan.id))
+    })
+
+    test("a held job with no run this request can see it held for is a 409 that says to ask again, and writes nothing", async () => {
+      const live = await held()
+      const jobId = await jobIdOf(live.id)
+      // The run's job id moved off the held job: what a sweep's uncommitted transaction, or a hand edit, looks like from here.
+      await ownerPool.db.update(generationRun).set({ jobId: randomUUID() }).where(eq(generationRun.id, live.id))
+      try {
+        const problem = await refused(await generate(olivia, scheme.id), 409)
+        assert.equal(problem.detail, GENERATION_ALREADY_QUEUED)
+        assert.equal((await runsOf(olivia, scheme.id)).items.length, 2, "nothing written")
+      } finally {
+        await ownerPool.db.update(generationRun).set({ jobId }).where(eq(generationRun.id, live.id))
+      }
+    })
+
+    test("a run whose job is gone — cancelled, or a worker that died — blocks nothing: the next click starts a new run and leaves the old row as it was", async () => {
+      const live = await held()
+      await boss.cancel(GENERATE_ROUTES_QUEUE, await jobIdOf(live.id))
+      const next = await answered(await generate(olivia, scheme.id, { from: "2026-10-19", to: "2026-10-25" }), 202)
+      assert.notEqual(next.id, live.id)
+      const stale = GenerationRun.parse(await (await olivia(`/generation-runs/${live.id}`)).json())
+      assert.equal(stale.status, "queued", "history, left as it was")
+      assert.deepEqual(
+        (await jobsOf(scheme.id)).map((job) => job.state).sort(),
+        ["cancelled", "completed", "created"],
+        "the cancelled job, the finished one and the new one",
+      )
+    })
+
+    test("a database no worker has started on has no queue to send to: 503 in so many words, and no run written", async () => {
+      const noWorker = createApp({ probe: pool, pool, verifier: keys.verifier, jobs: { send: async () => Promise.reject(new QueueMissing(GENERATE_ROUTES_QUEUE)) } })
+      const call = callingAs(noWorker, keys, a.users.olivia, a.companyId)
+      const before = (await runsOf(olivia, harbor.id)).items.length
+      const problem = await refused(await call(`/route-schemes/${harbor.id}/generate`, { method: "POST", body: WEEK }), 503)
+      assert.equal(problem.detail, WORKER_QUEUE_MISSING)
+      assert.equal((await runsOf(olivia, harbor.id)).items.length, before)
+    })
+
+    test("a page size or a cursor that will not do is a 400 naming it", async () => {
+      const limit = await refused(await olivia(`/route-schemes/${scheme.id}/generation-runs?limit=0`), 400)
+      assert.deepEqual(limit.errors?.map((error) => error.path), ["limit"])
+      const cursor = await refused(await olivia(`/route-schemes/${scheme.id}/generation-runs?cursor=not-ours`), 400)
+      assert.deepEqual(cursor.errors?.map((error) => error.path), ["cursor"])
+    })
   })
 })

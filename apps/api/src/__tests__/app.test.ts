@@ -1159,9 +1159,9 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(operations("/route-schemes/{id}/generation-runs"), { get: "listRouteSchemeGenerationRuns" })
     assert.deepEqual(operations("/generation-runs/{id}"), { get: "getGenerationRun" })
 
-    // 202 for the run it started, 200 for the one already in flight, 409 for a draft; no 201, since a run is not created by the caller's hand.
+    // 202 for the run it started, 200 for the one already in flight, 409 for a draft or a held job with no run to show, 503 for a database no worker has made the queue on; no 201, since a run is not created by the caller's hand.
     const generate = document.paths["/route-schemes/{id}/generate"].post
-    assert.deepEqual(Object.keys(generate.responses), ["200", "202", "400", "401", "403", "404", "409"])
+    assert.deepEqual(Object.keys(generate.responses), ["200", "202", "400", "401", "403", "404", "409", "503"])
     assert.deepEqual(generate.requestBody?.content["application/json"].schema.required, ["from", "to"])
     assert.equal(generate.responses["202"].headers, undefined, "a run is read at /generation-runs/{id}, and the body carries its id")
     assert.deepEqual(Object.keys(document.paths["/route-schemes/{id}/generation-runs"].get.responses), ["200", "400", "401", "403", "404"])
