@@ -25,8 +25,11 @@
 // Sending first also keeps the request clear of the scheme's row lock:
 // generation holds it `for update` for its whole transaction, and the
 // run's key on the scheme would make an insert wait for it — here an insert
-// happens only when no job of the scheme is active, which is when nothing
-// holds the lock.
+// happens only when no job of the scheme is queued or active, so no
+// generation holds the lock. For the same reason the route takes no
+// `lockRow` on the scheme before reading its status, against the API's rule
+// for a row whose rule it holds: a click must never wait on a generation
+// (#128), and the rule it would protect is held again by the worker.
 //
 // A draft scheme generates nothing and is refused (409) in the issue's
 // words; the worker holds the same rule again when it runs, since a scheme
@@ -106,7 +109,7 @@ const runOf = (row: RunRow): GenerationRun => ({
 /** The runs of this company, in the projects the caller works in. */
 const runScope = (principal: Principal): SQL | undefined => and(eq(generationRun.companyId, principal.companyId), inProjects(generationRun.projectId, principal))
 
-export function generationRunRoutes(guard: MiddlewareHandler<AuthEnv>) {
+export function generationRoutes(guard: MiddlewareHandler<AuthEnv>) {
   return new Hono<AuthEnv>()
     .post(
       "/route-schemes/:id/generate",
@@ -144,11 +147,12 @@ export function generationRunRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const jobId = await sendInTransaction(tx, GENERATE_ROUTES_QUEUE, data, { singletonKey: scheme.id })
         if (jobId === null) {
           // A job of the scheme is queued, active or waiting to retry, and it is the newest run's: answer that run.
+          // Newest by `created_at`, the database's clock, which both writers stamp; the ids come from two clocks, this process's and the database's.
           const [inFlight] = await tx
             .select(runColumns)
             .from(generationRun)
             .where(and(runScope(principal), eq(generationRun.routeSchemeId, scheme.id)))
-            .orderBy(desc(generationRun.id))
+            .orderBy(desc(generationRun.createdAt), desc(generationRun.id))
             .limit(1)
           if (inFlight === undefined) throw new Error(`a generation job of route scheme ${scheme.id} is queued or active, and the scheme has no run`)
           return c.json(runOf(inFlight), 200)

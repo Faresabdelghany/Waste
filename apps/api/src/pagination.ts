@@ -17,6 +17,11 @@
 // on the way in: a cursor that is not one of ours is a 400 naming `cursor`,
 // not an empty page and not a 500 from Postgres refusing a malformed uuid.
 //
+// A list that reads newest first (a scheme's generation runs, Issue #97 part
+// B) orders by `id` descending under the same cursor: the last item's id, the
+// next page being the rows below it (`lt` where an ascending list says `gt`).
+// The cursor does not carry a direction, since a list has only one.
+//
 // Whether there is a next page is a question about a row the page does not
 // contain, so a route asks the database for `fetchLimit(limit)` rows and
 // hands them all to `pageOf`, which keeps the page and turns the surplus into

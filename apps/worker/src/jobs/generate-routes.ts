@@ -50,6 +50,8 @@
 //
 // The payload carries the company beside the run, so the handler opens the
 // fenced transaction without a cross-tenant read first; the sender knows both.
+// The queue's name and the payload are @waste/db/commands/generation's, since
+// the office's button in apps/api sends the same job as the nightly sweep.
 import type { Tx } from "@waste/db/client"
 import { GENERATE_ROUTES_QUEUE, type GenerateRoutesData } from "@waste/db/commands/generation"
 import { collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
@@ -87,10 +89,6 @@ import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm"
 import { defineJob, type JobContext } from "./definition"
 import { loggable } from "./loggable"
 import { daysWithBoundary, stopCandidatesByDay } from "./stop-matching"
-
-// The queue and the payload are the two senders' (@waste/db/commands/generation):
-// the office's button in apps/api and the nightly sweep here send the same job.
-export { GENERATE_ROUTES_QUEUE, type GenerateRoutesData }
 
 /** What one run did, as the run row records it. */
 export type GenerationCounts = {

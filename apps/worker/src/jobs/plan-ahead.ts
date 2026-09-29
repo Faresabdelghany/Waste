@@ -28,13 +28,13 @@
 // one company's transaction is logged and the sweep goes on to the next,
 // since one tenant's trouble is not another's, and the job then fails so the
 // count shows on /readyz.
+import { GENERATE_ROUTES_QUEUE, type GenerateRoutesData } from "@waste/db/commands/generation"
 import { generationRun } from "@waste/db/schema/generation"
 import { withCompany } from "@waste/db/tenant"
 import { planAheadWindow } from "@waste/domain/route-schemes/plan-ahead"
 import { sql } from "drizzle-orm"
 
 import { defineJob, type JobContext } from "./definition"
-import { GENERATE_ROUTES_QUEUE, type GenerateRoutesData } from "./generate-routes"
 import { loggable } from "./loggable"
 import { inTransaction } from "./transaction"
 

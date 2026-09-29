@@ -16,7 +16,7 @@ The Hono API (ADR-0001), run from TypeScript source through tsx. `src/app.ts` bu
 - A body value that will not do is a 400 naming its field (`invalidRequest`). A row whose state refuses the command is a 409 with one sentence saying why. Judge in this order: the path's own row (404), its state (409), the body's fields (400), then the 409s that need the body.
 - A database refusal goes through the doors in `src/routes/shared.ts`, each with the route's own sentence: `refuseDuplicate` (23505), `refuseOverlap` (23P01), `refuseCheck` (23514, as a 400) and `replayed` (an idempotent retry meeting a primary key). A client sees the sentence and never the constraint's name; an unmapped 23514 is a 500, which means a sentence is missing.
 - A create answers 201 with `Location` through `created()` and declares it with `describeCreated`. An append to a ledger — a stock movement, a comment, a weight review — answers 201 without one. `src/__tests__/app.test.ts` counts the secured operations and the 201s; update it with each new route.
-- A list answers `Page(item)` through `src/pagination.ts`: ordered by `id` (a UUIDv7, so creation order), with a cursor over `id`, no offsets and no total.
+- A list answers `Page(item)` through `src/pagination.ts`: ordered by `id` (a UUIDv7, so creation order; newest first only where the route says so), with a cursor over `id`, no offsets and no total.
 - The server mints the ids of web writes (`newId()`, `src/ids.ts`); a driver's command carries the id its device minted.
 
 ## Rules the API holds

@@ -26,11 +26,12 @@ import { createDb, type Database } from "@waste/db/client"
 import { GENERATE_ROUTES_QUEUE } from "@waste/db/commands/generation"
 import { generationRun } from "@waste/db/schema/generation"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
+import { withCompany } from "@waste/db/tenant"
 import { eq, inArray, sql } from "drizzle-orm"
 import { PgBoss } from "pg-boss"
 
 import { createApp } from "../app"
-import { DRAFT_GENERATES_NOTHING } from "../routes/generation-runs"
+import { DRAFT_GENERATES_NOTHING } from "../routes/generation"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -53,6 +54,8 @@ describe("the generation endpoints", { skip: database.skip || owner.skip }, () =
   let ownerPool: Database
   /** pg-boss on the owner's connection: the worker's side of the queue, to read what the API sent and to take a job off it. */
   let boss: PgBoss
+  /** What pg-boss reported on its own; the last test holds it to nothing. */
+  const bossErrors: unknown[] = []
   let keys: SigningKeys
   let a: Tenant
   let b: Tenant
@@ -80,9 +83,7 @@ describe("the generation endpoints", { skip: database.skip || owner.skip }, () =
     pool = createDb(database.url, { max: 4 })
     ownerPool = createDb(owner.url, { max: 2 })
     boss = new PgBoss({ connectionString: owner.url, schema: PGBOSS_SCHEMA, migrate: false, supervise: false, schedule: false })
-    boss.on("error", (error) => {
-      throw error
-    })
+    boss.on("error", (error) => void bossErrors.push(error))
     await boss.start()
     await boss.createQueue(GENERATE_ROUTES_QUEUE, { policy: "exclusive" })
     keys = await signingKeys()
@@ -285,10 +286,8 @@ describe("the generation endpoints", { skip: database.skip || owner.skip }, () =
   test("the runs are the company's: as wms_api under another company's fence, none of a's is there", async () => {
     const ours = (await ownerPool.db.select({ id: generationRun.id }).from(generationRun).where(inArray(generationRun.routeSchemeId, [scheme.id, harbor.id]))).length
     assert.equal(ours, 3, "two of Copenhagen's, one of Harbor's")
-    const seen = await pool.db.transaction(async (tx) => {
-      await tx.execute(sql`select set_config('wms.company_id', ${b.companyId}, true)`)
-      return (await tx.select({ id: generationRun.id }).from(generationRun)).length
-    })
+    const seen = await withCompany(pool.db, b.companyId, async (tx) => (await tx.select({ id: generationRun.id }).from(generationRun)).length)
     assert.equal(seen, 0)
+    assert.deepEqual(bossErrors, [], "pg-boss reported nothing of its own")
   })
 })
