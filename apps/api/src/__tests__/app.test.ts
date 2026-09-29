@@ -36,11 +36,11 @@ type Operation = {
   security?: unknown[]
   parameters?: { name: string; in: string; required?: boolean; schema?: JsonSchema }[]
   requestBody?: { content: Record<string, { schema: JsonSchema }> }
-  responses: Record<string, { content: Record<string, { schema: JsonSchema }>; headers?: Record<string, { description?: string; schema?: JsonSchema }> }>
+  responses: Record<string, { description?: string; content: Record<string, { schema: JsonSchema }>; headers?: Record<string, { description?: string; schema?: JsonSchema }> }>
 }
 type Spec = {
   openapi: string
-  info: { title: string; version: string }
+  info: { title: string; version: string; description?: string }
   paths: Record<string, Record<string, Operation>>
   components?: { securitySchemes?: Record<string, unknown> }
 }
@@ -333,6 +333,12 @@ describe("GET /openapi.json", () => {
   test("declares the bearer token as its one security scheme", async () => {
     const document = await spec()
     assert.deepEqual(document.components?.securitySchemes, { bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" } })
+  })
+
+  test("names the account's problem type where a client learns what ends its session: the document's description and /me's 403 (Issue #150)", async () => {
+    const document = await spec()
+    assert.match(document.info.description ?? "", /`urn:waste:problem:no-active-account`/)
+    assert.match(document.paths["/me"].get.responses["403"].description ?? "", /`urn:waste:problem:no-active-account`/)
   })
 
   test("requires the bearer token on every operation but the two probes and the document itself", async () => {
@@ -1340,7 +1346,7 @@ describe("GET /openapi.json", () => {
     const operation = document.paths["/me"].get
     assert.equal(operation.operationId, "getMe")
     assert.deepEqual(Object.keys(operation.responses), ["200", "401", "403"])
-    assert.deepEqual(schemaOf(document, "/me", "200").required, ["user", "company", "role", "projects", "serviceProvider"])
+    assert.deepEqual(schemaOf(document, "/me", "200").required, ["user", "company", "role", "projects", "serviceProvider", "driver"])
     for (const status of ["401", "403"]) {
       const content = operation.responses[status].content
       assert.deepEqual(Object.keys(content), ["application/problem+json"], status)

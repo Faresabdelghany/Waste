@@ -81,7 +81,8 @@ export type User = z.infer<typeof User>
 
 /**
  * An invitation: the account is written with no login bound (`invited`), and
- * the invitation e-mail itself is Supabase's. The e-mail is stored lowercase;
+ * no e-mail is sent — the Login is created apart and bound on its first
+ * sign-in by the address (Issue #150). The e-mail is stored lowercase;
  * the route lowercases it before the database sees it, and the database's
  * check is the backstop, so what arrives here is what the caller typed.
  */
