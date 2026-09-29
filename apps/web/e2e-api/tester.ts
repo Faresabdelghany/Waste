@@ -8,7 +8,8 @@
 // the browser like the other round trips.
 //
 // Idempotent, since a developer's stack outlives a run: an account the
-// address already has is brought to this role and this access with a patch.
+// address already has is brought to this role and this access with a patch,
+// and switched on again if a run left it deactivated.
 import type { APIRequestContext } from "@playwright/test"
 
 import { expect } from "./fixtures"
@@ -55,8 +56,14 @@ export async function ensureTester(api: APIRequestContext, email: string): Promi
   const invited = await api.post("/users", { data: { email, fullName: "E2E Tester", ...wanted } })
   if (invited.status() === 201) return { user: (await invited.json()) as User, project, role }
   expect(invited.status(), "POST /users for an address already invited").toBe(409)
-  const existing = (await listAll<User>(api, "/users")).find((candidate) => candidate.email === email.toLowerCase())
+  let existing = (await listAll<User>(api, "/users")).find((candidate) => candidate.email === email.toLowerCase())
   if (existing === undefined) throw new Error(`POST /users answered 409 for ${email}, but no account carries the address`)
+  // A tester left switched off by a run that ended between its deactivation and its reactivation (account-refusal.spec.ts) is switched on again here, so the stack heals itself.
+  if (existing.status === "deactivated") {
+    const reactivated = await api.post(`/users/${existing.id}/reactivate`)
+    expect(reactivated.status(), `POST /users/${existing.id}/reactivate`).toBe(200)
+    existing = (await reactivated.json()) as User
+  }
   if (existing.roleId === wanted.roleId && !existing.allProjects && existing.serviceProviderId === null && existing.projectIds.join() === wanted.projectIds.join()) {
     return { user: existing, project, role }
   }
