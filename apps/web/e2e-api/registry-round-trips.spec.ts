@@ -37,6 +37,17 @@ async function openLoaded(page: Page, url: string, listPath: string) {
   expect((await loaded).status()).toBe(200)
 }
 
+/**
+ * The row's opener, after narrowing the list to the name through the
+ * module's own search: the lists page at twenty-five rows and a developer's
+ * stack accumulates rows across runs, so a row's presence is asked of the
+ * whole list and not of its first page.
+ */
+async function rowNamed(page: Page, name: string) {
+  await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill(name)
+  return page.getByRole("button", { name: `Open ${name}` })
+}
+
 async function addServiceProvider(page: Page, values: { legalName: string; registrationNumber: string; contactName: string; contactEmail: string }) {
   await page.getByRole("button", { name: "Add service provider" }).click()
   const dialog = page.getByRole("dialog")
@@ -82,7 +93,7 @@ test("Service Providers: created in the browser with Location, read back, change
   expect(edited.status()).toBe(200)
   expect(await edited.json()).toMatchObject({ id: body.id, contactName: "E2E Contact, renamed" })
   await openLoaded(page, "/service-providers", "/service-providers")
-  await page.getByRole("button", { name: `Open ${legalName}` }).click()
+  await (await rowNamed(page, legalName)).click()
   await expect(page.getByRole("definition").filter({ hasText: "E2E Contact, renamed" })).toBeVisible()
 
   // A registration number somebody else takes after this page loaded: the form cannot know, the API's 409 is told in its sentence, and the row is gone.
@@ -95,9 +106,9 @@ test("Service Providers: created in the browser with Location, read back, change
   await expect(page.getByText(`${otherName} was not saved`)).toBeVisible()
   await expect(page.getByText(`This company already has a service provider with the registration number ${taken} in DK`)).toBeVisible()
   await openLoaded(page, "/service-providers", "/service-providers")
-  await expect(page.getByRole("button", { name: `Open ${legalName}` })).toBeVisible()
-  await expect(page.getByRole("button", { name: `Open ${elsewhere.legalName}` })).toBeVisible()
-  await expect(page.getByRole("button", { name: `Open ${otherName}` })).toHaveCount(0)
+  await expect(await rowNamed(page, legalName)).toBeVisible()
+  await expect(await rowNamed(page, elsewhere.legalName)).toBeVisible()
+  await expect(await rowNamed(page, otherName)).toHaveCount(0)
 })
 
 async function createOrganisation(page: Page, values: { name: string; registrationNumber: string; email: string }) {
@@ -161,7 +172,7 @@ test("Contacts & Companies: created in the browser with Location, read back, mov
   await expect(page.getByText(`${otherName} was not saved`)).toBeVisible()
   await expect(page.getByText(`This company already has a customer with registration number ${taken}`)).toBeVisible()
   await openLoaded(page, "/customers?module=contacts", "/customers")
-  await expect(page.getByRole("button", { name: `Open ${name}` })).toBeVisible()
-  await expect(page.getByRole("button", { name: `Open ${elsewhere.name}` })).toBeVisible()
-  await expect(page.getByRole("button", { name: `Open ${otherName}` })).toHaveCount(0)
+  await expect(await rowNamed(page, name)).toBeVisible()
+  await expect(await rowNamed(page, elsewhere.name)).toBeVisible()
+  await expect(await rowNamed(page, otherName)).toHaveCount(0)
 })

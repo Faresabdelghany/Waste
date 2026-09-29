@@ -17,11 +17,11 @@ test("the API and the worker answer ready on the stack", async () => {
     expect(await api.json()).toMatchObject({ status: "ok", checks: { database: "ok" } })
     expect(api.headers()["cache-control"]).toBe("no-store")
 
+    // Readiness, not history: `failedJobs` counts a developer stack's past
+    // and belongs to a scenario that runs a job.
     const worker = await probes.get(`${E2E.workerUrl}/readyz`)
     expect(worker.status()).toBe(200)
-    const body = (await worker.json()) as { status: string; checks: { database: string; boss: string }; failedJobs: number }
-    expect(body).toMatchObject({ status: "ok", checks: { database: "ok", boss: "ok" } })
-    expect(body.failedJobs).toBe(0)
+    expect(await worker.json()).toMatchObject({ status: "ok", checks: { database: "ok", boss: "ok" } })
   } finally {
     await probes.dispose()
   }

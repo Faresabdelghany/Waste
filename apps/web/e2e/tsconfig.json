@@ -10,6 +10,6 @@
     "incremental": false,
     "plugins": []
   },
-  "include": ["./**/*.ts", "../playwright.config.ts", "../e2e-api/**/*.ts", "../playwright.api.config.ts"],
+  "include": ["./**/*.ts", "../playwright.config.ts", "../e2e-api/**/*.ts", "../playwright.api.config.ts", "../playwright.shared.ts"],
   "exclude": []
 }

@@ -15,9 +15,11 @@ export const E2E = {
   /** Every local Login's password, unless the stack was started with `LOCAL_LOGIN_PASSWORD`. */
   loginPassword: process.env.E2E_LOGIN_PASSWORD ?? "local-waste-password",
   /**
-   * The tester the suite invites through the API and signs in as: its Login
-   * exists because the stack was started with this address in
-   * `LOCAL_EXTRA_LOGINS`; its User Account is the suite's to make.
+   * The tester the suite invites through the API and signs in as. Its Login
+   * is in every local plan (`E2E_TESTER_LOGIN`, packages/db/src/local-stack/
+   * logins.ts, the same address); another address needs to have been in
+   * `LOCAL_EXTRA_LOGINS` at stack start. Its User Account is the suite's to
+   * make.
    */
   testerEmail: process.env.E2E_TESTER_EMAIL ?? "e2e-tester@waste-e2e.example",
   /** The API's own origin, for the runner's calls beside the browser's and for its readiness probe (root CLAUDE.md: :3001). */

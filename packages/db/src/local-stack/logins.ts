@@ -30,6 +30,14 @@ export const DEFAULT_LOCAL_LOGIN_PASSWORD = "local-waste-password"
 /** The shortest password local Auth accepts (`[auth] minimum_password_length`). */
 export const MINIMUM_PASSWORD_LENGTH = 12
 
+/**
+ * The API e2e suite's tester (apps/web/e2e-api/env.ts spells the same
+ * address as its default): in every local plan, so a stack started with
+ * nothing set can run the suite, whose scenarios invite this address and
+ * sign in as it. `LOCAL_EXTRA_LOGINS` adds to it, never replaces it.
+ */
+export const E2E_TESTER_LOGIN = "e2e-tester@waste-e2e.example"
+
 export type LocalLoginsPlan = {
   /** The stack's API origin, loopback, no trailing slash (`http://127.0.0.1:54321`). */
   apiUrl: string
@@ -51,9 +59,9 @@ export function parseExtraLogins(value: string | undefined): string[] {
 }
 
 /**
- * What `db:logins` will do, decided from the environment and the seed's own
- * list, and refused when it would reach anything but this machine. Pure, so
- * the refusals are unit-tested.
+ * What `db:logins` will do, decided from the environment, the seed's own
+ * list and the suite's tester, and refused when it would reach anything but
+ * this machine. Pure, so the refusals are unit-tested.
  */
 export function planLocalLogins({
   apiUrl,
@@ -85,7 +93,7 @@ export function planLocalLogins({
     throw new Error(`LOCAL_LOGIN_PASSWORD has ${password.length} characters; local Auth requires at least ${MINIMUM_PASSWORD_LENGTH}`)
   }
   const emails: string[] = []
-  for (const address of [...seeded, ...extra]) {
+  for (const address of [...seeded, E2E_TESTER_LOGIN, ...extra]) {
     const email = address.trim().toLowerCase()
     if (email === "" || !email.includes("@")) throw new Error(`"${address}" is not an e-mail address`)
     if (!emails.includes(email)) emails.push(email)

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, describe, test } from "node:test"
 
-import { DEFAULT_LOCAL_LOGIN_PASSWORD, ensureLogins, parseExtraLogins, parseStatusEnv, planLocalLogins, type LocalLoginsPlan } from "../local-stack/logins"
+import { DEFAULT_LOCAL_LOGIN_PASSWORD, E2E_TESTER_LOGIN, ensureLogins, parseExtraLogins, parseStatusEnv, planLocalLogins, type LocalLoginsPlan } from "../local-stack/logins"
 import { ensureSigningKeys, generateSigningKey, renderSigningKeys } from "../local-stack/signing-keys"
 import { DEMO_ACCOUNT_EMAILS } from "../seed/demo"
 
@@ -73,14 +73,18 @@ const apiUrl = "http://127.0.0.1:54321"
 const secretKey = "sb_secret_test"
 
 describe("planLocalLogins", () => {
-  test("every seeded address and every extra one, lowercase, each once, the public default password", () => {
-    const plan = planLocalLogins({ apiUrl: `${apiUrl}/`, secretKey, seeded: DEMO_ACCOUNT_EMAILS, extra: ["Tester@E2E.example", "tester@e2e.example"] })
+  test("every seeded address, the suite's tester and every extra one, lowercase, each once, the public default password", () => {
+    const plan = planLocalLogins({ apiUrl: `${apiUrl}/`, secretKey, seeded: DEMO_ACCOUNT_EMAILS, extra: ["Tester@E2E.example", "tester@e2e.example", E2E_TESTER_LOGIN] })
     assert.deepEqual(plan, {
       apiUrl,
       secretKey,
       password: DEFAULT_LOCAL_LOGIN_PASSWORD,
-      emails: [...DEMO_ACCOUNT_EMAILS, "tester@e2e.example"],
+      emails: [...DEMO_ACCOUNT_EMAILS, E2E_TESTER_LOGIN, "tester@e2e.example"],
     })
+  })
+
+  test("the tester is in the plan with nothing extra set, so a bare stack:start can run the suite", () => {
+    assert.deepEqual(planLocalLogins({ apiUrl, secretKey, seeded: [] }).emails, [E2E_TESTER_LOGIN])
   })
 
   test("the seed's three accounts are the list the Pilot's Logins carry (#140)", () => {

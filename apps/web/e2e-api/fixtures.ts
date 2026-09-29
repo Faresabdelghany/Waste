@@ -50,13 +50,23 @@ export function freshContext(browser: Browser): Promise<BrowserContext> {
   return browser.newContext({ storageState: { cookies: [], origins: [] } })
 }
 
-/** Signs a person in through the real form on /login and lands them; the page ends up wherever `/me` sends them. */
+/**
+ * Signs a person in through the real form on /login and lands them; the page
+ * ends up wherever `/me` sends them. A refusal — Auth's, or the landing's —
+ * fails at once with the form's own sentence, rather than as a timeout that
+ * says nothing about credentials.
+ */
 export async function signIn(page: Page, email: string, password: string): Promise<void> {
   await page.goto("/login")
   await page.getByLabel("E-mail").fill(email)
   await page.getByLabel("Password").fill(password)
   await page.getByRole("button", { name: "Sign in" }).click()
-  await page.waitForURL((url) => url.pathname !== "/login")
+  const alert = page.locator("form, main").getByRole("alert").filter({ hasText: /\S/ }).first()
+  const outcome = await Promise.race([
+    page.waitForURL((url) => url.pathname !== "/login").then(() => null),
+    alert.waitFor().then(() => alert.textContent()),
+  ])
+  if (outcome !== null) throw new Error(`sign-in as ${email} was refused: ${outcome.trim()}`)
 }
 
 type Fixtures = {

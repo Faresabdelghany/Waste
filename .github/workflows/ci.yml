@@ -274,24 +274,27 @@ jobs:
   e2e-api:
     name: End-to-end (web → API → database, Playwright)
     runs-on: ubuntu-latest
-    # The pull-request budget is wall time (#131): this bound, with
-    # Playwright's own ten-minute globalTimeout inside it, keeps a broken lane
-    # from outlasting verify. Measured on the first runs: see the pull request
-    # that added the job (#151).
-    timeout-minutes: 15
+    # The pull-request budget is wall time (#131): a run is meant to finish
+    # inside verify's, and a broken one is stopped by Playwright's eight-minute
+    # globalTimeout (playwright.api.config.ts) with the report still written.
+    # This bound is the backstop behind that, wide enough that the pulls, the
+    # build and the readiness wait before Playwright cannot eat the margin: a
+    # job that times out is cancelled, and a cancelled job uploads nothing.
+    # Measured on the first runs: see the pull request that added the job
+    # (#151).
+    timeout-minutes: 20
     env:
       # The API verifies tokens from the stack's own Auth, behind Kong on
       # 54321 (supabase/config.toml's default): the workflow-level placeholder
       # is overridden here and nowhere else.
       SUPABASE_URL: http://127.0.0.1:54321
-      # The tester's Login, created at stack start; the suite invites its
-      # account and signs in as it (apps/web/e2e-api/tester.ts).
-      LOCAL_EXTRA_LOGINS: e2e-tester@waste-e2e.example
-      E2E_TESTER_EMAIL: e2e-tester@waste-e2e.example
-      # The seeded primary administrator (packages/db/src/seed/demo.ts). The
-      # password is the public local default every local Login gets
-      # (packages/db/src/local-stack/logins.ts), so it is set nowhere here.
+      # The seeded primary administrator (packages/db/src/seed/demo.ts), and
+      # the tester whose Login every local plan holds and whose account the
+      # suite invites (apps/web/e2e-api/tester.ts). The password is the public
+      # local default every local Login gets (packages/db/src/local-stack/
+      # logins.ts), so it is set nowhere here.
       E2E_LOGIN_EMAIL: fares.abdelghany@kystbyen.example
+      E2E_TESTER_EMAIL: e2e-tester@waste-e2e.example
       PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
     steps:
       - uses: actions/checkout@v7

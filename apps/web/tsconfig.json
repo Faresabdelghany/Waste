@@ -34,6 +34,7 @@
     "e2e",
     "e2e-api",
     "playwright.config.ts",
-    "playwright.api.config.ts"
+    "playwright.api.config.ts",
+    "playwright.shared.ts"
   ]
 }

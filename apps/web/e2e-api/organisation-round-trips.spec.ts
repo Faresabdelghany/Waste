@@ -1,5 +1,5 @@
 import { expect, problemOf, test } from "./fixtures"
-import { E2E, uniqueName } from "./env"
+import { uniqueName } from "./env"
 import { projectNamed, roleNamed, TESTER_PROJECT, type User } from "./tester"
 
 // Scenario 4, the two switched modules whose product surfaces do not yet
@@ -37,7 +37,8 @@ test("Company & Projects: a project round-trips with Location, and a second of t
 
 test("Users & Roles: an invitation round-trips with Location, and the address cannot be invited twice", async ({ api }) => {
   const [project, role] = await Promise.all([projectNamed(api, TESTER_PROJECT), roleNamed(api, "Dispatcher")])
-  const email = `${uniqueName("e2e").replace(/\s+/g, "-").toLowerCase()}@waste-e2e.example`
+  // A fresh address every run, never the tester's (e2e-tester@…), which the isolation scenario signs in as.
+  const email = `${uniqueName("e2e-invitee").replace(/\s+/g, "-").toLowerCase()}@waste-e2e.example`
   const invited = await api.post("/users", { data: { email, fullName: "E2E Invitee", roleId: role.id, projectIds: [project.id] } })
   expect(invited.status()).toBe(201)
   const location = invited.headers().location
@@ -56,7 +57,4 @@ test("Users & Roles: an invitation round-trips with Location, and the address ca
   const duplicate = await api.post("/users", { data: { email: email.toUpperCase(), fullName: "Somebody Else", roleId: role.id, projectIds: [project.id] } })
   expect(duplicate.status()).toBe(409)
   expect(await problemOf(duplicate)).toMatchObject({ status: 409, detail: `This company already has a user with the e-mail address ${JSON.stringify(email)}` })
-
-  // The tester's address is what the isolation scenario signs in with; it is not this test's to take.
-  expect(email).not.toBe(E2E.testerEmail.toLowerCase())
 })
