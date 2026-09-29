@@ -58,6 +58,19 @@ ENV NODE_ENV=production \
     WORKER_HOST=127.0.0.1 \
     WORKER_PORT=3002
 COPY --from=build --chown=node:node /app /app
+# The commit the image is built from (Issue #152), as apps/api/Dockerfile
+# carries it: the OCI revision label and build.json beside the API's
+# package.json, which its GET /healthz reads as build.commit — what a Pilot
+# release proves live. Absent on a local build; anything but a full lowercase
+# commit id fails the build.
+ARG SOURCE_COMMIT=""
+LABEL org.opencontainers.image.revision="${SOURCE_COMMIT}"
+RUN if [ -n "$SOURCE_COMMIT" ]; then \
+      printf "%s" "$SOURCE_COMMIT" | grep -Eqx "[0-9a-f]{40}" \
+        || { echo "SOURCE_COMMIT is not a full commit id: $SOURCE_COMMIT" >&2; exit 1; }; \
+      printf "{\"commit\":\"%s\"}\n" "$SOURCE_COMMIT" > /app/apps/api/build.json \
+        && chown node:node /app/apps/api/build.json; \
+    fi
 WORKDIR /app/apps/pilot
 USER node
 EXPOSE 3001
