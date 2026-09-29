@@ -63,8 +63,13 @@ export class FakeProvider implements RoutingProvider {
     let at = request.depot
     while (remaining.length > 0) {
       let nearest = 0
+      let best = haversineMetres(at, remaining[0].stop)
       for (let candidate = 1; candidate < remaining.length; candidate += 1) {
-        if (haversineMetres(at, remaining[candidate].stop) < haversineMetres(at, remaining[nearest].stop)) nearest = candidate
+        const distance = haversineMetres(at, remaining[candidate].stop)
+        if (distance < best) {
+          nearest = candidate
+          best = distance
+        }
       }
       const [next] = remaining.splice(nearest, 1)
       order.push(next.index)

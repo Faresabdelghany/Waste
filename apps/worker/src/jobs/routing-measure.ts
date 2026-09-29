@@ -43,10 +43,17 @@ type Gathered = { kind: "points"; points: Position2D[] } | { kind: "refused"; se
 
 const positionOf = (location: Point | null): Position2D | null => (location ? [location.coordinates[0], location.coordinates[1]] : null)
 
+/** Consecutive identical coordinates span no leg — two bins at one address are one point of the trip — and PostGIS refuses a zero-length LINESTRING, so they collapse here. */
+const distinctConsecutive = (points: readonly Position2D[]): Position2D[] =>
+  points.filter((point, index) => index === 0 || point[0] !== points[index - 1][0] || point[1] !== points[index - 1][1])
+
 async function gather(tx: Tx, planId: string): Promise<Gathered> {
-  const [found] = await tx.select({ status: plan.status, trip: plan.trip, routeId: plan.routeId }).from(plan).where(eq(plan.id, planId))
-  if (!found) throw new Error(`routing.measure: plan ${planId} is not there`)
+  const [found] = await tx.select({ status: plan.status, solver: plan.solver, trip: plan.trip, routeId: plan.routeId }).from(plan).where(eq(plan.id, planId))
+  // Deleted between send and work (a tenant sweep, a reset): permanently unanswerable, so nothing retries it.
+  if (!found) return { kind: "done", status: "not there; a sweep between send and work retries nothing" }
   if (found.status !== "calculating") return { kind: "done", status: found.status }
+  // An optimiser Plan has no creation-time sequence: its stops and legs are the solver's to write on routing.optimise (#171).
+  if (found.solver === "optimiser") return { kind: "refused", sentence: "an optimiser Plan is routing.optimise's to solve, not measured here" }
   const stops = await tx
     .select({ position: planStop.position, property: property.location, point: sharedCollectionPoint.location })
     .from(planStop)
@@ -71,23 +78,29 @@ async function gather(tx: Tx, planId: string): Promise<Gathered> {
     const home = positionOf(ends?.depot ?? null)
     const station = positionOf(ends?.station ?? null)
     if (!home || !station) return { kind: "refused", sentence: "a full trip needs the route's depot and unloading station, and one is missing" }
-    return { kind: "points", points: [home, ...points, station, home] }
+    return { kind: "points", points: distinctConsecutive([home, ...points, station, home]) }
   }
-  return { kind: "points", points }
+  return { kind: "points", points: distinctConsecutive(points) }
 }
 
-async function fail(tx: Tx, planId: string, sentence: string): Promise<void> {
+/** Fails the Plan under its row lock, exactly as the ready path writes: a Plan that moved meanwhile is left as it is. */
+async function fail(tx: Tx, planId: string, sentence: string, log: (message: string) => void): Promise<void> {
+  const [locked] = await tx.select({ status: plan.status }).from(plan).where(eq(plan.id, planId)).for("update")
+  if (!locked || locked.status !== "calculating") {
+    log(`routing.measure: plan ${planId} moved to ${locked?.status ?? "nowhere"} meanwhile; the refusal writes nothing`)
+    return
+  }
   await tx.update(plan).set({ status: "failed", failureReason: sentence, deferredUntil: null }).where(eq(plan.id, planId))
 }
 
 async function measureOne(data: RoutingMeasureData, context: JobContext): Promise<void> {
   const gathered = await withCompany(context.api.db, data.companyId, (tx: Tx) => gather(tx, data.planId))
   if (gathered.kind === "done") {
-    context.log(`routing.measure: plan ${data.planId} is already ${gathered.status}; a replay writes nothing`)
+    context.log(`routing.measure: plan ${data.planId} is ${gathered.status}; this run writes nothing`)
     return
   }
   if (gathered.kind === "refused") {
-    await withCompany(context.api.db, data.companyId, (tx: Tx) => fail(tx, data.planId, gathered.sentence))
+    await withCompany(context.api.db, data.companyId, (tx: Tx) => fail(tx, data.planId, gathered.sentence, context.log))
     context.log(`routing.measure: plan ${data.planId} failed: ${gathered.sentence}`)
     return
   }
@@ -133,7 +146,8 @@ export const routingMeasure = defineJob<RoutingMeasureData>({
   queueOptions: {
     policy: "exclusive",
     expireInSeconds: 600,
-    retentionSeconds: 7 * 24 * 60 * 60,
+    // A done job's week (#132 §3): deleteAfterSeconds is completed-job retention; retentionSeconds would instead bound how long a queued job may wait, which #171's deferral needs long.
+    deleteAfterSeconds: 7 * 24 * 60 * 60,
     retryLimit: 3,
     retryDelay: 30,
     retryBackoff: true,

@@ -8,7 +8,7 @@
 // and `plan` into the cycle `sweepOrder` (reset-to-seed.ts) rightly refuses:
 // self-clearing, the edge forces no order and the sweep deletes plans first.
 // Hand-written into 0013 below drizzle-kit's statements, this function the
-// one spelling, active-plan-rendering.test.ts the pin.
+// one spelling, routing-rendering.test.ts the byte-for-byte pin.
 
 /** The statement that keys `route.active_plan_id` into `plan`, for the migration file. */
 export function activePlanKey(): string {

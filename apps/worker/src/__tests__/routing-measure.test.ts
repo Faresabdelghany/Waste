@@ -22,18 +22,18 @@ import { asc, eq } from "drizzle-orm"
 
 import type { JobContext } from "../jobs/definition"
 import { routingMeasure, ROUTING_MEASURE_QUEUE, type RoutingMeasureData } from "../jobs/routing-measure"
-import { databaseUnderTest } from "./database"
+import { databaseUnderTest, ownerUnderTest } from "./database"
 import { dropConsumerTenant, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "./consumer-fixtures"
 
 const database = databaseUnderTest()
-const owner = process.env.DATABASE_ADMIN_URL
+const owner = ownerUnderTest()
 
 const DEPOT: Position2D = [12.5683, 55.6761]
 const PARKVEJ: Position2D = [12.575, 55.68]
 const HAVNEGADE: Position2D = [12.61, 55.71]
 const STATION: Position2D = [12.55, 55.72]
 
-describe("routing.measure through the fake provider", { skip: database.skip || (owner ? false : "DATABASE_ADMIN_URL is not set (the ledger sweep needs the owner)") }, () => {
+describe("routing.measure through the fake provider", { skip: database.skip || owner.skip }, () => {
   let api: Database
   let admin: Database
   let tenant: ConsumerTenant
@@ -56,7 +56,7 @@ describe("routing.measure through the fake provider", { skip: database.skip || (
 
   before(async () => {
     api = createDb(database.url)
-    admin = createDb(owner as string)
+    admin = createDb(owner.url)
     tenant = await seedConsumerTenant(api)
     depotId = testId()
     stationId = testId()
@@ -75,7 +75,7 @@ describe("routing.measure through the fake provider", { skip: database.skip || (
   })
 
   /** A calculating Plan with its stops written at creation, the way #124 §1 has it, over the seeded route's pickups in position order. */
-  async function seedPlan(seeded: SeededRoute, trip: "full" | "stops-only"): Promise<string> {
+  async function seedPlan(seeded: SeededRoute, trip: "full" | "stops-only", solver: "baseline" | "optimiser" = "baseline"): Promise<string> {
     const planId = testId()
     const stops = seeded.pickupIds
     await withCompany(api.db, tenant.companyId, async (tx: Tx) => {
@@ -84,11 +84,11 @@ describe("routing.measure through the fake provider", { skip: database.skip || (
         companyId: tenant.companyId,
         projectId: tenant.projectId,
         routeId: seeded.id,
-        solver: "baseline",
+        solver,
         status: "calculating",
         trip,
         provider: "fake",
-        fingerprint: planFingerprint({ provider: "fake", profile: "driving-hgv", solver: "baseline", depot: trip === "full" ? DEPOT : null, station: trip === "full" ? STATION : null, stops: [PARKVEJ, HAVNEGADE] }),
+        fingerprint: planFingerprint({ provider: "fake", profile: "driving-hgv", solver, depot: trip === "full" ? DEPOT : null, station: trip === "full" ? STATION : null, stops: [PARKVEJ, HAVNEGADE] }),
       })
       await tx.insert(planStop).values(stops.map((pickupId, index) => ({ id: testId(), companyId: tenant.companyId, projectId: tenant.projectId, routeId: seeded.id, planId, pickupId, position: index + 1 })))
     })
@@ -162,12 +162,43 @@ describe("routing.measure through the fake provider", { skip: database.skip || (
     assert.deepEqual(await legsOf(planId), [])
   })
 
-  test("the queue is #132's: exclusive under the fingerprint singleton, ten minutes to run, kept a week", () => {
+  test("two consecutive stops at one address measure as one point: no zero-length leg, the Plan ready (two bins at one property is routine)", async () => {
+    const seeded = await seedRoute(api, tenant, { status: "active", pickups: [{ container: "bin1", status: "planned" }, { container: "bin2", status: "planned" }] })
+    await withCompany(api.db, tenant.companyId, async (tx: Tx) => {
+      await tx.update(route).set({ depotId, unloadingStationId: stationId }).where(eq(route.id, seeded.id))
+      // Both bins at Parkvej: consecutive identical coordinates, which PostGIS would refuse as a LINESTRING(P, P).
+      await tx.update(pickup).set({ propertyId: tenant.properties.parkvej.id }).where(eq(pickup.id, seeded.pickupIds[1]))
+    })
+    const planId = await seedPlan(seeded, "full")
+    await run(planId)
+    const measured = await planRow(planId)
+    assert.equal(measured.status, "ready")
+    const legs = await legsOf(planId)
+    assert.equal(legs.length, 3, "depot → Parkvej → station → depot; the duplicate point spans no leg")
+    assert.deepEqual(legs[1].path.coordinates, [PARKVEJ, STATION])
+  })
+
+  test("an optimiser Plan is refused, not measured: its sequence is the solver's to write (#124 §2)", async () => {
+    const seeded = await seedRoute(api, tenant, { status: "active", pickups: [{ container: "bin1", status: "planned" }] })
+    const planId = await seedPlan(seeded, "stops-only", "optimiser")
+    await run(planId)
+    const measured = await planRow(planId)
+    assert.equal(measured.status, "failed")
+    assert.match(measured.failureReason ?? "", /optimiser/)
+    assert.deepEqual(await legsOf(planId), [])
+  })
+
+  test("a Plan that is not there completes as a no-op: a sweep between send and work retries nothing", async () => {
+    await run(testId())
+    assert.ok(lines.some((line) => /is not there|writes nothing|no such plan/i.test(line)))
+  })
+
+  test("the queue is #132's: exclusive under the fingerprint singleton, ten minutes to run, done jobs kept a week", () => {
     assert.equal(routingMeasure.queue, "routing.measure")
     assert.deepEqual(routingMeasure.queueOptions, {
       policy: "exclusive",
       expireInSeconds: 600,
-      retentionSeconds: 7 * 24 * 60 * 60,
+      deleteAfterSeconds: 7 * 24 * 60 * 60,
       retryLimit: 3,
       retryDelay: 30,
       retryBackoff: true,
