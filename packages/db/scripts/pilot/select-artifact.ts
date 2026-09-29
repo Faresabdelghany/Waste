@@ -5,7 +5,7 @@
 // download step and the checks after it. Reads GITHUB_TOKEN (the job's, with
 // `actions: read`), GITHUB_REPOSITORY and GITHUB_API_URL.
 import { fetchSourceArtifact } from "../../src/pilot/github"
-import { output, required, step, summary } from "./step"
+import { output, required, step, summary } from "../step"
 
 await step(async () => {
   const pick = await fetchSourceArtifact({

@@ -9,7 +9,11 @@
 // and the fingerprint of the database as it was dumped, kept as
 // fingerprint.txt in the archive, since a restored database is proved against
 // the backup's own fingerprint and not the committed one, which describes the
-// head.
+// head. The six dumps read one exported snapshot (pilot-backup.sh holds a
+// read-only transaction open for the whole backup and every pg_dump imports
+// its snapshot), so a transaction that spans two of the schemas — the outbox
+// relay stamps a row in `wms` and enqueues its job in `pgboss` in one — is in
+// the backup whole or not at all, while the API and the worker keep running.
 //
 // A schema dump holds no publication membership (pg_dump writes it only with
 // the publication, which a dump of three schemas leaves out), and dropping
@@ -49,9 +53,21 @@ const PUBLISHED_TABLE = new RegExp(`^(?:${OWNED_SCHEMAS.join("|")})\\.[a-z_][a-z
 /** What a restore runs first, inside its one transaction. */
 export const DROP_OWNED_SCHEMAS = `DROP SCHEMA IF EXISTS ${[...OWNED_SCHEMAS].reverse().join(", ")} CASCADE`
 
+/** A schema's two dump files, the one spelling the backup, the manifest and the restore share. */
+export const schemaFileOf = (schema: string): string => `${schema}-schema.sql`
+export const dataFileOf = (schema: string): string => `${schema}-data.sql`
+
 /** The dump files of the schemas a backup includes, in restore order: every schema file, then every data file. */
 export function dumpFiles(schemas: readonly string[]): string[] {
-  return [...schemas.map((schema) => `${schema}-schema.sql`), ...schemas.map((schema) => `${schema}-data.sql`)]
+  return [...schemas.map(schemaFileOf), ...schemas.map(dataFileOf)]
+}
+
+/** One line of what pilot-backup.sh dumps: a schema, whether a backup requires it, and its two files. */
+export type PlannedDump = { schema: string; required: boolean; schemaFile: string; dataFile: string }
+
+/** What pilot-backup.sh dumps, in OWNED_SCHEMAS' order: each owned schema, required unless a backup may leave it out (OPTIONAL_SCHEMAS), with its two files. */
+export function dumpPlan(): PlannedDump[] {
+  return OWNED_SCHEMAS.map((schema) => ({ schema, required: !OPTIONAL_SCHEMAS.includes(schema), schemaFile: schemaFileOf(schema), dataFile: dataFileOf(schema) }))
 }
 
 export type BackupManifest = {
@@ -87,9 +103,9 @@ function checkDumps(dir: string, schemas: readonly string[]): void {
     if (!existsSync(file)) throw new Error(`${name} is missing from the backup`)
     if (statSync(file).size === 0) throw new Error(`${name} is empty`)
   }
-  const domain = readFileSync(path.join(dir, `${wms.schemaName}-schema.sql`), "utf8")
-  if (!new RegExp(`^CREATE SCHEMA ${wms.schemaName};$`, "m").test(domain)) throw new Error(`${wms.schemaName}-schema.sql does not create the ${wms.schemaName} schema`)
-  if (!new RegExp(`^CREATE TABLE ${wms.schemaName}\\.`, "m").test(domain)) throw new Error(`${wms.schemaName}-schema.sql defines no table`)
+  const domain = readFileSync(path.join(dir, schemaFileOf(wms.schemaName)), "utf8")
+  if (!new RegExp(`^CREATE SCHEMA ${wms.schemaName};$`, "m").test(domain)) throw new Error(`${schemaFileOf(wms.schemaName)} does not create the ${wms.schemaName} schema`)
+  if (!new RegExp(`^CREATE TABLE ${wms.schemaName}\\.`, "m").test(domain)) throw new Error(`${schemaFileOf(wms.schemaName)} defines no table`)
 }
 
 export type ManifestInput = {
@@ -194,7 +210,7 @@ export function checkRestoreTarget(manifest: BackupManifest, { identity, commit,
  */
 export function restorePlan(manifest: BackupManifest, dir: string): string[] {
   const plan = ["-c", DROP_OWNED_SCHEMAS]
-  for (const schema of manifest.schemas) plan.push("-f", path.join(dir, `${schema}-schema.sql`))
+  for (const schema of manifest.schemas) plan.push("-f", path.join(dir, schemaFileOf(schema)))
   const tables = manifest.publication?.tables ?? []
   if (tables.length > 0) {
     const members = tables.map((table) => {
@@ -204,6 +220,6 @@ export function restorePlan(manifest: BackupManifest, dir: string): string[] {
     })
     plan.push("-c", `ALTER PUBLICATION ${PUBLICATION} ADD TABLE ${members.join(", ")}`)
   }
-  for (const schema of manifest.schemas) plan.push("-f", path.join(dir, `${schema}-data.sql`))
+  for (const schema of manifest.schemas) plan.push("-f", path.join(dir, dataFileOf(schema)))
   return plan
 }

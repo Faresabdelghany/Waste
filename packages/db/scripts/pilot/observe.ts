@@ -3,7 +3,7 @@
 // RELEASE_COMMIT and /readyz 200, both uncached. On timeout it fails naming
 // the commit, RELEASE_IMAGE and the last thing it saw.
 import { observeRelease } from "../../src/pilot/release"
-import { required, step, summary } from "./step"
+import { required, step, summary } from "../step"
 
 await step(async () => {
   const commit = required("RELEASE_COMMIT")

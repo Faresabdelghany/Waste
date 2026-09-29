@@ -9,7 +9,7 @@
 import { count } from "@waste/domain/text"
 
 import { checkDatabaseJournal } from "../src/migrate"
-import { output, required, step } from "./pilot/step"
+import { output, required, step } from "./step"
 
 await step(async () => {
   const url = required("DATABASE_ADMIN_URL")

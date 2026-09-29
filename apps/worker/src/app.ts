@@ -23,7 +23,7 @@
 // #152). `/healthz` names no build yet (`build: null`): the worker's image
 // bakes its commit in the way the API's does when its deployment lands, and
 // until then says so rather than guessing.
-import { HealthResponse, type WorkerReadinessResponse } from "@waste/contracts/health"
+import { HealthResponse, PROBE_HEADERS, type WorkerReadinessResponse } from "@waste/contracts/health"
 import type { Database } from "@waste/db/client"
 import { Hono } from "hono"
 
@@ -41,9 +41,6 @@ export type AppOptions = {
   /** The relay's stale count (`staleOutboxCount` over the worker role's pool), read beside the checks and carried on a ready body as information; omitted where the worker has no outbox to relay, as a test's may not. */
   staleOutbox?: () => Promise<number>
 }
-
-/** What both probes answer beside their body: a probe is the process, never a cache's copy. */
-const PROBE_HEADERS = { "Cache-Control": "no-store" }
 
 export function createApp({ probe, boss, now = () => new Date(), checkTimeoutMs = CHECK_TIMEOUT_MS, staleOutbox }: AppOptions) {
   const app = new Hono()

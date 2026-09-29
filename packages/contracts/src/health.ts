@@ -32,6 +32,11 @@ import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
 
+/** What both probes answer in `Cache-Control` (Issue #152): never cached, so what a release observes is the process and never a cache's copy. */
+export const PROBE_CACHE_CONTROL = "no-store"
+/** The response headers both probes answer with, the one spelling the API, the worker and the Pilot's release share. */
+export const PROBE_HEADERS: Record<string, string> = { "Cache-Control": PROBE_CACHE_CONTROL }
+
 /** A full commit id, as a build records it and GitHub names it: forty lowercase hex digits. */
 export const CommitId = z.string().regex(/^[0-9a-f]{40}$/, "a full commit id: forty lowercase hex digits")
 

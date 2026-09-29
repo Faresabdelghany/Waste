@@ -51,3 +51,20 @@ export function exclusionConstraintOf(error: unknown): string | undefined {
 export function checkConstraintOf(error: unknown): string | undefined {
   return constraintOf(error, CHECK_VIOLATION)
 }
+
+/** How Drizzle's wrapper begins its message: `Failed query: <statement>\nparams: <values>`, the statement and what was bound to it. */
+export const DRIZZLE_QUERY = "Failed query: "
+
+/**
+ * An error's message with the statement cut off. Drizzle's wrapper spells its
+ * message as the statement and its parameters, so a log line, a run row or a
+ * workflow summary that carried it whole would carry a row's values; its
+ * first line names nothing but the statement's head, so the message is cut at
+ * the statement, and the cause — postgres.js's error, whose message is the
+ * database's own sentence — carries what matters. The worker's `loggable`
+ * and the Pilot scripts' `step` both read it; any other message is returned
+ * as it is.
+ */
+export function messageWithoutStatement(message: string): string {
+  return message.startsWith(DRIZZLE_QUERY) ? "Failed query" : message
+}

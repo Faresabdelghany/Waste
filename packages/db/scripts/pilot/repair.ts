@@ -5,7 +5,7 @@
 import { expectPilot } from "../../src/pilot/identity"
 import { runRepair } from "../../src/pilot/repair"
 import { ACTIVE_REPAIRS } from "../repairs/index"
-import { required, step, summary } from "./step"
+import { required, step, summary } from "../step"
 
 await step(async () => {
   const url = required("DATABASE_ADMIN_URL")

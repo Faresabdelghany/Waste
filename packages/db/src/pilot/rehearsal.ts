@@ -25,7 +25,7 @@ import { readAppliedMigrations } from "../journal-check"
 import { isLocalHost } from "../local-host"
 import { checkDatabaseJournal, OWNED_SCHEMAS } from "../migrate"
 import { checkRestoreTarget, DROP_OWNED_SCHEMAS, FINGERPRINT_COPY, majorOf, verifyBackup } from "./backup"
-import { barrierOpen, closeBarrier, openLogins, planRecovery, readLogins, spellLogins } from "./barrier"
+import { requireBarrierOpen, closeBarrier, openLogins, planRecovery, readLogins, spellLogins } from "./barrier"
 import { databaseIdentity } from "./identity"
 
 const SCRIPTS = fileURLToPath(new URL("../../scripts", import.meta.url))
@@ -85,7 +85,7 @@ export async function rehearseRestore(url: string, { barrier = false, log = () =
     checkRestoreTarget(manifest, { identity })
 
     const recorded = barrier ? await readLogins(owner.sql) : undefined
-    if (recorded !== undefined) barrierOpen(recorded)
+    if (recorded !== undefined) requireBarrierOpen(recorded)
     if (barrier) log(`rehearsal: barrier closed, ${(await closeBarrier(owner.sql)).terminated} session(s) ended; recorded ${spellLogins(recorded ?? {})}`)
     run("bash", [path.join(SCRIPTS, "pilot-restore.sh"), "apply"], { ...pilot, RESTORE_DIR: restore }, log)
 

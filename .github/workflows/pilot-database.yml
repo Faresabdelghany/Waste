@@ -388,6 +388,12 @@ jobs:
           EXPECTED_ATTEMPT: ${{ github.run_attempt }}
           EXPECTED_COMMIT: ${{ github.sha }}
         run: node --import tsx scripts/pilot/barrier.ts open
+      # The roles and the publication as the restore left them — the check's own report, which fails while wms_api cannot log in.
+      - name: Verify the roles and the publication
+        working-directory: packages/db
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+        run: node --import tsx scripts/pilot/state.ts
       - name: Remove plaintext
         if: always()
         run: rm -rf "$RUNNER_TEMP"/pilot-backup.* "$RUNNER_TEMP"/pilot-restore-key.* "$RUNNER_TEMP/pilot-restore" "$RUNNER_TEMP/pilot-source" "$RUNNER_TEMP/pilot-backup"

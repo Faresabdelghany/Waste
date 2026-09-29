@@ -10,7 +10,7 @@ import { createDb } from "../../src/client"
 import { planPilotLogins } from "../../src/pilot/grant-logins"
 import { expectPilot } from "../../src/pilot/identity"
 import { readLogins, spellLogins } from "../../src/pilot/barrier"
-import { required, step, summary } from "./step"
+import { required, step, summary } from "../step"
 
 await step(async () => {
   if (process.env.GITHUB_ACTIONS !== "true") throw new Error("grant-logins runs inside the protected workflow only")

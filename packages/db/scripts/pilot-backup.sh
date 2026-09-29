@@ -14,13 +14,16 @@
 #
 # What it does, in order, stopping at the first failure:
 #  1. PostgreSQL client 17 (PGDG on the runner) and a server no newer than it;
-#  2. six plain-SQL dumps — schema and data of wms, drizzle and pgboss (pgboss
-#     only where it exists: the Pilot has none before migration 0011) — with
-#     the flags below and nothing else, `--no-owner` with privileges kept;
-#  3. the manifest and the fingerprint beside them (scripts/pilot/manifest.ts
+#  2. one snapshot for every dump: a session exports a snapshot and holds its
+#     read-only transaction open until the dumps are done;
+#  3. six plain-SQL dumps — schema and data of wms, drizzle and pgboss (pgboss
+#     only where it exists: the Pilot has none before migration 0011), as
+#     scripts/pilot/dump-plan.ts lists them — each importing that snapshot,
+#     with the flags below and nothing else, `--no-owner` with privileges kept;
+#  4. the manifest and the fingerprint beside them (scripts/pilot/manifest.ts
 #     write), which also checks every dump is non-empty and the wms schema
 #     dump carries the schema and a table;
-#  4. a tar of the lot, encrypted with age to the recipient, and the encrypted
+#  5. a tar of the lot, encrypted with age to the recipient, and the encrypted
 #     file checked non-empty.
 # The plaintext lives in a directory of its own, mode 700, and is deleted on
 # every exit; the workflow's always-running cleanup step deletes it again.
@@ -66,29 +69,55 @@ client_version="$(pg_dump --version)"
 client_major="$(printf '%s' "$client_version" | sed -E 's/^[^0-9]*([0-9]+).*/\1/')"
 [ "$client_major" = 17 ] || fail "pg_dump is major $client_major ($client_version); the workflow pins PostgreSQL client 17"
 server_number="$(psql -X -A -t -c 'show server_version_num')" \
-  || fail "cannot reach the database (a Free Supabase project may be paused: resume it in the dashboard and re-run the workflow)"
+  || fail "cannot reach the database${PILOT_PAUSED_HINT:+ ($PILOT_PAUSED_HINT)}"
 server_major=$((server_number / 10000))
 [ "$client_major" -ge "$server_major" ] || fail "pg_dump $client_major is older than the server's $server_major: move the pinned client first"
 echo "pilot-backup: pg_dump $client_major against server $server_major"
 
-# 2. The dumps, one schema at a time: the schemas src/migrate.ts's
-# OWNED_SCHEMAS names, in its order (the manifest step refuses a backup that
-# left out one the database has).
-for schema in wms drizzle pgboss; do
+# 2. One snapshot for every dump. A release backs up while the API and the
+# worker keep writing, and a transaction of theirs can span two schemas — the
+# outbox relay stamps a row in wms and enqueues its job in pgboss in one — so
+# six dumps each taking a snapshot of their own could hold the row without the
+# job, or the job without the row. A session exports a snapshot and holds its
+# read-only transaction open until the dumps are done, and every pg_dump
+# imports it (--snapshot), so the six files are one moment of the database.
+# Two FIFOs carry the conversation (a coprocess needs bash 4, and the
+# rehearsal runs on macOS's 3.2 too). Should the session drop, the next dump
+# fails on a snapshot that no longer exists — never quietly on one of its own.
+mkfifo "$work/snapshot.in" "$work/snapshot.out"
+psql -X -q -A -t -v ON_ERROR_STOP=1 < "$work/snapshot.in" > "$work/snapshot.out" 2>&1 &
+snapshot_pid=$!
+exec 3> "$work/snapshot.in" 4< "$work/snapshot.out"
+printf '%s\n' \
+  'set idle_in_transaction_session_timeout = 0;' \
+  'begin isolation level repeatable read read only;' \
+  'select pg_export_snapshot();' >&3
+IFS= read -r snapshot <&4 || fail "the snapshot session answered nothing"
+[[ "$snapshot" =~ ^[0-9A-Fa-f]+-[0-9A-Fa-f]+-[0-9]+$ ]] || fail "no snapshot exported: $snapshot"
+echo "pilot-backup: every dump reads snapshot $snapshot"
+
+# 3. The dumps, one schema at a time, as scripts/pilot/dump-plan.ts lists them
+# (src/pilot/backup.ts: OWNED_SCHEMAS in its order, pgboss the one a backup
+# may leave out; the manifest step refuses a backup that left out one the
+# database has).
+while read -r schema requirement schema_file data_file; do
   present="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "select count(*) from pg_namespace where nspname = '$schema'")"
   if [ "$present" = 0 ]; then
-    [ "$schema" = pgboss ] || incomplete "the database has no $schema schema, so it cannot be backed up whole"
-    echo "pilot-backup: no pgboss schema yet (before migration 0011): not dumped"
+    [ "$requirement" = optional ] || incomplete "the database has no $schema schema, so it cannot be backed up whole"
+    echo "pilot-backup: no $schema schema yet (before migration 0011): not dumped"
     continue
   fi
-  pg_dump --no-owner --encoding=UTF8 --schema-only --schema="$schema" --file="$plain/$schema-schema.sql"
-  pg_dump --no-owner --encoding=UTF8 --data-only --schema="$schema" --file="$plain/$schema-data.sql"
-done
+  pg_dump --no-owner --encoding=UTF8 --snapshot="$snapshot" --schema-only --schema="$schema" --file="$plain/$schema_file"
+  pg_dump --no-owner --encoding=UTF8 --snapshot="$snapshot" --data-only --schema="$schema" --file="$plain/$data_file"
+done < <(node --import tsx scripts/pilot/dump-plan.ts)
+printf 'commit;\n' >&3
+exec 3>&- 4<&-
+wait "$snapshot_pid" || fail "the snapshot session did not end cleanly"
 
-# 3. The manifest and the fingerprint, and the dumps' checks.
+# 4. The manifest and the fingerprint, and the dumps' checks.
 CLIENT_VERSION="$client_version" BACKUP_DIR="$plain" node --import tsx scripts/pilot/manifest.ts write
 
-# 4. One archive, encrypted to the recipient.
+# 5. One archive, encrypted to the recipient.
 tar -C "$plain" -cf "$work/backup.tar" .
 age --encrypt --recipients-file "$recipient" --output "$output" "$work/backup.tar"
 [ -s "$output" ] || fail "the encrypted backup is empty"

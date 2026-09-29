@@ -25,7 +25,7 @@
 // is a 404, not a 401. The verifier is injected: server.ts builds it over the
 // project's remote key set, a test over a local one, and the app never reads
 // SUPABASE_URL itself.
-import { type BuildInfo, HealthResponse, ReadinessResponse, ReadyResponse, UnavailableResponse } from "@waste/contracts/health"
+import { type BuildInfo, HealthResponse, PROBE_HEADERS, ReadinessResponse, ReadyResponse, UnavailableResponse } from "@waste/contracts/health"
 import type { Database } from "@waste/db/client"
 import { Hono } from "hono"
 import { describeRoute, openAPIRouteHandler, resolver } from "hono-openapi"
@@ -93,9 +93,6 @@ export type AppOptions = {
   /** The build /healthz names: server.ts reads the image's build file (build-info.ts); null from a checkout. */
   build?: BuildInfo | null
 }
-
-/** What both probes answer beside their body: a probe is the process, never a cache's copy. */
-const PROBE_HEADERS = { "Cache-Control": "no-store" }
 
 export function createApp({ probe, pool, verifier, now = () => new Date(), databaseTimeoutMs = DATABASE_CHECK_TIMEOUT_MS, log, build = null }: AppOptions) {
   const app = new Hono()

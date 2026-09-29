@@ -4,7 +4,7 @@
 // prints the deploy id; the hook's 200 is not a deployment, the observations
 // after it are.
 import { triggerDeploy } from "../../src/pilot/release"
-import { output, required, step, summary } from "./step"
+import { output, required, step, summary } from "../step"
 
 await step(async () => {
   const image = required("RELEASE_IMAGE")

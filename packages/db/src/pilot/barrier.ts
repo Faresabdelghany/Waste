@@ -2,7 +2,7 @@
 // a reset-to-seed replaces what the API and the worker read, so before it
 // drops anything the protected workflow closes the door on both:
 //
-// 1. `recordLogins` reads `rolcanlogin` of `wms_api` and `wms_worker` and the
+// 1. `readLogins` reads `rolcanlogin` of `wms_api` and `wms_worker` and the
 //    workflow stores the record as an artifact (login-state.json: the two
 //    states, the run, the operation, the commit, the time and the database's
 //    identity, never a credential), then reads it back and checks its digest;
@@ -20,8 +20,8 @@
 // record no longer says what is right. And a barrier is never closed over
 // one already closed: while wms_api cannot log in, recording would record the
 // closed state, and a later recovery from that record would restore nothing
-// (a restore re-run after one that failed is exactly that), so `barrierOpen`
-// refuses and says to recover first.
+// (a restore re-run after one that failed is exactly that), so
+// `requireBarrierOpen` refuses and says to recover first.
 import type { Sql } from "postgres"
 
 import { textList } from "../query/text-list"
@@ -52,19 +52,6 @@ function plain(roles: readonly string[]): readonly string[] {
   return roles
 }
 
-/** Whether each role can log in now; a role that does not exist is an error, not a state. */
-export async function readLogins(sql: Sql, roles: readonly string[] = BARRIER_ROLES): Promise<Record<string, boolean>> {
-  const rows = await sql<{ name: string; login: boolean }[]>`
-    select rolname as name, rolcanlogin as login from pg_roles where rolname = any(${textList(sql, plain(roles))})`
-  const logins: Record<string, boolean> = {}
-  for (const role of roles) {
-    const row = rows.find((candidate) => candidate.name === role)
-    if (row === undefined) throw new Error(`the role ${role} does not exist on this database`)
-    logins[role] = row.login
-  }
-  return logins
-}
-
 /** Whether each role can log in now, or null for a role that does not exist yet (wms_worker before migration 0011). */
 export async function readLoginsIfPresent(sql: Sql, roles: readonly string[]): Promise<Record<string, boolean | null>> {
   const rows = await sql<{ name: string; login: boolean }[]>`
@@ -72,17 +59,28 @@ export async function readLoginsIfPresent(sql: Sql, roles: readonly string[]): P
   return Object.fromEntries(roles.map((role) => [role, rows.find((row) => row.name === role)?.login ?? null]))
 }
 
+/** Whether each role can log in now; a role that does not exist is an error, not a state. */
+export async function readLogins(sql: Sql, roles: readonly string[] = BARRIER_ROLES): Promise<Record<string, boolean>> {
+  const present = await readLoginsIfPresent(sql, roles)
+  const logins: Record<string, boolean> = {}
+  for (const role of roles) {
+    const login = present[role]
+    if (login === null || login === undefined) throw new Error(`the role ${role} does not exist on this database`)
+    logins[role] = login
+  }
+  return logins
+}
+
 export function loginRecord(input: Omit<LoginRecord, "schema">): LoginRecord {
   return { schema: LOGIN_RECORD_SCHEMA, ...input }
 }
 
+/** What wms_api NOLOGIN means wherever it is found, the check's failure and the record's refusal alike: an earlier run's barrier, never a state of its own. */
+export const BARRIER_CLOSED = "wms_api cannot log in: an earlier restore or reset closed the write barrier and never opened it. Run recover-logins with that run's id first (supabase/README.md)."
+
 /** Refuses to close a barrier while one is closed: wms_api NOLOGIN is an earlier run's barrier, never a state worth recording. */
-export function barrierOpen(logins: Record<string, boolean>): void {
-  if (logins[API_ROLE] !== true) {
-    throw new Error(
-      "wms_api cannot log in: an earlier restore or reset closed the write barrier and never opened it. Run recover-logins with that run's id first; a record taken now would record the closed state and restore nothing.",
-    )
-  }
+export function requireBarrierOpen(logins: Record<string, boolean>): void {
+  if (logins[API_ROLE] !== true) throw new Error(`${BARRIER_CLOSED} A record taken now would record the closed state and restore nothing.`)
 }
 
 /** Holds a record to the run, the commit and the database it must be of. */

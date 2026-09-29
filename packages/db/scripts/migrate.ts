@@ -4,7 +4,7 @@
 // migrations (an extension already present, a role already there) go to
 // stderr.
 import { migrateDatabase } from "../src/migrate"
-import { required, step } from "./pilot/step"
+import { required, step } from "./step"
 
 await step(async () => {
   const { applied } = await migrateDatabase(required("DATABASE_ADMIN_URL"), { onnotice: (notice) => console.error(`postgres ${notice.severity}: ${notice.message}`) })

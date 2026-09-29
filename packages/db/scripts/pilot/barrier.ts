@@ -24,7 +24,7 @@ import path from "node:path"
 import { createDb } from "../../src/client"
 import {
   BARRIER_OPERATIONS,
-  barrierOpen,
+  requireBarrierOpen,
   checkRecord,
   closeBarrier,
   loginRecord,
@@ -37,7 +37,7 @@ import {
 } from "../../src/pilot/barrier"
 import { databaseIdentity, expectPilot } from "../../src/pilot/identity"
 import { sha256 } from "../../src/sha256"
-import { output, required, step, summary } from "./step"
+import { output, required, step, summary } from "../step"
 
 await step(async () => {
   const [mode] = process.argv.slice(2)
@@ -50,7 +50,7 @@ await step(async () => {
       const operation = required("BARRIER_OPERATION")
       if (!BARRIER_OPERATIONS.includes(operation as BarrierOperation)) throw new Error(`${operation} is not an operation that closes the barrier`)
       const logins = await readLogins(sql)
-      barrierOpen(logins)
+      requireBarrierOpen(logins)
       const record = loginRecord({
         operation: operation as BarrierOperation,
         run: { id: required("GITHUB_RUN_ID"), attempt: required("GITHUB_RUN_ATTEMPT") },

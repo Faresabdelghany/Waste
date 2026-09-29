@@ -9,12 +9,12 @@
 // gives it one, and does not exist before migration 0011; wms_sync has none
 // until a PowerSync instance exists.
 import { createDb } from "../../src/client"
-import { readLoginsIfPresent, spellLogins } from "../../src/pilot/barrier"
+import { BARRIER_CLOSED, readLoginsIfPresent, spellLogins } from "../../src/pilot/barrier"
 import { databaseIdentity, expectPilot } from "../../src/pilot/identity"
 import { publicationProblems, readPublicationTables } from "../../src/pilot/publication"
 import { API_ROLE, SYNC_ROLE, WORKER_ROLE } from "../../src/roles"
 import { syncedTableNames } from "../../src/sql/publication"
-import { required, step, summary } from "./step"
+import { required, step, summary } from "../step"
 
 await step(async () => {
   const url = required("DATABASE_ADMIN_URL")
@@ -25,7 +25,7 @@ await step(async () => {
     summary(`${await databaseIdentity(sql, url)}: ${spellLogins(logins)}`)
     const problems = publicationProblems(await readPublicationTables(sql), syncedTableNames())
     if (problems.length === 0) summary(`The powersync publication holds exactly the ${syncedTableNames().length} synced tables`)
-    if (logins[API_ROLE] !== true) problems.unshift("wms_api cannot log in: a restore or a reset closed the write barrier and never opened it. Run recover-logins with that run's id (supabase/README.md).")
+    if (logins[API_ROLE] !== true) problems.unshift(BARRIER_CLOSED)
     if (problems.length > 0) throw new Error(problems.join("\n"))
   } finally {
     await close()

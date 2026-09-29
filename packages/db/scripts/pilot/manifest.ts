@@ -15,7 +15,7 @@
 import { createDb } from "../../src/client"
 import { checkRestoreTarget, verifyBackup, writeManifest } from "../../src/pilot/backup"
 import { databaseIdentity, expectPilot } from "../../src/pilot/identity"
-import { required, step, summary } from "./step"
+import { required, step, summary } from "../step"
 
 await step(async () => {
   const [mode] = process.argv.slice(2)

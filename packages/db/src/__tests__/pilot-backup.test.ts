@@ -8,7 +8,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { describe, test } from "node:test"
 
-import { checkRestoreTarget, majorOf, restorePlan, verifyBackup, writeManifest, type BackupManifest } from "../pilot/backup"
+import { checkRestoreTarget, dumpPlan, majorOf, restorePlan, verifyBackup, writeManifest, type BackupManifest } from "../pilot/backup"
 import { createDb } from "../client"
 import { migrateDatabase } from "../migrate"
 import { libpqEnvironment, shellExports } from "../pilot/pg-env"
@@ -52,6 +52,16 @@ describe("restorePlan", () => {
   test("leaves the publication alone where the backup names no table, and refuses a table name it would have to quote", () => {
     assert.ok(!restorePlan(manifest({ schemas: ["wms", "drizzle"], publication: null }), "/r").some((argument) => argument.startsWith("ALTER PUBLICATION")))
     assert.throws(() => restorePlan(manifest({ publication: { name: "powersync", tables: ['wms.company"; drop table wms.route; --'] } }), "/r"), /is not a table this workflow restores/)
+  })
+})
+
+describe("dumpPlan", () => {
+  test("names every owned schema in order with its two files, pg-boss's the one a backup may leave out", () => {
+    assert.deepEqual(dumpPlan(), [
+      { schema: "wms", required: true, schemaFile: "wms-schema.sql", dataFile: "wms-data.sql" },
+      { schema: "drizzle", required: true, schemaFile: "drizzle-schema.sql", dataFile: "drizzle-data.sql" },
+      { schema: "pgboss", required: false, schemaFile: "pgboss-schema.sql", dataFile: "pgboss-data.sql" },
+    ])
   })
 })
 

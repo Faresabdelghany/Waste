@@ -7,7 +7,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { Refused, refused, RefusedField } from "../commands/shared"
-import { CHECK_VIOLATION, checkConstraintOf, EXCLUSION_VIOLATION, exclusionConstraintOf, sqlstate, UNIQUE_VIOLATION, uniqueConstraintOf } from "../sqlstate"
+import { CHECK_VIOLATION, checkConstraintOf, DRIZZLE_QUERY, EXCLUSION_VIOLATION, exclusionConstraintOf, messageWithoutStatement, sqlstate, UNIQUE_VIOLATION, uniqueConstraintOf } from "../sqlstate"
 
 /** An error the way postgres.js raises one: the SQLSTATE as `code`, the constraint as `constraint_name`. */
 const postgresError = (code: string, constraint?: string) => Object.assign(new Error(`SQLSTATE ${code}`), { code, ...(constraint === undefined ? {} : { constraint_name: constraint }) })
@@ -52,5 +52,14 @@ describe("Refused", () => {
     const error = new RefusedField("alertId", "Not an alert of this project")
     assert.ok(error instanceof Refused)
     assert.deepEqual([error.name, error.status, error.message, error.path], ["RefusedField", 400, "Not an alert of this project", "alertId"])
+  })
+})
+
+describe("messageWithoutStatement", () => {
+  test("cuts Drizzle's message at the statement, so neither the SQL nor what was bound to it survives, and leaves any other message whole", () => {
+    const drizzle = `${DRIZZLE_QUERY}insert into "wms"."user_account" ("email") values ($1)\nparams: lars.mikkelsen@nordren.example`
+    assert.equal(messageWithoutStatement(drizzle), "Failed query")
+    assert.equal(messageWithoutStatement('duplicate key value violates unique constraint "ticket_source_event_id_idx"'), 'duplicate key value violates unique constraint "ticket_source_event_id_idx"')
+    assert.equal(messageWithoutStatement(""), "")
   })
 })

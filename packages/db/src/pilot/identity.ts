@@ -14,10 +14,11 @@ import type { Sql } from "postgres"
 
 import { isLocalHost } from "../local-host"
 
-/** A Supabase project ref: twenty lowercase letters and digits. */
-const REF = /^[a-z0-9]{20}$/
+/** A Supabase project ref: twenty lowercase letters and digits, spelled once for the ref alone and for the direct host that carries one. */
+const REF_SHAPE = "[a-z0-9]{20}"
+const REF = new RegExp(`^${REF_SHAPE}$`)
 const POOLER_HOST = /^aws-\d+-[a-z0-9-]+\.pooler\.supabase\.com$/
-const DIRECT_HOST = /^db\.([a-z0-9]{20})\.supabase\.co$/
+const DIRECT_HOST = new RegExp(`^db\\.(${REF_SHAPE})\\.supabase\\.co$`)
 
 export type Target = { kind: "supabase"; ref: string } | { kind: "local" }
 

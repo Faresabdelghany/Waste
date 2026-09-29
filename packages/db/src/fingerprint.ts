@@ -50,6 +50,7 @@ import { createDb } from "./client"
 import { MIGRATIONS_FOLDER, MIGRATIONS_SCHEMA, MIGRATIONS_TABLE, OWNED_SCHEMAS } from "./migrate"
 import { textList } from "./query/text-list"
 import { API_ROLE, SYNC_ROLE, WORKER_ROLE } from "./roles"
+import { wms } from "./schema/wms"
 import { sha256 } from "./sha256"
 import { PGBOSS_SCHEMA } from "./sql/pgboss"
 import { PUBLICATION } from "./sql/publication"
@@ -166,7 +167,7 @@ async function readFingerprint(sql: Sql): Promise<string[]> {
       and not (c.relispartition and exists (select from pg_inherits i where i.inhrelid = c.oid and i.inhparent = to_regclass(${DATED_PARTITIONS_OF})))`
 
   const [{ owner, database }] = await sql<{ owner: string; database: string }[]>`
-    select coalesce((select pg_get_userbyid(nspowner) from pg_namespace where nspname = 'wms'), current_user::text) as owner,
+    select coalesce((select pg_get_userbyid(nspowner) from pg_namespace where nspname = ${wms.schemaName}), current_user::text) as owner,
            current_database()::text as database`
   const role = (name: string) => (name === owner ? "<owner>" : name)
   const acl = (text: string, options?: { grantor?: boolean }) => spellAcl(parse<AclItem[]>(text) ?? [], role, options)

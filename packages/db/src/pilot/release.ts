@@ -17,7 +17,7 @@
 // stale or unmoved clock, a cached or non-ready answer — resets the count, so
 // a release is proven by the new process answering steadily and not by one
 // lucky answer from an old one or a cache.
-import type { HealthResponse } from "@waste/contracts/health"
+import { HealthResponse, PROBE_CACHE_CONTROL } from "@waste/contracts/health"
 
 export const OBSERVATIONS_NEEDED = 3
 export const OBSERVE_INTERVAL_MS = 10_000
@@ -29,16 +29,16 @@ export type ProbeAnswer = { status: number; cacheControl: string | null; body: u
 export type Observation = { at: string; healthz: ProbeAnswer; readyz: ProbeAnswer }
 export type Verdict = { ok: true; time: string } | { ok: false; reason: string }
 
-/** The contracts' body, read structurally: this package runs no zod (schema/geometry.ts says why), so the shape is checked here. */
-const isHealth = (body: unknown): body is HealthResponse => {
-  const value = body as Partial<HealthResponse> | null
-  return value !== null && typeof value === "object" && value.status === "ok" && typeof value.time === "string" && "build" in value
+/** The contracts' body, parsed with the contracts' own schema, so what a release accepts is exactly what the API promises. */
+const parseHealth = (body: unknown): HealthResponse | undefined => {
+  const parsed = HealthResponse.safeParse(body)
+  return parsed.success ? parsed.data : undefined
 }
 
 function probeProblem(path: string, answer: ProbeAnswer): string | undefined {
   if ("error" in answer) return `GET ${path} failed: ${answer.error}`
   if (answer.status !== 200) return `GET ${path} answered ${answer.status}`
-  if (answer.cacheControl !== "no-store") return `GET ${path} answered Cache-Control: ${answer.cacheControl ?? "none"}, not no-store`
+  if (answer.cacheControl !== PROBE_CACHE_CONTROL) return `GET ${path} answered Cache-Control: ${answer.cacheControl ?? "none"}, not ${PROBE_CACHE_CONTROL}`
   return undefined
 }
 
@@ -46,8 +46,8 @@ function probeProblem(path: string, answer: ProbeAnswer): string | undefined {
 export function judgeObservation(observation: Observation, { commit, previousTime }: { commit: string; previousTime: string | null }): Verdict {
   const healthProblem = probeProblem("/healthz", observation.healthz)
   if (healthProblem !== undefined) return { ok: false, reason: healthProblem }
-  const { body } = observation.healthz as { body: unknown }
-  if (!isHealth(body)) return { ok: false, reason: "GET /healthz answered a body that is not a health response" }
+  const body = parseHealth((observation.healthz as { body: unknown }).body)
+  if (body === undefined) return { ok: false, reason: "GET /healthz answered a body that is not a health response" }
   if (body.build === null) return { ok: false, reason: "GET /healthz names no build" }
   if (body.build.commit !== commit) return { ok: false, reason: `GET /healthz is build ${body.build.commit}, not the released ${commit}` }
   const skew = Math.abs(Date.parse(body.time) - Date.parse(observation.at))

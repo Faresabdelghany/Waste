@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto"
 import { describe, test } from "node:test"
 
 import { createDb } from "../client"
-import { BARRIER_ROLES, barrierOpen, checkRecord, closeBarrier, loginRecord, openLogins, parseLoginRecord, planRecovery, readLogins, readLoginsIfPresent, spellLogins } from "../pilot/barrier"
+import { BARRIER_ROLES, requireBarrierOpen, checkRecord, closeBarrier, loginRecord, openLogins, parseLoginRecord, planRecovery, readLogins, readLoginsIfPresent, spellLogins } from "../pilot/barrier"
 import { databaseUnderTest, withUser } from "./database"
 
 const COMMIT = "5f1501d6a2b3c4d5e6f708192a3b4c5d6e7f8091"
@@ -18,7 +18,7 @@ const record = loginRecord({
   run: { id: "18000000001", attempt: "1" },
   commit: COMMIT,
   recordedAt: "2026-09-29T08:00:00.000Z",
-  identity: "supabase:ztmisreemxepvjxelbql/postgres",
+  identity: "supabase:abcdefghijklmnopqrst/postgres",
   logins: { wms_api: true, wms_worker: false },
 })
 
@@ -49,10 +49,10 @@ describe("a login-state record", () => {
   })
 })
 
-describe("barrierOpen and checkRecord", () => {
+describe("requireBarrierOpen and checkRecord", () => {
   test("refuse to close a barrier over one already closed, since the record would restore nothing", () => {
-    assert.doesNotThrow(() => barrierOpen({ wms_api: true, wms_worker: false }))
-    assert.throws(() => barrierOpen({ wms_api: false, wms_worker: false }), /wms_api cannot log in: an earlier restore or reset closed the write barrier and never opened it\. Run recover-logins/)
+    assert.doesNotThrow(() => requireBarrierOpen({ wms_api: true, wms_worker: false }))
+    assert.throws(() => requireBarrierOpen({ wms_api: false, wms_worker: false }), /wms_api cannot log in: an earlier restore or reset closed the write barrier and never opened it\. Run recover-logins/)
   })
 
   test("hold a record to its run, its commit and its database", () => {
@@ -61,7 +61,7 @@ describe("barrierOpen and checkRecord", () => {
     assert.doesNotThrow(() => checkRecord(record, { identity: record.identity, run: record.run }), "a close checks the run and the database, not a commit")
     assert.throws(() => checkRecord(record, { ...expected, run: { id: record.run.id, attempt: "2" } }), /is of run 18000000001 attempt 1, not run 18000000001 attempt 2/)
     assert.throws(() => checkRecord(record, { ...expected, commit: "0".repeat(40) }), /names commit 5f1501d6a2b3c4d5e6f708192a3b4c5d6e7f8091, not its run's 0{40}/)
-    assert.throws(() => checkRecord(record, { ...expected, identity: "local/postgres" }), /is of supabase:ztmisreemxepvjxelbql\/postgres, not local\/postgres/)
+    assert.throws(() => checkRecord(record, { ...expected, identity: "local/postgres" }), /is of supabase:abcdefghijklmnopqrst\/postgres, not local\/postgres/)
   })
 })
 

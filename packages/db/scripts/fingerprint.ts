@@ -16,7 +16,7 @@
 import { readFileSync, writeFileSync } from "node:fs"
 
 import { compareFingerprints, committedFingerprint, FINGERPRINT_FILE, fingerprintDatabase, fingerprintDigest } from "../src/fingerprint"
-import { required, step } from "./pilot/step"
+import { required, step } from "./step"
 
 await step(async () => {
   const url = required("DATABASE_ADMIN_URL")
