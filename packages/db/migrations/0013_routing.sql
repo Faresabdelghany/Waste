@@ -70,6 +70,8 @@ ALTER TABLE "wms"."plan_stop" ADD CONSTRAINT "plan_stop_route_id_fk" FOREIGN KEY
 ALTER TABLE "wms"."plan_stop" ADD CONSTRAINT "plan_stop_route_id_plan_id_fk" FOREIGN KEY ("company_id","project_id","route_id","plan_id") REFERENCES "wms"."plan"("company_id","project_id","route_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "wms"."plan_stop" ADD CONSTRAINT "plan_stop_route_id_pickup_id_fk" FOREIGN KEY ("company_id","project_id","route_id","pickup_id") REFERENCES "wms"."pickup"("company_id","project_id","route_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "plan_fingerprint_idx" ON "wms"."plan" USING btree ("company_id","fingerprint");--> statement-breakpoint
+CREATE INDEX "plan_leg_project_id_idx" ON "wms"."plan_leg" USING btree ("company_id","project_id");--> statement-breakpoint
+CREATE INDEX "plan_stop_project_id_idx" ON "wms"."plan_stop" USING btree ("company_id","project_id");--> statement-breakpoint
 CREATE INDEX "plan_stop_pickup_id_idx" ON "wms"."plan_stop" USING btree ("company_id","pickup_id");--> statement-breakpoint
 CREATE INDEX "route_active_plan_id_idx" ON "wms"."route" USING btree ("company_id","active_plan_id");--> statement-breakpoint
 ALTER TABLE "wms"."plan" ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;

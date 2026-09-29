@@ -95,7 +95,9 @@ const expected = [
   projectFkTo("plan_leg", "route_id", "route"),
   planFk("plan_leg"),
   index("plan", "plan_fingerprint_idx", "company_id", "fingerprint"),
+  index("plan_stop", "plan_stop_project_id_idx", "company_id", "project_id"),
   index("plan_stop", "plan_stop_pickup_id_idx", "company_id", "pickup_id"),
+  index("plan_leg", "plan_leg_project_id_idx", "company_id", "project_id"),
 ]
 
 /** What 0013 does to `route`: the active Plan as a column and its index — the key is hand-written, so drizzle-kit never sees it. */
@@ -121,11 +123,11 @@ describe("the Routing tables as drizzle-kit writes them", () => {
     assert.deepEqual(await generatedAlterations(), altered)
   })
 
-  test("migration 0013 begins with exactly what drizzle-kit generates for the schema: 19 statements", async () => {
+  test("migration 0013 begins with exactly what drizzle-kit generates for the schema: 21 statements", async () => {
     const statements = await fileStatements()
     // The same statements, whatever order drizzle-kit's loader gave the tables (it sorts a module's exports).
     const generated = (await generatedHead()).map(normalised).sort()
-    assert.equal(generated.length, 19, "three CREATE TABLE, one ADD COLUMN, twelve foreign keys, three indexes")
+    assert.equal(generated.length, 21, "three CREATE TABLE, one ADD COLUMN, twelve foreign keys, five indexes")
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
   })
 

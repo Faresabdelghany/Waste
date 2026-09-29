@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "The routing-provider adapter (#39, decided on #124/#132; ADR-0006's optimiser package): the provider interface every routing call goes through — measure a point sequence into legs of LineString, metres and seconds, optimise a stop set from a depot — and the deterministic fake provider CI and the tests run against (#131: no OpenRouteService credential exists on the public repository), selected by ROUTING_PROVIDER. The fake draws straight legs, measures them by haversine at a fixed speed, optimises by nearest-neighbour from the depot (visibly different from input order) and takes a scripted quota state for the quota engine's tests (S3, #171). Server-only: the API and the worker call it; apps/web is fenced out in eslint.config.mjs the way @waste/db is. Depends on @waste/contracts (the geometry it returns) and @waste/domain (the fingerprint's rules). Ships TypeScript source for tsx consumers.",
+  "description": "The routing-provider adapter (#39, decided on #124/#132; ADR-0006's optimiser package): the provider interface every routing call goes through — measure a point sequence into legs of LineString, metres and seconds, optimise a stop set from a depot — and the deterministic fake provider CI and the tests run against (#131: no OpenRouteService credential exists on the public repository), selected by ROUTING_PROVIDER. The fake draws straight legs, measures them by haversine at a fixed speed, optimises by nearest-neighbour from the depot (visibly different from input order) and takes a scripted quota state for the quota engine's tests (S3, #171). Server-only: the API and the worker call it; apps/web is fenced out in eslint.config.mjs the way @waste/db is. Depends on @waste/contracts (the geometry it returns) alone; @waste/domain joins when the quota engine needs the fingerprint here (#171). Ships TypeScript source for tsx consumers.",
   "exports": {
     "./package.json": "./package.json",
     "./__tests__/*": null,
@@ -15,8 +15,7 @@
     "test": "node --import tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
-    "@waste/contracts": "workspace:*",
-    "@waste/domain": "workspace:*"
+    "@waste/contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22",

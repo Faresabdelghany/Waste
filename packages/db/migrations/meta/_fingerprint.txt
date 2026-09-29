@@ -1105,6 +1105,7 @@ constraint wms.plan_leg plan_leg_route_id_fk FOREIGN KEY (company_id, project_id
 constraint wms.plan_leg plan_leg_route_id_plan_id_fk FOREIGN KEY (company_id, project_id, route_id, plan_id) REFERENCES wms.plan(company_id, project_id, route_id, id)
 index wms.plan_leg plan_leg_pkey CREATE UNIQUE INDEX plan_leg_pkey ON wms.plan_leg USING btree (id)
 index wms.plan_leg plan_leg_plan_id_position_key CREATE UNIQUE INDEX plan_leg_plan_id_position_key ON wms.plan_leg USING btree (company_id, plan_id, "position")
+index wms.plan_leg plan_leg_project_id_idx CREATE INDEX plan_leg_project_id_idx ON wms.plan_leg USING btree (company_id, project_id)
 policy wms.plan_leg plan_leg_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.plan_stop kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
 column wms.plan_stop 1 id uuid not-null default=wms.uuidv7()
@@ -1128,6 +1129,7 @@ index wms.plan_stop plan_stop_pickup_id_idx CREATE INDEX plan_stop_pickup_id_idx
 index wms.plan_stop plan_stop_pkey CREATE UNIQUE INDEX plan_stop_pkey ON wms.plan_stop USING btree (id)
 index wms.plan_stop plan_stop_plan_id_pickup_id_key CREATE UNIQUE INDEX plan_stop_plan_id_pickup_id_key ON wms.plan_stop USING btree (company_id, plan_id, pickup_id)
 index wms.plan_stop plan_stop_plan_id_position_key CREATE UNIQUE INDEX plan_stop_plan_id_position_key ON wms.plan_stop USING btree (company_id, plan_id, "position")
+index wms.plan_stop plan_stop_project_id_idx CREATE INDEX plan_stop_project_id_idx ON wms.plan_stop USING btree (company_id, project_id)
 policy wms.plan_stop plan_stop_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.planning_area kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.planning_area 1 id uuid not-null default=wms.uuidv7()
@@ -2652,5 +2654,5 @@ journal 1790339832474 588e649ff4b232b168e5ad760ecd65b588f4bd4be5be5be4bd049dbd96
 journal 1790353500322 07ea348aca846931ca830eebf25c9e0d8f9acd5d9a6294d58d5447c6e7586255
 journal 1790370729141 17fe7f428e6ec8d22c32e9385147ce5b532614e30f8d0a16654ec5649583c4a3
 journal 1790383636636 c40e0a4b47bf76a6cb1e76f9e7750ecc36ffef0e5c4bbc19ceb469061f73f03e
-journal 1790708975444 dd415dd15b69d43a058b433078c52195d17366dfa308354cd6d669b5e96a5203
+journal 1790711684369 f812e571a1ed7f0eb48027fee7d2c718fb759ac55cd11d3c4e68a6fa6a281f51
 pgboss-version 42

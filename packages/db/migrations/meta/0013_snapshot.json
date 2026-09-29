@@ -1,5 +1,5 @@
 {
-  "id": "d41b2626-cd54-40f9-9225-a7e683cb56ac",
+  "id": "bc77f415-f35e-4239-9179-a2671ea840fc",
   "prevId": "06b84b4e-5e4a-4f16-b569-26a19a345ca5",
   "version": "7",
   "dialect": "postgresql",
@@ -18696,7 +18696,29 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "plan_leg_project_id_idx": {
+          "name": "plan_leg_project_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "plan_leg_company_id_fk": {
           "name": "plan_leg_company_id_fk",
@@ -18852,6 +18874,27 @@
         }
       },
       "indexes": {
+        "plan_stop_project_id_idx": {
+          "name": "plan_stop_project_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "plan_stop_pickup_id_idx": {
           "name": "plan_stop_pickup_id_idx",
           "columns": [

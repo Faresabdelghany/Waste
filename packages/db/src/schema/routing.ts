@@ -99,6 +99,8 @@ export const planStop = wms.table(
     tenantUnique(t, t.planId, t.position),
     tenantUnique(t, t.planId, t.pickupId),
     positive(t.position),
+    // Nothing references the ledgers, so no key leads with the project; the sweep and any project read take this index, Execution's own practice.
+    tenantIndex(t, t.projectId),
     tenantIndex(t, t.pickupId),
   ],
 )
@@ -128,5 +130,6 @@ export const planLeg = wms.table(
     validGeometry(t.path),
     // A leg of nothing is a leg of zero metres, never a negative one; the totals' shape holds the same on the plan.
     check(tableObjectName(t.id.table, "measure_shape", "planLeg"), sql`${t.metres} >= 0 and ${t.seconds} >= 0`),
+    tenantIndex(t, t.projectId),
   ],
 )

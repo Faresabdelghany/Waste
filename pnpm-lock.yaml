@@ -594,9 +594,6 @@ importers:
       '@waste/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@waste/domain':
-        specifier: workspace:*
-        version: link:../domain
     devDependencies:
       '@types/node':
         specifier: ^22
