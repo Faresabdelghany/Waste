@@ -5,7 +5,7 @@
 // read "Not optimised" (#124 §4), both through `ensurePlan`
 // (routes/plan-shapes.ts): the fingerprint's cache first, a `ready` match
 // re-activated without a call, then the Plan written `calculating` and its
-// job sent in the request's transaction under the fingerprint singleton. The
+// job sent in the request's transaction under the Plan-id singleton. The
 // request is accepted while the quota is exhausted — the answer is the
 // `calculating` Plan, `deferredUntil` beside it once #171's engine defers —
 // and a Route without a Plan stays complete: nothing routing gates dispatch

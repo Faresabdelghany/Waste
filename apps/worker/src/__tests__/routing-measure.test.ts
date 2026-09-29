@@ -193,7 +193,7 @@ describe("routing.measure through the fake provider", { skip: database.skip || o
     assert.ok(lines.some((line) => /is not there|writes nothing|no such plan/i.test(line)))
   })
 
-  test("the queue is #132's: exclusive under the fingerprint singleton, ten minutes to run, done jobs kept a week", () => {
+  test("the queue is #132's: exclusive under the Plan-id singleton, ten minutes to run, done jobs kept a week", () => {
     assert.equal(routingMeasure.queue, "routing.measure")
     assert.deepEqual(routingMeasure.queueOptions, {
       policy: "exclusive",

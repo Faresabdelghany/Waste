@@ -135,7 +135,7 @@ describe("the Plan endpoints and the manual reorder", { skip: database.skip || o
     const jobs = await jobsFor(ROUTING_MEASURE_QUEUE, plans.items[0].id)
     assert.equal(jobs.length, 1, "one measurement waits on the queue")
     assert.equal(jobs[0].data.companyId, a.companyId)
-    assert.ok(jobs[0].singleton_key, "keyed by the fingerprint")
+    assert.ok(jobs[0].singleton_key, "keyed by the Plan's id")
   })
 
   test("the same order twice is one Plan and one job; a second, different order is a second Plan, and the first stays as history", async () => {

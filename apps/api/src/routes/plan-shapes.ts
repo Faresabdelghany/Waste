@@ -7,7 +7,7 @@
 // `ready` match instead of asking the provider again (#124 §4), the Plan
 // written `calculating` with a known sequence's stops, activation on creation
 // for `manual` and `baseline` (#124 §2), and the job sent in the request's
-// transaction under the fingerprint singleton (#132 §3).
+// transaction under the Plan-id singleton (#132 §3).
 import type { Point } from "@waste/contracts/geojson"
 import type { ActivePlan, Plan, PlanLeg } from "@waste/contracts/plans"
 import type { Tx } from "@waste/db/client"
@@ -233,7 +233,7 @@ export type EnsuredPlan = { planId: string; created: boolean }
  * activate, enqueue — all in the request's transaction, the provider never
  * called (#124 §4: the call is the job's, outside any transaction). A `ready`
  * match is re-activated and consumes no call; a `calculating` one is answered
- * as it stands (the fingerprint singleton holds its job); a `failed` one is
+ * as it stands (its job held, or re-sent, under the Plan-id singleton); a `failed` one is
  * retried with a new Plan.
  */
 export async function ensurePlan(

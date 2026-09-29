@@ -568,7 +568,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
           .where(and(routeScope(principal), eq(route.id, id)))
           .returning(routeColumns)
         if (row === undefined) throw noSuchRoute(id)
-        // The order becomes a manual Plan, active from creation, its measurement enqueued under the fingerprint
+        // The order becomes a manual Plan, active from creation, its measurement enqueued under the Plan-id
         // singleton (routes/plan-shapes.ts) — the in-place rewrite of pickup.position is retired (#124's clobber).
         await ensurePlan(tx, principal, row, { solver: "manual", orderedPickupIds: pickupIds }, { routing, jobs })
         const [activated] = await tx
