@@ -50,7 +50,7 @@ const api = createDb(env.DATABASE_URL, apiPoolMax === undefined ? {} : { max: ap
 const worker = createDb(env.WORKER_DATABASE_URL, workerPoolMax === undefined ? {} : { max: workerPoolMax })
 const probe = createDb(env.DATABASE_URL, probePoolOptions(CHECK_TIMEOUT_MS))
 const boss = createBoss({ url: env.WORKER_DATABASE_URL, pollingIntervalSeconds })
-console.log(`@waste/worker knobs: api-role pool max ${apiPoolMax ?? 10}, worker-role pool max ${workerPoolMax ?? 10}, pg-boss pool 3, polling ${pollingIntervalSeconds ?? "pg-boss's defaults"}${pollingIntervalSeconds === undefined ? "" : " s"}, supervise ${knob("WORKER_SUPERVISE_INTERVAL_SECONDS") ?? 60} s, queue cache ${knob("WORKER_QUEUE_CACHE_INTERVAL_SECONDS") ?? 60} s, keep-alive ${process.env.KEEP_ALIVE_URL ? `${process.env.KEEP_ALIVE_URL}/readyz each beat` : "off"}`)
+console.log(`@waste/worker knobs: api-role pool max ${apiPoolMax ?? 10}, worker-role pool max ${workerPoolMax ?? 10}, pg-boss pool 3, polling ${pollingIntervalSeconds ?? "pg-boss's defaults"}${pollingIntervalSeconds === undefined ? "" : " s"}, supervise ${knob("WORKER_SUPERVISE_INTERVAL_SECONDS") ?? 60} s, queue cache ${knob("WORKER_QUEUE_CACHE_INTERVAL_SECONDS") ?? 60} s, pg-boss idle timeout ${knob("WORKER_BOSS_IDLE_TIMEOUT_SECONDS") ?? 10} s, keep-alive ${process.env.KEEP_ALIVE_URL ? `${process.env.KEEP_ALIVE_URL}/readyz each beat` : "off"}`)
 let started = false
 
 /** What the boot has made so far: pg-boss running with its queues once `startBoss` answered, the listener once it bound. A shutdown closes what is there. */
