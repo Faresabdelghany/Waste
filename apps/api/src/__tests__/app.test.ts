@@ -183,6 +183,7 @@ describe("GET /openapi.json", () => {
       "/driver/routes/{id}",
       "/drivers",
       "/drivers/{id}",
+      "/generation-runs/{id}",
       "/healthz",
       "/invoices",
       "/invoices/{id}",
@@ -221,6 +222,8 @@ describe("GET /openapi.json", () => {
       "/route-schemes",
       "/route-schemes/{id}",
       "/route-schemes/{id}/collection-groups",
+      "/route-schemes/{id}/generate",
+      "/route-schemes/{id}/generation-runs",
       "/route-schemes/{id}/occurrences",
       "/routes",
       "/routes/live",
@@ -357,8 +360,8 @@ describe("GET /openapi.json", () => {
     }
     assert.equal(
       secured,
-      230,
-      "/me, the ten organisation routes, the twelve access routes, the fifty-one registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each, agreements with their subscriptions and containers with their placements — the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six — and the eighteen resources routes of slice 3: vehicle types with their container types, five, warehouses and depots, four each, and unloading stations with their fractions, five — and the seven of the container ledger (Issue #101, slice 5): the five commands receive, return, transfer, decommission and adjust, one container's movements, and the ledger across containers — and Resources' seven vehicle allocation routes (#101, slice 6): the list, the allocate command, the read, the three commands change, confirm and release, and the history — and the nine fleet routes of Resources' slice 4: vehicles with the compartments set, five, and drivers, four — and the eighteen office routes of Execution's slice 3 (Issue #104): routes, eight (the list, the read, assign, dispatch, reschedule, cancel, the pickup order and the command log), pickups, four (the list, the read, remove and correct-outcome), live, three (the live read, the sessions list and one session), and weights, three (the unloads list, one unload and the office's capture on a route) — and the five of the driver door (Issue #104, slice 4): the driver's start screen, their routes, one route, the command batch and the receipts — and Resolution's nineteen (Issue #109): the thirteen ticket routes, the list and the create, the read and the patch, the seven commands assign, start, wait, hold, complete, reject and reopen, the history and the comment, and the six alert routes, the list, the raise, the read, and the three commands acknowledge, resolve and link-ticket — and Finance's forty-eight (Issue #112): price lists, nine (the list, the create, the read and the patch, a list's rows and the row added under it, one row and its patch, and the resolve read), service areas, eleven (the list, the create, the read and the patch, the two set replacements, an area's assignments and the assignment added under it, the assignments across the caller's reach, one assignment and its patch), and service provider prices, five (the list, the create, the read, the patch and the index command, which writes the next row of the chain), billable events, five (the list, the manual create, the read, and the two commands reprice and cancel), billing runs, four (the list, the run, the preview and the read), and invoices, three (the list, the read and the credit note), settlements, seven (the list, the create, the read, the three commands calculate, close and reopen, and the history), and weight control's four (the three decisions approve, reject and correct on an unload, and its reviews)",
+      233,
+      "/me, the ten organisation routes, the twelve access routes, the fifty-one registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, eight each, agreements with their subscriptions and containers with their placements — the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six — and the three of part B, the generate command and the two run reads — and the eighteen resources routes of slice 3: vehicle types with their container types, five, warehouses and depots, four each, and unloading stations with their fractions, five — and the seven of the container ledger (Issue #101, slice 5): the five commands receive, return, transfer, decommission and adjust, one container's movements, and the ledger across containers — and Resources' seven vehicle allocation routes (#101, slice 6): the list, the allocate command, the read, the three commands change, confirm and release, and the history — and the nine fleet routes of Resources' slice 4: vehicles with the compartments set, five, and drivers, four — and the eighteen office routes of Execution's slice 3 (Issue #104): routes, eight (the list, the read, assign, dispatch, reschedule, cancel, the pickup order and the command log), pickups, four (the list, the read, remove and correct-outcome), live, three (the live read, the sessions list and one session), and weights, three (the unloads list, one unload and the office's capture on a route) — and the five of the driver door (Issue #104, slice 4): the driver's start screen, their routes, one route, the command batch and the receipts — and Resolution's nineteen (Issue #109): the thirteen ticket routes, the list and the create, the read and the patch, the seven commands assign, start, wait, hold, complete, reject and reopen, the history and the comment, and the six alert routes, the list, the raise, the read, and the three commands acknowledge, resolve and link-ticket — and Finance's forty-eight (Issue #112): price lists, nine (the list, the create, the read and the patch, a list's rows and the row added under it, one row and its patch, and the resolve read), service areas, eleven (the list, the create, the read and the patch, the two set replacements, an area's assignments and the assignment added under it, the assignments across the caller's reach, one assignment and its patch), and service provider prices, five (the list, the create, the read, the patch and the index command, which writes the next row of the chain), billable events, five (the list, the manual create, the read, and the two commands reprice and cancel), billing runs, four (the list, the run, the preview and the read), and invoices, three (the list, the read and the credit note), settlements, seven (the list, the create, the read, the three commands calculate, close and reopen, and the history), and weight control's four (the three decisions approve, reject and correct on an unload, and its reviews)",
     )
   })
 
@@ -1146,6 +1149,37 @@ describe("GET /openapi.json", () => {
     }
     // The occurrence read answers rows and no cursor: a computation over a bounded window, not a table.
     assert.equal(document.paths["/route-schemes/{id}/occurrences"].get.responses["200"].content["application/json"].schema.type, "array")
+  })
+
+  test("documents the generation door of part B: the command that answers at once and the two run reads (#97, #128)", async () => {
+    const document = await spec()
+    const operations = (path: string) =>
+      Object.fromEntries(Object.entries(document.paths[path]).map(([method, operation]) => [method, operation.operationId]))
+    assert.deepEqual(operations("/route-schemes/{id}/generate"), { post: "generateRouteScheme" })
+    assert.deepEqual(operations("/route-schemes/{id}/generation-runs"), { get: "listRouteSchemeGenerationRuns" })
+    assert.deepEqual(operations("/generation-runs/{id}"), { get: "getGenerationRun" })
+
+    // 202 for the run it started, 200 for the one already in flight, 409 for a draft; no 201, since a run is not created by the caller's hand.
+    const generate = document.paths["/route-schemes/{id}/generate"].post
+    assert.deepEqual(Object.keys(generate.responses), ["200", "202", "400", "401", "403", "404", "409"])
+    assert.deepEqual(generate.requestBody?.content["application/json"].schema.required, ["from", "to"])
+    assert.equal(generate.responses["202"].headers, undefined, "a run is read at /generation-runs/{id}, and the body carries its id")
+    assert.deepEqual(Object.keys(document.paths["/route-schemes/{id}/generation-runs"].get.responses), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(Object.keys(document.paths["/generation-runs/{id}"].get.responses), ["200", "400", "401", "403", "404"])
+
+    const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
+    assert.deepEqual(byName(document.paths["/route-schemes/{id}/generation-runs"].get).sort(), ["path:id", "query:cursor", "query:limit", "query:status"])
+    const page = document.paths["/route-schemes/{id}/generation-runs"].get.responses["200"].content["application/json"].schema
+    assert.deepEqual(page.required, ["items", "nextCursor"])
+
+    // The rules a client must know are in the prose: it never waits, one run at a time, a draft generates nothing.
+    assert.match(generate.description ?? "", /answers at once, before generation has begun/)
+    assert.match(generate.description ?? "", /Generation happens on the worker, never on the request/)
+    assert.match(generate.description ?? "", /two clicks are one run/)
+    assert.match(generate.description ?? "", /A draft scheme generates nothing \(409\)/)
+    assert.match(generate.description ?? "", /at most 366 days/)
+    assert.match(document.paths["/route-schemes/{id}/generation-runs"].get.description ?? "", /newest first/)
+    assert.match(document.paths["/generation-runs/{id}"].get.description ?? "", /what the office polls/)
   })
 
   test("documents each resources route of slice 3 with its verbs, its problems and the rules a client must know", async () => {

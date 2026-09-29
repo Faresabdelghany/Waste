@@ -1,9 +1,10 @@
 // Planning's closed lists at the API boundary (Issue #97): each of
 // @waste/domain/planning/vocabulary's tuples turned into the `z.enum` the
 // routes validate against, so an unknown token never reaches a `CHECK` that
-// would refuse it as a 500 naming nothing. Shared here because three modules
+// would refuse it as a 500 naming nothing. Shared here because four modules
 // read them — `organisation.ts` for a project's weekend, `route-schemes.ts` for
-// nearly everything, `planning-areas.ts` for a purpose — and a list spelled in
+// nearly everything, `planning-areas.ts` for a purpose, `generation.ts` for a
+// run's trigger and status (part B) — and a list spelled in
 // one place is a list that cannot drift between them. The vehicle a rule asks
 // for is not an enum since Resources (Issue #101): a vehicle type is a row of
 // the company's (`vehicle-types.ts`), and a Stop Matching Rule names it by id.
@@ -17,6 +18,8 @@
 // the same tuple (`subsetOf` in packages/db), and an array with a day twice
 // would store a day twice.
 import {
+  GENERATION_RUN_STATUSES,
+  GENERATION_TRIGGERS,
   HOLIDAY_POLICIES,
   PLANNING_AREA_PURPOSES,
   RECURRENCE_FREQUENCIES,
@@ -69,6 +72,14 @@ export type RouteSchemeStatus = z.infer<typeof RouteSchemeStatus>
 /** Why a Planning Area exists. */
 export const PlanningAreaPurpose = z.enum(PLANNING_AREA_PURPOSES)
 export type PlanningAreaPurpose = z.infer<typeof PlanningAreaPurpose>
+
+/** What started a generation run: the office's button, or the nightly cron (part B). */
+export const GenerationTrigger = z.enum(GENERATION_TRIGGERS)
+export type GenerationTrigger = z.infer<typeof GenerationTrigger>
+
+/** Where a generation run stands (part B): queued until the worker takes it, running, then succeeded or failed. */
+export const GenerationRunStatus = z.enum(GENERATION_RUN_STATUSES)
+export type GenerationRunStatus = z.infer<typeof GenerationRunStatus>
 
 /** What a set of days with a day in it twice is told. */
 export const EACH_DAY_ONCE = eachOnceSentence("day", "a set of days holds each day at most once")

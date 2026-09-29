@@ -27,6 +27,7 @@ The Hono API (ADR-0001), run from TypeScript source through tsx. `src/app.ts` bu
 - Routes take the app's injected `now`. An instant becomes a day in the project's timezone through `src/routes/days.ts`, and a body's instant may run ahead of the clock by `OCCURRED_AT_SKEW_MS` at most.
 - News for another context goes into the outbox through `emit()` (`src/outbox.ts`), in the request's transaction, after the rows it describes, with the wire resource as the route answers it for its payload.
 - A statement the worker runs too lives in `@waste/db/commands` and throws `Refused`, which the error handler answers as the 409 or 400 it names.
+- Work for the worker is a pg-boss job sent in the request's transaction through `sendInTransaction` (`src/queue.ts`), so it commits with the rows that asked for it. The worker creates every queue when it starts; the API creates none.
 - A new environment variable goes into `src/env.ts` and onto the API's tasks in `turbo.json`.
 
 ## Tests
