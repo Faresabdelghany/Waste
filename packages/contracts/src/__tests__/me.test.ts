@@ -33,7 +33,7 @@ const olivia = {
 const lars = {
   user: {
     id: "01a0d2a4-a280-7005-8000-000000000002",
-    email: "lars.mikkelsen@nordren.dk",
+    email: "lars.mikkelsen@nordren.example",
     fullName: "Lars Mikkelsen",
     status: "active",
     allProjects: false,

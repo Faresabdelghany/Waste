@@ -61,7 +61,7 @@ const copenhagen: Project = {
 }
 const harbor: Project = { ...copenhagen, id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial", kind: "Business unit", status: "onboarding", holidayList: null }
 const aarhus: Project = { ...copenhagen, id: "019995e0-0000-7000-8000-00000000abcd", name: "Aarhus North", kind: "Contract", weekend: ["friday", "saturday"], holidayList: null }
-const nordren: ServiceProvider = { id: "01a0d2a4-a280-7003-8000-000000000001", ...STAMPS, legalName: "NordRen ApS", registrationNumber: "40291188", country: "DK", contactName: "Lars Mikkelsen", contactEmail: "lars.mikkelsen@nordren.dk" }
+const nordren: ServiceProvider = { id: "01a0d2a4-a280-7003-8000-000000000001", ...STAMPS, legalName: "NordRen ApS", registrationNumber: "40291188", country: "DK", contactName: "Lars Mikkelsen", contactEmail: "lars.mikkelsen@nordren.example" }
 const administrator: Role = {
   id: "01a0d2a4-a280-7004-8000-000000000001",
   ...STAMPS,
@@ -86,7 +86,7 @@ const olivia: User = {
   primaryAdministrator: true,
   deactivatedAt: null,
 }
-const lars: User = { ...olivia, id: "01a0d2a4-a280-7005-8000-000000000002", email: "lars@nordren.dk", fullName: "Lars Mikkelsen", status: "invited", roleId: custom.id, allProjects: false, serviceProviderId: nordren.id, primaryAdministrator: false }
+const lars: User = { ...olivia, id: "01a0d2a4-a280-7005-8000-000000000002", email: "lars@nordren.example", fullName: "Lars Mikkelsen", status: "invited", roleId: custom.id, allProjects: false, serviceProviderId: nordren.id, primaryAdministrator: false }
 const viewer: User = { ...olivia, id: "019995e0-0000-7000-8000-0000000000bb", email: "viewer@kystbyen.example", fullName: "Viewer Person", roleId: custom.id, allProjects: false, projectIds: [copenhagen.id], primaryAdministrator: false }
 
 /** A resolver over a few mapped records, the way the store composes one. */
@@ -285,10 +285,10 @@ describe("the service providers", () => {
     const record: BusinessRecord = {
       ...serviceProviderAdapter.toRecord(nordren, context(fixtures)),
       id: "service-providers-service-provider-company-1",
-      submittedValues: { legalName: "Fjord Renhold AS", registrationNumber: "998877665", country: "Norway", contactName: "Kari", contactEmail: "kari@fjord.no" },
+      submittedValues: { legalName: "Fjord Renhold AS", registrationNumber: "998877665", country: "Norway", contactName: "Kari", contactEmail: "kari@fjord.example" },
     }
     const body = serviceProviderAdapter.toCreateBody?.(record, context(fixtures))
-    assert.deepEqual(body, { legalName: "Fjord Renhold AS", registrationNumber: "998877665", country: "NO", contactName: "Kari", contactEmail: "kari@fjord.no" })
+    assert.deepEqual(body, { legalName: "Fjord Renhold AS", registrationNumber: "998877665", country: "NO", contactName: "Kari", contactEmail: "kari@fjord.example" })
     assert.ok(ServiceProviderCreate.safeParse(body).success)
     const patch = serviceProviderAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, contactName: "Ola" } }, context(fixtures))
     assert.deepEqual(patch, { contactName: "Ola" })
