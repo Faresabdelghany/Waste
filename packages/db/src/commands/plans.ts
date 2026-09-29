@@ -8,10 +8,11 @@
 // payload and the writes are spelled here, once, rather than in two apps that
 // cannot import each other.
 //
-// Both queues are `exclusive` and every send carries the Plan's fingerprint
-// as `singletonKey` (the worker's registry creates the queues so), so two
-// requests for one result collapse into one job (#132 §3). The fingerprint is
-// also the cache key: `plansMatching` answers the route's Plans of one
+// Both queues are `exclusive` and every send carries the Plan's id as
+// `singletonKey` (the worker's registry creates the queues so): one Plan never
+// holds two live jobs, and a lost one is re-sent after `routingJobHeld` says
+// so. Two requests for one result collapse earlier, at the cache, whose key is
+// the fingerprint (#132 §3): `plansMatching` answers the route's Plans of one
 // fingerprint, newest first, and the caller re-activates a `ready` match
 // instead of asking the provider again (#124 §4), enqueues nothing beside a
 // `calculating` one, and retries a `failed` one with a new Plan.

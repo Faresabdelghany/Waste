@@ -3,8 +3,9 @@
 // (#124 §1: the sequence is written exactly once, on creation for a known
 // sequence), asks the provider for the legs of its trip, and writes what came
 // back — the legs, the totals, the provenance — flipping `calculating →
-// ready`. The queue is `exclusive` with the Plan's fingerprint as
-// `singletonKey`, so two requests for one result collapse (#132 §3); ten
+// ready`. The queue is `exclusive` with the Plan's id as `singletonKey`, so
+// one Plan never holds two live jobs — two requests for one result collapse
+// earlier, at the senders' fingerprint cache (#132 §3); ten
 // minutes to run, kept a week, pg-boss's retries 3 at 30 s → 5 min (#132 §4;
 // the quota engine that defers instead arrives with #171).
 //
@@ -135,7 +136,7 @@ async function measureOne(data: RoutingMeasureData, context: JobContext): Promis
   })
 }
 
-/** #132 §3–4 for both routing queues: exclusive under the fingerprint singleton, ten minutes to run, done jobs kept a week, retries 3 at 30 s → 5 min. */
+/** #132 §3–4 for both routing queues: exclusive under the Plan-id singleton, ten minutes to run, done jobs kept a week, retries 3 at 30 s → 5 min. */
 const ROUTING_QUEUE_OPTIONS: JobQueueOptions = {
   policy: "exclusive",
   expireInSeconds: 600,
