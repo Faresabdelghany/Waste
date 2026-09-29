@@ -61,7 +61,13 @@ export type BossOptions = {
   cronWorkerIntervalSeconds?: number
   /** How often the queues' counts (the failed count /readyz reads) are refreshed, in seconds. */
   monitorIntervalSeconds?: number
+  /** PROTOTYPE (#134): WORKER_POLLING_INTERVAL_SECONDS — raises pg-boss's cron worker, cron pass and flow poll to it where they poll more often (the cron two capped at pg-boss's 45); an interval already longer stays. */
+  pollingIntervalSeconds?: number
 }
+
+/** PROTOTYPE (#134): an interval raised to the knob where it polls more often than the knob, never lowered, capped where pg-boss caps it. */
+const raised = (defaultSeconds: number, knob: number | undefined, cap = Number.POSITIVE_INFINITY) =>
+  knob === undefined ? undefined : Math.min(Math.max(defaultSeconds, knob), cap)
 
 /** pg-boss as the process holds it: the instance, and what was registered on it. */
 export type Boss = {
@@ -77,7 +83,11 @@ export type Boss = {
 /** How long stop() lets a handler in flight finish before it is failed and the pool closed. */
 export const STOP_TIMEOUT_MS = 10_000
 
-export function createBoss({ url, max = 3, log = (line) => console.error(line), cronMonitorIntervalSeconds, cronWorkerIntervalSeconds, monitorIntervalSeconds }: BossOptions): PgBoss {
+export function createBoss({ url, max = 3, log = (line) => console.error(line), cronMonitorIntervalSeconds: cronMonitor, cronWorkerIntervalSeconds: cronWorker, monitorIntervalSeconds, pollingIntervalSeconds }: BossOptions): PgBoss {
+  // PROTOTYPE (#134): pg-boss's defaults are 30 (cron pass), 5 (cron worker) and 5 (flow poll).
+  const cronMonitorIntervalSeconds = cronMonitor ?? raised(30, pollingIntervalSeconds, 45)
+  const cronWorkerIntervalSeconds = cronWorker ?? raised(5, pollingIntervalSeconds, 45)
+  const flowIntervalSeconds = raised(5, pollingIntervalSeconds)
   const boss = new PgBoss({
     connectionString: url,
     schema: PGBOSS_SCHEMA,
@@ -93,6 +103,7 @@ export function createBoss({ url, max = 3, log = (line) => console.error(line), 
     ...(cronMonitorIntervalSeconds === undefined ? {} : { cronMonitorIntervalSeconds }),
     ...(cronWorkerIntervalSeconds === undefined ? {} : { cronWorkerIntervalSeconds }),
     ...(monitorIntervalSeconds === undefined ? {} : { monitorIntervalSeconds }),
+    ...(flowIntervalSeconds === undefined ? {} : { flowIntervalSeconds }),
   })
   // An `error` with no listener would throw out of pg-boss's event emitter and end the process; a connection dropped mid-poll is one such error, and pg-boss reconnects on the next poll.
   boss.on("error", (error) => log(`pg-boss: ${error instanceof Error ? error.message : String(error)}`))
@@ -109,7 +120,7 @@ export function createBoss({ url, max = 3, log = (line) => console.error(line), 
  * fails here is the database: the schema missing or at another version
  * (`start()` says which), or the role unable to reach it.
  */
-export async function startBoss(boss: PgBoss, jobs: readonly AnyJob[], context: JobContext): Promise<Boss> {
+export async function startBoss(boss: PgBoss, jobs: readonly AnyJob[], context: JobContext, { pollingIntervalSeconds }: { pollingIntervalSeconds?: number } = {}): Promise<Boss> {
   await boss.start()
   const bring = async (queue: string, options: JobQueueOptions | undefined) => {
     await boss.createQueue(queue, options)
@@ -128,7 +139,9 @@ export async function startBoss(boss: PgBoss, jobs: readonly AnyJob[], context: 
   const queues: string[] = []
   for (const job of jobs) {
     await bring(job.queue, job.queueOptions)
-    await boss.work(job.queue, job.workOptions ?? {}, (batch) => job.handler(batch, context))
+    // PROTOTYPE (#134): every queue's poll raised to the knob; pg-boss's own default is 2 s, the relay's 1 s.
+    const polling = raised(job.workOptions?.pollingIntervalSeconds ?? 2, pollingIntervalSeconds)
+    await boss.work(job.queue, { ...job.workOptions, ...(polling === undefined ? {} : { pollingIntervalSeconds: polling }) }, (batch) => job.handler(batch, context))
     if (job.schedule !== undefined) {
       await boss.schedule(job.queue, job.schedule, job.scheduleData ?? null, job.scheduleOptions)
     } else {

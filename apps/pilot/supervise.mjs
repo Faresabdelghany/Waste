@@ -21,6 +21,7 @@
 //   - SIGTERM and SIGINT are forwarded to both children and both are waited
 //     for; a child still up after `killAfterMs` is killed.
 import { spawn as nodeSpawn } from "node:child_process"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { constants as osConstants } from "node:os"
 import { pathToFileURL } from "node:url"
 
@@ -173,6 +174,80 @@ export function supervise({
   })
 }
 
+const MIB = 1024 * 1024
+const readText = (path) => {
+  try {
+    return readFileSync(path, "utf8")
+  } catch {
+    return undefined
+  }
+}
+const statusKiB = (status, field) => Number(status.match(new RegExp(`^${field}:\\s+(\\d+) kB`, "m"))?.[1] ?? 0)
+const mib = (bytes) => `${(bytes / MIB).toFixed(1)}MiB`
+
+/** The container's cgroup accounting, v2 or v1: what a memory limit is enforced on, each page counted once. */
+function cgroupMemory() {
+  if (existsSync("/sys/fs/cgroup/memory.current")) {
+    const stat = readText("/sys/fs/cgroup/memory.stat") ?? ""
+    const field = (name) => Number(stat.match(new RegExp(`^${name} (\\d+)$`, "m"))?.[1] ?? Number.NaN)
+    const max = readText("/sys/fs/cgroup/memory.max")?.trim()
+    return {
+      version: 2,
+      current: Number(readText("/sys/fs/cgroup/memory.current")),
+      peak: Number(readText("/sys/fs/cgroup/memory.peak") ?? Number.NaN),
+      max: max === undefined || max === "max" ? Number.NaN : Number(max),
+      anon: field("anon"),
+      file: field("file"),
+    }
+  }
+  const v1 = (name) => Number(readText(`/sys/fs/cgroup/memory/${name}`) ?? Number.NaN)
+  const stat = readText("/sys/fs/cgroup/memory/memory.stat") ?? ""
+  const field = (name) => Number(stat.match(new RegExp(`^${name} (\\d+)$`, "m"))?.[1] ?? Number.NaN)
+  return { version: 1, current: v1("memory.usage_in_bytes"), peak: v1("memory.max_usage_in_bytes"), max: v1("memory.limit_in_bytes"), anon: field("rss"), file: field("cache") }
+}
+
+/**
+ * PROTOTYPE, gate 1 of #134: one line of the container's memory — the
+ * cgroup's own numbers beside each process's RSS and peak RSS (VmHWM) from
+ * /proc, the API and the worker found by their entry file, a child's own
+ * children (tsx's esbuild service) summed beside it. RSS counts a shared page
+ * once per process, so the processes add up to more than the cgroup; the
+ * cgroup is what a limit is enforced on.
+ */
+export function memoryLine() {
+  const table = new Map()
+  for (const entry of readdirSync("/proc")) {
+    if (!/^\d+$/.test(entry)) continue
+    const status = readText(`/proc/${entry}/status`)
+    if (status === undefined) continue
+    table.set(Number(entry), {
+      ppid: Number(status.match(/^PPid:\s+(\d+)/m)?.[1]),
+      rss: statusKiB(status, "VmRSS") * 1024,
+      hwm: statusKiB(status, "VmHWM") * 1024,
+      cmdline: (readText(`/proc/${entry}/cmdline`) ?? "").replaceAll("\0", " "),
+    })
+  }
+  const descendantsRss = (pid) => {
+    let sum = 0
+    for (const [child, row] of table) if (row.ppid === pid) sum += row.rss + descendantsRss(child)
+    return sum
+  }
+  const parts = []
+  const self = table.get(process.pid)
+  if (self) parts.push(`supervisor=${mib(self.rss)}(hwm ${mib(self.hwm)})`)
+  for (const [name, entry] of [
+    ["api", "src/server.ts"],
+    ["worker", "src/main.ts"],
+  ]) {
+    const found = [...table].find(([, row]) => row.ppid === process.pid && row.cmdline.includes(entry))
+    parts.push(found ? `${name}=${mib(found[1].rss)}(hwm ${mib(found[1].hwm)}, children ${mib(descendantsRss(found[0]))})` : `${name}=down`)
+  }
+  let total = 0
+  for (const row of table.values()) total += row.rss
+  const cg = cgroupMemory()
+  return `memory cgroup(v${cg.version}) current=${mib(cg.current)} peak=${mib(cg.peak)} max=${mib(cg.max)} anon=${mib(cg.anon)} file=${mib(cg.file)} | rss ${parts.join(" ")} processes=${table.size} sum=${mib(total)}`
+}
+
 // Run directly (the image's CMD): the two children as their own images run
 // them. PILOT_API_DIR and PILOT_WORKER_DIR default to the deploy directories
 // the Dockerfile lays out; a workstation points them at apps/api and
@@ -180,6 +255,17 @@ export function supervise({
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const apiDir = process.env.PILOT_API_DIR ?? "/app/apps/api"
   const workerDir = process.env.PILOT_WORKER_DIR ?? "/app/apps/worker"
+  // PROTOTYPE, gate 1 of #134: the memory line every PILOT_MEMORY_LOG_SECONDS, off when unset.
+  const memorySeconds = Number(process.env.PILOT_MEMORY_LOG_SECONDS)
+  if (Number.isFinite(memorySeconds) && memorySeconds > 0 && existsSync("/proc/self/status")) {
+    setInterval(() => {
+      try {
+        process.stdout.write(`[pilot] ${memoryLine()}\n`)
+      } catch (error) {
+        process.stdout.write(`[pilot] memory line failed: ${error instanceof Error ? error.message : String(error)}\n`)
+      }
+    }, memorySeconds * 1000).unref()
+  }
   const code = await supervise({
     api: {
       name: "api",

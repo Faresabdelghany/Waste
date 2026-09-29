@@ -115,6 +115,8 @@ export const RELAY_QUEUE = "execution.relay-outbox"
 export const BATCH_SIZE = 100
 /** How long a tick waits before its successor when the sweep came back short; the cadence the issue asked for. */
 export const RELAY_INTERVAL_SECONDS = 5
+/** PROTOTYPE (#134): the successor's delay raised to WORKER_POLLING_INTERVAL_SECONDS where set (#128 Q3: the relay within 30 s in the Pilot). #149 writes the knob properly. */
+const SUCCESSOR_SECONDS = Math.max(RELAY_INTERVAL_SECONDS, Number(process.env.WORKER_POLLING_INTERVAL_SECONDS) > 0 ? Number(process.env.WORKER_POLLING_INTERVAL_SECONDS) : 0)
 /** After this long unpublished, a row is stale: a poison event, or a relay that has not run. An hour. */
 export const OUTBOX_STALE_MS = 60 * 60 * 1_000
 
@@ -272,7 +274,7 @@ export const relayOutbox = defineJob<RelayOutboxData>({
       (error: unknown) => ({ error }),
     )
     // The successor, whatever the tick did: a tick that failed is tried again after the interval, a batch's worth (some company at its cap, or as many rows across companies) is followed at once. `short` drops the send when one is already queued.
-    const startAfter = "outcome" in tick && tick.outcome.swept >= BATCH_SIZE ? 0 : RELAY_INTERVAL_SECONDS
+    const startAfter = "outcome" in tick && tick.outcome.swept >= BATCH_SIZE ? 0 : SUCCESSOR_SECONDS
     await context.send(RELAY_QUEUE, { source: "successor" } satisfies RelayOutboxData, { startAfter })
     if ("error" in tick) throw tick.error
     const { published } = tick.outcome

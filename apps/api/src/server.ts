@@ -27,14 +27,16 @@ import { DATABASE_CHECK_TIMEOUT_MS, probePoolOptions } from "./readiness"
 const env = parseEnv(process.env)
 const build = readBuildInfo()
 const probe = createDb(env.DATABASE_URL, probePoolOptions(DATABASE_CHECK_TIMEOUT_MS))
-const pool = createDb(env.DATABASE_URL)
+// PROTOTYPE (#134): the request pool's size from DATABASE_POOL_MAX, the Pilot's 5; postgres.js's 10 when unset. #149 writes the knob properly.
+const poolMax = Number(process.env.DATABASE_POOL_MAX) > 0 ? Number(process.env.DATABASE_POOL_MAX) : undefined
+const pool = createDb(env.DATABASE_URL, poolMax === undefined ? {} : { max: poolMax })
 const auth = supabaseAuth(env.SUPABASE_URL)
 const verifier = createVerifier({ keySet: createRemoteJWKSet(auth.jwks), issuer: auth.issuer })
 const listening = await listen(createApp({ probe, pool, verifier, databaseTimeoutMs: DATABASE_CHECK_TIMEOUT_MS, build }), {
   host: env.HOST,
   port: env.PORT,
 })
-console.log(`@waste/api listening on ${listening.url}, verifying tokens from ${auth.issuer}, build ${build?.commit ?? "none"}`)
+console.log(`@waste/api listening on ${listening.url}, verifying tokens from ${auth.issuer}, build ${build?.commit ?? "none"}, request pool max ${poolMax ?? 10}`)
 
 // Shutdown: the listener drains and the probe pool closes together, since a
 // probe is not a request and 503 is the right answer to one that arrives

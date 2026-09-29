@@ -30,6 +30,18 @@ export const heartbeat = defineJob<HeartbeatData>({
     for (const job of jobs) {
       log(`worker.heartbeat: ${now().toISOString()} (${job.data.source}, job ${job.id})`)
     }
+    // PROTOTYPE (#134 gate 4): the self-ping of #128 Q4 — each beat fetches KEEP_ALIVE_URL's /readyz when set, so the prototype can see whether Render counts it as inbound traffic. #149 writes it properly.
+    const keepAlive = process.env.KEEP_ALIVE_URL
+    if (keepAlive) {
+      const started = Date.now()
+      try {
+        const response = await fetch(`${keepAlive}/readyz`, { signal: AbortSignal.timeout(10_000) })
+        await response.text()
+        log(`worker.heartbeat: keep-alive ${response.status} in ${Date.now() - started} ms`)
+      } catch (error) {
+        log(`worker.heartbeat: keep-alive failed after ${Date.now() - started} ms: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
     return { beats: jobs.length }
   },
 })

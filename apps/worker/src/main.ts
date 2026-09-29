@@ -41,10 +41,16 @@ import { OUTBOX_DEAD_QUEUE } from "./outbox/subscribe"
 import { CHECK_TIMEOUT_MS, probePoolOptions } from "./readiness"
 
 const env = parseEnv(process.env)
-const api = createDb(env.DATABASE_URL)
-const worker = createDb(env.WORKER_DATABASE_URL)
+// PROTOTYPE (#134): the Pilot's knobs, rough — the two application pools' sizes (the Pilot's 3 and 2; postgres.js's 10 when unset) and the polling interval (#128 Q3, 30 in the Pilot; pg-boss's and the relay's own when unset). The names are the prototype's: in one container both children read one environment, so a pool's knob names its process. #149 writes them properly.
+const knob = (name: string) => (Number(process.env[name]) > 0 ? Number(process.env[name]) : undefined)
+const apiPoolMax = knob("WORKER_API_POOL_MAX")
+const workerPoolMax = knob("WORKER_POOL_MAX")
+const pollingIntervalSeconds = knob("WORKER_POLLING_INTERVAL_SECONDS")
+const api = createDb(env.DATABASE_URL, apiPoolMax === undefined ? {} : { max: apiPoolMax })
+const worker = createDb(env.WORKER_DATABASE_URL, workerPoolMax === undefined ? {} : { max: workerPoolMax })
 const probe = createDb(env.DATABASE_URL, probePoolOptions(CHECK_TIMEOUT_MS))
-const boss = createBoss({ url: env.WORKER_DATABASE_URL })
+const boss = createBoss({ url: env.WORKER_DATABASE_URL, pollingIntervalSeconds })
+console.log(`@waste/worker knobs: api-role pool max ${apiPoolMax ?? 10}, worker-role pool max ${workerPoolMax ?? 10}, pg-boss pool 3, polling ${pollingIntervalSeconds ?? "pg-boss's defaults"}${pollingIntervalSeconds === undefined ? "" : " s"}, keep-alive ${process.env.KEEP_ALIVE_URL ? `${process.env.KEEP_ALIVE_URL}/readyz each beat` : "off"}`)
 let started = false
 
 /** What the boot has made so far: pg-boss running with its queues once `startBoss` answered, the listener once it bound. A shutdown closes what is there. */
@@ -52,13 +58,18 @@ const made: { running?: Boss; listening?: Listening } = {}
 
 /** pg-boss started with every job, and the probes bound; a failure of either is the process's exit. */
 async function boot() {
-  const running = await startBoss(boss, JOBS, {
-    api,
-    worker,
-    now: () => new Date(),
-    log: (message) => console.log(message),
-    send: (name, data, options) => boss.send(name, data, options),
-  })
+  const running = await startBoss(
+    boss,
+    JOBS,
+    {
+      api,
+      worker,
+      now: () => new Date(),
+      log: (message) => console.log(message),
+      send: (name, data, options) => boss.send(name, data, options),
+    },
+    { pollingIntervalSeconds },
+  )
   made.running = running
   started = true
   const listening = await listen(
