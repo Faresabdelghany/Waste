@@ -50,7 +50,7 @@ const provider = {
   registrationNumber: "38144210",
   country: "DK",
   contactName: "Lars Mikkelsen",
-  contactEmail: "lars.mikkelsen@nordren.dk",
+  contactEmail: "lars.mikkelsen@nordren.example",
   ...STAMPS,
 }
 
@@ -270,7 +270,7 @@ describe("ServiceProviderCreate", () => {
 
 describe("ServiceProviderPatch", () => {
   test("changes any of the five, and refuses an empty patch", () => {
-    assert.deepEqual(ServiceProviderPatch.parse({ contactEmail: "mikkel@nordren.dk" }), { contactEmail: "mikkel@nordren.dk" })
+    assert.deepEqual(ServiceProviderPatch.parse({ contactEmail: "mikkel@nordren.example" }), { contactEmail: "mikkel@nordren.example" })
     assert.deepEqual(refusal(ServiceProviderPatch.safeParse({})), [{ path: "", message: "Give at least one field to change" }])
     assert.equal(ServiceProviderPatch.safeParse({ contactEmail: "nobody" }).success, false)
     assert.match(refusal(ServiceProviderPatch.safeParse({ legalName: "x", id: ID }))[0].message, /id/)

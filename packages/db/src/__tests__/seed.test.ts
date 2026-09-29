@@ -365,8 +365,8 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     assert.deepEqual(
       providers.map((row) => [row.id, row.legalName, row.registrationNumber, row.country, row.contactName, row.contactEmail]),
       [
-        [DEMO_IDS.serviceProviders.cityhaul, "CityHaul A/S", "39122004", "DK", "Mikkel Andersen", "mikkel.andersen@cityhaul.dk"],
-        [DEMO_IDS.serviceProviders.nordren, "NordRen ApS", "40291188", "DK", "Lars Mikkelsen", "lars.mikkelsen@nordren.dk"],
+        [DEMO_IDS.serviceProviders.cityhaul, "CityHaul A/S", "39122004", "DK", "Mikkel Andersen", "mikkel.andersen@cityhaul.example"],
+        [DEMO_IDS.serviceProviders.nordren, "NordRen ApS", "40291188", "DK", "Lars Mikkelsen", "lars.mikkelsen@nordren.example"],
       ],
     )
 
@@ -652,7 +652,7 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     const [restored] = await owner.db.select().from(company)
     assert.equal(restored.name, "Kystbyen Renovation")
     const [nordren] = await owner.db.select().from(serviceProvider).where(eq(serviceProvider.id, DEMO_IDS.serviceProviders.nordren))
-    assert.equal(nordren.contactEmail, "lars.mikkelsen@nordren.dk")
+    assert.equal(nordren.contactEmail, "lars.mikkelsen@nordren.example")
     const [parkvej] = await owner.db.select().from(property).where(eq(property.id, parkvejId))
     assert.deepEqual([parkvej.name, parkvej.location], ["Parkvej 18", { type: "Point", coordinates: [12.576848, 55.703119] }])
     const [bin82014] = await owner.db.select().from(container).where(eq(container.id, DEMO_IDS.registry.containers["asset-82014"]))

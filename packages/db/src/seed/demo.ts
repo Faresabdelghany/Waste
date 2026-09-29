@@ -193,7 +193,7 @@ const SERVICE_PROVIDERS: (typeof serviceProvider.$inferInsert)[] = [
     registrationNumber: "40291188",
     country: "DK",
     contactName: "Lars Mikkelsen",
-    contactEmail: "lars.mikkelsen@nordren.dk",
+    contactEmail: "lars.mikkelsen@nordren.example",
   },
   {
     id: DEMO_IDS.serviceProviders.cityhaul,
@@ -202,7 +202,7 @@ const SERVICE_PROVIDERS: (typeof serviceProvider.$inferInsert)[] = [
     registrationNumber: "39122004",
     country: "DK",
     contactName: "Mikkel Andersen",
-    contactEmail: "mikkel.andersen@cityhaul.dk",
+    contactEmail: "mikkel.andersen@cityhaul.example",
   },
 ]
 
