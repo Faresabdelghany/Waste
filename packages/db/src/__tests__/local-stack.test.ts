@@ -111,7 +111,8 @@ describe("planLocalLogins", () => {
   })
 
   test("refuses a password shorter than local Auth's minimum", () => {
-    assert.throws(() => planLocalLogins({ apiUrl, secretKey, password: "elevenchars", seeded: [] }), /11 characters.*at least 12/)
+    assert.throws(() => planLocalLogins({ apiUrl, secretKey, password: "seven77", seeded: [] }), /7 characters.*at least 8/)
+    assert.equal(planLocalLogins({ apiUrl, secretKey, password: "eight888", seeded: [] }).password, "eight888", "the config's bound, eight, as on the Pilot (#164)")
   })
 
   test("refuses an entry that is not an address", () => {

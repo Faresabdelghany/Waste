@@ -18,8 +18,13 @@ import { uniqueName } from "./env"
 type ServiceProvider = { id: string; legalName: string; registrationNumber: string; country: string; contactName: string; contactEmail: string }
 type Customer = { id: string; kind: "person" | "organisation"; name: string; registrationNumber: string | null; email: string | null; status: string }
 
-/** Eight digits no earlier run used, since a registration number is unique within the company. */
-const registrationNumber = () => `${Date.now() % 100_000_000}`.padStart(8, "0")
+/**
+ * Eight digits no earlier run used, since a registration number is unique
+ * within the company: four of the clock and four at random, so a stack that
+ * outlives a day cannot hand a rerun an earlier run's number, as the clock
+ * alone would every twenty-eight hours.
+ */
+const registrationNumber = () => `${Date.now() % 10_000}`.padStart(4, "0") + `${Math.floor(Math.random() * 10_000)}`.padStart(4, "0")
 
 /** The browser's API call the form submit makes: the answer of the request path `path`, method `method`. */
 const answerOf = (page: Page, method: string, path: string) =>
