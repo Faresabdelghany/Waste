@@ -156,6 +156,10 @@ _Avoid_: Actual assignment
 The driver, vehicle, trailer, depot, or service provider that performed the route.
 _Avoid_: Planned assignment
 
+**Dispatch**:
+The office's release of a planned Route to execution: it requires a Planned Assignment's driver, marks the Route ready, and freezes it against regeneration. Dispatch moves no vehicle and starts no Session — the driver starting the Route does that.
+_Avoid_: Assign (dispatch releases an assignment, it does not create one), start (the driver's act), send
+
 **Pickup**:
 One stop-level service action generated inside a dated Route. It exists from planning through execution, and its outcome and proof are recorded against that same Pickup.
 _Avoid_: Pickup history, separate service event, property, route

@@ -16,7 +16,18 @@
 // should move), the stamps (the trigger's), and never a column another actor
 // writes — an account's `auth_user_id` and `deactivated_at` are the hook's and
 // the API's, which is why demo.ts leaves them out of USER_COLUMNS.
-import { getTableName, sql, type SQL } from "drizzle-orm"
+//
+// The second write is for a set: the rows of one parent that the API
+// replaces whole — deleted, and written back under ids it mints — on every
+// edit of the set, a calendar's holidays or a collection group's picks among
+// them (Issue #156). Keyed by its id such a row would meet its own content
+// under another id after the first edit through the product, and the next
+// run would stop at the set's unique key (23505) — the failure #140 met with
+// an account's access rows, which are the pair they join for the same reason.
+// So a set is compared by its content, parent by parent, and a set that
+// differs is replaced whole, the way the API replaces it; one that says what
+// this run proposes, whatever its ids, is not touched.
+import { getTableName, inArray, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgInsertValue, PgTable, PgUpdateSetSource } from "drizzle-orm/pg-core"
 
 import type { Tx } from "../client"
@@ -88,4 +99,56 @@ export async function upsertOwned<T extends SeededTable>(tx: Tx, table: T, rows:
     .onConflictDoUpdate({ target: table.id, set: restore(owned) as PgUpdateSetSource<T>, setWhere: changesSomething(owned) })
     .returning({ id: table.id })
   return written.length
+}
+
+/** One member of a set as its compared columns say it, the way two members are told apart: a null and an absent value are one. */
+const memberKey = (values: readonly unknown[]): string => JSON.stringify(values.map((value) => value ?? null))
+
+/** Two sets as their members' keys: the same members, as often each. */
+const sameMembers = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && [...a].sort().join("\n") === [...b].sort().join("\n")
+
+/**
+ * Writes the sets of `parents` — every parent whose set this run owns, an
+ * empty set included — and answers how many rows it wrote. Parent by parent,
+ * the stored set is compared with the proposed one on `compared`, the
+ * member's columns; where they differ, the parent's rows are deleted and the
+ * proposed ones inserted under their fixed ids, and where they agree nothing
+ * is written, whatever ids the stored members carry.
+ */
+export async function replaceSets<T extends SeededTable>(
+  tx: Tx,
+  table: T,
+  parent: PgColumn,
+  parents: readonly string[],
+  rows: readonly T["$inferInsert"][],
+  compared: readonly PgColumn[],
+): Promise<number> {
+  if (parents.length === 0) return 0
+  for (const column of [parent, ...compared]) {
+    if (column.table !== table) {
+      throw new Error(`replaceSets: column "${columnName(column)}" is not a column of "${getTableName(table)}"`)
+    }
+  }
+  const parentOf = (row: Record<string, unknown>): string => row[propertyOf(parent)] as string
+  const keyOf = (row: Record<string, unknown>): string => memberKey(compared.map((column) => row[propertyOf(column)]))
+
+  const proposed = new Map<string, string[]>(parents.map((id) => [id, []]))
+  for (const row of rows as Record<string, unknown>[]) {
+    const members = proposed.get(parentOf(row))
+    if (members === undefined) throw new Error(`replaceSets: a proposed row of "${getTableName(table)}" names ${parentOf(row)}, which is not one of its parents`)
+    members.push(keyOf(row))
+  }
+  const found = new Map<string, string[]>(parents.map((id) => [id, []]))
+  const stored = (await tx
+    .select(Object.fromEntries([parent, ...compared].map((column) => [propertyOf(column), column])))
+    .from(table as PgTable)
+    .where(inArray(parent, [...parents]))) as Record<string, unknown>[]
+  for (const row of stored) found.get(parentOf(row))?.push(keyOf(row))
+
+  const differing = parents.filter((id) => !sameMembers(found.get(id) ?? [], proposed.get(id) ?? []))
+  if (differing.length === 0) return 0
+  const deleted = await tx.delete(table).where(inArray(parent, differing)).returning({ id: table.id })
+  const replacing = (rows as Record<string, unknown>[]).filter((row) => differing.includes(parentOf(row)))
+  const inserted = replacing.length === 0 ? [] : await tx.insert(table).values(replacing as PgInsertValue<T>[]).returning({ id: table.id })
+  return deleted.length + inserted.length
 }

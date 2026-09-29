@@ -37,8 +37,22 @@ const registry = [
   count(counts.containers, "container"),
   count(counts.containerServicePlacements, "placement"),
 ].join(", ")
+const configuration = [
+  count(counts.vehicleTypes, "vehicle type"),
+  count(counts.vehicles, "vehicle"),
+  count(counts.drivers, "driver"),
+  count(counts.depots + counts.warehouses + counts.unloadingStations, "place"),
+  count(counts.planningAreas, "planning area"),
+  count(counts.planningAreaBoundaries, "boundary", "boundaries"),
+  count(counts.collectionCalendars, "calendar"),
+  count(counts.collectionCalendarHolidays, "holiday"),
+  count(counts.routeSchemes, "route scheme"),
+  count(counts.priceLists, "price list"),
+  count(counts.priceListRows, "price row"),
+].join(", ")
 console.log(
   `@waste/db: demo company ${companyId} on ${new URL(url).hostname} holds ${held}; ` +
     `its Registry ${registry}; ` +
+    `its configuration ${configuration}; ` +
     (changed === 0 ? "nothing to change" : `${count(changed, "row")} written`),
 )
