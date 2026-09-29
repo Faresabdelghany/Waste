@@ -39,8 +39,9 @@ enabled = false
 enable_signup = false
 # The temporary password the Owner hands over and the one the tester replaces
 # it with (Change password, in the web's account menu) are both at least
-# twelve characters (Issue #150); Auth refuses a shorter one in its own words.
-minimum_password_length = 12
+# eight characters, the length Supabase recommends; Auth refuses a shorter one
+# in its own words.
+minimum_password_length = 8
 # The built-in mailer is deliberately not relied on for account delivery or
 # recovery on the Pilot: it reaches only the members of the Supabase
 # organisation's Team, two messages an hour (research, #120). No invitation,
