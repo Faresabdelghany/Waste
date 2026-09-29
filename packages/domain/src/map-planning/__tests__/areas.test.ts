@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { BusinessRecord } from "../../prototype-record"
-import { AREA_LAYER_PALETTE, planningAreaLayers, planningAreaOutline } from "../areas"
+import { AREA_LAYER_PALETTE, PLANNING_AREA_GEOMETRY_KEY, planningAreaGeometry, planningAreaLayers, planningAreaOutline } from "../areas"
 import { pointInPolygon, type LngLat } from "../geo"
 import { containerLocation } from "../positions"
 import { TEST_GAZETTEER } from "./gazetteer-fixture"
@@ -95,6 +95,9 @@ describe("planningAreaLayers", () => {
     assert.ok(layer.bounds)
     const garbage = record("area-x", {}, { name: "Nowhere", submittedValues: { geometry: "north of the river" } })
     assert.deepEqual(planningAreaLayers([garbage], containers, TEST_GAZETTEER)[0].polygon, [], "text that is no polygon leaves the containers to decide, and Nowhere has none")
+    const crooked = record("area-y", {}, { name: "Crooked", submittedValues: { [PLANNING_AREA_GEOMETRY_KEY]: JSON.stringify({ type: "Polygon", coordinates: [[[12.56, 55.67], [12.58, "55.67"], [12.58, 55.69], [12.56, 55.67]]] }) } })
+    assert.equal(planningAreaGeometry(crooked), null, "one malformed position is no polygon, not a polygon with a vertex missing")
+    assert.deepEqual(planningAreaLayers([crooked], containers, TEST_GAZETTEER)[0].polygon, [])
   })
 
   test("colours cycle the palette in list order and soft-deleted areas are skipped", () => {

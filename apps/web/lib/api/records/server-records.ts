@@ -277,7 +277,10 @@ export async function writeRecord(client: ApiClient, module: ServerModule, curre
     if (body === null) return { kind: "unchanged", record }
     if (isLocalRefusal(body)) return { kind: "refused", recordId: record.id, problem: refusalProblem(body) }
     const resource = await adapter.update(client, serverId, body)
-    return { kind: "updated", record: adapter.toRecord(resource, context), serverId: resource.id }
+    // Under the row's own web id, whatever the mapping would now derive — a
+    // fixture matched by a name the write just changed — so one server row
+    // stays one row here, as `withCreated` keeps a minted id.
+    return { kind: "updated", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId: resource.id }
   } catch (error) {
     return { kind: "refused", recordId: record.id, problem: problemOfError(error) }
   }

@@ -129,16 +129,17 @@ export function CollectionCalendarsSettings() {
   )
 
   // A deep link (/settings?pane=collection-calendars&record=…) opens that
-  // calendar for editing — once the store has loaded, so a user-created
-  // calendar is found too. Later edits keep their own state, so the records
+  // calendar for editing — once the store has loaded and, on the Pilot, once
+  // the module's rows are here, so a user-created calendar and an API
+  // calendar are found too. Later edits keep their own state, so the records
   // list is deliberately not a dependency.
   const requestedRecordId = searchParams.get("record")
   useEffect(() => {
-    if (!hydrated || !requestedRecordId) return
+    if (!hydrated || !calendars.ready || !requestedRecordId) return
     const record = calendarRecords.find((candidate) => candidate.id === requestedRecordId)
     if (record) setEditingCalendar(record)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated, requestedRecordId])
+  }, [hydrated, calendars.ready, requestedRecordId])
 
   const projectLabel = (record: BusinessRecord): string => {
     const ids = record.projectIds ?? []
@@ -183,8 +184,10 @@ export function CollectionCalendarsSettings() {
   const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(filtered)
 
   // On the Pilot the store answers the write's outcome once the API has, so
-  // the success is said then and a refusal by the store, in the API's words;
-  // on the browser's own path there is nothing to wait for.
+  // the dialog stays open and the success is said once the API has answered;
+  // a refusal is the store's toast, in the API's words, over the form still
+  // holding what was typed. On the browser's own path there is nothing to
+  // wait for.
   const whenSaved = (outcome: ReturnType<typeof upsertRecord>, done: () => void) => {
     if (outcome === undefined) done()
     else void outcome.then((result) => result.kind !== "refused" && done())
@@ -196,21 +199,21 @@ export function CollectionCalendarsSettings() {
       actorName: ACTOR_NAME,
       lookups,
     })
-    whenSaved(upsertRecord(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, record), () =>
+    whenSaved(upsertRecord(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, record), () => {
+      setIsCreateOpen(false)
       toast.success("Collection calendar created", {
         description: `${record.name} is read by route generation on its project.`,
-      }),
-    )
-    setIsCreateOpen(false)
+      })
+    })
   }
 
   const handleEdit = (values: BusinessFormValues) => {
     if (!editingCalendar) return
     const record = updateCollectionCalendarRecord(editingCalendar, values, lookups)
-    whenSaved(upsertRecord(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, record), () =>
-      toast.success("Collection calendar updated", { description: `${record.name} was updated.` }),
-    )
-    setEditingCalendar(null)
+    whenSaved(upsertRecord(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, record), () => {
+      setEditingCalendar(null)
+      toast.success("Collection calendar updated", { description: `${record.name} was updated.` })
+    })
   }
 
   const emptyMessage = calendars.pending
@@ -225,7 +228,7 @@ export function CollectionCalendarsSettings() {
       title="Collection calendars"
       description={calendarsModule.description}
       action={
-        <Button size="sm" onClick={() => setIsCreateOpen(true)} disabled={!calendars.ready}>
+        <Button size="sm" onClick={() => setIsCreateOpen(true)} disabled={!calendars.ready || !organisation.ready}>
           <Plus className="h-4 w-4" weight="bold" />
           {calendarsModule.primaryAction}
         </Button>

@@ -9,41 +9,58 @@
 // An area is two resources on the wire — the identity, and effective-dated
 // boundary versions of its outline (ADR-0005) — and one record here: the
 // read lists both and files every version under its area, and the record
-// carries the version in force on the day as its geometry (a GeoJSON
-// Polygon on `submittedValues.geometry`, which the map draws as it stands:
-// @waste/domain/map-planning/areas, `storedOutline`), its dates, and the
-// version's id, so an edit patches that version. The record's status is a
-// reading of the versions against the day, as the contracts say it is:
-// Active with one in force, Upcoming with only a later one, Expired with
-// only ended ones, Draft with none — no status is on the wire, so the store
-// refuses every move. A period's end is spelled two ways: the wire's
-// `validTo` is the first day out of force (half-open, ADR-0005), the form's
-// "Effective to" and "Valid to" the last day in, as every fixture end date
-// reads; the adapter adds a day on the way out and takes one on the way in.
+// reads one version against the day — the one in force, else the next to
+// come, else the last to end — for its status, its dates and the version's
+// id, so an edit patches that version. The day is the project's, not the
+// browser's: a version that starts on the first of the month is in force
+// in Copenhagen an hour before it is in London. The status is a reading, as
+// the contracts say it is: Active with a version in force, Upcoming, Expired,
+// Draft with none — no status is on the wire, so the store refuses every
+// move. Only the version in force lends the record its geometry (a GeoJSON
+// Polygon under `PLANNING_AREA_GEOMETRY_KEY`, which the map draws as it
+// stands: @waste/domain/map-planning/areas), since the map shows what is in
+// force today; an upcoming or ended version keeps its dates and its id for
+// the form. A period's end is spelled two ways: the wire's `validTo` is the
+// first day out of force (half-open, ADR-0005), the form's "Effective to"
+// and "Valid to" the last day in, as every fixture end date reads; the
+// adapter adds a day on the way out and takes one on the way in.
 //
-// The polygon a form's geometry text spells is closed here, as the contracts'
-// header says the web adapter does: a GeoJSON Polygon or a Feature around
-// one, or a list of `[lng, lat]` pairs or `{ lng, lat }` spots, becomes one
-// closed flat ring at six decimals; text that is none of those is a note,
-// and the area is registered undrawn, to be drawn later. The reference (the
-// code) is set once and the project does not move, so a change to either is
-// refused before the API, in its own words.
+// The form's geometry text is read three ways. JSON that spells a polygon —
+// a GeoJSON Polygon or a Feature around one, holes and all, or a list of
+// `[lng, lat]` pairs or `{ lng, lat }` spots — is closed here at six
+// decimals, as the contracts' header says the web adapter does. Text that is
+// not JSON is a note: the area is registered undrawn, to be drawn later.
+// JSON that spells no polygon a map could draw — a FeatureCollection, two
+// points, a position with a string in it — is refused before the API, since
+// a drawing that came out wrong is not a note. The reference (the code) is
+// set once and the project does not move, so a change to either is refused
+// too, in its own words; and a version's start does not move: on an area
+// whose version has ended, a new polygon with a new start is the next
+// version, added through the area's boundaries route.
 //
 // A calendar travels with its holidays, replaced whole through their own
 // route; the record spells them as the readers do — `holidayDates` as the
 // dates and `holidayNames` as the names, the shape the Holiday lists pane
 // writes — and a write names each day from the record's carried names,
-// then from the project's holiday list, then not at all.
+// then from the project's holiday list, then not at all. An edit that moves
+// the period and the holidays together is two requests, and the API holds
+// each to the other (a holiday outside the period is a 400, a period
+// shortened under its holidays a 409), so the order follows the change:
+// holidays first when the new set fits the period as stored, the period
+// first when a new holiday lies outside it.
 //
-// Ids. A seeded area keeps its fixture's id (`area-indreby`), since the
-// fixtures of modules still on the browser's path — containers, schemes,
-// service areas — name areas by it; the mapping goes when those switch. A
-// calendar is `calendar-<uuid>` from the start: nothing names a calendar by
-// id — a project's calendars are found by project — so the fixture-id
-// mapping retires here, as the plan on #81 has it.
+// Ids. A seeded area keeps its fixture's id (`area-indreby`), matched by the
+// reference it quotes — the fixture's Code fact, set once — and by name only
+// for a fixture without one, since the fixtures of modules still on the
+// browser's path — containers, schemes, service areas — name areas by id;
+// the mapping goes when those switch. A calendar is `calendar-<uuid>` from
+// the start: nothing names a calendar by id — a project's calendars are
+// found by project — so the fixture-id mapping retires here, as the plan on
+// #81 has it.
 import type { CollectionCalendar, CollectionCalendarHoliday } from "@waste/contracts/collection-calendars"
 import type { FlatPolygon, Position2D } from "@waste/contracts/geojson"
 import type { PlanningArea, PlanningAreaBoundary, PlanningAreaCreated } from "@waste/contracts/planning-areas"
+import { PLANNING_AREA_GEOMETRY_KEY } from "@waste/domain/map-planning/areas"
 import { PLANNING_AREA_PURPOSES, type PlanningAreaPurpose } from "@waste/domain/planning/vocabulary"
 import { parseHolidayDates } from "@waste/domain/route-schemes/calendar"
 import { holidayNamesFor } from "@waste/domain/route-schemes/holiday-names"
@@ -58,6 +75,7 @@ import { PLANNING_AREAS_MODULE, planningAreaPurposeOptions } from "@/lib/data/pl
 import { create, get, listAll, patch, put } from "../client"
 import {
   fixtureNamed,
+  hasPrefix,
   inheritedPresentation,
   ofKind,
   patchOf,
@@ -75,11 +93,27 @@ const refusal = (path: string, message: string): LocalRefusal => ({ path, messag
 /** Whether a typed form value differs between two records. */
 const changedTyped = (before: BusinessRecord, after: BusinessRecord, key: string) => typed(before, key) !== typed(after, key)
 
-/** The day as the browser's calendar has it: a stamp is presentation, and the version in force is read on the person's day. */
+/** The day as the browser's calendar has it. */
 function localDay(now: Date): string {
   const month = String(now.getMonth() + 1).padStart(2, "0")
   const day = String(now.getDate()).padStart(2, "0")
   return `${now.getFullYear()}-${month}-${day}`
+}
+
+/**
+ * The day `now` falls on in a project's timezone, `YYYY-MM-DD` (`en-CA`
+ * spells it so), the day a version is read as in force on; the browser's own
+ * day for a project without one, or one Intl does not know.
+ */
+function dayIn(now: Date, timezone: string | undefined): string {
+  if (timezone) {
+    try {
+      return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now)
+    } catch {
+      // A timezone Intl does not know: the browser's day below.
+    }
+  }
+  return localDay(now)
 }
 
 /** The form's last day in force from the wire's first day out (half-open), and back. */
@@ -111,33 +145,53 @@ function closedRing(positions: readonly (Position2D | undefined)[]): Position2D[
   return [...open, open[0]]
 }
 
-function ringOf(value: unknown): Position2D[] | undefined {
-  if (Array.isArray(value)) return closedRing(value.map(positionOf))
+/** Every ring of the polygon the parsed JSON spells — the outer ring first, then any holes — each closed; undefined for JSON that spells none. */
+function ringsOf(value: unknown): Position2D[][] | undefined {
+  if (Array.isArray(value)) {
+    const ring = closedRing(value.map(positionOf))
+    return ring === undefined ? undefined : [ring]
+  }
   if (!value || typeof value !== "object") return undefined
   const shape = value as { type?: unknown; coordinates?: unknown; geometry?: unknown }
-  if (shape.type === "Feature") return ringOf(shape.geometry)
-  if (shape.type === "Polygon" && Array.isArray(shape.coordinates) && Array.isArray(shape.coordinates[0])) {
-    return closedRing((shape.coordinates[0] as unknown[]).map(positionOf))
+  if (shape.type === "Feature") return ringsOf(shape.geometry)
+  if (shape.type === "Polygon" && Array.isArray(shape.coordinates) && shape.coordinates.length > 0) {
+    const rings = (shape.coordinates as unknown[]).map((ring) => (Array.isArray(ring) ? closedRing(ring.map(positionOf)) : undefined))
+    return rings.every((ring) => ring !== undefined) ? (rings as Position2D[][]) : undefined
   }
   return undefined
 }
 
+/** What the create and the edit refuse JSON that spells no polygon with, at the geometry field. */
+export const NOT_A_POLYGON = "This is not a polygon the map can draw: give a GeoJSON Polygon, a Feature around one, or a list of [lng, lat] positions that enclose an area"
+
+/** The three readings of a form's geometry text: blank, a note in words, JSON that spells a polygon, and JSON that spells none. */
+export type GeometryText = { kind: "none" } | { kind: "note" } | { kind: "malformed" } | { kind: "polygon"; polygon: FlatPolygon }
+
 /**
- * The flat polygon a form's geometry text spells — a GeoJSON Polygon, a
- * Feature around one, a list of `[lng, lat]` pairs or of `{ lng, lat }` spots
- * — closed on its first position at six decimals, the decimetre the
- * Registry's points keep; undefined for text that is no polygon.
+ * A form's geometry text read: `none` for blank, `note` for text that is
+ * not JSON (a description, the area to be drawn later), `polygon` for JSON
+ * that spells one — a GeoJSON Polygon, a Feature around one, a list of
+ * `[lng, lat]` pairs or of `{ lng, lat }` spots — closed on its first
+ * position at six decimals, the decimetre the Registry's points keep, holes
+ * kept; and `malformed` for JSON that spells no polygon a map could draw.
  */
-export function parsePolygonText(text: string | undefined): FlatPolygon | undefined {
-  if (text === undefined || text.trim() === "") return undefined
+export function geometryOfText(text: string | undefined): GeometryText {
+  if (text === undefined || text.trim() === "") return { kind: "none" }
   let parsed: unknown
   try {
     parsed = JSON.parse(text)
   } catch {
-    return undefined
+    return { kind: "note" }
   }
-  const ring = ringOf(parsed)
-  return ring === undefined ? undefined : { type: "Polygon", coordinates: [ring] }
+  if (parsed === null || typeof parsed !== "object") return { kind: "note" }
+  const rings = ringsOf(parsed)
+  return rings === undefined ? { kind: "malformed" } : { kind: "polygon", polygon: { type: "Polygon", coordinates: rings } }
+}
+
+/** The flat polygon a form's geometry text spells, or undefined for text that spells none — a note or a malformed drawing alike. */
+export function parsePolygonText(text: string | undefined): FlatPolygon | undefined {
+  const geometry = geometryOfText(text)
+  return geometry.kind === "polygon" ? geometry.polygon : undefined
 }
 
 // ---------------------------------------------------------------------------
@@ -163,15 +217,16 @@ const isPurpose = (value: string): value is PlanningAreaPurpose => (PLANNING_ARE
 /** `Route planning`, the form's own label for the wire's token. */
 const purposeLabel = (purpose: string) => planningAreaPurposeOptions().find((option) => option.value === purpose)?.label ?? purpose
 
-/** The first version a create carries, or a version added later: the polygon, its start, and its end as the first day out. */
-function boundaryCreateOf(record: BusinessRecord, polygon: FlatPolygon): { boundary: FlatPolygon; validFrom: string; validTo?: string } | LocalRefusal {
-  const from = typed(record, "effectiveFrom")
+/** The fixture area that quotes the reference: its Code fact, the seed's own code, which a rename does not touch. */
+const fixtureCoded = (fixtures: readonly BusinessRecord[], code: string) => fixtures.filter(hasPrefix("area")).find((record) => record.facts.Code === code)
+
+/** A version to add — the first, or the next after one that ended: the polygon, its start, and its end as the first day out. */
+function boundaryCreateOf(polygon: FlatPolygon, from: string | undefined, to: string | undefined): { boundary: FlatPolygon; validFrom: string; validTo?: string } | LocalRefusal {
   if (!from) return refusal("effectiveFrom", "A drawn area needs the day its boundary comes into force")
-  const to = typed(record, "effectiveTo")
   return { boundary: polygon, validFrom: from, ...(to === undefined ? {} : { validTo: firstDayOut(to) }) }
 }
 
-/** What an area's update carries: a patch of the area, and one of the version in force or a first version, each to its own route. */
+/** What an area's update carries: a patch of the area, and one of the version the record reads or a version to add, each to its own route. */
 type PlanningAreaWrite = {
   area?: { name?: string; purpose?: string }
   boundary?: { id: string; patch: { boundary?: FlatPolygon; validTo?: string | null } } | { create: { boundary: FlatPolygon; validFrom: string; validTo?: string } }
@@ -187,10 +242,11 @@ export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
     return areas.map((area) => ({ ...area, boundaries: boundaries.filter((version) => version.planningAreaId === area.id) }))
   },
   toRecord: (area, context) => {
-    const fixture = fixtureNamed(context.fixtures, "area", [area.name])
+    const fixture = fixtureCoded(context.fixtures, area.code) ?? fixtureNamed(context.fixtures, "area", [area.name])
     const project = context.resolve.byServerId(area.projectId)
     const projectWebId = project?.id ?? webIdOf("project", area.projectId)
-    const { status, version } = versionInForce(area.boundaries, localDay(context.now ?? new Date()))
+    const day = dayIn(context.now ?? new Date(), project === undefined ? undefined : typed(project, "timezone"))
+    const { status, version } = versionInForce(area.boundaries, day)
     const purpose = purposeLabel(area.purpose)
     const effectiveTo = version === null || version.validTo === null ? undefined : lastDayIn(version.validTo)
     return {
@@ -222,8 +278,11 @@ export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
           : {
               effectiveFrom: version.validFrom,
               ...(effectiveTo === undefined ? {} : { effectiveTo }),
-              geometry: JSON.stringify(version.boundary),
               boundaryId: version.id,
+              // The form's confirmation that the drawing passed: a version the API holds has.
+              geometryConfirmed: true,
+              // The map draws what is in force today, so only that version is the record's geometry.
+              ...(status === "Active" ? { [PLANNING_AREA_GEOMETRY_KEY]: JSON.stringify(version.boundary) } : {}),
             }),
       },
     }
@@ -237,9 +296,10 @@ export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
     if (projectId === undefined) return refusal("projectId", "Pick a project")
     const purpose = typed(record, "purpose")
     if (!purpose || !isPurpose(purpose)) return refusal("purpose", "Pick a purpose")
-    const polygon = parsePolygonText(typed(record, "geometry"))
-    if (polygon === undefined) return { projectId, code, name, purpose }
-    const boundary = boundaryCreateOf(record, polygon)
+    const drawn = geometryOfText(typed(record, PLANNING_AREA_GEOMETRY_KEY))
+    if (drawn.kind === "malformed") return refusal(PLANNING_AREA_GEOMETRY_KEY, NOT_A_POLYGON)
+    if (drawn.kind !== "polygon") return { projectId, code, name, purpose }
+    const boundary = boundaryCreateOf(drawn.polygon, typed(record, "effectiveFrom"), typed(record, "effectiveTo"))
     if ("path" in boundary) return boundary
     return { projectId, code, name, purpose, boundary }
   },
@@ -247,24 +307,34 @@ export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
     if (changedTyped(before, after, "areaCode")) return refusal("areaCode", "The reference is set once: an area that needs another reference is another area")
     if (changedTyped(before, after, "projectId")) return refusal("projectId", "An area stays in its project")
     const area = patchOf(before, after, (record) => ({ name: typed(record, "areaName") ?? record.name, purpose: typed(record, "purpose") }))
-    const versionId = typed(after, "boundaryId") ?? typed(before, "boundaryId")
-    const drawnBefore = parsePolygonText(typed(before, "geometry"))
-    const drawnAfter = parsePolygonText(typed(after, "geometry"))
+    const drawn = geometryOfText(typed(after, PLANNING_AREA_GEOMETRY_KEY))
+    if (drawn.kind === "malformed") return refusal(PLANNING_AREA_GEOMETRY_KEY, NOT_A_POLYGON)
+    const drawnAfter = drawn.kind === "polygon" ? drawn.polygon : undefined
+    const drawnBefore = parsePolygonText(typed(before, PLANNING_AREA_GEOMETRY_KEY))
     const redrawn = drawnAfter !== undefined && JSON.stringify(drawnBefore) !== JSON.stringify(drawnAfter)
+    const versionId = typed(after, "boundaryId") ?? typed(before, "boundaryId")
+    const startMoved = changedTyped(before, after, "effectiveFrom")
     const endBefore = typed(before, "effectiveTo")
     const endAfter = typed(after, "effectiveTo")
+    // On an area whose version has ended, a new polygon or a new start is the
+    // next version; its end alone moved is that version reopened or ended anew.
+    const nextVersion = before.status === "Expired" && (drawnAfter !== undefined || startMoved)
     let boundary: PlanningAreaWrite["boundary"]
-    if (versionId !== undefined) {
-      if (changedTyped(before, after, "effectiveFrom")) return refusal("effectiveFrom", "A version's start does not move: end this one and draw the next")
+    if (versionId !== undefined && !nextVersion) {
+      if (startMoved) return refusal("effectiveFrom", "A version's start does not move: end this one and draw the next")
       const versionPatch = {
         ...(redrawn ? { boundary: drawnAfter } : {}),
         ...(endBefore === endAfter ? {} : { validTo: endAfter === undefined ? null : firstDayOut(endAfter) }),
       }
       if (Object.keys(versionPatch).length > 0) boundary = { id: versionId, patch: versionPatch }
-    } else if (drawnAfter !== undefined) {
-      const first = boundaryCreateOf(after, drawnAfter)
-      if ("path" in first) return first
-      boundary = { create: first }
+    } else if (drawnAfter !== undefined || nextVersion) {
+      if (nextVersion && !startMoved) return refusal("effectiveFrom", "This version has ended: give the day the next one comes into force")
+      if (drawnAfter === undefined) return refusal(PLANNING_AREA_GEOMETRY_KEY, "The next version needs its boundary: give the polygon it draws")
+      // The ended version's end, left as the form showed it, says nothing about the next version's.
+      const end = nextVersion && endBefore === endAfter ? undefined : endAfter
+      const next = boundaryCreateOf(drawnAfter, typed(after, "effectiveFrom"), end)
+      if ("path" in next) return next
+      boundary = { create: next }
     }
     if (area === null && boundary === undefined) return null
     const write: PlanningAreaWrite = { ...(area === null ? {} : { area }), ...(boundary === undefined ? {} : { boundary }) }
@@ -275,17 +345,21 @@ export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
       const { boundary, ...area } = created
       return { ...area, boundaries: boundary === null ? [] : [boundary] }
     }),
-  // Each part to its own route, then the versions read back, so the record shows what stands.
+  // The version first — the request the API is likeliest to refuse, an
+  // overlap or a polygon PostGIS rejects — so a refusal leaves the area as
+  // it was; then the area, then the versions read back, so the record shows
+  // what stands. Two requests are still two: a version written before an
+  // area patch the API refuses stays written, and the pane's refusal says so
+  // in the API's sentence while the row shows the version.
   update: async (client, serverId, body) => {
     const write = body as PlanningAreaWrite
-    const patched = write.area === undefined ? undefined : await patch<PlanningArea>(client, `/planning-areas/${serverId}`, write.area)
     if (write.boundary !== undefined && "patch" in write.boundary) {
       await patch<PlanningAreaBoundary>(client, `/planning-area-boundaries/${write.boundary.id}`, write.boundary.patch)
     }
     if (write.boundary !== undefined && "create" in write.boundary) {
       await create<PlanningAreaBoundary>(client, `/planning-areas/${serverId}/boundaries`, write.boundary.create)
     }
-    const area = patched ?? (await get<PlanningArea>(client, `/planning-areas/${serverId}`))
+    const area = write.area === undefined ? await get<PlanningArea>(client, `/planning-areas/${serverId}`) : await patch<PlanningArea>(client, `/planning-areas/${serverId}`, write.area)
     const boundaries = await listAll<PlanningAreaBoundary>(client, `/planning-areas/${serverId}/boundaries`)
     return { ...area, boundaries }
   },
@@ -302,9 +376,11 @@ function holidaysOf(record: BusinessRecord, project: BusinessRecord | undefined)
   return parseHolidayDates(typed(record, "holidayDates")).map((day) => ({ day, name: carried.get(day) ?? listed(day) ?? null }))
 }
 
+/** What a calendar's update carries, and in which order when it carries both: `holidaysFirst` when the new set fits the period as stored. */
 type CollectionCalendarWrite = {
   calendar?: { name?: string; validFrom?: string; validTo?: string | null }
   holidays?: CollectionCalendarHoliday[]
+  holidaysFirst?: boolean
 }
 
 export const collectionCalendarAdapter: ResourceAdapter<CollectionCalendar> = {
@@ -372,15 +448,38 @@ export const collectionCalendarAdapter: ResourceAdapter<CollectionCalendar> = {
     const is = holidaysOf(after, project)
     const holidays = JSON.stringify(was) === JSON.stringify(is) ? undefined : is
     if (calendar === null && holidays === undefined) return null
-    const write: CollectionCalendarWrite = { ...(calendar === null ? {} : { calendar }), ...(holidays === undefined ? {} : { holidays }) }
+    if (calendar === null) return { holidays }
+    if (holidays === undefined) return { calendar }
+    // Both move: the holidays go first when every one fits the period as
+    // stored (the period may then shrink under the set that remains), the
+    // period first when a holiday lies outside it (the set is put once the
+    // period has room). A holiday dropped at one end and one added past the
+    // other in the same edit fits neither order; the API refuses the second
+    // request in its own sentence, and the edit is made in two.
+    const storedFrom = typed(before, "validFrom") ?? ""
+    const storedTo = typed(before, "validTo")
+    const fitsStored = (day: string) => day >= storedFrom && (storedTo === undefined || day <= storedTo)
+    const write: CollectionCalendarWrite = { calendar, holidays, holidaysFirst: is.every((holiday) => fitsStored(holiday.day)) }
     return write
   },
   create: (client, body) => create<CollectionCalendar>(client, "/collection-calendars", body).then((created) => created.body),
-  // The calendar first, then the whole set of holidays; the answer is the calendar as it now stands.
+  // The two requests in the order the body says; the answer is the calendar as it now stands.
   update: async (client, serverId, body) => {
     const write = body as CollectionCalendarWrite
-    let calendar = write.calendar === undefined ? undefined : await patch<CollectionCalendar>(client, `/collection-calendars/${serverId}`, write.calendar)
-    if (write.holidays !== undefined) calendar = await put<CollectionCalendar>(client, `/collection-calendars/${serverId}/holidays`, { holidays: write.holidays })
+    let calendar: CollectionCalendar | undefined
+    const patchCalendar = async () => {
+      if (write.calendar !== undefined) calendar = await patch<CollectionCalendar>(client, `/collection-calendars/${serverId}`, write.calendar)
+    }
+    const putHolidays = async () => {
+      if (write.holidays !== undefined) calendar = await put<CollectionCalendar>(client, `/collection-calendars/${serverId}/holidays`, { holidays: write.holidays })
+    }
+    if (write.holidaysFirst) {
+      await putHolidays()
+      await patchCalendar()
+    } else {
+      await patchCalendar()
+      await putHolidays()
+    }
     return calendar ?? (await get<CollectionCalendar>(client, `/collection-calendars/${serverId}`))
   },
 }

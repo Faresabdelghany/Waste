@@ -41,6 +41,7 @@ import { BusinessRecordFormDialog } from "@/components/waste/business-record-for
 import {
   useBusinessRecordStore,
   useBusinessRecordsHydrated,
+  useModuleRecords,
 } from "@/components/waste/business-record-store"
 import { statusClasses } from "@/components/waste/business-record-views"
 import type {
@@ -108,6 +109,9 @@ const ACTOR_NAME = "Olivia Larsen"
 
 /** Where the project records live — the module resolveProjectCalendar reads the weekend and list name from. */
 const ORGANISATION_MODULE: ModuleLocation = { workspaceId: "configure", moduleId: "organization" }
+const NO_RECORDS: readonly BusinessRecord[] = []
+const ORGANISATION_FIXTURES = getModuleDefinition(ORGANISATION_MODULE)?.records ?? NO_RECORDS
+const CALENDAR_FIXTURES = getModuleDefinition(COLLECTION_CALENDARS_MODULE)?.records ?? NO_RECORDS
 
 const AMBER =
   "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
@@ -138,8 +142,14 @@ export function HolidayListsSettings() {
       : []
   }
 
-  const projectRecords = projectRecordsOf(liveRecords(ORGANISATION_MODULE))
-  const calendarRecords = liveRecords(COLLECTION_CALENDARS_MODULE)
+  // The projects and the calendars the pane edits: on the Pilot, the API's
+  // rows once they are here and nothing before (Issue #175), so no card
+  // offers a year over fixtures the API does not hold.
+  const organisation = useModuleRecords(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId, ORGANISATION_FIXTURES)
+  const calendars = useModuleRecords(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, CALENDAR_FIXTURES)
+  const ready = organisation.ready && calendars.ready
+  const projectRecords = projectRecordsOf(organisation.records.filter((record) => !isSoftDeleted(record)))
+  const calendarRecords = calendars.records.filter((record) => !isSoftDeleted(record))
 
   const lookups: CollectionCalendarLookups = {
     projectName: (projectId) => projectRecords.find((record) => record.id === projectId)?.name,
@@ -160,20 +170,30 @@ export function HolidayListsSettings() {
   const needle = query.trim().toLowerCase()
   const shown = ordered.filter((project) => project.name.toLowerCase().includes(needle))
 
+  // On the Pilot the store answers the write's outcome once the API has, so
+  // the success is said then and a refusal by the store, in the API's words;
+  // on the browser's own path there is nothing to wait for.
+  const whenSaved = (outcome: ReturnType<typeof upsertRecord>, done: () => void) => {
+    if (outcome === undefined) done()
+    else void outcome.then((result) => result.kind !== "refused" && done())
+  }
+
   const saveProject = (project: BusinessRecord, settings: ProjectCalendarSettings) => {
     const written = withProjectCalendar(project, settings)
-    upsertRecord(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId, written)
-    toast.success(`${project.name} updated`, {
-      description: `${projectHolidayListName(written) ?? NO_HOLIDAY_LIST_LABEL} · ${weekendLabel(projectWeekend(written))} weekend.`,
-    })
+    whenSaved(upsertRecord(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId, written), () =>
+      toast.success(`${project.name} updated`, {
+        description: `${projectHolidayListName(written) ?? NO_HOLIDAY_LIST_LABEL} · ${weekendLabel(projectWeekend(written))} weekend.`,
+      }),
+    )
   }
 
   const saveEntries = (record: BusinessRecord, entries: readonly HolidayEntry[]) => {
     const written = withHolidayEntries(record, entries, lookups)
-    upsertRecord(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, written)
-    toast.success(`${record.name} updated`, {
-      description: `${count(entries.length, "holiday")} · read by the next route generation on the project.`,
-    })
+    whenSaved(upsertRecord(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, written), () =>
+      toast.success(`${record.name} updated`, {
+        description: `${count(entries.length, "holiday")} · read by the next route generation on the project.`,
+      }),
+    )
   }
 
   const openCreate = (project: BusinessRecord, years: readonly BusinessRecord[]) => {
@@ -206,12 +226,19 @@ export function HolidayListsSettings() {
   const handleCreate = (values: BusinessFormValues) => {
     if (!creating) return
     const record = createYearRecord(creating.proposal, values, { actorName: ACTOR_NAME, lookups })
-    upsertRecord(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, record)
-    toast.success(`${record.name} created`, {
-      description: "Its holidays are read by route generation on the project.",
+    whenSaved(upsertRecord(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, record), () => {
+      setCreating(null)
+      toast.success(`${record.name} created`, {
+        description: "Its holidays are read by route generation on the project.",
+      })
     })
-    setCreating(null)
   }
+
+  const emptyMessage = organisation.pending || calendars.pending
+    ? "Reading the projects and their calendars from the API…"
+    : (organisation.problem ?? calendars.problem)
+      ? `The holiday lists could not be read from the API: ${(organisation.problem ?? calendars.problem)?.detail ?? (organisation.problem ?? calendars.problem)?.title}`
+      : "No project matches this search."
 
   return (
     <AssetPanelShell
@@ -231,9 +258,9 @@ export function HolidayListsSettings() {
       }
     >
       <div className="space-y-4">
-        {shown.length === 0 ? (
+        {!ready || shown.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border/60 p-8 text-center text-sm text-muted-foreground">
-            No project matches this search.
+            {emptyMessage}
           </p>
         ) : (
           shown.map((project) => (

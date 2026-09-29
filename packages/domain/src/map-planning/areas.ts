@@ -76,15 +76,30 @@ export function planningAreaOutline(spots: readonly LngLat[]): LngLat[] {
 }
 
 /**
- * The outline an area record carries from the server: `submittedValues.geometry`,
- * a GeoJSON Polygon as the web's adapter writes the version in force
- * (apps/web/lib/api/records/planning.ts), whose outer ring the map draws as it
- * stands — open, since every outline here is. Null where the record carries
- * none, or text that is no polygon: the area is then outlined around its
- * located containers, as every fixture area is.
+ * The typed value an area record carries its boundary on: a GeoJSON Polygon
+ * as the web's adapter writes the version in force
+ * (apps/web/lib/api/records/planning.ts). The adapter and this reader share
+ * the key so neither misspells the other.
  */
-export function storedOutline(area: BusinessRecord): LngLat[] | null {
-  const raw = area.submittedValues?.geometry
+export const PLANNING_AREA_GEOMETRY_KEY = "geometry"
+
+/** A GeoJSON Polygon's rings as the record carries them: `[lng, lat]` positions, the first ring the outer, any other a hole. */
+export type PlanningAreaGeometry = { type: "Polygon"; coordinates: [number, number][][] }
+
+const positionOf = (value: unknown): [number, number] | null =>
+  Array.isArray(value) && value.length >= 2 && typeof value[0] === "number" && typeof value[1] === "number" && Number.isFinite(value[0]) && Number.isFinite(value[1])
+    ? [value[0], value[1]]
+    : null
+
+/**
+ * The polygon an area record carries under `PLANNING_AREA_GEOMETRY_KEY`, as
+ * it stands — every ring, since a hole travels with its outer ring — or null
+ * where the record carries none, text that is no polygon, or a polygon with
+ * one position missing or malformed: a polygon with a vertex dropped is a
+ * different shape, not this one with a flaw.
+ */
+export function planningAreaGeometry(area: BusinessRecord): PlanningAreaGeometry | null {
+  const raw = area.submittedValues?.[PLANNING_AREA_GEOMETRY_KEY]
   if (typeof raw !== "string" || raw.trim() === "") return null
   let parsed: unknown
   try {
@@ -94,10 +109,28 @@ export function storedOutline(area: BusinessRecord): LngLat[] | null {
   }
   if (!parsed || typeof parsed !== "object") return null
   const polygon = parsed as { type?: unknown; coordinates?: unknown }
-  if (polygon.type !== "Polygon" || !Array.isArray(polygon.coordinates) || !Array.isArray(polygon.coordinates[0])) return null
-  const ring = (polygon.coordinates[0] as unknown[]).flatMap((position) =>
-    Array.isArray(position) && typeof position[0] === "number" && typeof position[1] === "number" ? [{ lng: position[0], lat: position[1] }] : [],
-  )
+  if (polygon.type !== "Polygon" || !Array.isArray(polygon.coordinates) || polygon.coordinates.length === 0) return null
+  const rings: [number, number][][] = []
+  for (const ring of polygon.coordinates as unknown[]) {
+    if (!Array.isArray(ring)) return null
+    const positions = ring.map(positionOf)
+    if (positions.some((position) => position === null)) return null
+    rings.push(positions as [number, number][])
+  }
+  return { type: "Polygon", coordinates: rings }
+}
+
+/**
+ * The outline an area record carries from the server: the outer ring of
+ * `planningAreaGeometry`, open, since every outline the map draws is. Null
+ * where the record carries no polygon, or one whose outer ring encloses
+ * nothing: the area is then outlined around its located containers, as
+ * every fixture area is.
+ */
+export function storedOutline(area: BusinessRecord): LngLat[] | null {
+  const polygon = planningAreaGeometry(area)
+  if (polygon === null) return null
+  const ring = polygon.coordinates[0].map(([lng, lat]) => ({ lng, lat }))
   const last = ring[ring.length - 1]
   const open = ring.length >= 4 && last.lng === ring[0].lng && last.lat === ring[0].lat ? ring.slice(0, -1) : ring
   return open.length >= 3 ? open : null
