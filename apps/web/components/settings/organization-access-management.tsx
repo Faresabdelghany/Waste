@@ -11,7 +11,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
-import { useApiConfigured } from "@/components/waste/api-session-store"
+import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import {
   useBusinessRecordStore,
   useServerModuleState,
@@ -75,20 +75,21 @@ import {
   isCompanyRecord,
   REACTIVATE_USER,
 } from "@/lib/api/records/organisation"
-import { IDLE, type ModuleState } from "@/lib/api/records/server-records"
+import { IDLE } from "@/lib/api/records/server-records"
 import {
   FIXTURE_COMPANY_ID,
   FIXTURE_SERVICE_PROVIDER_IDS,
   getWorkspaceDefinition,
+  type BusinessRecord,
 } from "@/lib/data/business-modules"
 import {
+  pilotEmptyState,
   projectPickerOptions,
   providerPickerOptions,
   rolePickerOptions,
   roleRowsOf,
   userRowsOf,
   type UserRow,
-  type UsersRolesSource,
 } from "@/lib/data/users-roles"
 import { cn } from "@/lib/utils"
 
@@ -112,23 +113,19 @@ const serviceProviderAccessModule = getWorkspaceDefinition("service-providers").
   (module) => module.id === "service-provider-workspace",
 )
 
-/**
- * What the Users table says on the Pilot while it has no rows: the list is
- * still being read, or the read failed — never the fixtures (Issue #163).
- */
-function pilotListMessage(module: ModuleState): string | null {
-  if (module.status === "ready") return null
-  if (module.status === "failed") return "The users could not be read from the API."
-  return "Reading the company's users from the API…"
-}
+/** No records, shared: a `[]` made in render reads as mutable to the React Compiler and would keep it from compiling the pane. */
+const NO_RECORDS: readonly BusinessRecord[] = []
 
 function UserRowActions({
   row,
+  self,
   disabled,
   onDeactivate,
   onReactivate,
 }: {
   row: UserRow
+  /** The signed-in person's own row: deactivating it would end their own session, and only another administrator could undo it. */
+  self: boolean
   disabled: boolean
   onDeactivate: () => void
   onReactivate: () => void
@@ -151,6 +148,8 @@ function UserRowActions({
       <DropdownMenuContent align="end" className="min-w-44">
         {deactivated ? (
           <DropdownMenuItem onSelect={onReactivate}>Reactivate</DropdownMenuItem>
+        ) : self ? (
+          <DropdownMenuItem disabled>Your own account is not deactivated here</DropdownMenuItem>
         ) : (
           <DropdownMenuItem onSelect={onDeactivate}>Deactivate</DropdownMenuItem>
         )}
@@ -463,8 +462,14 @@ export function OrganizationAccessManagement() {
   // access module through the record store and nothing else: the
   // organisation store below is fixture mode's (Issue #163).
   const configured = useApiConfigured()
+  const { me } = useApiSession()
   const { getRecords, upsertRecord, sendCommand } = useBusinessRecordStore()
   const accessModuleState = useServerModuleState("configure", "access") ?? IDLE
+  // The pickers' and the company name's modules: read only once each is
+  // ready, since `getRecords` answers a module's fixtures until then and a
+  // fixture project is one the API never returned.
+  const organisationReady = useServerModuleState("configure", "organization")?.status === "ready"
+  const providersReady = useServerModuleState("service-providers", "service-providers")?.status === "ready"
   const {
     companies,
     projects,
@@ -499,9 +504,11 @@ export function OrganizationAccessManagement() {
   const [roleScope, setRoleScope] = useState("")
   const [rolePermissions, setRolePermissions] = useState("")
 
-  // The row a command is out for, and the row Deactivate asks about first.
+  // The row a command is out for, and the row Deactivate asks about first;
+  // the row stays named while its dialog animates shut.
   const [pendingCommandId, setPendingCommandId] = useState<string | null>(null)
   const [deactivating, setDeactivating] = useState<UserRow | null>(null)
+  const [deactivateOpen, setDeactivateOpen] = useState(false)
 
   const accessRecords = getRecords(
     "configure",
@@ -514,50 +521,44 @@ export function OrganizationAccessManagement() {
     serviceProviderAccessModule?.records ?? [],
   )
   // The Pilot's pickers and the company's name: the organisation and the
-  // service-provider modules, as the store loaded them.
-  const organisationRecords = getRecords(
-    "configure",
-    "organization",
-    organizationModule?.records ?? [],
-  )
-  const providerRecords = getRecords(
-    "service-providers",
-    "service-providers",
-    serviceProvidersModule?.records ?? [],
-  )
+  // service-provider modules, as the store loaded them, and `/me` for the
+  // company until the organisation module is ready.
+  const organisationRecords: readonly BusinessRecord[] =
+    configured && organisationReady ? getRecords("configure", "organization", organizationModule?.records ?? NO_RECORDS) : NO_RECORDS
+  const providerRecords: readonly BusinessRecord[] =
+    configured && providersReady ? getRecords("service-providers", "service-providers", serviceProvidersModule?.records ?? NO_RECORDS) : NO_RECORDS
   const companyRecord = organisationRecords.find(isCompanyRecord)
-  const companyName =
-    companyRecord?.facts.Name ?? companyRecord?.name ?? companies[0]?.name ?? "Company"
+  // The caller's company is `/me`'s; the organisation record lends only its web id.
+  const companyName = me?.company.name ?? "Company"
+  // The pickers, before the rows' memos: a call over these arrays after the
+  // memos reads to the React Compiler as a possible mutation of a dependency,
+  // and it would then skip the pane.
+  const roleOptions = rolePickerOptions(accessRecords)
+  const projectOptions = projectPickerOptions(organisationRecords)
+  const providerOptions = providerPickerOptions(providerRecords)
 
-  const source = useMemo<UsersRolesSource>(
+  const userRows = useMemo(
     () =>
-      configured
-        ? { kind: "api", module: accessModuleState, companyName }
-        : {
-            kind: "fixtures",
-            organizationUsers,
-            companies,
-            projects,
-            roles,
-            accessRecords,
-            serviceProviderAccessRecords,
-          },
-    [
-      accessModuleState,
-      accessRecords,
-      companies,
-      companyName,
-      configured,
-      organizationUsers,
-      projects,
-      roles,
-      serviceProviderAccessRecords,
-    ],
+      userRowsOf(
+        configured
+          ? { kind: "api", module: accessModuleState, companyName }
+          : { kind: "fixtures", organizationUsers, companies, projects, roles, accessRecords, serviceProviderAccessRecords },
+      ),
+    [accessModuleState, accessRecords, companies, companyName, configured, organizationUsers, projects, roles, serviceProviderAccessRecords],
   )
-  const userRows = useMemo(() => userRowsOf(source), [source])
-  const roleRows = useMemo(() => roleRowsOf(source), [source])
-  const pilotMessage = configured ? pilotListMessage(accessModuleState) : null
+  const roleRows = useMemo(
+    () =>
+      roleRowsOf(
+        configured
+          ? { kind: "api", module: accessModuleState, companyName }
+          : { kind: "fixtures", organizationUsers, companies, projects, roles, accessRecords, serviceProviderAccessRecords },
+      ),
+    [accessModuleState, accessRecords, companies, companyName, configured, organizationUsers, projects, roles, serviceProviderAccessRecords],
+  )
+  const pilotUsersEmpty = configured ? pilotEmptyState(accessModuleState, "users") : null
+  const pilotRolesEmpty = configured ? pilotEmptyState(accessModuleState, "roles") : null
   const pilotReady = !configured || accessModuleState.status === "ready"
+  const selfEmail = me?.user.email.toLowerCase()
 
   const userStatusOptions = useMemo(
     () => [...new Set(userRows.map((user) => user.status))].sort(),
@@ -572,22 +573,27 @@ export function OrganizationAccessManagement() {
     [roleRows],
   )
 
-  const runUserCommand = async (row: UserRow, name: string, done: string) => {
+  // A promise chain rather than try/finally, which the React Compiler skips.
+  // A refusal is toasted by the store in the API's words; only success is
+  // this pane's to say.
+  const runUserCommand = (row: UserRow, name: string, done: string) => {
     setPendingCommandId(row.id)
-    try {
-      // A refusal is toasted by the store in the API's words; only success is this pane's to say.
-      const outcome = await sendCommand("configure", "access", row.id, name)
-      if (outcome.kind === "done") toast.success(done)
-    } finally {
-      setPendingCommandId(null)
-    }
+    return sendCommand("configure", "access", row.id, name)
+      .then((outcome) => {
+        if (outcome.kind === "done") toast.success(done)
+      })
+      .finally(() => setPendingCommandId(null))
   }
 
-  const confirmDeactivate = async () => {
+  const askToDeactivate = (row: UserRow) => {
+    setDeactivating(row)
+    setDeactivateOpen(true)
+  }
+
+  const confirmDeactivate = () => {
     if (deactivating === null) return
     const row = deactivating
-    await runUserCommand(row, DEACTIVATE_USER, `${row.name} deactivated`)
-    setDeactivating(null)
+    void runUserCommand(row, DEACTIVATE_USER, `${row.name} deactivated`).finally(() => setDeactivateOpen(false))
   }
 
   const normalizedUserQuery = userQuery.trim().toLowerCase()
@@ -830,7 +836,7 @@ export function OrganizationAccessManagement() {
               size="sm"
               onClick={() => setAddUserOpen(true)}
               disabled={!pilotReady}
-              title={pilotReady ? undefined : pilotMessage ?? undefined}
+              title={pilotUsersEmpty?.message}
             >
               <Plus className="h-4 w-4" weight="bold" /> Add user
             </Button>
@@ -886,7 +892,14 @@ export function OrganizationAccessManagement() {
                 {usersPageRows.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell className="min-w-52 py-3">
-                      <div className="font-medium text-foreground">{user.name}</div>
+                      <div className="flex items-center gap-2 font-medium text-foreground">
+                        {user.name}
+                        {user.primaryAdministrator && (
+                          <Badge variant="muted" className="font-normal">
+                            Primary administrator
+                          </Badge>
+                        )}
+                      </div>
                       {userView.showDetails && (
                         <div className="mt-0.5 text-xs text-muted-foreground">
                           {user.email}
@@ -908,8 +921,9 @@ export function OrganizationAccessManagement() {
                       <TableCell className="w-12 text-right">
                         <UserRowActions
                           row={user}
+                          self={user.email.toLowerCase() === selfEmail}
                           disabled={pendingCommandId !== null}
-                          onDeactivate={() => setDeactivating(user)}
+                          onDeactivate={() => askToDeactivate(user)}
                           onReactivate={() =>
                             void runUserCommand(user, REACTIVATE_USER, `${user.name} reactivated`)
                           }
@@ -921,14 +935,8 @@ export function OrganizationAccessManagement() {
                 {filteredUsers.length === 0 && (
                   <EmptyRow
                     colSpan={configured ? 6 : 5}
-                    message={pilotMessage ?? "No users match your search."}
-                    hint={
-                      pilotMessage === null
-                        ? undefined
-                        : accessModuleState.problem === null
-                          ? "The list shows the API's users and nothing else."
-                          : accessModuleState.problem.detail ?? accessModuleState.problem.title
-                    }
+                    message={pilotUsersEmpty?.message ?? "No users match your search."}
+                    hint={pilotUsersEmpty?.hint}
                   />
                 )}
               </TableBody>
@@ -1045,8 +1053,8 @@ export function OrganizationAccessManagement() {
                 {filteredRoles.length === 0 && (
                   <EmptyRow
                     colSpan={roleView.showDetails ? 5 : 4}
-                    message={pilotMessage === null ? "No roles match your search." : pilotMessage.replace("users", "roles")}
-                    hint={pilotMessage === null ? undefined : "The list shows the API's roles and nothing else."}
+                    message={pilotRolesEmpty?.message ?? "No roles match your search."}
+                    hint={pilotRolesEmpty?.hint}
                   />
                 )}
               </TableBody>
@@ -1065,15 +1073,20 @@ export function OrganizationAccessManagement() {
         <InviteUserDialog
           open={addUserOpen}
           onOpenChange={setAddUserOpen}
-          roles={rolePickerOptions(accessRecords)}
-          projects={projectPickerOptions(organisationRecords)}
-          providers={providerPickerOptions(providerRecords)}
+          roles={roleOptions}
+          projects={projectOptions}
+          providers={providerOptions}
           companyRecordId={companyRecord?.id}
-          invite={(record) => upsertRecord("configure", "access", record)}
+          // The dialog says a refusal itself, so the store's toast is off;
+          // and a record only goes out while the module is ready, never to
+          // the browser's bucket.
+          invite={(record) =>
+            accessModuleState.status === "ready" ? upsertRecord("configure", "access", record, { report: false }) : undefined
+          }
         />
       )}
 
-      <Dialog open={deactivating !== null} onOpenChange={(nextOpen) => { if (!nextOpen && pendingCommandId === null) setDeactivating(null) }}>
+      <Dialog open={deactivateOpen} onOpenChange={(nextOpen) => { if (!nextOpen && pendingCommandId === null) setDeactivateOpen(false) }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Deactivate {deactivating?.name}?</DialogTitle>
@@ -1087,7 +1100,7 @@ export function OrganizationAccessManagement() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setDeactivating(null)}
+              onClick={() => setDeactivateOpen(false)}
               disabled={pendingCommandId !== null}
             >
               Cancel
@@ -1095,7 +1108,7 @@ export function OrganizationAccessManagement() {
             <Button
               type="button"
               variant="destructive"
-              onClick={() => void confirmDeactivate()}
+              onClick={confirmDeactivate}
               disabled={pendingCommandId !== null}
             >
               {pendingCommandId === null ? "Deactivate" : "Deactivating…"}

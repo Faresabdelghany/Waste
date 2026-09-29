@@ -486,8 +486,11 @@ export const userAdapter: ResourceAdapter<User> = {
       if (serviceProviderId === undefined) return refusal("serviceProviderId", "Not a service provider of this company")
       return { email, fullName, roleId, serviceProviderId }
     }
-    if (typed(record, "projectAccess") === ALL_PROJECTS_ACCESS) return { email, fullName, roleId, allProjects: true }
-    const webIds = typed(record, "projectIds")?.split(",").map((id) => id.trim()) ?? record.projectIds ?? []
+    // The projects the form ticked decide before the access label does: the
+    // label is presentation, and a project may be called "All projects".
+    const tickedIds = typed(record, "projectIds")?.split(",").map((id) => id.trim())
+    if (tickedIds === undefined && typed(record, "projectAccess") === ALL_PROJECTS_ACCESS) return { email, fullName, roleId, allProjects: true }
+    const webIds = tickedIds ?? record.projectIds ?? []
     // Every project named must be one the store loaded. One it has not is
     // refused, not dropped: the API would take the rest as the whole.
     const projectIds = webIds.map((webId) => context.resolve.serverIdOf(webId))

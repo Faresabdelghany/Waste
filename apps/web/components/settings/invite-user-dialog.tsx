@@ -32,10 +32,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { problemSentence } from "@/lib/api/problem"
+import { genericProblem, problemSentence } from "@/lib/api/problem"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import {
+  coversEveryProject,
   inviteRecord,
   mintInviteId,
   type InviteAccess,
@@ -43,9 +44,6 @@ import {
 } from "@/lib/data/users-roles"
 
 type AccessKind = InviteAccess["kind"]
-
-/** The role that always covers every project (CONTEXT.md: Company Administrator). */
-const COMPANY_ADMINISTRATOR = "Company Administrator"
 
 const ACCESS_LABELS: Record<AccessKind, string> = {
   "all-projects": "All current and future projects",
@@ -81,7 +79,7 @@ export function InviteUserDialog({
   const [refusal, setRefusal] = useState<string | null>(null)
 
   const role = roles.find((candidate) => candidate.id === roleId)
-  const administrator = role?.name === COMPANY_ADMINISTRATOR
+  const administrator = role !== undefined && coversEveryProject(role.id)
   const kind: AccessKind = administrator ? "all-projects" : accessKind
 
   const reset = () => {
@@ -110,7 +108,10 @@ export function InviteUserDialog({
     return provider === undefined ? null : { kind, provider }
   }
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
+  // A promise chain rather than try/finally: the React Compiler skips a
+  // component with a `try` it cannot compile, and this dialog's re-renders
+  // are per keystroke.
+  const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const access = chosenAccess()
     if (!fullName.trim() || !email.trim() || role === undefined || access === null) {
@@ -119,21 +120,25 @@ export function InviteUserDialog({
     }
     setRefusal(null)
     setSubmitting(true)
-    try {
-      const record = inviteRecord({ fullName, email, role, access, companyRecordId }, mintInviteId())
-      const outcome = await invite(record)
-      if (outcome !== undefined && outcome.kind === "refused") {
-        setRefusal(problemSentence(outcome.problem))
-        return
-      }
-      onOpenChange(false)
-      reset()
-      toast.success("Invitation written", {
-        description: `${record.name} lists as invited until a Login with this address first signs in.`,
+    const record = inviteRecord({ fullName, email, role, access, companyRecordId }, mintInviteId())
+    // No outcome means the record went to the browser, which on the Pilot
+    // is no Invitation at all: said so, never a success.
+    const outcome: Promise<WriteOutcome> =
+      invite(record) ??
+      Promise.resolve({ kind: "refused", recordId: record.id, problem: genericProblem(400, "The company's users are not being read from the API right now, so no Invitation was written.") })
+    void outcome
+      .then((result) => {
+        if (result.kind === "refused") {
+          setRefusal(problemSentence(result.problem))
+          return
+        }
+        onOpenChange(false)
+        reset()
+        toast.success("Invitation written", {
+          description: `${record.name} lists as invited until a Login with this address first signs in.`,
+        })
       })
-    } finally {
-      setSubmitting(false)
-    }
+      .finally(() => setSubmitting(false))
   }
 
   return (

@@ -22,7 +22,7 @@ import {
   hasLegacyIds,
   migrateLegacyRecordBuckets,
 } from "@/lib/data/legacy-ids"
-import type { ApiClient } from "@/lib/api/client"
+import { UNREACHABLE_STATUS, type ApiClient } from "@/lib/api/client"
 import { genericProblem, isAccountRefusal, problemSentence, type Problem } from "@/lib/api/problem"
 import { moduleKeyOf } from "@/lib/api/records/adapter"
 import { SERVER_MODULES, serverModuleOf } from "@/lib/api/records/modules"
@@ -56,7 +56,7 @@ import { useApiClient, useApiSessionIdentity } from "./api-session-store"
  * bare `contractor` field (the access form's field is `serviceProviderId`,
  * which the shared map already covers), so no browser is known to hold this
  * key. It is kept because `organizationForRecord` in
- * components/settings/organization-access-management.tsx reads
+ * lib/data/users-roles.ts (the Users & roles pane's fixture rows) reads
  * `submittedValues.serviceProvider`, and without an explicit entry a bare
  * `contractor` key would fall through to the token rewrite and become
  * `"service-provider"`, which nothing reads.
@@ -76,14 +76,16 @@ type BusinessRecordStoreValue = {
   /**
    * Saves a record. On a switched module that is ready, the write's outcome
    * once the API has answered — a caller that needs to know (a dialog that
-   * stays open on a refusal) awaits it; the rest of the workspace ignores it.
-   * On every other module the record goes to the browser's bucket, and there
-   * is nothing to await.
+   * stays open on a refusal) awaits it, and may say `report: false` to tell
+   * the person itself instead of the store's toast; the rest of the
+   * workspace ignores it. On every other module the record goes to the
+   * browser's bucket, and there is nothing to await.
    */
   upsertRecord: (
     workspaceId: WorkspaceId,
     moduleId: string,
     record: BusinessRecord,
+    options?: { report?: boolean },
   ) => Promise<WriteOutcome> | undefined
   /**
    * Sends one of a row's commands (`deactivate`, `reactivate`, …: the
@@ -183,6 +185,20 @@ function fixturesOf(workspaceId: WorkspaceId, moduleId: string): readonly Busine
   return getModuleDefinition({ workspaceId, moduleId })?.records ?? []
 }
 
+/**
+ * Runs `turn` after the row's writes and commands in flight, and holds the
+ * row until it settles: two saves of one row take turns, and a command on a
+ * row whose create is out waits for its server id.
+ */
+function enqueue<T>(pending: Map<string, Promise<unknown>>, recordId: string, turn: () => Promise<T>): Promise<T> {
+  const previous = pending.get(recordId) ?? Promise.resolve()
+  const next: Promise<T> = previous.then(turn, turn).finally(() => {
+    if (pending.get(recordId) === next) pending.delete(recordId)
+  })
+  pending.set(recordId, next)
+  return next
+}
+
 export function BusinessRecordStoreProvider({
   children,
 }: {
@@ -259,14 +275,14 @@ export function BusinessRecordStoreProvider({
   // and never falling back on fixtures. A load the session outlives — the
   // person signs out mid-way — is aborted, not left to finish into a store
   // that no longer wants it, and a write it outlives is dropped when it
-  // answers (`generation`).
+  // answers (`generation`). Every change of person or API empties the
+  // modules first, a sign-in as someone else included: the last person's
+  // rows are never shown under the next one while theirs load.
   useEffect(() => {
     const server = stores.server
     stores.generation.set((generation) => generation + 1)
-    if (identity === null) {
-      server.set(NO_SERVER_MODULES)
-      return
-    }
+    server.set(NO_SERVER_MODULES)
+    if (identity === null) return
     const controller = new AbortController()
     const initial = stores.client.getSnapshot()
     if (initial === null) return
@@ -372,12 +388,13 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
   )
 
   const upsertRecord = useCallback(
-    (workspaceId: WorkspaceId, moduleId: string, record: BusinessRecord) => {
+    (workspaceId: WorkspaceId, moduleId: string, record: BusinessRecord, options?: { report?: boolean }) => {
       const key = moduleKey(workspaceId, moduleId)
       const module = serverModuleOf(workspaceId, moduleId)
       const serverStore = stores.server
       const current = module === undefined ? undefined : serverStore.getSnapshot().get(key)
       const client = stores.client.getSnapshot()
+      const report = options?.report ?? true
 
       if (module !== undefined && current !== undefined && current.status === "ready" && client !== null) {
         // Optimistic and reconciled: the row shows what was saved at once,
@@ -386,44 +403,47 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
         const before = current.records.find((candidate) => candidate.id === record.id)
         serverStore.set((state) => new Map(state).set(key, withRecord(state.get(key) ?? current, record)))
         // The session this write belongs to: one that has ended by the time
-        // the write's turn comes, or by the time it answers, gets nothing
-        // but the word that it ended.
+        // the write's turn comes gets nothing but the word that it ended;
+        // one that ends while the API answers gets the answer, since the
+        // API gave it, but the store — the next person's by then — does not.
         const generation = stores.generation.getSnapshot()
         const outlived = () => stores.generation.getSnapshot() !== generation
-        const ended = (): WriteOutcome => ({ kind: "refused", recordId: record.id, problem: genericProblem(0, "The session ended before the record was saved") })
+        const ended = (): WriteOutcome => ({ kind: "refused", recordId: record.id, problem: genericProblem(UNREACHABLE_STATUS, "The session ended before the record was saved") })
         const run = async (): Promise<WriteOutcome> => {
           if (outlived()) return ended()
-          const outcome = await writeRecord(client, module, current, record, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
-          if (outlived()) return ended()
+          // The server ids and the client as they stand when this write's
+          // turn comes: a create queued before it has answered by now, so a
+          // second save of the row is a patch and not a second POST, and the
+          // token is the current one. The row as it was when this save was
+          // asked for stays the patch's `before`: the patch says what this
+          // save moved.
+          const latest = serverStore.getSnapshot().get(key) ?? current
+          const turn = stores.client.getSnapshot() ?? client
+          const outcome = await writeRecord(turn, module, { ...current, serverIds: latest.serverIds }, record, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
+          if (outlived()) return outcome
           serverStore.set((state) => {
-            const latest = state.get(key) ?? current
+            const settled = state.get(key) ?? current
             switch (outcome.kind) {
               case "created":
-                return new Map(state).set(key, withCreated(latest, outcome.optimisticId, outcome.record, outcome.serverId))
+                return new Map(state).set(key, withCreated(settled, outcome.optimisticId, outcome.record, outcome.serverId))
               case "updated":
-                return new Map(state).set(key, withRecord(latest, outcome.record, outcome.serverId))
+                return new Map(state).set(key, withRecord(settled, outcome.record, outcome.serverId))
               case "unchanged":
                 return state
               case "refused": {
                 const restored =
                   before === undefined
-                    ? { ...latest, records: latest.records.filter((candidate) => candidate.id !== outcome.recordId) }
-                    : withRecord(latest, before)
+                    ? { ...settled, records: settled.records.filter((candidate) => candidate.id !== outcome.recordId) }
+                    : withRecord(settled, before)
                 return new Map(state).set(key, { ...restored, problem: outcome.problem })
               }
             }
           })
           // The account's own refusal has ended the session; /login says why.
-          if (outcome.kind === "refused" && !isAccountRefusal(outcome.problem)) reportProblem(`${record.name} was not saved`, outcome.problem)
+          if (outcome.kind === "refused" && report && !isAccountRefusal(outcome.problem)) reportProblem(`${record.name} was not saved`, outcome.problem)
           return outcome
         }
-        const pending = stores.pendingWrites
-        const previous = pending.get(record.id) ?? Promise.resolve()
-        const next: Promise<WriteOutcome> = previous.then(run, run).finally(() => {
-          if (pending.get(record.id) === next) pending.delete(record.id)
-        })
-        pending.set(record.id, next)
-        return next
+        return enqueue(stores.pendingWrites, record.id, run)
       }
 
       store.set((current) => {
@@ -452,13 +472,16 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
       const record = current?.records.find((candidate) => candidate.id === recordId)
       if (module === undefined || current === undefined || current.status !== "ready" || record === undefined || stores.client.getSnapshot() === null) {
         // A module on the browser's own path has no commands, and the pane
-        // offers none there; this is the store saying so, not a person's
-        // mistake to toast.
-        return Promise.resolve({ kind: "refused", what: "Nothing was changed", recordId, problem: genericProblem(400, `${key} is not read from the API, or holds no record ${recordId}`) })
+        // offers none there; a caller that asked all the same is told, as
+        // for any refusal.
+        const refused: CommandOutcome = { kind: "refused", what: "Nothing was changed", recordId, problem: genericProblem(400, `${key} is not read from the API, or holds no record ${recordId}`) }
+        reportProblem(refused.what, refused.problem)
+        return Promise.resolve(refused)
       }
+      // The session this command belongs to, as for a write above.
       const generation = stores.generation.getSnapshot()
       const outlived = () => stores.generation.getSnapshot() !== generation
-      const ended = (): CommandOutcome => ({ kind: "refused", what: `${record.name} was not changed`, recordId, problem: genericProblem(0, "The session ended before the command was sent") })
+      const ended = (): CommandOutcome => ({ kind: "refused", what: `${record.name} was not changed`, recordId, problem: genericProblem(UNREACHABLE_STATUS, "The session ended before the command was sent") })
       const run = async (): Promise<CommandOutcome> => {
         if (outlived()) return ended()
         // The row and the client as they stand when the command's turn
@@ -469,7 +492,7 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
         const client = stores.client.getSnapshot()
         if (client === null) return ended()
         const outcome = await commandRecord(client, module, latest, row, name, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
-        if (outlived()) return ended()
+        if (outlived()) return outcome
         if (outcome.kind === "done") {
           serverStore.set((state) => new Map(state).set(key, withRecord(state.get(key) ?? latest, outcome.record, outcome.serverId)))
         } else if (!isAccountRefusal(outcome.problem)) {
@@ -477,13 +500,7 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
         }
         return outcome
       }
-      const pending = stores.pendingWrites
-      const previous = pending.get(recordId) ?? Promise.resolve()
-      const next: Promise<CommandOutcome> = previous.then(run, run).finally(() => {
-        if (pending.get(recordId) === next) pending.delete(recordId)
-      })
-      pending.set(recordId, next)
-      return next
+      return enqueue(stores.pendingWrites, recordId, run)
     },
     [stores],
   )

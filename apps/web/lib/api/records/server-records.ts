@@ -45,7 +45,7 @@ import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 
 import type { ApiClient } from "../client"
 import { ApiProblem, genericProblem, type Problem } from "../problem"
-import { isLocalRefusal, moduleKeyOf, statusToken, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, moduleKeyOf, statusToken, webIdOf, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 import { isCompanyRecord } from "./organisation"
 
 export type ModuleStatus = "idle" | "loading" | "ready" | "failed"
@@ -153,7 +153,12 @@ export async function loadModule(client: ApiClient, module: ServerModule, { fixt
     const resources = await adapter.list(client)
     const context: MappingContext = { fixtures, resolve: resolverOver(state, { records, serverIds }), companyRecordId: companyRecordIdOf(state), now }
     for (const resource of resources) {
-      const record = adapter.toRecord(resource, context)
+      const mapped = adapter.toRecord(resource, context)
+      // A fixture lends its id to one row. A second row the mapping matches
+      // onto the same fixture (two accounts with one full name) keeps the
+      // server's id instead, so no two rows share a web id — a write or a
+      // command looks the server id up by it and would reach the wrong row.
+      const record = serverIds.has(mapped.id) ? { ...mapped, id: webIdOf(adapter.prefix, resource.id) } : mapped
       records.push(record)
       serverIds.set(record.id, resource.id)
     }

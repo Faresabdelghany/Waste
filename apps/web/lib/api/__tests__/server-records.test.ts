@@ -164,6 +164,20 @@ describe("loading a module", () => {
     assert.equal(result.records[0].facts.Parent, "Parent")
   })
 
+  test("a fixture lends its id to one row: a second row mapped onto the same fixture keeps the server's id, so no two rows share a web id", async () => {
+    const twins = thingAdapter("t", [
+      { id: "1", createdAt: "", updatedAt: "", name: "Olivia Larsen" },
+      { id: "2", createdAt: "", updatedAt: "", name: "Olivia Larsen" },
+    ])
+    // The way fixtureNamed maps: both rows are "the fixture" by name.
+    const aliasing: ResourceAdapter<Thing> = { ...twins, toRecord: (thing) => record("t-olivia", thing.name) }
+    const module: ServerModule = { workspaceId: "configure", moduleId: "access", resources: [aliasing] }
+    const result = await loadModule(client, module, options())
+    assert.deepEqual(result.records.map((candidate) => candidate.id), ["t-olivia", "t-2"])
+    assert.equal(result.serverIds.get("t-olivia"), "1")
+    assert.equal(result.serverIds.get("t-2"), "2")
+  })
+
   test("a list that throws fails the load", async () => {
     const broken: ResourceAdapter<Thing> = { ...thingAdapter("b", []), list: async () => { throw new Error("boom") } }
     const module: ServerModule = { workspaceId: "configure", moduleId: "access", resources: [broken] }

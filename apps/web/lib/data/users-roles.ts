@@ -18,7 +18,7 @@
 // one-of a matter of shape, so the record carries exactly one way and the
 // adapter finds exactly one.
 import { typed, typedFlag } from "@/lib/api/records/adapter"
-import { ALL_PROJECTS_ACCESS, NO_PROJECT_ACCESS, roleAdapter, SERVICE_PROVIDER_ACCESS, serviceProviderAdapter, userAdapter } from "@/lib/api/records/organisation"
+import { ALL_PROJECTS_ACCESS, NO_PROJECT_ACCESS, roleAdapter, roleWebIdOf, SERVICE_PROVIDER_ACCESS, serviceProviderAdapter, userAdapter } from "@/lib/api/records/organisation"
 import type { ModuleState } from "@/lib/api/records/server-records"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "./business-modules"
@@ -69,6 +69,31 @@ export type UsersRolesSource = ({ kind: "fixtures" } & FixtureUsersRoles) | { ki
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name)
 
+/**
+ * The seeded Company Administrator's web id (`roleWebIdOf`: `role-<key>`),
+ * the role that always covers every project (CONTEXT.md). By its key, not
+ * its name: a seeded role may be renamed, and a custom role may be called
+ * anything.
+ */
+export const COMPANY_ADMINISTRATOR_ROLE_ID = roleWebIdOf({ id: "", key: "company-administrator" })
+
+/** Whether a role, by web id, covers every current and future project, so Add user offers no other access for it. */
+export const coversEveryProject = (roleId: string): boolean => roleId === COMPANY_ADMINISTRATOR_ROLE_ID
+
+/**
+ * What a table says on the Pilot while it has no rows: the list is still
+ * being read, or the read failed with the API's own detail — never the
+ * fixtures. Null once the module is ready, when an empty table means what
+ * it says.
+ */
+export function pilotEmptyState(module: ModuleState, noun: "users" | "roles"): { message: string; hint: string } | null {
+  if (module.status === "ready") return null
+  if (module.status === "failed") {
+    return { message: `The ${noun} could not be read from the API.`, hint: module.problem === null ? "The API did not answer." : (module.problem.detail ?? module.problem.title) }
+  }
+  return { message: `Reading the company's ${noun} from the API…`, hint: `The list shows the API's ${noun} and nothing else.` }
+}
+
 /** The users the tab lists, sorted by name. */
 export function userRowsOf(source: UsersRolesSource): UserRow[] {
   if (source.kind === "api") {
@@ -91,13 +116,16 @@ export function roleRowsOf(source: UsersRolesSource): RoleRow[] {
 }
 
 function apiUserRow(record: BusinessRecord, companyName: string): UserRow {
+  const projectAccess = record.facts.Projects ?? typed(record, "projectAccess") ?? NO_PROJECT_ACCESS
   return {
     id: record.id,
     name: record.name,
     email: typed(record, "email") ?? record.facts.Email ?? "",
     role: record.facts.Roles ?? typed(record, "role") ?? "Role",
-    organization: record.facts["Service provider"] ?? companyName,
-    projectAccess: record.facts.Projects ?? typed(record, "projectAccess") ?? NO_PROJECT_ACCESS,
+    // A provider's account is the provider's even when the store could not
+    // resolve which one (the providers module failed to load): never the company's.
+    organization: record.facts["Service provider"] ?? (projectAccess === SERVICE_PROVIDER_ACCESS ? SERVICE_PROVIDER_ACCESS : companyName),
+    projectAccess,
     status: record.status,
     primaryAdministrator: record.facts["Primary administrator"] === "Yes",
   }

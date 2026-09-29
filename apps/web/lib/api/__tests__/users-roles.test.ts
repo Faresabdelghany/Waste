@@ -13,7 +13,10 @@ import type { Company, Project, ServiceProvider } from "@waste/contracts/organis
 
 import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, FIXTURE_SERVICE_PROVIDER_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
 import {
+  COMPANY_ADMINISTRATOR_ROLE_ID,
+  coversEveryProject,
   inviteRecord,
+  pilotEmptyState,
   projectPickerOptions,
   providerPickerOptions,
   rolePickerOptions,
@@ -24,7 +27,7 @@ import {
 } from "../../data/users-roles"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
-import { accessModule, companyAdapter, projectAdapter, roleAdapter, serviceProviderAdapter, userAdapter } from "../records/organisation"
+import { accessModule, companyAdapter, projectAdapter, roleAdapter, roleWebIdOf, SERVICE_PROVIDER_ACCESS, serviceProviderAdapter, userAdapter } from "../records/organisation"
 import { IDLE, loaded, loadFailed, loading, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
@@ -123,6 +126,13 @@ describe("the invitation Add user builds", () => {
     assert.deepEqual(body, { email: "new.person@kystbyen.example", fullName: "New Person", roleId: nightShift.id, serviceProviderId: nordren.id })
     assert.deepEqual(ways(body), ["serviceProviderId"])
     assert.ok(UserInvite.safeParse(body).success)
+  })
+
+  test("a project that happens to be named \"All projects\", ticked under selected projects, is sent as that project and never as every project", () => {
+    const record = inviteRecord({ ...newPerson, access: { kind: "projects", projects: [{ id: copenhagenRecord.id, name: "All projects" }] } }, "access-user-11")
+    const body = userAdapter.toCreateBody?.(record, invitedContext())
+    assert.deepEqual(body, { email: "new.person@kystbyen.example", fullName: "New Person", roleId: dispatcher.id, projectIds: [copenhagen.id] })
+    assert.deepEqual(ways(body), ["projectIds"])
   })
 
   test("the address is sent as typed, trimmed and lowercased, since it is what the hook binds on", () => {
@@ -283,6 +293,41 @@ describe("what the Roles tab lists", () => {
   test("without the adapter: the organisation store's roles, a browser-made one included", () => {
     const rows = roleRowsOf({ kind: "fixtures", ...fixtureSources })
     assert.deepEqual(rows.map((row) => row.name), ["Company Administrator", "Browser Role"])
+  })
+})
+
+describe("what the pane says while it has no rows on the Pilot", () => {
+  test("a module still loading: a reading sentence and the rule, for either noun; a failed one: the API's own detail", () => {
+    assert.deepEqual(pilotEmptyState(IDLE, "users"), { message: "Reading the company's users from the API…", hint: "The list shows the API's users and nothing else." })
+    assert.deepEqual(pilotEmptyState(loading(IDLE), "roles"), { message: "Reading the company's roles from the API…", hint: "The list shows the API's roles and nothing else." })
+    const failed = loadFailed(loading(IDLE), { type: "about:blank", title: "Forbidden", status: 403, detail: "Your role does not allow view on configure.access" })
+    assert.deepEqual(pilotEmptyState(failed, "roles"), { message: "The roles could not be read from the API.", hint: "Your role does not allow view on configure.access" })
+    assert.deepEqual(pilotEmptyState(loadFailed(loading(IDLE), { type: "about:blank", title: "Service Unavailable", status: 503 }), "users"), { message: "The users could not be read from the API.", hint: "Service Unavailable" })
+    assert.equal(pilotEmptyState(access, "users"), null)
+  })
+})
+
+describe("a provider user whose provider the store could not resolve", () => {
+  test("is listed under \"Service provider\", never under the company", () => {
+    const withoutProviders = resolverOver(new Map([["configure.access", loaded({ records: [nightShiftRecord], serverIds: new Map([[nightShiftRecord.id, nightShift.id]]) }, 1)]]))
+    const unresolved = userAdapter.toRecord(lars, context(accessFixtures, withoutProviders))
+    assert.equal(unresolved.facts["Service provider"], undefined)
+    assert.equal(unresolved.facts.Projects, SERVICE_PROVIDER_ACCESS)
+    const rows = userRowsOf({ kind: "api", module: loaded({ records: [unresolved], serverIds: new Map([[unresolved.id, lars.id]]) }, 1), companyName: "Kystbyen Renovation" })
+    assert.equal(rows[0].organization, SERVICE_PROVIDER_ACCESS)
+    assert.equal(rows[0].projectAccess, SERVICE_PROVIDER_ACCESS)
+  })
+})
+
+describe("the role that covers every project", () => {
+  test("is the seeded Company Administrator by its web id, whatever it is called today", () => {
+    assert.equal(COMPANY_ADMINISTRATOR_ROLE_ID, roleWebIdOf(administrator))
+    assert.ok(coversEveryProject(administratorRecord.id))
+    const renamed: Role = { ...administrator, name: "Tenant Owner" }
+    assert.ok(coversEveryProject(roleAdapter.toRecord(renamed, context(accessFixtures)).id), "a renamed seeded role keeps its key")
+    assert.ok(!coversEveryProject(dispatcherRecord.id))
+    const impostor: Role = { ...nightShift, name: "Company Administrator" }
+    assert.ok(!coversEveryProject(roleAdapter.toRecord(impostor, context(accessFixtures)).id), "a custom role with the name is not it")
   })
 })
 
