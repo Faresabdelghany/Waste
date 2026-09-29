@@ -10,7 +10,7 @@ Every owner-level action on the Pilot's database goes through one workflow, `.gi
 |---|---|---|
 | `check` | Journal check, the fingerprint against the committed file (once nothing is pending), the service roles' LOGIN state and the `powersync` publication against the synced tables. Writes nothing. | — |
 | `release` | A Pilot release: the steps below. | `run_seed` (default off), `deploy_api` (default on) |
-| `reset-to-seed` | Reserved for #142's sweep and re-seed inside the write barrier; fails until that lands. | — |
+| `reset-to-seed` | The demo company swept and written back as the seed says, inside the write barrier, after a safety backup. | `services_suspended` |
 | `grant-logins` | LOGIN for exactly `wms_api` and `wms_worker` with the environment's app-role passwords. | — |
 | `restore` | A named run's backup restored inside the write barrier. | `source_run_id`, `services_suspended` |
 | `repair` | One allow-listed repair module. | `repair_id` |
@@ -72,6 +72,23 @@ The job: checks the source run is a dispatched run of this workflow on `main`; d
 The restored database is at the backup's journal position; a `release` brings it forward to `main`'s migrations.
 
 **If a restore fails or is cancelled after the barrier closed, `wms_api` and `wms_worker` stay NOLOGIN** — the API answers 503 rather than writing into a database mid-restore. Read the failed step, then run `recover-logins` with that run's id.
+
+## A reset to the seed
+
+`reset-to-seed` takes the demo company, Kystbyen Renovation, back to what `pnpm db:seed` writes (Issue #142): every scheme, route, ticket, movement and invoice testers made goes, and the tenant is again configured and never run. No other company, no `auth` user, no role and no password is touched.
+
+1. **Suspend the Pilot's services** in Render (the API and the worker).
+2. **Dispatch** `reset-to-seed` with `services_suspended` on, and approve it.
+
+The job refuses a Pilot behind `main`'s migrations (the seed is `main`'s: run `release` first) and checks the fingerprint; takes a **safety backup**, uploaded as `pilot-backup-<run>-<attempt>`, which `restore` takes back by this run's id; closes the **write barrier** exactly as a restore does; then, in one owner transaction, deletes every row of the demo company, children first and the ledgers with them, and writes the seed back, committing only when the seed finds nothing left to change and the route, ticket and invoice counters are where a fresh seed leaves them. The journal check and the fingerprint follow, the recorded LOGIN states come back only after every check, and the run ends with the check's report of the roles and the publication. The run's summary lists what was swept, table by table.
+
+**What stays.** The company's Organisation & Access is not swept: the company, its projects, service providers, roles and grants, and every User Account with its Project and Service Provider Access. So every Login stays bound, and a tester's account made in Users & Roles keeps its role and access through a reset; the seeded ones are put back to the seed's word (a renamed role, a moved access row).
+
+**What goes with it.** The tenant's unpublished outbox events are swept and never relayed. Jobs pg-boss already holds for the company stay on their queues: once the worker runs again, each meets a tenant without the rows it names and either does nothing or fails, is retried and ends failed, an outbox consumer's copy on `outbox.dead`. The summary counts both; those dead letters are not to be redriven.
+
+3. **Resume the services**, and run `check`.
+
+**If a reset fails or is cancelled after the barrier closed, `wms_api` and `wms_worker` stay NOLOGIN**: run `recover-logins` with that run's id. The sweep and the seed are one transaction, so a failure there leaves the tenant as it was. The seed itself refuses when a kept row stands where a seeded one must go back — the primary administrator moved to another account, a custom role or project named like a seeded one — and names the constraint: recover the logins, put that row right in the application, and reset again.
 
 ## recover-logins
 

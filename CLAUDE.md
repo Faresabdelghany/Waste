@@ -27,7 +27,7 @@ Scripts live in each `package.json`; these are the ones with a catch.
 
 ## The Pilot's database
 
-The hosted Supabase project, the Pilot, changes only through `.github/workflows/pilot-database.yml`. Each run is one fixed operation (`check`, `release`, `grant-logins`, `restore`, `repair`, `recover-logins`) under the `pilot` environment, which the owner approves. The procedures are in `supabase/README.md`. The rule that a merged migration is never edited, and how a mistake is repaired instead, are in `packages/db/migrations/README.md`.
+The hosted Supabase project, the Pilot, changes only through `.github/workflows/pilot-database.yml`. Each run is one fixed operation (`check`, `release`, `reset-to-seed`, `grant-logins`, `restore`, `repair`, `recover-logins`) under the `pilot` environment, which the owner approves. The procedures are in `supabase/README.md`. The rule that a merged migration is never edited, and how a mistake is repaired instead, are in `packages/db/migrations/README.md`.
 
 ## Workspace packages
 
