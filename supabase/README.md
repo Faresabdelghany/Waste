@@ -1,6 +1,6 @@
 # The Pilot's Supabase project
 
-This directory holds the local stack's configuration (`config.toml`, read by `pnpm db:start`) and the age recipient the Pilot's backups are encrypted to (`pilot-backup.pub`). This file is the operator's runbook for the **Pilot** — the hosted environment on the one Supabase project, `waste-pilot` — and its sections are the procedures an operator follows by hand. The infrastructure unit is always written the Supabase project here: a bare Project is the domain's (`CONTEXT.md`).
+This directory holds the local stack's configuration (`config.toml`, read by `pnpm db:start`) and the age recipient the Pilot's backups are encrypted to (`pilot-backup.pub`). This file is the operator's runbook for the **Pilot** — the hosted environment on the one Supabase project, `waste-pilot` — and its sections are the procedures an operator follows by hand: the database's, from *The database door* to *Adoption*, and Auth's, *A tester's User Account and Login*. The infrastructure unit is always written the Supabase project here: a bare Project is the domain's (`CONTEXT.md`).
 
 ## The database door
 
@@ -93,3 +93,23 @@ When a merged migration meets data on the Pilot that it cannot take, the data is
 ## Adoption
 
 The hand actions that brought the Pilot behind this door are Issue #152's slice 3: rotate the owner's password, create the `pilot` environment and its secrets, commit the age recipient, run `check`, then `release` with `deploy_api` and `run_seed` off to apply 0010–0012, and delete every local copy of an owner or app-role credential.
+
+## A tester's User Account and Login
+
+A Login here is Supabase Auth's: the identity a person signs in with, bound to exactly one User Account (`CONTEXT.md`) — not a database role's LOGIN, which `grant-logins` is about. A tester gets in by a small procedure run by hand (Issue #150, decided in #129). Nothing is mailed at any step, and no key beyond the publishable one reaches the web or the API.
+
+1. **Invite.** `POST /users` writes the tester's User Account, an Invitation — status `invited` — until a Login is bound to it. The address is an identifier and nothing more: it is what the access token hook matches on. Settings › Users & roles does not send it yet — its Add user still writes to the browser, since #81 left the organisation store on fixtures — so until it does, a Company Administrator sends it to the API under their own access token (the `access_token` a password grant answers at `https://<ref>.supabase.co/auth/v1/token?grant_type=password`, the publishable key as `apikey`), with `email`, `fullName`, `roleId` and one of `"allProjects": true`, `projectIds` or `serviceProviderId`, the ids read from `GET /roles`, `GET /projects` and `GET /service-providers`.
+2. **Create the Login.** The Supabase organisation's Owner opens the Pilot's Supabase project at Authentication › Users › Add user › **Create new user**, enters the same address, leaves **Auto confirm user** on, and sets a temporary password of at least 12 characters.
+3. **Hand it over** out of band — in person, or on a channel the two already share — never in an issue, a pull request, a commit or a message anyone else reads.
+4. **First sign-in.** The tester signs in at `/login`. The hook binds the Login to the one open Invitation carrying the address, and the web lands them by `GET /me`: an account an active driver profile is bound to on `/driver`, everyone else on `/operate`.
+5. **A password of their own, at once**: the account menu at the foot of the sidebar › Change password. The web verifies the temporary password by signing in with it, then sets the new one.
+
+**The minimum length.** `config.toml` records `minimum_password_length = 12`; on the Pilot the Owner sets the same in the dashboard, at Authentication › Sign In / Providers › Email, before the first Login is created.
+
+**A forgotten password** is reset by the Owner, who sets a new temporary password and hands it over as in step 3. The dashboard cannot set a password on an existing Login, and its recovery mail would not arrive, so the reset is the Auth Admin API's `updateUserById` — `PUT https://<ref>.supabase.co/auth/v1/admin/users/<User UID>` with `{"password": "…"}`, under the project's secret key (Project Settings › API Keys) as `apikey` — run by the Owner in their own terminal, the key read in from the password manager and never written down.
+
+**Deactivation** is `POST /users/:id/deactivate`, sent the way the invitation is while Users & roles has no such command. It takes hold on the Login's next token, which the hook refuses with "This account is deactivated", and on the API's next request, which refuses the account with the problem type `urn:waste:problem:no-active-account`: the web ends the session and `/login` shows the sentence. The Login itself is not touched, and `POST /users/:id/reactivate` restores the account. A permission refusal is a different thing: it leaves the session alone.
+
+**Nobody joins the Team.** The Supabase organisation's Team is dashboard access to the infrastructure, and no tester is added to it — not even to receive the built-in mailer's messages, which reach only Team members, two an hour (#120). The mailer is part of no procedure here.
+
+**Gate B.** Automated invitation delivery — the Admin API's `inviteUserByEmail` over custom SMTP, or `createUser` from `POST /users` — needs a service-role key in the API and a mail provider. It is the recorded direction beyond the Pilot and is not built; until then this procedure is how a tester gets in.

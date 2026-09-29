@@ -43,7 +43,7 @@
 // here.
 import { STATUS_CODES } from "node:http"
 
-import { BLANK_PROBLEM_TYPE, PROBLEM_MEDIA_TYPE, Problem, type ProblemFieldError } from "@waste/contracts/problem"
+import { BLANK_PROBLEM_TYPE, PROBLEM_MEDIA_TYPE, Problem, type ProblemFieldError, type ProblemKind } from "@waste/contracts/problem"
 import { Refused } from "@waste/db/commands/shared"
 import { checkConstraintOf, EXCLUSION_VIOLATION, exclusionConstraintOf, sqlstate, UNIQUE_VIOLATION, uniqueConstraintOf } from "@waste/db/sqlstate"
 import type { ErrorHandler, NotFoundHandler } from "hono"
@@ -55,6 +55,12 @@ import { resolver, validator } from "hono-openapi"
 export type ProblemStatus = ClientErrorStatusCode | ServerErrorStatusCode
 
 export type ProblemOptions = {
+  /**
+   * The kind of problem when it is more than its status, a type and title of
+   * `@waste/contracts/problem`; only the principal's two account refusals
+   * name one (auth/principal.ts). Absent, the problem is `about:blank`.
+   */
+  kind?: ProblemKind
   /** One sentence on what went wrong with this request. Never on a 500. */
   detail?: string
   /** The fields a 400 refused. */
@@ -65,11 +71,11 @@ export type ProblemOptions = {
 
 const isProblemStatus = (status: number): status is ProblemStatus => status >= 400 && status <= 599
 
-/** The body of a problem of this status: `about:blank`, the reason phrase as title, and what the caller added. */
-export function problemBody(status: ProblemStatus, { detail, errors }: ProblemOptions = {}): Problem {
+/** The body of a problem of this status: its kind's type and title, else `about:blank` and the reason phrase, and what the caller added. */
+export function problemBody(status: ProblemStatus, { kind, detail, errors }: ProblemOptions = {}): Problem {
   return {
-    type: BLANK_PROBLEM_TYPE,
-    title: STATUS_CODES[status] ?? `${status}`,
+    type: kind?.type ?? BLANK_PROBLEM_TYPE,
+    title: kind?.title ?? STATUS_CODES[status] ?? `${status}`,
     status,
     ...(detail === undefined ? {} : { detail }),
     ...(errors === undefined ? {} : { errors }),

@@ -41,6 +41,8 @@ import {
   SignOut,
   CaretRight,
 } from "@phosphor-icons/react/dist/ssr"
+import { AccountMenu } from "@/components/auth/account-menu"
+import { useApiConfigured } from "@/components/waste/api-session-store"
 import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import {
   resolveActiveRouteSummaries,
@@ -70,6 +72,7 @@ export function AppSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { setOpenMobile } = useSidebar()
+  const apiConfigured = useApiConfigured()
   const { starredRouteIds } = useActiveRoutes("operator")
   const { getRecords } = useBusinessRecordStore()
 
@@ -230,33 +233,38 @@ export function AppSidebar() {
           })}
         </SidebarMenu>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="mt-1.5 flex w-full cursor-pointer items-center gap-2.5 rounded-md p-1.5 text-left hover:bg-sidebar-accent"
-            >
-              <Avatar className="h-8 w-8">
-                <AvatarImage src="/avatar-profile.jpg" />
-                <AvatarFallback>OL</AvatarFallback>
-              </Avatar>
-              <div className="flex flex-1 flex-col">
-                <span className="text-sm font-medium">Olivia Larsen</span>
-                <span className="text-xs text-sidebar-foreground/60">Operations manager</span>
-              </div>
-              <CaretRight className="h-4 w-4 text-sidebar-foreground/55" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side="right" align="end" className="w-40">
-            <DropdownMenuItem
-              className="cursor-pointer text-destructive focus:text-destructive"
-              onSelect={() => router.push("/login")}
-            >
-              <SignOut className="h-4 w-4" />
-              Logout
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* On the Pilot the account is the one signed in (/me); in fixture mode, the operator persona. */}
+        {apiConfigured ? (
+          <AccountMenu className="mt-1.5" />
+        ) : (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="mt-1.5 flex w-full cursor-pointer items-center gap-2.5 rounded-md p-1.5 text-left hover:bg-sidebar-accent"
+              >
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src="/avatar-profile.jpg" />
+                  <AvatarFallback>OL</AvatarFallback>
+                </Avatar>
+                <div className="flex flex-1 flex-col">
+                  <span className="text-sm font-medium">Olivia Larsen</span>
+                  <span className="text-xs text-sidebar-foreground/60">Operations manager</span>
+                </div>
+                <CaretRight className="h-4 w-4 text-sidebar-foreground/55" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="right" align="end" className="w-40">
+              <DropdownMenuItem
+                className="cursor-pointer text-destructive focus:text-destructive"
+                onSelect={() => router.push("/login")}
+              >
+                <SignOut className="h-4 w-4" />
+                Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </SidebarFooter>
 
     </Sidebar>

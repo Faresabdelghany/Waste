@@ -8,10 +8,13 @@
 // holds no service key).
 //
 // An invitation writes the account with no login bound, so its status is
-// `invited`; the invitation e-mail itself is Supabase's. The e-mail is
-// lowercased here, before the database sees it, because the access token hook
-// binds by `lower(claims.email)` and the column's check is the backstop, not
-// the rule. The status on the wire is derived from the row and never stored
+// `invited`. Nothing is sent: the Login is created apart from this route — on
+// the Pilot by the Supabase organisation's Owner in the dashboard
+// (supabase/README.md, Issue #150) — with the same address, and the access
+// token hook binds it to the one open invitation carrying that address on its
+// first sign-in. The e-mail is lowercased here, before the database sees it,
+// because the hook binds by `lower(claims.email)` and the column's check is
+// the backstop, not the rule. The status on the wire is derived from the row and never stored
 // (access-shape.ts).
 //
 // What an account reaches is exactly one of three things — every project, the
@@ -271,7 +274,7 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "inviteUser",
         summary: "Invite a user",
         description:
-          "Creates an account in the caller's company with no login bound, so its status is `invited` until the person signs in; the invitation e-mail itself is Supabase's. The body names exactly one of `allProjects: true`, `projectIds` or `serviceProviderId`: a company user takes Project Access and no provider, a provider user the reverse. The e-mail is stored lowercase. The server mints the id; a body that carries one is refused.",
+          "Creates an account in the caller's company with no login bound, so its status is `invited` until the person first signs in. No e-mail is sent: the login is created separately, with the same address, and the access token hook binds it to this account on its first sign-in. The body names exactly one of `allProjects: true`, `projectIds` or `serviceProviderId`: a company user takes Project Access and no provider, a provider user the reverse. The e-mail is stored lowercase. The server mints the id; a body that carries one is refused.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The account as it was written.", User),

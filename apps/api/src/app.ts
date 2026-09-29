@@ -26,6 +26,7 @@
 // project's remote key set, a test over a local one, and the app never reads
 // SUPABASE_URL itself.
 import { type BuildInfo, HealthResponse, PROBE_HEADERS, ReadinessResponse, ReadyResponse, UnavailableResponse } from "@waste/contracts/health"
+import { NO_ACTIVE_ACCOUNT } from "@waste/contracts/problem"
 import type { Database } from "@waste/db/client"
 import { Hono } from "hono"
 import { describeRoute, openAPIRouteHandler, resolver } from "hono-openapi"
@@ -210,8 +211,7 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
         info: {
           title: "Waste API",
           version: manifest.version,
-          description:
-            "The only web boundary to domain data (ADR-0001). Every route but the probes and this document takes a Supabase access token as a bearer token; every error is an RFC 9457 problem. A 400 lists the fields it refused by path; every write body is strict, so a member it does not know is refused by name, and the error names the members it does accept. A create answers 201 with `Location`, the path of the resource's own GET, root-relative: the API is served at its origin's root and mounts under no prefix.",
+          description: `The only web boundary to domain data (ADR-0001). Every route but the probes and this document takes a Supabase access token as a bearer token; every error is an RFC 9457 problem. Every problem's type is \`about:blank\` but one: a 403 of type \`${NO_ACTIVE_ACCOUNT.type}\` refuses the account and not the request — the token names no company, or no active account in its company is bound to its login — and a client ends its session on it, while a 403 of \`about:blank\`, a role's grant refused, leaves the session alone. A 400 lists the fields it refused by path; every write body is strict, so a member it does not know is refused by name, and the error names the members it does accept. A create answers 201 with \`Location\`, the path of the resource's own GET, root-relative: the API is served at its origin's root and mounts under no prefix.`,
         },
         components: {
           securitySchemes: { [BEARER_AUTH]: BEARER_SECURITY_SCHEME },

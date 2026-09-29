@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto"
 import { after, before, describe, test } from "node:test"
 
 import { Me } from "@waste/contracts/me"
+import { BLANK_PROBLEM_TYPE, NO_ACTIVE_ACCOUNT } from "@waste/contracts/problem"
 import { createDb, type Database } from "@waste/db/client"
+import { driver } from "@waste/db/schema/fleet"
 import { company, project } from "@waste/db/schema/organisation"
 import { withCompany } from "@waste/db/tenant"
 import { and, eq, inArray } from "drizzle-orm"
@@ -27,12 +29,29 @@ describe("the request path against the database", { skip: database.skip }, () =>
   let a: Tenant
   let b: Tenant
   let app: ReturnType<typeof createApp>
+  /** Tenant A's driver profiles: the viewer's, active, and Lars's, inactive; Olivia has none. */
+  const drivers = { viewer: testId(), lars: testId() }
 
   before(async () => {
     pool = createDb(database.url, { max: 4 })
     keys = await signingKeys()
     a = await seedTenant(pool)
     b = await seedTenant(pool)
+    await withCompany(pool.db, a.companyId, (tx) =>
+      tx.insert(driver).values([
+        { id: drivers.viewer, companyId: a.companyId, projectId: a.projects.copenhagen.id, name: "Vera Viewer", employment: "employee", userAccountId: a.users.viewer.id, status: "active" },
+        {
+          id: drivers.lars,
+          companyId: a.companyId,
+          projectId: a.projects.copenhagen.id,
+          name: "Lars Mikkelsen",
+          employment: "service-provider",
+          serviceProviderId: a.serviceProviders.nordren.id,
+          userAccountId: a.users.lars.id,
+          status: "inactive",
+        },
+      ]),
+    )
     app = createApp({ probe: pool, pool, verifier: keys.verifier })
   })
   after(async () => {
@@ -78,6 +97,7 @@ describe("the request path against the database", { skip: database.skip }, () =>
         },
         projects: [a.projects.cairo, a.projects.copenhagen, a.projects.harbor],
         serviceProvider: null,
+        driver: null,
       })
       assert.equal(body.role.grants.length, 50, "the administrator's charter names every module")
     })
@@ -106,6 +126,7 @@ describe("the request path against the database", { skip: database.skip }, () =>
         },
         projects: [],
         serviceProvider: a.serviceProviders.nordren,
+        driver: null,
       })
     })
 
@@ -132,19 +153,57 @@ describe("the request path against the database", { skip: database.skip }, () =>
     })
   })
 
-  describe("GET /me refused with 403", () => {
+  describe("GET /me names the active driver profile bound to the account", () => {
+    const driverOf = async (account: Account) => Me.parse(await (await get("/me", await tokenFor(account, a.companyId))).json()).driver
+    const setStatus = (id: string, status: string) =>
+      withCompany(pool.db, a.companyId, (tx) => tx.update(driver).set({ status }).where(and(eq(driver.companyId, a.companyId), eq(driver.id, id))))
+
+    test("by its id, for an account an active profile is bound to", async () => {
+      assert.deepEqual(await driverOf(a.users.viewer), { id: drivers.viewer })
+    })
+
+    test("as null for an account no profile is bound to", async () => {
+      assert.equal(await driverOf(a.users.olivia), null)
+    })
+
+    test("as null for a profile that is inactive or suspended, and by its id again once it is active", async () => {
+      try {
+        assert.equal(await driverOf(a.users.lars), null, "inactive")
+        await setStatus(drivers.lars, "suspended")
+        assert.equal(await driverOf(a.users.lars), null, "suspended")
+        await setStatus(drivers.lars, "active")
+        assert.deepEqual(await driverOf(a.users.lars), { id: drivers.lars }, "active: the status decides, not the binding")
+      } finally {
+        await setStatus(drivers.lars, "inactive")
+      }
+    })
+
+    test("as null for the other tenant's accounts, whose company binds no profile", async () => {
+      const body = Me.parse(await (await get("/me", await tokenFor(b.users.viewer, b.companyId))).json())
+      assert.equal(body.driver, null)
+    })
+  })
+
+  describe("GET /me refused with 403, of the account's own kind", () => {
+    // The kind is what a client ends its session on (Issue #150), so each of
+    // the principal's refusals must carry it, with the sentence that says which.
     const forbidden = async (token: string, why: string) => {
       const response = await get("/me", token)
       assert.equal(response.status, 403, why)
       assert.equal(response.headers.get("www-authenticate"), null, why)
-      const body = await readProblem(response)
-      assert.equal(body.title, "Forbidden", why)
+      const body = await readProblem(response, NO_ACTIVE_ACCOUNT)
       assert.match(body.detail ?? "", /account/, why)
       return body
     }
 
+    test("for a token that names no company: the hook found no account for the login", async () => {
+      const body = await forbidden(await signToken(keys, { sub: randomUUID() }), "no company claim")
+      assert.equal(body.detail, "The token names no company: this login has no account here")
+    })
+
     test("for a login no account is bound to", async () => {
-      await forbidden(await signToken(keys, { sub: randomUUID(), companyId: a.companyId }), "unknown sub")
+      const body = await forbidden(await signToken(keys, { sub: randomUUID(), companyId: a.companyId }), "unknown sub")
+      assert.equal(body.detail, "No active account in this company is bound to this login")
     })
 
     // A `sub` of "" is a token that names no subject at all, and verify.ts
@@ -199,14 +258,18 @@ describe("the request path against the database", { skip: database.skip }, () =>
           assert.deepEqual(olivia.company, { id: a.companyId, name: a.name })
           assert.deepEqual(olivia.projects, [a.projects.cairo, a.projects.copenhagen, a.projects.harbor], "A's three projects and none of B's")
           assert.equal(olivia.grants.length, 50)
+          assert.equal(olivia.driver, null)
 
           const lars = await resolvePrincipal(tx, { userId: login(a.users.lars), companyId: a.companyId })
           assert.deepEqual(lars?.serviceProvider, a.serviceProviders.nordren)
           assert.deepEqual(lars?.projects, [])
+          assert.equal(lars?.driver, null, "his profile is inactive")
 
           const viewer = await resolvePrincipal(tx, { userId: login(a.users.viewer), companyId: a.companyId })
           assert.deepEqual(viewer?.projects, [a.projects.copenhagen], "her Project Access row and not B's viewer's")
           assert.deepEqual(viewer?.grants, [{ moduleKey: "configure.access", actions: ["view"] }])
+          assert.deepEqual(viewer?.driver, { id: drivers.viewer }, "her profile, active")
+          assert.equal((await resolvePrincipal(tx, { userId: login(b.users.viewer), companyId: b.companyId }))?.driver, null, "B's viewer drives under nothing of A's")
         })
       } finally {
         await admin.close()
@@ -267,6 +330,9 @@ describe("the request path against the database", { skip: database.skip }, () =>
       const body = await readProblem(refused)
       assert.match(body.detail ?? "", /configure\.access/)
       assert.match(body.detail ?? "", /edit/)
+      // A permission refusal leaves the account alone, so a client keeps its session.
+      assert.equal(body.type, BLANK_PROBLEM_TYPE, "about:blank, never the account's kind")
+      assert.equal(body.title, "Forbidden")
     })
 
     test("hands the handler a transaction that sees the caller's company and nothing else", async () => {

@@ -49,6 +49,7 @@ describe("the provider predicate", { skip: database.skip || owner.skip }, () => 
     grants: [],
     projects,
     serviceProvider: provider,
+    driver: null,
   })
 
   before(async () => {

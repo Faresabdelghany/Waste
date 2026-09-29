@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { after, before, describe, test } from "node:test"
 
+import { NO_ACTIVE_ACCOUNT } from "@waste/contracts/problem"
 import { createDb } from "@waste/db/client"
 import { generateSecret, SignJWT } from "jose"
 
@@ -76,12 +77,11 @@ describe("GET /me without a usable token", () => {
 })
 
 describe("GET /me with a good token that names no company", () => {
-  test("answers 403 with a problem body when app_metadata carries no company_id: this login has no account", async () => {
+  test("answers 403 with a problem body of the account's kind when app_metadata carries no company_id: this login has no account", async () => {
     const response = await withToken(await signToken(keys))
     assert.equal(response.status, 403)
     assert.equal(response.headers.get("www-authenticate"), null)
-    const body = await readProblem(response)
-    assert.equal(body.title, "Forbidden")
+    const body = await readProblem(response, NO_ACTIVE_ACCOUNT)
     assert.match(body.detail ?? "", /company/)
   })
 
@@ -93,7 +93,7 @@ describe("GET /me with a good token that names no company", () => {
           : await signToken(keys, { appMetadata })
       const response = await withToken(token)
       assert.equal(response.status, 403, JSON.stringify(appMetadata))
-      await readProblem(response)
+      await readProblem(response, NO_ACTIVE_ACCOUNT)
     }
   })
 })

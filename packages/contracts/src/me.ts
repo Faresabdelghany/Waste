@@ -5,13 +5,16 @@
 // the role with its grants normalised (edit, create and delete imply view,
 // `@waste/domain/access/grants`), the projects the account works in (every
 // project of the company when `allProjects`, else its Project Access rows),
-// and the Service Provider it belongs to or null.
+// the Service Provider it belongs to or null, and the active driver profile
+// bound to it or null (Issue #150).
 //
 // Summaries, not resources: a project is its id and name here, the full
 // Project is `organisation.ts`'s and the full User and Role are `access.ts`'s
-// (slices 4 and 5). The frontend reads this once after sign-in to draw the
-// sidebar and the permission gates; a change to a grant or a project shows on
-// the next call, since nothing here is cached server-side.
+// (slices 4 and 5), the full Driver `fleet.ts`'s. The frontend reads this once
+// after sign-in to draw the sidebar and the permission gates, and to land the
+// person: a driver on `/driver`, everyone else on `/operate`. A change to a
+// grant or a project shows on the next call, since nothing here is cached
+// server-side.
 import * as z from "zod"
 
 import { Id } from "./ids"
@@ -57,6 +60,11 @@ const MeServiceProvider = z.object({
   legalName: Label,
 })
 
+/** The driver profile the account drives under: its id and nothing more, since the landing reads only whether there is one. */
+const MeDriver = z.object({
+  id: Id,
+})
+
 export const Me = z.object({
   user: MeUser,
   company: MeCompany,
@@ -65,5 +73,11 @@ export const Me = z.object({
   projects: z.array(MeProject),
   /** The provider a provider user belongs to; null for a company user. */
   serviceProvider: MeServiceProvider.nullable(),
+  /**
+   * The active driver profile whose `user_account_id` is this account; null
+   * when there is none, or when it is `inactive` or `suspended`. The web
+   * lands a driver on `/driver` by this fact, never by a grant.
+   */
+  driver: MeDriver.nullable(),
 })
 export type Me = z.infer<typeof Me>

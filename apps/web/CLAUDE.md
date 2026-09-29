@@ -16,7 +16,8 @@ The Next.js App Router prototype (TypeScript, Tailwind CSS v4, shadcn/ui). Recor
 - `components/waste/business-record-store.tsx` answers `getRecords` and `upsertRecord`. A module in `SERVER_MODULES` (`lib/api/records/modules.ts`) reads the API while a person is signed in against one; every other module reads fixtures plus the browser's bucket. To switch a module, add it there, with a mapping under `lib/api/records/` wherever the wire and the prototype's form disagree.
 - A switched module shows the server's rows, or its fixtures until they arrive or when the load failed — never a mix with records made in the browser.
 - `lib/api/client.ts` is the one way the web calls the API. The prototype's ids stay the web's handles; the server's id is kept beside the record in the module's `serverIds`.
-- The browser calls `/waste-api/*` on its own origin, and `next.config.mjs` proxies it to `WASTE_API_ORIGIN`, since the API has no CORS yet. `NEXT_PUBLIC_WASTE_API_URL` turns the adapter on; the two `NEXT_PUBLIC_SUPABASE_*` variables turn on password sign-in at `/login` (see `.env.example`).
+- The browser calls `/waste-api/*` on its own origin, and `next.config.mjs` proxies it to `WASTE_API_ORIGIN`, since the API has no CORS yet. `NEXT_PUBLIC_WASTE_API_URL` turns the adapter on, and with it the Pilot's sign-in: every page but `/login` needs a session (`components/auth/sign-in-gate.tsx`), `/login` offers the password form alone (the two `NEXT_PUBLIC_SUPABASE_*` variables, see `.env.example`), a person lands where `GET /me` says (`Me.driver`: `/driver`, else `/operate`) and the sidebar's identity is `/me`'s. Without it the fixture picker, local development and e2e are as before.
+- `lib/api/session.ts` holds the session's rules. Only the API's `urn:waste:problem:no-active-account` or a refresh Auth refuses ends a session; a 403 of `about:blank` is a permission refusal and leaves it alive.
 
 ## Persisted state and renames
 

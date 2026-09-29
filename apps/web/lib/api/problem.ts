@@ -16,6 +16,19 @@ export type { Problem, ProblemFieldError }
 /** The media type every error body carries; spelled once here as in the contracts. */
 export const PROBLEM_MEDIA_TYPE = "application/problem+json"
 
+/**
+ * The `type` of the one refusal that ends a session (Issue #150): the token
+ * is sound but the account behind it is refused, not the request. The
+ * contracts' `NO_ACTIVE_ACCOUNT.type`, re-spelled like the media type above
+ * so no zod reaches the bundle, and held equal to it by a test.
+ */
+export const NO_ACTIVE_ACCOUNT_PROBLEM_TYPE = "urn:waste:problem:no-active-account"
+
+/** Whether a problem refuses the account itself: the one kind that ends the session, where a permission 403 (`about:blank`) never does. */
+export function isAccountRefusal(problem: Problem): boolean {
+  return problem.type === NO_ACTIVE_ACCOUNT_PROBLEM_TYPE
+}
+
 /** The reason phrases the web falls back on when a body carries no title of its own. */
 const REASON_PHRASES: Readonly<Record<number, string>> = {
   400: "Bad Request",

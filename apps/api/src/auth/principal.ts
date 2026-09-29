@@ -7,9 +7,10 @@
 // company; its role and the role's grants, normalised through the one rule in
 // @waste/domain/access/grants; the projects it works in (all of the company's
 // when `all_projects`, else its Project Access rows); its Service Provider or
-// none. That is the Principal, looked up once per request, so a revoked grant
-// or a deactivated account is refused on the very next call and nothing is
-// cached anywhere.
+// none; the active driver profile bound to it or none (Issue #150: what the
+// web lands a driver by). That is the Principal, looked up once per request,
+// so a revoked grant or a deactivated account is refused on the very next
+// call and nothing is cached anywhere.
 //
 // The API binds the claim to the tenant itself: every lookup below carries
 // `company_id = companyId`, and the company in the Principal is the joined
@@ -21,7 +22,11 @@
 // even a UUID, a deactivated account and a company that does not exist are
 // all the same "no active account here", a 403 with the problem body (a 401
 // would say "get a better token", and no token would help). A token with no
-// company claim is the hook's "no account at all", also 403.
+// company claim is the hook's "no account at all", also 403. Both carry the
+// one problem kind beyond `about:blank`, `NO_ACTIVE_ACCOUNT`
+// (@waste/contracts/problem), because it is the account that is refused and
+// not the request: a client ends its session on that kind, and on nothing a
+// grant refused (require.ts stays `about:blank`).
 //
 // The handler runs inside that same transaction and receives it as `tx`:
 // no handler opens a transaction of its own, so a request's reads and writes
@@ -32,11 +37,14 @@
 // the context carries an error or the response is an error status, and
 // committed otherwise: a request that failed leaves nothing behind, whether
 // the handler threw a problem or returned one.
+import { NO_ACTIVE_ACCOUNT } from "@waste/contracts/problem"
 import type { Database, Tx } from "@waste/db/client"
 import { projectAccess, role, roleGrant, userAccount } from "@waste/db/schema/access"
+import { driver } from "@waste/db/schema/fleet"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
 import { withCompany } from "@waste/db/tenant"
 import type { Grant } from "@waste/domain/access/grants"
+import type { DriverStatus } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, isNull } from "drizzle-orm"
 import type { MiddlewareHandler } from "hono"
 
@@ -57,6 +65,8 @@ export type Principal = {
   /** Sorted by name; every project of the company when `user.allProjects`. */
   projects: { id: string; name: string }[]
   serviceProvider: { id: string; legalName: string } | null
+  /** The driver profile bound to the account (`driver.user_account_id`) while it is `active`; null otherwise. The driver door resolves the whole profile itself (driver.ts). */
+  driver: { id: string } | null
 }
 
 /** The context variables an authenticated route reads: `c.get("principal")` and `c.get("tx")`, on a `Hono<AuthEnv>`. */
@@ -68,6 +78,9 @@ export const BEARER_SECURITY_SCHEME = { type: "http", scheme: "bearer", bearerFo
 export const BEARER_SECURITY = [{ [BEARER_AUTH]: [] }]
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** The one driver status a profile drives under; `inactive` and `suspended` land the account as anyone else. */
+const ACTIVE_DRIVER: DriverStatus = "active"
 
 /** The hook's claim, `app_metadata.company_id`, when it is there and a UUID; undefined otherwise. */
 export function companyIdOf(claims: VerifiedClaims): string | undefined {
@@ -110,13 +123,18 @@ export async function resolvePrincipal(tx: Tx, { userId, companyId }: Login): Pr
       roleSystem: role.system,
       companyId: company.id,
       companyName: company.name,
+      driverId: driver.id,
     })
     .from(userAccount)
     // The joins spell the composite keys, as the fence already implies them;
     // the where binds the account to the claim's company, which the fence
-    // alone would leave to itself.
+    // alone would leave to itself. The driver profile rides on the same
+    // statement, the claim's company on its join too: at most one profile
+    // names an account (the partial unique index on its login), and one that
+    // is not active is no driver, so it joins nothing.
     .innerJoin(role, and(eq(role.companyId, userAccount.companyId), eq(role.id, userAccount.roleId)))
     .innerJoin(company, eq(company.id, userAccount.companyId))
+    .leftJoin(driver, and(eq(driver.companyId, companyId), eq(driver.userAccountId, userAccount.id), eq(driver.status, ACTIVE_DRIVER)))
     .where(and(eq(userAccount.companyId, companyId), eq(userAccount.authUserId, userId), isNull(userAccount.deactivatedAt)))
     .limit(1)
   if (found === undefined) return null
@@ -161,6 +179,7 @@ export async function resolvePrincipal(tx: Tx, { userId, companyId }: Login): Pr
     grants: grantsOfRows(grantRows),
     projects,
     serviceProvider: provider ?? null,
+    driver: found.driverId === null ? null : { id: found.driverId },
   }
 }
 
@@ -201,14 +220,14 @@ export function authenticate({ pool, verifier }: AuthenticateOptions): Middlewar
     }
     const companyId = companyIdOf(verified.claims)
     if (companyId === undefined) {
-      throw problem(403, { detail: "The token names no company: this login has no account here" })
+      throw problem(403, { kind: NO_ACTIVE_ACCOUNT, detail: "The token names no company: this login has no account here" })
     }
 
     try {
       await withCompany(pool.db, companyId, async (tx) => {
         const principal = await resolvePrincipal(tx, { userId: verified.claims.sub, companyId })
         if (principal === null) {
-          throw problem(403, { detail: "No active account in this company is bound to this login" })
+          throw problem(403, { kind: NO_ACTIVE_ACCOUNT, detail: "No active account in this company is bound to this login" })
         }
         c.set("principal", principal)
         c.set("tx", tx)

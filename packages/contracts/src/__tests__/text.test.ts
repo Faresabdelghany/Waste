@@ -88,6 +88,7 @@ describe("the schemas that take a label", () => {
       role: { id: ID, key: "company-administrator", name: "Company Administrator", scope: "Company", system: true, grants: [] },
       projects: [{ id: ID, name: "Copenhagen Central" }],
       serviceProvider: null,
+      driver: null,
     }
     assert.deepEqual(Me.parse(me), me)
     assert.equal(Me.safeParse({ ...me, user: { ...me.user, fullName: "  " } }).success, false)

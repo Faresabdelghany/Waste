@@ -11,7 +11,11 @@
 //                   in the browser; the page size is the API's maximum;
 //   a refusal     — every non-2xx body is an RFC 9457 problem (problem.ts),
 //                   thrown as `ApiProblem` so a caller reads one shape whether
-//                   the validator, a grant, a duplicate or the network said no;
+//                   the validator, a grant, a duplicate or the network said no,
+//                   and told first to the client's `onRefused`, which is how
+//                   the session ends itself on the account's refusal from any
+//                   call (session.ts, Issue #150) without every caller
+//                   remembering to;
 //   a create      — answers 201 with the body and `Location`, the path of the
 //                   row's own GET (Issue #74), which the browser may read only
 //                   because the API's CORS exposes the header; `created` hands
@@ -35,6 +39,8 @@ export type ApiClient = {
   fetch?: typeof fetch
   /** Aborting it ends every request in flight with a problem of status 0; the store aborts a load it no longer wants. */
   signal?: AbortSignal
+  /** Told of every refusal the API answers, just before it is thrown; a request that never reached the API is not the API's refusal and is not told. */
+  onRefused?: (problem: Problem) => void
 }
 
 export type Page<Item> = { items: Item[]; nextCursor: string | null }
@@ -95,7 +101,11 @@ async function request(client: ApiClient, method: string, path: string, body?: u
       genericProblem(UNREACHABLE_STATUS, `The API at ${client.baseUrl} did not answer${cause instanceof Error && cause.message ? ` (${cause.message})` : ""}`),
     )
   }
-  if (!response.ok) throw new ApiProblem(await problemOfResponse(response))
+  if (!response.ok) {
+    const problem = await problemOfResponse(response)
+    client.onRefused?.(problem)
+    throw new ApiProblem(problem)
+  }
   return response
 }
 

@@ -27,6 +27,7 @@ const olivia = {
     { id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial" },
   ],
   serviceProvider: null,
+  driver: null,
 }
 
 const lars = {
@@ -49,6 +50,7 @@ const lars = {
   },
   projects: [],
   serviceProvider: { id: "01a0d2a4-a280-7003-8000-000000000001", legalName: "NordRen ApS" },
+  driver: null,
 }
 
 describe("Me", () => {
@@ -61,6 +63,15 @@ describe("Me", () => {
     const custom = { ...olivia, role: { ...olivia.role, key: null, system: false } }
     assert.deepEqual(Me.parse(custom).role, custom.role)
     assert.equal(Me.parse(olivia).serviceProvider, null)
+  })
+
+  test("names the active driver profile bound to the account by its id, and nothing else of it", () => {
+    const driving = { ...olivia, driver: { id: "01a0d2a4-a280-7019-8000-000000000001" } }
+    assert.deepEqual(Me.parse(driving).driver, { id: "01a0d2a4-a280-7019-8000-000000000001" })
+    assert.deepEqual(Me.parse({ ...olivia, driver: { id: "01a0d2a4-a280-7019-8000-000000000001", name: "Mads Jensen" } }).driver, {
+      id: "01a0d2a4-a280-7019-8000-000000000001",
+    })
+    assert.equal(Me.safeParse({ ...olivia, driver: { id: "550e8400-e29b-41d4-a716-446655440000" } }).success, false, "a version 4 id")
   })
 
   test("the caller is always active: an invited account has no token and a deactivated one is refused before this body", () => {
@@ -77,5 +88,7 @@ describe("Me", () => {
     assert.equal(Me.safeParse(withoutProvider).success, false, "serviceProvider is null, never absent")
     const { projects: _projects, ...withoutProjects } = olivia
     assert.equal(Me.safeParse(withoutProjects).success, false, "projects is a list, empty for a provider user")
+    const { driver: _driver, ...withoutDriver } = olivia
+    assert.equal(Me.safeParse(withoutDriver).success, false, "driver is null, never absent")
   })
 })
