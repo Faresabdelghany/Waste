@@ -307,26 +307,8 @@ test("removing a filter chip lifts the filter (#55)", async ({ page }) => {
   await expect(page.locator("[data-marker]")).toHaveCount(markersBefore)
 })
 
-test("the Layers control switches the base map and draws planning-area outlines", async ({ page }) => {
-  await page.getByRole("button", { name: /^Layers/ }).click()
-  const layers = page.getByRole("dialog", { name: "Layers" })
-  await expect(layers.getByRole("radiogroup", { name: "Base map" })).toBeVisible()
-  await expect(layers.getByRole("radio", { name: "Streets" })).toHaveAttribute("aria-checked", "true")
-  await layers.getByRole("radio", { name: "Satellite" }).click()
-  await expect(layers.getByRole("radio", { name: "Satellite" })).toHaveAttribute("aria-checked", "true")
-  await expect(layers).toContainText("Planning areas")
-  await expect(page.locator("[data-area-outline]")).toHaveCount(0)
-  await layers.getByRole("checkbox", { name: /Indre By Operations/ }).click()
-  await expect(page.locator('[data-area-outline="area-indreby"]')).toBeVisible()
-  await expect(page.getByTestId("layers-count")).toHaveText(/^1\/\d+$/)
-  const zoomBefore = await mapZoom(page)
-  await layers.getByRole("button", { name: "Zoom to Indre By Operations" }).click()
-  await expect.poll(() => mapZoom(page)).not.toBe(zoomBefore)
-  // Every registry container counts, whichever project it bills to; an area
-  // with no containers in the system cannot be switched on or zoomed to.
-  await expect(layers.getByRole("checkbox", { name: /Nordhavn Harbor Area/ })).toBeEnabled()
-  await expect(layers.getByRole("checkbox", { name: /Nasr City Operations/ })).toBeDisabled()
-})
+// The Layers control's planning-area outlines are the API's now (slice 1 of
+// #81): the scenario lives in e2e-api/planning-configuration.spec.ts.
 
 test("the search flies to an address and the map zooms out to the whole world", async ({ page }) => {
   const search = page.getByRole("combobox", { name: "Search the map" })
@@ -347,19 +329,9 @@ test("the search flies to an address and the map zooms out to the whole world", 
   await expect(page.locator('[data-marker="cluster"]')).toHaveCount(1)
 })
 
-test("a legacy Plan calendars link lands on the Settings pane", async ({ page }) => {
-  await page.goto("/plan?module=calendars&record=calendar-central")
-  await expect(page).toHaveURL(/\/settings\?pane=collection-calendars&record=calendar-central/)
-  // The deep link opens that calendar for editing; the modal hides the pane
-  // behind it until it closes.
-  const dialog = page.getByRole("dialog", { name: "Edit collection calendar" })
-  await expect(dialog).toBeVisible()
-  await expect(dialog.getByLabel("Calendar name")).toHaveValue("Copenhagen Central 2026")
-  await page.keyboard.press("Escape")
-  await expect(dialog).toBeHidden()
-  await expect(page.getByRole("heading", { name: "Collection calendars" }).first()).toBeVisible()
-  await expect(page.getByRole("cell", { name: "Copenhagen Central 2026" }).first()).toBeVisible()
-})
+// The legacy calendars link and the Settings pane it lands on read the API's
+// calendars now (slice 1 of #81): the scenario lives in
+// e2e-api/planning-configuration.spec.ts.
 
 test("the Routes layer counts the fixture route days by status and draws nothing until switched on", async ({ page }) => {
   // Fixture pickups name their stops by address; the ones on gazetteer streets make their route days drawable.

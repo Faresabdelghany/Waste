@@ -37,6 +37,7 @@ import { BusinessRecordFormDialog } from "@/components/waste/business-record-for
 import {
   useBusinessRecordStore,
   useBusinessRecordsHydrated,
+  useModuleRecords,
 } from "@/components/waste/business-record-store"
 import { statusClasses } from "@/components/waste/business-record-views"
 import type {
@@ -66,6 +67,8 @@ import { cn } from "@/lib/utils"
 
 const ACTOR_NAME = "Olivia Larsen"
 
+const ORGANISATION_MODULE = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })
+
 export function CollectionCalendarsSettings() {
   const { getRecords, upsertRecord } = useBusinessRecordStore()
   const hydrated = useBusinessRecordsHydrated()
@@ -92,11 +95,14 @@ export function CollectionCalendarsSettings() {
       : []
   }
 
-  const calendarRecords = relationRecords(COLLECTION_CALENDARS_MODULE)
-  const projectRecords = relationRecords({
-    workspaceId: "configure",
-    moduleId: "organization",
-  }).filter((record) => record.id.startsWith("project-"))
+  // The pane's own module and the projects it names: on the Pilot, the API's
+  // rows once they are here and nothing before (Issue #175).
+  const calendars = useModuleRecords(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, calendarsModule.records)
+  const calendarRecords = calendars.records.filter((record) => !isSoftDeleted(record))
+  const organisation = useModuleRecords("configure", "organization", ORGANISATION_MODULE?.records ?? [])
+  const projectRecords = organisation.records.filter(
+    (record) => !isSoftDeleted(record) && record.id.startsWith("project-"),
+  )
 
   const lookups: CollectionCalendarLookups = {
     projectName: (projectId) =>
@@ -176,26 +182,42 @@ export function CollectionCalendarsSettings() {
   )
   const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(filtered)
 
+  // On the Pilot the store answers the write's outcome once the API has, so
+  // the success is said then and a refusal by the store, in the API's words;
+  // on the browser's own path there is nothing to wait for.
+  const whenSaved = (outcome: ReturnType<typeof upsertRecord>, done: () => void) => {
+    if (outcome === undefined) done()
+    else void outcome.then((result) => result.kind !== "refused" && done())
+  }
+
   const handleCreate = (values: BusinessFormValues) => {
     const record = createCollectionCalendarRecord(values, {
       now: Date.now(),
       actorName: ACTOR_NAME,
       lookups,
     })
-    upsertRecord(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, record)
-    toast.success("Collection calendar created", {
-      description: `${record.name} is read by route generation on its project.`,
-    })
+    whenSaved(upsertRecord(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, record), () =>
+      toast.success("Collection calendar created", {
+        description: `${record.name} is read by route generation on its project.`,
+      }),
+    )
     setIsCreateOpen(false)
   }
 
   const handleEdit = (values: BusinessFormValues) => {
     if (!editingCalendar) return
     const record = updateCollectionCalendarRecord(editingCalendar, values, lookups)
-    upsertRecord(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, record)
-    toast.success("Collection calendar updated", { description: `${record.name} was updated.` })
+    whenSaved(upsertRecord(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, record), () =>
+      toast.success("Collection calendar updated", { description: `${record.name} was updated.` }),
+    )
     setEditingCalendar(null)
   }
+
+  const emptyMessage = calendars.pending
+    ? "Reading the collection calendars from the API…"
+    : calendars.problem
+      ? `The collection calendars could not be read from the API: ${calendars.problem.detail ?? calendars.problem.title}`
+      : "No collection calendars match this search."
 
   return (
     <AssetPanelShell
@@ -203,7 +225,7 @@ export function CollectionCalendarsSettings() {
       title="Collection calendars"
       description={calendarsModule.description}
       action={
-        <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+        <Button size="sm" onClick={() => setIsCreateOpen(true)} disabled={!calendars.ready}>
           <Plus className="h-4 w-4" weight="bold" />
           {calendarsModule.primaryAction}
         </Button>
@@ -246,7 +268,7 @@ export function CollectionCalendarsSettings() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <EmptyRow colSpan={8} message="No collection calendars match this search." />
+                <EmptyRow colSpan={8} message={emptyMessage} />
               ) : (
                 pageRows.map((row) => (
                   <TableRow key={row.record.id}>

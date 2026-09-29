@@ -75,7 +75,35 @@ export function planningAreaOutline(spots: readonly LngLat[]): LngLat[] {
   return boundsPolygon(boundsFromPolygon(corners))
 }
 
-/** One layer per visible area, in the order the areas come. */
+/**
+ * The outline an area record carries from the server: `submittedValues.geometry`,
+ * a GeoJSON Polygon as the web's adapter writes the version in force
+ * (apps/web/lib/api/records/planning.ts), whose outer ring the map draws as it
+ * stands — open, since every outline here is. Null where the record carries
+ * none, or text that is no polygon: the area is then outlined around its
+ * located containers, as every fixture area is.
+ */
+export function storedOutline(area: BusinessRecord): LngLat[] | null {
+  const raw = area.submittedValues?.geometry
+  if (typeof raw !== "string" || raw.trim() === "") return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return null
+  }
+  if (!parsed || typeof parsed !== "object") return null
+  const polygon = parsed as { type?: unknown; coordinates?: unknown }
+  if (polygon.type !== "Polygon" || !Array.isArray(polygon.coordinates) || !Array.isArray(polygon.coordinates[0])) return null
+  const ring = (polygon.coordinates[0] as unknown[]).flatMap((position) =>
+    Array.isArray(position) && typeof position[0] === "number" && typeof position[1] === "number" ? [{ lng: position[0], lat: position[1] }] : [],
+  )
+  const last = ring[ring.length - 1]
+  const open = ring.length >= 4 && last.lng === ring[0].lng && last.lat === ring[0].lat ? ring.slice(0, -1) : ring
+  return open.length >= 3 ? open : null
+}
+
+/** One layer per visible area, in the order the areas come: the outline the server holds where the record carries one, else the outline around its containers. */
 export function planningAreaLayers(
   areas: readonly BusinessRecord[],
   containers: readonly BusinessRecord[],
@@ -90,7 +118,7 @@ export function planningAreaLayers(
     .filter((area) => !isSoftDeleted(area))
     .map((area, index) => {
       const spots = located.filter(({ container }) => belongsTo(container, area)).map(({ spot }) => spot)
-      const polygon = planningAreaOutline(spots)
+      const polygon = storedOutline(area) ?? planningAreaOutline(spots)
       return {
         id: area.id,
         name: area.name,
