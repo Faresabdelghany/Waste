@@ -40,10 +40,18 @@ next-env.d.ts
 # Finder metadata
 .DS_Store
 
-# Playwright
+# Playwright: the fixture suite's output, the API suite's (Issue #151), and
+# the session the API suite's setup project saves.
 test-results/
 playwright-report/
+test-results-api/
+playwright-report-api/
+apps/web/e2e-api/.auth/
 .playwright-cli/
+
+# Local Auth's signing key (Issue #151): minted on this machine by
+# `pnpm db:signing-key`, named by supabase/config.toml, never committed.
+supabase/signing_keys.json
 
 # Turborepo
 .turbo/

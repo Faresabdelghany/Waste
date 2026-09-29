@@ -24,13 +24,23 @@ enabled = false
 # from packages/db/src/seed/demo.ts run as the owner after the migrations (Issue #70).
 enabled = false
 
-# None of the Auth decisions below has any effect on `pnpm db:start`, which
-# is `supabase db start`: the local stack is the database container alone and
-# runs no Auth server. They are here so the decisions live in the repository
-# and `supabase config push` can apply them to the hosted project; on the
-# Pilot the Owner sets them in the dashboard (README.md, "A tester's User
-# Account and Login").
+# The Auth decisions below are the hosted project's, kept in the repository
+# so `supabase config push` can apply them; on the Pilot the Owner sets them
+# in the dashboard (README.md, "A tester's User Account and Login"). They have
+# no effect on `pnpm db:start`, which is `supabase db start`, the database
+# container alone. They do govern `pnpm stack:start` (Issue #151), which
+# brings up Postgres, Kong and GoTrue so the API e2e suite signs in through
+# the real password grant and the real hook.
 [auth]
+# Local Auth signs ES256, as the hosted project does, with the key at this
+# path — relative to this file, gitignored by name, and written by
+# `pnpm db:signing-key` (packages/db/scripts/signing-key.ts) when absent,
+# which every root command that starts or stops the stack runs first: the CLI
+# fails to load this config while the file is missing and `supabase gen
+# signing-key` refuses for the same reason. Minted per clone and per CI run,
+# never committed; `supabase config push` does not carry signing keys, so the
+# hosted project's keys are untouched by this line.
+signing_keys_path = "./signing_keys.json"
 # Sign-up is off: a User Account is created by an administrator (the demo
 # seed, or POST /users) and its Login by the Supabase organisation's Owner in
 # the dashboard. The access token hook below binds an invited

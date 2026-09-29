@@ -270,6 +270,14 @@ const USERS: (typeof userAccount.$inferInsert)[] = [
   },
 ]
 
+/**
+ * The addresses the seeded accounts carry, in the seed's order: what the
+ * local stack's Login tooling (`pnpm db:logins`, #151) creates a confirmed
+ * Login for, read from here so the list is spelled once — the Pilot's Logins
+ * carry the same three.
+ */
+export const DEMO_ACCOUNT_EMAILS: readonly string[] = USERS.map((user) => user.email)
+
 // Mads works in Copenhagen Central alone. The row has no fixed id: like a
 // grant, it is the pair it joins (applyDemo).
 const PROJECT_ACCESS: (typeof projectAccess.$inferInsert)[] = [

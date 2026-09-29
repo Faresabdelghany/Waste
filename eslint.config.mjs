@@ -60,9 +60,9 @@ export default defineConfig([
     },
   },
 
-  // Playwright suite: `use` is Playwright's fixture function, not React's hook.
+  // Playwright suites: `use` is Playwright's fixture function, not React's hook.
   {
-    files: ["apps/web/e2e/**/*.ts", "apps/web/playwright.config.ts"],
+    files: ["apps/web/e2e/**/*.ts", "apps/web/playwright.config.ts", "apps/web/e2e-api/**/*.ts", "apps/web/playwright.api.config.ts", "apps/web/playwright.shared.ts"],
     rules: {
       "react-hooks/rules-of-hooks": "off",
     },
