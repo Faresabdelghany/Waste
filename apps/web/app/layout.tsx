@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { Toaster } from "@/components/ui/sonner"
+import { SignInGate } from "@/components/auth/sign-in-gate"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AppThemeProvider } from "@/components/app-theme-provider"
 import { ThemeBootstrapScript } from "@/components/theme-bootstrap-script"
@@ -62,7 +63,7 @@ export default function RootLayout({
                   <CommercialRegistriesStoreProvider>
                     <BusinessRecordStoreProvider>
                       <ActiveRoutesStoreProvider>
-                        {children}
+                        <SignInGate>{children}</SignInGate>
                         <Analytics />
                         <Toaster richColors closeButton />
                       </ActiveRoutesStoreProvider>

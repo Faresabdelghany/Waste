@@ -5,7 +5,18 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { EXPIRY_MARGIN_MS, isExpired, refreshSession, refusalMessage, sessionOf, signInWithPassword, SignInRefused } from "../auth"
+import {
+  EXPIRY_MARGIN_MS,
+  isExpired,
+  PasswordChangeRefused,
+  refreshSession,
+  refusalMessage,
+  sessionOf,
+  signInWithPassword,
+  SignInRefused,
+  signOut,
+  updatePassword,
+} from "../auth"
 import { apiConfigOf, authConfigOf } from "../config"
 
 const config = { supabaseUrl: "https://project.supabase.co", anonKey: "anon" }
@@ -96,6 +107,74 @@ describe("the token endpoint", () => {
       () => signInWithPassword(config, "x@y.example", "pw", { fetch: empty.fetch }),
       (error: unknown) => error instanceof SignInRefused && /without a session/.test(error.message),
     )
+  })
+})
+
+describe("updatePassword (Issue #150)", () => {
+  const FRESH = { access_token: "fresh", refresh_token: "r2", expires_in: 3600, user: { id: "u-1", email: "x@y.example" } }
+  const answering = (token: () => Response, user: () => Response) => scripted((url) => (url.includes("/auth/v1/token") ? token() : user()))
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
+
+  test("verifies the current password by signing in with it, then sets the new one under that fresh session, which it answers", async () => {
+    const { fetch, calls } = answering(() => json(FRESH), () => json({ id: "u-1", email: "x@y.example" }))
+    const session = await updatePassword(config, "x@y.example", "the old one", "a new one of twelve", { fetch, now: () => NOW })
+    assert.deepEqual(
+      calls.map((call) => `${call.init.method} ${call.url}`),
+      ["POST https://project.supabase.co/auth/v1/token?grant_type=password", "PUT https://project.supabase.co/auth/v1/user"],
+    )
+    assert.equal(calls[0].init.body, JSON.stringify({ email: "x@y.example", password: "the old one" }))
+    const headers = calls[1].init.headers as Record<string, string>
+    assert.equal(headers.authorization, "Bearer fresh")
+    assert.equal(headers.apikey, "anon")
+    assert.equal(calls[1].init.body, JSON.stringify({ password: "a new one of twelve" }))
+    assert.deepEqual(session, { accessToken: "fresh", refreshToken: "r2", expiresAt: NOW + 3_600_000, email: "x@y.example", userId: "u-1" })
+  })
+
+  test("a current password Auth refuses stops it before the update, and says which password was wrong", async () => {
+    const { fetch, calls } = answering(() => json({ code: 400, error_code: "invalid_credentials", msg: "Invalid login credentials" }, 400), () => json({}))
+    await assert.rejects(
+      () => updatePassword(config, "x@y.example", "not it", "a new one of twelve", { fetch }),
+      (error: unknown) => error instanceof PasswordChangeRefused && error.status === 400 && error.message === "The current password is not right",
+    )
+    assert.equal(calls.length, 1, "no update was sent")
+  })
+
+  test("a new password Auth refuses is refused in Auth's words; a lost network at either step is status 0", async () => {
+    const weak = answering(() => json(FRESH), () => json({ code: 422, error_code: "weak_password", msg: "Password should be at least 12 characters." }, 422))
+    await assert.rejects(
+      () => updatePassword(config, "x@y.example", "the old one", "short", { fetch: weak.fetch }),
+      (error: unknown) => error instanceof PasswordChangeRefused && error.status === 422 && error.message === "Password should be at least 12 characters.",
+    )
+    const lost = (async (input: RequestInfo | URL) => {
+      if (String(input).includes("/auth/v1/token")) return json(FRESH)
+      throw new TypeError("Failed to fetch")
+    }) as typeof fetch
+    await assert.rejects(
+      () => updatePassword(config, "x@y.example", "the old one", "a new one of twelve", { fetch: lost }),
+      (error: unknown) => error instanceof PasswordChangeRefused && error.status === 0 && /did not answer/.test(error.message),
+    )
+  })
+})
+
+describe("signOut (Issue #150)", () => {
+  test("revokes this browser's session at Auth, under its own token and the publishable key", async () => {
+    const { fetch, calls } = scripted(() => new Response(null, { status: 204 }))
+    await signOut(config, "t0k3n", { fetch })
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].url, "https://project.supabase.co/auth/v1/logout?scope=local")
+    assert.equal(calls[0].init.method, "POST")
+    const headers = calls[0].init.headers as Record<string, string>
+    assert.equal(headers.authorization, "Bearer t0k3n")
+    assert.equal(headers.apikey, "anon")
+  })
+
+  test("is best-effort: a refusal and a lost network settle as a success does, and nothing is thrown", async () => {
+    const refusing = scripted(() => new Response(JSON.stringify({ msg: "invalid JWT" }), { status: 401 }))
+    await signOut(config, "expired", { fetch: refusing.fetch })
+    const failing = (async () => {
+      throw new TypeError("Failed to fetch")
+    }) as typeof fetch
+    await signOut(config, "t0k3n", { fetch: failing })
   })
 })
 

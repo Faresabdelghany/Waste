@@ -23,7 +23,7 @@ import {
   migrateLegacyRecordBuckets,
 } from "@/lib/data/legacy-ids"
 import type { ApiClient } from "@/lib/api/client"
-import { problemSentence, type Problem } from "@/lib/api/problem"
+import { isAccountRefusal, problemSentence, type Problem } from "@/lib/api/problem"
 import { moduleKeyOf } from "@/lib/api/records/adapter"
 import { SERVER_MODULES, serverModuleOf } from "@/lib/api/records/modules"
 import {
@@ -220,9 +220,12 @@ export function BusinessRecordStoreProvider({
   // again. The switched modules load in SERVER_MODULES' order, one after the
   // other, since a later module's mapping resolves the earlier ones' rows (a
   // user names its role and its projects); each lands as it arrives, and a
-  // module that fails is reported once and left on its fixtures. A load the
-  // session outlives — the person signs out mid-way — is aborted, not left
-  // to finish into a store that no longer wants it.
+  // module that fails is reported once and left on its fixtures — unless the
+  // API refused the account itself (Issue #150): the client has ended the
+  // session by then, so the load stops there, reported nowhere but /login
+  // and never falling back on fixtures. A load the session outlives — the
+  // person signs out mid-way — is aborted, not left to finish into a store
+  // that no longer wants it.
   useEffect(() => {
     const server = stores.server
     if (identity === null) {
@@ -248,6 +251,7 @@ export function BusinessRecordStoreProvider({
         } catch (error) {
           if (controller.signal.aborted) return
           const problem = problemOfError(error)
+          if (isAccountRefusal(problem)) return
           server.set((state) => new Map(state).set(key, loadFailed(state.get(key) ?? IDLE, problem)))
           reportProblem(`${key} could not be read from the API`, problem)
         }
@@ -366,7 +370,8 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
               }
             }
           })
-          if (outcome.kind === "refused") reportProblem(`${record.name} was not saved`, outcome.problem)
+          // The account's own refusal has ended the session; /login says why.
+          if (outcome.kind === "refused" && !isAccountRefusal(outcome.problem)) reportProblem(`${record.name} was not saved`, outcome.problem)
         }
         const pending = stores.pendingWrites
         const previous = pending.get(record.id) ?? Promise.resolve()
