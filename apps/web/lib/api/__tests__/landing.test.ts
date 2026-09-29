@@ -35,6 +35,15 @@ describe("returnPath", () => {
     }
   })
 
+  test("is never another origin once the parser has removed dot segments either", () => {
+    // Each of these parses to the protocol-relative `//elsewhere.example/…`,
+    // which a navigation would follow off-site.
+    for (const next of ["/.//elsewhere.example/phish", "/..//elsewhere.example", "/%2e//elsewhere.example", "/%2E%2E//elsewhere.example", "/.\\/elsewhere.example", "/a/..//elsewhere.example"]) {
+      assert.equal(returnPath(next), null, next)
+      assert.equal(afterSignIn(OFFICE, next), "/operate", next)
+    }
+  })
+
   test("is never the sign-in page itself, nor the root, which is the landing already", () => {
     assert.equal(returnPath("/login"), null)
     assert.equal(returnPath("/login/"), null, "the trailing slash Next redirects away")

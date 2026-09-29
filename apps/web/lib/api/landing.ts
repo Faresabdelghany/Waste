@@ -47,6 +47,10 @@ export function returnPath(next: string | null | undefined): string | null {
     return null
   }
   if (url.origin !== OWN_ORIGIN) return null
+  // What is returned is the parsed path, so it is the parsed path that must
+  // not name another origin: the parser removes dot segments and turns `\`
+  // into `/`, and `/.//host` comes out as the protocol-relative `//host`.
+  if (url.pathname.startsWith("//")) return null
   // Next redirects a trailing slash away, so `/login/` is /login too.
   const page = url.pathname.replace(/\/+$/, "")
   if (page === "" || page === SIGN_IN_PATH) return null
