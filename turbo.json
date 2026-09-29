@@ -36,7 +36,8 @@
         "HOST",
         "PORT",
         "WORKER_DATABASE_URL",
-        "DATABASE_URL"
+        "DATABASE_URL",
+        "ROUTING_PROVIDER"
       ]
     },
     "@waste/web#dev": {

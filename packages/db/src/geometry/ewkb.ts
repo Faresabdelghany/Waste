@@ -1,27 +1,28 @@
 // PostGIS hands a geometry column to the client as hex EWKB: WKB (ISO 19125)
 // with PostGIS's flag bits in the type word for Z, M and an embedded SRID.
-// This decodes that text into the GeoJSON the contracts carry, for the two
-// shapes the columns store: a Point and a Polygon, two-dimensional or with a Z
-// that becomes the position's altitude. Everything else is refused by name
-// rather than guessed at: a measure (M) has no place in a GeoJSON position, a
-// line string or a collection has no column yet (Issue 6), and an empty
-// geometry has no coordinates to give.
+// This decodes that text into the GeoJSON the contracts carry, for the three
+// shapes the columns store: a Point, a LineString (#169, the plan leg) and a
+// Polygon, two-dimensional or with a Z that becomes the position's altitude.
+// Everything else is refused by name rather than guessed at: a measure (M) has
+// no place in a GeoJSON position, a multi-shape or a collection has no column,
+// and an empty geometry has no coordinates to give.
 //
 // The decoder does not re-check ring closure or validity: the `validGeometry`
 // check beside the column (schema/geometry.ts) holds those at write time, and
 // a decoder that second-guessed the database would only hide a broken row. It
 // does refuse a ring of fewer than four positions, which no closed ring has
 // and the contracts' LinearRing could not hold.
-import type { Point, Polygon, Position } from "@waste/contracts/geojson"
+import type { LineString, Point, Polygon, Position } from "@waste/contracts/geojson"
 
 export type DecodedGeometry = {
   /** The SRID embedded in the EWKB, null when there is none (plain WKB). */
   srid: number | null
-  geometry: Point | Polygon
+  geometry: Point | LineString | Polygon
 }
 
 // WKB geometry type codes, the ones this package may meet.
 const POINT = 1
+const LINESTRING = 2
 const POLYGON = 3
 const TYPE_NAMES: Readonly<Record<number, string>> = {
   1: "Point",
@@ -126,11 +127,18 @@ export function decodeEwkbHex(hex: string): DecodedGeometry {
   const srid = (word & HAS_SRID) !== 0 ? reader.int32() : null
   if ((word & HAS_M) !== 0) fail(`${typeName(type)} carries a measure (M), which a GeoJSON position cannot hold`)
 
-  let geometry: Point | Polygon
+  let geometry: Point | LineString | Polygon
   if (type === POINT) {
     const coordinates = position(reader, hasZ)
     if (coordinates.some((value) => Number.isNaN(value))) fail("an empty point has no position")
     geometry = { type: "Point", coordinates }
+  } else if (type === LINESTRING) {
+    const positionCount = reader.uint32()
+    if (positionCount === 0) fail("an empty line string has no positions")
+    if (positionCount < 2) fail(`${positionCount} position(s); a line string has at least two`)
+    const coordinates: Position[] = []
+    for (let index = 0; index < positionCount; index += 1) coordinates.push(position(reader, hasZ))
+    geometry = { type: "LineString", coordinates }
   } else if (type === POLYGON) {
     const ringCount = reader.uint32()
     if (ringCount === 0) fail("an empty polygon has no rings")
@@ -144,7 +152,7 @@ export function decodeEwkbHex(hex: string): DecodedGeometry {
     }
     geometry = { type: "Polygon", coordinates }
   } else {
-    fail(`${typeName(type)} is not stored here: only Point and Polygon columns exist`)
+    fail(`${typeName(type)} is not stored here: only Point, LineString and Polygon columns exist`)
   }
 
   if (reader.remaining > 0) fail(`${reader.remaining} byte(s) left after the geometry`)

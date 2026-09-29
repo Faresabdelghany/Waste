@@ -107,6 +107,7 @@ describe("the job registry", () => {
       "worker.heartbeat",
       "planning.generate-routes",
       "planning.plan-ahead",
+      "routing.measure",
       "execution.relay-outbox",
       ...RESOLUTION_KINDS.map(outboxQueue),
       ...FINANCE_EVENT_KINDS.map(outboxQueue),

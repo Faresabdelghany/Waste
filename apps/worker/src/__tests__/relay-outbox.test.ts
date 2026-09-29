@@ -26,6 +26,7 @@ import { outboxEvent } from "@waste/db/schema/execution"
 import { company, project } from "@waste/db/schema/organisation"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { withCompany } from "@waste/db/tenant"
+import { FakeProvider } from "@waste/routing/fake"
 import type { OutboxKind } from "@waste/contracts/execution"
 import { asc } from "drizzle-orm"
 import type { PgBoss } from "pg-boss"
@@ -70,6 +71,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     },
     now: () => new Date(),
     log: (message) => void lines.push(message),
+    routing: new FakeProvider(),
     send: (queue, data, options) => {
       if (data && "id" in data && typeof data.id === "string") sent.push({ queue, id: data.id })
       return boss.send(queue, data, options)

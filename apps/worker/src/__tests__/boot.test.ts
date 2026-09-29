@@ -16,6 +16,7 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { createDb, type Database } from "@waste/db/client"
+import { FakeProvider } from "@waste/routing/fake"
 import { migrateDatabase } from "@waste/db/migrate"
 import { PGBOSS_SCHEMA, PGBOSS_SCHEMA_VERSION } from "@waste/db/sql/pgboss"
 import { PgBoss } from "pg-boss"
@@ -49,6 +50,7 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     now: () => new Date("2026-09-25T12:00:00Z"),
     log: (message) => void lines.push(message),
     send: (queue, data, options) => running!.boss.send(queue, data, options),
+    routing: new FakeProvider(),
   })
 
   before(async () => {

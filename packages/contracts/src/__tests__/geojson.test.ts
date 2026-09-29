@@ -1,7 +1,31 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { FlatLinearRing, FlatPoint, FlatPolygon, Latitude, LinearRing, Longitude, Point, Polygon, Position, Position2D } from "../geojson"
+import { FlatLinearRing, FlatLineString, FlatPoint, FlatPolygon, Latitude, LinearRing, LineString, Longitude, Point, Polygon, Position, Position2D } from "../geojson"
+
+describe("LineString and FlatLineString (#169)", () => {
+  test("parses two or more positions and keeps them", () => {
+    const line = { type: "LineString", coordinates: [[12.5, 55.7], [12.6, 55.71], [12.7, 55.72]] }
+    assert.deepEqual(LineString.parse(line), line)
+    assert.deepEqual(FlatLineString.parse(line), line)
+  })
+
+  test("refuses fewer than two positions", () => {
+    const short = { type: "LineString", coordinates: [[12.5, 55.7]] }
+    assert.equal(LineString.safeParse(short).success, false)
+    assert.equal(FlatLineString.safeParse(short).success, false)
+  })
+
+  test("FlatLineString refuses an altitude where LineString carries it", () => {
+    const lifted = { type: "LineString", coordinates: [[12.5, 55.7, 3], [12.6, 55.71, 3]] }
+    assert.deepEqual(LineString.parse(lifted), lifted)
+    assert.equal(FlatLineString.safeParse(lifted).success, false)
+  })
+
+  test("refuses another geometry's type word", () => {
+    assert.equal(LineString.safeParse({ type: "Point", coordinates: [[12.5, 55.7], [12.6, 55.71]] }).success, false)
+  })
+})
 
 const cph: [number, number] = [12.5683, 55.6761]
 

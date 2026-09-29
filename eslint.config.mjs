@@ -54,6 +54,12 @@ export default defineConfig([
               group: ["@waste/db", "@waste/db/*", "drizzle-orm", "drizzle-orm/*", "postgres", "postgres/*"],
               message: "The web app never talks to the database (ADR-0001): go through the API in apps/api.",
             },
+            {
+              // #39/#124: the routing provider's key is server-side only, so the
+              // adapter package is the API's and the worker's, never the browser's.
+              group: ["@waste/routing", "@waste/routing/*"],
+              message: "The routing provider is called server-side only (#39): the web reads Plans through the API in apps/api.",
+            },
           ],
         },
       ],

@@ -1,0 +1,15 @@
+{
+  // Server-only code (Node through tsx), like packages/db: Node's types from
+  // the base config, ECMAScript only, no DOM. Not purity-gated: this package
+  // exists to talk to a routing provider. The structural conventions of the
+  // gated packages still hold (source by subpath, tests hidden, tests in
+  // their own program).
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["esnext"],
+    "target": "es2022",
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/__tests__/**"]
+}

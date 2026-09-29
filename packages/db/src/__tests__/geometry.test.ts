@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
-import type { Point, Polygon } from "@waste/contracts/geojson"
+import type { LineString, Point, Polygon } from "@waste/contracts/geojson"
 import { sql } from "drizzle-orm"
 import { integer } from "drizzle-orm/pg-core"
 
@@ -23,8 +23,9 @@ const specimen = wms.table(
     id: integer().primaryKey(),
     location: geometry.point(),
     boundary: geometry.polygon(),
+    path: geometry.lineString(),
   },
-  (table) => [validGeometry(table.location), validGeometry(table.boundary)],
+  (table) => [validGeometry(table.location), validGeometry(table.boundary), validGeometry(table.path)],
 )
 
 // Inner Copenhagen, roughly, with a hole where the lakes are.
@@ -94,7 +95,31 @@ describe("geometry columns against the database", { skip: database.skip }, () =>
     inSpecimen(async (tx) => {
       await tx.insert(specimen).values({ id: 1, boundary: copenhagen })
       const rows = await tx.select().from(specimen)
-      assert.deepEqual(rows, [{ id: 1, location: null, boundary: copenhagen }])
+      assert.deepEqual(rows, [{ id: 1, location: null, boundary: copenhagen, path: null }])
+    }))
+
+  test("a line string round-trips through both faces, and the column refuses a point with 22023 (#169)", () =>
+    inSpecimen(async (tx) => {
+      const path: LineString = {
+        type: "LineString",
+        coordinates: [
+          [12.5683, 55.6761],
+          [12.5709, 55.6772],
+          [12.5794, 55.6838],
+        ],
+      }
+      await tx.insert(specimen).values({ id: 1, path })
+      const [row] = await tx.select({ path: specimen.path }).from(specimen)
+      assert.deepEqual(row.path, path)
+      const raw = await tx.execute<{ path: string }>(sql`select ${specimen.path} as path from ${specimen}`)
+      assert.match(raw[0].path, /^0102000020E6100000/)
+      assert.deepEqual(decodeEwkbHex(raw[0].path), { srid: SRID, geometry: path })
+      const [asJson] = await tx.select({ cast: sql`to_jsonb(${specimen.path})`.mapWith(specimen.path) }).from(specimen)
+      assert.deepEqual(asJson.cast, path)
+      await assert.rejects(
+        tx.transaction((savepoint) => savepoint.insert(specimen).values({ id: 2, path: townHall as never })),
+        refusedWith("22023", /Geometry type \(Point\) does not match column type \(LineString\)/),
+      )
     }))
 
   test("a [lng, lat] point round-trips; the column is flat and refuses an altitude with 22023", () =>

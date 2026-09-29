@@ -1045,6 +1045,92 @@ index wms.pickup pickup_shared_collection_point_id_idx CREATE INDEX pickup_share
 index wms.pickup pickup_waste_fraction_id_idx CREATE INDEX pickup_waste_fraction_id_idx ON wms.pickup USING btree (company_id, waste_fraction_id)
 trigger wms.pickup pickup_touch_updated_at enabled=O CREATE TRIGGER pickup_touch_updated_at BEFORE UPDATE ON wms.pickup FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.pickup pickup_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.plan kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.plan 1 id uuid not-null default=wms.uuidv7()
+column wms.plan 2 company_id uuid not-null
+column wms.plan 3 project_id uuid not-null
+column wms.plan 4 created_at timestamp with time zone not-null default=now()
+column wms.plan 5 updated_at timestamp with time zone not-null default=now()
+column wms.plan 6 route_id uuid not-null
+column wms.plan 7 solver text not-null
+column wms.plan 8 status text not-null default='calculating'::text
+column wms.plan 9 fingerprint text not-null
+column wms.plan 10 trip text not-null
+column wms.plan 11 distance_metres integer
+column wms.plan 12 duration_seconds integer
+column wms.plan 13 deferred_until timestamp with time zone
+column wms.plan 14 failure_reason text
+column wms.plan 15 provider text not-null
+column wms.plan 16 engine_version text
+column wms.plan 17 graph_date date
+constraint wms.plan plan_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.plan plan_deferred_shape CHECK (((deferred_until IS NULL) OR (status = 'calculating'::text)))
+constraint wms.plan plan_failure_shape CHECK (((status = 'failed'::text) = (failure_reason IS NOT NULL)))
+constraint wms.plan plan_pkey PRIMARY KEY (id)
+constraint wms.plan plan_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.plan plan_route_id_fk FOREIGN KEY (company_id, project_id, route_id) REFERENCES wms.route(company_id, project_id, id)
+constraint wms.plan plan_route_id_project_key UNIQUE (company_id, project_id, route_id, id)
+constraint wms.plan plan_solver_one_of CHECK ((solver = ANY (ARRAY['optimiser'::text, 'manual'::text, 'baseline'::text])))
+constraint wms.plan plan_status_one_of CHECK ((status = ANY (ARRAY['calculating'::text, 'ready'::text, 'failed'::text])))
+constraint wms.plan plan_totals_shape CHECK (
+CASE status
+    WHEN 'ready'::text THEN ((distance_metres IS NOT NULL) AND (distance_metres >= 0) AND (duration_seconds IS NOT NULL) AND (duration_seconds >= 0))
+    ELSE ((distance_metres IS NULL) AND (duration_seconds IS NULL))
+END)
+constraint wms.plan plan_trip_one_of CHECK ((trip = ANY (ARRAY['full'::text, 'stops-only'::text])))
+index wms.plan plan_fingerprint_idx CREATE INDEX plan_fingerprint_idx ON wms.plan USING btree (company_id, fingerprint)
+index wms.plan plan_pkey CREATE UNIQUE INDEX plan_pkey ON wms.plan USING btree (id)
+index wms.plan plan_route_id_project_key CREATE UNIQUE INDEX plan_route_id_project_key ON wms.plan USING btree (company_id, project_id, route_id, id)
+trigger wms.plan plan_touch_updated_at enabled=O CREATE TRIGGER plan_touch_updated_at BEFORE UPDATE ON wms.plan FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.plan plan_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.plan_leg kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
+column wms.plan_leg 1 id uuid not-null default=wms.uuidv7()
+column wms.plan_leg 2 company_id uuid not-null
+column wms.plan_leg 3 project_id uuid not-null
+column wms.plan_leg 4 recorded_at timestamp with time zone not-null default=now()
+column wms.plan_leg 5 route_id uuid not-null
+column wms.plan_leg 6 plan_id uuid not-null
+column wms.plan_leg 7 position integer not-null
+column wms.plan_leg 8 path extensions.geometry(LineString,4326) not-null
+column wms.plan_leg 9 metres integer not-null
+column wms.plan_leg 10 seconds integer not-null
+constraint wms.plan_leg plan_leg_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.plan_leg plan_leg_measure_shape CHECK (((metres >= 0) AND (seconds >= 0)))
+constraint wms.plan_leg plan_leg_path_valid CHECK ((extensions.st_isvalid(path) AND (NOT extensions.st_isempty(path)) AND (extensions.st_xmin((path)::extensions.box3d) >= ('-180'::integer)::double precision) AND (extensions.st_xmax((path)::extensions.box3d) <= (180)::double precision) AND (extensions.st_ymin((path)::extensions.box3d) >= ('-90'::integer)::double precision) AND (extensions.st_ymax((path)::extensions.box3d) <= (90)::double precision)))
+constraint wms.plan_leg plan_leg_pkey PRIMARY KEY (id)
+constraint wms.plan_leg plan_leg_plan_id_position_key UNIQUE (company_id, plan_id, "position")
+constraint wms.plan_leg plan_leg_position_positive CHECK (("position" > 0))
+constraint wms.plan_leg plan_leg_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.plan_leg plan_leg_route_id_fk FOREIGN KEY (company_id, project_id, route_id) REFERENCES wms.route(company_id, project_id, id)
+constraint wms.plan_leg plan_leg_route_id_plan_id_fk FOREIGN KEY (company_id, project_id, route_id, plan_id) REFERENCES wms.plan(company_id, project_id, route_id, id)
+index wms.plan_leg plan_leg_pkey CREATE UNIQUE INDEX plan_leg_pkey ON wms.plan_leg USING btree (id)
+index wms.plan_leg plan_leg_plan_id_position_key CREATE UNIQUE INDEX plan_leg_plan_id_position_key ON wms.plan_leg USING btree (company_id, plan_id, "position")
+index wms.plan_leg plan_leg_project_id_idx CREATE INDEX plan_leg_project_id_idx ON wms.plan_leg USING btree (company_id, project_id)
+policy wms.plan_leg plan_leg_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.plan_stop kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
+column wms.plan_stop 1 id uuid not-null default=wms.uuidv7()
+column wms.plan_stop 2 company_id uuid not-null
+column wms.plan_stop 3 project_id uuid not-null
+column wms.plan_stop 4 recorded_at timestamp with time zone not-null default=now()
+column wms.plan_stop 5 route_id uuid not-null
+column wms.plan_stop 6 plan_id uuid not-null
+column wms.plan_stop 7 pickup_id uuid not-null
+column wms.plan_stop 8 position integer not-null
+constraint wms.plan_stop plan_stop_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.plan_stop plan_stop_pkey PRIMARY KEY (id)
+constraint wms.plan_stop plan_stop_plan_id_pickup_id_key UNIQUE (company_id, plan_id, pickup_id)
+constraint wms.plan_stop plan_stop_plan_id_position_key UNIQUE (company_id, plan_id, "position")
+constraint wms.plan_stop plan_stop_position_positive CHECK (("position" > 0))
+constraint wms.plan_stop plan_stop_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.plan_stop plan_stop_route_id_fk FOREIGN KEY (company_id, project_id, route_id) REFERENCES wms.route(company_id, project_id, id)
+constraint wms.plan_stop plan_stop_route_id_pickup_id_fk FOREIGN KEY (company_id, project_id, route_id, pickup_id) REFERENCES wms.pickup(company_id, project_id, route_id, id)
+constraint wms.plan_stop plan_stop_route_id_plan_id_fk FOREIGN KEY (company_id, project_id, route_id, plan_id) REFERENCES wms.plan(company_id, project_id, route_id, id)
+index wms.plan_stop plan_stop_pickup_id_idx CREATE INDEX plan_stop_pickup_id_idx ON wms.plan_stop USING btree (company_id, pickup_id)
+index wms.plan_stop plan_stop_pkey CREATE UNIQUE INDEX plan_stop_pkey ON wms.plan_stop USING btree (id)
+index wms.plan_stop plan_stop_plan_id_pickup_id_key CREATE UNIQUE INDEX plan_stop_plan_id_pickup_id_key ON wms.plan_stop USING btree (company_id, plan_id, pickup_id)
+index wms.plan_stop plan_stop_plan_id_position_key CREATE UNIQUE INDEX plan_stop_plan_id_position_key ON wms.plan_stop USING btree (company_id, plan_id, "position")
+index wms.plan_stop plan_stop_project_id_idx CREATE INDEX plan_stop_project_id_idx ON wms.plan_stop USING btree (company_id, project_id)
+policy wms.plan_stop plan_stop_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.planning_area kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.planning_area 1 id uuid not-null default=wms.uuidv7()
 column wms.planning_area 2 company_id uuid not-null
@@ -1457,6 +1543,8 @@ column wms.route 25 started_at timestamp with time zone
 column wms.route 26 completed_at timestamp with time zone
 column wms.route 27 cancelled_at timestamp with time zone
 column wms.route 28 generation_run_id uuid
+column wms.route 29 active_plan_id uuid
+constraint wms.route route_active_plan_id_fk FOREIGN KEY (company_id, project_id, id, active_plan_id) REFERENCES wms.plan(company_id, project_id, route_id, id) ON DELETE SET NULL (active_plan_id)
 constraint wms.route route_actual_driver_id_fk FOREIGN KEY (company_id, project_id, actual_driver_id) REFERENCES wms.driver(company_id, project_id, id)
 constraint wms.route route_actual_shape CHECK ((((actual_driver_id IS NOT NULL) = (started_at IS NOT NULL)) AND ((actual_vehicle_id IS NOT NULL) = (started_at IS NOT NULL)) AND ((actual_trailer_id IS NULL) OR (started_at IS NOT NULL))))
 constraint wms.route route_actual_trailer_id_fk FOREIGN KEY (company_id, project_id, actual_trailer_id) REFERENCES wms.vehicle(company_id, project_id, id)
@@ -1486,6 +1574,7 @@ CASE status
 END)
 constraint wms.route route_status_one_of CHECK ((status = ANY (ARRAY['planned'::text, 'ready'::text, 'active'::text, 'completed'::text, 'cancelled'::text])))
 constraint wms.route route_unloading_station_id_fk FOREIGN KEY (company_id, unloading_station_id) REFERENCES wms.unloading_station(company_id, id)
+index wms.route route_active_plan_id_idx CREATE INDEX route_active_plan_id_idx ON wms.route USING btree (company_id, active_plan_id)
 index wms.route route_actual_driver_id_idx CREATE INDEX route_actual_driver_id_idx ON wms.route USING btree (company_id, actual_driver_id)
 index wms.route route_actual_trailer_id_idx CREATE INDEX route_actual_trailer_id_idx ON wms.route USING btree (company_id, actual_trailer_id)
 index wms.route route_actual_vehicle_id_idx CREATE INDEX route_actual_vehicle_id_idx ON wms.route USING btree (company_id, actual_vehicle_id)
@@ -2565,4 +2654,5 @@ journal 1790339832474 588e649ff4b232b168e5ad760ecd65b588f4bd4be5be5be4bd049dbd96
 journal 1790353500322 07ea348aca846931ca830eebf25c9e0d8f9acd5d9a6294d58d5447c6e7586255
 journal 1790370729141 17fe7f428e6ec8d22c32e9385147ce5b532614e30f8d0a16654ec5649583c4a3
 journal 1790383636636 c40e0a4b47bf76a6cb1e76f9e7750ecc36ffef0e5c4bbc19ceb469061f73f03e
+journal 1790711684369 f812e571a1ed7f0eb48027fee7d2c718fb759ac55cd11d3c4e68a6fa6a281f51
 pgboss-version 42

@@ -59,6 +59,7 @@ COPY apps/worker/package.json apps/worker/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/db/package.json packages/db/
 COPY packages/domain/package.json packages/domain/
+COPY packages/routing/package.json packages/routing/
 COPY packages/tooling/package.json packages/tooling/
 RUN pnpm install --frozen-lockfile --prod --filter @waste/worker...
 
@@ -76,6 +77,7 @@ COPY apps/worker apps/worker
 COPY packages/contracts packages/contracts
 COPY packages/db packages/db
 COPY packages/domain packages/domain
+COPY packages/routing packages/routing
 RUN pnpm --filter @waste/worker deploy --prod /app/apps/worker
 COPY tsconfig.base.json /app/tsconfig.base.json
 

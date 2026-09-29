@@ -290,11 +290,12 @@ describe("reset-to-seed against a database of its own", { skip: database.skip },
     const swept = SWEPT_TABLES.map(getTableName)
     assert.deepEqual(KEPT_TABLES.map(getTableName).sort(), [...KEPT].sort())
     assert.deepEqual([...swept, ...KEPT].sort(), tables.map((row) => row.name).sort(), "every wms table is kept or swept, once")
+    // A SET NULL key (confdeltype 'n') clears itself under the parent's delete, so it forces no order (#169: route.active_plan_id).
     const keys = await owner.sql<{ child: string; parent: string }[]>`
       select child.relname as child, parent.relname as parent from pg_constraint k
       join pg_class child on child.oid = k.conrelid join pg_class parent on parent.oid = k.confrelid
       join pg_namespace n on n.oid = child.relnamespace
-      where k.contype = 'f' and n.nspname = 'wms' and child.oid <> parent.oid`
+      where k.contype = 'f' and n.nspname = 'wms' and child.oid <> parent.oid and k.confdeltype <> 'n'`
     const position = new Map(swept.map((name, index) => [name, index]))
     for (const { child, parent } of keys) {
       if (!position.has(child)) {

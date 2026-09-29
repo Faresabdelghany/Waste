@@ -22,23 +22,13 @@ import { describe, test } from "node:test"
 
 import { PICKUP_STATUSES, ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
 import { GENERATION_RUN_STATUSES, GENERATION_TRIGGERS } from "@waste/domain/planning/vocabulary"
-import { sql } from "drizzle-orm"
-import { boolean, check, date, integer, text, time, timestamp, unique, uuid } from "drizzle-orm/pg-core"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
-import { tableObjectName } from "../names"
-import { oneOf } from "../schema/checks"
-import { id, projectScoped, timestamps } from "../schema/columns"
 import { route } from "../schema/execution"
-import { driver, vehicle } from "../schema/fleet"
 import { generationMatch, generationRun } from "../schema/generation"
-import { company, project, serviceProvider } from "../schema/organisation"
-import { depot, unloadingStation } from "../schema/places"
-import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "../schema/references"
-import { collectionGroup, routeScheme } from "../schema/route-schemes"
-import { wms } from "../schema/wms"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
 import { checksOf, companyFk, createTable, index, oneOfCheck, projectFk, projectFkTo, ref, uniqueKey } from "./rendering"
+import { routeAsOf } from "./route-as-of"
 import { statementsBetween, statementsFor } from "./specimen"
 
 /** The two tables in the order src/schema/generation.ts defines them; drizzle-kit's own loader sorts a module's exports, which the migration test allows for. */
@@ -89,77 +79,8 @@ const expected = [
   index("generation_match", "generation_match_generation_run_id_idx", "company_id", "generation_run_id"),
 ]
 
-const instant = () => timestamp({ withTimezone: true })
-
-/** The route as 0008 left it (Issue #104): every column, key, check and index of src/schema/execution.ts but the run that last wrote it. Another table object of the same name is fine here, since nothing connects to a database. */
-const routeAsOf0008 = wms.table(
-  "route",
-  {
-    ...id,
-    ...projectScoped,
-    ...timestamps,
-    routeSchemeId: uuid().notNull(),
-    collectionGroupId: uuid().notNull(),
-    serviceDate: date().notNull(),
-    operatingDate: date().notNull(),
-    status: text().notNull().default("planned"),
-    cancelledByGeneration: boolean().notNull().default(false),
-    note: text(),
-    number: integer().notNull(),
-    plannedStartTime: time(),
-    plannedVehicleId: uuid(),
-    plannedDriverId: uuid(),
-    plannedTrailerId: uuid(),
-    depotId: uuid(),
-    plannedServiceProviderId: uuid(),
-    unloadingStationId: uuid(),
-    actualVehicleId: uuid(),
-    actualDriverId: uuid(),
-    actualTrailerId: uuid(),
-    dispatchedAt: instant(),
-    startedAt: instant(),
-    completedAt: instant(),
-    cancelledAt: instant(),
-  },
-  (t) => [
-    companyReference(t, company),
-    tenantReference(t, [t.projectId], project),
-    projectReference(t, [t.routeSchemeId], routeScheme),
-    projectReference(t, [t.collectionGroupId], collectionGroup),
-    projectReference(t, [t.plannedVehicleId], vehicle),
-    projectReference(t, [t.plannedTrailerId], vehicle),
-    projectReference(t, [t.plannedDriverId], driver),
-    projectReference(t, [t.depotId], depot),
-    tenantReference(t, [t.plannedServiceProviderId], serviceProvider),
-    tenantReference(t, [t.unloadingStationId], unloadingStation),
-    projectReference(t, [t.actualVehicleId], vehicle),
-    projectReference(t, [t.actualTrailerId], vehicle),
-    projectReference(t, [t.actualDriverId], driver),
-    unique(tableObjectName(t.companyId.table, "generation_key", "route")).on(t.companyId, t.routeSchemeId, t.collectionGroupId, t.serviceDate),
-    tenantUnique(t, t.number),
-    projectKey(t),
-    oneOf(t.status, ROUTE_STATUSES),
-    check(
-      tableObjectName(t.id.table, "actual_shape", "route"),
-      sql`(${t.actualDriverId} is not null) = (${t.startedAt} is not null) and (${t.actualVehicleId} is not null) = (${t.startedAt} is not null) and (${t.actualTrailerId} is null or ${t.startedAt} is not null)`,
-    ),
-    check(
-      tableObjectName(t.id.table, "stamps_shape", "route"),
-      sql`case ${t.status} when 'planned' then ${t.dispatchedAt} is null and ${t.startedAt} is null and ${t.completedAt} is null and ${t.cancelledAt} is null when 'ready' then ${t.dispatchedAt} is not null and ${t.startedAt} is null and ${t.completedAt} is null and ${t.cancelledAt} is null when 'active' then ${t.dispatchedAt} is not null and ${t.startedAt} is not null and ${t.completedAt} is null and ${t.cancelledAt} is null when 'completed' then ${t.dispatchedAt} is not null and ${t.startedAt} is not null and ${t.completedAt} is not null and ${t.cancelledAt} is null when 'cancelled' then ${t.cancelledAt} is not null and ${t.completedAt} is null and (${t.startedAt} is null or ${t.dispatchedAt} is not null) else false end`,
-    ),
-    tenantIndex(t, t.collectionGroupId),
-    tenantIndex(t, t.projectId, t.operatingDate),
-    tenantIndex(t, t.plannedDriverId, t.status),
-    tenantIndex(t, t.actualDriverId),
-    tenantIndex(t, t.plannedVehicleId),
-    tenantIndex(t, t.plannedTrailerId),
-    tenantIndex(t, t.depotId),
-    tenantIndex(t, t.plannedServiceProviderId),
-    tenantIndex(t, t.unloadingStationId),
-    tenantIndex(t, t.actualVehicleId),
-    tenantIndex(t, t.actualTrailerId),
-  ],
-)
+const routeAsOf0008 = routeAsOf("0008")
+const routeAsOf0012 = routeAsOf("0012")
 
 /** What 0012 does to `route`: the run that last wrote it, as a column, its key into the run and its index. */
 const altered = [
@@ -171,8 +92,8 @@ const altered = [
 /** What the two tables owe their migration file, in the order migrations/README.md lays out: fence and trigger, table by table. */
 const handWritten = Object.values(tables).flatMap((table) => handWrittenStatements(table))
 
-/** The ALTER TABLEs as drizzle-kit wrote them: the route from 0008's spelling to today's. */
-const generatedAlterations = (): Promise<string[]> => statementsBetween({ route: routeAsOf0008 }, { route })
+/** The ALTER TABLEs as drizzle-kit wrote them: the route from 0008's spelling to 0012's — 0013's active Plan is routing-rendering.test.ts's to pin. */
+const generatedAlterations = (): Promise<string[]> => statementsBetween({ route: routeAsOf0008 }, { route: routeAsOf0012 })
 
 /** Everything drizzle-kit wrote at the head of 0012: the two tables and the altered route. */
 const generatedHead = async (): Promise<string[]> => [...(await statementsFor(tables)), ...(await generatedAlterations())]

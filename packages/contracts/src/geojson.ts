@@ -55,6 +55,13 @@ export const Polygon = z.object({
 })
 export type Polygon = z.infer<typeof Polygon>
 
+/** Two or more positions: a routed leg's geometry (Issue #169, the first stored line string). */
+export const LineString = z.object({
+  type: z.literal("LineString"),
+  coordinates: z.array(Position).min(2, { error: "a line string has at least two positions" }),
+})
+export type LineString = z.infer<typeof LineString>
+
 // The flat shapes (Issue #97, with the first stored polygon). A geometry
 // column of this system is flat — `geometry(Polygon, 4326)`, no Z — and
 // PostGIS refuses a third ordinate with 22023 after the write has been sent,
@@ -93,3 +100,10 @@ export const FlatPolygon = z.object({
   coordinates: z.array(FlatLinearRing).min(1, { error: "a polygon has an outer ring" }),
 })
 export type FlatPolygon = z.infer<typeof FlatPolygon>
+
+/** `LineString` over flat positions: what a `geometry(LineString, 4326)` column takes without a 22023 on the way in. */
+export const FlatLineString = z.object({
+  type: z.literal("LineString"),
+  coordinates: z.array(Position2D).min(2, { error: "a line string has at least two positions" }),
+})
+export type FlatLineString = z.infer<typeof FlatLineString>

@@ -30,6 +30,7 @@
 // that redeploys while the worker is still dialling gets a clean exit and
 // closed pools rather than Node's default 143 with the connections dropped.
 import { createDb } from "@waste/db/client"
+import { providerFromEnv } from "@waste/routing/select"
 
 import { createApp } from "./app"
 import { createBoss, startBoss, type Boss } from "./boss"
@@ -41,6 +42,7 @@ import { OUTBOX_DEAD_QUEUE } from "./outbox/subscribe"
 import { CHECK_TIMEOUT_MS, probePoolOptions } from "./readiness"
 
 const env = parseEnv(process.env)
+const routing = providerFromEnv({ ROUTING_PROVIDER: env.ROUTING_PROVIDER })
 const api = createDb(env.DATABASE_URL)
 const worker = createDb(env.WORKER_DATABASE_URL)
 const probe = createDb(env.DATABASE_URL, probePoolOptions(CHECK_TIMEOUT_MS))
@@ -58,6 +60,7 @@ async function boot() {
     now: () => new Date(),
     log: (message) => console.log(message),
     send: (name, data, options) => boss.send(name, data, options),
+    routing,
   })
   made.running = running
   started = true

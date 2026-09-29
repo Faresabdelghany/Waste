@@ -1,7 +1,9 @@
 // PostGIS geometry columns that read and write as the GeoJSON the contracts
 // carry (@waste/contracts/geojson): `geometry.point()` is a
-// `geometry(Point, 4326)` column typed `Point`, `geometry.polygon()` a
-// `geometry(Polygon, 4326)` column typed `Polygon`.
+// `geometry(Point, 4326)` column typed `Point`, `geometry.lineString()` a
+// `geometry(LineString, 4326)` column typed `LineString` (#169, the plan
+// leg), `geometry.polygon()` a `geometry(Polygon, 4326)` column typed
+// `Polygon`.
 //
 // Writes. The value goes to the database as one GeoJSON parameter through
 // ST_GeomFromGeoJSON, which reads a GeoJSON without a crs member as WGS 84
@@ -52,7 +54,7 @@
 // range the contracts define (±180, ±90) is held here as well, since the type
 // modifier does not check it and a row outside it could never be read back
 // through a contracts-validated response.
-import type { Point, Polygon, Position } from "@waste/contracts/geojson"
+import type { LineString, Point, Polygon, Position } from "@waste/contracts/geojson"
 import { sql } from "drizzle-orm"
 import { check, customType, type CheckBuilder, type PgColumn } from "drizzle-orm/pg-core"
 
@@ -64,7 +66,7 @@ export const SRID = 4326
 /** How PostGIS's json cast names the SRID, in the `crs` member it adds. */
 const CRS_NAME = `EPSG:${SRID}`
 
-type Shape = { Point: Point; Polygon: Polygon }
+type Shape = { Point: Point; LineString: LineString; Polygon: Polygon }
 type ShapeName = keyof Shape
 type Geometry = Shape[ShapeName]
 
@@ -87,10 +89,13 @@ const cleanPosition = (type: ShapeName, position: Position): Position => {
 
 const cleanGeometry = (type: ShapeName, value: Geometry): Geometry => {
   if (value.type === "Point") return { type: "Point", coordinates: cleanPosition(type, value.coordinates) }
+  if (value.type === "LineString") {
+    return { type: "LineString", coordinates: value.coordinates.map((position) => cleanPosition(type, position)) }
+  }
   if (value.type === "Polygon") {
     return { type: "Polygon", coordinates: value.coordinates.map((ring) => ring.map((position) => cleanPosition(type, position))) }
   }
-  fail(type, `${String((value as { type?: unknown }).type)} is not a GeoJSON Point or Polygon`)
+  fail(type, `${String((value as { type?: unknown }).type)} is not a GeoJSON Point, LineString or Polygon`)
 }
 
 const fromEwkb = (type: ShapeName, hex: string): Geometry => {
@@ -104,8 +109,8 @@ const fromCastJson = (type: ShapeName, value: unknown): Geometry => {
   const { type: shape, coordinates, crs } = value as CastGeoJson
   const name = crs?.properties?.name
   if (name !== CRS_NAME) fail(type, `crs ${name === undefined ? "missing (SRID 0)" : String(name)} is not ${CRS_NAME}`)
-  if ((shape !== "Point" && shape !== "Polygon") || !Array.isArray(coordinates)) {
-    fail(type, `${String(shape)} is not a GeoJSON Point or Polygon`)
+  if ((shape !== "Point" && shape !== "LineString" && shape !== "Polygon") || !Array.isArray(coordinates)) {
+    fail(type, `${String(shape)} is not a GeoJSON Point, LineString or Polygon`)
   }
   return { type: shape, coordinates } as Geometry
 }
@@ -123,6 +128,7 @@ const geometryOf = <T extends ShapeName>(type: T) =>
 
 export const geometry = {
   point: geometryOf("Point"),
+  lineString: geometryOf("LineString"),
   polygon: geometryOf("Polygon"),
 }
 
