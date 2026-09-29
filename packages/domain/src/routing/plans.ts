@@ -22,3 +22,35 @@ export const activeOnCreation = (solver: PlanSolver): boolean => solver !== "opt
  */
 export const tripOf = ({ hasDepot, hasStation }: { hasDepot: boolean; hasStation: boolean }): PlanTrip =>
   hasDepot && hasStation ? "full" : "stops-only"
+
+/** The optimiser's ceiling: one optimisation request takes at most fifty locations (#118); above it a Plan is `baseline`, measured and read "Not optimised". */
+export const OPTIMISER_MAX_STOPS = 50
+
+/**
+ * The current execution order (#170): the active Plan's sequence for the
+ * stops it names — one it names that is no longer the route's is dropped, not
+ * invented — and the stops it does not name appended in baseline order
+ * (#124 §2), so a driver never loses the last usable order because one bin
+ * joined the day. `sequence` on the wire is a stop's ordinal here, computed
+ * on every read and never stored. Without an active Plan the baseline stands.
+ */
+export function executionOrder(baseline: readonly string[], planOrder: readonly string[] | null): string[] {
+  if (planOrder === null) return [...baseline]
+  const present = new Set(baseline)
+  const named = planOrder.filter((id) => present.has(id))
+  const namedSet = new Set(named)
+  return [...named, ...baseline.filter((id) => !namedSet.has(id))]
+}
+
+/**
+ * Staleness, a reading and never a status (#124 §2): the route's stops moved
+ * under the active Plan — a stop was inserted that the Plan does not name, or
+ * one it names was removed by regeneration. A stop the driver decided is
+ * progress, not staleness.
+ */
+export function planIsStale({ named, open, removed }: { named: readonly string[]; open: readonly string[]; removed: readonly string[] }): boolean {
+  const namedSet = new Set(named)
+  if (open.some((id) => !namedSet.has(id))) return true
+  const removedSet = new Set(removed)
+  return named.some((id) => removedSet.has(id))
+}

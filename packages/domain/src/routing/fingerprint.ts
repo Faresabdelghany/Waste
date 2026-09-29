@@ -1,6 +1,9 @@
 // The Plan fingerprint (#124 §4, corrected by #132 §6): the one key of
-// idempotency, deduplication and the adapter's cache, within a Route and
-// across Routes on an exact match. It keys request inputs only — the provider,
+// idempotency, deduplication and the cache. In S2 the cache is one Route's —
+// `plansMatching` (@waste/db/commands/plans) looks up by route and fingerprint,
+// and a job's singleton is the Plan's id — and #124's cross-route reuse ("two
+// Routes over the same stops on two days are one call") arrives with the
+// adapter's own cache in S3+. It keys request inputs only — the provider,
 // the profile, the solver and its configuration, the coordinates rounded to
 // about a metre, and every constraint that can affect the result — because
 // the provider reports its engine version and graph date only in the
@@ -35,8 +38,15 @@ export type FingerprintInputs = {
   configuration?: Readonly<Record<string, string | number | boolean>>
   depot?: FingerprintPosition | null
   station?: FingerprintPosition | null
-  /** Ordered for `manual` and `baseline`; a set (sorted here) for `optimiser`. */
-  stops: readonly FingerprintPosition[]
+  /**
+   * Ordered for `manual` and `baseline`; a set (sorted here) for `optimiser`.
+   * A stop whose place has no location keys by the string its caller names it
+   * with — the pickup's id, say — so the request still fingerprints, its
+   * measurement fails with the sentence instead, and two different orders
+   * over unlocated stops stay two fingerprints (#170): a dispatcher's second
+   * reorder is never swallowed by the first's cache entry.
+   */
+  stops: readonly (FingerprintPosition | string)[]
   /** Every constraint that can affect the result, flat scalars only. */
   constraints?: Readonly<Record<string, string | number | boolean>>
 }
@@ -50,7 +60,7 @@ const spellRecord = (record: Readonly<Record<string, string | number | boolean>>
     .join("&")
 
 export function planFingerprint(inputs: FingerprintInputs): string {
-  const stops = inputs.stops.map(spell)
+  const stops = inputs.stops.map((stop) => (typeof stop === "string" ? `none(${stop})` : spell(stop)))
   if (inputs.solver === "optimiser") stops.sort()
   return [
     `provider=${inputs.provider}`,

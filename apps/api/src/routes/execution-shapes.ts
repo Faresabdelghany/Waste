@@ -44,6 +44,7 @@ import { assignedTo, type DriverProfile } from "../auth/driver"
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { problem } from "../problem"
+import { planContextOf, sequencedPickups } from "./plan-shapes"
 import { instantOf, stampsOf, timeOf } from "./shared"
 
 export const noSuchRoute = (id: string) => problem(404, { detail: `No route ${id} in the projects this account works in` })
@@ -63,6 +64,7 @@ export const routeColumns = {
   note: route.note,
   cancelledByGeneration: route.cancelledByGeneration,
   generationRunId: route.generationRunId,
+  activePlanId: route.activePlanId,
   plannedStartTime: route.plannedStartTime,
   plannedVehicleId: route.plannedVehicleId,
   plannedDriverId: route.plannedDriverId,
@@ -450,18 +452,26 @@ export async function unloadsOfRoute(tx: Tx, companyId: string, routeId: string)
  * open session or null, every session oldest first, its unloads oldest
  * first — the pieces the office's `RouteDetail` and the driver's
  * `DriverRouteDetail` share, each adding pickups of its own shape (the
- * office's bare, the driver's with their places joined, routes/driver.ts).
+ * office's bare, the driver's with their places joined, routes/driver.ts) and
+ * the active Plan's reading with the `sequence` it gives them (#170,
+ * routes/plan-shapes.ts).
  */
-export async function routeWithSessions(tx: Tx, companyId: string, row: RouteRow): Promise<Omit<RouteDetail, "pickups">> {
+export async function routeWithSessions(tx: Tx, companyId: string, row: RouteRow): Promise<Omit<RouteDetail, "pickups" | "activePlan">> {
   const [answered, sessions, unloads] = await Promise.all([routeWithProgress(tx, companyId, row), sessionsOfRoute(tx, companyId, row.id), unloadsOfRoute(tx, companyId, row.id)])
   const open = sessions.find((candidate) => candidate.endedAt === null)
   return { ...answered, session: open === undefined ? null : sessionOf(open), sessions: sessions.map(sessionOf), unloads: unloads.map(unloadOf) }
 }
 
-/** The route with everything that hangs off it, as the office reads and every office command answers it: the pickups by position beside the rest. */
+/**
+ * The route with everything that hangs off it, as the office reads and every
+ * office command answers it: the pickups by `sequence` — the active Plan's
+ * order where there is one, the baseline's otherwise (#170), each stop
+ * carrying its ordinal — and the active Plan's reading beside them.
+ */
 export async function detailOf(tx: Tx, companyId: string, row: RouteRow): Promise<RouteDetail> {
   const [answered, pickups] = await Promise.all([routeWithSessions(tx, companyId, row), pickupsOfRoute(tx, companyId, row.id)])
-  return { ...answered, pickups: pickups.map(pickupOf) }
+  const context = await planContextOf(tx, companyId, row, pickups)
+  return { ...answered, pickups: sequencedPickups(pickups.map(pickupOf), context), activePlan: context.activePlan }
 }
 
 export const receiptColumns = {

@@ -27,6 +27,7 @@ import { heartbeat } from "../jobs/heartbeat"
 import { OPEN_TICKETS_QUEUE_OPTIONS, openTickets } from "../jobs/open-tickets"
 import { RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, recordBillableEvents } from "../jobs/record-billable-events"
 import { relayOutbox } from "../jobs/relay-outbox"
+import { ROUTING_OPTIMISE_QUEUE } from "@waste/db/commands/plans"
 import { CONSUMED_RETENTION_SECONDS, DEAD_LETTER_RETENTION_SECONDS, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUES, outboxQueue, UNCONSUMED_RETENTION_SECONDS, type RelayedEvent } from "../outbox/subscribe"
 import { checkBoss } from "../readiness"
 import { ownerUnderTest, withDatabaseName } from "./database"
@@ -84,7 +85,11 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     const boss = createBoss({ url, log: (line) => void errors.push(line), cronWorkerIntervalSeconds: 1, monitorIntervalSeconds: 1, cronMonitorIntervalSeconds: 1 })
     running = await startBoss(boss, JOBS, context(fresh))
     assert.deepEqual(running.queues, JOBS.map((job) => job.queue))
-    assert.deepEqual(running.published, [OUTBOX_DEAD_QUEUE, ...OUTBOX_QUEUES.map((queue) => queue.queue)], "the dead-letter queue and then the relay's outbox.<kind> queues, each once")
+    assert.deepEqual(
+      running.published,
+      [ROUTING_OPTIMISE_QUEUE, OUTBOX_DEAD_QUEUE, ...OUTBOX_QUEUES.map((queue) => queue.queue)],
+      "routing.optimise (the API sends, #171's worker works), then the dead-letter queue and the relay's outbox.<kind> queues, each once",
+    )
     assert.equal(await boss.schemaVersion(), PGBOSS_SCHEMA_VERSION)
     const queues = await boss.getQueues([...running.queues, ...running.published])
     assert.deepEqual(

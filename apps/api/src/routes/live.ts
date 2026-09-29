@@ -37,6 +37,7 @@ import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, validate } from "../problem"
 import { noSuchSession, openSessionsByRoute, progressByRoute, progressFor, routeColumns, routeOf, routeScope, sessionColumns, sessionOf, sessionScope } from "./execution-shapes"
+import { activePlansByRoute } from "./plan-shapes"
 import { requireRoute } from "./references"
 import type { ClockOptions } from "./scheme-groups"
 import { describeJson, IdParam } from "./shared"
@@ -101,15 +102,17 @@ export function liveRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new 
           .limit(fetchLimit(limit))
         const { items, nextCursor } = pageOf(rows, limit)
         const ids = items.map((row) => row.id)
-        const [progress, sessions, locations] = await Promise.all([
+        const [progress, sessions, locations, plans] = await Promise.all([
           progressByRoute(tx, principal.companyId, ids),
           openSessionsByRoute(tx, principal.companyId, ids),
           lastLocationsByRoute(tx, principal.companyId, ids),
+          activePlansByRoute(tx, principal.companyId, items),
         ])
         const live: LiveRoute[] = items.map((row) => {
           const open = sessions.get(row.id)
           return {
             ...routeOf(row, progressFor(progress, row.id)),
+            activePlan: plans.get(row.id) ?? null,
             session: open === undefined ? null : sessionOf(open),
             lastLocation: locations.get(row.id) ?? null,
             lastSeenAt: open === undefined ? null : open.lastSeenAt.toISOString(),

@@ -74,6 +74,8 @@ export const Env = z.object({
   PORT: Port,
   DATABASE_URL: DatabaseUrl,
   SUPABASE_URL: SupabaseUrl,
+  /** The routing provider's name (#170, #131): unset means the fake; the one validator of the value is providerFromEnv (@waste/routing/select), so the refusal has one spelling. */
+  ROUTING_PROVIDER: z.string().optional(),
 })
 export type Env = z.infer<typeof Env>
 

@@ -83,16 +83,16 @@ describe("Route", () => {
     assert.equal(labelMatches({ number: 1042, label: "RC-1042" }), true)
     assert.equal(labelMatches({ number: 1042, label: "RC-1043" }), false)
     assert.deepEqual(refusal(Route.safeParse({ ...route, label: "RC-1043" })), [{ path: "label", message: LABEL_IS_THE_NUMBER }])
-    assert.deepEqual(refusal(RouteDetail.safeParse({ ...route, label: "1042", pickups: [], session: null, sessions: [], unloads: [] })), [{ path: "label", message: LABEL_IS_THE_NUMBER }])
+    assert.deepEqual(refusal(RouteDetail.safeParse({ ...route, label: "1042", pickups: [], activePlan: null, session: null, sessions: [], unloads: [] })), [{ path: "label", message: LABEL_IS_THE_NUMBER }])
     assert.equal(Route.safeParse({ ...route, number: 0 }).success, false)
     assert.equal(Route.safeParse({ ...route, plannedStartTime: "06:30:00" }).success, false, "HH:MM, no seconds")
     assert.equal(Route.safeParse({ ...route, serviceDate: "2026-10-05T00:00:00Z" }).success, false, "a day, not an instant")
   })
 
   test("a detail carries the pickups by position, the open session, every session and the unloads; a live route its open session and three readings", () => {
-    const detail = { ...route, pickups: [pickup], session, sessions: [session], unloads: [] }
+    const detail = { ...route, pickups: [pickup], activePlan: null, session, sessions: [session], unloads: [] }
     assert.deepEqual(RouteDetail.parse(detail), detail)
-    const live = { ...route, session, lastLocation: { type: "Point", coordinates: [12.5951, 55.7089] }, lastSeenAt: "2026-10-05T06:05:00.000Z", paused: false }
+    const live = { ...route, activePlan: null, session, lastLocation: { type: "Point", coordinates: [12.5951, 55.7089] }, lastSeenAt: "2026-10-05T06:05:00.000Z", paused: false }
     assert.deepEqual(LiveRoute.parse(live), live)
     const due = { ...live, status: "ready", session: null, lastLocation: null, lastSeenAt: null, startedAt: null, actual: { vehicleId: null, driverId: null, trailerId: null } }
     assert.deepEqual(LiveRoute.parse(due), due)

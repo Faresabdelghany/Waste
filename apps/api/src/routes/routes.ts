@@ -55,7 +55,8 @@ import type { PickupStatus, RouteStatus } from "@waste/domain/execution/vocabula
 import { licenceRefusal, licenceSentence } from "@waste/domain/resources/licence"
 import type { VehicleStatus } from "@waste/domain/resources/vocabulary"
 import { count } from "@waste/domain/text"
-import { and, asc, eq, gt, gte, inArray, isNull, lte, sql } from "drizzle-orm"
+import type { RoutingProvider } from "@waste/routing/provider"
+import { and, asc, eq, gt, gte, inArray, isNull, lte } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -67,6 +68,8 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { detailOf, findRoute, labelOf, noSuchRoute, pickupColumns, pickupOf, pickupsOfRoute, receiptColumns, receiptOf, routeColumns, routeScope, routesOf, type RouteRow } from "./execution-shapes"
 import { findDriver, findVehicle, vehicleLabel, type DriverRow, type VehicleRow } from "./fleet-lookups"
+import { ensurePlan } from "./plan-shapes"
+import type { JobSender } from "@waste/db/jobs"
 import { NOT_AN_UNLOADING_STATION, requireDepot, type Scope } from "./references"
 import type { ClockOptions } from "./scheme-groups"
 import { describeJson, IdParam, lockRow, stamp } from "./shared"
@@ -85,7 +88,7 @@ export const dispatchedNeedsADriver = (label: string): string => `Route ${label}
 
 /** The consequence each office command spells when the route is already running (the domain's `activeAnd`). */
 const ASSIGNMENT_IS_THE_SESSIONS = "the session's driver and vehicle are its actual assignment"
-const ORDER_IS_FROZEN = "its order is frozen"
+export const ORDER_IS_FROZEN = "its order is frozen"
 const DAY_IS_FIXED = "the day it runs is fixed"
 
 /** What a body naming a station that takes none of what the route collects is told, at `unloadingStationId`. */
@@ -112,8 +115,10 @@ export const orderMismatch = (missing: number, strangers: number): string =>
  * The route the path names, locked and read: every command holds a rule the
  * API rather than the database holds — the status, the licence, the order —
  * so it takes the row lock first and reads afterwards (routes/shared.ts).
+ * Exported for the Plan endpoints (routes/plans.ts), whose optimise is a
+ * command over the route.
  */
-async function lockedRoute(tx: Tx, principal: Principal, id: string): Promise<RouteRow> {
+export async function lockedRoute(tx: Tx, principal: Principal, id: string): Promise<RouteRow> {
   await lockRow(tx, route, { companyId: principal.companyId, id })
   const current = await findRoute(tx, principal, id)
   if (current === undefined) throw noSuchRoute(id)
@@ -229,7 +234,7 @@ const commandProblems = (action: "view" | "edit") => ({
   404: describeProblem("No route with that id in the projects this account works in."),
 })
 
-export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
+export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), routing, jobs }: ClockOptions & { routing: RoutingProvider; jobs: JobSender }) {
   return new Hono<AuthEnv>()
     .get(
       "/routes",
@@ -370,7 +375,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         if (row === undefined) throw noSuchRoute(id)
         const detail = await detailOf(tx, principal.companyId, row)
         if (row.plannedDriverId !== current.plannedDriverId || row.plannedVehicleId !== current.plannedVehicleId) {
-          const { pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, ...answered } = detail
+          const { pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, ...answered } = detail
           await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-reassigned", payload: answered, projectId: row.projectId, occurredAt: now() })
         }
         return c.json(detail)
@@ -411,7 +416,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
           .returning(routeColumns)
         if (row === undefined) throw noSuchRoute(id)
         const detail = await detailOf(tx, principal.companyId, row)
-        const { pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, ...answered } = detail
+        const { pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, ...answered } = detail
         await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-dispatched", payload: answered, projectId: row.projectId, occurredAt: at })
         return c.json(detail)
       },
@@ -517,7 +522,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
             .where(and(eq(session.companyId, principal.companyId), eq(session.routeId, row.id), isNull(session.endedAt)))
         }
         const detail = await detailOf(tx, principal.companyId, row)
-        const { pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, ...answered } = detail
+        const { pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, ...answered } = detail
         await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-cancelled", payload: answered, projectId: row.projectId, occurredAt: at })
         for (const stop of closed) {
           await emit(tx, principal, { aggregate: "pickup", aggregateId: stop.id, kind: "pickup-skipped", payload: pickupOf(stop), projectId: stop.projectId, occurredAt: at })
@@ -531,13 +536,14 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "putRoutePickupOrder",
         summary: "Reorder a route's stops",
         description:
-          "Replaces the order of the route's open pickups with the one in the body: positions are rewritten 1..n in body order, and a pickup already decided keeps the position it had. The body names every `planned` pickup of the route exactly once — one left out, or one named that is not an open pickup of this route, is refused (400 at `pickupIds`) counting both. A route that has started is refused (409): the sequence is frozen once a session has started (ADR-0002); a completed or cancelled one does not change. Under the route's row lock; the route's `updatedAt` moves, since the order is part of the route on the wire.",
+          "The dispatcher's order becomes a `manual` Plan (#170, decided on #124): the body names every `planned` pickup of the route exactly once, in the order they will be visited, and that sequence is written as a Plan, made the route's active one, and sent for measurement — the fake or the provider answers its legs and totals on the worker, never on this request. `pickup.position`, the generated baseline, is never rewritten (ADR-0002), so the next generation run cannot undo the dispatcher; the route's read orders by `sequence`, the active Plan's word. An identical order already measured is re-activated and consumes no provider call; one still measuring is answered as it stands. One left out, or one named that is not an open pickup of this route, is refused (400 at `pickupIds`) counting both. A route that has started is refused (409): the sequence is frozen once a session has started (ADR-0002); a completed or cancelled one does not change. Under the route's row lock; the route's `updatedAt` moves, since the order is part of the route on the wire.",
         security: BEARER_SECURITY,
         responses: {
-          200: describeJson("The route with its pickups in the new order.", RouteDetail),
+          200: describeJson("The route with its pickups in the new order, the manual Plan active and measuring.", RouteDetail),
           400: describeProblem("The path does not hold an id, or the body is missing `pickupIds`, names a member it does not own, names a pickup twice, or is not exactly the route's open pickups."),
           ...commandProblems("edit"),
           409: describeProblem("The route is active, completed or cancelled."),
+          503: describeProblem("No worker has started on this database yet, so the routing queue is not there to send the order's measurement to; nothing was written."),
         },
       }),
       guard,
@@ -562,15 +568,15 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
           .where(and(routeScope(principal), eq(route.id, id)))
           .returning(routeColumns)
         if (row === undefined) throw noSuchRoute(id)
-        // One statement for the whole order: the body's ids with their ordinal, joined onto the route's pickups.
-        const ordered = sql`unnest(array[${sql.join(
-          pickupIds.map((stopId) => sql`${stopId}`),
-          sql`, `,
-        )}]::uuid[]) with ordinality as ordered(id, position)`
-        await tx.execute(
-          sql`update ${pickup} set ${sql.identifier("position")} = ordered.position::int, ${sql.identifier("updated_at")} = now() from ${ordered} where ${pickup.companyId} = ${principal.companyId} and ${pickup.routeId} = ${row.id} and ${pickup.id} = ordered.id`,
-        )
-        return c.json(await detailOf(tx, principal.companyId, row))
+        // The order becomes a manual Plan, active from creation, its measurement enqueued under the Plan-id
+        // singleton (routes/plan-shapes.ts) — the in-place rewrite of pickup.position is retired (#124's clobber).
+        await ensurePlan(tx, principal, row, { solver: "manual", orderedPickupIds: pickupIds }, { routing, jobs })
+        const [activated] = await tx
+          .select(routeColumns)
+          .from(route)
+          .where(and(routeScope(principal), eq(route.id, id)))
+          .limit(1)
+        return c.json(await detailOf(tx, principal.companyId, activated ?? row))
       },
     )
     .get(

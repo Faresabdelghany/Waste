@@ -26,6 +26,7 @@ import { routeLabel, RouteStatus } from "./execution"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { Pickup } from "./pickups"
+import { ActivePlan } from "./plans"
 import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
 import { changesSomething, eachOnce, eachOnceSentence, NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Session } from "./sessions"
@@ -103,8 +104,10 @@ export type Route = z.infer<typeof Route>
 export const RouteDetail = z
   .object({
     ...routeFields,
-    /** By position. */
+    /** By `sequence`: the active Plan's order where there is one, the baseline's otherwise (#170). */
     pickups: z.array(Pickup),
+    /** The active Plan's reading, or null while the generated baseline stands unmeasured, drawn dashed (#124). */
+    activePlan: ActivePlan.nullable(),
     /** The open session, or null. */
     session: Session.nullable(),
     /** Every session, oldest first. */
@@ -178,6 +181,8 @@ export type LiveRouteQuery = z.infer<typeof LiveRouteQuery>
 export const LiveRoute = z
   .object({
     ...routeFields,
+    /** The active Plan's reading, or null (#170). */
+    activePlan: ActivePlan.nullable(),
     /** The open session, or null for a route due today that has not started. */
     session: Session.nullable(),
     /** The latest point a proof carried, or null. */

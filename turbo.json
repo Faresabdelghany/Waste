@@ -26,7 +26,8 @@
         "HOST",
         "PORT",
         "DATABASE_URL",
-        "SUPABASE_URL"
+        "SUPABASE_URL",
+        "ROUTING_PROVIDER"
       ]
     },
     "@waste/worker#dev": {

@@ -39,6 +39,7 @@ definePurityTests({
     "@waste/domain/resolution/event-shapes",
     "@waste/domain/resolution/vocabulary",
     "@waste/domain/resources/vocabulary",
+    "@waste/domain/routing/vocabulary",
     "zod",
   ],
   allowedTestImports: ["@waste/tooling/purity"],

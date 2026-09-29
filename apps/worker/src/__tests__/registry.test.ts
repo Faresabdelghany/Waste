@@ -10,6 +10,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { ROUTING_OPTIMISE_QUEUE } from "@waste/db/commands/plans"
 import { OUTBOX_KINDS } from "@waste/domain/execution/vocabulary"
 
 import { isCronExpression } from "../boss"
@@ -162,7 +163,7 @@ describe("the job registry", () => {
     assert.ok(!runScheduledBilling.queue.startsWith("outbox."), "sent by the schedule, never by the relay")
   })
 
-  test("publishes each queue once, and the queues a job publishes and nobody works are the outbox kinds no consumer takes, and the dead-letter queue", () => {
+  test("publishes each queue once, and the queues a job publishes and nobody works are the outbox kinds no consumer takes, the dead-letter queue, and routing.optimise until #171 works it", () => {
     const worked = new Set(JOBS.map((job) => job.queue))
     const published = JOBS.flatMap((job) => (job.publishes ?? []).map((queue) => queue.queue))
     assert.deepEqual([...new Set(published)], published, "each published queue once")
@@ -171,7 +172,8 @@ describe("the job registry", () => {
     assert.deepEqual(consumed.sort(), [...RESOLUTION_KINDS, ...FINANCE_EVENT_KINDS].map(outboxQueue).sort())
     const waiting = published.filter((queue) => !worked.has(queue))
     assert.ok(waiting.includes(OUTBOX_DEAD_QUEUE), "the dead-letter queue is published and worked by nobody")
-    assert.equal(waiting.length - 1, OUTBOX_KINDS.length - RESOLUTION_KINDS.length - FINANCE_EVENT_KINDS.length, "the kinds nobody consumes yet")
+    assert.ok(waiting.includes(ROUTING_OPTIMISE_QUEUE), "the API sends optimiser Plans here (#170); a job waits until #171's worker takes the queue")
+    assert.equal(waiting.length - 2, OUTBOX_KINDS.length - RESOLUTION_KINDS.length - FINANCE_EVENT_KINDS.length, "the kinds nobody consumes yet")
   })
 
   test("updatableOptions drops the policy and nothing else, the dead letter among what it keeps", () => {
