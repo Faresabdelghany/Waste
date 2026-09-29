@@ -46,6 +46,11 @@ RUN pnpm --filter @waste/api deploy --prod /app/apps/api \
  && pnpm --filter @waste/worker deploy --prod /app/apps/worker
 COPY tsconfig.base.json /app/tsconfig.base.json
 COPY apps/pilot/supervise.mjs /app/apps/pilot/supervise.mjs
+# Supabase's root CA, as its dashboard publishes it (prod-ca-2021.crt, the
+# root the pooler's chain ends in). node-postgres, which pg-boss dials
+# through, reads `sslmode=require` as verify-full and refuses the pooler
+# without it; with it both drivers' TLS is verified against Supabase's root.
+COPY apps/pilot/supabase-root-2021-ca.crt /app/supabase-root-2021-ca.crt
 
 # Both tsconfig chains resolve (the refusal comes when tsx's loader registers).
 RUN cd /app/apps/api && TSX_TSCONFIG_PATH=tsconfig.json node --import tsx --eval "console.log('api tsconfig read')" \
@@ -56,7 +61,8 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3001 \
     WORKER_HOST=127.0.0.1 \
-    WORKER_PORT=3002
+    WORKER_PORT=3002 \
+    NODE_EXTRA_CA_CERTS=/app/supabase-root-2021-ca.crt
 COPY --from=build --chown=node:node /app /app
 # The commit the image is built from (Issue #152), as apps/api/Dockerfile
 # carries it: the OCI revision label and build.json beside the API's
