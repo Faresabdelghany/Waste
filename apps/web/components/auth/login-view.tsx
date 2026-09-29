@@ -71,7 +71,7 @@ export function LoginView() {
             <h1 className="mt-2 text-xl font-semibold">Sign in to Waste</h1>
             <p className="text-sm text-muted-foreground">
               {apiConfigured
-                ? "Sign in with your account."
+                ? "Sign in with your e-mail address and password."
                 : passwordSignInAvailable
                   ? "Sign in with your account, or choose a demo account."
                   : "Choose an account to continue."}

@@ -47,7 +47,9 @@ export function returnPath(next: string | null | undefined): string | null {
     return null
   }
   if (url.origin !== OWN_ORIGIN) return null
-  if (url.pathname === "/" || url.pathname === SIGN_IN_PATH) return null
+  // Next redirects a trailing slash away, so `/login/` is /login too.
+  const page = url.pathname.replace(/\/+$/, "")
+  if (page === "" || page === SIGN_IN_PATH) return null
   return `${url.pathname}${url.search}${url.hash}`
 }
 

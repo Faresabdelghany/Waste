@@ -37,6 +37,7 @@ describe("returnPath", () => {
 
   test("is never the sign-in page itself, nor the root, which is the landing already", () => {
     assert.equal(returnPath("/login"), null)
+    assert.equal(returnPath("/login/"), null, "the trailing slash Next redirects away")
     assert.equal(returnPath("/login?next=%2Foperate"), null)
     assert.equal(returnPath("/"), null)
     assert.equal(returnPath(""), null)
