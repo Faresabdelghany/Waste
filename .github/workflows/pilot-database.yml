@@ -8,12 +8,13 @@
 #   check           the journal check, the fingerprint against the committed
 #                   file (once nothing is pending), the service roles' LOGIN
 #                   state and the publication's tables; writes nothing
-#   release         a Pilot release, one approved run: the image resolved by
-#                   digest, the journal checked, an encrypted backup, the
-#                   migrations, the seed on request, the journal and the
-#                   fingerprint checked again, the exact image deployed and
-#                   proved live — or, with deploy_api off, a database-only
-#                   release
+#   release         a Pilot release, one approved run: the journal checked,
+#                   an encrypted backup, the migrations, the seed on request,
+#                   the journal and the fingerprint checked again, one
+#                   release commit of this commit's tree on the deploy branch
+#                   `pilot` (Suga builds the Pilot image from it, #149) and
+#                   the build proved live — or, with deploy_api off, a
+#                   database-only release
 #   reset-to-seed   the demo company swept and written back as the seed says,
 #                   inside the write barrier, after a safety backup
 #   grant-logins    LOGIN for exactly wms_api and wms_worker from the
@@ -31,7 +32,9 @@
 # this is a one-person approval boundary, not a two-person control. Every
 # action is pinned by commit here, the one workflow that holds the owner's
 # secret; a job installs @waste/db's dependencies from the lockfile and
-# restores no cache.
+# restores no cache. The workflow's token is read-only but for the release
+# job, whose `contents: write` is what lets its last step move the deploy
+# branch; every checkout keeps its credentials out of the tree.
 name: Pilot database
 
 on:
@@ -54,7 +57,7 @@ on:
         type: boolean
         default: false
       deploy_api:
-        description: "release: deploy this commit's API image and prove it live (off: a database-only release)"
+        description: "release: fast-forward the pilot branch Suga builds from to this commit and prove the build live (off: a database-only release)"
         type: boolean
         default: true
       source_run_id:
@@ -62,7 +65,7 @@ on:
         type: string
         default: ""
       services_suspended:
-        description: "restore, reset-to-seed: the Pilot's Render services are suspended"
+        description: "restore, reset-to-seed: the Pilot's Suga service (the API and the worker) is stopped"
         type: boolean
         default: false
       repair_id:
@@ -85,8 +88,10 @@ env:
   # the secret URL to before it connects.
   PILOT_SUPABASE_REF: ztmisreemxepvjxelbql
   PILOT_DATABASE_HOST: aws-0-eu-north-1.pooler.supabase.com
-  # The package CI publishes the Pilot image to (the hosting issue, #149).
-  PILOT_IMAGE: ghcr.io/faresabdelghany/waste-pilot
+  # The deploy branch Suga builds the Pilot image from (#149, ADR-0008): a
+  # release writes one commit on it (the released commit's tree plus the file
+  # naming it), and nothing else moves it.
+  PILOT_DEPLOY_BRANCH: pilot
 
 jobs:
   check:
@@ -129,6 +134,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: pilot
+    # `contents: write` for step 8 alone, the fast-forward of the deploy
+    # branch; the checkout below still keeps the token out of the tree, and
+    # the step reads it as its own environment.
+    permissions:
+      contents: write
     steps:
       # 1. main, and nothing else.
       - name: Require main
@@ -138,16 +148,12 @@ jobs:
           DEPLOY_API: ${{ inputs.deploy_api }}
           RUN_SEED: ${{ inputs.run_seed }}
         run: |
-          kind=$([ "$DEPLOY_API" = true ] && echo "a release of the database and the API" || echo "a database-only release: no image, hook or URL read")
+          kind=$([ "$DEPLOY_API" = true ] && echo "a release of the database and the Pilot image: the $PILOT_DEPLOY_BRANCH branch gets this commit's tree" || echo "a database-only release: the $PILOT_DEPLOY_BRANCH branch does not move, no URL read")
           echo "Commit $GITHUB_SHA: $kind; seed: $RUN_SEED" | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      # 2. The image CI published for this commit, by digest, proved by its revision label.
-      - name: Resolve the image
-        id: image
-        if: inputs.deploy_api
-        run: bash packages/db/scripts/pilot-image.sh
+      # 2. Nothing to resolve: Suga builds the image from the deploy branch, whose tree step 8 makes this commit's, so the code the release deploys is this commit by construction.
       - uses: ./.github/actions/pilot-node
       # 3. The journal agrees with main's migrations before anything is written.
       - name: Journal check
@@ -189,23 +195,22 @@ jobs:
         run: |
           pnpm db:check
           pnpm db:fingerprint --check
-      # 8. The exact image, by digest, through Render's deploy hook (this step alone reads it).
+      # 8. One release commit on the deploy branch through GitHub's git data API, under the job's token (this step alone reads it): this commit's tree plus apps/pilot/release.json naming it, on the branch's head and this commit. Suga builds and rolls out from there, and the image writes the file into build.json, since Suga passes no commit into a build. Never forced: the branch's head is a parent, so it fast-forwards.
       - name: Deploy
         id: deploy
         if: inputs.deploy_api
         working-directory: packages/db
         env:
-          PILOT_RENDER_DEPLOY_HOOK: ${{ secrets.PILOT_RENDER_DEPLOY_HOOK }}
-          RELEASE_IMAGE: ${{ steps.image.outputs.image }}
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ github.sha }}
         run: node --import tsx scripts/pilot/deploy.ts
-      # 9. Three consecutive observations of the released build within ten minutes.
+      # 9. Three consecutive observations of the released build within ten minutes; the old build's answers while Suga builds count as not yet.
       - name: Prove it live
         if: inputs.deploy_api
         working-directory: packages/db
         env:
           PILOT_API_URL: ${{ vars.PILOT_API_URL }}
           RELEASE_COMMIT: ${{ github.sha }}
-          RELEASE_IMAGE: ${{ steps.image.outputs.image }}
         run: node --import tsx scripts/pilot/observe.ts
       - name: Remove plaintext
         if: always()
@@ -223,7 +228,7 @@ jobs:
           SERVICES_SUSPENDED: ${{ inputs.services_suspended }}
         run: |
           test "$GITHUB_REF" = refs/heads/main || { echo "::error::The Pilot's database is operated from main only"; exit 1; }
-          test "$SERVICES_SUSPENDED" = true || { echo "::error::Suspend the Pilot's Render services first, then dispatch the reset with services_suspended on"; exit 1; }
+          test "$SERVICES_SUSPENDED" = true || { echo "::error::Stop the Pilot's Suga service first, then dispatch the reset with services_suspended on"; exit 1; }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
@@ -359,7 +364,7 @@ jobs:
           SOURCE_RUN_ID: ${{ inputs.source_run_id }}
         run: |
           test "$GITHUB_REF" = refs/heads/main || { echo "::error::The Pilot's database is operated from main only"; exit 1; }
-          test "$SERVICES_SUSPENDED" = true || { echo "::error::Suspend the Pilot's Render services first, then dispatch the restore with services_suspended on"; exit 1; }
+          test "$SERVICES_SUSPENDED" = true || { echo "::error::Stop the Pilot's Suga service first, then dispatch the restore with services_suspended on"; exit 1; }
           [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::source_run_id names no run"; exit 1; }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

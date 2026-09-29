@@ -21,27 +21,30 @@ No input is SQL, a shell command or a path; a run id and a repair id are validat
 ### What the environment holds
 
 - **Environment `pilot`**: deployment branch `main` only; required reviewer the repository owner; self-review prevention **off**, since one person dispatches and approves — this is a one-person approval boundary, not a two-person control; no wait timer.
-- **Secrets** (environment): `PILOT_DATABASE_ADMIN_URL` — the `postgres` role's Session pooler string from the dashboard's Connect dialog (host copied, never derived; user `postgres.<ref>`, port 5432, the password percent-encoded, `?sslmode=require`); `PILOT_BACKUP_AGE_KEY` — the age identity whose recipient is `pilot-backup.pub`; `PILOT_RENDER_DEPLOY_HOOK` — Render's deploy hook, once the hosting issue (#149) creates the service; `PILOT_DATABASE_URL` and `PILOT_WORKER_DATABASE_URL` — the app roles' session-pooler URLs, the ones Render runs with.
-- **Variable** (repository): `PILOT_API_URL`, the API's public origin, read by `release` to prove a deployment live (and by the keep-alive).
-- **Constants** (in the workflow, reviewed with it): the Supabase project ref, the pooler host and the GHCR package. Every script holds the secret URL to the ref before it connects, so a secret pasted from another Supabase project is refused by name.
+- **Secrets** (environment): `PILOT_DATABASE_ADMIN_URL` — the `postgres` role's Session pooler string from the dashboard's Connect dialog (host copied, never derived; user `postgres.<ref>`, port 5432, the password percent-encoded, `?sslmode=require`); `PILOT_BACKUP_AGE_KEY` — the age identity whose recipient is `pilot-backup.pub`; `PILOT_DATABASE_URL` and `PILOT_WORKER_DATABASE_URL` — the app roles' session-pooler URLs, the ones the Pilot's Suga service runs with (#149, `apps/pilot/README.md`).
+- **Variable** (repository): `PILOT_API_URL`, the API's public origin on Suga, read by `release` to prove a deployment live.
+- **Constants** (in the workflow, reviewed with it): the Supabase project ref, the pooler host and the deploy branch `pilot`. Every script holds the secret URL to the ref before it connects, so a secret pasted from another Supabase project is refused by name.
+- **The token**: the workflow's own is read-only but for the `release` job, which has `contents: write` so its deploy step can move the `pilot` branch. If `pilot` is protected by a ruleset, the workflow needs a bypass on it (or a deploy key), the owner's to grant.
 
 A secret reaches only the step that needs it, as that step's environment; it is never printed, written to an artifact or put on a command line (`pg_dump` and `psql` read libpq's environment). A pull request or a fork never sees any of it: the workflow runs on dispatch only, and an environment secret is read only after approval.
 
 ## A release
 
-A Pilot release is one approved `release` run, and the API is released through it, never by CI's `main` run:
+A Pilot release is one approved `release` run, and the Pilot image — the API and the worker in one container (ADR-0008) — is released through it, never by CI's `main` run or by a push to `pilot` by hand:
 
 1. **main** — the job refuses any other ref (and the environment admits only `main`).
-2. **The image** (with `deploy_api`) — `<package>:sha-<commit>`, which CI publishes for every commit on `main`, resolved to its digest, and its OCI `org.opencontainers.image.revision` label held to the commit. No image, no release.
+2. **The image** — nothing to resolve: Suga builds `apps/pilot/Dockerfile` from the `pilot` branch, and step 8 puts this commit's tree on that branch, so the code deployed is the released commit by construction. (CI builds and smoke-tests the same Dockerfile on every run and publishes nothing.)
 3. **Journal check** — the Pilot's migration journal against `main`'s migrations (below). A refusal stops the release before anything is written.
 4. **Backup** — every release, code-only ones too: the encrypted backup below, uploaded as `pilot-backup-<run>-<attempt>`. Any failure stops the release here.
 5. **Migrate** — `pnpm db:migrate`: every pending migration in one transaction, behind the journal check under the migration lock. None pending is fine.
 6. **Seed** (with `run_seed`) — `pnpm db:seed`, idempotent. A reviewed seed change reaches the Pilot this way and no other.
 7. **Journal check and fingerprint** — the journal again, and the complete fingerprint of the Pilot against the committed `packages/db/migrations/meta/_fingerprint.txt`; the log names every line that differs.
-8. **Deploy** (with `deploy_api`) — Render's deploy hook with `imgURL=<package>@sha256:<digest>`, the exact image of step 2; the deploy id is recorded. The hook's 200 is not a deployment.
-9. **Proof** (with `deploy_api`) — for up to ten minutes, three consecutive observations ten seconds apart, each `GET /healthz` 200 naming the released commit in `build.commit` with a fresh clock that advances, and `GET /readyz` 200, both answering `Cache-Control: no-store`. An old build, a failure, a stale clock or a non-ready answer starts the count again; on timeout the release fails naming the commit, the digest and the last thing it saw.
+8. **Deploy** (with `deploy_api`) — one release commit written on the `pilot` branch through GitHub's git data API under the job's token: the released commit's tree plus `apps/pilot/release.json` naming it, with the branch's head and the released commit as parents. The branch is created where it does not exist yet, left alone where it already names the commit, and updated without force (its head is a parent, so the update is a fast-forward by construction). Suga sees the push, builds the image (18–26 s) and rolls it out (about 14 s of boot as downtime). The commit is not a deployment; the observations after it are. Because the branch moves only after steps 5–7, a code change that needs a migration can never go live before its migration. Nothing else moves `pilot`: a commit pushed to it by hand is built and served until the next release, whose tree is main's whatever the branch held.
+9. **Proof** (with `deploy_api`) — for up to ten minutes, three consecutive observations ten seconds apart, each `GET /healthz` 200 naming the released commit in `build.commit` with a fresh clock that advances, and `GET /readyz` 200, both answering `Cache-Control: no-store`. The old build's answers while Suga builds and rolls out count as "not yet"; an old build, a failure, a stale clock or a non-ready answer starts the count again; on timeout the release fails naming the commit and the last thing it saw.
 
-**A database-only release** is `release` with `deploy_api` off: steps 1 and 3–7, recorded as such in the run's summary, with no image, hook or URL read. It proves the schema, not that matching API code is live: the first API release after one deploys a commit whose database expectations match the schema already applied. The adoption run that applies 0010–0012 is one.
+**A database-only release** is `release` with `deploy_api` off: steps 1 and 3–7, recorded as such in the run's summary, with the `pilot` branch left where it is and no URL read. It proves the schema, not that matching code is live: the first full release after one puts on `pilot` a commit whose database expectations match the schema already applied. The adoption run that applied 0010–0012 was one.
+
+**Why a release commit and not a plain fast-forward.** Suga passes no commit id into its builds — its build arguments are values typed into the service's form — so the image cannot learn the commit from the host. The release file in the tree is what the Dockerfile writes into `build.json` when CI's `SOURCE_COMMIT` is absent, and `build.commit` on the Pilot names the released commit of `main`, never the release commit itself. `pilot`'s history is one release commit per release, each with the released `main` commit as a parent, so `git log --first-parent pilot` reads as the Pilot's release log.
 
 ### When a release fails
 
@@ -49,7 +52,7 @@ The run's summary and the failed step's log say where it stopped. Stopped at 1�
 
 ### A paused Supabase project
 
-A Free Supabase project is paused after a week without activity. When a connection fails with the database unreachable, the scripts say so: the Free Supabase project may be paused; resume it in the dashboard (the paused Supabase project's Restore button) and re-run the workflow. The keep-alive of the hosting issue keeps the Pilot awake once it is deployed.
+A Free Supabase project is paused after a week without activity. When a connection fails with the database unreachable, the scripts say so: the Free Supabase project may be paused; resume it in the dashboard (the paused Supabase project's Restore button) and re-run the workflow. Once the Pilot image runs on Suga its worker polls the database every thirty seconds; whether Supabase counts that as activity is unverified (#149's first week says), and the Restore button is the fallback.
 
 ## Backups
 
@@ -61,13 +64,13 @@ CI rehearses the whole round trip on every run (`pnpm --filter @waste/db rehears
 
 A restore replaces the Pilot's `wms`, `drizzle` and `pgboss` schemas with a backup's. It never touches `auth` or any other schema, nor a role or its password.
 
-1. **Suspend the Pilot's services** in Render (the API and the worker), so nothing restarts into a half-restored database.
+1. **Stop the Pilot's Suga service** (the API and the worker run in its one container), so nothing restarts into a half-restored database.
 2. **Find the backup**: the id of the run that took it — a `release`, or an earlier `restore`'s safety backup — from the run's URL (`…/actions/runs/<id>`). Its artifact must not have expired.
 3. **Dispatch** `restore` with `source_run_id` and `services_suspended` on, and approve it.
 
 The job: checks the source run is a dispatched run of this workflow on `main`; downloads its newest backup artifact, the download refusing one whose digest differs from the artifact store's (the package's checksum); takes a **safety backup** of the Pilot as it is, restorable later by this run's id — and stops on any failure but one: a database that has lost a schema a backup requires cannot be backed up whole, and the restore goes on without a safety backup, saying so; decrypts and verifies the backup — every file's sha256, the manifest's run and commit against the source run's, and its identity against this database; then the **write barrier**: refuses to close over a barrier already closed (while `wms_api` cannot log in, recording would record the closed state and a recovery from it would restore nothing: run `recover-logins` for the earlier run first), records `wms_api`'s and `wms_worker`'s LOGIN in `login-state.json` (no credential), stores it as the artifact `login-state-<run>-<attempt>` for 90 days, reads it back and checks its digest, and only then sets both roles NOLOGIN, ends their sessions and waits until none remain. One `psql` then drops the three schemas and restores the backup in a single transaction — the schemas, the publication's tables, the data — and any error rolls the whole of it back. The journal check and the backup's own fingerprint prove the result, only after every check do the recorded LOGIN states come back, and the run ends with the check's own report of the roles and the publication.
 
-4. **Resume the services**, and run `check`.
+4. **Start the Suga service again**, and run `check`.
 
 The restored database is at the backup's journal position; a `release` brings it forward to `main`'s migrations.
 
@@ -77,7 +80,7 @@ The restored database is at the backup's journal position; a `release` brings it
 
 `reset-to-seed` takes the demo company, Kystbyen Renovation, back to what `pnpm db:seed` writes (Issue #142): every scheme, route, ticket, movement and invoice testers made goes, and the tenant is again configured and never run. No other company, no `auth` user, no role and no password is touched.
 
-1. **Suspend the Pilot's services** in Render (the API and the worker).
+1. **Stop the Pilot's Suga service** (the API and the worker run in its one container).
 2. **Dispatch** `reset-to-seed` with `services_suspended` on, and approve it.
 
 The job refuses a Pilot behind `main`'s migrations (the seed is `main`'s: run `release` first) and checks the fingerprint; takes a **safety backup**, uploaded as `pilot-backup-<run>-<attempt>`, which `restore` takes back by this run's id; closes the **write barrier** exactly as a restore does; then, in one owner transaction, deletes every row of the demo company, children first and the ledgers with them, and writes the seed back, committing only when the seed finds nothing left to change and the route, ticket and invoice counters are where a fresh seed leaves them. The journal check and the fingerprint follow, the recorded LOGIN states come back only after every check, and the run ends with the check's report of the roles and the publication. The run's summary lists what was swept, table by table.
@@ -86,7 +89,7 @@ The job refuses a Pilot behind `main`'s migrations (the seed is `main`'s: run `r
 
 **What goes with it.** The tenant's unpublished outbox events are swept and never relayed. Jobs pg-boss already holds for the company stay on their queues: once the worker runs again, each meets a tenant without the rows it names and either does nothing or fails, is retried and ends failed, an outbox consumer's copy on `outbox.dead`. The summary counts both; those dead letters are not to be redriven.
 
-3. **Resume the services**, and run `check`.
+3. **Start the Suga service again**, and run `check`.
 
 **If a reset fails or is cancelled after the barrier closed, `wms_api` and `wms_worker` stay NOLOGIN**: run `recover-logins` with that run's id. The sweep and the seed are one transaction, so a failure there leaves the tenant as it was. The seed itself refuses when a kept row stands where a seeded one must go back — the primary administrator moved to another account, a custom role or project named like a seeded one — and names the constraint: recover the logins, put that row right in the application, and reset again.
 
@@ -94,14 +97,14 @@ The job refuses a Pilot behind `main`'s migrations (the seed is `main`'s: run `r
 
 `recover-logins` takes the id of the restore (or reset) run that closed the barrier. It checks the run is a dispatched run of this workflow on `main`, downloads its newest login record, checks the record's shape, operation, run, commit and database, re-reads the roles, and restores only what the barrier took: a role recorded LOGIN that cannot log in now gets it back, a role already as recorded is left alone, and a role that can log in now but was recorded NOLOGIN is **refused**, since somebody changed it since and the record no longer says what is right. It reports the final state and never a credential.
 
-**Break-glass, outside normal operation**: when the record has expired (after 90 days) or is lost and the roles are still NOLOGIN, `recover-logins` refuses. Run `check` first: it names each role's state. When you are sure no restore or reset is still running and the database is in the state you intend, run `grant-logins`, which gives both app roles LOGIN with the passwords the `pilot` environment holds — the ones Render runs with — and nothing else.
+**Break-glass, outside normal operation**: when the record has expired (after 90 days) or is lost and the roles are still NOLOGIN, `recover-logins` refuses. Run `check` first: it names each role's state. When you are sure no restore or reset is still running and the database is in the state you intend, run `grant-logins`, which gives both app roles LOGIN with the passwords the `pilot` environment holds — the ones the Suga service runs with — and nothing else.
 
 ## grant-logins and rotation
 
 `grant-logins` reads `PILOT_DATABASE_ADMIN_URL`, `PILOT_DATABASE_URL` and `PILOT_WORKER_DATABASE_URL`, holds each to the Pilot's pooler host, port 5432, the `postgres` database and its own user (`postgres.<ref>`, `wms_api.<ref>`, `wms_worker.<ref>`), masks every password in the log before anything runs, and grants LOGIN to exactly the two roles. It accepts no role name and no SQL.
 
 - **The owner's password** (`postgres`): reset it in the dashboard (Database › Settings) whenever the connection string has been seen anywhere but the `pilot` environment and the password manager; copy the Session pooler string from the Connect dialog, percent-encode the password, add `?sslmode=require`, and replace `PILOT_DATABASE_ADMIN_URL` and the password manager's copy. The pooler may answer 28P01 for about a minute after a reset. A reset does not touch the app roles' logins.
-- **The app roles' passwords**: generate new ones; store the new URLs as `PILOT_DATABASE_URL` and `PILOT_WORKER_DATABASE_URL` and in Render; run `grant-logins`; deploy the matching configuration; confirm `/readyz` answers with each least-privileged role; then delete any old copy.
+- **The app roles' passwords**: generate new ones; store the new URLs as `PILOT_DATABASE_URL` and `PILOT_WORKER_DATABASE_URL` and in the Suga service's environment; run `grant-logins`; redeploy the service so it reads them; confirm `/readyz` answers with each least-privileged role; then delete any old copy.
 
 ## repair
 

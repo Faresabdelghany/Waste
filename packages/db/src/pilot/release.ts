@@ -1,12 +1,26 @@
-// The last two steps of a Pilot release (Issue #152, decided in #133): the
-// deploy, and the proof that it is live.
+// The last two steps of a Pilot release (Issue #152, decided in #133; on
+// Suga since #149): the deploy, and the proof that it is live.
 //
-// The deploy is Render's deploy hook with `imgURL=<image>@sha256:<digest>`
-// — the exact image the release resolved and verified, never a moving tag.
-// The hook's URL carries its key, so it is a secret: it reaches this step
-// alone and appears in no message. Its 200 means Render accepted the request,
-// not that anything is deployed; the id it answers is recorded for
-// diagnostics.
+// The deploy is one commit written on the deploy branch, `pilot`, through
+// GitHub's git data API under the job's own token (`contents: write` on the
+// release job alone): the released commit's tree plus
+// `apps/pilot/release.json` naming that commit, with the branch's head and
+// the released commit as parents. Suga builds the image from that branch on
+// every push, so the commit is the deployment, and writing it only after the
+// migrations and the fingerprint passed is what keeps the database from ever
+// being behind the code it serves (#133's door). The file is why the commit
+// is not a plain fast-forward of the branch to main's commit: Suga passes no
+// commit id into its builds (its build arguments are values typed into the
+// service's form), and `build.commit` on /healthz — what the proof below
+// reads — has to come from the tree the host builds; the image's Dockerfile
+// writes the file into build.json where CI's SOURCE_COMMIT is absent. The
+// ref update is never forced, so the branch fast-forwards by construction
+// (its head is a parent) and main's history is in its ancestry; a branch
+// that does not exist yet is created (the first release), and one that
+// already names the commit is left alone (a release dispatched again).
+// Whatever the branch held before is not in the new tree, so a branch moved
+// by hand never reaches the image. The token reaches this step alone and
+// appears in no message.
 //
 // The proof is three consecutive observations ten seconds apart within ten
 // minutes, each one GET /healthz answering 200 with `build.commit` the
@@ -16,7 +30,10 @@
 // cache-bypass request headers. Anything else — an old build, a failure, a
 // stale or unmoved clock, a cached or non-ready answer — resets the count, so
 // a release is proven by the new process answering steadily and not by one
-// lucky answer from an old one or a cache.
+// lucky answer from an old one or a cache. Between the push and Suga's
+// rollout the old build keeps answering, and the observer says "not yet" on
+// each such answer until the new one takes over; Suga's build and rollout
+// take about a minute, well inside the ten.
 import { HealthResponse, PROBE_CACHE_CONTROL } from "@waste/contracts/health"
 
 export const OBSERVATIONS_NEEDED = 3
@@ -77,8 +94,6 @@ export async function askProbe(apiUrl: string, path: "/healthz" | "/readyz"): Pr
 export type ObserveOptions = {
   apiUrl: string
   commit: string
-  /** The image the release deployed, for the failure's message. */
-  image?: string
   probe?: (path: "/healthz" | "/readyz") => Promise<ProbeAnswer>
   now?: () => Date
   sleep?: (ms: number) => Promise<void>
@@ -89,7 +104,6 @@ export type ObserveOptions = {
 export async function observeRelease({
   apiUrl,
   commit,
-  image,
   probe = (path) => askProbe(apiUrl, path),
   now = () => new Date(),
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -122,9 +136,7 @@ export async function observeRelease({
       log(`observation ${count}: not yet — ${verdict.reason}`)
     }
     if (now().getTime() + OBSERVE_INTERVAL_MS > deadline) {
-      throw new Error(
-        `No three consecutive observations of build ${commit}${image === undefined ? "" : ` (${image})`} within ${OBSERVE_TIMEOUT_MS / 1000} s; last: ${last}`,
-      )
+      throw new Error(`No three consecutive observations of build ${commit} within ${OBSERVE_TIMEOUT_MS / 1000} s; last: ${last}`)
     }
     await sleep(OBSERVE_INTERVAL_MS)
   }
@@ -133,30 +145,135 @@ export async function observeRelease({
 /** The one fetch these calls make: always to a URL they built. */
 export type Fetch = (input: URL, init?: RequestInit) => Promise<Response>
 
-/** An image the hook may deploy: a GHCR package pinned by digest. */
-const PINNED_IMAGE = /^ghcr\.io\/[a-z0-9._-]+(?:\/[a-z0-9._-]+)*@sha256:[0-9a-f]{64}$/
+/** A full commit id, as GitHub names one. */
+const COMMIT_ID = /^[0-9a-f]{40}$/
+/** `<owner>/<name>`, as GITHUB_REPOSITORY spells it. */
+const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
+/** A plain branch name: no `refs/`, no slash, nothing git would refuse. */
+const BRANCH = /^[A-Za-z0-9_.-]+$/
 
-/** Calls Render's deploy hook with the image by digest; answers the deploy id Render gave, never the hook. */
-export async function triggerDeploy(hookUrl: string, image: string, { fetch = globalThis.fetch }: { fetch?: Fetch } = {}): Promise<{ deployId: string }> {
-  if (!PINNED_IMAGE.test(image)) throw new Error(`${image} is not an image pinned by digest (ghcr.io/<package>@sha256:<digest>)`)
-  const notAHook = new Error("PILOT_RENDER_DEPLOY_HOOK is not a Render deploy hook (https://api.render.com/deploy/srv-…?key=…)")
-  let url: URL
+/** Where the release commit names the released commit: the file the Pilot image reads into build.json (apps/pilot/Dockerfile). Absent on main; present on every commit of the deploy branch. */
+export const RELEASE_FILE = "apps/pilot/release.json"
+
+export type DeployBranchOptions = {
+  /** `<owner>/<name>`: GITHUB_REPOSITORY. */
+  repository: string
+  /** The deploy branch Suga tracks: PILOT_DEPLOY_BRANCH, `pilot`. */
+  branch: string
+  /** The released commit, on main: RELEASE_COMMIT. */
+  sha: string
+  /** The job's token, with `contents: write`: GITHUB_TOKEN. Appears in no message. */
+  token: string
+  /** GitHub's API; github.com's unless a test says otherwise. */
+  apiUrl?: string
+  fetch?: Fetch
+}
+
+export type DeployBranchRelease = {
+  /** Whether this call wrote a release commit; false where the branch already named the released commit. */
+  moved: boolean
+  /** The commit the branch named before, or null where it named none (no branch, or one without the file). */
+  previous: string | null
+  /** The branch's head after: the release commit, or the head as found where nothing moved. */
+  head: string
+  /** The released commit, as the file on the branch now names it. */
+  commit: string
+}
+
+/** GitHub's `message` from an error body, where it gave one. */
+const githubSaid = async (response: Response): Promise<string> => {
   try {
-    url = new URL(hookUrl)
+    const body = (await response.json()) as { message?: unknown } | null
+    return typeof body?.message === "string" ? body.message : `status ${response.status}`
   } catch {
-    throw notAHook
+    return `status ${response.status}`
   }
-  if (url.protocol !== "https:" || url.hostname !== "api.render.com" || !/^\/deploy\/srv-[a-z0-9]+$/.test(url.pathname) || !url.searchParams.has("key")) throw notAHook
-  url.searchParams.set("imgURL", image)
-  const response = await fetch(url, { method: "POST", redirect: "manual", signal: AbortSignal.timeout(30_000) })
-  if (!response.ok) throw new Error(`The deploy hook answered ${response.status}`)
-  let body: unknown = null
-  try {
-    body = await response.json()
-  } catch {
-    body = null
+}
+
+/**
+ * Releases a commit of main to the deploy branch by writing one commit on
+ * it through GitHub's git data API: the released commit's tree plus
+ * `apps/pilot/release.json` naming that commit, on the branch's head and the
+ * released commit as parents — so the branch fast-forwards (the update is
+ * never forced), main's history is in its ancestry, and whatever the branch
+ * held before is not in its tree. Suga builds the branch's head, and the
+ * image writes the file into build.json, which is how /healthz on the Pilot
+ * names the released commit when the host injects none. A branch that
+ * already names the commit is left alone; one that does not exist is
+ * created. Answers what the branch named before and names now.
+ */
+export async function releaseToDeployBranch({ repository, branch, sha, token, apiUrl = "https://api.github.com", fetch = globalThis.fetch }: DeployBranchOptions): Promise<DeployBranchRelease> {
+  if (!REPOSITORY.test(repository)) throw new Error(`GITHUB_REPOSITORY is not <owner>/<name>: ${repository}`)
+  if (!BRANCH.test(branch)) throw new Error(`PILOT_DEPLOY_BRANCH is not a plain branch name: ${branch}`)
+  if (!COMMIT_ID.test(sha)) throw new Error(`RELEASE_COMMIT is not a full commit id: ${sha}`)
+  if (token === "") throw new Error("GITHUB_TOKEN is not set")
+  const ref = `refs/heads/${branch}`
+  const headers = { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "content-type": "application/json" }
+  const call = (path: string, init: { method: string; body?: unknown }) =>
+    fetch(new URL(`/repos/${repository}${path}`, apiUrl), { method: init.method, headers, body: init.body === undefined ? undefined : JSON.stringify(init.body), redirect: "manual", signal: AbortSignal.timeout(30_000) })
+  const refuse = async (response: Response, doing: string): Promise<never> => {
+    throw new Error(`GitHub answered ${response.status} ${doing}: ${await githubSaid(response)}`)
   }
-  const id = (body as { deploy?: { id?: unknown } } | null)?.deploy?.id
-  if (typeof id !== "string" || id === "") throw new Error("The deploy hook answered no deploy id")
-  return { deployId: id }
+  const shaOf = async (response: Response, what: string): Promise<string> => {
+    const value = ((await response.json()) as { sha?: unknown }).sha
+    if (typeof value !== "string" || !COMMIT_ID.test(value)) throw new Error(`GitHub answered no id for ${what}`)
+    return value
+  }
+
+  // Where the branch is, and which commit it names.
+  const current = await call(`/git/ref/heads/${branch}`, { method: "GET" })
+  let head: string | null = null
+  let previous: string | null = null
+  if (current.status !== 404) {
+    if (!current.ok) await refuse(current, `reading ${ref}`)
+    const object = ((await current.json()) as { object?: { sha?: unknown } }).object?.sha
+    if (typeof object !== "string" || !COMMIT_ID.test(object)) throw new Error(`GitHub answered no commit for ${ref}`)
+    head = object
+    const file = await call(`/contents/${RELEASE_FILE}?ref=${head}`, { method: "GET" })
+    if (file.ok) {
+      const body = (await file.json()) as { content?: unknown; encoding?: unknown }
+      if (typeof body.content === "string" && body.encoding === "base64") {
+        try {
+          const named = (JSON.parse(Buffer.from(body.content, "base64").toString("utf8")) as { commit?: unknown }).commit
+          if (typeof named === "string" && COMMIT_ID.test(named)) previous = named
+        } catch {
+          previous = null
+        }
+      }
+    } else if (file.status !== 404) {
+      await refuse(file, `reading ${RELEASE_FILE} on ${ref}`)
+    }
+    if (previous === sha) return { moved: false, previous, head, commit: sha }
+  }
+
+  // The released commit's tree, plus the file naming it.
+  const released = await call(`/git/commits/${sha}`, { method: "GET" })
+  if (!released.ok) await refuse(released, `reading commit ${sha}`)
+  const baseTree = ((await released.json()) as { tree?: { sha?: unknown } }).tree?.sha
+  if (typeof baseTree !== "string" || !COMMIT_ID.test(baseTree)) throw new Error(`GitHub answered no tree for commit ${sha}`)
+  const tree = await call("/git/trees", { method: "POST", body: { base_tree: baseTree, tree: [{ path: RELEASE_FILE, mode: "100644", type: "blob", content: `${JSON.stringify({ commit: sha })}\n` }] } })
+  if (!tree.ok) await refuse(tree, "writing the release tree")
+  const releaseTree = await shaOf(tree, "the release tree")
+
+  // The release commit: on the branch's head and the released commit, so the branch fast-forwards and main's history is in its ancestry.
+  const commit = await call("/git/commits", {
+    method: "POST",
+    body: {
+      message: `Release ${sha} to the Pilot\n\nThe tree of ${sha} on main plus ${RELEASE_FILE}, which names it: the commit Suga builds the Pilot image from (.github/workflows/pilot-database.yml, release step 8).`,
+      tree: releaseTree,
+      parents: head === null ? [sha] : [head, sha],
+    },
+  })
+  if (!commit.ok) await refuse(commit, "writing the release commit")
+  const releaseCommit = await shaOf(commit, "the release commit")
+
+  // The branch onto it: created where there was none, else a non-forced update, which GitHub refuses unless it is a fast-forward.
+  if (head === null) {
+    const created = await call("/git/refs", { method: "POST", body: { ref, sha: releaseCommit } })
+    if (!created.ok) await refuse(created, `creating ${ref}`)
+  } else {
+    const moved = await call(`/git/refs/heads/${branch}`, { method: "PATCH", body: { sha: releaseCommit, force: false } })
+    if (!moved.ok) await refuse(moved, `moving ${ref}`)
+  }
+  return { moved: true, previous, head: releaseCommit, commit: sha }
 }
