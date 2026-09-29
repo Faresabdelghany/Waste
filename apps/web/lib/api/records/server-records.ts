@@ -45,7 +45,7 @@ import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 
 import type { ApiClient } from "../client"
 import { ApiProblem, genericProblem, type Problem } from "../problem"
-import { isLocalRefusal, moduleKeyOf, statusToken, webIdOf, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, moduleKeyOf, statusToken, webIdOf, type CommandInput, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 import { isCompanyRecord } from "./organisation"
 
 export type ModuleStatus = "idle" | "loading" | "ready" | "failed"
@@ -300,10 +300,11 @@ export type CommandOutcome =
  * minted this session keeps its minted id, as `withCreated` keeps it. Nothing
  * is sent for a record no adapter owns, a command the adapter does not have,
  * or a row the server does not hold yet — an optimistic create still in
- * flight — and each is refused with a sentence. A refusal the API answers
- * comes back as its problem.
+ * flight — and each is refused with a sentence; nor for a body the command's
+ * `toBody` refuses, which comes back as the 400 a write's local refusal is.
+ * A refusal the API answers comes back as its problem.
  */
-export async function commandRecord(client: ApiClient, module: ServerModule, current: ModuleState, record: BusinessRecord, name: string, options: LoadOptions): Promise<CommandOutcome> {
+export async function commandRecord(client: ApiClient, module: ServerModule, current: ModuleState, record: BusinessRecord, name: string, input: CommandInput | undefined, options: LoadOptions): Promise<CommandOutcome> {
   const adapter = adapterFor(module, record)
   const command = adapter?.commands?.[name]
   const what = command?.refused(record) ?? `${record.name} was not changed`
@@ -312,9 +313,11 @@ export async function commandRecord(client: ApiClient, module: ServerModule, cur
   if (command === undefined) return refused(genericProblem(400, `The API has no "${name}" for a ${adapter.prefix}`))
   const serverId = current.serverIds.get(record.id)
   if (serverId === undefined) return refused(genericProblem(400, `${record.name} is not on the API yet: wait for it to be saved, then try again`))
+  const context: MappingContext = { fixtures: options.fixtures, resolve: resolverOver(options.state), companyRecordId: companyRecordIdOf(options.state), now: options.now }
+  const body = command.toBody?.(input ?? {}, record, context)
+  if (isLocalRefusal(body)) return refused(refusalProblem(body))
   try {
-    const resource = await command.run(client, serverId)
-    const context: MappingContext = { fixtures: options.fixtures, resolve: resolverOver(options.state), companyRecordId: companyRecordIdOf(options.state), now: options.now }
+    const resource = await command.run(client, serverId, body)
     return { kind: "done", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId: resource.id }
   } catch (error) {
     return refused(problemOfError(error))

@@ -24,7 +24,7 @@ import {
 } from "@/lib/data/legacy-ids"
 import { UNREACHABLE_STATUS, type ApiClient } from "@/lib/api/client"
 import { genericProblem, isAccountRefusal, problemSentence, type Problem } from "@/lib/api/problem"
-import { moduleKeyOf } from "@/lib/api/records/adapter"
+import { moduleKeyOf, type CommandInput } from "@/lib/api/records/adapter"
 import { SERVER_MODULES, serverModuleOf, viewableModules } from "@/lib/api/records/modules"
 import {
   commandRecord,
@@ -90,14 +90,17 @@ type BusinessRecordStoreValue = {
   /**
    * Sends one of a row's commands (`deactivate`, `reactivate`, …: the
    * adapter's `commands`) on a switched module that is ready, and puts the
-   * API's answer in the row's place. A refusal is told to the person in the
-   * API's words, as a write's is, and handed back.
+   * API's answer in the row's place. `input` is what the command's dialog
+   * says (a warehouse, a reason), which the command maps to its body. A
+   * refusal is told to the person in the API's words, as a write's is, and
+   * handed back.
    */
   sendCommand: (
     workspaceId: WorkspaceId,
     moduleId: string,
     recordId: string,
     name: string,
+    input?: CommandInput,
   ) => Promise<CommandOutcome>
 }
 
@@ -476,7 +479,7 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
   )
 
   const sendCommand = useCallback(
-    (workspaceId: WorkspaceId, moduleId: string, recordId: string, name: string): Promise<CommandOutcome> => {
+    (workspaceId: WorkspaceId, moduleId: string, recordId: string, name: string, input?: CommandInput): Promise<CommandOutcome> => {
       const key = moduleKey(workspaceId, moduleId)
       const module = serverModuleOf(workspaceId, moduleId)
       const serverStore = stores.server
@@ -503,7 +506,7 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
         const row = latest.records.find((candidate) => candidate.id === recordId) ?? record
         const client = stores.client.getSnapshot()
         if (client === null) return ended()
-        const outcome = await commandRecord(client, module, latest, row, name, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
+        const outcome = await commandRecord(client, module, latest, row, name, input, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
         if (outlived()) return outcome
         if (outcome.kind === "done") {
           serverStore.set((state) => new Map(state).set(key, withRecord(state.get(key) ?? latest, outcome.record, outcome.serverId)))

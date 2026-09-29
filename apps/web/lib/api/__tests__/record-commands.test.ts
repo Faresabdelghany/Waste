@@ -2,18 +2,23 @@
 // and `/reactivate` sent through the user adapter's commands and the record
 // store's seam, `commandRecord` — the path, the empty body, the answer put
 // back under the row's own web id, and a refusal handed back as the API's
-// problem with the sentence the person is told it under.
+// problem with the sentence the person is told it under. A command that says
+// something (Issue #181: a container received into a warehouse, an
+// allocation released with a reason) maps the dialog's input to its body
+// through the adapter's `toBody`, web ids through the resolver, and a body
+// the adapter refuses never leaves the browser.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { Role, User } from "@waste/contracts/access"
 
 import { getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import { command } from "../client"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, type MappingContext, type ServerModule } from "../records/adapter"
+import { NOTHING_RESOLVED, type LocalRefusal, type MappingContext, type ResourceAdapter, type Resource, type ServerModule } from "../records/adapter"
 import { accessModule, DEACTIVATE_USER, REACTIVATE_USER, roleAdapter, userAdapter } from "../records/organisation"
 import { commandRecord, loaded, resolverOver, type ServerRecordsState } from "../records/server-records"
-import { clientOver, json, problem, scripted } from "./scripted-fetch"
+import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-25T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
@@ -68,7 +73,7 @@ const options = { fixtures, state, now: NOW }
 describe("deactivate and reactivate", () => {
   test("deactivate posts to the row's own command path with no body, and the answer replaces the row, deactivated", async () => {
     const { fetch, calls } = scripted([() => json({ ...viewer, status: "deactivated", deactivatedAt: "2026-09-25T10:00:00.000Z" })])
-    const outcome = await commandRecord(clientOver(fetch), accessModule, current, viewerRecord, DEACTIVATE_USER, options)
+    const outcome = await commandRecord(clientOver(fetch), accessModule, current, viewerRecord, DEACTIVATE_USER, undefined, options)
     assert.equal(calls.length, 1)
     assert.equal(calls[0].url, `http://api.test/users/${viewer.id}/deactivate`)
     assert.equal(calls[0].init.method, "POST")
@@ -84,7 +89,7 @@ describe("deactivate and reactivate", () => {
   test("reactivate posts to its path and the row is active again", async () => {
     const { fetch, calls } = scripted([() => json({ ...viewer, status: "active", deactivatedAt: null })])
     const deactivated = { ...viewerRecord, status: "Deactivated" }
-    const outcome = await commandRecord(clientOver(fetch), accessModule, current, deactivated, REACTIVATE_USER, options)
+    const outcome = await commandRecord(clientOver(fetch), accessModule, current, deactivated, REACTIVATE_USER, undefined, options)
     assert.equal(calls[0].url, `http://api.test/users/${viewer.id}/reactivate`)
     assert.equal(outcome.kind, "done")
     if (outcome.kind !== "done") return
@@ -95,7 +100,7 @@ describe("deactivate and reactivate", () => {
     const minted: BusinessRecord = { ...viewerRecord, id: "access-user-mint-1" }
     const held = loaded({ records: [minted], serverIds: new Map([["access-user-mint-1", viewer.id]]) }, 1)
     const { fetch } = scripted([() => json({ ...viewer, status: "deactivated", deactivatedAt: "2026-09-25T10:00:00.000Z" })])
-    const outcome = await commandRecord(clientOver(fetch), accessModule, held, minted, DEACTIVATE_USER, { ...options, state: new Map([["configure.access", held]]) })
+    const outcome = await commandRecord(clientOver(fetch), accessModule, held, minted, DEACTIVATE_USER, undefined, { ...options, state: new Map([["configure.access", held]]) })
     assert.equal(outcome.kind, "done")
     if (outcome.kind !== "done") return
     assert.equal(outcome.record.id, "access-user-mint-1")
@@ -105,7 +110,7 @@ describe("deactivate and reactivate", () => {
   test("the primary administrator's 409 comes back as the API words it, under a heading naming the person", async () => {
     const detail = "The primary administrator cannot be deactivated: it is the company's last way in"
     const { fetch } = scripted([() => problem(409, detail)])
-    const outcome = await commandRecord(clientOver(fetch), accessModule, current, oliviaRecord, DEACTIVATE_USER, options)
+    const outcome = await commandRecord(clientOver(fetch), accessModule, current, oliviaRecord, DEACTIVATE_USER, undefined, options)
     assert.equal(outcome.kind, "refused")
     if (outcome.kind !== "refused") return
     assert.equal(outcome.problem.status, 409)
@@ -116,7 +121,7 @@ describe("deactivate and reactivate", () => {
 
   test("a permission 403 is a refusal like any other: the sentence is the API's and the session is nobody's business here", async () => {
     const { fetch } = scripted([() => problem(403, "Your role does not allow edit on configure.access")])
-    const outcome = await commandRecord(clientOver(fetch), accessModule, current, viewerRecord, REACTIVATE_USER, options)
+    const outcome = await commandRecord(clientOver(fetch), accessModule, current, viewerRecord, REACTIVATE_USER, undefined, options)
     assert.equal(outcome.kind, "refused")
     if (outcome.kind !== "refused") return
     assert.equal(outcome.problem.type, "about:blank")
@@ -126,7 +131,7 @@ describe("deactivate and reactivate", () => {
   test("a row the server does not hold yet is refused before any request", async () => {
     const minted: BusinessRecord = { ...viewerRecord, id: "access-user-mint-2" }
     const { fetch, calls } = scripted([])
-    const outcome = await commandRecord(clientOver(fetch), accessModule, current, minted, DEACTIVATE_USER, options)
+    const outcome = await commandRecord(clientOver(fetch), accessModule, current, minted, DEACTIVATE_USER, undefined, options)
     assert.equal(outcome.kind, "refused")
     if (outcome.kind !== "refused") return
     assert.deepEqual(calls, [])
@@ -136,7 +141,7 @@ describe("deactivate and reactivate", () => {
 
   test("a command the adapter does not have is refused before any request", async () => {
     const { fetch, calls } = scripted([])
-    const outcome = await commandRecord(clientOver(fetch), accessModule, current, viewerRecord, "vanish", options)
+    const outcome = await commandRecord(clientOver(fetch), accessModule, current, viewerRecord, "vanish", undefined, options)
     assert.equal(outcome.kind, "refused")
     if (outcome.kind !== "refused") return
     assert.deepEqual(calls, [])
@@ -146,7 +151,7 @@ describe("deactivate and reactivate", () => {
   test("a record no adapter owns is refused with a sentence", async () => {
     const { fetch, calls } = scripted([])
     const stranger: BusinessRecord = { ...viewerRecord, id: "elsewhere-1", recordKind: undefined }
-    const outcome = await commandRecord(clientOver(fetch), accessModule, current, stranger, DEACTIVATE_USER, options)
+    const outcome = await commandRecord(clientOver(fetch), accessModule, current, stranger, DEACTIVATE_USER, undefined, options)
     assert.equal(outcome.kind, "refused")
     if (outcome.kind !== "refused") return
     assert.deepEqual(calls, [])
@@ -158,5 +163,76 @@ describe("deactivate and reactivate", () => {
     assert.equal(roleAdapter.commands, undefined)
     const module: ServerModule = accessModule
     assert.deepEqual(module.resources.map((resource) => resource.prefix), ["role", "user"])
+  })
+})
+
+describe("a command that says something", () => {
+  // A resource of the test's own, so the seam is held apart from any one
+  // module's adapter: a thing tagged with a label and the user it is for.
+  type Thing = Resource & { label: string; tag: string | null; forUserId: string | null }
+  const thing: Thing = { id: "019995e0-0000-7000-8000-0000000000cc", ...STAMPS, label: "Thing one", tag: null, forUserId: null }
+  const TAG = "tag"
+  const thingAdapter: ResourceAdapter<Thing> = {
+    prefix: "thing",
+    owns: (record) => record.id.startsWith("thing-"),
+    list: null,
+    toRecord: (resource) => ({ ...viewerRecord, id: `thing-${resource.id}`, name: resource.label, facts: { Tag: resource.tag ?? "", For: resource.forUserId ?? "" }, recordKind: "Thing" }),
+    toPatchBody: () => null,
+    update: () => Promise.reject(new Error("no patch here")),
+    commands: {
+      [TAG]: {
+        toBody: (input, _record, context): unknown | LocalRefusal => {
+          const tag = typeof input.tag === "string" ? input.tag.trim() : ""
+          if (tag === "") return { path: "tag", message: "A tag says something" }
+          const forUserId = typeof input.forUserId === "string" ? context.resolve.serverIdOf(input.forUserId) : undefined
+          if (forUserId === undefined) return { path: "forUserId", message: "Pick a user the API holds" }
+          return { tag, forUserId }
+        },
+        run: (client, serverId, body) => command<Thing>(client, `/things/${serverId}/tag`, body),
+        refused: (record) => `${record.name} was not tagged`,
+      },
+      touch: {
+        run: (client, serverId, body) => command<Thing>(client, `/things/${serverId}/touch`, body),
+        refused: (record) => `${record.name} was not touched`,
+      },
+    },
+  }
+  const thingModule: ServerModule = { workspaceId: "configure", moduleId: "things", resources: [thingAdapter] }
+  const thingRecord = thingAdapter.toRecord(thing, context())
+  const held = loaded({ records: [thingRecord], serverIds: new Map([[thingRecord.id, thing.id]]) }, 1)
+  const withUsers = { fixtures, state: new Map([["configure.access", current], ["configure.things", held]]), now: NOW }
+
+  test("the dialog's input becomes the body through toBody, its web ids resolved, and run posts it", async () => {
+    const { fetch, calls } = scripted([() => json({ ...thing, tag: "urgent", forUserId: viewer.id })])
+    const outcome = await commandRecord(clientOver(fetch), thingModule, held, thingRecord, TAG, { tag: " urgent ", forUserId: viewerRecord.id }, withUsers)
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].url, `http://api.test/things/${thing.id}/tag`)
+    assert.deepEqual(bodyOf(calls[0]), { tag: "urgent", forUserId: viewer.id })
+    assert.equal(outcome.kind, "done")
+    if (outcome.kind !== "done") return
+    assert.equal(outcome.record.id, thingRecord.id)
+    assert.equal(outcome.record.facts.Tag, "urgent")
+  })
+
+  test("a body the adapter refuses never leaves the browser: the refusal names the field, in the API's shape", async () => {
+    const { fetch, calls } = scripted([])
+    const blank = await commandRecord(clientOver(fetch), thingModule, held, thingRecord, TAG, { tag: " ", forUserId: viewerRecord.id }, withUsers)
+    const unknown = await commandRecord(clientOver(fetch), thingModule, held, thingRecord, TAG, { tag: "urgent", forUserId: "user-nobody" }, withUsers)
+    assert.deepEqual(calls, [])
+    for (const [outcome, path, message] of [[blank, "tag", "A tag says something"], [unknown, "forUserId", "Pick a user the API holds"]] as const) {
+      assert.equal(outcome.kind, "refused")
+      if (outcome.kind !== "refused") continue
+      assert.equal(outcome.problem.status, 400)
+      assert.deepEqual(outcome.problem.errors, [{ path, message }])
+      assert.equal(outcome.what, "Thing one was not tagged")
+    }
+  })
+
+  test("a command with no toBody runs with no body, whatever the caller handed in", async () => {
+    const { fetch, calls } = scripted([() => json(thing)])
+    const outcome = await commandRecord(clientOver(fetch), thingModule, held, thingRecord, "touch", { stray: "input" }, withUsers)
+    assert.equal(calls[0].url, `http://api.test/things/${thing.id}/touch`)
+    assert.equal(calls[0].init.body, undefined)
+    assert.equal(outcome.kind, "done")
   })
 })
