@@ -164,6 +164,47 @@ describe("updatePassword (Issue #150)", () => {
   })
 })
 
+describe("updatePassword when the update does not go through", () => {
+  const FRESH = { access_token: "fresh", refresh_token: "r2", expires_in: 3600, user: { id: "u-1", email: "x@y.example" } }
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
+
+  test("a new password Auth refuses revokes the session the verification opened, which nobody would hold", async () => {
+    const { fetch, calls } = scripted((url) =>
+      url.includes("/auth/v1/token") ? json(FRESH) : url.includes("/auth/v1/logout") ? new Response(null, { status: 204 }) : json({ code: 422, error_code: "same_password", msg: "New password should be different from the old password." }, 422),
+    )
+    await assert.rejects(
+      () => updatePassword(config, "x@y.example", "the old one", "the old one", { fetch }),
+      (error: unknown) => error instanceof PasswordChangeRefused && error.status === 422 && error.session === null,
+    )
+    assert.deepEqual(
+      calls.map((call) => `${call.init.method} ${call.url}`),
+      [
+        "POST https://project.supabase.co/auth/v1/token?grant_type=password",
+        "PUT https://project.supabase.co/auth/v1/user",
+        "POST https://project.supabase.co/auth/v1/logout?scope=local",
+      ],
+    )
+    assert.equal((calls[2].init.headers as Record<string, string>).authorization, "Bearer fresh")
+  })
+
+  test("an update Auth did not answer, or failed at, may have gone through: the verification's session is handed back to keep", async () => {
+    const lost = (async (input: RequestInfo | URL) => {
+      if (String(input).includes("/auth/v1/token")) return json(FRESH)
+      throw new TypeError("Failed to fetch")
+    }) as typeof fetch
+    await assert.rejects(
+      () => updatePassword(config, "x@y.example", "the old one", "a new one of twelve", { fetch: lost }),
+      (error: unknown) => error instanceof PasswordChangeRefused && error.status === 0 && error.session?.accessToken === "fresh",
+    )
+    const failing = scripted((url) => (url.includes("/auth/v1/token") ? json(FRESH) : json({ code: 503, msg: "Service Unavailable" }, 503)))
+    await assert.rejects(
+      () => updatePassword(config, "x@y.example", "the old one", "a new one of twelve", { fetch: failing.fetch }),
+      (error: unknown) => error instanceof PasswordChangeRefused && error.status === 503 && error.session?.accessToken === "fresh",
+    )
+    assert.equal(failing.calls.length, 2, "nothing is revoked: the change may stand")
+  })
+})
+
 describe("signOut (Issue #150)", () => {
   test("revokes this browser's session at Auth, under its own token and the publishable key", async () => {
     const { fetch, calls } = scripted(() => new Response(null, { status: 204 }))

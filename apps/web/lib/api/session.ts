@@ -237,10 +237,17 @@ export function createApiSession({ api, auth, fetch: doFetch, now = Date.now }: 
       const { session, me } = store.getSnapshot()
       const email = session?.email ?? me?.user.email ?? null
       if (auth === null || session === null || email === null) throw new PasswordChangeRefused(0, "Nobody is signed in")
-      const fresh = await changePassword(auth, email, currentPassword, newPassword, authOptions)
-      // Auth has ended every other session of the Login, the one held a moment ago included.
+      // Auth ends every other session of the Login when the password changes,
+      // the one held a moment ago included, so the verification's is kept.
       const who = whoOf(session)
-      store.set((state) => (state.session !== null && whoOf(state.session) === who ? { ...state, session: fresh } : state))
+      const keep = (fresh: ApiSession) => store.set((state) => (state.session !== null && whoOf(state.session) === who ? { ...state, session: fresh } : state))
+      try {
+        keep(await changePassword(auth, email, currentPassword, newPassword, authOptions))
+      } catch (error) {
+        // An update whose answer was lost may have gone through: keep the verification's session all the same.
+        if (error instanceof PasswordChangeRefused && error.session !== null) keep(error.session)
+        throw error
+      }
     },
   }
 }

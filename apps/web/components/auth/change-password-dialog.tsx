@@ -54,7 +54,14 @@ export function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; on
   }
 
   return (
-    <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        // While a change is in flight the dialog stays open, so its answer lands in the form that asked.
+        if (next) onOpenChange(true)
+        else if (!busy) close()
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Change password</DialogTitle>
@@ -81,7 +88,7 @@ export function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; on
             </p>
           )}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={close}>
+            <Button type="button" variant="outline" onClick={close} disabled={busy}>
               Cancel
             </Button>
             <Button type="submit" disabled={busy}>

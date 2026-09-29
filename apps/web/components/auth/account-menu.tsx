@@ -7,7 +7,7 @@
 // needs no navigation here: the session drops, and the gate sends the page
 // to /login. In fixture mode each sidebar keeps its persona menu instead.
 import { useState } from "react"
-import { CaretRight, Key, SignOut } from "@phosphor-icons/react/dist/ssr"
+import { ChevronRight, KeyRound, LogOut } from "lucide-react"
 
 import { ChangePasswordDialog } from "@/components/auth/change-password-dialog"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -49,7 +49,7 @@ export function AccountMenu({ className }: { className?: string }) {
               <span className="truncate text-sm font-medium">{name}</span>
               <span className="truncate text-xs text-sidebar-foreground/60">{role}</span>
             </div>
-            <CaretRight className="h-4 w-4 shrink-0 text-sidebar-foreground/55" />
+            <ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground/55" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="right" align="end" className="w-60">
@@ -60,11 +60,11 @@ export function AccountMenu({ className }: { className?: string }) {
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem className="cursor-pointer" onSelect={() => setChangingPassword(true)}>
-            <Key className="h-4 w-4" />
+            <KeyRound className="h-4 w-4" />
             Change password
           </DropdownMenuItem>
           <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onSelect={() => void signOut()}>
-            <SignOut className="h-4 w-4" />
+            <LogOut className="h-4 w-4" />
             Sign out
           </DropdownMenuItem>
         </DropdownMenuContent>

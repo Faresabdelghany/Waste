@@ -174,11 +174,19 @@ export function refreshSession(config: AuthConfig, refreshToken: string, { fetch
 /** A password change Auth refused, in words for the person making it: the current password did not verify, or the new one will not do. */
 export class PasswordChangeRefused extends Error {
   readonly status: number
+  /**
+   * The session the verification opened, when the change may have gone
+   * through all the same — Auth did not answer the update, or failed at it —
+   * so the caller keeps it: it is valid whichever way the change went, and
+   * the session held before may not be. Null otherwise.
+   */
+  readonly session: ApiSession | null
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, session: ApiSession | null = null) {
     super(message)
     this.name = "PasswordChangeRefused"
     this.status = status
+    this.session = session
   }
 }
 
@@ -191,9 +199,11 @@ export class PasswordChangeRefused extends Error {
  * every other session of the Login when its password changes, the one the
  * web held included, so the session the update ran under is the one to keep:
  * it is answered, and the caller adopts it. Refused with
- * `PasswordChangeRefused`: the current password not right (400), the new one
- * in Auth's words (a 422 for one too short or unchanged), status 0 when Auth
- * did not answer.
+ * `PasswordChangeRefused`: the current password not right (400); the new one
+ * in Auth's words (a 422 for one too short or unchanged), the verification's
+ * session revoked, since nobody would hold it; or the update unanswered
+ * (status 0) or failed (5xx), when the change may have gone through and the
+ * verification's session is handed back to keep.
  */
 export async function updatePassword(
   config: AuthConfig,
@@ -213,10 +223,13 @@ export async function updatePassword(
   try {
     answer = await callAuth(config, "/auth/v1/user", { method: "PUT", token: verified.accessToken, body: { password: newPassword } }, doFetch)
   } catch (error) {
-    throw new PasswordChangeRefused(0, unreachable(error))
+    throw new PasswordChangeRefused(0, unreachable(error), verified)
   }
-  if (!answer.ok) throw new PasswordChangeRefused(answer.status, authSentence(answer.body) ?? `The new password was not accepted (HTTP ${answer.status})`)
-  return verified
+  if (answer.ok) return verified
+  const refusal = authSentence(answer.body) ?? `The new password was not accepted (HTTP ${answer.status})`
+  if (answer.status >= 500) throw new PasswordChangeRefused(answer.status, refusal, verified)
+  await signOut(config, verified.accessToken, { fetch: doFetch })
+  throw new PasswordChangeRefused(answer.status, refusal)
 }
 
 /**

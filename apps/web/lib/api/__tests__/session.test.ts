@@ -260,6 +260,17 @@ describe("changing the password", () => {
     assert.equal(state.session?.userId, "auth-mads")
   })
 
+  test("a change whose answer was lost keeps the verification's session, which Auth may have left the only one", async () => {
+    const { session } = await signedIn([
+      () => tokens("fresh"),
+      () => {
+        throw new TypeError("Failed to fetch")
+      },
+    ])
+    await assert.rejects(() => session.updatePassword("the temporary one", "a password of my own"), PasswordChangeRefused)
+    assert.equal(session.store.getSnapshot().session?.accessToken, "fresh")
+  })
+
   test("a refused change leaves the session as it was", async () => {
     const { session } = await signedIn([() => json({ code: 400, error_code: "invalid_credentials", msg: "Invalid login credentials" }, 400)])
     await assert.rejects(() => session.updatePassword("not it", "a password of my own"), PasswordChangeRefused)
