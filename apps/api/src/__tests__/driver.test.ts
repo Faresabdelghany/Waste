@@ -9,9 +9,11 @@ import { Route } from "@waste/contracts/routes"
 import { Session } from "@waste/contracts/sessions"
 import { NET_IS_GROSS_LESS_TARE, Unload } from "@waste/contracts/unloads"
 import { createDb, type Database } from "@waste/db/client"
+import { wasteFraction } from "@waste/db/schema/catalogue"
 import { property as propertyTable, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { driverCommand, outboxEvent, pickup as pickupTable, proofOfService, route as routeTable, session as sessionTable } from "@waste/db/schema/execution"
 import { vehicle as vehicleTable } from "@waste/db/schema/fleet"
+import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
 import { withCompany } from "@waste/db/tenant"
 import {
   alreadyOnRoute,
@@ -67,6 +69,8 @@ const fromNow = (ms: number): string => new Date(MORNING.getTime() + ms).toISOSt
 /** Ids that sort in the order they were minted: one millisecond apart, so a page over `id` is a page over upload order. */
 let tick = Date.now()
 const mint = (): string => testId((tick += 1))
+/** Rows in the order the door lists them, by id: the order Postgres gives a uuid, which is the string order of its lowercase spelling. */
+const byId = <Row extends { id: string }>(rows: Row[]): Row[] => [...rows].sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
 
 type Envelope = { id: string; kind: DriverCommandKind; routeId: string; occurredAt: string; deviceId: string; body: unknown }
 type EnvelopeOptions = { id?: string; occurredAt?: string; deviceId?: string }
@@ -304,6 +308,76 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
       const cursor = RoutePage.parse(await (await mads("/driver/routes?limit=1")).json())
       assert.equal(cursor.items.length, 1)
       assert.ok(cursor.nextCursor !== null, "two ready routes today, one per page")
+    })
+
+    test("GET /driver/me answers what a start picks from: the active powered vehicles and trailers of the driver profile's project, by id, each by its callsign or else its plate — not another project's, not one out of service, not another company's", async () => {
+      const setVehicle = (id: string, values: { status?: string; callsign?: string | null }) =>
+        withCompany(pool.db, a.companyId, (tx) => tx.update(vehicleTable).set(values).where(and(eq(vehicleTable.companyId, a.companyId), eq(vehicleTable.id, id))))
+      // For this test alone: WH-77 out of service, so more than a retired vehicle is seen to stay off the list, and the trailer without its callsign, so its plate names it.
+      await setVehicle(fleet.vehicles.drifting.id, { status: "unavailable" })
+      await setVehicle(fleet.vehicles.trailer.id, { callsign: null })
+      try {
+        const me = DriverMe.parse(await (await mads("/driver/me")).json())
+        assert.deepEqual(
+          me.vehicles,
+          byId([
+            { id: fleet.vehicles.wh24.id, label: fleet.vehicles.wh24.label, kind: "powered-vehicle", requiredLicenceClass: "c" },
+            { id: fleet.vehicles.wh25.id, label: fleet.vehicles.wh25.label, kind: "powered-vehicle", requiredLicenceClass: "ce" },
+            { id: fleet.vehicles.trailer.id, label: "CN 90 112", kind: "trailer", requiredLicenceClass: "b" },
+          ]),
+          "Copenhagen Central's in service: not WH-99 or WH-T99 (retired) or WH-77 (unavailable), not Harbor's HB-1, none of the other company's",
+        )
+      } finally {
+        await setVehicle(fleet.vehicles.drifting.id, { status: "active" })
+        await setVehicle(fleet.vehicles.trailer.id, { callsign: fleet.vehicles.trailer.label })
+      }
+    })
+
+    test("GET /driver/me answers what an unload picks from: the company's stations that are not closed, by id, each with exactly the fractions it accepts, and the company's fractions — none of another company's", async () => {
+      const { companyId } = a
+      const glass = { id: testId(), key: "glass", name: "Glass" }
+      const food = { id: testId(), key: "food", name: "Food waste" }
+      const station = (code: string, name: string, status: string, weighbridge: boolean, coordinates: [number, number]) => ({
+        id: testId(),
+        companyId,
+        code,
+        name,
+        address: `${name}, Kystbyen`,
+        location: { type: "Point" as const, coordinates },
+        ownership: "company",
+        weighbridge,
+        status,
+      })
+      const seasonal = station("TS-NORDKAJ", "Nordkaj transfer station", "seasonal", true, [12.6012, 55.7121])
+      const draft = station("TS-SYDKAJ", "Sydkaj transfer station", "draft", false, [12.5741, 55.6523])
+      const closed = station("TS-OSTKAJ", "Østkaj transfer station", "closed", true, [12.6305, 55.6907])
+      await withCompany(pool.db, companyId, async (tx) => {
+        await tx.insert(wasteFraction).values([glass, food].map((fraction) => ({ ...fraction, companyId })))
+        await tx.insert(unloadingStation).values([seasonal, draft, closed])
+        await tx.insert(unloadingStationFraction).values([
+          { companyId, unloadingStationId: fleet.stations.amager.id, wasteFractionId: fixtures.residual.id },
+          { companyId, unloadingStationId: fleet.stations.amager.id, wasteFractionId: glass.id },
+          { companyId, unloadingStationId: seasonal.id, wasteFractionId: food.id },
+          { companyId, unloadingStationId: closed.id, wasteFractionId: fixtures.residual.id },
+        ])
+      })
+      const me = DriverMe.parse(await (await mads("/driver/me")).json())
+      const accepting = (id: string, wasteFractionIds: string[]) => ({ id, wasteFractionIds: [...wasteFractionIds].sort() })
+      assert.deepEqual(
+        me.unloadingStations.map(({ id, wasteFractionIds }) => ({ id, wasteFractionIds })),
+        byId([accepting(fleet.stations.amager.id, [fixtures.residual.id, glass.id]), accepting(seasonal.id, [food.id]), accepting(draft.id, [])]),
+        "the active, the seasonal and the draft station, each with its own fractions sorted by id and the draft one with none; not the closed one, none of the other company's",
+      )
+      assert.deepEqual(
+        me.unloadingStations.find(({ id }) => id === seasonal.id),
+        { id: seasonal.id, name: seasonal.name, location: seasonal.location, weighbridge: true, wasteFractionIds: [food.id] },
+        "a station as the unload screen shows it",
+      )
+      assert.deepEqual(
+        me.wasteFractions,
+        byId([{ id: fixtures.residual.id, key: "residual", name: "Residual waste" }, glass, food]),
+        "the company's three, not the other company's residual",
+      )
     })
 
     test("another company's driver sees their own routes and none of these", async () => {
@@ -1153,6 +1227,10 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
       assert.ok(ids.includes(alis.id))
       assert.ok(!ids.includes(madss.id))
       assert.equal(me.routes.find((route) => route.id === alis.id)?.planned.serviceProviderId, a.serviceProviders.nordren.id)
+      // What a start and an unload pick from is bounded by the driver profile and the company, never by Project Access: Ali's account works in no project, and his profile is Copenhagen Central's, as Mads's is.
+      const madsMe = DriverMe.parse(await (await mads("/driver/me")).json())
+      assert.ok(me.vehicles.length > 0 && me.unloadingStations.length > 0 && me.wasteFractions.length > 0, "an account in no project picks from the lists all the same")
+      assert.deepEqual([me.vehicles, me.unloadingStations, me.wasteFractions], [madsMe.vehicles, madsMe.unloadingStations, madsMe.wasteFractions])
       assert.equal((await refused(await ali(`/driver/routes/${madss.id}`), 404)).detail, noRouteAssigned(madss.id))
       await rejected(envelope("start-route", madss.id, { vehicleId: fleet.vehicles.wh24.id }), 404, noRouteAssigned(madss.id), ali)
       await started(alis, { call: ali, vehicleId: fleet.vehicles.wh25.id })

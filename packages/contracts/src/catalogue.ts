@@ -56,7 +56,7 @@ export const ProductUnit = z.enum(PRODUCT_UNITS)
 export type ProductUnit = z.infer<typeof ProductUnit>
 
 /** A lowercase slug: `residual`, `food`, `hard-plastic` — the one key shape of text.ts. */
-const FractionKey = Slug()
+export const FractionKey = Slug()
 
 /** A volume, a rate or an interval: a whole positive number, since zero is none of them. */
 const Count = PositiveInt
