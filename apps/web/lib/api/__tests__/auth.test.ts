@@ -45,6 +45,14 @@ describe("sessionOf", () => {
     assert.equal(sessionOf({ access_token: "a", refresh_token: "r", expires_in: 3600 }, NOW)?.userId, null)
   })
 
+  test("counts the expiry on this device's clock when Auth says how long the token lasts, so a clock that is off does not expire it at birth", () => {
+    // Auth sends both; its `expires_at` is its own clock's, here an hour behind this device's.
+    const authNow = NOW - 3_600_000
+    const body = { access_token: "a", refresh_token: "r", expires_in: 3600, expires_at: authNow / 1000 + 3600, user: { id: "u-1" } }
+    assert.equal(sessionOf(body, NOW)?.expiresAt, NOW + 3_600_000)
+    assert.equal(isExpired({ expiresAt: sessionOf(body, NOW)?.expiresAt ?? 0 }, NOW), false)
+  })
+
   test("refuses what is not a session", () => {
     assert.equal(sessionOf(null), null)
     assert.equal(sessionOf({ access_token: "a" }), null)

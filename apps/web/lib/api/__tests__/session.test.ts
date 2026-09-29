@@ -147,6 +147,46 @@ describe("the session-ending rule", () => {
     assert.equal(script.calls.length, 2, "the fresh token is an hour from expiry")
   })
 
+  test("a refresh Auth cannot answer right now — rate-limited, failing, timed out — keeps the session and is tried again", async () => {
+    for (const status of [408, 429, 500, 502, 503, 504]) {
+      const script = scripted([() => json({ code: status, msg: `HTTP ${status}` }, status), () => tokens("a2")])
+      const session = createApiSession({ api: API, auth: AUTH, fetch: script.fetch, now: () => NOW })
+      session.hydrate(stored({ expiresAt: NOW + 30_000 }))
+      await session.refreshIfDue()
+      assert.equal(session.store.getSnapshot().session?.accessToken, "a0", `${status}: kept`)
+      assert.equal(session.store.getSnapshot().ended, null, `${status}: nothing ended`)
+      await session.refreshIfDue()
+      assert.equal(session.store.getSnapshot().session?.accessToken, "a2", `${status}: tried again`)
+    }
+  })
+
+  test("a refresh in flight across a second read of the same stored session lands, and is sent once", async () => {
+    // React's development double mount reads the stored session twice: a new object, the same tokens.
+    let answer: (response: Response) => void = () => {}
+    const script = scripted([() => new Promise<Response>((resolve) => (answer = resolve))])
+    const session = createApiSession({ api: API, auth: AUTH, fetch: script.fetch, now: () => NOW })
+    session.hydrate(stored({ expiresAt: NOW + 30_000 }))
+    const first = session.refreshIfDue()
+    session.hydrate(stored({ expiresAt: NOW + 30_000 }))
+    const second = session.refreshIfDue()
+    answer(tokens("a2"))
+    await Promise.all([first, second])
+    assert.equal(script.calls.length, 1)
+    assert.equal(session.store.getSnapshot().session?.accessToken, "a2")
+  })
+
+  test("/me with a token that has run out refreshes it first, then reads", async () => {
+    const script = scripted([() => tokens("a2"), () => me(null)])
+    const session = createApiSession({ api: API, auth: AUTH, fetch: script.fetch, now: () => NOW })
+    session.hydrate(stored({ expiresAt: NOW - 1 }))
+    assert.equal((await session.loadMe()).user.fullName, "Mads Jensen")
+    assert.deepEqual(
+      script.calls.map((call) => call.url),
+      ["https://project.supabase.co/auth/v1/token?grant_type=refresh_token", "http://api.test/me"],
+    )
+    assert.equal((script.calls[1].init.headers as Record<string, string>).authorization, "Bearer a2")
+  })
+
   test("a session nobody can refresh — a tab that did not sign in itself — ends as expired once its token runs out", async () => {
     const session = createApiSession({ api: API, auth: AUTH, fetch: scripted([]).fetch, now: () => NOW })
     session.hydrate(stored({ refreshToken: null, expiresAt: NOW - 1 }))
@@ -175,6 +215,20 @@ describe("signing out", () => {
     assert.equal(calls[1].url, "https://project.supabase.co/auth/v1/logout?scope=local")
     assert.equal((calls[1].init.headers as Record<string, string>).authorization, "Bearer a1")
     assert.deepEqual(session.store.getSnapshot().ended, { reason: "signed-out" })
+  })
+
+  test("with a token that has run out, refreshes first, so the revocation is one Auth honours", async () => {
+    const script = scripted([() => tokens("a2"), () => new Response(null, { status: 204 })])
+    const session = createApiSession({ api: API, auth: AUTH, fetch: script.fetch, now: () => NOW })
+    session.hydrate(stored({ expiresAt: NOW - 1 }))
+    await session.signOut()
+    assert.deepEqual(
+      script.calls.map((call) => call.url),
+      ["https://project.supabase.co/auth/v1/token?grant_type=refresh_token", "https://project.supabase.co/auth/v1/logout?scope=local"],
+    )
+    assert.equal((script.calls[1].init.headers as Record<string, string>).authorization, "Bearer a2")
+    assert.deepEqual(session.store.getSnapshot().ended, { reason: "signed-out" })
+    assert.equal(session.store.getSnapshot().session, null)
   })
 
   test("a revocation Auth refuses, or never answers, drops the session all the same", async () => {

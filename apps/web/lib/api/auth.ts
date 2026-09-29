@@ -74,12 +74,14 @@ export function sessionOf(body: unknown, now = Date.now()): ApiSession | null {
   if (typeof body !== "object" || body === null) return null
   const token = body as TokenResponse
   if (typeof token.access_token !== "string" || typeof token.refresh_token !== "string") return null
-  // `expires_at` is epoch seconds when Auth sends it; `expires_in` seconds from now otherwise.
+  // `expires_in` is seconds from now, which this device's clock can count;
+  // `expires_at`, epoch seconds on Auth's clock, only when that is all there
+  // is, since a device clock that is off would read it as long past or far off.
   const expiresAt =
-    typeof token.expires_at === "number"
-      ? token.expires_at * 1000
-      : typeof token.expires_in === "number"
-        ? now + token.expires_in * 1000
+    typeof token.expires_in === "number"
+      ? now + token.expires_in * 1000
+      : typeof token.expires_at === "number"
+        ? token.expires_at * 1000
         : null
   if (expiresAt === null) return null
   const email = token.user && typeof token.user.email === "string" ? token.user.email : null

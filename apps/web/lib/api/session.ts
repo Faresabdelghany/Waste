@@ -66,6 +66,16 @@ export type SessionState = {
 export const UNREAD_SESSION: SessionState = { session: null, hydrated: false, ended: null, me: null }
 
 /**
+ * Whether a refresh that failed was Auth refusing the session — a 4xx: the
+ * refresh token spent or revoked, the hook refusing the account — rather
+ * than Auth not answering now, which is tried again: no answer at all, a
+ * timeout (408), a rate limit (429) or a failure of its own (5xx).
+ */
+function refusedAtRefresh(error: unknown): error is SignInRefused {
+  return error instanceof SignInRefused && error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429
+}
+
+/**
  * Who a session is, apart from its tokens: Auth's user id, the same across
  * every refresh, else the e-mail, else the token itself (the older, never
  * worse behaviour of reloading on a refresh).
@@ -113,7 +123,7 @@ export type ApiSessionController = {
 export function createApiSession({ api, auth, fetch: doFetch, now = Date.now }: ApiSessionOptions): ApiSessionController {
   const store = createExternalStore<SessionState>(UNREAD_SESSION)
   const authOptions: AuthOptions = { ...(doFetch === undefined ? {} : { fetch: doFetch }), now }
-  let refreshing = false
+  let refreshing: Promise<void> | null = null
   let meInFlight: { who: string; read: Promise<Me> } | null = null
 
   /** Ends the open session when it is the one `holds` picks out, for the reason given; a session opened since is left alone. */
@@ -140,6 +150,34 @@ export function createApiSession({ api, auth, fetch: doFetch, now = Date.now }: 
     }
   }
 
+  // One refresh at a time, shared by whoever asks while it is in flight. Its
+  // answer belongs to whichever held session still carries the refresh token
+  // it spent: a second read of the stored session is a new object with the
+  // same tokens (React's development double mount does exactly that).
+  const refreshIfDue = (): Promise<void> => {
+    const { session, hydrated } = store.getSnapshot()
+    if (!hydrated || session === null || !isExpired(session, now())) return Promise.resolve()
+    if (refreshing !== null) return refreshing
+    const refreshToken = session.refreshToken
+    if (auth === null || refreshToken === null) {
+      endWhen((current) => current.accessToken === session.accessToken, { reason: "expired" })
+      return Promise.resolve()
+    }
+    const spent = (current: ApiSession) => current.refreshToken === refreshToken
+    refreshing = refreshSession(auth, refreshToken, authOptions).then(
+      (next) => store.set((state) => (state.session !== null && spent(state.session) ? { ...state, session: next } : state)),
+      (error: unknown) => {
+        // A refresh Auth refused ends the session; one it could not answer now is tried again on the next tick.
+        if (refusedAtRefresh(error)) endWhen(spent, { reason: "refused", detail: error.message })
+      },
+    )
+    const settled = refreshing
+    void settled.finally(() => {
+      if (refreshing === settled) refreshing = null
+    })
+    return settled
+  }
+
   return {
     store,
     api,
@@ -157,35 +195,31 @@ export function createApiSession({ api, auth, fetch: doFetch, now = Date.now }: 
       const { session } = store.getSnapshot()
       if (session === null) return
       endWhen((current) => current === session, { reason: "signed-out" })
-      if (auth !== null) await revokeSession(auth, session.accessToken, authOptions)
-    },
-    refreshIfDue: async () => {
-      const { session, hydrated } = store.getSnapshot()
-      if (!hydrated || session === null || refreshing || !isExpired(session, now())) return
-      if (auth === null || session.refreshToken === null) {
-        endWhen((current) => current === session, { reason: "expired" })
-        return
+      if (auth === null) return
+      // Auth refuses to revoke under a token that has run out, which would
+      // leave the refresh token live: a tab that holds one refreshes first.
+      let token = session.accessToken
+      if (isExpired(session, now()) && session.refreshToken !== null) {
+        try {
+          token = (await refreshSession(auth, session.refreshToken, authOptions)).accessToken
+        } catch {
+          // Best-effort, like the revocation itself.
+        }
       }
-      refreshing = true
-      try {
-        const next = await refreshSession(auth, session.refreshToken, authOptions)
-        store.set((state) => (state.session === session ? { ...state, session: next } : state))
-      } catch (error) {
-        // A refresh Auth refused ends the session; one the network lost is tried again on the next tick.
-        if (error instanceof SignInRefused && error.status !== 0) endWhen((current) => current === session, { reason: "refused", detail: error.message })
-      } finally {
-        refreshing = false
-      }
+      await revokeSession(auth, token, authOptions)
     },
+    refreshIfDue,
     client: () => {
       const { session } = store.getSnapshot()
       return session === null ? null : clientFor(session)
     },
     clientFor,
-    loadMe: () => {
+    loadMe: async () => {
+      // A token that has run out is refreshed first — a reload after a laptop slept past the hour.
+      await refreshIfDue()
       const { session } = store.getSnapshot()
       const client = session === null ? null : clientFor(session)
-      if (session === null || client === null) return Promise.reject(new ApiProblem(genericProblem(UNREACHABLE_STATUS, "Nobody is signed in")))
+      if (session === null || client === null) throw new ApiProblem(genericProblem(UNREACHABLE_STATUS, "Nobody is signed in"))
       const who = whoOf(session)
       if (meInFlight !== null && meInFlight.who === who) return meInFlight.read
       const read = get<Me>(client, "/me").then((me) => {
