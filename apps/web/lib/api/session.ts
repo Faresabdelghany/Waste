@@ -90,7 +90,7 @@ export type ApiSessionController = {
   readonly auth: AuthConfig | null
   /** The session read from the browser's storage, or null: the state is hydrated from here on. */
   hydrate: (session: ApiSession | null) => void
-  /** Signs in and opens the session, clearing why the last one ended; throws `SignInRefused` in Auth's words. */
+  /** Signs in and opens the session; the attempt clears why the last one ended. Throws `SignInRefused` in Auth's words. */
   signIn: (email: string, password: string) => Promise<ApiSession>
   /** Drops the session at once, then revokes it at Auth best-effort; settles when Auth has answered or not. */
   signOut: () => Promise<void>
@@ -147,6 +147,8 @@ export function createApiSession({ api, auth, fetch: doFetch, now = Date.now }: 
     hydrate: (session) => store.set((state) => ({ ...state, session, hydrated: true })),
     signIn: async (email, password) => {
       if (auth === null) throw new SignInRefused(0, "Password sign-in is not configured: set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY")
+      // A new attempt answers for itself: why the last session ended is not said beside this one's refusal.
+      store.set((state) => (state.ended === null ? state : { ...state, ended: null }))
       const session = await signInWithPassword(auth, email, password, authOptions)
       store.set((state) => ({ ...state, session, ended: null, me: null }))
       return session

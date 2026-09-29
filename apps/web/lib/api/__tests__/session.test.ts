@@ -9,7 +9,7 @@ import { describe, test } from "node:test"
 
 import { NO_ACTIVE_ACCOUNT } from "@waste/contracts/problem"
 
-import { PasswordChangeRefused, type ApiSession } from "../auth"
+import { PasswordChangeRefused, SignInRefused, type ApiSession } from "../auth"
 import { get } from "../client"
 import { landingOf } from "../landing"
 import { ApiProblem, NO_ACTIVE_ACCOUNT_PROBLEM_TYPE, PROBLEM_MEDIA_TYPE } from "../problem"
@@ -97,6 +97,14 @@ describe("the session-ending rule", () => {
     await session.signIn(EMAIL, "again")
     assert.equal(session.store.getSnapshot().ended, null)
     assert.equal(session.store.getSnapshot().session?.accessToken, "a2")
+  })
+
+  test("a sign-in Auth refuses clears the old reason too: the form says what went wrong this time", async () => {
+    const { session } = await signedIn([() => accountRefused("No active account in this company is bound to this login"), () => json({ code: 403, msg: "This account is deactivated" }, 403)])
+    await assert.rejects(() => session.loadMe())
+    await assert.rejects(() => session.signIn(EMAIL, "the temporary one"), SignInRefused)
+    assert.equal(session.store.getSnapshot().ended, null)
+    assert.equal(session.store.getSnapshot().session, null)
   })
 
   test("a permission refusal, a 403 of about:blank, leaves the session alive", async () => {
