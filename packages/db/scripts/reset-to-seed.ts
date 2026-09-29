@@ -35,11 +35,9 @@ await step(async () => {
       : `Outbox: ${count(report.unsentEvents, "unpublished event")} went with the sweep and will never be relayed.`,
   )
   summary(
-    report.waitingJobs === null
-      ? "pg-boss: not installed on this database, so no job waits."
-      : report.waitingJobs === 0
-        ? "pg-boss: no waiting job names the company."
-        : `pg-boss: ${count(report.waitingJobs, "waiting job")} still ${report.waitingJobs === 1 ? "names" : "name"} the company and ${report.waitingJobs === 1 ? "is" : "are"} left on ${report.waitingJobs === 1 ? "its queue" : "their queues"}: ` +
-          "when a worker takes one it meets a tenant without the rows it names, and either finds nothing to do or fails, is retried and ends failed — an outbox consumer's copy on outbox.dead, which is not to be redriven.",
+    report.waitingJobs === 0
+      ? "pg-boss: no waiting job names the company."
+      : `pg-boss: ${count(report.waitingJobs, "waiting job")} still ${report.waitingJobs === 1 ? "names" : "name"} the company and ${report.waitingJobs === 1 ? "is" : "are"} left on ${report.waitingJobs === 1 ? "its queue" : "their queues"}: ` +
+        "when a worker takes one it meets a tenant without the rows it names, and either finds nothing to do or fails, is retried and ends failed — an outbox consumer's copy on outbox.dead, which is not to be redriven.",
   )
 })

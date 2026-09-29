@@ -6,8 +6,8 @@
 // writes today, "configured, never run" since #143.
 //
 // One transaction, as the owner (`DATABASE_ADMIN_URL`, BYPASSRLS locally and
-// on Supabase), which may delete from the eleven ledgers `appendOnly` guards
-// from `wms_api`: the sweep, `applyDemo` — the transaction body `seedDemo`
+// on Supabase), which may delete from the ledgers `appendOnly` guards from
+// `wms_api`: the sweep, `applyDemo` — the transaction body `seedDemo`
 // runs, called inside this one so the sweep and the seed commit together —
 // the counters, and the postconditions. A failure anywhere rolls all of it
 // back, so the Pilot's write barrier (#133) is reopened onto the tenant as it
@@ -57,6 +57,8 @@
 // under its queue's policy and then failed, and an outbox consumer's copy
 // lands on `outbox.dead`, counted by `/readyz` and not to be redriven. The
 // reset counts both for the operator to read.
+import { isDeepStrictEqual } from "node:util"
+
 import { getTableName, is, sql } from "drizzle-orm"
 import { getTableConfig, PgTable, type PgColumn } from "drizzle-orm/pg-core"
 
@@ -129,12 +131,12 @@ export type ResetReport = {
   unsentEvents: number
   /** The company's User Accounts the seed does not name, kept as they were: the Pilot's testers. */
   otherAccounts: number
-  /** Jobs waiting on pg-boss's queues whose data names the company; null where pg-boss's schema is not installed. */
-  waitingJobs: number | null
+  /** Jobs waiting on pg-boss's queues (created or retrying) whose data names the company. */
+  waitingJobs: number
 }
 
 /** Refuses any company but the demo company's: the reset sweeps one tenant, the one whose every row the seed writes back. */
-export function requireDemoCompany(companyId: string): void {
+function requireDemoCompany(companyId: string): void {
   if (companyId !== DEMO_COMPANY_ID) {
     throw new Error(`reset-to-seed resets the demo company (${DEMO_COMPANY_ID}) and no other; refused ${companyId}, and nothing was deleted`)
   }
@@ -166,14 +168,12 @@ async function resetCounters(tx: Tx, companyId: string): Promise<boolean> {
   return written.length > 0
 }
 
-/** The jobs waiting on pg-boss's queues (created or retrying) whose data names the company; null on a database without pg-boss's schema (before migration 0011). */
-async function waitingJobsOf(tx: Tx, companyId: string): Promise<number | null> {
-  const [installed] = await tx.execute<{ present: boolean }>(sql`select to_regclass(${`${PGBOSS_SCHEMA}.job`}) is not null as present`)
-  if (installed?.present !== true) return null
+/** The jobs waiting on pg-boss's queues whose data names the company: `created` and `retry` are the states before `active` in pg-boss's `job_state`. */
+async function waitingJobsOf(tx: Tx, companyId: string): Promise<number> {
   const [waiting] = await tx.execute<{ jobs: number }>(
     sql`select count(*)::int as jobs from ${sql.identifier(PGBOSS_SCHEMA)}.job where state < 'active' and data->>'companyId' = ${companyId}`,
   )
-  return waiting?.jobs ?? 0
+  return waiting.jobs
 }
 
 /**
@@ -200,7 +200,7 @@ export async function resetToSeed(adminUrl: string, companyId: string = DEMO_COM
       const again = await applyDemo(tx)
       if (again !== 0) throw new Error(`the seed found ${again} rows still to change after the reset, so the reset was rolled back`)
       const [counters] = await tx.select(COUNTERS).from(company).where(sql`${company.id} = ${companyId}`)
-      if (JSON.stringify(counters) !== JSON.stringify(COUNTER_DEFAULTS)) {
+      if (!isDeepStrictEqual(counters, COUNTER_DEFAULTS)) {
         throw new Error(`the counters read ${JSON.stringify(counters)} after the reset, not ${JSON.stringify(COUNTER_DEFAULTS)}, so the reset was rolled back`)
       }
 
