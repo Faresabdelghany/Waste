@@ -1,9 +1,23 @@
 name: CI
 
+# A change that touches nothing but documentation or session handoff notes
+# starts no run (#139). That is safe only while no check is required: a
+# workflow that paths-ignore skips leaves a required check waiting as
+# "Expected" and the pull request unmergeable, so adopting required checks
+# moves this filter inside the jobs (a first job that decides, the others
+# `if:` on it).
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".remember/**"
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".remember/**"
 
 concurrency:
   group: ci-${{ github.ref }}

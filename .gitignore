@@ -51,3 +51,7 @@ playwright-report/
 # An image's build metadata (Issue #152): written inside the image from its
 # build argument, never in a checkout.
 apps/*/build.json
+
+# Session handoff notes (Issue #139): local to each checkout and never
+# committed, since the repository is public.
+.remember/
