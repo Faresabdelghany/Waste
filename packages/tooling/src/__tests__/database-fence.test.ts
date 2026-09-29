@@ -68,3 +68,27 @@ describe("the database fence around apps/web", () => {
     assert.deepEqual(await fenceMessages(linters.api, "apps/api/src/specimen.ts", source), [])
   })
 })
+
+const ROUTING_FENCED = [
+  'import { providerFromEnv } from "@waste/routing/select"',
+  'import { FakeProvider } from "@waste/routing/fake"',
+  'import type { RoutingProvider } from "@waste/routing/provider"',
+  'import * as routing from "@waste/routing"',
+]
+
+describe("the routing fence around apps/web (#169)", () => {
+  for (const line of ROUTING_FENCED) {
+    test(`reports ${line} under apps/web as an error naming the API`, async () => {
+      const messages = await fenceMessages(linters.web, "apps/web/lib/data/specimen.ts", `${line}\nexport const specimen = 1\n`)
+      assert.equal(messages.length, 1, JSON.stringify(messages))
+      assert.equal(messages[0].severity, 2, "an error, so `pnpm lint` fails")
+      assert.match(messages[0].message, /server-side/)
+      assert.match(messages[0].message, /apps\/api/)
+    })
+  }
+
+  test("fences apps/web only: the API and the worker call the provider", async () => {
+    const source = `${ROUTING_FENCED.join("\n")}\nexport const specimen = [providerFromEnv, FakeProvider, routing]\n`
+    assert.deepEqual(await fenceMessages(linters.api, "apps/api/src/specimen.ts", source), [])
+  })
+})

@@ -191,8 +191,8 @@ const CHANGED_IN_0010 = new Map([
   [unloadTable(true), unloadTable(false)],
 ])
 
-/** route as drizzle-kit writes it today — with the run that last wrote it, which 0012 added (Issue #97 part B) — and as it wrote it as of 0008, without. */
-const routeTable = (generation: boolean): string =>
+/** route as drizzle-kit wrote it as of each file: 0008 bare, 0012 with the run that last wrote it (Issue #97 part B), 0013 with the active Plan too (#169). */
+const routeTable = (asOf: "0008" | "0012" | "0013"): string =>
   createTable("route", "project", [
     '"route_scheme_id" uuid NOT NULL',
     '"collection_group_id" uuid NOT NULL',
@@ -201,7 +201,8 @@ const routeTable = (generation: boolean): string =>
     `"status" text DEFAULT 'planned' NOT NULL`,
     '"cancelled_by_generation" boolean DEFAULT false NOT NULL',
     '"note" text',
-    ...(generation ? ['"generation_run_id" uuid'] : []),
+    ...(asOf === "0008" ? [] : ['"generation_run_id" uuid']),
+    ...(asOf === "0013" ? ['"active_plan_id" uuid'] : []),
     '"number" integer NOT NULL',
     '"planned_start_time" time',
     '"planned_vehicle_id" uuid',
@@ -225,14 +226,20 @@ const routeTable = (generation: boolean): string =>
     stampsShape,
   ])
 
-/** What 0012 changed on one of the seven (Issue #97 part B): the route's CREATE TABLE as drizzle-kit generates it now onto what 0008 says. */
-const CHANGED_IN_0012 = new Map([[routeTable(true), routeTable(false)]])
+/** What 0013 changed on one of the seven (#169): the route's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0012. Applied before `CHANGED_IN_0012`, one file at a time. */
+const CHANGED_IN_0013 = new Map([[routeTable("0013"), routeTable("0012")]])
+
+/** What 0013 added to the route beside the column: its index. The key into `plan` is hand-written (src/sql/active-plan.ts), so drizzle-kit never sees it. */
+const ADDED_IN_0013 = [index("route", "route_active_plan_id_idx", "company_id", "active_plan_id")]
+
+/** What 0012 changed on one of the seven (Issue #97 part B): the route's CREATE TABLE as of 0012 onto what 0008 says. */
+const CHANGED_IN_0012 = new Map([[routeTable("0012"), routeTable("0008")]])
 
 /** What 0012 added to the route beside the column: its key into the run and its index. 0008 begins with the generated statements less these. */
 const ADDED_IN_0012 = [projectFkTo("route", "generation_run_id", "generation_run"), index("route", "route_generation_run_id_idx", "company_id", "generation_run_id")]
 
 const expected = [
-  routeTable(true),
+  routeTable("0013"),
   createTable("pickup", "project", [
     '"route_id" uuid NOT NULL',
     '"container_id" uuid NOT NULL',
@@ -375,6 +382,7 @@ const expected = [
   index("route", "route_actual_vehicle_id_idx", "company_id", "actual_vehicle_id"),
   index("route", "route_actual_trailer_id_idx", "company_id", "actual_trailer_id"),
   index("route", "route_generation_run_id_idx", "company_id", "generation_run_id"),
+  index("route", "route_active_plan_id_idx", "company_id", "active_plan_id"),
   index("pickup", "pickup_project_id_idx", "company_id", "project_id"),
   index("pickup", "pickup_container_id_idx", "company_id", "container_id"),
   index("pickup", "pickup_property_id_idx", "company_id", "property_id"),
@@ -455,7 +463,8 @@ const handWritten = [...Object.values(tables).flatMap((table) => handWrittenStat
 /** Everything drizzle-kit wrote at the head of 0008: the seven tables as they were generated as of 0008 — the outbox and the unload in their earlier spelling, the route without the run that last wrote it, what 0012 added left out — and the company altered from 0002's spelling to 0008's. */
 const generatedHead = async (): Promise<string[]> => [
   ...(await statementsFor(tables))
-    .filter((statement) => !ADDED_IN_0012.includes(statement))
+    .filter((statement) => !ADDED_IN_0013.includes(statement) && !ADDED_IN_0012.includes(statement))
+    .map((statement) => CHANGED_IN_0013.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0012.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0010.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0009.get(statement) ?? statement),
@@ -479,14 +488,17 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     const generated = (await generatedHead()).map(normalised).sort()
     assert.equal(generated.length, 98, "seven CREATE TABLE, one ADD COLUMN, forty-seven foreign keys, forty-three indexes")
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
-    // The statement 0010 changed is one the schema generates today, and the one 0009 changed is what 0010 maps back to, so each mapping maps something; the same for 0012's.
+    // The statement 0013 changed is one the schema generates today, and the one 0012 changed is what 0013 maps back to — each mapping maps something, one file at a time; the same chain for 0010 and 0009.
     const today = await statementsFor(tables)
-    for (const statement of CHANGED_IN_0012.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0013.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of ADDED_IN_0013) assert.ok(today.includes(statement), statement)
+    for (const statement of CHANGED_IN_0012.keys()) assert.ok([...CHANGED_IN_0013.values()].includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0012) assert.ok(today.includes(statement), statement)
     for (const statement of CHANGED_IN_0010.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0009.keys()) assert.ok([...CHANGED_IN_0010.values()].includes(statement), statement.split("\n")[0])
     assert.equal(CHANGED_IN_0010.size, 2, "the outbox's vocabulary and the unload's key")
     assert.equal(CHANGED_IN_0012.size, 1, "the route's run")
+    assert.equal(CHANGED_IN_0013.size, 1, "the route's active Plan")
   })
 
   test("and carries below them the fence and trigger, or revoke, of each table, then the sync role, its grants and the publication: 7 x 3 + 3 + 17 + 1 = 42 statements", async () => {

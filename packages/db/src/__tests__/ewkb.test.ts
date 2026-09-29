@@ -79,10 +79,43 @@ describe("decodeEwkbHex", () => {
     assert.throws(() => decodeEwkbHex(POINT_M), /Point carries a measure \(M\)/)
   })
 
+  test("decodes a line string position by position (#169, the first stored line string)", () => {
+    assert.deepEqual(decodeEwkbHex(LINESTRING), {
+      srid: 4326,
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [0, 0],
+          [1, 1],
+        ],
+      },
+    })
+  })
+
+  test("a line string's Z becomes each position's altitude", () => {
+    // 'SRID=4326;LINESTRING Z (0 0 1, 1 1 1)'::geometry: word 0xA0000002 little-endian.
+    const hex = "01020000A0E610000002000000" + "0000000000000000".repeat(2) + "000000000000F03F" + "000000000000F03F".repeat(3)
+    assert.deepEqual(decodeEwkbHex(hex).geometry, {
+      type: "LineString",
+      coordinates: [
+        [0, 0, 1],
+        [1, 1, 1],
+      ],
+    })
+  })
+
   test("refuses the shapes no column stores, by name", () => {
-    assert.throws(() => decodeEwkbHex(LINESTRING), /LineString is not stored here/)
+    // 'SRID=4326;MULTIPOINT((0 0))'::geometry's header: the decoder refuses at the type word.
+    assert.throws(() => decodeEwkbHex("0104000020E6100000"), /MultiPoint is not stored here/)
     // An ISO WKB dimension code (1000 + type) is not how PostGIS spells EWKB.
     assert.throws(() => decodeEwkbHex("01E9030000" + "0000000000000000" + "0000000000000000"), /WKB type 1001 is not stored here/)
+  })
+
+  test("refuses a line string of fewer than two positions", () => {
+    // Zero positions: what 'LINESTRING EMPTY' stores.
+    assert.throws(() => decodeEwkbHex("0102000020E610000000000000"), /an empty line string has no positions/)
+    // One position, (0 0).
+    assert.throws(() => decodeEwkbHex("0102000020E610000001000000" + "0000000000000000".repeat(2)), /1 position\(s\); a line string has at least two/)
   })
 
   test("refuses an empty geometry: nothing to give GeoJSON", () => {

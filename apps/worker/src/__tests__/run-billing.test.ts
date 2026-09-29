@@ -29,6 +29,7 @@ import { migrateDatabase } from "@waste/db/migrate"
 import { outboxEvent } from "@waste/db/schema/execution"
 import { billableEvent, billingRun, invoice } from "@waste/db/schema/finance"
 import { withCompany } from "@waste/db/tenant"
+import { FakeProvider } from "@waste/routing/fake"
 import type { BillableEventDraft } from "@waste/domain/finance/from-event"
 import { monthBefore } from "@waste/domain/finance/periods"
 import type { Job } from "pg-boss"
@@ -59,6 +60,7 @@ describe("finance.run-billing against Postgres", { skip }, () => {
     now: () => now,
     log: (message) => void lines.push(message),
     send: async () => null,
+    routing: new FakeProvider(),
   })
 
   before(async () => {

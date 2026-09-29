@@ -137,6 +137,8 @@ export const route = wms.table(
     note: text(),
     /** The generation run that last wrote the route (#97 part B, migration 0012); null on a route no run has written. */
     generationRunId: uuid(),
+    /** The active Plan (#39 S1, migration 0013): the execution sequence when set; null means the generated baseline stands unmeasured, drawn dashed (#124). */
+    activePlanId: uuid(),
     /** The display number, `RC-1042` on the wire; from the company's counter, never renumbered. */
     number: integer().notNull(),
     /** Copied from the scheme at creation; a time on the project's clock. */
@@ -174,6 +176,10 @@ export const route = wms.table(
     projectReference(t, [t.actualTrailerId], vehicle),
     projectReference(t, [t.actualDriverId], driver),
     projectReference(t, [t.generationRunId], generationRun),
+    // The key on active_plan_id is hand-written (src/sql/active-plan.ts): a plan of this route, and no other's,
+    // ON DELETE SET NULL (active_plan_id) — the column subset Drizzle cannot express, without which a multi-column
+    // SET NULL would null company_id and the route's own id. Out of Drizzle's sight, it is also out of sweepOrder's,
+    // which is right: a self-clearing edge forces no order (reset-to-seed.ts).
     // ADR-0002's identity: one route per scheme, group and service date. Named for what it is, the way #97 spelled it.
     unique(tableObjectName(t.companyId.table, "generation_key", "route")).on(t.companyId, t.routeSchemeId, t.collectionGroupId, t.serviceDate),
     tenantUnique(t, t.number),
@@ -202,6 +208,7 @@ export const route = wms.table(
     tenantIndex(t, t.actualVehicleId),
     tenantIndex(t, t.actualTrailerId),
     tenantIndex(t, t.generationRunId),
+    tenantIndex(t, t.activePlanId),
   ],
 )
 

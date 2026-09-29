@@ -16,6 +16,7 @@
     "./execution/__tests__/*": null,
     "./resolution/__tests__/*": null,
     "./finance/__tests__/*": null,
+    "./routing/__tests__/*": null,
     "./*": "./src/*.ts"
   },
   "scripts": {

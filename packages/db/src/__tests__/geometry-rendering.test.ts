@@ -19,8 +19,9 @@ const specimen = wms.table(
     id: integer().primaryKey(),
     location: geometry.point(),
     boundary: geometry.polygon(),
+    path: geometry.lineString(),
   },
-  (table) => [validGeometry(table.location), validGeometry(table.boundary)],
+  (table) => [validGeometry(table.location), validGeometry(table.boundary), validGeometry(table.path)],
 )
 
 const column = (name: string): PgColumn => {
@@ -62,6 +63,7 @@ describe("the geometry columns as drizzle-kit writes them", () => {
     assert.match(createTable, /^CREATE TABLE "wms"\."specimen_geometry_rendering" \(/)
     assert.match(createTable, /\t"location" geometry\(Point, 4326\),\n/)
     assert.match(createTable, /\t"boundary" geometry\(Polygon, 4326\),\n/)
+    assert.match(createTable, /\t"path" geometry\(LineString, 4326\),\n/)
     const ref = '"wms"."specimen_geometry_rendering"."boundary"'
     assert.ok(
       createTable.includes(
@@ -99,6 +101,18 @@ describe("the write side of the geometry type", () => {
     const query = written(location, townHall)
     assert.equal(query.sql, "extensions.st_geomfromgeojson($1)")
     assert.deepEqual(query.params, ['{"type":"Point","coordinates":[12.5683,55.6761]}'])
+  })
+
+  test("a line string writes the same way, and its ordinates are held finite (#169)", () => {
+    const path = column("path")
+    const line = { type: "LineString", coordinates: [[12.5, 55.7], [12.6, 55.71]] }
+    const query = written(path, line)
+    assert.equal(query.sql, "extensions.st_geomfromgeojson($1)")
+    assert.deepEqual(query.params, ['{"type":"LineString","coordinates":[[12.5,55.7],[12.6,55.71]]}'])
+    assert.throws(
+      () => written(path, { type: "LineString", coordinates: [[12.5, 55.7], [NaN, 55.71]] }),
+      /geometry\.linestring: NaN is not a finite ordinate/,
+    )
   })
 
   test("drops an undefined altitude, which JSON would make null and PostGIS a Z of 0", () => {
@@ -151,6 +165,8 @@ describe("the read side of the geometry type", () => {
     assert.throws(() => location.mapFromDriverValue(cast(3857)), /geometry\.point: crs EPSG:3857 is not EPSG:4326/)
     assert.throws(() => location.mapFromDriverValue(cast(null)), /geometry\.point: crs missing \(SRID 0\) is not EPSG:4326/)
     assert.throws(() => location.mapFromDriverValue(42), /a number is neither hex EWKB nor GeoJSON/)
-    assert.throws(() => location.mapFromDriverValue({ ...cast(4326), type: "LineString" }), /LineString is not a GeoJSON Point or Polygon/)
+    // A LineString is a stored shape since #169, so a cast of one under a point column is a column mismatch, not an unknown shape.
+    assert.throws(() => location.mapFromDriverValue({ ...cast(4326), type: "LineString" }), /geometry\.point: the column holds a LineString/)
+    assert.throws(() => location.mapFromDriverValue({ ...cast(4326), type: "MultiPoint" }), /MultiPoint is not a GeoJSON Point, LineString or Polygon/)
   })
 })

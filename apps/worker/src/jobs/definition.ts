@@ -9,6 +9,7 @@
 // here knows pg-boss's connection: a handler gets what it needs from the
 // context, so a test runs it with pools of its own.
 import type { Database } from "@waste/db/client"
+import type { RoutingProvider } from "@waste/routing/provider"
 import type { Job, Queue, QueueOptions, ScheduleOptions, SendOptions, WorkOptions } from "pg-boss"
 
 /** What a handler runs with. Built once per process by main.ts, handed to every job; a test builds its own. */
@@ -43,6 +44,14 @@ export type JobContext = {
    * or not at all.
    */
   send: (name: string, data: object | null, options?: SendOptions) => Promise<string | null>
+  /**
+   * The routing provider (#169): the fake unless `ROUTING_PROVIDER` says
+   * otherwise, built once by main.ts through `providerFromEnv`
+   * (@waste/routing/select). Never called inside a database transaction
+   * (#124 §4); a test injects its own, scripted where a quota path is under
+   * proof (#171).
+   */
+  routing: RoutingProvider
 }
 
 /**

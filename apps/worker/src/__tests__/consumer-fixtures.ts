@@ -36,7 +36,9 @@ import { driverCommand, outboxEvent, pickup, proofOfService, route } from "@wast
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
 import { company, project } from "@waste/db/schema/organisation"
+import { depot, unloadingStation } from "@waste/db/schema/places"
 import { alert, ticket, ticketEvent } from "@waste/db/schema/resolution"
+import { plan, planLeg, planStop } from "@waste/db/schema/routing"
 import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import type { PickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
@@ -341,16 +343,22 @@ export async function dropConsumerTenant(pool: Database, owner: Database, compan
   await owner.db.delete(ticketEvent).where(eq(ticketEvent.companyId, companyId))
   await owner.db.delete(proofOfService).where(eq(proofOfService.companyId, companyId))
   await owner.db.delete(driverCommand).where(eq(driverCommand.companyId, companyId))
+  // The Plan's stops and legs are ledgers too (#169), so the owner sweeps them; the plans themselves go as wms_api, before the pickups and routes they name.
+  await owner.db.delete(planLeg).where(eq(planLeg.companyId, companyId))
+  await owner.db.delete(planStop).where(eq(planStop.companyId, companyId))
   await withCompany(pool.db, companyId, async (tx: Tx) => {
     await tx.delete(alert).where(eq(alert.companyId, companyId))
     await tx.delete(ticket).where(eq(ticket.companyId, companyId))
     await tx.delete(outboxEvent).where(eq(outboxEvent.companyId, companyId))
+    await tx.delete(plan).where(eq(plan.companyId, companyId))
     await tx.delete(pickup).where(eq(pickup.companyId, companyId))
     await tx.delete(route).where(eq(route.companyId, companyId))
     await tx.delete(collectionGroup).where(eq(collectionGroup.companyId, companyId))
     await tx.delete(routeScheme).where(eq(routeScheme.companyId, companyId))
     await tx.delete(driver).where(eq(driver.companyId, companyId))
     await tx.delete(vehicle).where(eq(vehicle.companyId, companyId))
+    await tx.delete(unloadingStation).where(eq(unloadingStation.companyId, companyId))
+    await tx.delete(depot).where(eq(depot.companyId, companyId))
     await tx.delete(vehicleType).where(eq(vehicleType.companyId, companyId))
     await tx.delete(container).where(eq(container.companyId, companyId))
     await tx.delete(property).where(eq(property.companyId, companyId))
