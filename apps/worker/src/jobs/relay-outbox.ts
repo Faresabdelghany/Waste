@@ -70,7 +70,10 @@
 // the issue asked for seconds; so the relay is scheduled every minute as the
 // backstop and each tick, once its batch is done, sends its own successor
 // with `startAfter: RELAY_INTERVAL_SECONDS` (5) through the context's `send`,
-// which is how a five-second cadence lives on a one-minute cron. The queue's
+// which is how a five-second cadence lives on a one-minute cron — raised to
+// the context's polling knob where the Pilot sets one longer (#149;
+// `successorDelaySeconds`), so the relay runs within the knob and no more
+// often, and never lowered below its five seconds. The queue's
 // policy is `short` — one job queued at a time — so the successor and the
 // schedule's occurrence collapse into one row instead of two chains
 // racing, and a relay that fell over (a failed handler sends no successor) is
@@ -115,8 +118,19 @@ import { defineJob, type JobContext } from "./definition"
 export const RELAY_QUEUE = "execution.relay-outbox"
 /** How many unpublished rows one tick takes of each company, oldest first: the cap is per company, so one company's backlog never crowds another's rows out of the sweep. */
 export const BATCH_SIZE = 100
-/** How long a tick waits before its successor when the sweep came back short; the cadence the issue asked for. */
+/** How long a tick waits before its successor when the sweep came back short; the cadence the issue asked for, and the floor the polling knob raises. */
 export const RELAY_INTERVAL_SECONDS = 5
+
+/**
+ * When the successor runs: at once after a batch's worth (some company at its
+ * cap, or as many rows across companies), else after the relay's interval
+ * raised to the polling knob where that is longer. A tick that failed has no
+ * outcome and waits the interval. Pure.
+ */
+export function successorDelaySeconds(outcome: Pick<RelayOutcome, "swept"> | undefined, pollingIntervalSeconds: number | undefined): number {
+  if (outcome !== undefined && outcome.swept >= BATCH_SIZE) return 0
+  return Math.max(RELAY_INTERVAL_SECONDS, pollingIntervalSeconds ?? 0)
+}
 /** After this long unpublished, a row is stale: a poison event, or a relay that has not run. An hour. */
 export const OUTBOX_STALE_MS = 60 * 60 * 1_000
 
@@ -275,7 +289,7 @@ export const relayOutbox = defineJob<RelayOutboxData>({
       (error: unknown) => ({ error }),
     )
     // The successor, whatever the tick did: a tick that failed is tried again after the interval, a batch's worth (some company at its cap, or as many rows across companies) is followed at once. `short` drops the send when one is already queued.
-    const startAfter = "outcome" in tick && tick.outcome.swept >= BATCH_SIZE ? 0 : RELAY_INTERVAL_SECONDS
+    const startAfter = successorDelaySeconds("outcome" in tick ? tick.outcome : undefined, context.pollingIntervalSeconds)
     await context.send(RELAY_QUEUE, { source: "successor" } satisfies RelayOutboxData, { startAfter })
     if ("error" in tick) throw tick.error
     const { published } = tick.outcome

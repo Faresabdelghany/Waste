@@ -53,6 +53,14 @@ export type JobContext = {
    * proof (#171).
    */
   routing: RoutingProvider
+  /**
+   * The Pilot's polling knob, `WORKER_POLLING_INTERVAL_SECONDS` (#149): the
+   * floor under every poll this process makes — each queue's, which the
+   * wiring raises to it (../boss.ts), and a handler's own cadence where it
+   * has one (the relay's successor delay). Undefined, the one case a test
+   * needs, means the code's own defaults.
+   */
+  pollingIntervalSeconds?: number
 }
 
 /**

@@ -1,12 +1,16 @@
 // The process environment, read once at startup and never again. Four
-// variables: where to listen for the host's probes, and the two database
-// URLs — the worker role's, which pg-boss runs on and the sweeps read
-// through, and the API role's, which every job's writes run fenced on. Every
-// value arrives as a string, so the schemas do the reading. An empty variable
-// counts as not set, applied once in parseEnv for every variable, so a new
-// field is a plain schema with a default, or without one when the process
-// cannot run without it. Anything else in the environment is dropped, not
-// carried around.
+// variables the process needs: where to listen for the host's probes, and
+// the two database URLs — the worker role's, which pg-boss runs on and the
+// sweeps read through, and the API role's, which every job's writes run
+// fenced on. Then the knobs (#149): the sizes of the two pools and the
+// intervals the Pilot runs at, each absent unless set, and absent meaning
+// the code's own defaults — no Pilot value is a default here; the Pilot's
+// are its host's environment (apps/pilot/README.md). Every value arrives as
+// a string, so the schemas do the reading. An empty variable counts as not
+// set, applied once in parseEnv for every variable, so a new field is a
+// plain schema with a default, or without one when the process cannot run
+// without it. Anything else in the environment is dropped, not carried
+// around.
 import * as z from "zod"
 
 /** The address to bind the probes to. Loopback by default; a container sets `0.0.0.0`. */
@@ -77,6 +81,20 @@ const DatabaseUrl = z
   .refine(isPostgresUrl, { error: "must be a postgresql:// URL with a host, the API role's connection string" })
   .refine(isSessionUrl, { error: `port ${TRANSACTION_POOLER_PORT} is the transaction pooler; the worker's pools need a session (the direct connection or the session pooler on port 5432)` })
 
+/** A whole number from a string of decimal digits, at least `min`; absent unless set. */
+const wholeNumber = (min: number, what: string) =>
+  z
+    .string()
+    .regex(/^\d+$/, { error: `must be a whole number${what}` })
+    .transform(Number)
+    .pipe(z.int().min(min))
+    .optional()
+
+/** A pool's size: one connection or more. */
+const PoolMax = wholeNumber(1, " of connections, at least 1")
+/** An interval in whole seconds, at least one. */
+const Seconds = wholeNumber(1, " of seconds, at least 1")
+
 export const Env = z.object({
   HOST: Host,
   PORT: Port,
@@ -84,6 +102,18 @@ export const Env = z.object({
   DATABASE_URL: DatabaseUrl,
   /** The routing provider's name (#169, #131): unset means the fake; the one validator of the value is `providerFromEnv` (@waste/routing/select), so the refusal has one spelling. */
   ROUTING_PROVIDER: z.string().optional(),
+  /** The API role's pool, on which every job writes; postgres.js's 10 unless set. Named for its process, since in the Pilot's container both children read one environment. */
+  WORKER_API_POOL_MAX: PoolMax,
+  /** The worker role's pool, on which the sweeps read; postgres.js's 10 unless set. pg-boss's own pool stays at 3 (boss.ts). */
+  WORKER_POOL_MAX: PoolMax,
+  /** How often every queue is polled, in seconds: each queue's poll, the relay's successor delay and pg-boss's cron and flow intervals raised to it, never lowered (boss.ts); pg-boss's and the jobs' own unless set. Never a `schedule` cron: the 03:00 plan-ahead, the monthly billing run and the heartbeat's minute stay. */
+  WORKER_POLLING_INTERVAL_SECONDS: Seconds,
+  /** pg-boss's supervise pass (maintenance, and the monitor pass that refreshes the counts /readyz reads), in seconds; pg-boss's 60 unless set. */
+  WORKER_SUPERVISE_INTERVAL_SECONDS: Seconds,
+  /** pg-boss's queue-cache refresh, in seconds; pg-boss's 60 unless set. */
+  WORKER_QUEUE_CACHE_INTERVAL_SECONDS: Seconds,
+  /** How long pg-boss's pool keeps an idle connection, in seconds, 0 for ever; pg-pool's 10 unless set. At or above the longest interval that uses the pool, or every poll reopens a connection through the pooler (#134, gate 2). */
+  WORKER_BOSS_IDLE_TIMEOUT_SECONDS: wholeNumber(0, " of seconds, 0 for never"),
 })
 export type Env = z.infer<typeof Env>
 

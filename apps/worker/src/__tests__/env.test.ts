@@ -67,4 +67,33 @@ describe("parseEnv", () => {
     // The session pooler on 5432 and the local stack on 54322 pass.
     assert.equal(parseEnv({ ...base, WORKER_DATABASE_URL: pooled.replace("6543", "5432") }).WORKER_DATABASE_URL, pooled.replace("6543", "5432"))
   })
+
+  test("reads the Pilot's knobs (#149) as whole numbers, each absent — the code's defaults — unless set: the two pool sizes, the polling interval, pg-boss's supervise and queue-cache intervals, and its pool's idle timeout, which may be 0 for never", () => {
+    assert.deepEqual(parseEnv(base), expected, "none set: none carried")
+    assert.deepEqual(
+      parseEnv({
+        ...base,
+        WORKER_API_POOL_MAX: "3",
+        WORKER_POOL_MAX: "2",
+        WORKER_POLLING_INTERVAL_SECONDS: "30",
+        WORKER_SUPERVISE_INTERVAL_SECONDS: "300",
+        WORKER_QUEUE_CACHE_INTERVAL_SECONDS: "300",
+        WORKER_BOSS_IDLE_TIMEOUT_SECONDS: "600",
+      }),
+      { ...expected, WORKER_API_POOL_MAX: 3, WORKER_POOL_MAX: 2, WORKER_POLLING_INTERVAL_SECONDS: 30, WORKER_SUPERVISE_INTERVAL_SECONDS: 300, WORKER_QUEUE_CACHE_INTERVAL_SECONDS: 300, WORKER_BOSS_IDLE_TIMEOUT_SECONDS: 600 },
+    )
+    assert.equal(parseEnv({ ...base, WORKER_BOSS_IDLE_TIMEOUT_SECONDS: "0" }).WORKER_BOSS_IDLE_TIMEOUT_SECONDS, 0, "0: pg-pool never closes an idle connection")
+    assert.deepEqual(parseEnv({ ...base, WORKER_POLLING_INTERVAL_SECONDS: "", WORKER_POOL_MAX: "" }), expected, "empty is not set")
+  })
+
+  test("refuses a knob that is not a whole number, a pool size or an interval of 0, and names the variable", () => {
+    for (const name of ["WORKER_API_POOL_MAX", "WORKER_POOL_MAX", "WORKER_POLLING_INTERVAL_SECONDS", "WORKER_SUPERVISE_INTERVAL_SECONDS", "WORKER_QUEUE_CACHE_INTERVAL_SECONDS"]) {
+      for (const value of ["0", "-1", "1.5", "abc", "30s", " 30"]) {
+        assert.throws(() => parseEnv({ ...base, [name]: value }), naming(name), `${name}=${value}`)
+      }
+    }
+    for (const value of ["-1", "1.5", "abc", "never"]) {
+      assert.throws(() => parseEnv({ ...base, WORKER_BOSS_IDLE_TIMEOUT_SECONDS: value }), naming("WORKER_BOSS_IDLE_TIMEOUT_SECONDS"), value)
+    }
+  })
 })

@@ -5,7 +5,8 @@
 // Two pools on the one connection string, both as the API role: the probe
 // pool /readyz uses (probePoolOptions in readiness.ts says why a probe gets
 // its own) and the request pool every authenticated request runs a
-// transaction on (auth/principal.ts). Opening them connects to nothing:
+// transaction on (auth/principal.ts), sized by DATABASE_POOL_MAX where the
+// environment sets it (#149) and postgres.js's 10 otherwise. Opening them connects to nothing:
 // postgres.js dials on the first query, so the process starts whether or not
 // the database is up, and /readyz says which (a database that is down at boot
 // is the same as one that goes down later, and both are the balancer's to
@@ -28,14 +29,14 @@ import { DATABASE_CHECK_TIMEOUT_MS, probePoolOptions } from "./readiness"
 const env = parseEnv(process.env)
 const build = readBuildInfo()
 const probe = createDb(env.DATABASE_URL, probePoolOptions(DATABASE_CHECK_TIMEOUT_MS))
-const pool = createDb(env.DATABASE_URL)
+const pool = createDb(env.DATABASE_URL, env.DATABASE_POOL_MAX === undefined ? {} : { max: env.DATABASE_POOL_MAX })
 const auth = supabaseAuth(env.SUPABASE_URL)
 const verifier = createVerifier({ keySet: createRemoteJWKSet(auth.jwks), issuer: auth.issuer })
 const listening = await listen(createApp({ probe, pool, verifier, databaseTimeoutMs: DATABASE_CHECK_TIMEOUT_MS, build, routing: providerFromEnv({ ROUTING_PROVIDER: env.ROUTING_PROVIDER }) }), {
   host: env.HOST,
   port: env.PORT,
 })
-console.log(`@waste/api listening on ${listening.url}, verifying tokens from ${auth.issuer}, build ${build?.commit ?? "none"}`)
+console.log(`@waste/api listening on ${listening.url}, verifying tokens from ${auth.issuer}, build ${build?.commit ?? "none"}, request pool max ${env.DATABASE_POOL_MAX ?? 10}`)
 
 // Shutdown: the listener drains and the probe pool closes together, since a
 // probe is not a request and 503 is the right answer to one that arrives
