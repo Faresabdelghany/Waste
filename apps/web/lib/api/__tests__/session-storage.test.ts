@@ -7,25 +7,7 @@ import { describe, test } from "node:test"
 import type { ApiSession } from "../auth"
 import { readStoredSession, writeStoredSession } from "../session-storage"
 import { API_REFRESH_TOKEN_STORAGE_KEY, API_SESSION_STORAGE_KEY } from "../../storage-keys"
-
-/** The browser `Storage` surface, in memory, so a test can read it back. */
-function memoryStorage(entries: Readonly<Record<string, string>> = {}): Storage {
-  const map = new Map<string, string>(Object.entries(entries))
-  return {
-    get length() {
-      return map.size
-    },
-    clear: () => map.clear(),
-    getItem: (key: string) => map.get(key) ?? null,
-    key: (index: number) => [...map.keys()][index] ?? null,
-    removeItem: (key: string) => {
-      map.delete(key)
-    },
-    setItem: (key: string, value: string) => {
-      map.set(key, value)
-    },
-  }
-}
+import { memoryStorage } from "./memory-storage"
 
 const session: ApiSession = { accessToken: "a", refreshToken: "r", expiresAt: 1_800_000_000_000, email: "x@y.example", userId: "u-1" }
 

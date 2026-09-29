@@ -1,11 +1,13 @@
 // The API session apart from React (Issue #150): who the browser is signed in
 // as, and the one place that decides when that begins and ends. The provider
-// (components/waste/api-session-store.tsx) holds one controller, hands it the
-// session it read from the browser's storage, writes back what it holds, and
-// ticks its refresh; everything else here is testable against a scripted
-// `fetch`, which is how its tests drive it.
+// (components/waste/api-session-store.tsx) holds one controller, binds it to
+// the browser's storage (`attachStorage`), tells it of other tabs' writes
+// (`storageChanged`), and ticks its refresh; everything else here is testable
+// against a scripted `fetch` and in-memory storages, which is how its tests
+// drive it. A sign-out in one tab signs the browser's other tabs out, since
+// they share its access token.
 //
-// A session ends four ways, and `ended` says which, so /login can say why:
+// A session ends three ways, and `ended` says which, so /login can say why:
 //
 //   signed out  — the person asked; the session is dropped at once and
 //                 revoked at Auth best-effort (auth.ts, `signOut`);
@@ -44,6 +46,7 @@ import {
 import { get, UNREACHABLE_STATUS, type ApiClient } from "./client"
 import type { ApiConfig, AuthConfig } from "./config"
 import { ApiProblem, genericProblem, isAccountRefusal, type Problem } from "./problem"
+import { readStoredSession, writeStoredSession } from "./session-storage"
 
 /**
  * How the last session ended: the person signed out; the account was
@@ -100,6 +103,21 @@ export type ApiSessionController = {
   readonly auth: AuthConfig | null
   /** The session read from the browser's storage, or null: the state is hydrated from here on. */
   hydrate: (session: ApiSession | null) => void
+  /**
+   * Binds the session to the browser's storage (session-storage.ts): reads
+   * the stored session into the state, which is hydrated from here on, and
+   * writes back every session held — except that a tab's own expiry leaves
+   * the shared half alone, since another tab may have refreshed it. Answers
+   * the unbinding.
+   */
+  attachStorage: (shared: Storage, tab: Storage) => () => void
+  /**
+   * Another tab wrote the shared half. Its removal — a sign-out or a refusal
+   * there — signs this tab out too. A tab with no refresh token of its own,
+   * one that borrowed the shared token, takes the token another tab
+   * refreshed or signed in with; a tab that signed in itself keeps its own.
+   */
+  storageChanged: () => void
   /** Signs in and opens the session; the attempt clears why the last one ended. Throws `SignInRefused` in Auth's words. */
   signIn: (email: string, password: string) => Promise<ApiSession>
   /** Drops the session at once, then revokes it at Auth best-effort; settles when Auth has answered or not. */
@@ -125,6 +143,9 @@ export function createApiSession({ api, auth, fetch: doFetch, now = Date.now }: 
   const authOptions: AuthOptions = { ...(doFetch === undefined ? {} : { fetch: doFetch }), now }
   let refreshing: Promise<void> | null = null
   let meInFlight: { who: string; read: Promise<Me> } | null = null
+  let attached: { shared: Storage; tab: Storage } | null = null
+
+  const hydrate = (session: ApiSession | null) => store.set((state) => ({ ...state, session, hydrated: true }))
 
   /** Ends the open session when it is the one `holds` picks out, for the reason given; a session opened since is left alone. */
   const endWhen = (holds: (current: ApiSession) => boolean, ending: SessionEnding) => {
@@ -182,7 +203,39 @@ export function createApiSession({ api, auth, fetch: doFetch, now = Date.now }: 
     store,
     api,
     auth,
-    hydrate: (session) => store.set((state) => ({ ...state, session, hydrated: true })),
+    hydrate,
+    attachStorage: (shared, tab) => {
+      hydrate(readStoredSession(shared, tab))
+      attached = { shared, tab }
+      let written: ApiSession | null | undefined
+      const persist = () => {
+        const { session, ended } = store.getSnapshot()
+        if (session === written) return
+        written = session
+        if (session === null && ended?.reason === "expired") return
+        writeStoredSession(shared, tab, session)
+      }
+      // Written back once, so a shared half in an older shape takes this one — and a refresh token it carried leaves localStorage.
+      persist()
+      const unsubscribe = store.subscribe(persist)
+      return () => {
+        unsubscribe()
+        if (attached?.shared === shared && attached.tab === tab) attached = null
+      }
+    },
+    storageChanged: () => {
+      if (attached === null) return
+      // The shared half alone: this tab's refresh token, if it has one, belongs to its own session.
+      const stored = readStoredSession(attached.shared, null)
+      const { session } = store.getSnapshot()
+      if (stored === null) {
+        if (session !== null) endWhen((current) => current === session, { reason: "signed-out" })
+        return
+      }
+      if (session !== null && (session.refreshToken !== null || session.accessToken === stored.accessToken)) return
+      const samePerson = session !== null && whoOf(session) === whoOf(stored)
+      store.set((state) => ({ ...state, session: stored, ended: null, me: samePerson ? state.me : null }))
+    },
     signIn: async (email, password) => {
       if (auth === null) throw new SignInRefused(0, "Password sign-in is not configured: set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY")
       // A new attempt answers for itself: why the last session ended is not said beside this one's refusal.

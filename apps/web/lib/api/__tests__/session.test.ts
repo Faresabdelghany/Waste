@@ -14,6 +14,7 @@ import { get } from "../client"
 import { landingOf } from "../landing"
 import { ApiProblem, NO_ACTIVE_ACCOUNT_PROBLEM_TYPE, PROBLEM_MEDIA_TYPE } from "../problem"
 import { createApiSession } from "../session"
+import { memoryStorage } from "./memory-storage"
 
 type Call = { url: string; init: RequestInit }
 
@@ -275,6 +276,68 @@ describe("changing the password", () => {
     const { session } = await signedIn([() => json({ code: 400, error_code: "invalid_credentials", msg: "Invalid login credentials" }, 400)])
     await assert.rejects(() => session.updatePassword("not it", "a password of my own"), PasswordChangeRefused)
     assert.equal(session.store.getSnapshot().session?.accessToken, "a1")
+  })
+})
+
+describe("across the browser's tabs", () => {
+  // The shared half — the access token, its expiry, who — is localStorage's,
+  // every tab's; the refresh token is sessionStorage's, the tab that signed in.
+  // `storageChanged` is what the provider calls on another tab's write.
+  const tabOver = (shared: Storage, answers: Array<(call: Call) => Response | Promise<Response>>, clock: { now: number }) => {
+    const script = scripted(answers)
+    const controller = createApiSession({ api: API, auth: AUTH, fetch: script.fetch, now: () => clock.now })
+    const tab = memoryStorage()
+    controller.attachStorage(shared, tab)
+    return { controller, calls: script.calls, tab }
+  }
+
+  test("a sign-out in one tab signs the others out, the tab that signed in and the ones that borrowed its token alike", async () => {
+    const shared = memoryStorage()
+    const clock = { now: NOW }
+    const a = tabOver(shared, [() => tokens("a1"), () => new Response(null, { status: 204 })], clock)
+    await a.controller.signIn(EMAIL, "the temporary one")
+    const b = tabOver(shared, [], clock)
+    assert.equal(b.controller.store.getSnapshot().session?.accessToken, "a1", "a second tab is signed in too")
+    assert.equal(b.controller.store.getSnapshot().session?.refreshToken, null, "with no refresh token of its own")
+    await b.controller.signOut()
+    a.controller.storageChanged()
+    assert.equal(a.controller.store.getSnapshot().session, null)
+    assert.deepEqual(a.controller.store.getSnapshot().ended, { reason: "signed-out" })
+    assert.equal(a.tab.length, 0, "the signing tab's refresh token is gone, so nothing writes the session back")
+  })
+
+  test("a borrowing tab takes the token the signing tab refreshed; a tab that signed in itself keeps its own", async () => {
+    const shared = memoryStorage()
+    const clock = { now: NOW }
+    const a = tabOver(shared, [() => tokens("a1"), () => tokens("a2")], clock)
+    await a.controller.signIn(EMAIL, "the temporary one")
+    const b = tabOver(shared, [], clock)
+    clock.now = NOW + 3_600_000 - 30_000
+    await a.controller.refreshIfDue()
+    b.controller.storageChanged()
+    assert.equal(b.controller.store.getSnapshot().session?.accessToken, "a2")
+    const c = tabOver(shared, [() => tokens("c1")], clock)
+    await c.controller.signIn(EMAIL, "the temporary one")
+    a.controller.storageChanged()
+    assert.equal(a.controller.store.getSnapshot().session?.accessToken, "a2", "its own session, whose refresh token it holds")
+  })
+
+  test("a borrowing tab whose token runs out leaves the shared half alone: another tab may have refreshed it", async () => {
+    const shared = memoryStorage()
+    const clock = { now: NOW }
+    const a = tabOver(shared, [() => tokens("a1"), () => tokens("a2")], clock)
+    await a.controller.signIn(EMAIL, "the temporary one")
+    const b = tabOver(shared, [], clock)
+    clock.now = NOW + 3_600_000 - 30_000
+    await a.controller.refreshIfDue()
+    // B missed the write; its own copy, a1, runs out.
+    clock.now = NOW + 3_600_000
+    await b.controller.refreshIfDue()
+    assert.deepEqual(b.controller.store.getSnapshot().ended, { reason: "expired" })
+    const reloaded = createApiSession({ api: API, auth: AUTH, fetch: scripted([]).fetch, now: () => clock.now })
+    reloaded.attachStorage(shared, a.tab)
+    assert.equal(reloaded.store.getSnapshot().session?.accessToken, "a2", "the signing tab's reload is still signed in")
+    assert.equal(reloaded.store.getSnapshot().session?.refreshToken, "refresh-a2")
   })
 })
 

@@ -5,8 +5,8 @@
 // find it. The rules — when a session begins, refreshes and ends, and what
 // `/me` said about the person — are lib/api/session.ts's, a controller with
 // no React in it; this provider holds one (lib/external-store.ts says why the
-// context carries the handle and not the state), reads the browser's storage
-// into it after hydration, writes back every session it holds, ticks its
+// context carries the handle and not the state), binds it to the browser's
+// storage after hydration and tells it of other tabs' writes, ticks its
 // refresh a minute before the access token expires, and reads `/me` once for
 // each person signed in, for the sidebar's identity.
 //
@@ -28,16 +28,19 @@
 // surfaces script can reach (the legacy dashboard's `dangerouslySetInnerHTML`,
 // tiptap), so it is kept where only the tab that signed in can read it and
 // where closing the tab ends it. A tab that did not sign in itself therefore
-// has the access token's remaining life and no refresh: `refreshToken` is
-// null there, and when the token expires that tab's session ends as expired
-// and the gate sends it to /login, back to the page it was on once it signs in.
+// borrows the shared token and holds no refresh: `refreshToken` is null
+// there. It takes the token the signing tab refreshes when the storage event
+// says so, and if its copy runs out first its session ends as expired — the
+// shared half left alone — and the gate sends it to /login, back to the page
+// it was on once it signs in. A sign-out in any tab removes the shared half,
+// and every other tab signs out with it.
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react"
 
-import { isExpired, type ApiSession } from "@/lib/api/auth"
+import { isExpired } from "@/lib/api/auth"
 import type { ApiClient } from "@/lib/api/client"
 import { API_CONFIG, AUTH_CONFIG, type ApiConfig, type AuthConfig } from "@/lib/api/config"
 import { createApiSession, whoOf, type ApiSessionController, type SessionState } from "@/lib/api/session"
-import { readStoredSession, writeStoredSession } from "@/lib/api/session-storage"
+import { API_SESSION_STORAGE_KEY } from "@/lib/storage-keys"
 
 const ApiSessionContext = createContext<ApiSessionController | null>(null)
 
@@ -48,19 +51,17 @@ export function ApiSessionProvider({ children, api = API_CONFIG, auth = AUTH_CON
   const [controller] = useState<ApiSessionController>(() => createApiSession({ api, auth }))
 
   useEffect(() => {
-    controller.hydrate(readStoredSession(window.localStorage, window.sessionStorage))
-    // Written back once on load, so a shared half in an older shape takes this
-    // one — and a refresh token it carried leaves localStorage — and then on
-    // every change of session, never on a change of anything else.
-    let written: ApiSession | null | undefined
-    const persist = () => {
-      const { session } = controller.store.getSnapshot()
-      if (session === written) return
-      written = session
-      writeStoredSession(window.localStorage, window.sessionStorage, session)
+    const detach = controller.attachStorage(window.localStorage, window.sessionStorage)
+    // Another tab's sign-in, refresh or sign-out reaches this one as a
+    // storage event on the shared half (`key` is null when storage is cleared).
+    const follow = (event: StorageEvent) => {
+      if (event.storageArea === window.localStorage && (event.key === null || event.key === API_SESSION_STORAGE_KEY)) controller.storageChanged()
     }
-    persist()
-    return controller.store.subscribe(persist)
+    window.addEventListener("storage", follow)
+    return () => {
+      window.removeEventListener("storage", follow)
+      detach()
+    }
   }, [controller])
 
   useEffect(() => {
