@@ -1,19 +1,29 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { HealthResponse, ReadinessResponse, ReadyResponse, UnavailableResponse, WorkerReadinessResponse, WorkerReadyResponse, WorkerUnavailableResponse } from "../health"
+import { BuildInfo, HealthResponse, ReadinessResponse, ReadyResponse, UnavailableResponse, WorkerReadinessResponse, WorkerReadyResponse, WorkerUnavailableResponse } from "../health"
+
+const COMMIT = "21e7e2c0c8f1b4d9a3e5f6a7b8c9d0e1f2a3b4c5"
 
 describe("HealthResponse", () => {
-  test("is the status and the server's clock as an instant with offset", () => {
-    const body = { status: "ok", time: "2026-09-17T13:41:00Z" }
+  test("is the status, the server's clock as an instant with offset, and the build it runs", () => {
+    const body = { status: "ok", time: "2026-09-17T13:41:00Z", build: { commit: COMMIT } }
     assert.deepEqual(HealthResponse.parse(body), body)
-    assert.deepEqual(HealthResponse.parse({ status: "ok", time: "2026-09-17T15:41:00+02:00" }).time, "2026-09-17T15:41:00+02:00")
+    assert.deepEqual(HealthResponse.parse({ status: "ok", time: "2026-09-17T15:41:00+02:00", build: null }).time, "2026-09-17T15:41:00+02:00")
   })
 
   test("knows no other status and no clock without an offset", () => {
-    assert.equal(HealthResponse.safeParse({ status: "degraded", time: "2026-09-17T13:41:00Z" }).success, false)
-    assert.equal(HealthResponse.safeParse({ status: "ok", time: "2026-09-17T13:41:00" }).success, false)
-    assert.equal(HealthResponse.safeParse({ status: "ok" }).success, false)
+    assert.equal(HealthResponse.safeParse({ status: "degraded", time: "2026-09-17T13:41:00Z", build: null }).success, false)
+    assert.equal(HealthResponse.safeParse({ status: "ok", time: "2026-09-17T13:41:00", build: null }).success, false)
+    assert.equal(HealthResponse.safeParse({ status: "ok", build: null }).success, false)
+  })
+
+  test("says the build or says null, and a build is one full commit id (Issue #152)", () => {
+    assert.equal(HealthResponse.safeParse({ status: "ok", time: "2026-09-17T13:41:00Z" }).success, false)
+    for (const commit of [COMMIT.slice(0, 7), COMMIT.toUpperCase(), `${COMMIT}\n`, "main", "", "a".repeat(64)]) {
+      assert.equal(HealthResponse.safeParse({ status: "ok", time: "2026-09-17T13:41:00Z", build: { commit } }).success, false, JSON.stringify(commit))
+    }
+    assert.deepEqual(BuildInfo.parse({ commit: COMMIT }), { commit: COMMIT })
   })
 })
 

@@ -12,7 +12,7 @@ schemas = ["public", "graphql_public"]
 [db]
 port = 54322
 shadow_port = 54320
-# Must match the hosted project (waste-dev, Postgres 17).
+# Must match the hosted project (waste-pilot, Postgres 17).
 major_version = 17
 
 [db.migrations]

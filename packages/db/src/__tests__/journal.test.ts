@@ -45,4 +45,19 @@ describe("the migration journal", () => {
   test("keeps statement breakpoints on, the way the hand-written migrations are laid out", () => {
     for (const entry of journal().entries) assert.equal(entry.breakpoints, true, entry.tag)
   })
+
+  // drizzle-kit's `generate` reads every file of meta/ whose name does not
+  // start with `_` as a snapshot, parses it and diffs the schema against the
+  // last one in name order; a file of any other kind there (the fingerprint,
+  // Issue #152) must carry the `_` the journal carries, or the next generate
+  // fails on it or diffs against it.
+  test("keeps meta/ to one snapshot per entry beside the `_`-prefixed files drizzle-kit does not read", () => {
+    const meta = path.join(MIGRATIONS_FOLDER, "meta")
+    const snapshots = readdirSync(meta).filter((name) => !name.startsWith("_")).sort()
+    assert.deepEqual(
+      snapshots,
+      journal().entries.map((entry) => `${String(entry.idx).padStart(4, "0")}_snapshot.json`),
+    )
+    for (const name of snapshots) assert.equal(typeof JSON.parse(readFileSync(path.join(meta, name), "utf8")).id, "string", name)
+  })
 })

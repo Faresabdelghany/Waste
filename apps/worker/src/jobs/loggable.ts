@@ -13,12 +13,12 @@
 // names nothing but the statement's head, so the message is cut at the
 // statement and the cause — postgres.js's error, whose message is the
 // database's sentence (`new row for relation "pickup" violates check
-// constraint "fail_on_purpose"`) — carries what matters.
-const CAUSE_DEPTH = 3
-/** How Drizzle's wrapper begins its message; everything from here is the statement. */
-const DRIZZLE_QUERY = "Failed query: "
+// constraint "fail_on_purpose"`) — carries what matters. The cut is
+// `@waste/db/sqlstate`'s `messageWithoutStatement`, spelled once for this
+// projection and for the Pilot scripts' failure lines (Issue #152).
+import { DRIZZLE_QUERY, messageWithoutStatement as messageOf } from "@waste/db/sqlstate"
 
-const messageOf = (message: string): string => (message.startsWith(DRIZZLE_QUERY) ? "Failed query" : message)
+const CAUSE_DEPTH = 3
 
 export function loggable(error: unknown, depth: number = CAUSE_DEPTH): unknown {
   if (typeof error !== "object" || error === null) return error

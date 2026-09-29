@@ -89,6 +89,21 @@ ENV NODE_ENV=production \
     TSX_TSCONFIG_PATH=/app/apps/api/tsconfig.json
 COPY --from=build --chown=node:node /app /app
 WORKDIR /app/apps/api
+# The commit the image is built from (Issue #152): CI passes it as
+# SOURCE_COMMIT, the image carries it as the OCI revision label and as
+# build.json beside package.json, which GET /healthz reads
+# (src/build-info.ts) — immutable build metadata, never an environment
+# variable a host could set. Last before the metadata instructions, so a new
+# commit rebuilds one small layer. Without the argument (a local build) there
+# is no file and /healthz names no build; anything but a full lowercase
+# commit id fails the build.
+ARG SOURCE_COMMIT=""
+LABEL org.opencontainers.image.revision="${SOURCE_COMMIT}"
+RUN if [ -n "$SOURCE_COMMIT" ]; then \
+      printf "%s" "$SOURCE_COMMIT" | grep -Eqx "[0-9a-f]{40}" \
+        || { echo "SOURCE_COMMIT is not a full commit id: $SOURCE_COMMIT" >&2; exit 1; }; \
+      printf "{\"commit\":\"%s\"}\n" "$SOURCE_COMMIT" > build.json; \
+    fi
 USER node
 EXPOSE 3001
 # Liveness: the process answers. Readiness (the database answers) is GET

@@ -1,0 +1,473 @@
+# The one door to owner-level actions on the Pilot's database (Issue #152,
+# decided in #133; the procedures are supabase/README.md). Dispatched by hand
+# on main, one fixed operation per run, each its own job under the `pilot`
+# environment, which the repository owner approves before the job may read a
+# secret. No input is ever SQL, a shell command or a path: an operation is a
+# reviewed script below, and adding one is a reviewed change to this file.
+#
+#   check           the journal check, the fingerprint against the committed
+#                   file (once nothing is pending), the service roles' LOGIN
+#                   state and the publication's tables; writes nothing
+#   release         a Pilot release, one approved run: the image resolved by
+#                   digest, the journal checked, an encrypted backup, the
+#                   migrations, the seed on request, the journal and the
+#                   fingerprint checked again, the exact image deployed and
+#                   proved live — or, with deploy_api off, a database-only
+#                   release
+#   reset-to-seed   reserved for #142's sweep and re-seed inside the barrier
+#   grant-logins    LOGIN for exactly wms_api and wms_worker from the
+#                   environment's app-role URLs
+#   restore         a named run's backup restored inside the write barrier
+#   repair          one allow-listed repair module
+#   recover-logins  the LOGIN states a named restore or reset recorded, put
+#                   back after it failed or was cancelled
+#
+# Secrets are the `pilot` environment's and reach only the step that needs
+# them, as that step's environment: never a job's or the workflow's, never
+# printed, written to an artifact or put on a command line. The environment
+# admits main alone and asks the owner to approve every job that names it;
+# self-review prevention is off, since one person dispatches and approves:
+# this is a one-person approval boundary, not a two-person control. Every
+# action is pinned by commit here, the one workflow that holds the owner's
+# secret; a job installs @waste/db's dependencies from the lockfile and
+# restores no cache.
+name: Pilot database
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: The operation, one fixed job each (supabase/README.md)
+        type: choice
+        required: true
+        options:
+          - check
+          - release
+          - reset-to-seed
+          - grant-logins
+          - restore
+          - repair
+          - recover-logins
+      run_seed:
+        description: "release: run the idempotent demo seed after the migrations"
+        type: boolean
+        default: false
+      deploy_api:
+        description: "release: deploy this commit's API image and prove it live (off: a database-only release)"
+        type: boolean
+        default: true
+      source_run_id:
+        description: "restore, recover-logins: the id of the run whose backup or login record to use"
+        type: string
+        default: ""
+      services_suspended:
+        description: "restore: the Pilot's Render services are suspended"
+        type: boolean
+        default: false
+      repair_id:
+        description: "repair: the allow-listed repair, <issue>-<slug>"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+# One operation at a time, and a migration is never cancelled by the next.
+concurrency:
+  group: pilot-database
+  cancel-in-progress: false
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+  # Which Supabase project and which host the Pilot is: not secrets (the ref is
+  # the public API URL's), reviewed with this file, and what every script holds
+  # the secret URL to before it connects.
+  PILOT_SUPABASE_REF: ztmisreemxepvjxelbql
+  PILOT_DATABASE_HOST: aws-0-eu-north-1.pooler.supabase.com
+  # The package CI publishes the Pilot image to (the hosting issue, #149).
+  PILOT_IMAGE: ghcr.io/faresabdelghany/waste-pilot
+
+jobs:
+  check:
+    name: Check the Pilot's database
+    if: inputs.operation == 'check'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: pilot
+    steps:
+      - name: Require main
+        run: test "$GITHUB_REF" = refs/heads/main || { echo "::error::The Pilot's database is operated from main only"; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pilot-node
+      - name: Journal check
+        id: journal
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+        run: pnpm db:check
+      - name: Fingerprint against the committed file
+        if: steps.journal.outputs.pending == '0'
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+        run: pnpm db:fingerprint --check
+      - name: Fingerprint deferred
+        if: steps.journal.outputs.pending != '0'
+        env:
+          PENDING: ${{ steps.journal.outputs.pending }}
+        run: echo "$PENDING migration(s) pending, so the committed fingerprint (the head's) does not apply yet; a release compares it after migrating." | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Identity, logins and the publication
+        working-directory: packages/db
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+        run: node --import tsx scripts/pilot/state.ts
+
+  release:
+    name: Release to the Pilot
+    if: inputs.operation == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: pilot
+    steps:
+      # 1. main, and nothing else.
+      - name: Require main
+        run: test "$GITHUB_REF" = refs/heads/main || { echo "::error::The Pilot is released from main only"; exit 1; }
+      - name: Say what is released
+        env:
+          DEPLOY_API: ${{ inputs.deploy_api }}
+          RUN_SEED: ${{ inputs.run_seed }}
+        run: |
+          kind=$([ "$DEPLOY_API" = true ] && echo "a release of the database and the API" || echo "a database-only release: no image, hook or URL read")
+          echo "Commit $GITHUB_SHA: $kind; seed: $RUN_SEED" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # 2. The image CI published for this commit, by digest, proved by its revision label.
+      - name: Resolve the image
+        id: image
+        if: inputs.deploy_api
+        run: bash packages/db/scripts/pilot-image.sh
+      - uses: ./.github/actions/pilot-node
+      # 3. The journal agrees with main's migrations before anything is written.
+      - name: Journal check
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+        run: pnpm db:check
+      # 4. A backup on every release, uploaded before the migrations run; any failure stops the release here.
+      - uses: ./.github/actions/postgres-client
+      - name: Back up
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+          BACKUP_OUTPUT: ${{ runner.temp }}/pilot-backup/pilot-backup-${{ github.run_id }}-${{ github.run_attempt }}.tar.age
+        run: |
+          mkdir -p "$(dirname "$BACKUP_OUTPUT")"
+          bash packages/db/scripts/pilot-backup.sh
+      - name: Upload the backup
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pilot-backup-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pilot-backup/pilot-backup-${{ github.run_id }}-${{ github.run_attempt }}.tar.age
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      # 5. Every pending migration, in one transaction behind the journal check.
+      - name: Migrate
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+        run: pnpm db:migrate
+      # 6. The seed, only when asked.
+      - name: Seed
+        if: inputs.run_seed
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+        run: pnpm db:seed
+      # 7. The journal again, and the complete fingerprint against the committed file.
+      - name: Journal check and fingerprint
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+        run: |
+          pnpm db:check
+          pnpm db:fingerprint --check
+      # 8. The exact image, by digest, through Render's deploy hook (this step alone reads it).
+      - name: Deploy
+        id: deploy
+        if: inputs.deploy_api
+        working-directory: packages/db
+        env:
+          PILOT_RENDER_DEPLOY_HOOK: ${{ secrets.PILOT_RENDER_DEPLOY_HOOK }}
+          RELEASE_IMAGE: ${{ steps.image.outputs.image }}
+        run: node --import tsx scripts/pilot/deploy.ts
+      # 9. Three consecutive observations of the released build within ten minutes.
+      - name: Prove it live
+        if: inputs.deploy_api
+        working-directory: packages/db
+        env:
+          PILOT_API_URL: ${{ vars.PILOT_API_URL }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_IMAGE: ${{ steps.image.outputs.image }}
+        run: node --import tsx scripts/pilot/observe.ts
+      - name: Remove plaintext
+        if: always()
+        run: rm -rf "$RUNNER_TEMP"/pilot-backup.* "$RUNNER_TEMP/pilot-backup"
+
+  reset-to-seed:
+    name: Reset the Pilot to its seed
+    if: inputs.operation == 'reset-to-seed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # The slot is reserved: #142's sweep runs here, inside the write barrier
+      # the restore job uses, after a safety backup. No environment, so this
+      # asks for no approval and reads no secret.
+      - name: Not yet
+        run: |
+          echo "::error::reset-to-seed lands with #142's sweep script; until then this operation does nothing."
+          exit 1
+
+  grant-logins:
+    name: Grant the app roles' logins
+    if: inputs.operation == 'grant-logins'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: pilot
+    steps:
+      - name: Require main
+        run: test "$GITHUB_REF" = refs/heads/main || { echo "::error::The Pilot's database is operated from main only"; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pilot-node
+      - name: Grant LOGIN to wms_api and wms_worker
+        working-directory: packages/db
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+          PILOT_DATABASE_URL: ${{ secrets.PILOT_DATABASE_URL }}
+          PILOT_WORKER_DATABASE_URL: ${{ secrets.PILOT_WORKER_DATABASE_URL }}
+        run: node --import tsx scripts/pilot/grant-logins.ts
+
+  restore:
+    name: Restore the Pilot from a backup
+    if: inputs.operation == 'restore'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: pilot
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Require main, the confirmation and a run id
+        env:
+          SERVICES_SUSPENDED: ${{ inputs.services_suspended }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main || { echo "::error::The Pilot's database is operated from main only"; exit 1; }
+          test "$SERVICES_SUSPENDED" = true || { echo "::error::Suspend the Pilot's Render services first, then dispatch the restore with services_suspended on"; exit 1; }
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::source_run_id names no run"; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pilot-node
+      - uses: ./.github/actions/postgres-client
+      - name: Choose the backup
+        id: source
+        working-directory: packages/db
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          ARTIFACT_PREFIX: pilot-backup
+        run: node --import tsx scripts/pilot/select-artifact.ts
+      # The package's checksum: the artifact store's digest of what the
+      # backup's run uploaded, which the download refuses to differ from; the
+      # manifest's checksums are the dumps', verified after decryption.
+      - name: Download the backup
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          artifact-ids: ${{ steps.source.outputs.id }}
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/pilot-source
+          digest-mismatch: error
+      # A safety backup of the database as it is, restorable later by this
+      # run's id. Any failure stops the restore, but one: a database that lost
+      # a schema the backup requires (pilot-backup.sh's exit 3), the case a
+      # restore is for, cannot be backed up whole, and the restore goes on
+      # without one, saying so.
+      - name: Back up the database as it is
+        id: safety
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+          BACKUP_OUTPUT: ${{ runner.temp }}/pilot-backup/pilot-backup-${{ github.run_id }}-${{ github.run_attempt }}.tar.age
+        run: |
+          mkdir -p "$(dirname "$BACKUP_OUTPUT")"
+          status=0
+          bash packages/db/scripts/pilot-backup.sh || status=$?
+          if [ "$status" = 3 ]; then
+            echo "No safety backup: the database lacks a schema a backup requires, so it cannot be backed up whole. The restore goes on." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "taken=false" >> "$GITHUB_OUTPUT"
+          elif [ "$status" != 0 ]; then
+            exit "$status"
+          else
+            echo "taken=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Upload the safety backup
+        if: steps.safety.outputs.taken == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pilot-backup-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pilot-backup/pilot-backup-${{ github.run_id }}-${{ github.run_attempt }}.tar.age
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Decrypt the backup
+        env:
+          AGE_IDENTITY: ${{ secrets.PILOT_BACKUP_AGE_KEY }}
+          RESTORE_DIR: ${{ runner.temp }}/pilot-restore
+        run: |
+          shopt -s nullglob
+          found=("$RUNNER_TEMP"/pilot-source/*.tar.age "$RUNNER_TEMP"/pilot-source/*/*.tar.age)
+          test "${#found[@]}" = 1 || { echo "::error::the downloaded artifact holds ${#found[@]} encrypted backups, not one"; exit 1; }
+          BACKUP_FILE="${found[0]}" bash packages/db/scripts/pilot-restore.sh decrypt
+      - name: Verify the backup
+        working-directory: packages/db
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+          RESTORE_DIR: ${{ runner.temp }}/pilot-restore
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SOURCE_ATTEMPT: ${{ steps.source.outputs.attempt }}
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
+        run: node --import tsx scripts/pilot/manifest.ts verify
+      # The write barrier: the logins recorded and stored, read back, and only then closed.
+      - name: Record the logins
+        id: record
+        working-directory: packages/db
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+          BARRIER_OPERATION: restore
+          LOGIN_STATE_DIR: ${{ runner.temp }}/login-state
+        run: node --import tsx scripts/pilot/barrier.ts record
+      - name: Store the login record
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: login-state-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/login-state/login-state.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Read the login record back
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: login-state-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/login-state-copy
+          digest-mismatch: error
+      - name: Close the barrier
+        working-directory: packages/db
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+          LOGIN_STATE_COPY: ${{ runner.temp }}/login-state-copy/login-state.json
+          LOGIN_STATE_SHA256: ${{ steps.record.outputs.sha256 }}
+        run: node --import tsx scripts/pilot/barrier.ts close
+      # One transaction: the three schemas dropped and the backup restored, or nothing.
+      - name: Restore
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+          RESTORE_DIR: ${{ runner.temp }}/pilot-restore
+        run: bash packages/db/scripts/pilot-restore.sh apply
+      - name: Check the restored database
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+          FINGERPRINT: ${{ runner.temp }}/pilot-restore/fingerprint.txt
+        run: |
+          pnpm db:check
+          pnpm db:fingerprint --check "$FINGERPRINT"
+      # Only after every check: the recorded logins back. On any failure above they stay NOLOGIN: recover-logins with this run's id.
+      - name: Open the barrier
+        working-directory: packages/db
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+          LOGIN_STATE_FILE: ${{ runner.temp }}/login-state/login-state.json
+          EXPECTED_RUN_ID: ${{ github.run_id }}
+          EXPECTED_ATTEMPT: ${{ github.run_attempt }}
+          EXPECTED_COMMIT: ${{ github.sha }}
+        run: node --import tsx scripts/pilot/barrier.ts open
+      # The roles and the publication as the restore left them — the check's own report, which fails while wms_api cannot log in.
+      - name: Verify the roles and the publication
+        working-directory: packages/db
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+        run: node --import tsx scripts/pilot/state.ts
+      - name: Remove plaintext
+        if: always()
+        run: rm -rf "$RUNNER_TEMP"/pilot-backup.* "$RUNNER_TEMP"/pilot-restore-key.* "$RUNNER_TEMP/pilot-restore" "$RUNNER_TEMP/pilot-source" "$RUNNER_TEMP/pilot-backup"
+
+  repair:
+    name: Run an allow-listed repair
+    if: inputs.operation == 'repair'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: pilot
+    steps:
+      - name: Require main and a repair id
+        env:
+          REPAIR_ID: ${{ inputs.repair_id }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main || { echo "::error::The Pilot's database is operated from main only"; exit 1; }
+          [[ "$REPAIR_ID" =~ ^[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "::error::repair_id is not <issue>-<slug>"; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pilot-node
+      - name: Repair
+        working-directory: packages/db
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+          REPAIR_ID: ${{ inputs.repair_id }}
+        run: node --import tsx scripts/pilot/repair.ts
+
+  recover-logins:
+    name: Recover the app roles' logins
+    if: inputs.operation == 'recover-logins'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: pilot
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Require main and a run id
+        env:
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main || { echo "::error::The Pilot's database is operated from main only"; exit 1; }
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::source_run_id names no run"; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pilot-node
+      - name: Choose the login record
+        id: source
+        working-directory: packages/db
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          ARTIFACT_PREFIX: login-state
+        run: node --import tsx scripts/pilot/select-artifact.ts
+      - name: Download the login record
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          artifact-ids: ${{ steps.source.outputs.id }}
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/login-state-source
+          digest-mismatch: error
+      - name: Restore the recorded logins
+        working-directory: packages/db
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+          SOURCE_DIR: ${{ runner.temp }}/login-state-source
+          EXPECTED_RUN_ID: ${{ inputs.source_run_id }}
+          EXPECTED_ATTEMPT: ${{ steps.source.outputs.attempt }}
+          EXPECTED_COMMIT: ${{ steps.source.outputs.commit }}
+        run: |
+          shopt -s nullglob
+          found=("$SOURCE_DIR"/login-state.json "$SOURCE_DIR"/*/login-state.json)
+          test "${#found[@]}" = 1 || { echo "::error::the downloaded artifact holds ${#found[@]} login records, not one"; exit 1; }
+          LOGIN_STATE_FILE="${found[0]}" node --import tsx scripts/pilot/barrier.ts open

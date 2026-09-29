@@ -14,3 +14,6 @@
 export const API_ROLE = "wms_api"
 export const SYNC_ROLE = "wms_sync"
 export const WORKER_ROLE = "wms_worker"
+
+/** A role name a statement may splice in: lowercase letters, digits and underscores, never quoted. */
+export const PLAIN_ROLE = /^[a-z_][a-z0-9_]*$/

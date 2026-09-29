@@ -20,13 +20,34 @@
 // which is the number an operator or an alert reads off the probe; the
 // unavailable body names the check that failed, and a body whose status
 // disagrees with its checks does not parse, as the API's does not.
+//
+// `/healthz` also says which build answers (Issue #152): `build.commit` is
+// the full id of the commit the image was built from, baked into the image
+// as a file written from its build argument beside the OCI revision label,
+// never a runtime variable a host could set, and null where the process runs
+// from a checkout or an image built without it. The Pilot's release proves a
+// deployment live by reading it; both probes answer `Cache-Control: no-store`,
+// so what a release observes is the process and never a cache's copy.
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
 
+/** What both probes answer in `Cache-Control` (Issue #152): never cached, so what a release observes is the process and never a cache's copy. */
+export const PROBE_CACHE_CONTROL = "no-store"
+/** The response headers both probes answer with, the one spelling the API, the worker and the Pilot's release share. */
+export const PROBE_HEADERS: Record<string, string> = { "Cache-Control": PROBE_CACHE_CONTROL }
+
+/** A full commit id, as a build records it and GitHub names it: forty lowercase hex digits. */
+export const CommitId = z.string().regex(/^[0-9a-f]{40}$/, "a full commit id: forty lowercase hex digits")
+
+/** What an image says about its own build: the commit it was built from. */
+export const BuildInfo = z.object({ commit: CommitId })
+export type BuildInfo = z.infer<typeof BuildInfo>
+
 export const HealthResponse = z.object({
   status: z.literal("ok"),
   time: IsoDateTime,
+  build: BuildInfo.nullable(),
 })
 export type HealthResponse = z.infer<typeof HealthResponse>
 

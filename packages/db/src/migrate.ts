@@ -2,15 +2,20 @@
 // journal drizzle-kit writes for them: schema `drizzle`, table
 // `__drizzle_migrations`, one row per applied file with its sha256 and its
 // journal `when`. This is the one way migrations are applied: the `migrate`
-// script, the tests and the hosted project all go through it.
+// script, the tests and the Pilot's protected release (Issue #152) all go
+// through it.
 //
-// What the migrator does and does not do, so nobody relies on the wrong thing:
-// it applies every journal entry whose `when` is later than the newest row in
-// the table, in journal order, all in one transaction. It never compares
-// hashes, so an edited applied file is not re-applied (the hash test in
-// __tests__ catches the edit on a fresh database), and a migration merged with
-// an earlier `when` than one already applied would be skipped for good (the
-// journal test refuses a non-monotonic journal).
+// What drizzle-orm's migrator does and does not do, so nobody relies on the
+// wrong thing: it applies every journal entry whose `when` is later than the
+// newest row in the table, in journal order, all in one transaction. It never
+// compares hashes, so an edited applied file would not be re-applied, and a
+// migration merged with an earlier `when` than one already applied would be
+// skipped for good. The journal check (journal-check.ts) is what compares:
+// it runs under the lock below, before the migrator writes anything — its
+// schema and table included — and refuses a journal that disagrees with the
+// folder, so a database migrated from another version of a file is stopped
+// here instead of carrying on. `checkDatabaseJournal` asks the same question
+// without applying anything (`pnpm db:check`).
 //
 // Two processes migrating the same database at once (two test files, two
 // operators) would both find the journal short and both try to create the
@@ -30,13 +35,22 @@
 // `extensions` and elsewhere does not.
 import { migrate } from "drizzle-orm/postgres-js/migrator"
 import { fileURLToPath } from "node:url"
-import type { Notice } from "postgres"
+import type { Notice, ReservedSql } from "postgres"
 
-import { createDb } from "./client"
+import { createDb, type Db } from "./client"
+import { assertJournal, checkJournal, MIGRATIONS_SCHEMA, MIGRATIONS_TABLE, readAppliedMigrations, readMigrationFolder, type JournalReport } from "./journal-check"
+import { wms } from "./schema/wms"
+import { PGBOSS_SCHEMA } from "./sql/pgboss"
 
+export { MIGRATIONS_SCHEMA, MIGRATIONS_TABLE }
 export const MIGRATIONS_FOLDER = fileURLToPath(new URL("../migrations", import.meta.url))
-export const MIGRATIONS_SCHEMA = "drizzle"
-export const MIGRATIONS_TABLE = "__drizzle_migrations"
+
+/**
+ * The schemas the migrations own whole, in the order a restore lays them
+ * down: the domain's, the journal's and pg-boss's (Issue #152). The
+ * fingerprint covers them, a backup dumps them and a restore replaces them.
+ */
+export const OWNED_SCHEMAS: readonly string[] = [wms.schemaName, MIGRATIONS_SCHEMA, PGBOSS_SCHEMA]
 
 /** Any constant will do for pg_advisory_lock; this one spells "wms". */
 const MIGRATION_LOCK = 0x77_6d_73
@@ -52,38 +66,74 @@ export type MigrateOptions = {
   onnotice?: (notice: Notice) => void
 }
 
-export async function migrateDatabase(url: string, { onnotice }: MigrateOptions = {}): Promise<void> {
+/**
+ * Runs `fn` while this connection holds the migration lock: the pool for the
+ * work, the reserved connection that holds the lock for reads that must see
+ * the journal as it stands under it. Every holder of the lock goes through
+ * here — the migrator, the journal check, a Pilot repair (Issue #152).
+ */
+export async function withMigrationLock<T>(
+  url: string,
+  { onnotice }: MigrateOptions,
+  fn: (held: { db: Db; lock: ReservedSql }) => Promise<T>,
+): Promise<T> {
   if (new URL(url).port === TRANSACTION_POOLER_PORT) {
     throw new Error(
-      `migrateDatabase: ${new URL(url).hostname}:${TRANSACTION_POOLER_PORT} is the transaction pooler; migrations need a session (the direct connection or the session pooler on port 5432)`,
+      `${new URL(url).hostname}:${TRANSACTION_POOLER_PORT} is the transaction pooler; migrations need a session to hold their lock (the direct connection or the session pooler on port 5432)`,
     )
   }
-  // One connection runs the migrations, one holds the lock.
+  // One connection runs the work, one holds the lock.
   const { db, sql, close } = createDb(url, { max: 2, onnotice, searchPath: MIGRATION_SEARCH_PATH })
   try {
     const lock = await sql.reserve()
     try {
       await lock`select set_config('lock_timeout', ${LOCK_TIMEOUT}, false)`
       await lock`select pg_advisory_lock(${MIGRATION_LOCK})`
+      let result: T | undefined
       let failure: unknown
       try {
-        await migrate(db, {
-          migrationsFolder: MIGRATIONS_FOLDER,
-          migrationsSchema: MIGRATIONS_SCHEMA,
-          migrationsTable: MIGRATIONS_TABLE,
-        })
+        result = await fn({ db, lock })
       } catch (error) {
         failure = error
       }
       const [{ released }] = await lock<{ released: boolean }[]>`select pg_advisory_unlock(${MIGRATION_LOCK}) as released`
       if (failure !== undefined) throw failure
       if (!released) {
-        throw new Error("migrateDatabase: the migration lock was not held by the connection that tried to release it; is the URL a pooler in transaction mode?")
+        throw new Error("The migration lock was not held by the connection that tried to release it; is the URL a pooler in transaction mode?")
       }
+      return result as T
     } finally {
       lock.release()
     }
   } finally {
     await close()
   }
+}
+
+/** The journal check against this checkout's folder, read on the connection that holds the lock. */
+async function journalUnderLock(lock: ReservedSql): Promise<JournalReport> {
+  return checkJournal(readMigrationFolder(MIGRATIONS_FOLDER), await readAppliedMigrations(lock))
+}
+
+/**
+ * Applies every pending migration, after the journal check has passed, and
+ * answers the ones it applied; a refused journal throws `JournalError` and
+ * nothing is written.
+ */
+export async function migrateDatabase(url: string, options: MigrateOptions = {}): Promise<{ applied: string[] }> {
+  return withMigrationLock(url, options, async ({ db, lock }) => {
+    const report = await journalUnderLock(lock)
+    assertJournal(report)
+    await migrate(db, {
+      migrationsFolder: MIGRATIONS_FOLDER,
+      migrationsSchema: MIGRATIONS_SCHEMA,
+      migrationsTable: MIGRATIONS_TABLE,
+    })
+    return { applied: report.pending }
+  })
+}
+
+/** The journal check alone, under the same lock (`pnpm db:check`): what is applied, what is pending, and every problem. Writes nothing. */
+export async function checkDatabaseJournal(url: string, options: MigrateOptions = {}): Promise<JournalReport> {
+  return withMigrationLock(url, options, ({ lock }) => journalUnderLock(lock))
 }
