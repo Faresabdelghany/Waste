@@ -88,6 +88,10 @@ export function createBoss({ url, max = 3, log = (line) => console.error(line), 
   const cronMonitorIntervalSeconds = cronMonitor ?? raised(30, pollingIntervalSeconds, 45)
   const cronWorkerIntervalSeconds = cronWorker ?? raised(5, pollingIntervalSeconds, 45)
   const flowIntervalSeconds = raised(5, pollingIntervalSeconds)
+  // PROTOTYPE (#134, gate 2): pg-boss's supervise pass (maintenance deletes, the monitor) and its queue-cache refresh, both 60 s by default, from the environment; off when unset.
+  const envSeconds = (name: string) => (Number(process.env[name]) > 0 ? Number(process.env[name]) : undefined)
+  const superviseIntervalSeconds = envSeconds("WORKER_SUPERVISE_INTERVAL_SECONDS")
+  const queueCacheIntervalSeconds = envSeconds("WORKER_QUEUE_CACHE_INTERVAL_SECONDS")
   const boss = new PgBoss({
     connectionString: url,
     schema: PGBOSS_SCHEMA,
@@ -102,8 +106,10 @@ export function createBoss({ url, max = 3, log = (line) => console.error(line), 
     useListenNotify: false,
     ...(cronMonitorIntervalSeconds === undefined ? {} : { cronMonitorIntervalSeconds }),
     ...(cronWorkerIntervalSeconds === undefined ? {} : { cronWorkerIntervalSeconds }),
-    ...(monitorIntervalSeconds === undefined ? {} : { monitorIntervalSeconds }),
+    ...(monitorIntervalSeconds === undefined ? (superviseIntervalSeconds === undefined ? {} : { monitorIntervalSeconds: superviseIntervalSeconds }) : { monitorIntervalSeconds }),
     ...(flowIntervalSeconds === undefined ? {} : { flowIntervalSeconds }),
+    ...(superviseIntervalSeconds === undefined ? {} : { superviseIntervalSeconds }),
+    ...(queueCacheIntervalSeconds === undefined ? {} : { queueCacheIntervalSeconds }),
   })
   // An `error` with no listener would throw out of pg-boss's event emitter and end the process; a connection dropped mid-poll is one such error, and pg-boss reconnects on the next poll.
   boss.on("error", (error) => log(`pg-boss: ${error instanceof Error ? error.message : String(error)}`))
