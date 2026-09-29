@@ -13,12 +13,13 @@
 import type { WorkspaceId } from "@/lib/data/business-modules"
 
 import { moduleKeyOf, type ServerModule } from "./adapter"
+import { masterDataModule } from "./master-data"
 import { accessModule, organisationModule, serviceProvidersModule } from "./organisation"
 import { collectionCalendarsModule, planningAreasModule } from "./planning"
 import { customersModule } from "./registry"
 
-/** The switched modules, in load order; the planning configuration last, since an area and a calendar name their project. */
-export const SERVER_MODULES: readonly ServerModule[] = [organisationModule, serviceProvidersModule, accessModule, customersModule, planningAreasModule, collectionCalendarsModule]
+/** The switched modules, in load order; the planning configuration and the master data after the organisation, since an area, a calendar and a service frequency name their project. */
+export const SERVER_MODULES: readonly ServerModule[] = [organisationModule, serviceProvidersModule, accessModule, customersModule, planningAreasModule, collectionCalendarsModule, masterDataModule]
 
 const byKey = new Map(SERVER_MODULES.map((module) => [moduleKeyOf(module.workspaceId, module.moduleId), module]))
 

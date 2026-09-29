@@ -42,6 +42,7 @@ import {
   useBusinessRecordStore,
   useBusinessRecordsHydrated,
   useModuleRecords,
+  whenSaved,
 } from "@/components/waste/business-record-store"
 import { statusClasses } from "@/components/waste/business-record-views"
 import type {
@@ -169,14 +170,6 @@ export function HolidayListsSettings() {
   )
   const needle = query.trim().toLowerCase()
   const shown = ordered.filter((project) => project.name.toLowerCase().includes(needle))
-
-  // On the Pilot the store answers the write's outcome once the API has, so
-  // the success is said then and a refusal by the store, in the API's words;
-  // on the browser's own path there is nothing to wait for.
-  const whenSaved = (outcome: ReturnType<typeof upsertRecord>, done: () => void) => {
-    if (outcome === undefined) done()
-    else void outcome.then((result) => result.kind !== "refused" && done())
-  }
 
   const saveProject = (project: BusinessRecord, settings: ProjectCalendarSettings) => {
     const written = withProjectCalendar(project, settings)

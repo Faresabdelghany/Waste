@@ -48,6 +48,7 @@ import {
 } from "@/lib/data/business-form-records"
 import { migrateLegacyId, migrateLegacyModuleId } from "@/lib/data/legacy-ids"
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
+import { MASTER_DATA_MODULE, masterDataKindForField, masterDataKindOf } from "@/lib/data/master-data"
 import {
   collectFactColumnOptions,
   defaultFactColumns,
@@ -2387,6 +2388,19 @@ export function BusinessWorkspace({
             resolved.module.id === "templates"
           ) {
             if (!record.id.startsWith("template-")) return false
+          }
+          // A picker at the master data module gets the kind its field asks
+          // for (slice 2 of #81): the rule is the adapters' own ownership —
+          // the id's prefix, then the typed kind — so a renamed row stays in
+          // its list. A field that names no kind (an outcome reason, a fuel
+          // type) has no list on the API yet, so it sees only the rows of no
+          // kind: the fixtures' master-data sets, as before the switch.
+          if (
+            resolved.workspaceId === MASTER_DATA_MODULE.workspaceId &&
+            resolved.module.id === MASTER_DATA_MODULE.moduleId
+          ) {
+            const kind = masterDataKindOf(record)
+            if (kind !== null && kind !== masterDataKindForField(field.id)) return false
           }
           if (field.id === "projectId") {
             if (!isProjectRecordId(record.id)) return false
