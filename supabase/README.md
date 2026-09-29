@@ -121,7 +121,7 @@ A Login here is Supabase Auth's: the identity a person signs in with, bound to e
 4. **First sign-in.** The tester signs in at `/login`. The hook binds the Login to the one open Invitation carrying the address, and the web lands them by `GET /me`: an account an active driver profile is bound to on `/driver`, everyone else on `/operate`.
 5. **A password of their own, at once**: the account menu at the foot of the sidebar › Change password. The web verifies the temporary password by signing in with it, then sets the new one.
 
-**The minimum length.** `config.toml` records `minimum_password_length = 8`; on the Pilot the Owner sets the same in the dashboard, at Authentication › Sign In / Providers › Email, before the first Login is created.
+**The minimum length.** `config.toml` records `minimum_password_length = 8`; on the Pilot the Owner sets the same in the dashboard, at Authentication › Sign In / Providers › Email, before the first Login is created. In the same panel, **Require current password when updating** stays off. Change password proves the current password by signing in with it, then sends the new one alone, which that setting would refuse without `current_password`.
 
 **A forgotten password** is reset by the Owner, who sets a new temporary password and hands it over as in step 3. The dashboard cannot set a password on an existing Login, and its recovery mail would not arrive, so the reset is the Auth Admin API's `updateUserById` — `PUT https://<ref>.supabase.co/auth/v1/admin/users/<User UID>` with `{"password": "…"}`, under the project's secret key (Project Settings › API Keys) as `apikey` — run by the Owner in their own terminal, the key read in from the password manager and never written down.
 
