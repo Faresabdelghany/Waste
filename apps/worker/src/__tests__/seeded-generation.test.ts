@@ -8,8 +8,10 @@
 // run plans the week's routes with WH-24, Mads Jensen and the Nordhavn depot
 // and matches Residual containers inside the Indre By boundary; and
 // RS-Østerbro · Organic B's run counts BIN-91007 — picked, and under no
-// placement, since no product collects Metal — as unlocated and writes no
-// pickup for it, while the other three picks generate in their order.
+// placement, since no product collects Metal — as unlocated, the run's
+// warning for a pick it cannot place (its `warnings` hold the day-level
+// sentences and stay empty), and writes no pickup for it, while the other
+// three picks generate in their order.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
@@ -116,7 +118,7 @@ describe("the Pilot's first generation over the seeded tenant", { skip }, () => 
     assert.equal(outside, 0)
   })
 
-  test("RS-Østerbro · Organic B counts BIN-91007 unlocated and writes it no pickup, while its other three picks generate in their order", async () => {
+  test("RS-Østerbro · Organic B warns of BIN-91007 as unlocated and writes it no pickup, while its other three picks generate in their order", async () => {
     const { planning, resources, registry, serviceProviders } = DEMO_IDS
     const { run, routes, pickups } = await generated(planning.routeSchemes["scheme-osterbro-b"])
     assert.deepEqual([run.status, run.routesCreated, run.pickupsWritten, run.unlocated, run.warnings], ["succeeded", 2, 6, 1, []])

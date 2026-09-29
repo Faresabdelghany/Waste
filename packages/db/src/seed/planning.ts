@@ -79,9 +79,17 @@
 //   API would refuse to name him on is not seeded — the operator renews his
 //   licence and assigns him, or another driver, before a dispatch. BIN-91007
 //   stays picked: its fraction is Metal, which no product collects, so it has
-//   no placement, and a generation run counts it unlocated and writes no
-//   pickup for it while the other three generate — the expected result.
-//   Neither rule is restricted to container types.
+//   no placement, and a generation run writes no pickup for it while the
+//   other three generate — the expected result. The run's warning for it is
+//   its `unlocated` count, the server's word for a pick it could not place;
+//   the run's `warnings` hold the day-level sentences and stay empty. Neither
+//   rule is restricted to container types.
+//
+//   Left out, having no column: a scheme's Version, Hauler and "Container
+//   selection" facts and its counts ("214 stops/week"), a calendar's Week
+//   start and Timezone (the project's), an area's Boundary status, size and
+//   counts, and the prototype's `lastGeneratedAt` stamp on RS-Central, which
+//   on the server is a generation run's own record.
 import type { Polygon, Position } from "@waste/contracts/geojson"
 import { planningAreaOutline } from "@waste/domain/map-planning/areas"
 import type { LngLat } from "@waste/domain/map-planning/geo"
@@ -297,14 +305,15 @@ function build(): { ids: PlanningIds; rows: PlanningRows } {
   const holidayIds = keyed(holidays, holidayKey, "collectionCalendarHoliday")
   const schemeIds = keyed(SCHEMES, (spec) => spec.key, "routeScheme")
   const groupIds = keyed(SCHEMES, groupKeyOf, "collectionGroup")
-  const matches = SCHEMES.flatMap((spec) => spec.group.fractions.map((fraction) => ({ group: groupKeyOf(spec), project: spec.project, fraction })))
-  const matchKey = (entry: (typeof matches)[number]): string => `${entry.group}:${entry.fraction}`
-  const matchIds = keyed(matches, matchKey, "collectionGroupFraction")
+  const ruleFractions = SCHEMES.flatMap((spec) => spec.group.fractions.map((fraction) => ({ group: groupKeyOf(spec), project: spec.project, fraction })))
+  const ruleFractionKey = (entry: (typeof ruleFractions)[number]): string => `${entry.group}:${entry.fraction}`
+  const ruleFractionIds = keyed(ruleFractions, ruleFractionKey, "collectionGroupFraction")
   const picks = SCHEMES.flatMap((spec) => spec.group.containers.map((container, index) => ({ group: groupKeyOf(spec), project: spec.project, container, position: index + 1 })))
   const pickKey = (entry: (typeof picks)[number]): string => `${entry.group}:${entry.container}`
   const pickIds = keyed(picks, pickKey, "collectionGroupContainer")
   const groupId = (key: string) => required(groupIds, key, "collection group")
-  const resource = (ids: Readonly<Record<string, string>>, key: string | null, what: string) => (key === null ? null : required(ids, key, what))
+  /** The id keyed `key`, or null where the spec names none. */
+  const optional = (ids: Readonly<Record<string, string>>, key: string | null, what: string) => (key === null ? null : required(ids, key, what))
 
   return {
     ids: {
@@ -314,7 +323,7 @@ function build(): { ids: PlanningIds; rows: PlanningRows } {
       collectionCalendarHolidays: holidayIds,
       routeSchemes: schemeIds,
       collectionGroups: groupIds,
-      collectionGroupFractions: matchIds,
+      collectionGroupFractions: ruleFractionIds,
       collectionGroupContainers: pickIds,
     },
     rows: {
@@ -368,7 +377,7 @@ function build(): { ids: PlanningIds; rows: PlanningRows } {
         editPolicy: "ask",
         planAhead: true,
         status: "validated",
-        depotId: resource(RESOURCES_IDS.depots, spec.depot, "depot"),
+        depotId: optional(RESOURCES_IDS.depots, spec.depot, "depot"),
         unloadingStationId: null,
       })),
       collectionGroups: SCHEMES.map((spec) => ({
@@ -380,13 +389,13 @@ function build(): { ids: PlanningIds; rows: PlanningRows } {
         position: 1,
         days: [...spec.serviceDays],
         stopSource: spec.group.stopSource,
-        ruleVehicleTypeId: resource(RESOURCES_IDS.vehicleTypes, spec.group.ruleVehicleType, "vehicle type"),
+        ruleVehicleTypeId: optional(RESOURCES_IDS.vehicleTypes, spec.group.ruleVehicleType, "vehicle type"),
         serviceProviderId: spec.group.provider === null ? null : DEMO_SERVICE_PROVIDER_IDS[spec.group.provider],
-        vehicleId: resource(RESOURCES_IDS.vehicles, spec.group.vehicle, "vehicle"),
-        driverId: resource(RESOURCES_IDS.drivers, spec.group.driver, "driver"),
+        vehicleId: optional(RESOURCES_IDS.vehicles, spec.group.vehicle, "vehicle"),
+        driverId: optional(RESOURCES_IDS.drivers, spec.group.driver, "driver"),
       })),
-      collectionGroupFractions: matches.map((entry) => ({
-        id: required(matchIds, matchKey(entry), "group fraction"),
+      collectionGroupFractions: ruleFractions.map((entry) => ({
+        id: required(ruleFractionIds, ruleFractionKey(entry), "rule fraction"),
         companyId: COMPANY_ID,
         projectId: DEMO_PROJECT_IDS[entry.project],
         collectionGroupId: groupId(entry.group),
@@ -409,8 +418,7 @@ const built = build()
 /** Every Planning id the seed writes. */
 export const PLANNING_IDS: PlanningIds = built.ids
 
-/** The rows themselves, for a test that wants to read what the seed proposes. */
-export const PLANNING_ROWS: Readonly<PlanningRows> = built.rows
+const PLANNING_ROWS: Readonly<PlanningRows> = built.rows
 
 export const PLANNING_COUNTS: PlanningCounts = Object.fromEntries(Object.entries(built.rows).map(([table, rows]) => [table, rows.length])) as PlanningCounts
 
@@ -427,10 +435,14 @@ export async function applyPlanning(tx: Tx): Promise<number> {
     planningAreaBoundary.boundary,
   ])
   changed += await upsertOwned(tx, collectionCalendar, rows.collectionCalendars, [collectionCalendar.validFrom, collectionCalendar.validTo, collectionCalendar.name])
-  changed += await replaceSets(tx, collectionCalendarHoliday, collectionCalendarHoliday.collectionCalendarId, Object.values(PLANNING_IDS.collectionCalendars), rows.collectionCalendarHolidays, [
-    collectionCalendarHoliday.day,
-    collectionCalendarHoliday.name,
-  ])
+  // A calendar's holidays, a set `PUT …/holidays` replaces whole.
+  changed += await replaceSets(tx, {
+    table: collectionCalendarHoliday,
+    of: collectionCalendarHoliday.collectionCalendarId,
+    parents: Object.values(PLANNING_IDS.collectionCalendars),
+    rows: rows.collectionCalendarHolidays,
+    compared: [collectionCalendarHoliday.day, collectionCalendarHoliday.name],
+  })
   changed += await upsertOwned(tx, routeScheme, rows.routeSchemes, [
     routeScheme.validFrom,
     routeScheme.validTo,
@@ -461,11 +473,26 @@ export async function applyPlanning(tx: Tx): Promise<number> {
   ])
   // A group's rule and its picks are sets the API replaces whole; the seed owns every one of its groups' three, the empty ones included.
   const groups = Object.values(PLANNING_IDS.collectionGroups)
-  changed += await replaceSets(tx, collectionGroupFraction, collectionGroupFraction.collectionGroupId, groups, rows.collectionGroupFractions, [collectionGroupFraction.wasteFractionId])
-  changed += await replaceSets(tx, collectionGroupContainerType, collectionGroupContainerType.collectionGroupId, groups, [], [collectionGroupContainerType.containerTypeId])
-  changed += await replaceSets(tx, collectionGroupContainer, collectionGroupContainer.collectionGroupId, groups, rows.collectionGroupContainers, [
-    collectionGroupContainer.containerId,
-    collectionGroupContainer.position,
-  ])
+  changed += await replaceSets(tx, {
+    table: collectionGroupFraction,
+    of: collectionGroupFraction.collectionGroupId,
+    parents: groups,
+    rows: rows.collectionGroupFractions,
+    compared: [collectionGroupFraction.wasteFractionId],
+  })
+  changed += await replaceSets(tx, {
+    table: collectionGroupContainerType,
+    of: collectionGroupContainerType.collectionGroupId,
+    parents: groups,
+    rows: [],
+    compared: [collectionGroupContainerType.containerTypeId],
+  })
+  changed += await replaceSets(tx, {
+    table: collectionGroupContainer,
+    of: collectionGroupContainer.collectionGroupId,
+    parents: groups,
+    rows: rows.collectionGroupContainers,
+    compared: [collectionGroupContainer.containerId, collectionGroupContainer.position],
+  })
   return changed
 }

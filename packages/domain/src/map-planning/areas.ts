@@ -7,9 +7,11 @@
 //
 // The outline itself is `planningAreaOutline`, exported (Issue #156) because
 // the database seed stores the boundary it draws: `packages/db`'s planning
-// seed hands it the same containers at the same spots and closes the ring,
-// so the stored boundary and the map's picture are one derivation and
-// cannot drift.
+// seed hands it the containers at the spots the map places them and closes
+// the ring, so the stored boundary and the map's picture are one derivation.
+// The helper is shared; its inputs are the seed's copies of the web's
+// fixtures, which hold only as long as those copies do (registry.ts says
+// what keeps them together).
 
 import type { BusinessRecord } from "../prototype-record"
 import { cleanFact, typedString } from "../record-values"

@@ -38,7 +38,14 @@
 //   and the API's, never the seed's). Nothing is deleted but a grant a
 //   charter dropped, an access row of a seeded account that the seed does
 //   not name, and a seeded set that no longer says what the seed says, which
-//   is replaced whole as the API would replace it.
+//   is replaced whole as the API would replace it. One edit is beyond putting
+//   back: a seeded row of a period the product has versioned — ended, with a
+//   successor in force after it (a boundary, a scheme, a price row, the
+//   Registry's agreements alike) — since restoring its end would overlap the
+//   successor, and the exclusion constraint stops the run (23P01) with
+//   nothing written. #142's sweep has to remove such successors before it
+//   seeds, and a `release` with `run_seed` over a tenant the office has
+//   versioned needs the same first.
 //
 //   Any admin URL. Unlike bootstrap, which refuses a non-loopback host because
 //   it sets a password, this runs the same statements anywhere: the hosted

@@ -62,17 +62,29 @@
 //   `employee`; Lars Møller is NordRen's. Mads Jensen's profile names his
 //   account, `DEMO_IDS.users.mads` (#140), the Login the Driver App's testers
 //   share; no other driver has one.
+//
+//   Left out. A record's description is the prototype's display copy, often
+//   its state of the moment ("location feed is stale"), and not a note: every
+//   note is null. So are the facts no column holds — a warehouse's Zones,
+//   Available and In transit, a driver's App access and Cost rate, a
+//   vehicle's route and GPS readings. The fleet and places the fixtures name
+//   only as text, with no record of their own, are not invented (#143): the
+//   vehicles WH-18, WH-07, WH-15, WH-17, WH-22, WH-29 and WH-TR-12, the four
+//   drivers of the route days alone (Sofie Eriksen, Nadia Vestergaard, Jonas
+//   Holm, Emil Brandt), the Valby depot and the Paper Recovery facility. The
+//   one vehicle allocation (26 Jul, WH-24 with Mads Jensen) is stale
+//   operational scheduling, the operator's to make again, and the container
+//   types' weights are a store the browser keeps alone.
 import type { Point } from "@waste/contracts/geojson"
 import type { EmploymentType, FuelType, LicenceClass, UnloadingStationOwnership, VehicleKind, VehicleOwnership } from "@waste/domain/resources/vocabulary"
 import { CONTAINER_VEHICLE_COMPATIBILITY, STOP_MATCH_VEHICLE_TYPES } from "@waste/domain/route-schemes/matching"
-import { inArray } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "../schema/fleet"
 import { containerTypeVehicleType, vehicleType } from "../schema/fleet-types"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "../schema/places"
 import { DEMO_COMPANY_ID, DEMO_PROJECT_IDS, DEMO_SERVICE_PROVIDER_IDS, DEMO_USER_IDS, keyed, required } from "./ids"
-import { REGISTRY_IDS, REGISTRY_ROWS } from "./registry"
+import { CONTAINER_TYPE_KEYS, REGISTRY_IDS } from "./registry"
 import { replaceSets, upsertOwned } from "./upsert"
 
 const COMPANY_ID = DEMO_COMPANY_ID
@@ -89,10 +101,9 @@ const VEHICLE_TYPE_NAMES: readonly string[] = [...STOP_MATCH_VEHICLE_TYPES, TRAI
 
 /** The container type a name of the domain's table is, among the Registry's: its key and its id. */
 function containerTypeNamed(name: string): { key: string; id: string } {
-  const row = REGISTRY_ROWS.containerTypes.find((candidate) => candidate.name === name)
-  const key = row && Object.entries(REGISTRY_IDS.containerTypes).find(([, id]) => id === row.id)?.[0]
-  if (!row?.id || !key) throw new Error(`resources seed: the compatibility table names ${name}, which is no container type of the Registry's`)
-  return { key, id: row.id }
+  const key = CONTAINER_TYPE_KEYS[name]
+  if (!key) throw new Error(`resources seed: the compatibility table names ${name}, which is no container type of the Registry's`)
+  return { key, id: required(REGISTRY_IDS.containerTypes, key, "container type") }
 }
 
 /** Every pair the table allows, led by the vehicle type whose set it is. */
@@ -104,8 +115,8 @@ const COMPATIBILITY: readonly { vehicleType: string; containerType: { key: strin
 
 /* --------------------------------- places ---------------------------------- */
 
-/** The projects the Resources fixtures scope to; Cairo Operations has none. */
-type ResourcesProject = "copenhagen" | "harbor"
+/** The Resources fixtures scope to Copenhagen Central and Harbor Commercial; Cairo Operations has none. */
+type ResourcesProject = keyof typeof DEMO_PROJECT_IDS
 
 /** A place's code: its fixture id in capitals. */
 const codeOf = (key: string): string => key.toUpperCase()
@@ -235,9 +246,9 @@ function build(): { ids: ResourcesIds; rows: ResourcesRows } {
   const compartments = VEHICLES.filter((spec) => spec.kind === "powered-vehicle").map((spec) => ({ vehicle: spec.key, position: 1, fractions: spec.fractions }))
   const compartmentKey = (entry: { vehicle: string; position: number }): string => `${entry.vehicle}:${entry.position}`
   const compartmentIds = keyed(compartments, compartmentKey, "vehicleCompartment")
-  const carried = compartments.flatMap((entry) => entry.fractions.map((fraction) => ({ compartment: compartmentKey(entry), fraction })))
-  const carriedKey = (entry: (typeof carried)[number]): string => `${entry.compartment}:${entry.fraction}`
-  const carriedIds = keyed(carried, carriedKey, "vehicleCompartmentFraction")
+  const compartmentFractions = compartments.flatMap((entry) => entry.fractions.map((fraction) => ({ compartment: compartmentKey(entry), fraction })))
+  const compartmentFractionKey = (entry: (typeof compartmentFractions)[number]): string => `${entry.compartment}:${entry.fraction}`
+  const compartmentFractionIds = keyed(compartmentFractions, compartmentFractionKey, "vehicleCompartmentFraction")
   const driverIds = keyed(DRIVERS, (spec) => spec.key, "driver")
   const vehicleId = (key: string) => required(vehicleIds, key, "vehicle")
   const compartmentId = (key: string) => required(compartmentIds, key, "compartment")
@@ -252,7 +263,7 @@ function build(): { ids: ResourcesIds; rows: ResourcesRows } {
       unloadingStationFractions: stationFractionIds,
       vehicles: vehicleIds,
       vehicleCompartments: compartmentIds,
-      vehicleCompartmentFractions: carriedIds,
+      vehicleCompartmentFractions: compartmentFractionIds,
       drivers: driverIds,
     },
     rows: {
@@ -340,8 +351,8 @@ function build(): { ids: ResourcesIds; rows: ResourcesRows } {
         capacityKg: null,
         volumeLitres: null,
       })),
-      vehicleCompartmentFractions: carried.map((entry) => ({
-        id: required(carriedIds, carriedKey(entry), "compartment fraction"),
+      vehicleCompartmentFractions: compartmentFractions.map((entry) => ({
+        id: required(compartmentFractionIds, compartmentFractionKey(entry), "compartment fraction"),
         companyId: COMPANY_ID,
         projectId: DEMO_PROJECT_IDS[FLEET_PROJECT],
         vehicleCompartmentId: compartmentId(entry.compartment),
@@ -372,66 +383,9 @@ const built = build()
 /** Every Resources id the seed writes. */
 export const RESOURCES_IDS: ResourcesIds = built.ids
 
-/** The rows themselves, for a test that wants to read what the seed proposes. */
-export const RESOURCES_ROWS: Readonly<ResourcesRows> = built.rows
+const RESOURCES_ROWS: Readonly<ResourcesRows> = built.rows
 
 export const RESOURCES_COUNTS: ResourcesCounts = Object.fromEntries(Object.entries(built.rows).map(([table, rows]) => [table, rows.length])) as ResourcesCounts
-
-/** One compartment as the comparison reads it: its own columns, then its fractions in one order. */
-const compartmentMember = (compartment: { position: number; name?: string | null; capacityKg?: number | null; volumeLitres?: number | null }, fractions: readonly string[]): string =>
-  JSON.stringify([compartment.position, compartment.name ?? null, compartment.capacityKg ?? null, compartment.volumeLitres ?? null, [...fractions].sort()])
-
-/**
- * The seeded vehicles' compartments with their fractions: a set of sets the
- * API replaces whole (`PUT /vehicles/{id}/compartments`, the fractions
- * first), so it is compared whole per vehicle — the compartments and what
- * each carries, whatever their ids — and replaced whole where it differs,
- * as replaceSets does a set of one level. Every seeded vehicle's set is the
- * seed's, the trailer's empty one included.
- */
-async function writeCompartments(tx: Tx): Promise<number> {
-  const rows = RESOURCES_ROWS
-  const vehicleIds = rows.vehicles.map((row) => row.id as string)
-  const described = (compartments: readonly { id?: string; vehicleId: string; position: number; name?: string | null; capacityKg?: number | null; volumeLitres?: number | null }[], carried: readonly { vehicleCompartmentId: string; wasteFractionId: string }[]) => {
-    const byVehicle = new Map<string, string[]>(vehicleIds.map((id) => [id, []]))
-    for (const compartment of compartments) {
-      const fractions = carried.filter((row) => row.vehicleCompartmentId === compartment.id).map((row) => row.wasteFractionId)
-      byVehicle.get(compartment.vehicleId)?.push(compartmentMember(compartment, fractions))
-    }
-    return new Map([...byVehicle].map(([id, members]) => [id, members.sort().join("\n")]))
-  }
-  const stored = await tx
-    .select({ id: vehicleCompartment.id, vehicleId: vehicleCompartment.vehicleId, position: vehicleCompartment.position, name: vehicleCompartment.name, capacityKg: vehicleCompartment.capacityKg, volumeLitres: vehicleCompartment.volumeLitres })
-    .from(vehicleCompartment)
-    .where(inArray(vehicleCompartment.vehicleId, vehicleIds))
-  const storedIds = stored.map((row) => row.id)
-  const storedCarried =
-    storedIds.length === 0
-      ? []
-      : await tx
-          .select({ vehicleCompartmentId: vehicleCompartmentFraction.vehicleCompartmentId, wasteFractionId: vehicleCompartmentFraction.wasteFractionId })
-          .from(vehicleCompartmentFraction)
-          .where(inArray(vehicleCompartmentFraction.vehicleCompartmentId, storedIds))
-  const found = described(stored, storedCarried)
-  const proposed = described(rows.vehicleCompartments, rows.vehicleCompartmentFractions)
-  const differing = vehicleIds.filter((id) => found.get(id) !== proposed.get(id))
-  if (differing.length === 0) return 0
-
-  const replaced = stored.filter((row) => differing.includes(row.vehicleId)).map((row) => row.id)
-  let changed = 0
-  if (replaced.length > 0) {
-    changed += (await tx.delete(vehicleCompartmentFraction).where(inArray(vehicleCompartmentFraction.vehicleCompartmentId, replaced)).returning({ id: vehicleCompartmentFraction.id })).length
-    changed += (await tx.delete(vehicleCompartment).where(inArray(vehicleCompartment.id, replaced)).returning({ id: vehicleCompartment.id })).length
-  }
-  const compartments = rows.vehicleCompartments.filter((row) => differing.includes(row.vehicleId))
-  if (compartments.length > 0) {
-    changed += (await tx.insert(vehicleCompartment).values(compartments).returning({ id: vehicleCompartment.id })).length
-    const ids = compartments.map((row) => row.id as string)
-    const carried = rows.vehicleCompartmentFractions.filter((row) => ids.includes(row.vehicleCompartmentId))
-    if (carried.length > 0) changed += (await tx.insert(vehicleCompartmentFraction).values(carried).returning({ id: vehicleCompartmentFraction.id })).length
-  }
-  return changed
-}
 
 /** Writes Resources into an open transaction, after the Registry whose fractions and container types it names, and answers how many rows it changed. */
 export async function applyResources(tx: Tx): Promise<number> {
@@ -439,9 +393,14 @@ export async function applyResources(tx: Tx): Promise<number> {
   let changed = 0
   // `key` is set once (fleet-types.ts): the seed spells it on insert and never rewrites it.
   changed += await upsertOwned(tx, vehicleType, rows.vehicleTypes, [vehicleType.name, vehicleType.description])
-  changed += await replaceSets(tx, containerTypeVehicleType, containerTypeVehicleType.vehicleTypeId, Object.values(RESOURCES_IDS.vehicleTypes), rows.containerTypeVehicleTypes, [
-    containerTypeVehicleType.containerTypeId,
-  ])
+  // A vehicle type's compatible container types, a set the API replaces whole from the vehicle type's side.
+  changed += await replaceSets(tx, {
+    table: containerTypeVehicleType,
+    of: containerTypeVehicleType.vehicleTypeId,
+    parents: Object.values(RESOURCES_IDS.vehicleTypes),
+    rows: rows.containerTypeVehicleTypes,
+    compared: [containerTypeVehicleType.containerTypeId],
+  })
   // A place's `code` is set once (places.ts), like a vehicle type's key.
   changed += await upsertOwned(tx, depot, rows.depots, [
     depot.name,
@@ -468,9 +427,13 @@ export async function applyResources(tx: Tx): Promise<number> {
     unloadingStation.status,
     unloadingStation.notes,
   ])
-  changed += await replaceSets(tx, unloadingStationFraction, unloadingStationFraction.unloadingStationId, Object.values(RESOURCES_IDS.unloadingStations), rows.unloadingStationFractions, [
-    unloadingStationFraction.wasteFractionId,
-  ])
+  changed += await replaceSets(tx, {
+    table: unloadingStationFraction,
+    of: unloadingStationFraction.unloadingStationId,
+    parents: Object.values(RESOURCES_IDS.unloadingStations),
+    rows: rows.unloadingStationFractions,
+    compared: [unloadingStationFraction.wasteFractionId],
+  })
   changed += await upsertOwned(tx, vehicle, rows.vehicles, [
     vehicle.registration,
     vehicle.callsign,
@@ -486,7 +449,20 @@ export async function applyResources(tx: Tx): Promise<number> {
     vehicle.telematicsDeviceId,
     vehicle.notes,
   ])
-  changed += await writeCompartments(tx)
+  // Every seeded vehicle's compartments with the fractions each takes, the trailer's empty set included: `PUT /vehicles/{id}/compartments` replaces the two together.
+  changed += await replaceSets(tx, {
+    table: vehicleCompartment,
+    of: vehicleCompartment.vehicleId,
+    parents: Object.values(RESOURCES_IDS.vehicles),
+    rows: rows.vehicleCompartments,
+    compared: [vehicleCompartment.position, vehicleCompartment.name, vehicleCompartment.capacityKg, vehicleCompartment.volumeLitres],
+    nested: {
+      table: vehicleCompartmentFraction,
+      of: vehicleCompartmentFraction.vehicleCompartmentId,
+      rows: rows.vehicleCompartmentFractions,
+      compared: [vehicleCompartmentFraction.wasteFractionId],
+    },
+  })
   changed += await upsertOwned(tx, driver, rows.drivers, [
     driver.name,
     driver.workforceReference,

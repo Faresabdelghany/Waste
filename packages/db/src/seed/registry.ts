@@ -155,14 +155,15 @@ import {
   sharedCollectionPoint,
   sharedCollectionPointMember,
 } from "../schema/customers"
-import { counted, DEMO_COMPANY_ID, DEMO_PROJECT_IDS, keyed, required, requiredSpec, type DemoKind } from "./ids"
+import { counted, DEMO_COMPANY_ID, DEMO_PROJECT_IDS, keyed, required, type DemoKind } from "./ids"
 import { upsertOwned } from "./upsert"
 
 const COMPANY_ID = DEMO_COMPANY_ID
 
 /** The projects the Registry fixtures scope to; Cairo Operations has none. */
 const REGISTRY_PROJECTS = ["copenhagen", "harbor"] as const
-type RegistryProject = (typeof REGISTRY_PROJECTS)[number]
+/** A project the catalogue, and so a product or a price list, is in. */
+export type RegistryProject = (typeof REGISTRY_PROJECTS)[number]
 const projectIdOf = (project: RegistryProject): string => DEMO_PROJECT_IDS[project]
 
 /* ------------------------------ the catalogue ------------------------------ */
@@ -198,6 +199,9 @@ const CONTAINER_TYPES = [
   ["wastewater-3000", "Wastewater tank · 3,000 L", 3000],
 ] as const
 type ContainerTypeKey = (typeof CONTAINER_TYPES)[number][0]
+
+/** A container type's key by the name the domain's tables spell it in: `Two-wheel bin · 240 L` is `two-wheel-240`. */
+export const CONTAINER_TYPE_KEYS: Readonly<Record<string, ContainerTypeKey>> = Object.fromEntries(CONTAINER_TYPES.map(([key, name]) => [name, key]))
 
 // @waste/domain/service-frequencies SERVICE_FREQUENCIES, one row per project
 // the definition names (both). The shape satisfies `service_frequency_shape`:
@@ -872,6 +876,13 @@ const CONTAINERS: readonly ContainerSpec[] = [...EXPLICIT_CONTAINERS, ...Array.f
 const FUTURE_PLACEMENT_FROM = "2026-10-01"
 
 /* --------------------------------- rows ----------------------------------- */
+
+/** The spec keyed `key`, or this file's own sentence: never a TypeError from a Map. */
+function requiredSpec<T>(specs: ReadonlyMap<string, T>, key: string, what: string): T {
+  const spec = specs.get(key)
+  if (spec === undefined) throw new Error(`registry seed: no ${what} is keyed ${key}`)
+  return spec
+}
 
 /** Every Registry id, keyed by the prototype's record id (or the number, name or membership it goes by). */
 export type RegistryIds = {

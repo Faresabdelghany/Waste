@@ -178,7 +178,7 @@ describe("the demo seed's fixed ids", () => {
     for (const id of allIds(DEMO_IDS.registry)) assert.ok(registryKind(id) >= DEMO_KINDS.wasteFraction, `${id} is not in a Registry kind`)
   })
 
-  test("Planning, Resources and Finance take the kinds #143 allocated, from 0x016 in seeding build order", () => {
+  test("Planning, Resources and Finance take the kinds #143 allocated, from 0x016 in that order", () => {
     const after = Object.entries(DEMO_KINDS).filter(([, kind]) => kind > DEMO_KINDS.containerServicePlacement)
     assert.deepEqual(Object.fromEntries(after), {
       planningArea: 0x016,

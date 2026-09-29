@@ -16,6 +16,7 @@ import { planningAreaOutline } from "@waste/domain/map-planning/areas"
 import { groupDriverIssue, schemeLicenceDay, schemeStructureIssues } from "@waste/domain/planning/checks"
 import type { CustomerKind } from "@waste/domain/registry/vocabulary"
 import type { LicenceClass } from "@waste/domain/resources/vocabulary"
+import { holidayNamesFor } from "@waste/domain/route-schemes/holiday-names"
 import { CONTAINER_VEHICLE_COMPATIBILITY } from "@waste/domain/route-schemes/matching"
 import { eq } from "drizzle-orm"
 
@@ -26,6 +27,7 @@ import { collectionCalendar, collectionCalendarHoliday } from "../schema/collect
 import { priceList, priceListRow } from "../schema/finance"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "../schema/fleet"
 import { containerTypeVehicleType, vehicleType } from "../schema/fleet-types"
+import { project } from "../schema/organisation"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "../schema/places"
 import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "../schema/route-schemes"
@@ -355,6 +357,9 @@ describe("the pilot's configuration against a fresh database", { skip: database.
       ],
     )
     assert.deepEqual(of("calendar-cairo-2026").map((row) => [row.day, row.name]), [["2026-10-06", "Armed Forces Day"]])
+    // Each name is what its project's own list names the day — the list the generation job reads unnamed days through — so a list renamed on the project cannot leave these behind.
+    const lists = new Map((await owner.db.select({ id: project.id, holidayList: project.holidayList }).from(project)).map((row) => [row.id, row.holidayList]))
+    for (const row of holidays) assert.equal(row.name, holidayNamesFor(lists.get(row.projectId) ?? undefined)(row.day) ?? null, row.day)
   })
 
   test("Planning: RS-Central · Week A and RS-Østerbro · Organic B, validated from their fixture start with no end, each with its implicit group made explicit", async () => {

@@ -22,7 +22,9 @@
 //   customer is an organisation), and the negotiated Residual row of Østerbro
 //   Housing Association, which is the seeded customer Østerbro Housing by its
 //   id — never a name looked up when the seed runs — its inclusive end,
-//   2027-02-02, made the first day out of force. The fixtures tag every
+//   2027-02-02, made the first day out of force; the fixture tags it with a
+//   list of its own ("Negotiated · Østerbro Housing"), and it sits on
+//   Copenhagen's default list here, where #127 put it. The fixtures tag every
 //   default row to PL-Copenhagen-2026 alone; the per-project split is this
 //   seed's, so Harbor's list repeats Copenhagen's four default amounts on
 //   Harbor's products. An amount's numerals are copied as DKK minor units —
@@ -31,24 +33,25 @@
 //
 //   Left out, outside #127's set: the zone rows (Zone North, City Centre,
 //   Amager, Harbor — zones left the Price Lists UI with #127), the other
-//   customer-type rows (Municipal is no customer kind), the scheduled +3 %
+//   customer-type rows (Municipal is no customer kind), the two other
+//   variations of the four products — Glass igloo emptying for the Igloo
+//   3m³ container type, Bulky waste pickup for Organic — the scheduled +3 %
 //   change of 2027-01-01, the Nørrebro CoWork negotiated row (no such
-//   customer is seeded), and every row of a product outside the four. Never
-//   seeded, being the running Pilot's: service areas and their assignments,
-//   provider prices, billable events, billing runs, invoices, settlements.
+//   customer is seeded), and every row of a product outside the four. The
+//   Settings pane's zones, customer types and service levels are a store the
+//   browser keeps alone. Never seeded, being the running Pilot's: service
+//   areas and their assignments, provider prices, billable events, billing
+//   runs, invoices, settlements.
 import type { CustomerKind } from "@waste/domain/registry/vocabulary"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
 
 import type { Tx } from "../client"
 import { priceList, priceListRow } from "../schema/finance"
 import { counted, DEMO_COMPANY_ID, DEMO_PROJECT_IDS, keyed, required } from "./ids"
-import { REGISTRY_IDS } from "./registry"
+import { REGISTRY_IDS, type RegistryProject } from "./registry"
 import { upsertOwned } from "./upsert"
 
 const COMPANY_ID = DEMO_COMPANY_ID
-
-/** The projects the catalogue, and so a price list, is in. */
-type FinanceProject = "copenhagen" | "harbor"
 
 /** An amount's numerals as minor units: `18.50` is 1850. */
 function minorUnitsOf(amount: string): number {
@@ -83,7 +86,7 @@ const CARDBOARD: RowSpec = { key: "price-row-card-default", product: "product-ca
 const GLASS: RowSpec = { key: "price-row-glass-default", product: "product-glass-igloo", amount: "41.00", validFrom: "2026-01-01" }
 const BULKY: RowSpec = { key: "price-row-bulky-default", product: "product-bulky", amount: "45.00", validFrom: "2026-01-01" }
 
-type ListSpec = { key: string; project: FinanceProject; code: string; description: string; rows: readonly RowSpec[] }
+type ListSpec = { key: string; project: RegistryProject; code: string; description: string; rows: readonly RowSpec[] }
 const LISTS: readonly ListSpec[] = [
   {
     key: "price-list-copenhagen-2026",
@@ -104,7 +107,7 @@ const LISTS_FROM = "2026-01-01"
 export type FinanceIds = {
   priceLists: Readonly<Record<string, string>>
   /** Per project, as the catalogue's products are: a fixture row is on each list it is copied to. */
-  priceListRows: Readonly<Record<FinanceProject, Readonly<Record<string, string>>>>
+  priceListRows: Readonly<Record<RegistryProject, Readonly<Record<string, string>>>>
 }
 
 type FinanceRows = {
@@ -118,7 +121,7 @@ export type FinanceCounts = { [K in keyof FinanceRows]: number }
 function build(): { ids: FinanceIds; rows: FinanceRows } {
   const listIds = keyed(LISTS, (spec) => spec.key, "priceList")
   const next = counted("priceListRow")
-  const rowIds = Object.fromEntries(LISTS.map((list) => [list.project, Object.fromEntries(list.rows.map((row) => [row.key, next()]))])) as Record<FinanceProject, Record<string, string>>
+  const rowIds = Object.fromEntries(LISTS.map((list) => [list.project, Object.fromEntries(list.rows.map((row) => [row.key, next()]))])) as Record<RegistryProject, Record<string, string>>
 
   return {
     ids: { priceLists: listIds, priceListRows: rowIds },
@@ -162,8 +165,7 @@ const built = build()
 /** Every Finance id the seed writes. */
 export const FINANCE_IDS: FinanceIds = built.ids
 
-/** The rows themselves, for a test that wants to read what the seed proposes. */
-export const FINANCE_ROWS: Readonly<FinanceRows> = built.rows
+const FINANCE_ROWS: Readonly<FinanceRows> = built.rows
 
 export const FINANCE_COUNTS: FinanceCounts = Object.fromEntries(Object.entries(built.rows).map(([table, rows]) => [table, rows.length])) as FinanceCounts
 
