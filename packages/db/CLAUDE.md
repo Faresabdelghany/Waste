@@ -13,5 +13,5 @@ Read `migrations/README.md` before adding a table, a column or a migration. It i
 - `withCompany(db, companyId, fn)` (`src/tenant.ts`) takes the pool and refuses a transaction, since the setting it makes would outlive a savepoint's release.
 - Through the raw `sql` face, timestamps come back as Postgres text and a `Date` parameter is refused.
 - A statement both processes run throws `Refused` (`src/commands/shared.ts`); each process turns it into its own answer.
-- `pnpm db:seed` writes on fixed UUIDv7 ids (`DEMO_IDS`, `src/seed/demo.ts`), so a test can name a seeded row without looking it up, and an upsert that would change nothing writes nothing.
+- `pnpm db:seed` writes on fixed UUIDv7 ids (`DEMO_IDS`, `src/seed/demo.ts`), so a test can name a seeded row without looking it up, and an upsert that would change nothing writes nothing. Its accounts are the Pilot's demo Logins too, on reserved `.example` addresses: an address changed here needs the owner to rename that Login on the Pilot, and a real tester or another driver gets an account through Users & Roles on the Pilot.
 - The tests run against a real Postgres. The rendering tests pin DDL without one; the rest create a fresh database per file or share the local one, and `src/__tests__/specimen.ts` runs a specimen table inside a transaction that always rolls back.

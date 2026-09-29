@@ -2,10 +2,13 @@
 // fresh database of its own, so that "a clean database becomes the demo
 // company" is what is proved and nothing depends on what the shared local
 // database holds. The properties that matter: it writes what the spec lists,
-// a second run writes nothing at all, and a row someone edited by hand goes
-// back to what the seed says. The ids are fixed constants, so a hosted token
-// opens the same company locally; their shape is checked without a database.
+// a second run writes nothing at all, a row someone edited by hand goes back
+// to what the seed says, and what the seed does not own — a Login's binding,
+// an access row the API rewrote — stays as it is. The ids are fixed
+// constants, so a hosted token opens the same company locally; their shape is
+// checked without a database.
 import assert from "node:assert/strict"
+import { randomUUID } from "node:crypto"
 import { after, before, describe, test } from "node:test"
 
 import { SYSTEM_ROLES, SYSTEM_ROLE_KEYS } from "@waste/domain/access/system-roles"
@@ -111,6 +114,8 @@ describe("the demo seed's fixed ids", () => {
     assert.equal(demoId("company", 1), DEMO_IDS.company)
     assert.equal(demoId("project", 3), DEMO_IDS.projects.cairo)
     assert.equal(demoId("role", 11), DEMO_IDS.roles["integration-writer"])
+    // The id #143's driver profile names as its `user_account_id` (#140).
+    assert.equal(demoId("user", 3), DEMO_IDS.users.mads)
     assert.equal(demoId("serviceProviderAccess", 1), DEMO_IDS.serviceProviderAccess.lars)
     assert.equal(demoId("container", 0x6b), "01a0d2a4-a280-7014-8000-00000000006b")
     assert.throws(() => demoId("container", 0), /whole number from 1/)
@@ -183,7 +188,16 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     return row
   }
 
-  test("a clean database becomes Kystbyen Renovation: three projects, two service providers, eleven roles with their grants, two accounts", async () => {
+  /** Which projects an account reaches: all of the company's when `all_projects`, otherwise exactly its project_access rows. */
+  const reaches = async (accountId: string): Promise<string[]> => {
+    const [account] = await owner.db.select().from(userAccount).where(eq(userAccount.id, accountId))
+    const rows = account.allProjects
+      ? await owner.db.select({ id: project.id }).from(project)
+      : await owner.db.select({ id: projectAccess.projectId }).from(projectAccess).where(eq(projectAccess.userAccountId, accountId))
+    return rows.map((row) => row.id).sort()
+  }
+
+  test("a clean database becomes Kystbyen Renovation: three projects, two service providers, eleven roles with their grants, three accounts", async () => {
     const report = await seedDemo(fresh.url)
     assert.equal(report.companyId, DEMO_IDS.company)
     assert.ok(report.changed > 0)
@@ -192,7 +206,8 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
       serviceProviders: 2,
       roles: 11,
       roleGrants: expectedGrants,
-      users: 2,
+      users: 3,
+      projectAccess: 1,
       serviceProviderAccess: 1,
       ...REGISTRY_COUNTS,
     })
@@ -248,37 +263,38 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     const grants = await grantChecksum()
     assert.equal(grants.count, expectedGrants)
 
+    // Reserved addresses, each an Invitation: no Login is bound and none is deactivated.
     const accounts = await owner.db.select().from(userAccount).orderBy(userAccount.id)
     assert.deepEqual(
       accounts.map((row) => [row.id, row.email, row.fullName, row.allProjects, row.primaryAdministrator, row.serviceProviderId, row.authUserId, row.deactivatedAt]),
       [
-        [DEMO_IDS.users.fares, "fares4389@gmail.com", "Fares Abdelghany", true, true, null, null, null],
-        [DEMO_IDS.users.lars, "fares4389+lars@gmail.com", "Lars Mikkelsen", false, false, DEMO_IDS.serviceProviders.nordren, null, null],
+        [DEMO_IDS.users.fares, "fares.abdelghany@kystbyen.example", "Fares Abdelghany", true, true, null, null, null],
+        [DEMO_IDS.users.lars, "lars.mikkelsen@nordren.example", "Lars Mikkelsen", false, false, DEMO_IDS.serviceProviders.nordren, null, null],
+        [DEMO_IDS.users.mads, "mads.jensen@kystbyen.example", "Mads Jensen", false, false, null, null, null],
       ],
     )
   })
 
-  test("Fares works in every project and for no service provider; Lars works for NordRen and in no project", async () => {
+  test("Fares works in every project and for no service provider; Lars works for NordRen and in no project; Mads drives in Copenhagen Central alone", async () => {
     const [fares] = await owner.db.select().from(userAccount).where(eq(userAccount.id, DEMO_IDS.users.fares))
     const [lars] = await owner.db.select().from(userAccount).where(eq(userAccount.id, DEMO_IDS.users.lars))
+    const [mads] = await owner.db.select().from(userAccount).where(eq(userAccount.id, DEMO_IDS.users.mads))
     const roles = await owner.db.select().from(role)
     const key = (id: string) => roles.find((row) => row.id === id)?.key
 
-    // Which projects an account reaches: all of the company's when
-    // `all_projects`, otherwise exactly its project_access rows.
-    const projects = await owner.db.select().from(project)
-    const access = await owner.db.select().from(projectAccess)
-    const reaches = (account: typeof fares) =>
-      account.allProjects ? projects.map((row) => row.id).sort() : access.filter((row) => row.userAccountId === account.id).map((row) => row.projectId).sort()
-
     assert.equal(key(fares.roleId), "company-administrator")
-    assert.deepEqual(reaches(fares), Object.values(DEMO_IDS.projects).sort())
+    assert.deepEqual(await reaches(fares.id), Object.values(DEMO_IDS.projects).sort())
     assert.equal(fares.serviceProviderId, null)
     assert.equal(fares.primaryAdministrator, true)
 
     assert.equal(key(lars.roleId), "service-provider-manager")
-    assert.deepEqual(reaches(lars), [])
+    assert.deepEqual(await reaches(lars.id), [])
     assert.equal(lars.serviceProviderId, DEMO_IDS.serviceProviders.nordren)
+
+    assert.equal(key(mads.roleId), "driver")
+    assert.deepEqual(await reaches(mads.id), [DEMO_IDS.projects.copenhagen])
+    assert.equal(mads.serviceProviderId, null)
+    assert.equal(mads.primaryAdministrator, false)
     const providerAccess = await owner.db.select().from(serviceProviderAccess)
     assert.deepEqual(
       providerAccess.map((row) => [row.userAccountId, row.serviceProviderId]),
@@ -495,6 +511,7 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
       action: "delete",
     })
     await owner.db.delete(serviceProviderAccess).where(eq(serviceProviderAccess.id, DEMO_IDS.serviceProviderAccess.lars))
+    await owner.db.delete(projectAccess).where(eq(projectAccess.userAccountId, DEMO_IDS.users.mads))
     // Registry rows too, a geometry among them: the point takes part in the
     // row comparison through PostGIS's `=`, so a moved point is put back and
     // an unmoved one is not rewritten.
@@ -530,9 +547,54 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
       providerAccess.map((row) => [row.id, row.userAccountId, row.serviceProviderId]),
       [[DEMO_IDS.serviceProviderAccess.lars, DEMO_IDS.users.lars, DEMO_IDS.serviceProviders.nordren]],
     )
+    assert.deepEqual(await reaches(DEMO_IDS.users.mads), [DEMO_IDS.projects.copenhagen])
     // The grant rows were rewritten, so only the rows that were touched differ.
     assert.notEqual(await snapshot(), settled)
     assert.equal((await grantChecksum()).count, expectedGrants)
     assert.equal((await seedDemo(fresh.url)).changed, 0)
+  })
+
+  test("Mads's Project Access is the pair it joins: the row the API rewrote under another id is left as it is, and nothing is written", async () => {
+    // What the API does whenever an account's access is edited: the rows go, and come back under new ids.
+    await owner.db.delete(projectAccess).where(eq(projectAccess.userAccountId, DEMO_IDS.users.mads))
+    const [rewritten] = await owner.db
+      .insert(projectAccess)
+      .values({ companyId: DEMO_IDS.company, userAccountId: DEMO_IDS.users.mads, projectId: DEMO_IDS.projects.copenhagen })
+      .returning({ id: projectAccess.id })
+    const settled = await snapshot()
+
+    assert.equal((await seedDemo(fresh.url)).changed, 0)
+    assert.equal(await snapshot(), settled)
+    const rows = await owner.db.select().from(projectAccess).where(eq(projectAccess.userAccountId, DEMO_IDS.users.mads))
+    assert.deepEqual(
+      rows.map((row) => [row.id, row.projectId]),
+      [[rewritten.id, DEMO_IDS.projects.copenhagen]],
+    )
+  })
+
+  test("a re-run over the Pilot's accounts moves the two addresses in place, keeps both Logins bound and adds Mads as an Invitation; the run after writes nothing", async () => {
+    // The Pilot before #140: Fares and Lars bound to their Logins at the addresses they were invited at, and no Mads.
+    const logins = { fares: randomUUID(), lars: randomUUID() }
+    await owner.db.delete(projectAccess).where(eq(projectAccess.userAccountId, DEMO_IDS.users.mads))
+    await owner.db.delete(userAccount).where(eq(userAccount.id, DEMO_IDS.users.mads))
+    await owner.db.update(userAccount).set({ email: "fares@earlier-address.example", authUserId: logins.fares }).where(eq(userAccount.id, DEMO_IDS.users.fares))
+    await owner.db.update(userAccount).set({ email: "lars@earlier-address.example", authUserId: logins.lars }).where(eq(userAccount.id, DEMO_IDS.users.lars))
+
+    // Two addresses moved, one account and its Project Access added: four rows, and nothing else.
+    assert.equal((await seedDemo(fresh.url)).changed, 4)
+    const accounts = await owner.db.select().from(userAccount).orderBy(userAccount.id)
+    assert.deepEqual(
+      accounts.map((row) => [row.id, row.email, row.authUserId, row.deactivatedAt]),
+      [
+        [DEMO_IDS.users.fares, "fares.abdelghany@kystbyen.example", logins.fares, null],
+        [DEMO_IDS.users.lars, "lars.mikkelsen@nordren.example", logins.lars, null],
+        [DEMO_IDS.users.mads, "mads.jensen@kystbyen.example", null, null],
+      ],
+    )
+    assert.deepEqual(await reaches(DEMO_IDS.users.mads), [DEMO_IDS.projects.copenhagen])
+
+    const settled = await snapshot()
+    assert.equal((await seedDemo(fresh.url)).changed, 0)
+    assert.equal(await snapshot(), settled)
   })
 })

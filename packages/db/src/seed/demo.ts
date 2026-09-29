@@ -1,12 +1,14 @@
 // The demo company, as `pnpm db:seed` writes it (Issue #70, slice 2): the
 // tenant the prototype has always shown — Kystbyen Renovation, its three
 // projects with their working weeks (Issue #97), the two service providers it
-// works with, the eleven seeded roles with their grants, and the two accounts
-// the login picker offers — and, since 2026-09-25, its Registry: the
-// catalogue, the customers with their properties, groups and shared points,
-// the agreements with their subscriptions, and the containers with their
-// placements, derived from the web prototype's fixtures in registry.ts and
-// written in the same transaction.
+// works with, the eleven seeded roles with their grants, and the three
+// accounts the Pilot signs in with (Issue #140): Fares Abdelghany, the primary
+// administrator; Lars Mikkelsen, NordRen's Service Provider Manager; and Mads
+// Jensen, the driver, with Project Access to Copenhagen Central alone — and,
+// since 2026-09-25, its Registry: the catalogue, the customers with their
+// properties, groups and shared points, the agreements with their
+// subscriptions, and the containers with their placements, derived from the
+// web prototype's fixtures in registry.ts and written in the same transaction.
 //
 // Three properties make this a seed and not a fixture script:
 //
@@ -14,7 +16,8 @@
 //   version 7 by hand, so the local database and the hosted project hold the
 //   same company: a token minted against the hosted project opens the same
 //   rows locally, and a test may name a row without looking it up. A test
-//   holds their shape.
+//   holds their shape. A role grant and a Project Access are the two rows
+//   with no fixed id: each is what it joins (below).
 //
 //   Idempotent. Every insert is `on conflict ... do update` keyed by the id
 //   (upsert.ts), and the update is skipped when the stored row already says
@@ -42,12 +45,12 @@
 //   global, so no other company on the database may carry that pair. A test
 //   company takes a registration number of its own.
 //
-//   fares4389@gmail.com and fares4389+lars@gmail.com (both reaching the one
-//   inbox that receives the invitations for now) — the access token hook
-//   binds a first sign-in by e-mail across the whole database, so
-//   an account elsewhere with one of these addresses would be bound by it and
-//   then refused by `unique (auth_user_id)`. A test account takes an address
-//   on a random `.example` domain.
+//   fares.abdelghany@kystbyen.example, lars.mikkelsen@nordren.example and
+//   mads.jensen@kystbyen.example — the access token hook binds a first
+//   sign-in by e-mail across the whole database, and of two open invitations
+//   of one address it binds neither (migration 0005), so an account elsewhere
+//   with one of these addresses would keep the seeded one from ever being
+//   bound. A test account takes an address on a random `.example` domain.
 //
 //   The `01a0d2a4-a280-7…` id bucket — every id below is spelled by hand in
 //   it. A test row minted from the clock lands far from it, but a hand-written
@@ -60,7 +63,7 @@ import { SYSTEM_ROLES, type SystemRoleKey } from "@waste/domain/access/system-ro
 import { and, eq, inArray, sql } from "drizzle-orm"
 
 import { createDb, type Tx } from "../client"
-import { role, roleGrant, serviceProviderAccess, userAccount } from "../schema/access"
+import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "../schema/access"
 import { company, project, serviceProvider } from "../schema/organisation"
 import { DEMO_COMPANY_ID, DEMO_PROJECT_IDS } from "./ids"
 import { applyRegistry, REGISTRY_COUNTS, REGISTRY_IDS, type RegistryCounts } from "./registry"
@@ -98,6 +101,7 @@ export const DEMO_IDS = {
   users: {
     fares: "01a0d2a4-a280-7005-8000-000000000001",
     lars: "01a0d2a4-a280-7005-8000-000000000002",
+    mads: "01a0d2a4-a280-7005-8000-000000000003",
   },
   serviceProviderAccess: {
     lars: "01a0d2a4-a280-7006-8000-000000000001",
@@ -208,28 +212,53 @@ const GRANTS: (typeof roleGrant.$inferInsert)[] = SYSTEM_ROLES.flatMap((systemRo
   ),
 )
 
-// Both accounts are `invited` until Supabase Auth's access token hook binds
-// them on first sign-in: `auth_user_id` is null here and stays the hook's.
+// Each account is an Invitation (`invited`) until Supabase Auth's access token
+// hook binds a Login to it on first sign-in: `auth_user_id` is null here and
+// stays the hook's. No e-mail is ever sent on the Pilot (#129), so an address
+// is only what the hook matches a Login on, and each sits on a reserved
+// `.example` domain that names nobody's inbox; the Pilot's Logins carry the
+// same three. Nobody else is seeded: a tester's account is made in Users &
+// Roles on the Pilot at their real address, and so is a second driver's,
+// never by widening this list. The prototype keeps its fixture address in
+// lib/data/demo-accounts.ts until Issue 5.
 const USERS: (typeof userAccount.$inferInsert)[] = [
   {
     id: DEMO_IDS.users.fares,
     companyId: COMPANY_ID,
-    // For now both invitations go to one real inbox (see the header); the
-    // prototype keeps its fixture address in lib/data/demo-accounts.ts until Issue 5.
-    email: "fares4389@gmail.com",
+    email: "fares.abdelghany@kystbyen.example",
     fullName: "Fares Abdelghany",
     roleId: DEMO_IDS.roles["company-administrator"],
     allProjects: true,
     primaryAdministrator: true,
   },
   {
+    // Kept so the provider authorization model stays represented (#129).
     id: DEMO_IDS.users.lars,
     companyId: COMPANY_ID,
-    email: "fares4389+lars@gmail.com",
+    email: "lars.mikkelsen@nordren.example",
     fullName: "Lars Mikkelsen",
     roleId: DEMO_IDS.roles["service-provider-manager"],
     serviceProviderId: DEMO_IDS.serviceProviders.nordren,
   },
+  {
+    // The driver persona whose Login the Driver App's testers share (#145);
+    // the driver profile naming this account comes with #156 (decided in #143).
+    id: DEMO_IDS.users.mads,
+    companyId: COMPANY_ID,
+    email: "mads.jensen@kystbyen.example",
+    fullName: "Mads Jensen",
+    roleId: DEMO_IDS.roles.driver,
+  },
+]
+
+// Mads works in Copenhagen Central alone. A Project Access row has no fixed
+// id: like a grant, it is the pair it joins. The API replaces an account's
+// access rows under new ids whenever its access is edited, so a row keyed by
+// an id here would meet the same pair under another id on the next run and
+// fail on `unique (company_id, user_account_id, project_id)`; keyed by the
+// pair, the next run finds it and writes nothing.
+const PROJECT_ACCESS: (typeof projectAccess.$inferInsert)[] = [
+  { companyId: COMPANY_ID, userAccountId: DEMO_IDS.users.mads, projectId: DEMO_IDS.projects.copenhagen },
 ]
 
 const PROVIDER_ACCESS: (typeof serviceProviderAccess.$inferInsert)[] = [
@@ -248,6 +277,7 @@ export type DemoSeedCounts = {
   roles: number
   roleGrants: number
   users: number
+  projectAccess: number
   serviceProviderAccess: number
 } & RegistryCounts
 
@@ -264,6 +294,7 @@ const COUNTS: DemoSeedCounts = {
   roles: ROLES.length,
   roleGrants: GRANTS.length,
   users: USERS.length,
+  projectAccess: PROJECT_ACCESS.length,
   serviceProviderAccess: PROVIDER_ACCESS.length,
   ...REGISTRY_COUNTS,
 }
@@ -327,6 +358,13 @@ async function applyDemo(tx: Tx): Promise<number> {
       .values(GRANTS)
       .onConflictDoNothing({ target: [roleGrant.companyId, roleGrant.roleId, roleGrant.moduleKey, roleGrant.action] })
       .returning({ id: roleGrant.id }),
+  )
+  written(
+    await tx
+      .insert(projectAccess)
+      .values(PROJECT_ACCESS)
+      .onConflictDoNothing({ target: [projectAccess.companyId, projectAccess.userAccountId, projectAccess.projectId] })
+      .returning({ id: projectAccess.id }),
   )
 
   // The access row carries nothing beyond the pair it joins, and the
