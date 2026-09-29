@@ -323,7 +323,7 @@ const USER_COLUMNS = [
 ]
 
 /** Writes the demo company into an open transaction and answers how many rows it changed. */
-async function applyDemo(tx: Tx): Promise<number> {
+export async function applyDemo(tx: Tx): Promise<number> {
   let changed = 0
   const written = (rows: { id: string }[]) => {
     changed += rows.length
