@@ -41,7 +41,7 @@ Only the account holder can do these (tracking issue #191 lists them). The value
 
    `HOST`, `WORKER_HOST`, `WORKER_PORT` and `NODE_EXTRA_CA_CERTS` are the image's own. The three secrets are the `pilot` environment's `PILOT_DATABASE_URL`, `PILOT_WORKER_DATABASE_URL` and the project's origin, and go nowhere else (`supabase/README.md`).
 4. **The repository variable** `PILOT_API_URL`: the service's `https://<name>.suga.run`, which the release's proof reads.
-5. **The first release**: `release` with `deploy_api` on; the run's Deploy step writes `pilot`, Suga builds and rolls out, the proof passes once `/healthz` names the commit and `/readyz` answers 200 three times running. Then the two readings ADR-0008 owes (#149's acceptance): the memory line and Supabase's egress meter after a day, and the authenticated readings with a tester's token.
+5. **The first release**: `release` with `deploy_api` on; the run's Deploy step writes `pilot`, Suga builds and rolls out, the proof passes once `/healthz` names the commit and `/readyz` answers 200 three times running. A push made with the workflow's own token starts no Actions run (nothing should run on `pilot`) but does fire the GitHub App webhooks Suga listens to; if Suga does not build within a minute of the Deploy step, the place to look is the app's webhook deliveries (Settings › GitHub Apps › Suga) and the service's build log. Then the two readings ADR-0008 owes (#149's acceptance): the memory line and Supabase's egress meter after a day, and the authenticated readings with a tester's token.
 
 ## The knobs, as the code reads them
 

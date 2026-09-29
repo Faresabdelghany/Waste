@@ -8,9 +8,10 @@
 // and a pinned clock, so every reason a count resets is its own case; the
 // release commit over a recording GitHub, so the token leaves no test.
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import { describe, test } from "node:test"
 
-import { judgeChecks, judgeObservation, observeRelease, releaseToDeployBranch, requireChecks, type CheckRun, type Observation } from "../pilot/release"
+import { judgeChecks, judgeObservation, observeRelease, releaseToDeployBranch, REQUIRED_CHECKS, requireChecks, type CheckRun, type Observation } from "../pilot/release"
 
 const COMMIT = "5f1501d6a2b3c4d5e6f708192a3b4c5d6e7f8091"
 const OLD = "21e7e2c0c8f1b4d9a3e5f6a7b8c9d0e1f2a3b4c5"
@@ -249,6 +250,29 @@ describe("releaseToDeployBranch", () => {
   })
 })
 
+describe("REQUIRED_CHECKS", () => {
+  /** The `name:` of each job under `jobs:` in a workflow file, by job key, read without a YAML parser: a job key is two spaces in, its name four. */
+  const jobNames = (workflow: string): Map<string, string> => {
+    const names = new Map<string, string>()
+    let job: string | undefined
+    for (const line of workflow.split("\n")) {
+      const key = /^  ([A-Za-z0-9_-]+):\s*$/.exec(line)
+      if (key !== null) job = key[1]
+      const name = /^    name: (.+?)\s*$/.exec(line)
+      if (name !== null && job !== undefined && !names.has(job)) names.set(job, name[1])
+    }
+    return names
+  }
+
+  test("names the check runs CI's `verify` and `pilot-image` jobs report, spelled as .github/workflows/ci.yml spells them — a renamed job fails here, not a release", () => {
+    const ci = readFileSync(new URL("../../../../.github/workflows/ci.yml", import.meta.url), "utf8")
+    const names = jobNames(ci)
+    assert.deepEqual([...REQUIRED_CHECKS], [names.get("verify"), names.get("pilot-image")])
+    // The verify job's name carries commas, which is why the names are a constant and never a separated string.
+    assert.match(REQUIRED_CHECKS[0], /,/)
+  })
+})
+
 describe("judgeChecks", () => {
   const NAMES = ["Install, typecheck, lint, test, build", "Build pilot image"]
   const run = (name: string, status = "completed", conclusion: string | null = "success"): CheckRun => ({ name, status, conclusion, html_url: `https://github.com/x/y/runs/${name.length}` })
@@ -271,7 +295,8 @@ describe("judgeChecks", () => {
 
 describe("requireChecks", () => {
   const TOKEN = "ghs_s3cr3tT0ken"
-  const base = { repository: "faresabdelghany/waste", sha: COMMIT, names: ["Build pilot image"], token: TOKEN }
+  const base = { repository: "faresabdelghany/waste", sha: COMMIT, token: TOKEN }
+  const green = (name: string) => ({ name, status: "completed", conclusion: "success" })
   const github = (status: number, body: unknown) => {
     const calls: { url: string; headers: Record<string, string> }[] = []
     const fetch = async (input: URL | string, init?: RequestInit) => {
@@ -281,16 +306,17 @@ describe("requireChecks", () => {
     return { calls, fetch }
   }
 
-  test("reads the commit's check runs under the token and passes a green commit", async () => {
-    const gh = github(200, { total_count: 1, check_runs: [{ name: "Build pilot image", status: "completed", conclusion: "success" }] })
-    assert.deepEqual(await requireChecks({ ...base, fetch: gh.fetch }), { names: ["Build pilot image"] })
+  test("reads the commit's check runs under the token and passes a commit whose required runs — REQUIRED_CHECKS, whole names, commas and all — are green", async () => {
+    const gh = github(200, { total_count: 3, check_runs: [green("End-to-end (web, Playwright)"), ...REQUIRED_CHECKS.map(green)] })
+    assert.deepEqual(await requireChecks({ ...base, fetch: gh.fetch }), { names: REQUIRED_CHECKS })
     assert.equal(gh.calls[0].url, `https://api.github.com/repos/faresabdelghany/waste/commits/${COMMIT}/check-runs?per_page=100`)
     assert.equal(gh.calls[0].headers.authorization, `Bearer ${TOKEN}`)
   })
 
-  test("refuses a commit CI has not proved, naming the commit and the reason, and an answer that is not GitHub's", async () => {
-    await assert.rejects(requireChecks({ ...base, fetch: github(200, { total_count: 0, check_runs: [] }).fetch }), /Commit 5f1501d6a2b3c4d5e6f708192a3b4c5d6e7f8091 is not released: no check run named "Build pilot image"/)
-    await assert.rejects(requireChecks({ ...base, fetch: github(200, { check_runs: [{ name: "Build pilot image", status: "queued", conclusion: null }] }).fetch }), /is queued, not completed/)
+  test("refuses a commit CI has not proved, naming the commit and the missing run by its whole name, and an answer that is not GitHub's", async () => {
+    await assert.rejects(requireChecks({ ...base, fetch: github(200, { total_count: 0, check_runs: [] }).fetch }), /Commit 5f1501d6a2b3c4d5e6f708192a3b4c5d6e7f8091 is not released: no check run named "Install, typecheck, lint, test, build"/)
+    await assert.rejects(requireChecks({ ...base, fetch: github(200, { check_runs: [green(REQUIRED_CHECKS[0])] }).fetch }), /no check run named "Build pilot image"/)
+    await assert.rejects(requireChecks({ ...base, fetch: github(200, { check_runs: [green(REQUIRED_CHECKS[0]), { name: "Build pilot image", status: "queued", conclusion: null }] }).fetch }), /is queued, not completed/)
     await assert.rejects(requireChecks({ ...base, fetch: github(403, { message: "Resource not accessible by integration" }).fetch }), /GitHub answered 403 reading the check runs of 5f1501d6/)
     await assert.rejects(requireChecks({ ...base, fetch: github(200, { nothing: true }).fetch }), /GitHub answered no check runs for/)
     await assert.rejects(requireChecks({ ...base, token: "", fetch: github(200, {}).fetch }), /GITHUB_TOKEN is not set/)

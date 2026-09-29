@@ -259,7 +259,7 @@ export async function releaseToDeployBranch({ repository, branch, sha, token, ap
   const releaseTree = await shaOf(tree, "the release tree")
   if (head !== null && (await treeOf(head, `${ref}'s head ${head}`)) === releaseTree) return { moved: false, from: head, head, commit: sha }
 
-  // The release commit: on the branch's head and the released commit, so the branch fast-forwards and main's history is in its ancestry; on the released commit alone where there is no branch, or where the branch stands on that very commit (made by hand from main's tip).
+  // The release commit: on the branch's head and the released commit, so the branch fast-forwards and main's history is in its ancestry; on the released commit alone where there is no branch, or where the branch stands on that very commit (made by hand from main's tip). Where the head is a hand-pushed commit above an earlier release of this same commit, the released commit is already an ancestor of the head: git takes such a redundant parent, and GitHub has so far; if GitHub ever refuses it, this is the line to look at.
   const commit = await call("/git/commits", {
     method: "POST",
     body: {
@@ -282,13 +282,22 @@ export async function releaseToDeployBranch({ repository, branch, sha, token, ap
   return { moved: true, from: head, head: releaseCommit, commit: sha }
 }
 
+/**
+ * The check runs a release requires green on the commit: CI's `verify` and
+ * `pilot-image` jobs, by the `name:` each carries in .github/workflows/ci.yml
+ * (a check run is named after its job). A constant and never a separated
+ * string, since the first name has commas in it; the release test holds it
+ * to the workflow file, so a renamed job fails a test and not a release.
+ */
+export const REQUIRED_CHECKS: readonly string[] = ["Install, typecheck, lint, test, build", "Build pilot image"]
+
 export type RequireChecksOptions = {
   /** `<owner>/<name>`: GITHUB_REPOSITORY. */
   repository: string
   /** The released commit: RELEASE_COMMIT. */
   sha: string
-  /** The check runs that must have completed with success on it: CI's job names. */
-  names: readonly string[]
+  /** The check runs that must have completed with success on it; REQUIRED_CHECKS unless a test says otherwise. */
+  names?: readonly string[]
   /** The job's token, with `checks: read`: GITHUB_TOKEN. */
   token: string
   apiUrl?: string
@@ -320,7 +329,7 @@ export function judgeChecks(runs: readonly CheckRun[], names: readonly string[])
  * image itself this is what keeps a red or unfinished commit from being
  * migrated for and pushed to the deploy branch.
  */
-export async function requireChecks({ repository, sha, names, token, apiUrl = "https://api.github.com", fetch = globalThis.fetch }: RequireChecksOptions): Promise<{ names: readonly string[] }> {
+export async function requireChecks({ repository, sha, names = REQUIRED_CHECKS, token, apiUrl = "https://api.github.com", fetch = globalThis.fetch }: RequireChecksOptions): Promise<{ names: readonly string[] }> {
   if (!REPOSITORY.test(repository)) throw new Error(`GITHUB_REPOSITORY is not <owner>/<name>: ${repository}`)
   if (!COMMIT_ID.test(sha)) throw new Error(`RELEASE_COMMIT is not a full commit id: ${sha}`)
   if (token === "") throw new Error("GITHUB_TOKEN is not set")

@@ -156,14 +156,13 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/pilot-node
-      # 2. CI's proof of this commit, in place of the image the old step resolved: its verify and pilot-image check runs completed with success, else nothing is written. Suga builds the image from the deploy branch, whose tree step 8 makes this commit's, so the code the release deploys is this commit by construction.
+      # 2. CI's proof of this commit, in place of the image the old step resolved: the check runs REQUIRED_CHECKS names (packages/db/src/pilot/release.ts, held to ci.yml's job names by a test) completed with success, else nothing is written. Suga builds the image from the deploy branch, whose tree step 8 makes this commit's, so the code the release deploys is this commit by construction.
       - name: Require CI green on this commit
         if: inputs.deploy_api
         working-directory: packages/db
         env:
           GITHUB_TOKEN: ${{ github.token }}
           RELEASE_COMMIT: ${{ github.sha }}
-          RELEASE_CHECKS: "Install, typecheck, lint, test, build,Build pilot image"
         run: node --import tsx scripts/pilot/check-ci.ts
       # 3. The journal agrees with main's migrations before anything is written.
       - name: Journal check
