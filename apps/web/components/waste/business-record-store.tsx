@@ -110,6 +110,14 @@ type BusinessRecordStores = {
    * for the whole store, since two components may write the same row.
    */
   pendingWrites: Map<string, Promise<void>>
+  /**
+   * Which session the server-backed modules belong to: one more each time
+   * the person signed in changes (a sign-out, a sign-in as someone else). A
+   * write remembers the one it began in, and an answer that arrives after it
+   * changed is dropped: it would put the last person's rows back in front of
+   * the next one.
+   */
+  generation: ExternalStore<number>
 }
 
 // The context carries the stable store handles, never the state itself — see
@@ -162,6 +170,7 @@ export function BusinessRecordStoreProvider({
     server: createExternalStore<ServerRecordsState>(NO_SERVER_MODULES),
     client: createExternalStore<ApiClient | null>(null),
     pendingWrites: new Map(),
+    generation: createExternalStore(0),
   }))
   const client = useApiClient()
   const identity = useApiSessionIdentity()
@@ -225,9 +234,11 @@ export function BusinessRecordStoreProvider({
   // session by then, so the load stops there, reported nowhere but /login
   // and never falling back on fixtures. A load the session outlives — the
   // person signs out mid-way — is aborted, not left to finish into a store
-  // that no longer wants it.
+  // that no longer wants it, and a write it outlives is dropped when it
+  // answers (`generation`).
   useEffect(() => {
     const server = stores.server
+    stores.generation.set((generation) => generation + 1)
     if (identity === null) {
       server.set(NO_SERVER_MODULES)
       return
@@ -350,8 +361,14 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
         // tells the person why in the API's words.
         const before = current.records.find((candidate) => candidate.id === record.id)
         serverStore.set((state) => new Map(state).set(key, withRecord(state.get(key) ?? current, record)))
+        // The session this write belongs to: one that has ended by the time
+        // the write's turn comes, or by the time it answers, gets nothing.
+        const generation = stores.generation.getSnapshot()
+        const outlived = () => stores.generation.getSnapshot() !== generation
         const run = async () => {
+          if (outlived()) return
           const outcome = await writeRecord(client, module, current, record, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
+          if (outlived()) return
           serverStore.set((state) => {
             const latest = state.get(key) ?? current
             switch (outcome.kind) {
