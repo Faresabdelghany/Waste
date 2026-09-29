@@ -128,7 +128,7 @@ These are architectural constraints, not implementation preferences. Each has an
 
 - **DAWA closes 2026-10-01 10:00.** Gsearch closes 2026-11-01. Replacements are Adressevælger, Adressevask, and Datafordeleren, all from Klimadatastyrelsen, CC BY 4.0 with attribution.
 - PowerSync needs logical replication on the Supabase project.
-- The pg-boss worker and Valhalla need a host outside Supabase: Fly.io, ADR-0007.
+- The pg-boss worker and Valhalla need a host outside Supabase: Fly.io, ADR-0007 — deferred until Gate B; the Pilot runs the API and the worker as one Suga Free service under a supervisor, ADR-0008.
 
 ## Sources (verified 2026-09-17)
 

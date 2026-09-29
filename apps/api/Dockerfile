@@ -52,6 +52,7 @@ RUN npm install --global "pnpm@$(node -p "require('./package.json').packageManag
 # lockfile changes, not when source does.
 COPY pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/
+COPY apps/pilot/package.json apps/pilot/
 COPY apps/web/package.json apps/web/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/db/package.json packages/db/

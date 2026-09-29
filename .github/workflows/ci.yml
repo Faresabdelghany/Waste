@@ -116,8 +116,9 @@ jobs:
           load: true
           tags: waste-api:ci
           build-args: SOURCE_COMMIT=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # One cache scope per image: the three image jobs run side by side, and writers to one scope overwrite one another's index.
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
 
       # The process starts with a database nobody answers on (loopback port
       # 1 is refused at once inside the container), so liveness must answer
@@ -178,8 +179,8 @@ jobs:
           push: false
           load: true
           tags: waste-worker:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,scope=worker,mode=max
 
       # The other half of the API's smoke test: given a database nobody
       # answers on, the worker must not stay up. pg-boss checks its schema
@@ -206,6 +207,80 @@ jobs:
       - name: Container logs
         if: always()
         run: docker logs worker || true
+
+  pilot-image:
+    name: Build pilot image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      # The Pilot's image (apps/pilot/Dockerfile: the API and the worker
+      # under the supervisor, bundled; ADR-0008), built from the repository
+      # root on buildx with the same cache, loaded and pushed nowhere: Suga
+      # builds the Pilot's own copy from the `pilot` branch, and this job is
+      # the proof that the Dockerfile builds and the container behaves. The
+      # commit goes in as SOURCE_COMMIT, as the API image's does; on the
+      # deploy branch the same file is written from apps/pilot/release.json.
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/pilot/Dockerfile
+          push: false
+          load: true
+          tags: waste-pilot:ci
+          build-args: SOURCE_COMMIT=${{ github.sha }}
+          cache-from: type=gha,scope=pilot
+          cache-to: type=gha,scope=pilot,mode=max
+
+      # Against a database nobody answers on: the API answers /healthz 200
+      # naming this commit and /readyz 503 (the API image's two answers), the
+      # worker child exits and the supervisor restarts it with backoff — its
+      # first "restarting in 5 s" line, then a second start — while the API
+      # keeps answering, and `docker stop` ends the container cleanly with
+      # exit 0 through the supervisor's forwarded SIGTERM. Both waits poll
+      # with a deadline: up to 40 s for liveness (the bundles boot in about
+      # two seconds here), up to 40 s for the second start, since the
+      # worker's exit and its 5 s backoff run beside the API's boot at
+      # whatever share of a core the runner gives.
+      - name: Smoke test the image
+        run: |
+          docker run --detach --name pilot --publish 3001:3001 \
+            --env DATABASE_URL=postgresql://wms_api:x@127.0.0.1:1/postgres \
+            --env WORKER_DATABASE_URL=postgresql://wms_worker:x@127.0.0.1:1/postgres \
+            --env SUPABASE_URL="$SUPABASE_URL" \
+            waste-pilot:ci
+          status() { curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:3001$1" || echo 000; }
+          body() { curl --silent "http://127.0.0.1:3001$1" || true; }
+          for attempt in $(seq 1 40); do
+            if [ "$(docker inspect --format '{{.State.Running}}' pilot)" != true ]; then
+              echo "the container stopped before it answered (attempt $attempt)"
+              exit 1
+            fi
+            [ "$(status /healthz)" = 200 ] && break
+            sleep 1
+          done
+          healthz=$(status /healthz)
+          readyz=$(status /readyz)
+          echo "GET /healthz -> $healthz $(body /healthz)"
+          echo "GET /readyz -> $readyz $(body /readyz)"
+          test "$healthz" = 200 && test "$readyz" = 503
+          body /healthz | jq --exit-status --arg commit "$GITHUB_SHA" '.build.commit == $commit'
+          test "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' waste-pilot:ci)" = "$GITHUB_SHA"
+          for attempt in $(seq 1 40); do
+            [ "$(docker logs pilot 2>&1 | grep -c '^\[pilot\] worker started pid=')" -ge 2 ] && break
+            sleep 1
+          done
+          docker logs pilot 2>&1 | grep -E '^\[pilot\] worker exited code=1 signal=null after [0-9.]+ s; restarting in 5 s$' || { echo "::error::no worker restart with a 5 s backoff in the supervisor's log"; exit 1; }
+          test "$(docker logs pilot 2>&1 | grep -c '^\[pilot\] worker started pid=')" -ge 2 || { echo "::error::the worker was not started a second time within 40 s"; exit 1; }
+          test "$(status /healthz)" = 200
+          docker stop pilot >/dev/null
+          test "$(docker inspect --format '{{.State.ExitCode}}' pilot)" = 0
+          docker logs pilot 2>&1 | grep -qx '\[pilot\] exiting with 0'
+      - name: Container logs
+        if: always()
+        run: docker logs pilot 2>&1 | grep -E '^\[pilot\]' || true
 
   e2e:
     name: End-to-end (web, Playwright)

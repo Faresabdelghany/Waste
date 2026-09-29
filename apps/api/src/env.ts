@@ -1,10 +1,12 @@
 // The process environment, read once at startup and never again. Four
-// variables: where to listen, the database, and the Supabase project whose
-// Auth signs the tokens. Every value arrives as a string, so the schemas do
-// the reading. An empty variable counts as not set, applied once in parseEnv
-// for every variable, so a new field is a plain schema with a default, or
-// without one when the process cannot run without it. Anything else in the
-// environment is dropped, not carried around.
+// variables the process needs: where to listen, the database, and the
+// Supabase project whose Auth signs the tokens; and one knob, the request
+// pool's size, absent unless set (#149: the Pilot's is its host's
+// environment, never a default here). Every value arrives as a string, so
+// the schemas do the reading. An empty variable counts as not set, applied
+// once in parseEnv for every variable, so a new field is a plain schema with
+// a default, or without one when the process cannot run without it. Anything
+// else in the environment is dropped, not carried around.
 import * as z from "zod"
 
 /** The address to bind. Loopback by default; a container sets `0.0.0.0`. */
@@ -69,6 +71,18 @@ function isOrigin(value: string): boolean {
   }
 }
 
+/**
+ * The request pool's size: how many connections every authenticated request
+ * shares (server.ts). postgres.js's 10 unless set; the probe pool is one more
+ * and is not counted here. A whole number of at least one.
+ */
+const PoolMax = z
+  .string()
+  .regex(/^\d+$/, { error: "must be a whole number of connections, at least 1" })
+  .transform(Number)
+  .pipe(z.int().min(1))
+  .optional()
+
 export const Env = z.object({
   HOST: Host,
   PORT: Port,
@@ -76,6 +90,7 @@ export const Env = z.object({
   SUPABASE_URL: SupabaseUrl,
   /** The routing provider's name (#170, #131): unset means the fake; the one validator of the value is providerFromEnv (@waste/routing/select), so the refusal has one spelling. */
   ROUTING_PROVIDER: z.string().optional(),
+  DATABASE_POOL_MAX: PoolMax,
 })
 export type Env = z.infer<typeof Env>
 

@@ -8,7 +8,12 @@
 // which every job writes under `withCompany`, and the worker role's, on which
 // the sweeps read across tenants; both go into the context every handler
 // receives. A fourth, the probe pool /readyz uses, is one connection on the
-// API role's URL (readiness.ts says why a probe gets its own). Opening the
+// API role's URL (readiness.ts says why a probe gets its own). The two
+// application pools take their sizes from the environment's knobs where set
+// (env.ts; the Pilot's are 3 and 2, inside the pooler's 15 per role with the
+// API's own), and the polling knob reaches pg-boss and the context here, so
+// the line printed below is the one place the process says what it runs at.
+// Opening the
 // three `@waste/db` pools connects to nothing — postgres.js dials on the first
 // query — but `startBoss` does: pg-boss checks the installed schema version
 // before anything else, so a worker on a database without migration 0011, or
@@ -29,7 +34,7 @@
 // for a `start` in flight) and then closes what the boot made, so a host
 // that redeploys while the worker is still dialling gets a clean exit and
 // closed pools rather than Node's default 143 with the connections dropped.
-import { createDb } from "@waste/db/client"
+import { createDb, DEFAULT_POOL_MAX } from "@waste/db/client"
 import { providerFromEnv } from "@waste/routing/select"
 
 import { createApp } from "./app"
@@ -43,10 +48,23 @@ import { CHECK_TIMEOUT_MS, probePoolOptions } from "./readiness"
 
 const env = parseEnv(process.env)
 const routing = providerFromEnv({ ROUTING_PROVIDER: env.ROUTING_PROVIDER })
-const api = createDb(env.DATABASE_URL)
-const worker = createDb(env.WORKER_DATABASE_URL)
+// The Pilot's knobs (#149), each the code's default where the environment
+// leaves it unset: the two pools' sizes (an unset knob is `max: undefined`,
+// which createDb reads as its default), and the intervals boss.ts applies.
+const api = createDb(env.DATABASE_URL, { max: env.WORKER_API_POOL_MAX })
+const worker = createDb(env.WORKER_DATABASE_URL, { max: env.WORKER_POOL_MAX })
 const probe = createDb(env.DATABASE_URL, probePoolOptions(CHECK_TIMEOUT_MS))
-const boss = createBoss({ url: env.WORKER_DATABASE_URL })
+const boss = createBoss({
+  url: env.WORKER_DATABASE_URL,
+  pollingIntervalSeconds: env.WORKER_POLLING_INTERVAL_SECONDS,
+  superviseIntervalSeconds: env.WORKER_SUPERVISE_INTERVAL_SECONDS,
+  queueCacheIntervalSeconds: env.WORKER_QUEUE_CACHE_INTERVAL_SECONDS,
+  idleTimeoutSeconds: env.WORKER_BOSS_IDLE_TIMEOUT_SECONDS,
+})
+const seconds = (value: number | undefined, fallback: string) => (value === undefined ? fallback : `${value} s`)
+console.log(
+  `@waste/worker knobs: api-role pool max ${env.WORKER_API_POOL_MAX ?? DEFAULT_POOL_MAX}, worker-role pool max ${env.WORKER_POOL_MAX ?? DEFAULT_POOL_MAX}, pg-boss pool 3, polling ${seconds(env.WORKER_POLLING_INTERVAL_SECONDS, "the jobs' own")}, supervise ${seconds(env.WORKER_SUPERVISE_INTERVAL_SECONDS, "pg-boss's 60 s")}, queue cache ${seconds(env.WORKER_QUEUE_CACHE_INTERVAL_SECONDS, "pg-boss's 60 s")}, pg-boss idle timeout ${env.WORKER_BOSS_IDLE_TIMEOUT_SECONDS === 0 ? "never" : seconds(env.WORKER_BOSS_IDLE_TIMEOUT_SECONDS, "pg-pool's 10 s")}`,
+)
 let started = false
 
 /** What the boot has made so far: pg-boss running with its queues once `startBoss` answered, the listener once it bound. A shutdown closes what is there. */
@@ -61,6 +79,7 @@ async function boot() {
     log: (message) => console.log(message),
     send: (name, data, options) => boss.send(name, data, options),
     routing,
+    pollingIntervalSeconds: env.WORKER_POLLING_INTERVAL_SECONDS,
   })
   made.running = running
   started = true

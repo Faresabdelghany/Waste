@@ -105,4 +105,13 @@ describe("parseEnv", () => {
   test("says in its message that the trailing slash is refused, not stripped", () => {
     assert.throws(() => parseEnv({ ...base, SUPABASE_URL: `${SUPABASE}/` }), /without a trailing slash/)
   })
+
+  test("reads DATABASE_POOL_MAX, the request pool's size (#149), as a whole number of at least one, absent — postgres.js's default — unless set", () => {
+    assert.deepEqual(parseEnv(base), expected, "unset: not carried")
+    assert.deepEqual(parseEnv({ ...base, DATABASE_POOL_MAX: "" }), expected, "empty: not set")
+    assert.equal(parseEnv({ ...base, DATABASE_POOL_MAX: "5" }).DATABASE_POOL_MAX, 5)
+    for (const value of ["0", "-1", "2.5", "five", " 5"]) {
+      assert.throws(() => parseEnv({ ...base, DATABASE_POOL_MAX: value }), (error: unknown) => error instanceof Error && /DATABASE_POOL_MAX/.test(error.message), value)
+    }
+  })
 })

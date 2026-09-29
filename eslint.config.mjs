@@ -74,10 +74,10 @@ export default defineConfig([
     },
   },
 
-  // Shared packages (domain, contracts, api, worker, ...): stricter than the app.
+  // Shared packages (domain, contracts, api, worker, pilot, ...): stricter than the app.
   // Package lint scripts should run `eslint . --max-warnings 0`.
   {
-    files: ["packages/**/*.ts", "apps/api/**/*.ts", "apps/worker/**/*.ts"],
+    files: ["packages/**/*.ts", "apps/api/**/*.ts", "apps/worker/**/*.ts", "apps/pilot/**/*.ts"],
     extends: [tseslint.configs.recommended],
     rules: {
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],

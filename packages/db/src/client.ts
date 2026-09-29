@@ -57,9 +57,12 @@ export type ClientOptions = {
   backoffSeconds?: number
 }
 
+/** The pool size when none is asked for: postgres.js's own default, restated so a process can say what it runs at. */
+export const DEFAULT_POOL_MAX = 10
+
 export function createDb(
   url: string,
-  { max = 10, onnotice = () => {}, searchPath, connectTimeoutSeconds, backoffSeconds }: ClientOptions = {},
+  { max = DEFAULT_POOL_MAX, onnotice = () => {}, searchPath, connectTimeoutSeconds, backoffSeconds }: ClientOptions = {},
 ): Database {
   // prepare: false keeps the API's client valid behind Supabase's transaction
   // pooler, where named prepared statements are not supported. Migrations are
