@@ -16,7 +16,22 @@
 // should move), the stamps (the trigger's), and never a column another actor
 // writes — an account's `auth_user_id` and `deactivated_at` are the hook's and
 // the API's, which is why demo.ts leaves them out of USER_COLUMNS.
-import { getTableName, sql, type SQL } from "drizzle-orm"
+//
+// The second write is for a set: the rows of one parent that the API
+// replaces whole — deleted, and written back under ids it mints — on every
+// edit of the set, a calendar's holidays or a collection group's picks among
+// them (Issue #156). Keyed by its id such a row would meet its own content
+// under another id after the first edit through the product, and the next
+// run would stop at the set's unique key (23505) — the failure #140 met with
+// an account's access rows, which are the pair they join for the same reason.
+// So a set is compared by its content, parent by parent, and a set that
+// differs is replaced whole, the way the API replaces it; one that says what
+// this run proposes, whatever its ids, is not touched. A set whose members
+// carry a set of their own — a vehicle's compartments, each with the
+// fractions it takes, which `PUT /vehicles/{id}/compartments` replaces
+// together — is compared and replaced with it, the inner set first out and
+// last in.
+import { getTableName, inArray, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgInsertValue, PgTable, PgUpdateSetSource } from "drizzle-orm/pg-core"
 
 import type { Tx } from "../client"
@@ -88,4 +103,101 @@ export async function upsertOwned<T extends SeededTable>(tx: Tx, table: T, rows:
     .onConflictDoUpdate({ target: table.id, set: restore(owned) as PgUpdateSetSource<T>, setWhere: changesSomething(owned) })
     .returning({ id: table.id })
   return written.length
+}
+
+/** One member of a set as its compared columns say it, the way two members are told apart: a null and an absent value are one. */
+const memberKey = (values: readonly unknown[]): string => JSON.stringify(values.map((value) => value ?? null))
+
+/** Two sets as their members' keys: the same members, as often each. */
+const sameMembers = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && [...a].sort().join("\n") === [...b].sort().join("\n")
+
+/** The rows of a set, and what tells two of its members apart. */
+type SetOf<T extends SeededTable> = {
+  table: T
+  /** The column naming what the row belongs to: the set's parent, or the member of the outer set it is carried by. */
+  of: PgColumn
+  rows: readonly T["$inferInsert"][]
+  /** The member's own columns, beside `of`. */
+  compared: readonly PgColumn[]
+}
+
+/** The sets of `parents` — every parent whose set this run owns, an empty set included — and a set each member carries, where it carries one. */
+export type SeededSets<T extends SeededTable, N extends SeededTable> = SetOf<T> & {
+  parents: readonly string[]
+  nested?: SetOf<N>
+}
+
+/** A row's value of a column, keyed as Drizzle keys it: by the column's property name. */
+const valueOf = (row: Record<string, unknown>, column: PgColumn): unknown => row[propertyOf(column)]
+
+function refuseForeign(set: { table: PgTable; of: PgColumn; compared: readonly PgColumn[] }): void {
+  for (const column of [set.of, ...set.compared]) {
+    if (column.table !== set.table) throw new Error(`replaceSets: column "${columnName(column)}" is not a column of "${getTableName(set.table)}"`)
+  }
+}
+
+/**
+ * Writes the sets and answers how many rows it wrote. Parent by parent, the
+ * stored set is compared with the proposed one — each member on its
+ * `compared` columns and, with `nested`, on the set it carries — and where
+ * they differ the parent's rows are deleted and the proposed ones inserted
+ * under their fixed ids; where they agree nothing is written, whatever ids
+ * the stored members carry.
+ */
+export async function replaceSets<T extends SeededTable, N extends SeededTable = SeededTable>(tx: Tx, sets: SeededSets<T, N>): Promise<number> {
+  const { table, of, parents, compared, nested } = sets
+  if (parents.length === 0) return 0
+  refuseForeign(sets)
+  if (nested) refuseForeign(nested)
+  const rows = sets.rows as readonly Record<string, unknown>[]
+  const inner = (nested?.rows ?? []) as readonly Record<string, unknown>[]
+
+  /** The keys of the inner members, by the id of the member that carries them. */
+  const carriedBy = (innerRows: readonly Record<string, unknown>[]): Map<string, string[]> => {
+    const byMember = new Map<string, string[]>()
+    for (const row of innerRows) {
+      const member = valueOf(row, nested!.of) as string
+      byMember.set(member, [...(byMember.get(member) ?? []), memberKey(nested!.compared.map((column) => valueOf(row, column)))])
+    }
+    return byMember
+  }
+  const keyOf = (row: Record<string, unknown>, carried: Map<string, string[]>): string =>
+    memberKey([...compared.map((column) => valueOf(row, column)), ...(nested ? [[...(carried.get(row.id as string) ?? [])].sort()] : [])])
+  const bySet = (members: readonly Record<string, unknown>[], carried: Map<string, string[]>): Map<string, string[]> => {
+    const sets = new Map<string, string[]>(parents.map((id) => [id, []]))
+    for (const row of members) {
+      const set = sets.get(valueOf(row, of) as string)
+      if (set === undefined) throw new Error(`replaceSets: a row of "${getTableName(table)}" names ${String(valueOf(row, of))}, which is not one of its parents`)
+      set.push(keyOf(row, carried))
+    }
+    return sets
+  }
+
+  const proposed = bySet(rows, carriedBy(inner))
+  const stored = (await tx
+    .select({ id: table.id, ...Object.fromEntries([of, ...compared].map((column) => [propertyOf(column), column])) })
+    .from(table as PgTable)
+    .where(inArray(of, [...parents]))) as Record<string, unknown>[]
+  const storedIds = stored.map((row) => row.id as string)
+  const storedInner =
+    nested && storedIds.length > 0
+      ? ((await tx
+          .select(Object.fromEntries([nested.of, ...nested.compared].map((column) => [propertyOf(column), column])))
+          .from(nested.table as PgTable)
+          .where(inArray(nested.of, storedIds))) as Record<string, unknown>[])
+      : []
+  const found = bySet(stored, carriedBy(storedInner))
+
+  const differing = parents.filter((id) => !sameMembers(found.get(id) ?? [], proposed.get(id) ?? []))
+  if (differing.length === 0) return 0
+  let written = 0
+  const replaced = stored.filter((row) => differing.includes(valueOf(row, of) as string)).map((row) => row.id as string)
+  if (nested && replaced.length > 0) written += (await tx.delete(nested.table).where(inArray(nested.of, replaced)).returning({ id: nested.table.id })).length
+  written += (await tx.delete(table).where(inArray(of, differing)).returning({ id: table.id })).length
+  const replacing = rows.filter((row) => differing.includes(valueOf(row, of) as string))
+  if (replacing.length > 0) written += (await tx.insert(table).values(replacing as PgInsertValue<T>[]).returning({ id: table.id })).length
+  const members = new Set(replacing.map((row) => row.id as string))
+  const carried = inner.filter((row) => members.has(valueOf(row, nested!.of) as string))
+  if (nested && carried.length > 0) written += (await tx.insert(nested.table).values(carried as PgInsertValue<N>[]).returning({ id: nested.table.id })).length
+  return written
 }

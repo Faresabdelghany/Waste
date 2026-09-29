@@ -1,7 +1,8 @@
-// The demo seed (Issue #70, slice 2; the Registry since 2026-09-25) against a
-// fresh database of its own, so that "a clean database becomes the demo
-// company" is what is proved and nothing depends on what the shared local
-// database holds. The properties that matter: it writes what the spec lists,
+// The demo seed (Issue #70, slice 2; the Registry since 2026-09-25; the
+// pilot's Planning, Resources and Finance configuration since #156, whose
+// rows seed-configuration.test.ts reads one by one) against a fresh database
+// of its own, so that "a clean database becomes the demo company" is what is
+// proved and nothing depends on what the shared local database holds. The properties that matter: it writes what the spec lists,
 // a second run writes nothing at all, a row someone edited by hand goes back
 // to what the seed says, and what the seed does not own — a Login's binding,
 // the id the API gave an access row it wrote back — stays as it is. The ids
@@ -19,6 +20,7 @@ import { migrateDatabase } from "../migrate"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "../schema/access"
 import { agreement, subscription } from "../schema/agreements"
 import { containerType, product, serviceFrequency, wasteFraction } from "../schema/catalogue"
+import { collectionCalendar, collectionCalendarHoliday } from "../schema/collection-calendars"
 import { container, containerServicePlacement } from "../schema/containers"
 import {
   customer,
@@ -29,16 +31,22 @@ import {
   sharedCollectionPoint,
   sharedCollectionPointMember,
 } from "../schema/customers"
+import { priceList, priceListRow } from "../schema/finance"
+import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "../schema/fleet"
+import { containerTypeVehicleType, vehicleType } from "../schema/fleet-types"
 import { company, project, serviceProvider } from "../schema/organisation"
+import { depot, unloadingStation, unloadingStationFraction, warehouse } from "../schema/places"
+import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
+import { collectionGroup, collectionGroupContainer, collectionGroupFraction, routeScheme } from "../schema/route-schemes"
 import { DEMO_IDS, seedDemo } from "../seed/demo"
-import { DEMO_KINDS, demoId } from "../seed/ids"
+import { DEMO_KINDS, demoId, type DemoKind } from "../seed/ids"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 
 const database = databaseUnderTest()
 
 const UUIDV7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
-/** The twenty-three tables the seed writes, in the order it writes them. */
+/** The forty-three tables the seed writes rows into, in the order it writes them. */
 const SEEDED_TABLES = [
   company,
   project,
@@ -63,6 +71,26 @@ const SEEDED_TABLES = [
   subscription,
   container,
   containerServicePlacement,
+  vehicleType,
+  containerTypeVehicleType,
+  depot,
+  warehouse,
+  unloadingStation,
+  unloadingStationFraction,
+  vehicle,
+  vehicleCompartment,
+  vehicleCompartmentFraction,
+  driver,
+  planningArea,
+  planningAreaBoundary,
+  collectionCalendar,
+  collectionCalendarHoliday,
+  routeScheme,
+  collectionGroup,
+  collectionGroupFraction,
+  collectionGroupContainer,
+  priceList,
+  priceListRow,
 ]
 
 /** What the Registry seed holds per table, pinned so a fixture that grows or shrinks is noticed. */
@@ -82,6 +110,30 @@ const REGISTRY_COUNTS = {
   subscriptions: 38,
   containers: 107,
   containerServicePlacements: 56,
+}
+
+/** What the pilot's configuration holds per table (#156, the counts #143 decided), pinned beside the Registry's. */
+const CONFIGURATION_COUNTS = {
+  vehicleTypes: 6,
+  containerTypeVehicleTypes: 15,
+  depots: 1,
+  warehouses: 3,
+  unloadingStations: 1,
+  unloadingStationFractions: 2,
+  vehicles: 5,
+  vehicleCompartments: 4,
+  vehicleCompartmentFractions: 5,
+  drivers: 4,
+  planningAreas: 5,
+  planningAreaBoundaries: 4,
+  collectionCalendars: 5,
+  collectionCalendarHolidays: 31,
+  routeSchemes: 2,
+  collectionGroups: 2,
+  collectionGroupFractions: 1,
+  collectionGroupContainers: 4,
+  priceLists: 2,
+  priceListRows: 10,
 }
 
 /** Every id the seed spells, wherever it sits in DEMO_IDS. */
@@ -124,6 +176,71 @@ describe("the demo seed's fixed ids", () => {
     assert.equal(new Set(kinds).size, kinds.length)
     const registryKind = (id: string) => Number.parseInt(id.slice(15, 18), 16)
     for (const id of allIds(DEMO_IDS.registry)) assert.ok(registryKind(id) >= DEMO_KINDS.wasteFraction, `${id} is not in a Registry kind`)
+  })
+
+  test("Planning, Resources and Finance take the kinds #143 allocated, from 0x016 in that order", () => {
+    const after = Object.entries(DEMO_KINDS).filter(([, kind]) => kind > DEMO_KINDS.containerServicePlacement)
+    assert.deepEqual(Object.fromEntries(after), {
+      planningArea: 0x016,
+      planningAreaBoundary: 0x017,
+      collectionCalendar: 0x018,
+      collectionCalendarHoliday: 0x019,
+      routeScheme: 0x01a,
+      collectionGroup: 0x01b,
+      collectionGroupFraction: 0x01c,
+      collectionGroupContainer: 0x01d,
+      vehicleType: 0x01e,
+      containerTypeVehicleType: 0x01f,
+      depot: 0x020,
+      warehouse: 0x021,
+      unloadingStation: 0x022,
+      unloadingStationFraction: 0x023,
+      vehicle: 0x024,
+      vehicleCompartment: 0x025,
+      vehicleCompartmentFraction: 0x026,
+      driver: 0x027,
+      priceList: 0x028,
+      priceListRow: 0x029,
+    })
+    assert.equal(demoId("routeScheme", 1), "01a0d2a4-a280-701a-8000-000000000001")
+  })
+
+  test("the configuration's ids are keyed by the prototype's record ids, each in its table's kind, as many as the counts", () => {
+    const { planning, resources, finance } = DEMO_IDS
+    assert.ok(planning.routeSchemes["scheme-central-a"] && planning.collectionGroups["scheme-osterbro-b:default"] && planning.planningAreaBoundaries["area-harbor-1"])
+    assert.ok(planning.collectionCalendarHolidays["calendar-cairo-2027:2027-07-23"] && planning.collectionGroupContainers["scheme-osterbro-b:default:asset-seed-91007"])
+    assert.ok(resources.vehicleTypes["rear-loader"] && resources.containerTypeVehicleTypes["glass-crane:igloo-2500"] && resources.vehicleCompartmentFractions["vehicle-wh24:1:mixed"])
+    assert.ok(resources.drivers["driver-mads"] && resources.depots["depot-nordhavn"] && resources.unloadingStationFractions["station-arc:residual"])
+    assert.ok(finance.priceLists["price-list-harbor-2026"] && finance.priceListRows.copenhagen["price-row-res-osterbro"] && finance.priceListRows.harbor["price-row-glass-default"])
+    assert.equal(planning.planningAreaBoundaries["area-cairo-nasr"], undefined, "Cairo's area has no located container")
+    const tables = { ...resources, ...planning, ...finance }
+    const kinds: Record<keyof typeof tables, DemoKind> = {
+      vehicleTypes: "vehicleType",
+      containerTypeVehicleTypes: "containerTypeVehicleType",
+      depots: "depot",
+      warehouses: "warehouse",
+      unloadingStations: "unloadingStation",
+      unloadingStationFractions: "unloadingStationFraction",
+      vehicles: "vehicle",
+      vehicleCompartments: "vehicleCompartment",
+      vehicleCompartmentFractions: "vehicleCompartmentFraction",
+      drivers: "driver",
+      planningAreas: "planningArea",
+      planningAreaBoundaries: "planningAreaBoundary",
+      collectionCalendars: "collectionCalendar",
+      collectionCalendarHolidays: "collectionCalendarHoliday",
+      routeSchemes: "routeScheme",
+      collectionGroups: "collectionGroup",
+      collectionGroupFractions: "collectionGroupFraction",
+      collectionGroupContainers: "collectionGroupContainer",
+      priceLists: "priceList",
+      priceListRows: "priceListRow",
+    }
+    for (const [table, ids] of Object.entries(tables)) {
+      const spelled = allIds(ids)
+      assert.equal(spelled.length, CONFIGURATION_COUNTS[table as keyof typeof CONFIGURATION_COUNTS], `${table} spells ${spelled.length} ids`)
+      for (const [ordinal, id] of spelled.entries()) assert.equal(id, demoId(kinds[table as keyof typeof tables], ordinal + 1), `${table} counts from 1 in build order`)
+    }
   })
 
   test("the Registry ids are keyed by the prototype's record ids, its agreement numbers and its memberships", () => {
@@ -210,6 +327,7 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
       projectAccess: 1,
       serviceProviderAccess: 1,
       ...REGISTRY_COUNTS,
+      ...CONFIGURATION_COUNTS,
     })
 
     const [seeded] = await owner.db.select().from(company)
@@ -591,15 +709,16 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
   })
 
   test("a re-run over the Pilot's accounts moves the two addresses in place, keeps both Logins bound and adds Mads as an Invitation; the run after writes nothing", async () => {
-    // The Pilot before #140: Fares and Lars bound to their Logins at the addresses they were invited at, and no Mads.
+    // The Pilot before #140: Fares and Lars bound to their Logins at the addresses they were invited at, and no Mads — so no driver profile naming him (#156), which is unlinked here.
     const logins = { fares: randomUUID(), lars: randomUUID() }
+    await owner.db.update(driver).set({ userAccountId: null }).where(eq(driver.id, DEMO_IDS.resources.drivers["driver-mads"]))
     await owner.db.delete(projectAccess).where(eq(projectAccess.userAccountId, DEMO_IDS.users.mads))
     await owner.db.delete(userAccount).where(eq(userAccount.id, DEMO_IDS.users.mads))
     await owner.db.update(userAccount).set({ email: "fares@earlier-address.example", authUserId: logins.fares }).where(eq(userAccount.id, DEMO_IDS.users.fares))
     await owner.db.update(userAccount).set({ email: "lars@earlier-address.example", authUserId: logins.lars }).where(eq(userAccount.id, DEMO_IDS.users.lars))
 
-    // Two addresses moved, one account and its Project Access added: four rows, and nothing else.
-    assert.equal((await seedDemo(fresh.url)).changed, 4)
+    // Two addresses moved, one account and its Project Access added, his driver profile linked to it again: five rows, and nothing else.
+    assert.equal((await seedDemo(fresh.url)).changed, 5)
     const accounts = await owner.db.select().from(userAccount).orderBy(userAccount.id)
     assert.deepEqual(
       accounts.map((row) => [row.id, row.email, row.authUserId, row.deactivatedAt]),

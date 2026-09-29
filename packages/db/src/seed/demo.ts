@@ -8,7 +8,13 @@
 // — and, since 2026-09-25, its Registry: the catalogue, the customers with
 // their properties, groups and shared points, the agreements with their
 // subscriptions, and the containers with their placements, derived from the
-// web prototype's fixtures in registry.ts and written in the same transaction.
+// web prototype's fixtures in registry.ts and written in the same transaction
+// — and, since #156, the pilot's configuration on top of it: Resources' fleet
+// and places (resources.ts), Planning's areas, calendars and two route
+// schemes (planning.ts) and Finance's default price lists (finance.ts). The
+// seed writes configuration and identity only, never an operational row — no
+// route, run, session, ticket or invoice (#143) — so a tenant it resets is
+// "configured, never run", and it never needs a running worker.
 //
 // Three properties make this a seed and not a fixture script:
 //
@@ -17,7 +23,10 @@
 //   same company: a token minted against the hosted project opens the same
 //   rows locally, and a test may name a row without looking it up. A test
 //   holds their shape. A role grant and a Project Access are the two kinds of
-//   row with no fixed id; each is what it joins (applyDemo).
+//   row with no fixed id; each is what it joins (applyDemo). A member of a set
+//   the API replaces whole — a calendar's holidays, a group's picks — has one
+//   until the first edit through the product rewrites the set under ids the
+//   API mints; from then on it is its content (upsert.ts's `replaceSets`).
 //
 //   Idempotent. A record is written `on conflict (id) do update` (upsert.ts),
 //   and the update is skipped when the stored row already says what this run
@@ -27,8 +36,16 @@
 //   someone edited by hand is put back; what the seed does not own is left
 //   alone (an account's `auth_user_id` and `deactivated_at` are the hook's
 //   and the API's, never the seed's). Nothing is deleted but a grant a
-//   charter dropped and an access row of a seeded account that the seed does
-//   not name.
+//   charter dropped, an access row of a seeded account that the seed does
+//   not name, and a seeded set that no longer says what the seed says, which
+//   is replaced whole as the API would replace it. One edit is beyond putting
+//   back: a seeded row of a period the product has versioned — ended, with a
+//   successor in force after it (a boundary, a scheme, a price row, the
+//   Registry's agreements alike) — since restoring its end would overlap the
+//   successor, and the exclusion constraint stops the run (23P01) with
+//   nothing written. #142's sweep has to remove such successors before it
+//   seeds, and a `release` with `run_seed` over a tenant the office has
+//   versioned needs the same first.
 //
 //   Any admin URL. Unlike bootstrap, which refuses a non-loopback host because
 //   it sets a password, this runs the same statements anywhere: the hosted
@@ -68,8 +85,11 @@ import { and, eq, inArray, sql } from "drizzle-orm"
 import { createDb, type Tx } from "../client"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "../schema/access"
 import { company, project, serviceProvider } from "../schema/organisation"
-import { DEMO_COMPANY_ID, DEMO_PROJECT_IDS } from "./ids"
+import { applyFinance, FINANCE_COUNTS, FINANCE_IDS, type FinanceCounts } from "./finance"
+import { DEMO_COMPANY_ID, DEMO_PROJECT_IDS, DEMO_SERVICE_PROVIDER_IDS, DEMO_USER_IDS } from "./ids"
+import { applyPlanning, PLANNING_COUNTS, PLANNING_IDS, type PlanningCounts } from "./planning"
 import { applyRegistry, REGISTRY_COUNTS, REGISTRY_IDS, type RegistryCounts } from "./registry"
+import { applyResources, RESOURCES_COUNTS, RESOURCES_IDS, type ResourcesCounts } from "./resources"
 import { upsertOwned } from "./upsert"
 
 /**
@@ -84,10 +104,7 @@ import { upsertOwned } from "./upsert"
 export const DEMO_IDS = {
   company: DEMO_COMPANY_ID,
   projects: DEMO_PROJECT_IDS,
-  serviceProviders: {
-    nordren: "01a0d2a4-a280-7003-8000-000000000001",
-    cityhaul: "01a0d2a4-a280-7003-8000-000000000002",
-  },
+  serviceProviders: DEMO_SERVICE_PROVIDER_IDS,
   roles: {
     "company-administrator": "01a0d2a4-a280-7004-8000-000000000001",
     "operations-manager": "01a0d2a4-a280-7004-8000-000000000002",
@@ -101,15 +118,14 @@ export const DEMO_IDS = {
     driver: "01a0d2a4-a280-7004-8000-00000000000a",
     "integration-writer": "01a0d2a4-a280-7004-8000-00000000000b",
   } satisfies Record<SystemRoleKey, string>,
-  users: {
-    fares: "01a0d2a4-a280-7005-8000-000000000001",
-    lars: "01a0d2a4-a280-7005-8000-000000000002",
-    mads: "01a0d2a4-a280-7005-8000-000000000003",
-  },
+  users: DEMO_USER_IDS,
   serviceProviderAccess: {
     lars: "01a0d2a4-a280-7006-8000-000000000001",
   },
   registry: REGISTRY_IDS,
+  resources: RESOURCES_IDS,
+  planning: PLANNING_IDS,
+  finance: FINANCE_IDS,
 } as const
 
 const COMPANY_ID = DEMO_IDS.company
@@ -271,7 +287,7 @@ const PROVIDER_ACCESS: (typeof serviceProviderAccess.$inferInsert)[] = [
   },
 ]
 
-/** What the seed says the company holds: Organisation & Access by name, then the Registry's fifteen tables. */
+/** What the seed says the company holds: Organisation & Access by name, then the Registry's fifteen tables and the configuration's twenty. */
 export type DemoSeedCounts = {
   projects: number
   serviceProviders: number
@@ -280,7 +296,10 @@ export type DemoSeedCounts = {
   users: number
   projectAccess: number
   serviceProviderAccess: number
-} & RegistryCounts
+} & RegistryCounts &
+  ResourcesCounts &
+  PlanningCounts &
+  FinanceCounts
 
 export type DemoSeedReport = {
   companyId: string
@@ -298,6 +317,9 @@ const COUNTS: DemoSeedCounts = {
   projectAccess: PROJECT_ACCESS.length,
   serviceProviderAccess: PROVIDER_ACCESS.length,
   ...REGISTRY_COUNTS,
+  ...RESOURCES_COUNTS,
+  ...PLANNING_COUNTS,
+  ...FINANCE_COUNTS,
 }
 
 const COMPANY_COLUMNS = [company.name, company.legalName, company.registrationNumber, company.country, company.status]
@@ -413,8 +435,14 @@ async function applyDemo(tx: Tx): Promise<number> {
       .returning({ id: serviceProviderAccess.id }),
   )
 
-  // The Registry last: its rows name the company and the projects above.
+  // The Registry next: its rows name the company and the projects above.
   changed += await applyRegistry(tx)
+  // Then the configuration, which names the Registry's rows: Resources first,
+  // since Planning's schemes and groups name its depot, fleet and vehicle
+  // types, and Finance's rows the Registry's products and customers.
+  changed += await applyResources(tx)
+  changed += await applyPlanning(tx)
+  changed += await applyFinance(tx)
 
   return changed
 }

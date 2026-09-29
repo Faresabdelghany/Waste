@@ -107,12 +107,23 @@
 //   as service members; Kongens Nytorv serves properties within 350 m, and no
 //   fixture property is, so it has none.
 //
+//   Invoicing (Issue #156). A product carries its fixture's Invoice name and
+//   Invoice code and its VAT, 25 % on every one, in both projects: the three
+//   columns migration 0010 gave the product, which Finance & Contracting's
+//   billable events read. Its prices are Finance's rows (finance.ts).
+//
+//   Map places (Issue #156). A container's Planning area, Address and
+//   Property facts are copied as where the prototype's map places it
+//   (`mapped`): no Registry column holds them — a container carries no
+//   location and no area — and Planning's seed draws each planning area's
+//   boundary around them (planning.ts).
+//
 //   Left out, having no column: a property's PropertyID (P-88014) — its
 //   Property number (CPH-001882) is the `registry_id` — an agreement's
-//   Template and PriceList, a product's price, VAT, invoice name and code
-//   (Finance & Contracting's), a container's sensor, fill level, planning
-//   area, calendar and route scheme (Planning's and Resources'), and every
-//   metric and free-text count ("24 records", "118 properties").
+//   Template and PriceList, a product's price (a Price List's row, Finance's),
+//   a container's sensor, fill level, calendar and route scheme (Planning's
+//   and Resources' own rows say those), and every metric and free-text count
+//   ("24 records", "118 properties").
 //
 // Every reference from one row to another goes through `required` or
 // `requiredSpec`, so a key misspelled here is this file's own sentence and
@@ -144,21 +155,16 @@ import {
   sharedCollectionPoint,
   sharedCollectionPointMember,
 } from "../schema/customers"
-import { DEMO_COMPANY_ID, DEMO_PROJECT_IDS, demoId, type DemoKind } from "./ids"
+import { counted, DEMO_COMPANY_ID, DEMO_PROJECT_IDS, keyed, required, type DemoKind } from "./ids"
 import { upsertOwned } from "./upsert"
 
 const COMPANY_ID = DEMO_COMPANY_ID
 
 /** The projects the Registry fixtures scope to; Cairo Operations has none. */
 const REGISTRY_PROJECTS = ["copenhagen", "harbor"] as const
-type RegistryProject = (typeof REGISTRY_PROJECTS)[number]
+/** A project the catalogue, and so a product or a price list, is in. */
+export type RegistryProject = (typeof REGISTRY_PROJECTS)[number]
 const projectIdOf = (project: RegistryProject): string => DEMO_PROJECT_IDS[project]
-
-/** Ids of one kind, handed out in the order the rows are built. */
-function counted(kind: DemoKind): () => string {
-  let ordinal = 0
-  return () => demoId(kind, ++ordinal)
-}
 
 /* ------------------------------ the catalogue ------------------------------ */
 
@@ -194,6 +200,9 @@ const CONTAINER_TYPES = [
 ] as const
 type ContainerTypeKey = (typeof CONTAINER_TYPES)[number][0]
 
+/** A container type's key by the name the domain's tables spell it in: `Two-wheel bin · 240 L` is `two-wheel-240`. */
+export const CONTAINER_TYPE_KEYS: Readonly<Record<string, ContainerTypeKey>> = Object.fromEntries(CONTAINER_TYPES.map(([key, name]) => [name, key]))
+
 // @waste/domain/service-frequencies SERVICE_FREQUENCIES, one row per project
 // the definition names (both). The shape satisfies `service_frequency_shape`:
 // a rate with one interval or none, or no rate and no interval.
@@ -227,6 +236,9 @@ type ProductSpec = {
   containerType: ContainerTypeKey | null
   wasteFraction: WasteFractionKey | null
   serviceFrequency: ServiceFrequencyKey | null
+  invoiceName: string
+  invoiceCode: string
+  vatPercent: number
 }
 const PRODUCTS: readonly ProductSpec[] = [
   {
@@ -238,6 +250,9 @@ const PRODUCTS: readonly ProductSpec[] = [
     containerType: "two-wheel-240",
     wasteFraction: "residual",
     serviceFrequency: "freq-every-2-weeks",
+    invoiceName: "Residual waste collection 240L",
+    invoiceCode: "RES-240",
+    vatPercent: 25,
   },
   {
     key: "product-card-660",
@@ -248,6 +263,9 @@ const PRODUCTS: readonly ProductSpec[] = [
     containerType: "four-wheel-660",
     wasteFraction: "cardboard",
     serviceFrequency: null,
+    invoiceName: "Cardboard collection 660L",
+    invoiceCode: "CRD-660",
+    vatPercent: 25,
   },
   {
     key: "product-glass-igloo",
@@ -258,11 +276,62 @@ const PRODUCTS: readonly ProductSpec[] = [
     containerType: "igloo-2500",
     wasteFraction: "glass",
     serviceFrequency: null,
+    invoiceName: "Glass igloo emptying",
+    invoiceCode: "GLS-IGL",
+    vatPercent: 25,
   },
-  { key: "product-clean-monthly", name: "Bin cleaning · monthly", kind: "recurring-service", status: "active", unit: "month", containerType: null, wasteFraction: null, serviceFrequency: null },
-  { key: "product-bulky", name: "Bulky waste pickup", kind: "additional-service", status: "active", unit: "job", containerType: null, wasteFraction: null, serviceFrequency: null },
-  { key: "product-bagtag", name: "Extra bag tag", kind: "additional-service", status: "active", unit: "job", containerType: null, wasteFraction: "residual", serviceFrequency: null },
-  { key: "product-xmas", name: "Christmas tree collection", kind: "additional-service", status: "draft", unit: "job", containerType: null, wasteFraction: "organic", serviceFrequency: null },
+  {
+    key: "product-clean-monthly",
+    name: "Bin cleaning · monthly",
+    kind: "recurring-service",
+    status: "active",
+    unit: "month",
+    containerType: null,
+    wasteFraction: null,
+    serviceFrequency: null,
+    invoiceName: "Bin cleaning subscription",
+    invoiceCode: "SRV-CLN",
+    vatPercent: 25,
+  },
+  {
+    key: "product-bulky",
+    name: "Bulky waste pickup",
+    kind: "additional-service",
+    status: "active",
+    unit: "job",
+    containerType: null,
+    wasteFraction: null,
+    serviceFrequency: null,
+    invoiceName: "Bulky waste pickup",
+    invoiceCode: "SRV-BLK",
+    vatPercent: 25,
+  },
+  {
+    key: "product-bagtag",
+    name: "Extra bag tag",
+    kind: "additional-service",
+    status: "active",
+    unit: "job",
+    containerType: null,
+    wasteFraction: "residual",
+    serviceFrequency: null,
+    invoiceName: "Extra bag tag",
+    invoiceCode: "SRV-TAG",
+    vatPercent: 25,
+  },
+  {
+    key: "product-xmas",
+    name: "Christmas tree collection",
+    kind: "additional-service",
+    status: "draft",
+    unit: "job",
+    containerType: null,
+    wasteFraction: "organic",
+    serviceFrequency: null,
+    invoiceName: "Christmas tree collection",
+    invoiceCode: "SRV-XMS",
+    vatPercent: 25,
+  },
 ]
 
 /**
@@ -640,6 +709,15 @@ type StandsSpec = {
   /** The prototype's Future: installed for a placement that starts later. */
   future?: boolean
 }
+/**
+ * Where the prototype's map places a container, and the planning area its
+ * record files it under: its Address fact, placed with its Property fact as
+ * the seed, and its planning-area link — the typed `planningAreaId` the
+ * stop-match resolver read, a prototype record id. Nothing of it is a
+ * Registry column (a container carries no location and no area); Planning's
+ * seed draws each area's boundary around these (planning.ts).
+ */
+type MappedSpec = { area: string; address: string; seed: string }
 type ContainerSpec = {
   key: string
   project: RegistryProject
@@ -651,6 +729,8 @@ type ContainerSpec = {
   ownership: ContainerOwnership
   /** Where the prototype says it stands, or null for one in storage, in transit or ended. */
   stands: StandsSpec | null
+  /** Where its map places it, or null for one the map does not place: in storage, in transit or ended. */
+  mapped: MappedSpec | null
 }
 const SEEDED_WASTE_FRACTIONS: readonly WasteFractionKey[] = ["residual", "organic", "paper", "cardboard", "glass", "plastic", "metal"]
 const SEEDED_CONTAINER_TYPES: readonly ContainerTypeKey[] = ["two-wheel-140", "two-wheel-240", "four-wheel-660", "four-wheel-1100", "igloo-2500", "underground-5000"]
@@ -666,6 +746,7 @@ const EXPLICIT_CONTAINERS: readonly ContainerSpec[] = [
     serialNumber: "OTTO-24-82014",
     ownership: "company",
     stands: { property: PARKVEJ_18.key, agreement: "AGR-2408", fraction: "organic", frequency: "freq-every-2-weeks" },
+    mapped: { area: "area-osterbro-contract", address: "Parkvej 18, 2100 Copenhagen Ø", seed: "Parkvej 18" },
   },
   {
     key: "asset-44831",
@@ -677,8 +758,20 @@ const EXPLICIT_CONTAINERS: readonly ContainerSpec[] = [
     serialNumber: "SULO-22-44831",
     ownership: "customer",
     stands: { property: SUNDBYVEJ_91.key, agreement: "AGR-2188", fraction: "glass", frequency: "freq-monthly" },
+    mapped: { area: "area-amager-1", address: "Sundbyvej 91, 2300 Copenhagen S", seed: "Sundbyvej 91" },
   },
-  { key: "asset-99017", project: "copenhagen", label: "BIN-99017", containerType: "four-wheel-660", barcode: "WH99017", rfid: "E2008890", serialNumber: "SSI-26-99017", ownership: "company", stands: null },
+  {
+    key: "asset-99017",
+    project: "copenhagen",
+    label: "BIN-99017",
+    containerType: "four-wheel-660",
+    barcode: "WH99017",
+    rfid: "E2008890",
+    serialNumber: "SSI-26-99017",
+    ownership: "company",
+    stands: null,
+    mapped: null,
+  },
   {
     key: "asset-77104",
     project: "harbor",
@@ -689,16 +782,57 @@ const EXPLICIT_CONTAINERS: readonly ContainerSpec[] = [
     serialNumber: "SULO-26-77104",
     ownership: "company",
     stands: { property: DOCK_4.key, agreement: "AGR-2512", fraction: "cardboard", frequency: "freq-weekly" },
+    mapped: { area: "area-harbor-1", address: "Harbor Offices, Dock 4", seed: "Harbor Offices" },
   },
-  // Nørrebrogade 144 is not a fixture property, so the container stands unplaced.
-  { key: "asset-66420", project: "copenhagen", label: "BIN-66420", containerType: "four-wheel-660", barcode: "WH66420", rfid: null, serialNumber: "SSI-23-66420", ownership: "unrecorded", stands: null },
-  { key: "asset-50318", project: "copenhagen", label: "BIN-50318", containerType: "two-wheel-240", barcode: "WH50318", rfid: "E20050318", serialNumber: "OTTO-18-50318", ownership: "customer", stands: null },
-  { key: "asset-11862", project: "copenhagen", label: "BIN-11862", containerType: "wastewater-3000", barcode: "WH11862", rfid: "E20011862", serialNumber: "WTT-25-11862", ownership: "company", stands: null },
+  {
+    // Nørrebrogade 144 is not a fixture property, so the container stands
+    // unplaced; the map still places it, on a street it knows.
+    key: "asset-66420",
+    project: "copenhagen",
+    label: "BIN-66420",
+    containerType: "four-wheel-660",
+    barcode: "WH66420",
+    rfid: null,
+    serialNumber: "SSI-23-66420",
+    ownership: "unrecorded",
+    stands: null,
+    mapped: { area: "area-indreby", address: "Nørrebrogade 144, 2200 Copenhagen N", seed: "Nørrebrogade 144" },
+  },
+  {
+    key: "asset-50318",
+    project: "copenhagen",
+    label: "BIN-50318",
+    containerType: "two-wheel-240",
+    barcode: "WH50318",
+    rfid: "E20050318",
+    serialNumber: "OTTO-18-50318",
+    ownership: "customer",
+    stands: null,
+    mapped: null,
+  },
+  {
+    key: "asset-11862",
+    project: "copenhagen",
+    label: "BIN-11862",
+    containerType: "wastewater-3000",
+    barcode: "WH11862",
+    rfid: "E20011862",
+    serialNumber: "WTT-25-11862",
+    ownership: "company",
+    stands: null,
+    mapped: null,
+  },
 ]
 
+/** The planning areas the web's generator rotates a Copenhagen container through, by index; a Harbor one is always in the harbor's. */
+const SEEDED_COPENHAGEN_AREAS = ["area-indreby", "area-osterbro-contract", "area-amager-1"] as const
+const SEEDED_HARBOR_AREA = "area-harbor-1"
+
 // The web's buildSeededContainerRecords, index for index: the property it
-// stands at, its fraction and type, its frequency promise, and whether the
-// prototype's status cycle puts it in storage (unplaced) or in the future.
+// stands at, its fraction and type, its frequency promise, whether the
+// prototype's status cycle puts it in storage (unplaced) or in the future,
+// and, in service, the planning area it rotates into and the address the map
+// places it at, its property's.
 function seededContainer(index: number): ContainerSpec {
   const inCopenhagen = index < SEEDED_CONTAINER_COPENHAGEN_COUNT
   const propertyIndex = inCopenhagen
@@ -707,6 +841,7 @@ function seededContainer(index: number): ContainerSpec {
   const binNumber = 91001 + index
   const cycle = index % 20
   const inStorage = cycle === 17
+  const standsAt = seededProperty(propertyIndex)
   return {
     key: `asset-seed-${binNumber}`,
     project: inCopenhagen ? "copenhagen" : "harbor",
@@ -725,6 +860,13 @@ function seededContainer(index: number): ContainerSpec {
           frequency: index % 2 === 0 ? "freq-every-2-weeks" : "freq-weekly",
           future: cycle === 8,
         },
+    mapped: inStorage
+      ? null
+      : {
+          area: inCopenhagen ? SEEDED_COPENHAGEN_AREAS[index % SEEDED_COPENHAGEN_AREAS.length] : SEEDED_HARBOR_AREA,
+          address: standsAt.address,
+          seed: standsAt.name,
+        },
   }
 }
 
@@ -734,6 +876,13 @@ const CONTAINERS: readonly ContainerSpec[] = [...EXPLICIT_CONTAINERS, ...Array.f
 const FUTURE_PLACEMENT_FROM = "2026-10-01"
 
 /* --------------------------------- rows ----------------------------------- */
+
+/** The spec keyed `key`, or this file's own sentence: never a TypeError from a Map. */
+function requiredSpec<T>(specs: ReadonlyMap<string, T>, key: string, what: string): T {
+  const spec = specs.get(key)
+  if (spec === undefined) throw new Error(`registry seed: no ${what} is keyed ${key}`)
+  return spec
+}
 
 /** Every Registry id, keyed by the prototype's record id (or the number, name or membership it goes by). */
 export type RegistryIds = {
@@ -780,31 +929,6 @@ type RegistryRows = {
 
 /** How many rows the Registry seed holds per table. */
 export type RegistryCounts = { [K in keyof RegistryRows]: number }
-
-function keyed<T>(items: readonly T[], keyOf: (item: T) => string, kind: DemoKind): Record<string, string> {
-  const next = counted(kind)
-  const ids: Record<string, string> = {}
-  for (const item of items) {
-    const key = keyOf(item)
-    if (ids[key]) throw new Error(`registry seed: ${key} is spelled twice`)
-    ids[key] = next()
-  }
-  return ids
-}
-
-/** The id keyed `key`, or this file's own sentence: a misspelled reference is never a 23502 from the database. */
-function required(ids: Readonly<Record<string, string>>, key: string, what: string): string {
-  const id = ids[key]
-  if (!id) throw new Error(`registry seed: no ${what} is keyed ${key}`)
-  return id
-}
-
-/** The spec keyed `key`, the same way: never a TypeError from a Map. */
-function requiredSpec<T>(specs: ReadonlyMap<string, T>, key: string, what: string): T {
-  const spec = specs.get(key)
-  if (spec === undefined) throw new Error(`registry seed: no ${what} is keyed ${key}`)
-  return spec
-}
 
 function build(): { ids: RegistryIds; rows: RegistryRows } {
   const wasteFractionIds = keyed(WASTE_FRACTIONS, ([key]) => key, "wasteFraction")
@@ -871,6 +995,9 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
         containerTypeId: spec.containerType ? containerTypeId(spec.containerType) : null,
         wasteFractionId: spec.wasteFraction ? wasteFractionId(spec.wasteFraction) : null,
         serviceFrequencyId: spec.serviceFrequency ? serviceFrequencyId(project, spec.serviceFrequency) : null,
+        invoiceName: spec.invoiceName,
+        invoiceCode: spec.invoiceCode,
+        vatPercent: spec.vatPercent,
       })),
     ),
     customers: CUSTOMERS.map((spec) => ({
@@ -1113,6 +1240,17 @@ export const REGISTRY_IDS: RegistryIds = built.ids
 /** The rows themselves, for a test that wants to read what the seed proposes. */
 export const REGISTRY_ROWS: Readonly<RegistryRows> = built.rows
 
+/** A container the prototype's map places: which, where — the point a property here is stored at — and under which planning area its record files it. */
+export type MapPlaced = { container: string; area: string; spot: Point }
+
+/** Every container the map places, in the Registry's order; what Planning's seed draws the boundaries around. */
+export const REGISTRY_MAP_PLACES: readonly MapPlaced[] = CONTAINERS.flatMap((spec) => {
+  if (!spec.mapped) return []
+  const spot = placedAt(spec.mapped.address, spec.mapped.seed)
+  if (!spot) throw new Error(`registry seed: the map places ${spec.key} at ${spec.mapped.address}, which is on no gazetteer street`)
+  return [{ container: spec.key, area: spec.mapped.area, spot }]
+})
+
 export const REGISTRY_COUNTS: RegistryCounts = Object.fromEntries(Object.entries(built.rows).map(([table, rows]) => [table, rows.length])) as RegistryCounts
 
 /**
@@ -1142,6 +1280,9 @@ export async function applyRegistry(tx: Tx): Promise<number> {
     product.containerTypeId,
     product.wasteFractionId,
     product.serviceFrequencyId,
+    product.invoiceName,
+    product.invoiceCode,
+    product.vatPercent,
   ])
   changed += await upsertOwned(tx, customer, rows.customers, [
     customer.kind,

@@ -4,6 +4,14 @@
 // sit inside the line. Every visible area gets a row — one without located
 // containers has no geometry and cannot be shown or zoomed to. Pure data
 // logic; the map draws the polygons, the panel lists the rows.
+//
+// The outline itself is `planningAreaOutline`, exported (Issue #156) because
+// the database seed stores the boundary it draws: `packages/db`'s planning
+// seed hands it the containers at the spots the map places them and closes
+// the ring, so the stored boundary and the map's picture are one derivation.
+// The helper is shared; its inputs are the seed's copies of the web's
+// fixtures, which hold only as long as those copies do (registry.ts says
+// what keeps them together).
 
 import type { BusinessRecord } from "../prototype-record"
 import { cleanFact, typedString } from "../record-values"
@@ -51,7 +59,12 @@ function belongsTo(container: BusinessRecord, area: BusinessRecord): boolean {
   return Boolean(fact && fact.toLowerCase() === area.name.trim().toLowerCase())
 }
 
-function outline(spots: readonly LngLat[]): LngLat[] {
+/**
+ * The outline of an area around its located containers' spots, an open ring:
+ * three or more distinct spots are their convex hull pushed 80 m out, one or
+ * two a box 120 m past them, none no outline at all.
+ */
+export function planningAreaOutline(spots: readonly LngLat[]): LngLat[] {
   const hull = convexHull(spots)
   if (hull.length >= 3) return expandPolygon(hull, HULL_MARGIN_METRES)
   if (hull.length === 0) return []
@@ -77,7 +90,7 @@ export function planningAreaLayers(
     .filter((area) => !isSoftDeleted(area))
     .map((area, index) => {
       const spots = located.filter(({ container }) => belongsTo(container, area)).map(({ spot }) => spot)
-      const polygon = outline(spots)
+      const polygon = planningAreaOutline(spots)
       return {
         id: area.id,
         name: area.name,
