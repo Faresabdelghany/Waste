@@ -66,6 +66,18 @@ export type MappingContext = {
 /** A write the adapter refused before the API saw it, in the API's own words: a 400 with the field it names. */
 export type LocalRefusal = { path: string; message: string }
 
+/**
+ * A command on one row (`POST /users/:id/deactivate`): the request, which
+ * answers the row as it now stands, and the heading a person is told a
+ * refusal under ("Olivia Larsen was not deactivated"), the API's own
+ * sentence beneath it. The store sends one through `commandRecord`
+ * (server-records.ts).
+ */
+export type RecordCommand<R extends Resource> = {
+  run: (client: Client, serverId: string) => Promise<R>
+  refused: (record: Pick<BusinessRecord, "name">) => string
+}
+
 export type ResourceAdapter<R extends Resource> = {
   /** The id prefix a record of this kind carries: `project`, `customer`, … */
   prefix: string
@@ -91,6 +103,8 @@ export type ResourceAdapter<R extends Resource> = {
   create?: (client: Client, body: unknown) => Promise<R>
   /** The row's own patch route. */
   update: (client: Client, serverId: string, body: unknown) => Promise<R>
+  /** The row's commands, by name; absent for a kind the API commands nothing of. */
+  commands?: Readonly<Record<string, RecordCommand<R>>>
 }
 
 /** One switched `workspace.module`: the resources it lists, in list order. */

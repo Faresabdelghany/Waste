@@ -23,10 +23,11 @@ import {
   migrateLegacyRecordBuckets,
 } from "@/lib/data/legacy-ids"
 import type { ApiClient } from "@/lib/api/client"
-import { isAccountRefusal, problemSentence, type Problem } from "@/lib/api/problem"
+import { genericProblem, isAccountRefusal, problemSentence, type Problem } from "@/lib/api/problem"
 import { moduleKeyOf } from "@/lib/api/records/adapter"
 import { SERVER_MODULES, serverModuleOf } from "@/lib/api/records/modules"
 import {
+  commandRecord,
   IDLE,
   loadFailed,
   loadModule,
@@ -37,8 +38,10 @@ import {
   withCreated,
   withRecord,
   writeRecord,
+  type CommandOutcome,
   type ModuleState,
   type ServerRecordsState,
+  type WriteOutcome,
 } from "@/lib/api/records/server-records"
 import {
   BUSINESS_RECORDS_STORAGE_KEY,
@@ -70,11 +73,30 @@ type BusinessRecordStoreValue = {
     moduleId: string,
     fixtureRecords: readonly BusinessRecord[],
   ) => BusinessRecord[]
+  /**
+   * Saves a record. On a switched module that is ready, the write's outcome
+   * once the API has answered — a caller that needs to know (a dialog that
+   * stays open on a refusal) awaits it; the rest of the workspace ignores it.
+   * On every other module the record goes to the browser's bucket, and there
+   * is nothing to await.
+   */
   upsertRecord: (
     workspaceId: WorkspaceId,
     moduleId: string,
     record: BusinessRecord,
-  ) => void
+  ) => Promise<WriteOutcome> | undefined
+  /**
+   * Sends one of a row's commands (`deactivate`, `reactivate`, …: the
+   * adapter's `commands`) on a switched module that is ready, and puts the
+   * API's answer in the row's place. A refusal is told to the person in the
+   * API's words, as a write's is, and handed back.
+   */
+  sendCommand: (
+    workspaceId: WorkspaceId,
+    moduleId: string,
+    recordId: string,
+    name: string,
+  ) => Promise<CommandOutcome>
 }
 
 type BusinessRecordStores = {
@@ -105,11 +127,13 @@ type BusinessRecordStores = {
    */
   client: ExternalStore<ApiClient | null>
   /**
-   * Writes in flight, by web id, so a second save of a row whose first has
-   * not answered waits its turn rather than racing it to the API. One map
-   * for the whole store, since two components may write the same row.
+   * Writes and commands in flight, by web id, so a second save of a row
+   * whose first has not answered waits its turn rather than racing it to the
+   * API, and a command on a row whose create is out waits for its server id.
+   * One map for the whole store, since two components may write the same
+   * row.
    */
-  pendingWrites: Map<string, Promise<void>>
+  pendingWrites: Map<string, Promise<unknown>>
   /**
    * Which session the server-backed modules belong to: one more each time
    * the person signed in changes (a sign-out, a sign-in as someone else). A
@@ -362,13 +386,15 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
         const before = current.records.find((candidate) => candidate.id === record.id)
         serverStore.set((state) => new Map(state).set(key, withRecord(state.get(key) ?? current, record)))
         // The session this write belongs to: one that has ended by the time
-        // the write's turn comes, or by the time it answers, gets nothing.
+        // the write's turn comes, or by the time it answers, gets nothing
+        // but the word that it ended.
         const generation = stores.generation.getSnapshot()
         const outlived = () => stores.generation.getSnapshot() !== generation
-        const run = async () => {
-          if (outlived()) return
+        const ended = (): WriteOutcome => ({ kind: "refused", recordId: record.id, problem: genericProblem(0, "The session ended before the record was saved") })
+        const run = async (): Promise<WriteOutcome> => {
+          if (outlived()) return ended()
           const outcome = await writeRecord(client, module, current, record, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
-          if (outlived()) return
+          if (outlived()) return ended()
           serverStore.set((state) => {
             const latest = state.get(key) ?? current
             switch (outcome.kind) {
@@ -389,14 +415,15 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
           })
           // The account's own refusal has ended the session; /login says why.
           if (outcome.kind === "refused" && !isAccountRefusal(outcome.problem)) reportProblem(`${record.name} was not saved`, outcome.problem)
+          return outcome
         }
         const pending = stores.pendingWrites
         const previous = pending.get(record.id) ?? Promise.resolve()
-        const next: Promise<void> = previous.then(run, run).finally(() => {
+        const next: Promise<WriteOutcome> = previous.then(run, run).finally(() => {
           if (pending.get(record.id) === next) pending.delete(record.id)
         })
         pending.set(record.id, next)
-        return
+        return next
       }
 
       store.set((current) => {
@@ -411,12 +438,80 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
             : [record, ...existing],
         }
       })
+      return undefined
     },
     [store, stores],
   )
 
-  return useMemo(
-    () => ({ getRecords, upsertRecord }),
-    [getRecords, upsertRecord],
+  const sendCommand = useCallback(
+    (workspaceId: WorkspaceId, moduleId: string, recordId: string, name: string): Promise<CommandOutcome> => {
+      const key = moduleKey(workspaceId, moduleId)
+      const module = serverModuleOf(workspaceId, moduleId)
+      const serverStore = stores.server
+      const current = module === undefined ? undefined : serverStore.getSnapshot().get(key)
+      const record = current?.records.find((candidate) => candidate.id === recordId)
+      if (module === undefined || current === undefined || current.status !== "ready" || record === undefined || stores.client.getSnapshot() === null) {
+        // A module on the browser's own path has no commands, and the pane
+        // offers none there; this is the store saying so, not a person's
+        // mistake to toast.
+        return Promise.resolve({ kind: "refused", what: "Nothing was changed", recordId, problem: genericProblem(400, `${key} is not read from the API, or holds no record ${recordId}`) })
+      }
+      const generation = stores.generation.getSnapshot()
+      const outlived = () => stores.generation.getSnapshot() !== generation
+      const ended = (): CommandOutcome => ({ kind: "refused", what: `${record.name} was not changed`, recordId, problem: genericProblem(0, "The session ended before the command was sent") })
+      const run = async (): Promise<CommandOutcome> => {
+        if (outlived()) return ended()
+        // The row and the client as they stand when the command's turn
+        // comes: a create queued before it has answered by now, so the
+        // server id is there, and the token is the current one.
+        const latest = serverStore.getSnapshot().get(key) ?? current
+        const row = latest.records.find((candidate) => candidate.id === recordId) ?? record
+        const client = stores.client.getSnapshot()
+        if (client === null) return ended()
+        const outcome = await commandRecord(client, module, latest, row, name, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
+        if (outlived()) return ended()
+        if (outcome.kind === "done") {
+          serverStore.set((state) => new Map(state).set(key, withRecord(state.get(key) ?? latest, outcome.record, outcome.serverId)))
+        } else if (!isAccountRefusal(outcome.problem)) {
+          reportProblem(outcome.what, outcome.problem)
+        }
+        return outcome
+      }
+      const pending = stores.pendingWrites
+      const previous = pending.get(recordId) ?? Promise.resolve()
+      const next: Promise<CommandOutcome> = previous.then(run, run).finally(() => {
+        if (pending.get(recordId) === next) pending.delete(recordId)
+      })
+      pending.set(recordId, next)
+      return next
+    },
+    [stores],
   )
+
+  return useMemo(
+    () => ({ getRecords, upsertRecord, sendCommand }),
+    [getRecords, upsertRecord, sendCommand],
+  )
+}
+
+/**
+ * The state of a switched module — idle, loading, ready or failed, with its
+ * problem — or null for a module on the browser's own path. For a pane that
+ * must show nothing rather than the fixtures until the API has answered
+ * (Settings › Users & roles on the Pilot, Issue #163).
+ */
+export function useServerModuleState(workspaceId: WorkspaceId, moduleId: string): ModuleState | null {
+  const stores = useContext(BusinessRecordStoreContext)
+  if (!stores) {
+    throw new Error(
+      "useServerModuleState must be used within BusinessRecordStoreProvider",
+    )
+  }
+  const serverModules = useSyncExternalStore(
+    stores.server.subscribe,
+    stores.server.getSnapshot,
+    stores.server.getServerSnapshot,
+  )
+  if (serverModuleOf(workspaceId, moduleId) === undefined) return null
+  return serverModules.get(moduleKey(workspaceId, moduleId)) ?? IDLE
 }

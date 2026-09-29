@@ -277,3 +277,35 @@ export async function writeRecord(client: ApiClient, module: ServerModule, curre
     return { kind: "refused", recordId: record.id, problem: problemOfError(error) }
   }
 }
+
+export type CommandOutcome =
+  | { kind: "done"; record: BusinessRecord; serverId: string }
+  /** `what` is the heading the person is told the refusal under; the problem is the API's, or the store's own for a command that was never sent. */
+  | { kind: "refused"; what: string; problem: Problem; recordId: string }
+
+/**
+ * Sends one of a row's commands (adapter.ts, `commands`) and maps the answer
+ * as a read is mapped, under the row's own web id: a row the workspace
+ * minted this session keeps its minted id, as `withCreated` keeps it. Nothing
+ * is sent for a record no adapter owns, a command the adapter does not have,
+ * or a row the server does not hold yet — an optimistic create still in
+ * flight — and each is refused with a sentence. A refusal the API answers
+ * comes back as its problem.
+ */
+export async function commandRecord(client: ApiClient, module: ServerModule, current: ModuleState, record: BusinessRecord, name: string, options: LoadOptions): Promise<CommandOutcome> {
+  const adapter = adapterFor(module, record)
+  const command = adapter?.commands?.[name]
+  const what = command?.refused(record) ?? `${record.name} was not changed`
+  const refused = (problem: Problem): CommandOutcome => ({ kind: "refused", what, problem, recordId: record.id })
+  if (adapter === undefined) return refused(genericProblem(400, `${moduleKeyOf(module.workspaceId, module.moduleId)} has no server resource for ${record.id}`))
+  if (command === undefined) return refused(genericProblem(400, `The API has no "${name}" for a ${adapter.prefix}`))
+  const serverId = current.serverIds.get(record.id)
+  if (serverId === undefined) return refused(genericProblem(400, `${record.name} is not on the API yet: wait for it to be saved, then try again`))
+  try {
+    const resource = await command.run(client, serverId)
+    const context: MappingContext = { fixtures: options.fixtures, resolve: resolverOver(options.state), companyRecordId: companyRecordIdOf(options.state), now: options.now }
+    return { kind: "done", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId: resource.id }
+  } catch (error) {
+    return refused(problemOfError(error))
+  }
+}
