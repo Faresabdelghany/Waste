@@ -9,8 +9,13 @@
 # is made public once, by hand, in its package settings.
 name: Pilot image (prototype, #134)
 
+# On the branch's pushes as well as by hand: GitHub registers a
+# workflow_dispatch-only workflow only once it is on the default branch, and
+# this one never goes there, so the push is what runs it.
 on:
   workflow_dispatch:
+  push:
+    branches: [prototype/134-pilot-image]
 
 permissions:
   contents: read
