@@ -48,7 +48,7 @@ import {
   readPersisted,
 } from "@/lib/storage-keys"
 
-import { useApiClient, useApiSessionIdentity } from "./api-session-store"
+import { useApiClient, useApiConfigured, useApiSessionIdentity } from "./api-session-store"
 
 /**
  * Key renames specific to this store's records, on top of the shared map in
@@ -531,4 +531,26 @@ export function useServerModuleState(workspaceId: WorkspaceId, moduleId: string)
   )
   if (serverModuleOf(workspaceId, moduleId) === undefined) return null
   return serverModules.get(moduleKey(workspaceId, moduleId)) ?? IDLE
+}
+
+/**
+ * The records a pane lists. On the browser's own path, `getRecords` as ever.
+ * On the Pilot, a switched module's rows once they are here and nothing
+ * before — never the fixtures, since a fixture row shown on the Pilot is a
+ * row that does not exist — with the load's state beside them, for the
+ * pane's empty row and its create button (Issue #163's rule for Settings ›
+ * Users & roles, here for every pane that reads its own module).
+ */
+export function useModuleRecords(
+  workspaceId: WorkspaceId,
+  moduleId: string,
+  fixtures: readonly BusinessRecord[],
+): { records: BusinessRecord[]; ready: boolean; pending: boolean; problem: Problem | null } {
+  const configured = useApiConfigured()
+  const state = useServerModuleState(workspaceId, moduleId)
+  const { getRecords } = useBusinessRecordStore()
+  if (configured && state !== null && state.status !== "ready") {
+    return { records: [], ready: false, pending: state.status !== "failed", problem: state.problem }
+  }
+  return { records: getRecords(workspaceId, moduleId, fixtures), ready: true, pending: false, problem: null }
 }

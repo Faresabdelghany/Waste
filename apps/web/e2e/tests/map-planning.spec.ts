@@ -307,6 +307,8 @@ test("removing a filter chip lifts the filter (#55)", async ({ page }) => {
   await expect(page.locator("[data-marker]")).toHaveCount(markersBefore)
 })
 
+// The fixture path, which slice 1 of #81 leaves as it was; the API's outlines
+// are e2e-api/planning-configuration.spec.ts's.
 test("the Layers control switches the base map and draws planning-area outlines", async ({ page }) => {
   await page.getByRole("button", { name: /^Layers/ }).click()
   const layers = page.getByRole("dialog", { name: "Layers" })
@@ -347,6 +349,8 @@ test("the search flies to an address and the map zooms out to the whole world", 
   await expect(page.locator('[data-marker="cluster"]')).toHaveCount(1)
 })
 
+// The fixture path, which slice 1 of #81 leaves as it was; the same deep link
+// on an API calendar is e2e-api/planning-configuration.spec.ts's.
 test("a legacy Plan calendars link lands on the Settings pane", async ({ page }) => {
   await page.goto("/plan?module=calendars&record=calendar-central")
   await expect(page).toHaveURL(/\/settings\?pane=collection-calendars&record=calendar-central/)

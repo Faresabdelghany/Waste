@@ -241,6 +241,16 @@ describe("writing a record", () => {
     assert.deepEqual(resource.calls, ['update 1 {"name":"One renamed"}'])
   })
 
+  test("an updated row keeps its web id whatever the mapping would now derive, as a created row keeps its minted one: one server row is one row here", async () => {
+    const resource: ResourceAdapter<Thing> = { ...adapter(), toRecord: (thing) => record(`t-by-name-${thing.name.toLowerCase()}`, thing.name) }
+    const current = loaded({ records: [record("t-by-name-one", "One")], serverIds: new Map([["t-by-name-one", "1"]]) }, 1)
+    const outcome = await writeRecord(client, module(resource), current, record("t-by-name-one", "Two"), options())
+    assert.equal(outcome.kind, "updated")
+    if (outcome.kind !== "updated") return
+    assert.equal(outcome.record.id, "t-by-name-one", "not t-by-name-two")
+    assert.equal(outcome.record.name, "Two")
+  })
+
   test("a move to a status the wire has a word for is a patch", async () => {
     const resource = adapter()
     const current = loaded({ records: [record("t-1", "One")], serverIds: new Map([["t-1", "1"]]) }, 1)

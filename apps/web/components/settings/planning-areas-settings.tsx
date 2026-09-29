@@ -36,10 +36,12 @@ import {
   TablePagination,
   useTablePagination,
 } from "@/components/ui/table-pagination"
+import { useApiConfigured } from "@/components/waste/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import {
   useBusinessRecordStore,
   useBusinessRecordsHydrated,
+  useModuleRecords,
 } from "@/components/waste/business-record-store"
 import { statusClasses } from "@/components/waste/business-record-views"
 import type {
@@ -69,6 +71,11 @@ import { cn } from "@/lib/utils"
 
 const ACTOR_NAME = "Olivia Larsen"
 
+const ORGANISATION_MODULE = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })
+
+const isAreasModule = (location: ModuleLocation) =>
+  location.workspaceId === PLANNING_AREAS_MODULE.workspaceId && location.moduleId === PLANNING_AREAS_MODULE.moduleId
+
 export function PlanningAreasSettings() {
   const { getRecords, upsertRecord } = useBusinessRecordStore()
   const hydrated = useBusinessRecordsHydrated()
@@ -95,11 +102,14 @@ export function PlanningAreasSettings() {
       : []
   }
 
-  const areaRecords = relationRecords(PLANNING_AREAS_MODULE)
-  const projectRecords = relationRecords({
-    workspaceId: "configure",
-    moduleId: "organization",
-  }).filter((record) => record.id.startsWith("project-"))
+  // The pane's own module and the projects it names: on the Pilot, the API's
+  // rows once they are here and nothing before (Issue #175).
+  const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId, areasModule.records)
+  const areaRecords = areas.records.filter((record) => !isSoftDeleted(record))
+  const organisation = useModuleRecords("configure", "organization", ORGANISATION_MODULE?.records ?? [])
+  const projectRecords = organisation.records.filter(
+    (record) => !isSoftDeleted(record) && record.id.startsWith("project-"),
+  )
 
   const lookups: PlanningAreaLookups = {
     projectName: (projectId) =>
@@ -113,13 +123,17 @@ export function PlanningAreasSettings() {
     const records =
       field.id === "projectId"
         ? projectRecords
-        : relationRecords(field.relation).filter(
+        : (isAreasModule(field.relation) ? areaRecords : relationRecords(field.relation)).filter(
             // A version cannot supersede itself.
             (record) => !(field.id === "previousVersionId" && record.id === editingArea?.id),
           )
     return records.map((record) => ({ value: record.id, label: record.name }))
   }
 
+  // On the Pilot the drawing and its confirmation are the API's: an area
+  // registered undrawn, or one whose version is not the one in force today,
+  // carries no polygon on the form, and a rename must not have to paste one.
+  const configured = useApiConfigured()
   const editSchema = useMemo(
     () => ({
       ...schema,
@@ -127,21 +141,30 @@ export function PlanningAreasSettings() {
       submitLabel: "Save changes",
       description:
         "Update this planning area. Changes apply immediately to every scheme, container, and service area that references it.",
+      sections: configured
+        ? schema.sections.map((section) => ({
+            ...section,
+            fields: section.fields.map((field) =>
+              field.id === "geometry" || field.id === "geometryConfirmed" ? { ...field, required: false } : field,
+            ),
+          }))
+        : schema.sections,
     }),
-    [schema],
+    [configured, schema],
   )
 
   // A deep link (/settings?pane=areas&record=…) opens that area for editing —
-  // once the store has loaded, so a user-created area is found too (before
-  // hydration only fixtures exist). Later edits keep their own state, so the
-  // records list is deliberately not a dependency.
+  // once the store has loaded and, on the Pilot, once the module's rows are
+  // here, so a user-created area and an API area are found too. Later edits
+  // keep their own state, so the records list is deliberately not a
+  // dependency.
   const requestedRecordId = searchParams.get("record")
   useEffect(() => {
-    if (!hydrated || !requestedRecordId) return
+    if (!hydrated || !areas.ready || !requestedRecordId) return
     const record = areaRecords.find((candidate) => candidate.id === requestedRecordId)
     if (record) setEditingArea(record)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated, requestedRecordId])
+  }, [hydrated, areas.ready, requestedRecordId])
 
   const rows = areaRecords.map((record) => ({
     record,
@@ -168,26 +191,44 @@ export function PlanningAreasSettings() {
   )
   const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(filtered)
 
+  // On the Pilot the store answers the write's outcome once the API has, so
+  // the dialog stays open and the success is said once the API has answered;
+  // a refusal is the store's toast, in the API's words, over the form still
+  // holding what was typed. On the browser's own path there is nothing to
+  // wait for.
+  const whenSaved = (outcome: ReturnType<typeof upsertRecord>, done: () => void) => {
+    if (outcome === undefined) done()
+    else void outcome.then((result) => result.kind !== "refused" && done())
+  }
+
   const handleCreate = (values: BusinessFormValues) => {
     const record = createPlanningAreaRecord(values, {
       now: Date.now(),
       actorName: ACTOR_NAME,
       lookups,
     })
-    upsertRecord(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId, record)
-    toast.success("Planning area created", {
-      description: `${record.name} is available to route schemes, containers, and service areas.`,
+    whenSaved(upsertRecord(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId, record), () => {
+      setIsCreateOpen(false)
+      toast.success("Planning area created", {
+        description: `${record.name} is available to route schemes, containers, and service areas.`,
+      })
     })
-    setIsCreateOpen(false)
   }
 
   const handleEdit = (values: BusinessFormValues) => {
     if (!editingArea) return
     const record = updatePlanningAreaRecord(editingArea, values, lookups)
-    upsertRecord(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId, record)
-    toast.success("Planning area updated", { description: `${record.name} was updated.` })
-    setEditingArea(null)
+    whenSaved(upsertRecord(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId, record), () => {
+      setEditingArea(null)
+      toast.success("Planning area updated", { description: `${record.name} was updated.` })
+    })
   }
+
+  const emptyMessage = areas.pending
+    ? "Reading the planning areas from the API…"
+    : areas.problem
+      ? `The planning areas could not be read from the API: ${areas.problem.detail ?? areas.problem.title}`
+      : "No planning areas match this search."
 
   return (
     <AssetPanelShell
@@ -195,7 +236,7 @@ export function PlanningAreasSettings() {
       title={areasModule.label}
       description={areasModule.description}
       action={
-        <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+        <Button size="sm" onClick={() => setIsCreateOpen(true)} disabled={!areas.ready || !organisation.ready}>
           <Plus className="h-4 w-4" weight="bold" />
           {areasModule.primaryAction}
         </Button>
@@ -238,7 +279,7 @@ export function PlanningAreasSettings() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <EmptyRow colSpan={8} message="No planning areas match this search." />
+                <EmptyRow colSpan={8} message={emptyMessage} />
               ) : (
                 pageRows.map(({ record, row }) => (
                   <TableRow key={record.id}>
