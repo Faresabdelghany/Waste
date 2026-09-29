@@ -23,7 +23,13 @@
 // answered. `DriverCommandReceipt` is the stored receipt — its `routeId`
 // null on a rejection for a route the driver does not reach, which is
 // recorded in the driver's project with the claimed id kept in `body` as
-// `{ routeId, body }` — and `DriverMe` the connected client's start screen.
+// `{ routeId, body }` — and `DriverMe` the connected client's start screen,
+// with the three lists its commands pick from (#144): the active vehicles
+// and trailers of the driver profile's project a `start-route` names, and
+// the company's stations that are not closed, with what each accepts, and
+// its fractions, which a `record-unload` names — narrowed from the rows the
+// synced client reads in its `company` bucket (#104 §3), which a browser
+// has no bucket for.
 // `DriverRouteDetail` is the driver's read of one route (#104 §5): a
 // `RouteDetail` whose pickups are `DriverPickup`s, each with its place
 // joined — the address and the point of the property or the shared
@@ -40,12 +46,14 @@
 import { COMMAND_OUTCOMES } from "@waste/domain/execution/vocabulary"
 import * as z from "zod"
 
+import { WasteFraction } from "./catalogue"
 import { IsoDateTime } from "./dates"
 import { CommandOutcome, DriverCommandKind, DriverPickupReason, OBJECT_KEY, OBJECT_KEY_SHAPE, ObjectKey } from "./execution"
-import { Driver } from "./fleet"
+import { Driver, Vehicle } from "./fleet"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { Pickup } from "./pickups"
+import { UnloadingStation } from "./places"
 import { Problem } from "./problem"
 import { ProofOfService } from "./proofs"
 import { eachOnce, eachOnceSentence, PositiveInt, recorded } from "./resource"
@@ -207,13 +215,31 @@ export const DriverCommandReceipt = z
   .refine((receipt) => (receipt.outcome === "rejected") === (receipt.problem !== null), problemWithARejection)
 export type DriverCommandReceipt = z.infer<typeof DriverCommandReceipt>
 
-/** `GET /driver/me`: the connected client's start screen. */
+/** A vehicle or a trailer a `start-route` names, as the start screen offers it: the `Vehicle`'s id, kind and required licence class, and the one label a person names it by — the callsign where it has one, the plate otherwise. */
+export const DriverVehicle = Vehicle.pick({ id: true, kind: true, requiredLicenceClass: true }).extend({ label: Label })
+export type DriverVehicle = z.infer<typeof DriverVehicle>
+
+/** A station a `record-unload` names, as the unload screen offers it: the `UnloadingStation`'s id, name, point and weighbridge, and the fractions it accepts, sorted by id — none on record, an empty list. */
+export const DriverUnloadingStation = UnloadingStation.pick({ id: true, name: true, location: true, weighbridge: true, wasteFractionIds: true })
+export type DriverUnloadingStation = z.infer<typeof DriverUnloadingStation>
+
+/** A waste fraction a `record-unload` names: the `WasteFraction`'s id, key and name. */
+export const DriverWasteFraction = WasteFraction.pick({ id: true, key: true, name: true })
+export type DriverWasteFraction = z.infer<typeof DriverWasteFraction>
+
+/** `GET /driver/me`: the connected client's start screen, and what its commands pick from. */
 export const DriverMe = z.object({
   driver: Driver,
   /** The session the driver is on, or null. */
   openSession: Session.nullable(),
   /** The routes assigned to the driver that are ready or active, or completed today. */
   routes: z.array(Route),
+  /** The `active` powered vehicles and trailers of the driver profile's project, by id. */
+  vehicles: z.array(DriverVehicle),
+  /** The company's stations that are not `closed`, by id. */
+  unloadingStations: z.array(DriverUnloadingStation),
+  /** The company's, by id. */
+  wasteFractions: z.array(DriverWasteFraction),
 })
 export type DriverMe = z.infer<typeof DriverMe>
 

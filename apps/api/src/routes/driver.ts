@@ -13,6 +13,8 @@
 // (auth/driver.ts: `planned_driver_id` or `actual_driver_id` is this driver),
 // never `inProjects` — a Service Provider's driver, whose account works in no
 // project, reaches its assigned routes here and nothing anywhere else. The
+// start screen's pick lists name no route, so they carry the driver
+// profile's project, or the company alone, in its place (`pickLists`). The
 // driver is resolved on every request from the principal's account
 // (`resolveDriver`, 403 for the whole request when no active profile is bound
 // to the login), so a driver set inactive stops the next batch.
@@ -143,7 +145,7 @@ import { alreadyOnRoute, assignedTo, decide, type Clock, type Command, type Comm
 import { alreadyActive, closingReasonOf } from "@waste/domain/execution/transitions"
 import type { DriverCommandKind, OutboxAggregate, OutboxKind } from "@waste/domain/execution/vocabulary"
 import type { LicenceClass, VehicleKind, VehicleStatus } from "@waste/domain/resources/vocabulary"
-import { and, asc, eq, gt, inArray, isNull, or, sql, type SQL } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { isDeepStrictEqual } from "node:util"
@@ -180,7 +182,9 @@ import {
   type SessionRow,
 } from "./execution-shapes"
 import { vehicleColumns, vehicleLabel } from "./fleet-lookups"
+import { idsColumn } from "./id-sets"
 import { COMMAND_BACKDATE_MS, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS, primaryKeyOf, replayed } from "./shared"
+import { fractions as stationFractions } from "./unloading-stations"
 
 const MODULE = "operate.driver-app"
 const RoutePage = Page(Route)
@@ -252,6 +256,50 @@ async function dayRoutes(tx: Tx, principal: Principal, profile: DriverProfile, n
     )
     .orderBy(asc(route.id))
   return narrow.limit === undefined ? await statement : await statement.limit(narrow.limit)
+}
+
+/** The three lists of `DriverMe` a start and an unload pick from. */
+type PickLists = Pick<DriverMe, "vehicles" | "unloadingStations" | "wasteFractions">
+
+/**
+ * What the start screen and the unload screen pick from (#144): the rows #104
+ * §3's sync rules put in the `company` bucket, which a browser has no bucket
+ * for, narrowed to what the commands that name them accept. Three
+ * statements, one per list — a station's fractions a column of its own row
+ * (`idsColumn`) — each carrying the tenant and bounded the way the command
+ * that names its rows is judged: the vehicles by the driver profile's
+ * project — `start-route` takes a vehicle and a trailer of the route's
+ * project, and the assignment's key puts every route of this driver in the
+ * profile's (#125, Q5) — and `active`, the one status a start accepts; the
+ * stations and the fractions by the company alone, since `record-unload`
+ * takes any of the company's, and the stations `closed` left out. Never
+ * Project Access, like the rest of the door: a Service Provider's driver,
+ * whose account works in no project, picks from the same lists as the
+ * employee beside them, the company's stations included, which the office's
+ * station reads do not show their account (routes/unloading-stations.ts).
+ * Each list is by id, and so is each station's set of fractions, the order
+ * every set of this API is read in (routes/id-sets.ts).
+ */
+async function pickLists(tx: Tx, companyId: string, profile: DriverProfile): Promise<PickLists> {
+  const [vehicles, stations, wasteFractions] = await Promise.all([
+    tx
+      .select(vehicleColumns)
+      .from(vehicle)
+      .where(and(eq(vehicle.companyId, companyId), eq(vehicle.projectId, profile.projectId), eq(vehicle.status, "active")))
+      .orderBy(asc(vehicle.id)),
+    tx
+      .select({ id: unloadingStation.id, name: unloadingStation.name, location: unloadingStation.location, weighbridge: unloadingStation.weighbridge, wasteFractionIds: idsColumn(tx, stationFractions, companyId, unloadingStation.id) })
+      .from(unloadingStation)
+      .where(and(eq(unloadingStation.companyId, companyId), ne(unloadingStation.status, "closed")))
+      .orderBy(asc(unloadingStation.id)),
+    tx.select({ id: wasteFraction.id, key: wasteFraction.key, name: wasteFraction.name }).from(wasteFraction).where(eq(wasteFraction.companyId, companyId)).orderBy(asc(wasteFraction.id)),
+  ])
+  return {
+    vehicles: vehicles.map((row) => ({ id: row.id, label: vehicleLabel(row), kind: row.kind as VehicleKind, requiredLicenceClass: row.requiredLicenceClass as LicenceClass })),
+    // A station's column is `geometry(Point, 4326)`, flat: what it holds is the contracts' `FlatPoint`, however the column's type spells the altitude as optional.
+    unloadingStations: stations.map((row) => ({ ...row, location: row.location as FlatPoint })),
+    wasteFractions,
+  }
 }
 
 /** The open session of this driver, whichever route it is on; undefined when none. */
@@ -860,10 +908,10 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         operationId: "getDriverMe",
         summary: "The driver's start screen",
         description:
-          "The caller's own driver profile, the session they are on or null, and the routes assigned to them that are `ready` or `active`, or `completed` today on their project's clock. The caller is a driver: the account is bound to an active driver profile of the company (403 for the whole request otherwise), and the routes are the ones planned for or started by that driver — the assignment, never Project Access — so a service provider's driver, whose account works in no project, reads their assigned routes here. The connected client's start screen; the offline one reads its synced buckets.",
+          "The caller's own driver profile, the session they are on or null, the routes assigned to them that are `ready` or `active`, or `completed` today on their project's clock, and the three lists a start and an unload pick from: `vehicles`, the `active` powered vehicles and trailers of the driver profile's project, each with its `label` (the callsign, else the registration), `kind` and `requiredLicenceClass`; `unloadingStations`, the company's stations that are not `closed`, each with its `location`, whether it has a `weighbridge`, and the `wasteFractionIds` it accepts; and `wasteFractions`, the company's, each with its `key` and `name` — every list, and every station's fractions, by id. The caller is a driver: the account is bound to an active driver profile of the company (403 for the whole request otherwise), and the routes are the ones planned for or started by that driver — the assignment, never Project Access — so a service provider's driver, whose account works in no project, reads their assigned routes here, and picks from the same lists as any driver of their profile's project. The connected client's start screen; the offline one reads its synced buckets.",
         security: BEARER_SECURITY,
         responses: {
-          200: describeJson("The driver, the open session or null, and the day's routes.", DriverMe),
+          200: describeJson("The driver, the open session or null, the day's routes, and what a start and an unload pick from.", DriverMe),
           ...driverProblems("view"),
         },
       }),
@@ -878,7 +926,7 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         if (row === undefined) throw new Error(`driver ${profile.id} resolved and then not found`)
         const open = await openSessionOf(tx, principal.companyId, profile)
         const routes = await dayRoutes(tx, principal, profile, now(), {})
-        const body: DriverMe = { driver: driverOf(row), openSession: open === undefined ? null : sessionOf(open), routes: await routesOf(tx, principal.companyId, routes) }
+        const body: DriverMe = { driver: driverOf(row), openSession: open === undefined ? null : sessionOf(open), routes: await routesOf(tx, principal.companyId, routes), ...(await pickLists(tx, principal.companyId, profile)) }
         return c.json(body)
       },
     )

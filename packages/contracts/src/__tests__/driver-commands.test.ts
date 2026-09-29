@@ -199,11 +199,50 @@ describe("what the door answers and stores", () => {
     assert.match(refusal(DriverCommandBatchOutcome.safeParse({ outcomes: [row], nextCursor: null }))[0].message, /nextCursor/, "not a page")
   })
 
-  test("the driver's start screen is the profile, the open session and today's routes", () => {
+  test("the driver's start screen is the profile, the open session, today's routes and what a start and an unload pick from", () => {
     const driver = { id: OTHER, projectId: OTHER, name: "Mads Jensen", workforceReference: null, employment: "employee", serviceProviderId: null, homeDepotId: null, licenceClass: "ce", licenceNumber: null, licenceExpiry: null, userAccountId: ID, status: "active", notes: null, ...STAMPS }
-    const me = { driver, openSession: null, routes: [] }
+    const vehicles = [
+      { id: ID, label: "WH-24", kind: "powered-vehicle", requiredLicenceClass: "c" },
+      { id: THIRD, label: "CN 90 112", kind: "trailer", requiredLicenceClass: "b" },
+    ]
+    const unloadingStations = [
+      { id: OTHER, name: "Nordkaj transfer station", location: POINT, weighbridge: true, wasteFractionIds: [ID, THIRD] },
+      { id: THIRD, name: "Sydhavn drop-off", location: POINT, weighbridge: false, wasteFractionIds: [] },
+    ]
+    const wasteFractions = [{ id: ID, key: "residual", name: "Residual waste" }]
+    const me = { driver, openSession: null, routes: [], vehicles, unloadingStations, wasteFractions }
     assert.deepEqual(DriverMe.parse(me), me)
-    assert.deepEqual(refusal(DriverMe.safeParse({ ...me, routes: undefined })).map((issue) => issue.path), ["routes"])
+    for (const key of ["routes", "vehicles", "unloadingStations", "wasteFractions"]) {
+      assert.deepEqual(refusal(DriverMe.safeParse({ ...me, [key]: undefined })).map((issue) => issue.path), [key], `${key} is always there, empty or not`)
+    }
+
+    // A vehicle is named the way a person names it, one label, and carries what the start rule reads of it.
+    for (const key of ["id", "label", "kind", "requiredLicenceClass"]) {
+      const without: Record<string, unknown> = { ...vehicles[0] }
+      delete without[key]
+      assert.deepEqual(refusal(DriverMe.safeParse({ ...me, vehicles: [without] })).map((issue) => issue.path), [`vehicles.0.${key}`], key)
+    }
+    assert.deepEqual(refusal(DriverMe.safeParse({ ...me, vehicles: [{ ...vehicles[0], kind: "crane" }] })).map((issue) => issue.path), ["vehicles.0.kind"], "a vehicle is powered or a trailer")
+    assert.deepEqual(refusal(DriverMe.safeParse({ ...me, vehicles: [{ ...vehicles[0], requiredLicenceClass: null }] })).map((issue) => issue.path), ["vehicles.0.requiredLicenceClass"], "a vehicle's class is never unknown")
+    assert.deepEqual(refusal(DriverMe.safeParse({ ...me, vehicles: [{ ...vehicles[0], label: " " }] })).map((issue) => issue.path), ["vehicles.0.label"])
+
+    // A station is where it is and says what it accepts, by id; accepting nothing is an empty list, not an absent one.
+    for (const key of ["id", "name", "location", "weighbridge", "wasteFractionIds"]) {
+      const without: Record<string, unknown> = { ...unloadingStations[0] }
+      delete without[key]
+      assert.deepEqual(refusal(DriverMe.safeParse({ ...me, unloadingStations: [without] })).map((issue) => issue.path), [`unloadingStations.0.${key}`], key)
+    }
+    assert.deepEqual(refusal(DriverMe.safeParse({ ...me, unloadingStations: [{ ...unloadingStations[0], wasteFractionIds: ["residual"] }] })).map((issue) => issue.path), ["unloadingStations.0.wasteFractionIds.0"], "a fraction by its id")
+    assert.equal(DriverMe.safeParse({ ...me, unloadingStations: [{ ...unloadingStations[0], location: null }] }).success, false, "a station is always located")
+    assert.equal(DriverMe.safeParse({ ...me, unloadingStations: [{ ...unloadingStations[0], location: { type: "Point", coordinates: [12.5951, 55.7089, 10] } }] }).success, false, "a flat point")
+
+    // A fraction is its id, the key the rest of the system quotes and the name a person reads.
+    for (const key of ["id", "key", "name"]) {
+      const without: Record<string, unknown> = { ...wasteFractions[0] }
+      delete without[key]
+      assert.deepEqual(refusal(DriverMe.safeParse({ ...me, wasteFractions: [without] })).map((issue) => issue.path), [`wasteFractions.0.${key}`], key)
+    }
+    assert.deepEqual(refusal(DriverMe.safeParse({ ...me, wasteFractions: [{ ...wasteFractions[0], key: "Residual waste" }] })).map((issue) => issue.path), ["wasteFractions.0.key"], "the key is the catalogue's slug")
   })
 
   test("the driver's route read is the detail with each pickup's place joined: the address, the point or null, the container's label and the fraction's name", () => {

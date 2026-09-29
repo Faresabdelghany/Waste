@@ -29,7 +29,12 @@
 // project. This is deliberately not the rule the other company-wide families
 // (waste fractions, container types, vehicle types) follow, where a provider
 // with the grant reads the company's vocabulary: a vocabulary says nothing
-// about the company's operation, and where it unloads does.
+// about the company's operation, and where it unloads does. The driver door
+// is the one other reader, and it answers a driver and not an account:
+// `GET /driver/me` lists the company's stations that are not closed to every
+// active driver, a provider's among them, since `record-unload` takes any of
+// the company's and a driver who unloads names one (routes/driver.ts,
+// `pickLists`).
 //
 // The fractions are the set that travels with the record, through the
 // company-wide, role-less sibling in routes/id-sets.ts: read with the station
@@ -95,7 +100,7 @@ const columns = {
 type Row = Pick<typeof unloadingStation.$inferSelect, keyof typeof columns>
 
 /** What the station accepts: the waste fractions of this company, one row per fraction. */
-const fractions: IdSet<typeof unloadingStationFraction> = {
+export const fractions: IdSet<typeof unloadingStationFraction> = {
   table: unloadingStationFraction,
   parentId: unloadingStationFraction.unloadingStationId,
   entryId: unloadingStationFraction.wasteFractionId,
