@@ -34,7 +34,7 @@ const roleId = "018f7c2e-c000-7000-8000-000000000002"
 const otherCompanyId = "018f7c2e-c000-7000-8000-000000000003"
 const otherRoleId = "018f7c2e-c000-7000-8000-000000000004"
 // Addresses of this file's own: the hook binds by e-mail across the whole
-// database, so an address the demo seed also invited (fares4389@gmail.com,
+// database, so an address the demo seed also invited (its `USERS`,
 // src/seed/demo.ts) would be two open invitations, which the hook binds
 // neither of.
 const accounts = {
