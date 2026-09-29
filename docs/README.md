@@ -17,7 +17,7 @@ The domain glossary is `CONTEXT.md` at the repository root, not here. Every term
 ## Rules
 
 - An ADR needs all three: hard to reverse, surprising without context, and the result of a real trade-off. Otherwise do not write one.
-- Statuses: `proposed`, `accepted`, `deprecated`, `superseded by ADR-NNNN`.
+- Statuses: `proposed`, `accepted`, `deferred`, `deprecated`, `superseded by ADR-NNNN`. A deferred ADR stands as the target but is not applied yet; the ADR that defers it says why and until when.
 - Dates are absolute, `YYYY-MM-DD`.
 - The index below stays in sync: one line per file.
 
@@ -30,6 +30,6 @@ The domain glossary is `CONTEXT.md` at the repository root, not here. Every term
 - [ADR-0004 Offline execution](adr/0004-offline-execution.md) — accepted
 - [ADR-0005 Effective dating and temporal integrity](adr/0005-effective-dating.md) — accepted
 - [ADR-0006 PyVRP optimisation sidecar](adr/0006-pyvrp-optimisation-sidecar.md) — accepted
-- [ADR-0007 Hosting the API, the worker and Valhalla](adr/0007-hosting-api-worker-valhalla.md) — proposed
-- ADR-0008 — the number is reserved by the pilot's hosting decision, drafted on issue #134 and not yet a file here
+- [ADR-0007 Hosting the API, the worker and Valhalla](adr/0007-hosting-api-worker-valhalla.md) — deferred (ADR-0008)
+- [ADR-0008 Zero-cost hosting for the Pilot](adr/0008-zero-cost-hosting-for-the-pilot.md) — proposed
 - [ADR-0009 The pilot Plan](adr/0009-the-pilot-plan.md) — proposed

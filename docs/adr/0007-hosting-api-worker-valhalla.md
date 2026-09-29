@@ -1,9 +1,11 @@
 ---
-status: proposed
+status: deferred
 date: 2026-09-25
 ---
 
 # Hosting the API, the worker and Valhalla
+
+*Deferred 2026-09-30: the Pilot runs the API and the worker as one Suga Free service under a supervisor (ADR-0008), and this two-host target returns with Gate B, its budget and its Valhalla.*
 
 Three workloads need a host outside Supabase, and the architecture doc has held the choice open between Fly.io and Railway. The API ships as a container image today (`apps/api/Dockerfile`, built from the repository root and smoke-tested on every CI run, pushed nowhere). The pg-boss worker will be a second Node process on the same Postgres through the session pooler, and the PowerSync service, if it is self-hosted rather than run in PowerSync's EU cloud, a third long-running process on a logical replication slot. Valhalla is a routing engine over Denmark's tiles: a persistent volume of a few gigabytes that outlives a redeploy, since the tiles take a good while to build from the 470 MB extract, and a few gigabytes of memory while it serves matrices to the optimiser and legs to the map. The database is in Supabase's `eu-north-1`, Stockholm, and the API opens a transaction per authenticated request that spends several round trips on the principal alone — the tenant setting, the account, its role and grants, its projects, its provider — before the handler's own statements, so every millisecond between the host and the database is paid several times per request.
 
