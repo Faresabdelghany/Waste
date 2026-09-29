@@ -1,6 +1,17 @@
 import { RESOLUTION_RULE } from "@/lib/commercial/price-model"
 import { serviceFrequencyFactValue } from "@waste/domain/service-frequencies"
 import type { BusinessRecord } from "@waste/domain/prototype-record"
+import {
+  SEEDED_CONTAINER_COPENHAGEN_COUNT,
+  SEEDED_CONTAINER_COUNT,
+  SEEDED_PROPERTY_COPENHAGEN_COUNT,
+  SEEDED_PROPERTY_COUNT,
+  seededContainer,
+  seededContainerRecordId,
+  seededProperty,
+  seededPropertyRecordId,
+  type SeededProperty,
+} from "@waste/domain/fixtures/seeded-registry"
 
 // The prototype record model lives in @waste/domain (src/prototype-record.ts)
 // so the domain package needs nothing from this registry. Re-exported here so
@@ -254,14 +265,6 @@ const companyWideFixtureRecordIds = [
   "sales-lead-greenloop",
 ] as const
 
-const SEEDED_CONTAINER_COUNT = 100
-const SEEDED_CONTAINER_COPENHAGEN_COUNT = 70
-const SEEDED_PROPERTY_COUNT = 50
-const SEEDED_PROPERTY_COPENHAGEN_COUNT = 35
-
-const seededContainerRecordId = (index: number) => `asset-seed-${91001 + index}`
-const seededPropertyRecordId = (index: number) => `property-seed-${101 + index}`
-
 const seededCopenhagenContainerRecordIds = Array.from(
   { length: SEEDED_CONTAINER_COPENHAGEN_COUNT },
   (_, index) => seededContainerRecordId(index),
@@ -437,59 +440,10 @@ function record(
   }
 }
 
-const SEEDED_COPENHAGEN_STREETS: ReadonlyArray<readonly [string, string]> = [
-  ["Ryesgade", "2200 København N"],
-  ["Blegdamsvej", "2100 København Ø"],
-  ["Jagtvej", "2200 København N"],
-  ["Amagerbrogade", "2300 København S"],
-  ["Istedgade", "1650 København V"],
-  ["Godthåbsvej", "2000 Frederiksberg"],
-  ["Falkoner Allé", "2000 Frederiksberg"],
-  ["Strandboulevarden", "2100 København Ø"],
-  ["Tagensvej", "2400 København NV"],
-  ["Enghavevej", "1674 København V"],
-  ["Østerbrogade", "2100 København Ø"],
-  ["Vigerslev Allé", "2500 Valby"],
-]
-
-const SEEDED_HARBOR_STREETS: ReadonlyArray<readonly [string, string]> = [
-  ["Sandkaj", "2150 Nordhavn"],
-  ["Orientkaj", "2150 Nordhavn"],
-  ["Sundkrogsgade", "2150 Nordhavn"],
-  ["Trelleborggade", "2150 Nordhavn"],
-  ["Helsinkigade", "2150 Nordhavn"],
-]
-
-const SEEDED_PROPERTY_OWNERS = [
-  "Østerbro Housing",
-  "KAB Bolig",
-  "Jeudan A/S",
-  "DEAS Ejendomme",
-  "Private",
-  "By & Havn",
-] as const
-
-const SEEDED_PROPERTY_TYPES = ["Residential", "Commercial", "Mixed use"] as const
-
-const SEEDED_WASTE_FRACTIONS = [
-  "Residual",
-  "Organic",
-  "Paper",
-  "Cardboard",
-  "Glass",
-  "Plastic",
-  "Metal",
-] as const
-
-const SEEDED_CONTAINER_TYPES = [
-  "Two-wheel bin · 140 L",
-  "Two-wheel bin · 240 L",
-  "Four-wheel bin · 660 L",
-  "Four-wheel bin · 1,100 L",
-  "Igloo · 2,500 L",
-  "Underground · 5,000 L",
-] as const
-
+// The seeded properties and containers are @waste/domain/fixtures/seeded-registry's
+// (issue #99): its tables and arithmetic are the one spelling `pnpm db:seed` reads
+// too, so a record id stands at the same address here and on the server. What
+// follows shapes them into records, with what only the prototype shows.
 const SEEDED_UPDATED_LABELS = [
   "12 min ago",
   "38 min ago",
@@ -501,31 +455,17 @@ const SEEDED_UPDATED_LABELS = [
 
 const SEEDED_SENSOR_NETWORKS = ["LoRaWAN", "NB-IoT", "Sigfox"] as const
 
-type SeededPropertyProfile = {
-  name: string
-  address: string
-  propertyNumber: string
-  propertyType: (typeof SEEDED_PROPERTY_TYPES)[number]
-  owner: string
-  payer: string
+/** A seeded property with its project's name, as its records spell it. */
+type SeededPropertyProfile = Omit<SeededProperty, "project"> & {
   project: string
   inCopenhagen: boolean
 }
 
 function seededPropertyProfile(index: number): SeededPropertyProfile {
-  const inCopenhagen = index < SEEDED_PROPERTY_COPENHAGEN_COUNT
-  const streets = inCopenhagen ? SEEDED_COPENHAGEN_STREETS : SEEDED_HARBOR_STREETS
-  const [street, postal] = streets[index % streets.length]
-  const houseNumber = 3 + ((index * 7) % 120)
-  const name = `${street} ${houseNumber}`
-  const owner = SEEDED_PROPERTY_OWNERS[index % SEEDED_PROPERTY_OWNERS.length]
+  const property = seededProperty(index)
+  const inCopenhagen = property.project === "copenhagen"
   return {
-    name,
-    address: `${name}, ${postal}`,
-    propertyNumber: `CPH-9${String(1000 + index)}`,
-    propertyType: SEEDED_PROPERTY_TYPES[index % SEEDED_PROPERTY_TYPES.length],
-    owner,
-    payer: index % 4 === 3 ? "Municipal payer" : owner,
+    ...property,
     project: inCopenhagen ? "Copenhagen Central" : "Harbor Commercial",
     inCopenhagen,
   }
@@ -534,11 +474,10 @@ function seededPropertyProfile(index: number): SeededPropertyProfile {
 function buildSeededPropertyRecords(): BusinessRecord[] {
   return Array.from({ length: SEEDED_PROPERTY_COUNT }, (_, index) => {
     const profile = seededPropertyProfile(index)
-    const status =
-      index % 12 === 7 ? "Prospect" : index % 12 === 10 ? "On hold" : "Active"
+    const status = profile.status
     const subscriptions = 1 + (index % 4)
     return record(
-      seededPropertyRecordId(index),
+      profile.recordId,
       profile.name,
       `${profile.owner} · Payer ${profile.payer}`,
       status,
@@ -557,7 +496,7 @@ function buildSeededPropertyRecords(): BusinessRecord[] {
       },
       [
         `${subscriptions} containers`,
-        `Agreement AGR-${2600 + index}`,
+        `Agreement ${profile.agreementNumber}`,
         `${subscriptions * 8} collection events`,
       ],
       "CRM + property registry",
@@ -567,63 +506,21 @@ function buildSeededPropertyRecords(): BusinessRecord[] {
   })
 }
 
-// Planning-area links for declarative stop matching (issue #19): every
-// in-service container belongs to one configure.areas record, mirrored as the
-// "Planning area" display fact plus the typed submittedValues.planningAreaId
-// the stop-match resolver reads. Copenhagen containers rotate across the
-// three Copenhagen areas; Harbor containers all sit in the harbor area.
-const SEEDED_COPENHAGEN_AREAS: ReadonlyArray<{ id: string; name: string }> = [
-  { id: "area-indreby", name: "Indre By Operations" },
-  { id: "area-osterbro-contract", name: "Østerbro Zone 2" },
-  { id: "area-amager-1", name: "Amager Zone 1" },
-]
-const SEEDED_HARBOR_AREA = { id: "area-harbor-1", name: "Nordhavn Harbor Area" }
-
 function buildSeededContainerRecords(): BusinessRecord[] {
   return Array.from({ length: SEEDED_CONTAINER_COUNT }, (_, index) => {
-    const inCopenhagen = index < SEEDED_CONTAINER_COPENHAGEN_COUNT
-    const propertyIndex = inCopenhagen
-      ? index % SEEDED_PROPERTY_COPENHAGEN_COUNT
-      : SEEDED_PROPERTY_COPENHAGEN_COUNT +
-        ((index - SEEDED_CONTAINER_COPENHAGEN_COUNT) %
-          (SEEDED_PROPERTY_COUNT - SEEDED_PROPERTY_COPENHAGEN_COUNT))
-    const property = seededPropertyProfile(propertyIndex)
-    const binNumber = 91001 + index
-    const name = `BIN-${binNumber}`
-    const cycle = index % 20
-    const status =
-      cycle === 5
-        ? "Defect"
-        : cycle === 8
-          ? "Future"
-          : cycle === 11
-            ? "On hold"
-            : cycle === 17
-              ? "In storage"
-              : "Available"
-    const inService = status !== "In storage"
-    const fraction = SEEDED_WASTE_FRACTIONS[index % SEEDED_WASTE_FRACTIONS.length]
-    const containerType =
-      SEEDED_CONTAINER_TYPES[index % SEEDED_CONTAINER_TYPES.length]
+    const container = seededContainer(index)
+    const property = seededPropertyProfile(container.propertyIndex)
+    // The planning area (issue #19) is mirrored as the "Planning area" display
+    // fact plus the typed submittedValues.planningAreaId the stop-match
+    // resolver reads; the frequency is a typed reference (issue #20) whose
+    // display fact is derived from it, never authored.
+    const { label: name, status, inService, fraction, containerType, planningArea, serviceFrequencyId } = container
     const hasSensor = inService && index % 3 !== 2
     const fillLevel = 5 + ((index * 37) % 90)
     const network = SEEDED_SENSOR_NETWORKS[index % SEEDED_SENSOR_NETWORKS.length]
     const updated = SEEDED_UPDATED_LABELS[index % SEEDED_UPDATED_LABELS.length]
-    const agreementNumber = 2600 + propertyIndex
-    const planningArea = inService
-      ? inCopenhagen
-        ? SEEDED_COPENHAGEN_AREAS[index % SEEDED_COPENHAGEN_AREAS.length]
-        : SEEDED_HARBOR_AREA
-      : null
-    // Typed frequency reference (issue #20); the display fact is derived from
-    // it, never authored. Out-of-service units promise no cadence.
-    const serviceFrequencyId = inService
-      ? index % 2 === 0
-        ? "freq-every-2-weeks"
-        : "freq-weekly"
-      : null
     const seeded = record(
-      seededContainerRecordId(index),
+      container.recordId,
       name,
       inService ? `${property.name} · ${property.project}` : "Warehouse West · seeded stock",
       status,
@@ -635,12 +532,12 @@ function buildSeededContainerRecords(): BusinessRecord[] {
         : `${fraction} container held in a storage depot awaiting deployment.`,
       {
         "Container ID": name,
-        Barcode: `WH${binNumber}`,
-        RFID: index % 4 === 3 ? "Not recorded" : `E200${binNumber}`,
-        "Serial number": `SEED-26-${binNumber}`,
+        Barcode: container.barcode,
+        RFID: container.rfid ?? "Not recorded",
+        "Serial number": container.serialNumber,
         "Container type": containerType,
         "Waste fractions": fraction,
-        Ownership: index % 5 === 4 ? "Customer owned" : "Company owned",
+        Ownership: container.ownership,
         Project: property.project,
         "Planning area": planningArea?.name ?? "—",
         Address: inService ? property.address : "Warehouse West · aisle C2",
@@ -671,9 +568,9 @@ function buildSeededContainerRecords(): BusinessRecord[] {
         "Next collection": inService ? "28 Aug 2026" : "Not scheduled",
         Agreement:
           status === "Future"
-            ? `AGR-${agreementNumber} · Future`
+            ? `${property.agreementNumber} · Future`
             : inService
-              ? `AGR-${agreementNumber} · Active`
+              ? `${property.agreementNumber} · Active`
               : "None",
         Condition: status === "Defect" ? "Needs repair · raises ticket" : "Good",
         "Warranty end": "31 Dec 2029",
@@ -683,7 +580,7 @@ function buildSeededContainerRecords(): BusinessRecord[] {
       },
       [
         ...(inService
-          ? [`Property ${property.name}`, `Agreement AGR-${agreementNumber}`]
+          ? [`Property ${property.name}`, `Agreement ${property.agreementNumber}`]
           : ["Warehouse West"]),
         ...(status === "Defect" ? [`Repair ticket T-${9100 + index}`] : []),
       ],

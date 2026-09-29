@@ -31,7 +31,7 @@ The Next.js App Router prototype (TypeScript, Tailwind CSS v4, shadcn/ui). Recor
 - MapLibre's tile worker is served by `app/maplibre/[version]/[asset]/route.ts`, because Turbopack breaks its module-worker URL; keep `setWorkerUrl` pointed there. Camera moves jump instantly until a style has loaded.
 - Maps are north-up and flat: the road overlay's transform assumes it, so rotation and pitch stay disabled.
 - Roads come from the public OSRM demo server (no SLA, prototype only; the target is self-hosted Valhalla, ADR-0002) through `lib/map-planning/road-geometry-cache.ts`. E2E tests stub OSRM per test.
-- The planning questions — what a selection holds, coverage, routes, scheme comparison — are answered by `@waste/domain/map-planning/*`. The domain cannot see the registry, so every call that places a record takes `FIXTURE_GAZETTEER` (`lib/data/street-gazetteer.ts`) as an argument.
+- The planning questions — what a selection holds, coverage, routes, scheme comparison — are answered by `@waste/domain/map-planning/*`. The domain cannot see the registry, so every call that places a record takes `FIXTURE_GAZETTEER` (`@waste/domain/fixtures/gazetteer`, re-exported by `lib/data/street-gazetteer.ts`) as an argument.
 
 ## Next.js
 
