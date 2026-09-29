@@ -30,7 +30,7 @@ import type { Grant } from "@waste/contracts/permissions"
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
 import type { RoleAccessMap } from "@/lib/data/role-permissions"
 
-import { create, get, listAll, patch, put } from "../client"
+import { command, create, get, listAll, patch, put } from "../client"
 import {
   countryCode,
   countryName,
@@ -420,10 +420,14 @@ function projectAccessLabel(user: User, projectName: (projectId: string) => stri
   return user.projectIds.map(projectName).join(", ")
 }
 
+/** The user adapter's commands, by the names the Users & roles pane sends (Issue #163). */
+export const DEACTIVATE_USER = "deactivate"
+export const REACTIVATE_USER = "reactivate"
+
 export const userAdapter: ResourceAdapter<User> = {
   prefix: "user",
   owns: ofKind("user", ["User", "Service provider user"]),
-  // A user's status is derived on the wire (`invited`, `active`, `deactivated`) and `UserPatch` has no member for it; deactivation is its own command, not yet an adapter's.
+  // A user's status is derived on the wire (`invited`, `active`, `deactivated`) and `UserPatch` has no member for it: it moves through the two commands below, never a patch.
   statuses: undefined,
   list: (client) => listAll<User>(client, "/users"),
   toRecord: (user, context) => {
@@ -482,10 +486,17 @@ export const userAdapter: ResourceAdapter<User> = {
       if (serviceProviderId === undefined) return refusal("serviceProviderId", "Not a service provider of this company")
       return { email, fullName, roleId, serviceProviderId }
     }
-    if (typed(record, "projectAccess") === ALL_PROJECTS_ACCESS) return { email, fullName, roleId, allProjects: true }
-    const webIds = typed(record, "projectIds")?.split(",").map((id) => id.trim()) ?? record.projectIds ?? []
-    const projectIds = webIds.map((webId) => context.resolve.serverIdOf(webId)).filter((id): id is string => id !== undefined)
-    if (projectIds.length === 0) return refusal("projectIds", "Pick the projects the user works in, or all of them")
+    // The projects the form ticked decide before the access label does: the
+    // label is presentation, and a project may be called "All projects".
+    const tickedIds = typed(record, "projectIds")?.split(",").map((id) => id.trim())
+    if (tickedIds === undefined && typed(record, "projectAccess") === ALL_PROJECTS_ACCESS) return { email, fullName, roleId, allProjects: true }
+    const webIds = tickedIds ?? record.projectIds ?? []
+    // Every project named must be one the store loaded. One it has not is
+    // refused, not dropped: the API would take the rest as the whole.
+    const projectIds = webIds.map((webId) => context.resolve.serverIdOf(webId))
+    if (projectIds.length === 0 || !projectIds.every((id): id is string => id !== undefined)) {
+      return refusal("projectIds", "Pick the projects the user works in, or all of them")
+    }
     return { email, fullName, roleId, projectIds }
   },
   toPatchBody: (before, after, context) =>
@@ -495,6 +506,18 @@ export const userAdapter: ResourceAdapter<User> = {
     })),
   create: (client, body) => create<User>(client, "/users", body).then((created) => created.body),
   update: (client, serverId, body) => patch<User>(client, `/users/${serverId}`, body),
+  // Both need `edit` on `configure.access`; the primary administrator's
+  // deactivation is the API's 409, shown as it words it.
+  commands: {
+    [DEACTIVATE_USER]: {
+      run: (client, serverId) => command<User>(client, `/users/${serverId}/deactivate`),
+      refused: (record) => `${record.name} was not deactivated`,
+    },
+    [REACTIVATE_USER]: {
+      run: (client, serverId) => command<User>(client, `/users/${serverId}/reactivate`),
+      refused: (record) => `${record.name} was not reactivated`,
+    },
+  },
 }
 
 // ---------------------------------------------------------------------------
