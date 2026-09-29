@@ -6,8 +6,9 @@
 // `planAheadWindow(today)`: tomorrow through the next seven days, today's
 // routes being already operating (the domain's rule, route-schemes/
 // plan-ahead.ts). Every row is written as `wms_api` under `withCompany`, the
-// run and its job in one transaction through the `{ db }` adapter
-// (transaction.ts), so neither is left without the other.
+// run and its job in one transaction through `sendGenerateRoutes`
+// (`@waste/db/jobs`, the spelling the API's trigger shares, Issue #168), so
+// neither is left without the other.
 //
 // The sweep is the one statement in the system that reads across tenants,
 // and the reason `wms_worker` has BYPASSRLS: one `select` over route_scheme
@@ -28,7 +29,7 @@
 // one company's transaction is logged and the sweep goes on to the next,
 // since one tenant's trouble is not another's, and the job then fails so the
 // count shows on /readyz.
-import { GENERATE_ROUTES_QUEUE, type GenerateRoutesData } from "@waste/db/commands/generation"
+import { sendGenerateRoutes } from "@waste/db/jobs"
 import { generationRun } from "@waste/db/schema/generation"
 import { withCompany } from "@waste/db/tenant"
 import { planAheadWindow } from "@waste/domain/route-schemes/plan-ahead"
@@ -36,7 +37,6 @@ import { sql } from "drizzle-orm"
 
 import { defineJob, type JobContext } from "./definition"
 import { loggable } from "./loggable"
-import { inTransaction } from "./transaction"
 
 export const PLAN_AHEAD_QUEUE = "planning.plan-ahead"
 /** 03:00 UTC every day: past midnight in every timezone the demo serves. */
@@ -90,8 +90,7 @@ export async function planAhead({ api, worker, now, log, send }: JobContext, job
           .insert(generationRun)
           .values({ companyId: scheme.companyId, projectId: scheme.projectId, routeSchemeId: scheme.routeSchemeId, trigger: "cron", windowFrom: window.from, windowTo: window.to, status: "queued" })
           .returning({ id: generationRun.id })
-        const data: GenerateRoutesData = { generationRunId: run.id, companyId: scheme.companyId }
-        const sentJobId = await send(GENERATE_ROUTES_QUEUE, data, { singletonKey: scheme.routeSchemeId, db: inTransaction(tx) })
+        const sentJobId = await sendGenerateRoutes(send, tx, { generationRunId: run.id, companyId: scheme.companyId, routeSchemeId: scheme.routeSchemeId })
         if (sentJobId === null) {
           // A job of this scheme is queued or active: the run is rolled back with the send, and that run covers the week.
           throw new AlreadyQueued()

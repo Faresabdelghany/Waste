@@ -214,9 +214,6 @@ importers:
       jose:
         specifier: ^6.2.12
         version: 6.2.12
-      pg-boss:
-        specifier: 12.34.0
-        version: 12.34.0
       tsx:
         specifier: ^4.23.12
         version: 4.23.12
@@ -236,6 +233,9 @@ importers:
       '@waste/tooling':
         specifier: workspace:*
         version: link:../../packages/tooling
+      pg-boss:
+        specifier: 12.34.0
+        version: 12.34.0
       typescript:
         specifier: npm:@typescript/typescript6@^6.0.2
         version: '@typescript/typescript6@6.0.2'
@@ -548,6 +548,9 @@ importers:
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(pg@8.23.0)(postgres@3.4.9)
+      pg-boss:
+        specifier: 12.34.0
+        version: 12.34.0
       postgres:
         specifier: ^3.4.9
         version: 3.4.9
@@ -567,9 +570,6 @@ importers:
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
-      pg-boss:
-        specifier: 12.34.0
-        version: 12.34.0
       typescript:
         specifier: npm:@typescript/typescript6@^6.0.2
         version: '@typescript/typescript6@6.0.2'

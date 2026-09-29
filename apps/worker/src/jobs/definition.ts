@@ -9,8 +9,9 @@
 // here knows pg-boss's connection: a handler gets what it needs from the
 // context, so a test runs it with pools of its own.
 import type { Database } from "@waste/db/client"
+import type { Send } from "@waste/db/jobs"
 import type { RoutingProvider } from "@waste/routing/provider"
-import type { Job, Queue, QueueOptions, ScheduleOptions, SendOptions, WorkOptions } from "pg-boss"
+import type { Job, Queue, QueueOptions, ScheduleOptions, WorkOptions } from "pg-boss"
 
 /** What a handler runs with. Built once per process by main.ts, handed to every job; a test builds its own. */
 export type JobContext = {
@@ -37,13 +38,13 @@ export type JobContext = {
   /**
    * `boss.send(name, data, options)` as this process is connected: how a
    * handler enqueues another job. A handler that must enqueue in its own
-   * transaction passes `{ db: inTransaction(tx) }` in the options
-   * (./transaction.ts, pg-boss's own Drizzle adapter `fromDrizzle(tx, sql)`),
-   * as the plan-ahead sweep does for the run and its job and the relay for
-   * the stamp and its sends — so the job row commits with the handler's rows
-   * or not at all.
+   * transaction goes through `sendInTransaction` (`@waste/db/jobs`, pg-boss's
+   * own Drizzle adapter `fromDrizzle(tx, sql)` over the `db` option, the
+   * spelling the API's generation trigger shares), as the plan-ahead sweep
+   * does for the run and its job and the relay for the stamp and its sends —
+   * so the job row commits with the handler's rows or not at all.
    */
-  send: (name: string, data: object | null, options?: SendOptions) => Promise<string | null>
+  send: Send
   /**
    * The routing provider (#169): the fake unless `ROUTING_PROVIDER` says
    * otherwise, built once by main.ts through `providerFromEnv`
