@@ -30,6 +30,7 @@ import { after, before, describe, test } from "node:test"
 
 import type { Point, Polygon } from "@waste/contracts/geojson"
 import { createDb, type Database, type Tx } from "@waste/db/client"
+import { GENERATE_ROUTES_QUEUE } from "@waste/db/commands/generation"
 import { migrateDatabase } from "@waste/db/migrate"
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
@@ -49,7 +50,7 @@ import { PgBoss } from "pg-boss"
 
 import { createBoss, startBoss, type Boss } from "../boss"
 import type { JobContext } from "../jobs"
-import { DRAFT_GENERATES_NOTHING, GENERATE_ROUTES_QUEUE, generateRoutes, runGeneration } from "../jobs/generate-routes"
+import { DRAFT_GENERATES_NOTHING, generateRoutes, runGeneration } from "../jobs/generate-routes"
 import { eligibleSchemes, PLAN_AHEAD_QUEUE, planAhead } from "../jobs/plan-ahead"
 import { databaseUnderTest, ownerUnderTest, workerUnderTest } from "./database"
 

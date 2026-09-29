@@ -214,6 +214,9 @@ importers:
       jose:
         specifier: ^6.2.12
         version: 6.2.12
+      pg-boss:
+        specifier: 12.34.0
+        version: 12.34.0
       tsx:
         specifier: ^4.23.12
         version: 4.23.12

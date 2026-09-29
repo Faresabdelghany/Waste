@@ -49,6 +49,7 @@ import { customerRoutes } from "./routes/customers"
 import { depotRoutes } from "./routes/depots"
 import { driverDoorRoutes } from "./routes/driver"
 import { driverRoutes } from "./routes/drivers"
+import { generationRoutes } from "./routes/generation"
 import { invoiceRoutes } from "./routes/invoices"
 import { lifecycleRoutes } from "./routes/lifecycle"
 import { liveRoutes } from "./routes/live"
@@ -170,6 +171,7 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   // Planning's group rules judge a driver on "today" on the project's clock, so the two take the app's `now` as the ledger routes do.
   app.route("/", routeSchemeRoutes(guard, { now }))
   app.route("/", collectionGroupRoutes(guard, { now }))
+  app.route("/", generationRoutes(guard))
   app.route("/", vehicleTypeRoutes(guard))
   app.route("/", warehouseRoutes(guard))
   app.route("/", depotRoutes(guard))

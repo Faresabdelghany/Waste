@@ -1,8 +1,8 @@
 // Generation as a job (Issue #97 part B, ADR-0002): `planning.generate-routes`
 // turns one validated Route Scheme's rules into dated Routes and Pickups over
 // one window, recorded on a `generation_run` the sender wrote first — the
-// nightly `planning.plan-ahead` (plan-ahead.ts), or the office's button once
-// the API has it. The decisions are the domain's
+// nightly `planning.plan-ahead` (plan-ahead.ts), or the office's button,
+// `POST /route-schemes/:id/generate` in apps/api. The decisions are the domain's
 // (@waste/domain/planning/generation); this file is the I/O shell around
 // them: it reads the rows, asks the database the one question only it can
 // answer (which containers are eligible on a day and inside the boundary in
@@ -50,7 +50,10 @@
 //
 // The payload carries the company beside the run, so the handler opens the
 // fenced transaction without a cross-tenant read first; the sender knows both.
+// The queue's name and the payload are @waste/db/commands/generation's, since
+// the office's button in apps/api sends the same job as the nightly sweep.
 import type { Tx } from "@waste/db/client"
+import { GENERATE_ROUTES_QUEUE, type GenerateRoutesData } from "@waste/db/commands/generation"
 import { collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { containerTypeVehicleType } from "@waste/db/schema/fleet-types"
 import { pickup, route } from "@waste/db/schema/execution"
@@ -86,15 +89,6 @@ import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm"
 import { defineJob, type JobContext } from "./definition"
 import { loggable } from "./loggable"
 import { daysWithBoundary, stopCandidatesByDay } from "./stop-matching"
-
-export const GENERATE_ROUTES_QUEUE = "planning.generate-routes"
-
-export type GenerateRoutesData = {
-  /** The `generation_run` the sender wrote, `queued`. */
-  generationRunId: string
-  /** The run's company, so the handler opens the fenced transaction without a cross-tenant read. */
-  companyId: string
-}
 
 /** What one run did, as the run row records it. */
 export type GenerationCounts = {

@@ -347,6 +347,17 @@ const DAY_MS = 86_400_000
 /** The days from one calendar day to another; both are `YYYY-MM-DD`, so the UTC midnight of each is exact. */
 const daysBetween = (from: string, to: string): number => (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS
 
+/** A window of calendar days, both ends inclusive: the occurrence read's, and the generation command's (generation.ts), which holds it to the same two rules. */
+type DayWindow = { from: string; to: string }
+
+/** The end comes on or after the start. */
+export const windowOrdered = (window: DayWindow): boolean => window.to >= window.from
+export const windowOrderedIssue = { message: WINDOW_ORDERED, path: ["to"] }
+
+/** The two days are fewer than 366 apart, so the window spans at most 366 days. */
+export const windowAtMostAYear = (window: DayWindow): boolean => daysBetween(window.from, window.to) < OCCURRENCE_WINDOW_MAX_DAYS
+export const windowAtMostAYearIssue = { message: WINDOW_AT_MOST_A_YEAR, path: ["to"] }
+
 /**
  * The window of `GET /route-schemes/:id/occurrences`: both ends inclusive,
  * `to` on or after `from`, spanning at most 366 days — so the two days are
@@ -358,8 +369,8 @@ export const OccurrenceQuery = z
     from: IsoDate,
     to: IsoDate,
   })
-  .refine((window) => window.to >= window.from, { message: WINDOW_ORDERED, path: ["to"] })
-  .refine((window) => daysBetween(window.from, window.to) < OCCURRENCE_WINDOW_MAX_DAYS, { message: WINDOW_AT_MOST_A_YEAR, path: ["to"] })
+  .refine(windowOrdered, windowOrderedIssue)
+  .refine(windowAtMostAYear, windowAtMostAYearIssue)
 export type OccurrenceQuery = z.infer<typeof OccurrenceQuery>
 
 /** What a recurrence date became under the holiday policy: the domain's `OccurrenceStatus`, a reading and never stored, read from its tuple like every other Planning enum. */
