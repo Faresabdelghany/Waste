@@ -20,6 +20,11 @@ yarn-error.log*
 .env*
 !.env.example
 
+# The Pilot's release file: the release writes it into the `pilot` branch's
+# tree through GitHub's API (packages/db/src/pilot/release.ts), and a local
+# build may write one to try the Dockerfile; it is never committed to main.
+apps/pilot/release.json
+
 # vercel
 .vercel
 

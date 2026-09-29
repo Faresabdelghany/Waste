@@ -1,0 +1,27 @@
+{
+  "name": "@waste/pilot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The Pilot's container (Issue #149, the worker shape of #128 measured in #134, ADR-0008): the API and the worker as two child processes in one container under a small supervisor, built by Suga from `Dockerfile` on the tracked `pilot` branch. `src/supervise.ts` holds the rules — the host's PORT to the API, loopback 3002 to the worker, each child's output prefixed, the worker restarted with exponential backoff while the API keeps running, the container exiting with the API's code when the API exits, SIGTERM forwarded to both children and both waited for, a child still up after the grace killed; `src/main.ts` is the composition root the image runs; `src/memory.ts` the memory line (`PILOT_MEMORY_LOG_SECONDS`, off unless set) gate 1 was read with; `src/bundle.ts` the esbuild step that inlines each entry's workspace TypeScript and npm dependencies into one file, so the image boots plain node in seconds where tsx took minutes at a tenth of a core. esbuild and tsx are dependencies rather than devDependencies because the image's build stage installs with --prod and runs the bundle step; nothing of this package but the bundles reaches the runtime stage. Nothing here is a Pilot value: the knobs and pool ceilings the Pilot runs with are Suga's environment, listed in README.md.",
+  "exports": {
+    "./package.json": "./package.json",
+    "./__tests__/*": null,
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test --test-timeout=30000 \"src/**/*.test.ts\"",
+    "bundle": "node --import tsx src/bundle.ts"
+  },
+  "dependencies": {
+    "esbuild": "~0.28.0",
+    "tsx": "^4.23.12"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
+  }
+}

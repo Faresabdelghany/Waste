@@ -1,0 +1,12 @@
+{
+  // The supervisor is a Node process (bundled by src/bundle.ts for the image,
+  // run through tsx in its tests): Node's types from the base config,
+  // ECMAScript only, no DOM.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["esnext"],
+    "target": "es2022",
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"]
+}
