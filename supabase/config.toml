@@ -24,17 +24,29 @@ enabled = false
 # from packages/db/src/seed/demo.ts run as the owner after the migrations (Issue #70).
 enabled = false
 
-# Neither of the two Auth decisions below has any effect on `pnpm db:start`,
-# which is `supabase db start`: the local stack is the database container
-# alone and runs no Auth server. They are here so the decisions live in the
-# repository and `supabase config push` can apply them to the hosted project.
+# None of the Auth decisions below has any effect on `pnpm db:start`, which
+# is `supabase db start`: the local stack is the database container alone and
+# runs no Auth server. They are here so the decisions live in the repository
+# and `supabase config push` can apply them to the hosted project; on the
+# Pilot the Owner sets them in the dashboard (README.md, "A tester's User
+# Account and Login").
 [auth]
-# Sign-up is invitation-only: an account is created by an administrator (the
-# demo seed, or POST /users) and Supabase Auth only ever confirms an address
-# somebody was invited to. The access token hook below binds an invited
+# Sign-up is off: a User Account is created by an administrator (the demo
+# seed, or POST /users) and its Login by the Supabase organisation's Owner in
+# the dashboard. The access token hook below binds an invited
 # `wms.user_account` row by e-mail, which is safe only under this rule — with
 # open sign-up anyone could claim an invited address, and with it a company.
 enable_signup = false
+# The temporary password the Owner hands over and the one the tester replaces
+# it with (Change password, in the web's account menu) are both at least
+# twelve characters (Issue #150); Auth refuses a shorter one in its own words.
+minimum_password_length = 12
+# The built-in mailer is deliberately not relied on for account delivery or
+# recovery on the Pilot: it reaches only the members of the Supabase
+# organisation's Team, two messages an hour (research, #120). No invitation,
+# confirmation or recovery mail is part of any procedure; a Login is created,
+# and its password reset, by the Owner. The other Auth e-mail settings stay at
+# their defaults.
 
 [auth.hook.custom_access_token]
 # `public.custom_access_token_hook`, created by migration
