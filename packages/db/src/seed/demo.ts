@@ -4,9 +4,9 @@
 // works with, the eleven seeded roles with their grants, and the three
 // accounts the Pilot signs in with (Issue #140): Fares Abdelghany, the primary
 // administrator; Lars Mikkelsen, NordRen's Service Provider Manager; and Mads
-// Jensen, the driver, with Project Access to Copenhagen Central alone — and,
-// since 2026-09-25, its Registry: the catalogue, the customers with their
-// properties, groups and shared points, the agreements with their
+// Jensen, on the Driver role, with Project Access to Copenhagen Central alone
+// — and, since 2026-09-25, its Registry: the catalogue, the customers with
+// their properties, groups and shared points, the agreements with their
 // subscriptions, and the containers with their placements, derived from the
 // web prototype's fixtures in registry.ts and written in the same transaction.
 //
@@ -16,16 +16,19 @@
 //   version 7 by hand, so the local database and the hosted project hold the
 //   same company: a token minted against the hosted project opens the same
 //   rows locally, and a test may name a row without looking it up. A test
-//   holds their shape. A role grant and a Project Access are the two rows
-//   with no fixed id: each is what it joins (below).
+//   holds their shape. A role grant and a Project Access are the two kinds of
+//   row with no fixed id; each is what it joins (applyDemo).
 //
-//   Idempotent. Every insert is `on conflict ... do update` keyed by the id
-//   (upsert.ts), and the update is skipped when the stored row already says
-//   what this run proposes, so a second run writes nothing at all — not even
-//   an `updated_at` through the touch trigger. What someone edited by hand is
-//   put back; what the seed does not own is left alone (an account's
-//   `auth_user_id` and `deactivated_at` are the hook's and the API's, never
-//   the seed's). Nothing is deleted but a grant a charter dropped.
+//   Idempotent. A record is written `on conflict (id) do update` (upsert.ts),
+//   and the update is skipped when the stored row already says what this run
+//   proposes; a grant or an access row, which is nothing but what it joins,
+//   is written `on conflict do nothing` keyed by that. So a second run writes
+//   nothing at all — not even an `updated_at` through the touch trigger. What
+//   someone edited by hand is put back; what the seed does not own is left
+//   alone (an account's `auth_user_id` and `deactivated_at` are the hook's
+//   and the API's, never the seed's). Nothing is deleted but a grant a
+//   charter dropped and an access row of a seeded account that the seed does
+//   not name.
 //
 //   Any admin URL. Unlike bootstrap, which refuses a non-loopback host because
 //   it sets a password, this runs the same statements anywhere: the hosted
@@ -251,16 +254,14 @@ const USERS: (typeof userAccount.$inferInsert)[] = [
   },
 ]
 
-// Mads works in Copenhagen Central alone. A Project Access row has no fixed
-// id: like a grant, it is the pair it joins. The API replaces an account's
-// access rows under new ids whenever its access is edited, so a row keyed by
-// an id here would meet the same pair under another id on the next run and
-// fail on `unique (company_id, user_account_id, project_id)`; keyed by the
-// pair, the next run finds it and writes nothing.
+// Mads works in Copenhagen Central alone. The row has no fixed id: like a
+// grant, it is the pair it joins (applyDemo).
 const PROJECT_ACCESS: (typeof projectAccess.$inferInsert)[] = [
   { companyId: COMPANY_ID, userAccountId: DEMO_IDS.users.mads, projectId: DEMO_IDS.projects.copenhagen },
 ]
 
+// Lars's is first written under its fixed id; from then on it too is the
+// pair it joins.
 const PROVIDER_ACCESS: (typeof serviceProviderAccess.$inferInsert)[] = [
   {
     id: DEMO_IDS.serviceProviderAccess.lars,
@@ -332,6 +333,42 @@ async function applyDemo(tx: Tx): Promise<number> {
   changed += await upsertOwned(tx, project, PROJECTS, PROJECT_COLUMNS)
   changed += await upsertOwned(tx, serviceProvider, SERVICE_PROVIDERS, SERVICE_PROVIDER_COLUMNS)
   changed += await upsertOwned(tx, role, ROLES, ROLE_COLUMNS)
+
+  // A seeded account's access is the seed's, as a seeded role's grants are.
+  // An access row carries nothing but the pair it joins, so the pair is its
+  // identity, not its id: the API replaces an account's access rows under new
+  // ids whenever its access is edited, and a row keyed by its id would meet
+  // its own pair under another id on the next run. Any access row of a seeded
+  // account that the seed does not name goes first, before the accounts are
+  // written back: an account the API moved to another provider cannot take
+  // its seeded provider back while that provider's access row still names it.
+  const accountIds = Object.values(DEMO_IDS.users)
+  const namedProjects = PROJECT_ACCESS.map((row) => sql`(${row.userAccountId}::uuid, ${row.projectId}::uuid)`)
+  const namedProviders = PROVIDER_ACCESS.map((row) => sql`(${row.userAccountId}::uuid, ${row.serviceProviderId}::uuid)`)
+  written(
+    await tx
+      .delete(projectAccess)
+      .where(
+        and(
+          eq(projectAccess.companyId, COMPANY_ID),
+          inArray(projectAccess.userAccountId, accountIds),
+          sql`(${projectAccess.userAccountId}, ${projectAccess.projectId}) not in (${sql.join(namedProjects, sql`, `)})`,
+        ),
+      )
+      .returning({ id: projectAccess.id }),
+  )
+  written(
+    await tx
+      .delete(serviceProviderAccess)
+      .where(
+        and(
+          eq(serviceProviderAccess.companyId, COMPANY_ID),
+          inArray(serviceProviderAccess.userAccountId, accountIds),
+          sql`(${serviceProviderAccess.userAccountId}, ${serviceProviderAccess.serviceProviderId}) not in (${sql.join(namedProviders, sql`, `)})`,
+        ),
+      )
+      .returning({ id: serviceProviderAccess.id }),
+  )
   changed += await upsertOwned(tx, userAccount, USERS, USER_COLUMNS)
 
   // A grant has no fixed id — there are hundreds — so its identity is what it
@@ -359,6 +396,8 @@ async function applyDemo(tx: Tx): Promise<number> {
       .onConflictDoNothing({ target: [roleGrant.companyId, roleGrant.roleId, roleGrant.moduleKey, roleGrant.action] })
       .returning({ id: roleGrant.id }),
   )
+
+  // The access rows the seed names, each written only where its pair is absent.
   written(
     await tx
       .insert(projectAccess)
@@ -366,17 +405,12 @@ async function applyDemo(tx: Tx): Promise<number> {
       .onConflictDoNothing({ target: [projectAccess.companyId, projectAccess.userAccountId, projectAccess.projectId] })
       .returning({ id: projectAccess.id }),
   )
-
-  // The access row carries nothing beyond the pair it joins, and the
-  // composite key `(company_id, user_account_id, service_provider_id) →
-  // user_account` pins that pair to the account's own provider: an edit that
-  // moved it to another provider would be refused by the key, not silently
-  // kept. So the row is there or it is written, and there is no third state
-  // to reconcile.
   written(
-    await tx.insert(serviceProviderAccess).values(PROVIDER_ACCESS).onConflictDoNothing({ target: serviceProviderAccess.id }).returning({
-      id: serviceProviderAccess.id,
-    }),
+    await tx
+      .insert(serviceProviderAccess)
+      .values(PROVIDER_ACCESS)
+      .onConflictDoNothing({ target: [serviceProviderAccess.companyId, serviceProviderAccess.userAccountId, serviceProviderAccess.serviceProviderId] })
+      .returning({ id: serviceProviderAccess.id }),
   )
 
   // The Registry last: its rows name the company and the projects above.

@@ -4,9 +4,9 @@
 // database holds. The properties that matter: it writes what the spec lists,
 // a second run writes nothing at all, a row someone edited by hand goes back
 // to what the seed says, and what the seed does not own — a Login's binding,
-// an access row the API rewrote — stays as it is. The ids are fixed
-// constants, so a hosted token opens the same company locally; their shape is
-// checked without a database.
+// the id the API gave an access row it wrote back — stays as it is. The ids
+// are fixed constants, so a hosted token opens the same company locally;
+// their shape is checked without a database.
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { after, before, describe, test } from "node:test"
@@ -114,7 +114,7 @@ describe("the demo seed's fixed ids", () => {
     assert.equal(demoId("company", 1), DEMO_IDS.company)
     assert.equal(demoId("project", 3), DEMO_IDS.projects.cairo)
     assert.equal(demoId("role", 11), DEMO_IDS.roles["integration-writer"])
-    // The id #143's driver profile names as its `user_account_id` (#140).
+    // The id #156's driver profile names as its `user_account_id` (decided in #143).
     assert.equal(demoId("user", 3), DEMO_IDS.users.mads)
     assert.equal(demoId("serviceProviderAccess", 1), DEMO_IDS.serviceProviderAccess.lars)
     assert.equal(demoId("container", 0x6b), "01a0d2a4-a280-7014-8000-00000000006b")
@@ -275,7 +275,7 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     )
   })
 
-  test("Fares works in every project and for no service provider; Lars works for NordRen and in no project; Mads drives in Copenhagen Central alone", async () => {
+  test("Fares works in every project and for no service provider; Lars works for NordRen and in no project; Mads works in Copenhagen Central alone, on the Driver role", async () => {
     const [fares] = await owner.db.select().from(userAccount).where(eq(userAccount.id, DEMO_IDS.users.fares))
     const [lars] = await owner.db.select().from(userAccount).where(eq(userAccount.id, DEMO_IDS.users.lars))
     const [mads] = await owner.db.select().from(userAccount).where(eq(userAccount.id, DEMO_IDS.users.mads))
@@ -488,7 +488,7 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     assert.deepEqual(await grantChecksum(), checksum)
   })
 
-  test("what someone edited by hand goes back to what the seed says, and a grant the charter does not name is removed", async () => {
+  test("what someone edited by hand goes back to what the seed says: a grant the charter does not name is removed, and so is a seeded account's access the seed does not name", async () => {
     const settled = await snapshot()
     await owner.db.update(company).set({ name: "Kystbyen Sverige" }).where(eq(company.id, DEMO_IDS.company))
     // A camelCase column too: `set` is keyed by the property name and the
@@ -510,8 +510,14 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
       moduleKey: "commercial.invoices",
       action: "delete",
     })
-    await owner.db.delete(serviceProviderAccess).where(eq(serviceProviderAccess.id, DEMO_IDS.serviceProviderAccess.lars))
+    // Two accounts moved the way the API moves one — the access rows go, the
+    // account's own columns change, the new rows arrive: Mads to Harbor, and
+    // Lars to CityHaul, whose access row then names the account as it now is.
     await owner.db.delete(projectAccess).where(eq(projectAccess.userAccountId, DEMO_IDS.users.mads))
+    await owner.db.insert(projectAccess).values({ companyId: DEMO_IDS.company, userAccountId: DEMO_IDS.users.mads, projectId: DEMO_IDS.projects.harbor })
+    await owner.db.delete(serviceProviderAccess).where(eq(serviceProviderAccess.userAccountId, DEMO_IDS.users.lars))
+    await owner.db.update(userAccount).set({ serviceProviderId: DEMO_IDS.serviceProviders.cityhaul }).where(eq(userAccount.id, DEMO_IDS.users.lars))
+    await owner.db.insert(serviceProviderAccess).values({ companyId: DEMO_IDS.company, userAccountId: DEMO_IDS.users.lars, serviceProviderId: DEMO_IDS.serviceProviders.cityhaul })
     // Registry rows too, a geometry among them: the point takes part in the
     // row comparison through PostGIS's `=`, so a moved point is put back and
     // an unmoved one is not rewritten.
@@ -542,6 +548,8 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
       driverGrants.map((row) => `${row.moduleKey}:${row.action}`).sort(),
       ["operate.driver-app:edit", "operate.driver-app:view", "route-studio.pickups:edit", "route-studio.pickups:view", "route-studio.routes:view"],
     )
+    const [lars] = await owner.db.select().from(userAccount).where(eq(userAccount.id, DEMO_IDS.users.lars))
+    assert.equal(lars.serviceProviderId, DEMO_IDS.serviceProviders.nordren)
     const providerAccess = await owner.db.select().from(serviceProviderAccess)
     assert.deepEqual(
       providerAccess.map((row) => [row.id, row.userAccountId, row.serviceProviderId]),
@@ -554,21 +562,31 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     assert.equal((await seedDemo(fresh.url)).changed, 0)
   })
 
-  test("Mads's Project Access is the pair it joins: the row the API rewrote under another id is left as it is, and nothing is written", async () => {
+  test("an access row is the pair it joins: one the API wrote back under another id is left as it is, and nothing is written", async () => {
     // What the API does whenever an account's access is edited: the rows go, and come back under new ids.
     await owner.db.delete(projectAccess).where(eq(projectAccess.userAccountId, DEMO_IDS.users.mads))
-    const [rewritten] = await owner.db
+    await owner.db.delete(serviceProviderAccess).where(eq(serviceProviderAccess.userAccountId, DEMO_IDS.users.lars))
+    const [madsAccess] = await owner.db
       .insert(projectAccess)
       .values({ companyId: DEMO_IDS.company, userAccountId: DEMO_IDS.users.mads, projectId: DEMO_IDS.projects.copenhagen })
       .returning({ id: projectAccess.id })
+    const [larsAccess] = await owner.db
+      .insert(serviceProviderAccess)
+      .values({ companyId: DEMO_IDS.company, userAccountId: DEMO_IDS.users.lars, serviceProviderId: DEMO_IDS.serviceProviders.nordren })
+      .returning({ id: serviceProviderAccess.id })
     const settled = await snapshot()
 
     assert.equal((await seedDemo(fresh.url)).changed, 0)
     assert.equal(await snapshot(), settled)
-    const rows = await owner.db.select().from(projectAccess).where(eq(projectAccess.userAccountId, DEMO_IDS.users.mads))
+    const projectRows = await owner.db.select().from(projectAccess).where(eq(projectAccess.userAccountId, DEMO_IDS.users.mads))
     assert.deepEqual(
-      rows.map((row) => [row.id, row.projectId]),
-      [[rewritten.id, DEMO_IDS.projects.copenhagen]],
+      projectRows.map((row) => [row.id, row.projectId]),
+      [[madsAccess.id, DEMO_IDS.projects.copenhagen]],
+    )
+    const providerRows = await owner.db.select().from(serviceProviderAccess).where(eq(serviceProviderAccess.userAccountId, DEMO_IDS.users.lars))
+    assert.deepEqual(
+      providerRows.map((row) => [row.id, row.serviceProviderId]),
+      [[larsAccess.id, DEMO_IDS.serviceProviders.nordren]],
     )
   })
 
