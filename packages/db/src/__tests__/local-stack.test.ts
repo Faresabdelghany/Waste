@@ -5,7 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, describe, test } from "node:test"
 
-import { DEFAULT_LOCAL_LOGIN_PASSWORD, E2E_TESTER_LOGIN, ensureLogins, parseExtraLogins, parseStatusEnv, planLocalLogins, type LocalLoginsPlan } from "../local-stack/logins"
+import { DEFAULT_LOCAL_LOGIN_PASSWORD, E2E_TESTER_LOGIN, ensureLogins, MINIMUM_PASSWORD_LENGTH, parseExtraLogins, parseStatusEnv, planLocalLogins, type LocalLoginsPlan } from "../local-stack/logins"
 import { ensureSigningKeys, generateSigningKey, renderSigningKeys } from "../local-stack/signing-keys"
 import { DEMO_ACCOUNT_EMAILS } from "../seed/demo"
 
@@ -110,8 +110,17 @@ describe("planLocalLogins", () => {
     assert.throws(() => planLocalLogins({ apiUrl, secretKey: undefined, seeded: [] }), /SECRET_KEY is not set/)
   })
 
+  test("the minimum it holds a password to is the one supabase/config.toml sets for Auth, so the two cannot drift again (#164)", () => {
+    const config = readFileSync(new URL("../../../../supabase/config.toml", import.meta.url), "utf8")
+    const auth = config.slice(config.indexOf("\n[auth]\n"))
+    const bound = /^minimum_password_length = (\d+)$/m.exec(auth)
+    assert.ok(bound, "config.toml sets [auth] minimum_password_length")
+    assert.equal(MINIMUM_PASSWORD_LENGTH, Number(bound[1]))
+  })
+
   test("refuses a password shorter than local Auth's minimum", () => {
-    assert.throws(() => planLocalLogins({ apiUrl, secretKey, password: "elevenchars", seeded: [] }), /11 characters.*at least 12/)
+    assert.throws(() => planLocalLogins({ apiUrl, secretKey, password: "seven77", seeded: [] }), /7 characters.*at least 8/)
+    assert.equal(planLocalLogins({ apiUrl, secretKey, password: "eight888", seeded: [] }).password, "eight888", "the config's bound, eight, as on the Pilot (#164)")
   })
 
   test("refuses an entry that is not an address", () => {

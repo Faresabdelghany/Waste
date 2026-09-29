@@ -18,8 +18,15 @@ import { uniqueName } from "./env"
 type ServiceProvider = { id: string; legalName: string; registrationNumber: string; country: string; contactName: string; contactEmail: string }
 type Customer = { id: string; kind: "person" | "organisation"; name: string; registrationNumber: string | null; email: string | null; status: string }
 
-/** Eight digits no earlier run used, since a registration number is unique within the company. */
-const registrationNumber = () => `${Date.now() % 100_000_000}`.padStart(8, "0")
+/**
+ * Eight digits for a registration number, which is unique within the
+ * company: four of the clock, which tells two calls in one run apart, and
+ * four at random, so a number is not a function of the clock alone — the
+ * clock modulo 1e8 hands out the same number to two calls a cycle apart.
+ * A stack that outlives many runs still holds its rows, and a collision is
+ * the API's 409 in the test's log, not a silent pass.
+ */
+const registrationNumber = () => `${Date.now() % 10_000}`.padStart(4, "0") + `${Math.floor(Math.random() * 10_000)}`.padStart(4, "0")
 
 /** The browser's API call the form submit makes: the answer of the request path `path`, method `method`. */
 const answerOf = (page: Page, method: string, path: string) =>
