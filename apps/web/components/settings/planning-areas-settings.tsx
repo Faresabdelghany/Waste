@@ -42,6 +42,7 @@ import {
   useBusinessRecordStore,
   useBusinessRecordsHydrated,
   useModuleRecords,
+  whenSaved,
 } from "@/components/waste/business-record-store"
 import { statusClasses } from "@/components/waste/business-record-views"
 import type {
@@ -190,16 +191,6 @@ export function PlanningAreasSettings() {
     () => "",
   )
   const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(filtered)
-
-  // On the Pilot the store answers the write's outcome once the API has, so
-  // the dialog stays open and the success is said once the API has answered;
-  // a refusal is the store's toast, in the API's words, over the form still
-  // holding what was typed. On the browser's own path there is nothing to
-  // wait for.
-  const whenSaved = (outcome: ReturnType<typeof upsertRecord>, done: () => void) => {
-    if (outcome === undefined) done()
-    else void outcome.then((result) => result.kind !== "refused" && done())
-  }
 
   const handleCreate = (values: BusinessFormValues) => {
     const record = createPlanningAreaRecord(values, {

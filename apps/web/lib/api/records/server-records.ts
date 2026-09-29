@@ -148,9 +148,12 @@ export type LoadOptions = {
 export async function loadModule(client: ApiClient, module: ServerModule, { fixtures, state, now }: LoadOptions): Promise<LoadResult> {
   const records: BusinessRecord[] = []
   const serverIds = new Map<string, string>()
-  for (const adapter of module.resources) {
-    if (adapter.list === null) continue
-    const resources = await adapter.list(client)
+  // The lists go out together; only the mapping runs in the module's order,
+  // so an adapter listed after another still sees that one's rows.
+  const lists = await Promise.all(module.resources.map((adapter) => (adapter.list === null ? null : adapter.list(client))))
+  for (const [index, adapter] of module.resources.entries()) {
+    const resources = lists[index]
+    if (resources === null) continue
     const context: MappingContext = { fixtures, resolve: resolverOver(state, { records, serverIds }), companyRecordId: companyRecordIdOf(state), now }
     for (const resource of resources) {
       const mapped = adapter.toRecord(resource, context)

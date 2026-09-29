@@ -977,6 +977,24 @@ export const settingsModuleDomains: readonly SettingsModuleDomain[] = [
     boundaryNote:
       "Settings owns the project's weekend and holiday list and the dated calendar records behind it — holidays and validity per year. Holiday and non-working dates are skipped at generation, never moved.",
   },
+  // Operational master data (slice 2 of #81, 2026-09-30): the waste
+  // fractions, container types, service frequencies and vehicle types the
+  // API keeps as the company's own vocabulary, under Settings › Operations ›
+  // Master data — the pattern of every configure.* module with records.
+  {
+    key: "configure.master",
+    workspaceId: "configure",
+    moduleId: "master",
+    settingsPaneId: "master-data",
+    primaryBlueprintModule: "M09",
+    supportingBlueprintModules: ["M05", "M06", "M08"],
+    canonicalOwner: "Settings · Master data",
+    personas: ["Operations administrator", "Route planner", "Contract manager"],
+    upstream: ["M01", "M02"],
+    downstream: ["M05", "M06", "M08", "M09", "M10", "M11", "M16"],
+    boundaryNote:
+      "Settings owns the company's catalogue vocabulary — waste fractions, container types, service frequencies, vehicle types. Products, containers, the fleet and route schemes name its rows and never redefine them.",
+  },
 ]
 
 export function getPublicModuleDomain(

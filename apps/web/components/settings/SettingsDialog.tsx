@@ -10,6 +10,7 @@ import {
   CaretLeft,
   CheckCircle,
   CreditCard,
+  Database,
   Gear,
   IdentificationBadge,
   Lightning,
@@ -51,7 +52,9 @@ import { CommercialDefaultsExtras, CommercialSectionPane } from "@/components/se
 import { PlanningAreasSettings } from "@/components/settings/planning-areas-settings"
 import { CollectionCalendarsSettings } from "@/components/settings/collection-calendars-settings"
 import { HolidayListsSettings } from "@/components/settings/holiday-lists-settings"
-import { HOLIDAY_LISTS_SETTINGS_PANE_ID } from "@/lib/data/business-links"
+import { MasterDataSettings } from "@/components/settings/master-data-settings"
+import { useApiConfigured } from "@/components/waste/api-session-store"
+import { HOLIDAY_LISTS_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID } from "@/lib/data/business-links"
 import { PLANNING_AREAS_SETTINGS_PANE_ID } from "@/lib/data/planning-areas"
 import { COLLECTION_CALENDARS_SETTINGS_PANE_ID } from "@/lib/data/collection-calendars"
 import { migrateLegacyId } from "@/lib/data/legacy-ids"
@@ -134,6 +137,8 @@ const settingsSections: Array<{
       { id: COLLECTION_CALENDARS_SETTINGS_PANE_ID, label: "Collection calendars", icon: CalendarBlank },
       // Each project's holiday list — name, weekend, dated holidays per year (issue #36).
       { id: HOLIDAY_LISTS_SETTINGS_PANE_ID, label: "Holiday lists", icon: CalendarCheck },
+      // The company's catalogue vocabulary on the API (slice 2 of #81): offered with the adapter configured, since fixture mode never had the pane.
+      { id: MASTER_DATA_SETTINGS_PANE_ID, label: "Master data", icon: Database },
       { id: "operations-setup", label: "Operations setup", icon: SlidersHorizontal },
       { id: "ticket-comms", label: "Tickets & communication", icon: Bell },
     ],
@@ -1307,6 +1312,12 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
       "Each project's holiday list: its name, the weekend the project rests on, and the dated holidays of every year.",
     groups: [],
   },
+  [MASTER_DATA_SETTINGS_PANE_ID]: {
+    title: "Master data",
+    description:
+      "The company's waste fractions, container types, service frequencies and vehicle types — the vocabulary products, containers, the fleet and route schemes name.",
+    groups: [],
+  },
   access: {
     title: "Users and roles",
     description:
@@ -1410,6 +1421,7 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === "company" ||
     paneId === PLANNING_AREAS_SETTINGS_PANE_ID ||
     paneId === COLLECTION_CALENDARS_SETTINGS_PANE_ID ||
+    paneId === MASTER_DATA_SETTINGS_PANE_ID ||
     paneId.startsWith("commercial-")
   )
 }
@@ -1479,6 +1491,8 @@ export function SettingsWorkspace({
   returnTo = "/",
 }: SettingsWorkspaceProps) {
   const router = useRouter()
+  // The master data pane reads the API alone: without the adapter the nav does not offer it.
+  const configured = useApiConfigured()
   const [activeItemId, setActiveItemId] = useState(() =>
     initialPaneId && visiblePaneDefinitions[initialPaneId]
       ? initialPaneId
@@ -1513,10 +1527,16 @@ export function SettingsWorkspace({
   }, [initialPaneId])
 
   const filteredSections = useMemo(() => {
+    const offered = configured
+      ? settingsSections
+      : settingsSections.map((section) => ({
+          ...section,
+          items: section.items.filter((item) => item.id !== MASTER_DATA_SETTINGS_PANE_ID),
+        }))
     const normalized = search.trim().toLowerCase()
-    if (!normalized) return settingsSections
+    if (!normalized) return offered
 
-    return settingsSections
+    return offered
       .map((section) => ({
         ...section,
         items: section.items.filter((item) => {
@@ -1585,7 +1605,7 @@ export function SettingsWorkspace({
         }),
       }))
       .filter((section) => section.items.length > 0)
-  }, [search])
+  }, [configured, search])
 
   const activePane =
     visiblePaneDefinitions[activeItemId] ?? visiblePaneDefinitions.account
@@ -1775,6 +1795,8 @@ function SettingsPane({
         <CollectionCalendarsSettings />
       ) : paneId === HOLIDAY_LISTS_SETTINGS_PANE_ID ? (
         <HolidayListsSettings />
+      ) : paneId === MASTER_DATA_SETTINGS_PANE_ID ? (
+        <MasterDataSettings />
       ) : paneId.startsWith("commercial-") ? (
         <CommercialSectionPane paneId={paneId} />
       ) : (

@@ -554,3 +554,24 @@ export function useModuleRecords(
   }
   return { records: getRecords(workspaceId, moduleId, fixtures), ready: true, pending: false, problem: null }
 }
+
+/**
+ * How a pane waits on a write's outcome — the one way. On the Pilot
+ * `upsertRecord` answers once the API has, so the dialog stays open and the
+ * success is said only then; a refusal is the store's toast, in the API's
+ * words, over the form still holding what was typed, and `done` never runs.
+ * `settled`, when given, runs either way once the answer is in — for a pane
+ * that holds its form against a second submit while the first is out. On
+ * the browser's own path there is nothing to wait for, and both run at once.
+ */
+export function whenSaved(outcome: Promise<WriteOutcome> | undefined, done: () => void, settled?: () => void): void {
+  if (outcome === undefined) {
+    done()
+    settled?.()
+    return
+  }
+  void outcome.then((result) => {
+    settled?.()
+    if (result.kind !== "refused") done()
+  })
+}

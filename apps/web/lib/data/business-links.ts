@@ -1,4 +1,5 @@
 import { settingsModuleDomains } from "@/lib/data/business-domain"
+import { masterDataKindOf } from "@/lib/data/master-data-kinds"
 import {
   businessWorkspaces,
   type BusinessRecord,
@@ -56,13 +57,34 @@ export function holidaySettingsHref(projectId?: string): string {
 /** The pane itself, for a caller with no project in hand. */
 export const HOLIDAY_SETTINGS_HREF = holidaySettingsHref()
 
+const masterDataDomain = settingsModuleDomains.find((module) => module.moduleId === "master")
+if (!masterDataDomain) throw new Error("business-domain lists no settings domain for configure.master")
+
+/** The SettingsDialog pane that maintains the operational master data (slice 2 of #81): the settings domain's own pane id, spelled once there. */
+export const MASTER_DATA_SETTINGS_PANE_ID = masterDataDomain.settingsPaneId
+const MASTER_DATA_MODULE_ID = masterDataDomain.moduleId
+
+/** The search param that opens that pane on one kind: `waste-fraction`, `container-type`, `service-frequency` or `vehicle-type`. */
+export const MASTER_DATA_KIND_PARAM = "kind"
+
+/**
+ * Where the company's waste fractions, container types, service frequencies
+ * and vehicle types are kept: Settings › Operations › Master data, on the
+ * given kind when the caller knows it — the wizard's container types step
+ * and the Finance rows link there without importing the fixture registry.
+ */
+export function masterDataSettingsHref(kind?: string): string {
+  const params = new URLSearchParams({ pane: MASTER_DATA_SETTINGS_PANE_ID })
+  if (kind) params.set(MASTER_DATA_KIND_PARAM, kind)
+  return `/settings?${params.toString()}`
+}
+
 const settingsPaneByModule: Record<string, string> = {
   ...Object.fromEntries(
     settingsModuleDomains.map((module) => [module.moduleId, module.settingsPaneId]),
   ),
   organization: "company",
   access: "access",
-  master: "operations-setup",
   templates: "ticket-comms",
   finance: "finance",
   integrations: "integrations",
@@ -169,8 +191,12 @@ function moduleHref({
       })
     }
 
+    // A master data row of no kind is one of the fixtures' master-data sets,
+    // which keep their home under Operations setup; a row of a kind — the
+    // API's, or one the Master data pane minted — is the pane's.
+    const fixtureMasterDataSet = moduleId === MASTER_DATA_MODULE_ID && recordId !== undefined && masterDataKindOf({ id: recordId }) === null
     const params = new URLSearchParams({
-      pane: settingsPaneByModule[moduleId] ?? "company",
+      pane: fixtureMasterDataSet ? "operations-setup" : (settingsPaneByModule[moduleId] ?? "company"),
     })
     if (recordId) params.set("record", recordId)
     return `/settings?${params.toString()}`
