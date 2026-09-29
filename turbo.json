@@ -110,6 +110,18 @@
         "PLAYWRIGHT_BASE_URL"
       ]
     },
+    "test:e2e:api": {
+      "cache": false,
+      "env": [
+        "CI",
+        "PLAYWRIGHT_BASE_URL",
+        "E2E_LOGIN_EMAIL",
+        "E2E_LOGIN_PASSWORD",
+        "E2E_TESTER_EMAIL",
+        "E2E_API_URL",
+        "E2E_WORKER_URL"
+      ]
+    },
     "@waste/db#test": {
       "dependsOn": [
         "^test"

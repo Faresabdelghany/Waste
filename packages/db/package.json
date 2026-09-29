@@ -20,6 +20,8 @@
     "rehearse-restore": "node --env-file-if-exists=../../.env --import tsx scripts/pilot/rehearse.ts",
     "bootstrap": "node --env-file-if-exists=../../.env --import tsx scripts/bootstrap-local.ts",
     "seed": "node --env-file-if-exists=../../.env --import tsx scripts/seed-demo.ts",
+    "signing-key": "node --import tsx scripts/signing-key.ts",
+    "logins": "node --env-file-if-exists=../../.env --import tsx scripts/local-logins.ts",
     "reset-to-seed": "node --env-file-if-exists=../../.env --import tsx scripts/reset-to-seed.ts",
     "pgboss-plan": "node --import tsx scripts/pgboss-plan.ts"
   },

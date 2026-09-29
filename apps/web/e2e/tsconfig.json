@@ -1,14 +1,15 @@
 {
-  // The root tsconfig excludes e2e/ on purpose: Next dev's file watcher follows
-  // the root include set, and every spec write would otherwise Fast-Refresh
-  // reload the pages tests are driving. Type-check the suite with
-  // `pnpm typecheck:e2e` instead.
+  // The root tsconfig excludes e2e/ and e2e-api/ on purpose: Next dev's file
+  // watcher follows the root include set, and every spec write would
+  // otherwise Fast-Refresh reload the pages tests are driving. Type-check
+  // both suites with `pnpm typecheck:e2e` instead; the API suite (Issue
+  // #151) is checked here too rather than from a program of its own.
   "extends": "../tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
     "incremental": false,
     "plugins": []
   },
-  "include": ["./**/*.ts", "../playwright.config.ts"],
+  "include": ["./**/*.ts", "../playwright.config.ts", "../e2e-api/**/*.ts", "../playwright.api.config.ts"],
   "exclude": []
 }

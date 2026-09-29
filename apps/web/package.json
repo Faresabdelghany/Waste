@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test \"lib/**/__tests__/*.test.ts\"",
     "test:e2e": "playwright test",
+    "test:e2e:api": "playwright test --config playwright.api.config.ts",
     "typecheck:e2e": "tsc --noEmit -p e2e/tsconfig.json"
   },
   "dependencies": {

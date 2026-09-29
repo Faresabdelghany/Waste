@@ -270,3 +270,116 @@ jobs:
             apps/web/test-results
           retention-days: 14
           if-no-files-found: ignore
+
+  e2e-api:
+    name: End-to-end (web → API → database, Playwright)
+    runs-on: ubuntu-latest
+    # The pull-request budget is wall time (#131): this bound, with
+    # Playwright's own ten-minute globalTimeout inside it, keeps a broken lane
+    # from outlasting verify. Measured on the first runs: see the pull request
+    # that added the job (#151).
+    timeout-minutes: 15
+    env:
+      # The API verifies tokens from the stack's own Auth, behind Kong on
+      # 54321 (supabase/config.toml's default): the workflow-level placeholder
+      # is overridden here and nowhere else.
+      SUPABASE_URL: http://127.0.0.1:54321
+      # The tester's Login, created at stack start; the suite invites its
+      # account and signs in as it (apps/web/e2e-api/tester.ts).
+      LOCAL_EXTRA_LOGINS: e2e-tester@waste-e2e.example
+      E2E_TESTER_EMAIL: e2e-tester@waste-e2e.example
+      # The seeded primary administrator (packages/db/src/seed/demo.ts). The
+      # password is the public local default every local Login gets
+      # (packages/db/src/local-stack/logins.ts), so it is set nowhere here.
+      E2E_LOGIN_EMAIL: fares.abdelghany@kystbyen.example
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # The fixture job's browser cache, under the same key.
+      - id: playwright
+        run: echo "version=$(node -p "require('./apps/web/node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        id: browser
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - if: steps.browser.outputs.cache-hit != 'true'
+        run: pnpm --filter @waste/web exec playwright install --with-deps chromium
+      - if: steps.browser.outputs.cache-hit == 'true'
+        run: pnpm --filter @waste/web exec playwright install-deps chromium
+
+      # The trimmed local stack — Postgres, Kong and GoTrue, the other
+      # services excluded by name — migrated, bootstrapped, seeded and given
+      # its Logins, by the one root script developers run (root CLAUDE.md,
+      # Commands). The ES256 signing key is minted on this runner first and
+      # dies with it. The images are pulled every run and never put in the
+      # Actions cache, which the two image jobs' layers already share.
+      - run: pnpm stack:start
+
+      # The web built with the adapter on: the two Supabase variables are
+      # inlined at build time (apps/web/lib/api/config.ts), so this build is
+      # not the fixture job's and cannot be shared with it. The stack's URL
+      # and publishable key are read from the CLI's status rather than spelled
+      # here; with a signing key configured the CLI re-signs the legacy keys
+      # per run, so nothing in this file could be right twice.
+      - name: Read the stack's URL and publishable key
+        run: |
+          eval "$(pnpm exec supabase status -o env | grep -E '^[A-Z_]+=')"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$PUBLISHABLE_KEY"
+          } >> "$GITHUB_ENV"
+      - run: pnpm --filter @waste/web build
+        env:
+          WASTE_API_ORIGIN: http://127.0.0.1:3001
+          NEXT_PUBLIC_WASTE_API_URL: /waste-api
+
+      # The API and the worker from source under tsx, on their default ports,
+      # their output kept for the failure artifact below. Playwright starts
+      # only once both answer ready, bounded: two minutes for pg-boss to take
+      # its queues and the API to reach its pool, else the step fails with
+      # the last two answers in the log.
+      - name: Start the API and the worker
+        run: |
+          mkdir -p logs
+          nohup pnpm --filter @waste/api start > logs/api.log 2>&1 &
+          nohup pnpm --filter @waste/worker start > logs/worker.log 2>&1 &
+          status() { curl --silent --output /dev/null --write-out '%{http_code}' "$1" || echo 000; }
+          for attempt in $(seq 1 60); do
+            api=$(status http://127.0.0.1:3001/readyz)
+            worker=$(status http://127.0.0.1:3002/readyz)
+            [ "$api" = 200 ] && [ "$worker" = 200 ] && break
+            sleep 2
+          done
+          echo "GET /readyz: api $api, worker $worker, after $attempt attempts"
+          test "$api" = 200 && test "$worker" = 200
+
+      # playwright.api.config.ts serves the build on port 3000 under CI and
+      # runs the suite serially with two retries.
+      - run: pnpm test:e2e:api
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-api
+          path: |
+            apps/web/playwright-report-api
+            apps/web/test-results-api
+          retention-days: 14
+          if-no-files-found: ignore
+      # A browser failure can be a background job's: the two processes' logs
+      # go up beside the report when the job fails.
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: e2e-api-process-logs
+          path: logs
+          retention-days: 14
+          if-no-files-found: ignore
