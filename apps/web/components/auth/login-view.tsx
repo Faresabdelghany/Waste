@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import { useRouter } from "next/navigation"
-import { useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 import { ArrowRight } from "lucide-react"
 
 import { useApiSession } from "@/components/waste/api-session-store"
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SignInRefused } from "@/lib/api/auth"
-import { afterSignIn } from "@/lib/api/landing"
+import { afterSignIn, carriesNext, SIGN_IN_PATH } from "@/lib/api/landing"
 import { isAccountRefusal, isApiProblem, problemSentence } from "@/lib/api/problem"
 import { DEMO_ACCOUNTS } from "@/lib/data/demo-accounts"
 
@@ -35,6 +35,14 @@ export function LoginView() {
   const { session, hydrated, ended, apiConfigured, passwordSignInAvailable, signIn, signOut, loadMe } = useApiSession()
   const [landing, setLanding] = useState(false)
   const [landingError, setLandingError] = useState("")
+
+  // A session that ends here — refused right after sign-in, or signed out on
+  // the card — carries no `next` (lib/api/landing.ts): the next person to
+  // sign in on this screen lands by their own `/me`.
+  useEffect(() => {
+    if (session !== null || carriesNext(ended)) return
+    if (new URLSearchParams(window.location.search).has("next")) router.replace(SIGN_IN_PATH)
+  }, [session, ended, router])
 
   /** After sign-in, and on Continue. */
   const land = async () => {

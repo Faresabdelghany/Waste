@@ -5,7 +5,9 @@
 //
 //   the landing — `/me` decides it (`Me.driver`): a driver lands on the
 //                 driver's app, everyone else on operations; never a grant,
-//                 never a probe of the driver door;
+//                 never a probe of the driver door. `/driver` is the Driver
+//                 App's route (#145), which until it lands redirects to the
+//                 prototype's /tickets;
 //   the gate    — with the adapter on, every page but /login needs a session:
 //                 nothing renders until the browser's session is read, and a
 //                 visitor without one is sent to /login, carrying where they
@@ -23,9 +25,13 @@ import type { SessionEnding } from "./session"
 /** The one page the gate never stands in front of. */
 export const SIGN_IN_PATH = "/login"
 
-/** Where a signed-in person lands when they were going nowhere in particular. */
+/**
+ * Where a signed-in person lands when they were going nowhere in particular.
+ * A body with no `driver` at all — an API from before it — is no driver's:
+ * `/me` is read as a type and not checked, so the fact is read defensively.
+ */
 export function landingOf(me: Pick<Me, "driver">): "/driver" | "/operate" {
-  return me.driver !== null ? "/driver" : "/operate"
+  return me.driver?.id === undefined ? "/operate" : "/driver"
 }
 
 // Only to parse a relative `next` against: a value that resolves anywhere
@@ -78,12 +84,18 @@ export function gateOf({ configured, hydrated, signedIn }: GateState, pathname: 
 }
 
 /**
- * The sign-in page for a visitor at `here` (a path and query): `/login?next=`
- * while they were on their way somewhere — never signed in here, or their
- * session ran out with nobody to refresh it — and bare `/login` after a
- * sign-out or a refused account.
+ * Whether a visitor still carries where they were going: yes while they
+ * never signed in here, or their session ran out with nobody to refresh it;
+ * no after a sign-out or a refused account, so the next person to sign in
+ * lands by their own `/me`. /login drops a `next` from its address when a
+ * session ends on it.
  */
+export function carriesNext(ended: SessionEnding | null): boolean {
+  return ended === null || ended.reason === "expired"
+}
+
+/** The sign-in page for a visitor at `here` (a path and query): `/login?next=` while they carry it, else bare `/login`. */
 export function signInTarget(ended: SessionEnding | null, here: string): string {
-  const next = ended === null || ended.reason === "expired" ? returnPath(here) : null
+  const next = carriesNext(ended) ? returnPath(here) : null
   return next === null ? SIGN_IN_PATH : `${SIGN_IN_PATH}?next=${encodeURIComponent(next)}`
 }

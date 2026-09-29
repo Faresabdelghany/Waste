@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { afterSignIn, gateOf, landingOf, returnPath, signInTarget, type GateState } from "../landing"
+import { afterSignIn, carriesNext, gateOf, landingOf, returnPath, signInTarget, type GateState } from "../landing"
 
 const DRIVER = { driver: { id: "01a0d2a4-a280-7019-8000-000000000001" } }
 const OFFICE = { driver: null }
@@ -13,6 +13,11 @@ describe("the landing", () => {
   test("a driver lands on the driver's app, everyone else on operations", () => {
     assert.equal(landingOf(DRIVER), "/driver")
     assert.equal(landingOf(OFFICE), "/operate")
+  })
+
+  test("an API from before Me.driver, which sends no driver at all, lands everyone on operations", () => {
+    // The web can reach the Pilot before the API that answers `driver` is released.
+    assert.equal(landingOf({} as typeof OFFICE), "/operate")
   })
 
   test("sign-in returns the person to where they were going, and lands them by /me when they were going nowhere of ours", () => {
@@ -86,5 +91,12 @@ describe("the sign-in gate", () => {
   test("after a sign-out or a refused account, sends to /login alone, so the next person lands by their own /me", () => {
     assert.equal(signInTarget({ reason: "signed-out" }, "/operate"), "/login")
     assert.equal(signInTarget({ reason: "refused", detail: "This account is deactivated" }, "/operate"), "/login")
+  })
+
+  test("only a visitor on the way somewhere carries next: /login drops the one in its address when a session ends there", () => {
+    assert.equal(carriesNext(null), true)
+    assert.equal(carriesNext({ reason: "expired" }), true)
+    assert.equal(carriesNext({ reason: "signed-out" }), false)
+    assert.equal(carriesNext({ reason: "refused", detail: "No active account in this company is bound to this login" }), false)
   })
 })
