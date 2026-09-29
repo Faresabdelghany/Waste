@@ -279,7 +279,7 @@ describe("what the door answers and stores", () => {
       progress: { planned: 1, completed: 0, skipped: 0, failed: 0, total: 1, fraction: 0 },
       ...STAMPS,
     }
-    const detail = { ...route, pickups: [joined], session: null, sessions: [], unloads: [] }
+    const detail = { ...route, pickups: [joined], activePlan: null, session: null, sessions: [], unloads: [] }
     assert.deepEqual(DriverRouteDetail.parse(detail), detail)
     assert.deepEqual(refusal(DriverRouteDetail.safeParse({ ...detail, pickups: [pickup] })).map((issue) => issue.path).sort(), ["pickups.0.address", "pickups.0.containerLabel", "pickups.0.location", "pickups.0.wasteFractionName"], "a bare pickup is the office's shape, not the driver's")
     assert.deepEqual(refusal(DriverRouteDetail.safeParse({ ...detail, label: "RC-1043" })), [{ path: "label", message: LABEL_IS_THE_NUMBER }], "the route's own rule holds here too")

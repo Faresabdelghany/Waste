@@ -202,6 +202,9 @@ importers:
       '@waste/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@waste/routing':
+        specifier: workspace:*
+        version: link:../../packages/routing
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(pg@8.23.0)(postgres@3.4.9)

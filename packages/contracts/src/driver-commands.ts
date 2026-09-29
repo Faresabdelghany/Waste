@@ -57,6 +57,7 @@ import { UnloadingStation } from "./places"
 import { Problem } from "./problem"
 import { ProofOfService } from "./proofs"
 import { eachOnce, eachOnceSentence, PositiveInt, recorded } from "./resource"
+import { ActivePlan } from "./plans"
 import { labelIsTheNumber, labelMatches, Route, routeFields } from "./routes"
 import { Session } from "./sessions"
 import { Label, Paragraph } from "./text"
@@ -265,8 +266,10 @@ export type DriverPickup = z.infer<typeof DriverPickup>
 export const DriverRouteDetail = z
   .object({
     ...routeFields,
-    /** By position, each with its place. */
+    /** By `sequence` (#170): the active Plan's order where there is one, each with its place. */
     pickups: z.array(DriverPickup),
+    /** The active Plan's reading, or null: the driver door reads only the active Plan of a route assigned to them (#124 §5). */
+    activePlan: ActivePlan.nullable(),
     /** The open session, or null. */
     session: Session.nullable(),
     /** Every session, oldest first. */

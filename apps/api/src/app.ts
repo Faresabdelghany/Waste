@@ -53,6 +53,9 @@ import { driverRoutes } from "./routes/drivers"
 import { generationRoutes } from "./routes/generation"
 import { invoiceRoutes } from "./routes/invoices"
 import { lifecycleRoutes } from "./routes/lifecycle"
+import { providerFromEnv } from "@waste/routing/select"
+import type { RoutingProvider } from "@waste/routing/provider"
+
 import { liveRoutes } from "./routes/live"
 import { meRoutes } from "./routes/me"
 import { pickupRoutes } from "./routes/pickups"
@@ -64,6 +67,7 @@ import { propertyRoutes } from "./routes/properties"
 import { propertyGroupRoutes } from "./routes/property-groups"
 import { roleRoutes } from "./routes/roles"
 import { routeSchemeRoutes } from "./routes/route-schemes"
+import { planRoutes } from "./routes/plans"
 import { routeRoutes } from "./routes/routes"
 import { serviceAreaRoutes } from "./routes/service-areas"
 import { serviceProviderPriceRoutes } from "./routes/service-provider-prices"
@@ -106,9 +110,11 @@ export type AppOptions = {
    * none of them can free.
    */
   jobs?: JobSender
+  /** The routing provider (#170, #131): its name keys every Plan fingerprint, and no request ever calls it (#124 §4). The fake unless ROUTING_PROVIDER says otherwise; a test injects its own. */
+  routing?: RoutingProvider
 }
 
-export function createApp({ probe, pool, verifier, now = () => new Date(), databaseTimeoutMs = DATABASE_CHECK_TIMEOUT_MS, log, build = null, jobs = createJobSender(probe) }: AppOptions) {
+export function createApp({ probe, pool, verifier, now = () => new Date(), databaseTimeoutMs = DATABASE_CHECK_TIMEOUT_MS, log, build = null, jobs = createJobSender(probe), routing = providerFromEnv() }: AppOptions) {
   const app = new Hono()
   app.onError(errorHandler(log))
   app.notFound(notFound)
@@ -198,7 +204,9 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   // clock, the instant a command is stamped with, and the skew an office
   // unload's `occurredAt` may run ahead of it.
   app.route("/", liveRoutes(guard, { now }))
-  app.route("/", routeRoutes(guard, { now }))
+  app.route("/", routeRoutes(guard, { now, routing, jobs }))
+  // The Plan endpoints (#170) share the routes module and its grant; the provider's name keys the fingerprints.
+  app.route("/", planRoutes(guard, { routing, jobs }))
   app.route("/", pickupRoutes(guard, { now }))
   app.route("/", unloadRoutes(guard, { now }))
   // The driver door (Issue #104, slice 4) goes on after the office: its commands are judged against the request's clock, so it takes `now` like the ledger routes.

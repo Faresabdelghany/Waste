@@ -19,6 +19,7 @@
 // what data cannot answer.
 import type { Point, Position2D } from "@waste/contracts/geojson"
 import type { Tx } from "@waste/db/client"
+import { ROUTING_MEASURE_QUEUE, ROUTING_OPTIMISE_QUEUE, type RoutingJobData } from "@waste/db/commands/plans"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { depot, unloadingStation } from "@waste/db/schema/places"
@@ -27,16 +28,10 @@ import { withCompany } from "@waste/db/tenant"
 import { DEFAULT_PROFILE } from "@waste/routing/provider"
 import { asc, eq } from "drizzle-orm"
 
-import { defineJob, type JobContext } from "./definition"
+import { defineJob, type JobContext, type JobQueueOptions } from "./definition"
 
-export const ROUTING_MEASURE_QUEUE = "routing.measure"
-
-export type RoutingMeasureData = {
-  /** The `calculating` Plan whose stops creation wrote. */
-  planId: string
-  /** The Plan's company, so the handler opens the fenced transaction without a cross-tenant read; the sender knows both. */
-  companyId: string
-}
+export { ROUTING_MEASURE_QUEUE }
+export type RoutingMeasureData = RoutingJobData
 
 /** What the first transaction reads: the trip's points in driving order, or the sentence that ends the Plan. */
 type Gathered = { kind: "points"; points: Position2D[] } | { kind: "refused"; sentence: string } | { kind: "done"; status: string }
@@ -140,19 +135,25 @@ async function measureOne(data: RoutingMeasureData, context: JobContext): Promis
   })
 }
 
+/** #132 §3–4 for both routing queues: exclusive under the fingerprint singleton, ten minutes to run, done jobs kept a week, retries 3 at 30 s → 5 min. */
+const ROUTING_QUEUE_OPTIONS: JobQueueOptions = {
+  policy: "exclusive",
+  expireInSeconds: 600,
+  // A done job's week (#132 §3): deleteAfterSeconds is completed-job retention; retentionSeconds would instead bound how long a queued job may wait, which #171's deferral needs long.
+  deleteAfterSeconds: 7 * 24 * 60 * 60,
+  retryLimit: 3,
+  retryDelay: 30,
+  retryBackoff: true,
+  retryDelayMax: 300,
+}
+
 export const routingMeasure = defineJob<RoutingMeasureData>({
   queue: ROUTING_MEASURE_QUEUE,
   description: "Measures a baseline or manual Plan's trip through the routing provider: legs, totals and provenance onto the Plan, calculating → ready.",
-  queueOptions: {
-    policy: "exclusive",
-    expireInSeconds: 600,
-    // A done job's week (#132 §3): deleteAfterSeconds is completed-job retention; retentionSeconds would instead bound how long a queued job may wait, which #171's deferral needs long.
-    deleteAfterSeconds: 7 * 24 * 60 * 60,
-    retryLimit: 3,
-    retryDelay: 30,
-    retryBackoff: true,
-    retryDelayMax: 300,
-  },
+  queueOptions: ROUTING_QUEUE_OPTIONS,
+  // The API sends optimiser Plans to `routing.optimise` (#170) and its worker arrives with #171 (S3): the queue is
+  // created here so a send never meets a missing queue, the registry's rule, and a job waits on it until S3 works it.
+  publishes: [{ queue: ROUTING_OPTIMISE_QUEUE, queueOptions: ROUTING_QUEUE_OPTIONS }],
   handler: async (jobs, context) => {
     for (const job of jobs) await measureOne(job.data, context)
   },

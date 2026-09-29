@@ -36,6 +36,9 @@ import type { DriverCommandKind } from "@waste/domain/execution/vocabulary"
 import { and, asc, count, eq, inArray, isNull, sql } from "drizzle-orm"
 import { Hono } from "hono"
 
+import { createJobSender } from "@waste/db/jobs"
+import { FakeProvider } from "@waste/routing/fake"
+
 import { createApp } from "../app"
 import { NOT_A_DRIVERS_LOGIN } from "../auth/driver"
 import { authenticate } from "../auth/principal"
@@ -127,7 +130,7 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
     const door = new Hono()
     door.onError(errorHandler())
     door.route("/", driverDoorRoutes(guard, { now: () => now, log: (entry) => logged.push(entry) }))
-    door.route("/", routeRoutes(guard, { now: () => now }))
+    door.route("/", routeRoutes(guard, { now: () => now, routing: new FakeProvider(), jobs: createJobSender(pool) }))
     app = door as unknown as ReturnType<typeof createApp>
     mads = callingAs(app, keys, fixtures.accounts.mads, a.companyId)
     ali = callingAs(app, keys, fixtures.accounts.ali, a.companyId)

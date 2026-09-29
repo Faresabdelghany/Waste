@@ -34,8 +34,16 @@ export const Pickup = z.object({
   projectId: Id,
   routeId: Id,
   containerId: Id,
-  /** Stop order, 1..n. */
+  /** Stop order, 1..n: the generated baseline, never overwritten by a Plan (#124). */
   position: PositiveInt,
+  /**
+   * The stop's place in the current execution order (#170): the active Plan's
+   * where there is one, the baseline's otherwise. Computed on read, never
+   * stored. On every route read that carries the stop (`RouteDetail`,
+   * `DriverRouteDetail`); absent on a stop-centric read or an event payload
+   * recorded before it existed.
+   */
+  sequence: PositiveInt.optional(),
   status: PickupStatus,
   /** Why a skipped or failed pickup was not collected; null otherwise. */
   reason: PickupReason.nullable(),

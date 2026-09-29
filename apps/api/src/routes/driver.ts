@@ -172,6 +172,9 @@ import {
   routesOf,
   routeWithProgress,
   routeWithSessions,
+} from "./execution-shapes"
+import { planContextOf } from "./plan-shapes"
+import {
   sessionColumns,
   sessionOf,
   unloadOf,
@@ -985,7 +988,12 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const row = await findAssignedRoute(tx, principal, profile, id)
         if (row === undefined) throw noSuchAssignedRoute(id)
         const [answered, pickups] = await Promise.all([routeWithSessions(tx, principal.companyId, row), driverPickupsOfRoute(tx, principal.companyId, id)])
-        const body: DriverRouteDetail = { ...answered, pickups }
+        // The driver door orders by sequence and reads only the active Plan of a route assigned to them (#124 §5).
+        const context = await planContextOf(tx, principal.companyId, row, pickups)
+        const sequenced = pickups
+          .map((stop) => ({ ...stop, sequence: context.sequence.get(stop.id) as number }))
+          .sort((a, b) => a.sequence - b.sequence)
+        const body: DriverRouteDetail = { ...answered, pickups: sequenced, activePlan: context.activePlan }
         return c.json(body)
       },
     )

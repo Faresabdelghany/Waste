@@ -98,7 +98,7 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
     return RouteDetail.parse(await response.json())
   }
   /** The `Route` inside a detail: what an outbox payload carries. */
-  const routeOf = ({ pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, ...rest }: RouteDetail): Route => rest
+  const routeOf = ({ pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, ...rest }: RouteDetail): Route => rest
   /** The outbox rows about one aggregate, oldest first, read as `wms_api` under the fence. */
   const eventsAbout = async (aggregateId: string, companyId = a.companyId) =>
     await withCompany(pool.db, companyId, async (tx: Tx) =>
@@ -391,7 +391,9 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
         const [skipped, ...more] = await eventsAbout(stop.id)
         assert.equal(more.length, 0)
         assert.deepEqual([skipped.kind, skipped.aggregateKind, skipped.occurredAt.toISOString()], ["pickup-skipped", "pickup", NOON.toISOString()])
-        assert.deepEqual(skipped.payload, stop, "the pickup as the cancellation left it")
+        // `sequence` is a route read's computation (#170), not the event's: the payload is the stop itself.
+        const { sequence: _sequence, ...asEmitted } = stop
+        assert.deepEqual(skipped.payload, asEmitted, "the pickup as the cancellation left it")
       }
       const again = await commanded(seeded.id, "cancel", { reason: "Once more" })
       assert.deepEqual(again, cancelled, "idempotent, the first reason kept")
@@ -431,7 +433,7 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
   describe("PUT /routes/:id/pickup-order", () => {
     const put = (id: string, pickupIds: unknown, call = olivia) => call(`/routes/${id}/pickup-order`, { method: "PUT", body: { pickupIds } })
 
-    test("rewrites positions 1..n in body order, moves the route's stamp, and leaves a decided pickup's position alone", async () => {
+    test("the order becomes a manual Plan (#170): the read follows its sequence, the baseline positions and the stops themselves untouched", async () => {
       const seeded = await fresh()
       const [first, second, third] = seeded.pickupIds
       const before = await read(seeded.id)
@@ -439,17 +441,33 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
       const response = await put(seeded.id, [third, first, second])
       assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
       const reordered = RouteDetail.parse(await response.json())
-      assert.deepEqual(reordered.pickups.map((stop) => [stop.position, stop.id]), [[1, third], [2, first], [3, second]])
+      assert.deepEqual(reordered.pickups.map((stop) => [stop.sequence, stop.id]), [[1, third], [2, first], [3, second]], "the read orders by the Plan's sequence")
+      assert.deepEqual(
+        [...reordered.pickups].sort((x, y) => x.position - y.position).map((stop) => stop.id),
+        [first, second, third],
+        "pickup.position stays the generated baseline; the next run cannot undo the dispatcher (#124)",
+      )
+      assert.equal(reordered.activePlan?.solver, "manual")
+      assert.equal(reordered.activePlan?.status, "calculating")
       assert.ok(reordered.updatedAt > before.updatedAt, "the order is part of the route on the wire")
-      assert.ok(reordered.pickups.every((stop) => stop.updatedAt > before.pickups.find((was) => was.id === stop.id)!.updatedAt), "every stop was rewritten")
+      assert.ok(reordered.pickups.every((stop) => stop.updatedAt === before.pickups.find((was) => was.id === stop.id)!.updatedAt), "no stop is rewritten")
       assert.deepEqual(await read(seeded.id), reordered)
 
-      // Remove the stop now at position 2 through its own command, then reorder the two that are open: the skipped one keeps its position.
+      // Remove the first stop through its own command, then reorder the two that are open: the skipped one keeps its
+      // baseline position and, unnamed by the new Plan, appends at the sequence's end (#124 §2).
       const removed = await olivia(`/pickups/${first}/remove`, { method: "POST", body: { reason: "Moved out" } })
       assert.equal(removed.status, 200, JSON.stringify(await removed.clone().json()))
       const rest = RouteDetail.parse(await (await put(seeded.id, [second, third])).json())
-      const byId = new Map(rest.pickups.map((stop) => [stop.id, [stop.position, stop.status]] as const))
-      assert.deepEqual([byId.get(second), byId.get(first), byId.get(third)], [[1, "planned"], [2, "skipped"], [2, "planned"]], "1..n over the open stops; the skipped one keeps the 2 it had")
+      const byId = new Map(rest.pickups.map((stop) => [stop.id, [stop.position, stop.sequence, stop.status]] as const))
+      assert.deepEqual(
+        [byId.get(second), byId.get(third), byId.get(first)],
+        [
+          [2, 1, "planned"],
+          [3, 2, "planned"],
+          [1, 3, "skipped"],
+        ],
+        "the sequence is the new Plan's over the open stops, the skipped one appended; every position is the baseline's",
+      )
     })
 
     test("refuses an order that is not exactly the route's open pickups, counting what is left out and what is a stranger", async () => {

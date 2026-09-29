@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { activeOnCreation, tripOf } from "../plans"
+import { activeOnCreation, executionOrder, OPTIMISER_MAX_STOPS, planIsStale, tripOf } from "../plans"
 import { FINGERPRINT_DECIMALS, planFingerprint, roundCoordinate } from "../fingerprint"
 import { PLAN_SOLVERS, PLAN_STATUSES, PLAN_TRIPS, ROUTING_JOB_CLASSES, ROUTING_VOCABULARIES, SUPERSEDED } from "../vocabulary"
 
@@ -28,6 +28,38 @@ describe("activation (#124 §2)", () => {
     assert.equal(activeOnCreation("manual"), true)
     assert.equal(activeOnCreation("baseline"), true)
     assert.equal(activeOnCreation("optimiser"), false)
+  })
+})
+
+describe("the execution order (#170: sequence is computed on read, never stored)", () => {
+  test("the active Plan's order first, for the stops it names; the stops it does not name append in baseline order (#124 §2)", () => {
+    assert.deepEqual(executionOrder(["a", "b", "c"], ["c", "a", "b"]), ["c", "a", "b"])
+    assert.deepEqual(executionOrder(["a", "b", "c", "d"], ["c", "a"]), ["c", "a", "b", "d"])
+  })
+
+  test("a stop the Plan names that is no longer the route's is dropped, not invented", () => {
+    assert.deepEqual(executionOrder(["a", "b"], ["gone", "b", "a"]), ["b", "a"])
+  })
+
+  test("without an active Plan the baseline order stands", () => {
+    assert.deepEqual(executionOrder(["a", "b", "c"], null), ["a", "b", "c"])
+  })
+
+  test("the optimiser's ceiling is fifty stops, the provider's own limit (#118)", () => {
+    assert.equal(OPTIMISER_MAX_STOPS, 50)
+  })
+})
+
+describe("staleness: a reading, never a status (#124 §2)", () => {
+  test("an open stop the Plan does not name reads stale, and one it names that regeneration removed does too", () => {
+    assert.equal(planIsStale({ named: ["a", "b"], open: ["a", "b"], removed: [] }), false)
+    assert.equal(planIsStale({ named: ["a", "b"], open: ["a", "b", "c"], removed: [] }), true)
+    assert.equal(planIsStale({ named: ["a", "b"], open: ["a"], removed: ["b"] }), true)
+  })
+
+  test("a stop decided by the driver is progress, not staleness", () => {
+    // "b" completed: no longer open, not removed by regeneration — the Plan stands.
+    assert.equal(planIsStale({ named: ["a", "b"], open: ["a"], removed: [] }), false)
   })
 })
 
@@ -80,6 +112,15 @@ describe("the fingerprint (#124 §4, corrected by #132 §6: request inputs only)
     assert.equal(planFingerprint(inputs), planFingerprint(nudged))
     const moved = { ...inputs, stops: [[12.50002, 55.7], inputs.stops[1], inputs.stops[2]] as [number, number][] }
     assert.notEqual(planFingerprint(inputs), planFingerprint(moved))
+  })
+
+  test("a stop without a location keys by the name its caller gives it, so an unlocatable request still fingerprints — and two different orders of unlocated stops are two fingerprints (#170)", () => {
+    const bare = { ...inputs, stops: [inputs.stops[0], "unlocated:b", inputs.stops[2]] as ([number, number] | string)[] }
+    assert.equal(planFingerprint(bare), planFingerprint({ ...bare }))
+    assert.notEqual(planFingerprint(bare), planFingerprint(inputs))
+    const ab: Parameters<typeof planFingerprint>[0] = { ...inputs, solver: "manual", stops: ["unlocated:a", "unlocated:b"] }
+    const ba: Parameters<typeof planFingerprint>[0] = { ...inputs, solver: "manual", stops: ["unlocated:b", "unlocated:a"] }
+    assert.notEqual(planFingerprint(ab), planFingerprint(ba))
   })
 
   test("stop order counts for baseline and manual, and not for optimiser, whose stops are a set", () => {
