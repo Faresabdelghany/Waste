@@ -7,7 +7,10 @@
 // is the whole scope: a Service Provider's driver, whose account works in no
 // project at all, reaches exactly the routes assigned to them through this
 // door and nothing through any other (#104 §5, "What a Service Provider
-// account reaches"; #104 §7.19).
+// account reaches"; #104 §7.19). Beside the routes the door answers only what
+// a start and an unload pick from, which names no route and is bounded by the
+// driver profile's project or the company instead (routes/driver.ts,
+// `pickLists`).
 //
 // The driver is resolved on every request from the principal's `user.id`
 // through `driver.user_account_id`, inside the request's fenced transaction,

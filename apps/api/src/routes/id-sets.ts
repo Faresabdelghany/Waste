@@ -21,7 +21,10 @@
 // with the record's own row stamped first (`stamp()`, routes/shared.ts), and
 // the read order is by the entry's id — the contracts say a set is sorted by
 // id — for a page, a single read and the answer to a write alike, so what a
-// write answers is what the next read says.
+// write answers is what the next read says. A read that answers each record
+// with its set inside the record's own statement takes the set as a column
+// of the row instead (`idsColumn`), in the same order: the stations of
+// `GET /driver/me`, one statement per list (#144).
 //
 // Every statement carries `company_id = the caller's` beside the fence
 // (ADR-0001): the parent's company is what a row inherits, and there is no
@@ -44,7 +47,7 @@
 // is the one guard behind that: a repeated id is thrown there, since a body
 // schema that lost `eachOnce` would otherwise write two rows and answer one.
 import type { Tx } from "@waste/db/client"
-import { and, eq, type SQL } from "drizzle-orm"
+import { and, asc, eq, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 
 import { eachPresent, groupedBy } from "./sets"
@@ -108,6 +111,23 @@ export async function idsOf(tx: Tx, set: IdSetColumns, companyId: string, parent
 
 /** A body's set as the next read answers it: in the order Postgres gives a uuid, which is the string order of its lowercase spelling. The contracts' `eachOnce` already refused a repeated id, so sorting is the whole job. */
 export const asRead = (ids: readonly string[]): string[] => [...ids].sort()
+
+/**
+ * Each record's set as a column of its own row, for a statement that reads
+ * the records themselves: `array(select …)` correlated on `parentId`, the id
+ * column of the table that statement reads, sorted by the entry's id as a
+ * page's sets are, and an empty array for a record with none. One statement
+ * where a page and `idsOf` are two. The inner select is a query of its own
+ * and not raw SQL, because Drizzle writes the columns of a single-table
+ * statement's selection unqualified, and a bare `id` inside the subquery
+ * would be the entry table's own.
+ */
+export const idsColumn = (tx: Tx, set: IdSetColumns, companyId: string, parentId: PgColumn): SQL<string[]> =>
+  sql<string[]>`array${tx
+    .select({ id: set.entryId })
+    .from(set.table)
+    .where(and(eq(set.table.companyId, companyId), eq(set.parentId, parentId)))
+    .orderBy(asc(set.entryId))}`
 
 /** One record's set, read the way a page reads it, so what a write answers is what the next read says. */
 export async function idsFor(tx: Tx, set: IdSetColumns, companyId: string, parentId: string): Promise<string[]> {

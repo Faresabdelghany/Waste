@@ -140,7 +140,7 @@ import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { driverCommand, pickup, proofOfService, route, session, unload } from "@waste/db/schema/execution"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { project } from "@waste/db/schema/organisation"
-import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
+import { unloadingStation } from "@waste/db/schema/places"
 import { alreadyOnRoute, assignedTo, decide, type Clock, type Command, type CommandDriver, type Effect, type Lookups, type PickupState, type RouteState, type SessionState, type VehicleState } from "@waste/domain/execution/commands"
 import { alreadyActive, closingReasonOf } from "@waste/domain/execution/transitions"
 import type { DriverCommandKind, OutboxAggregate, OutboxKind } from "@waste/domain/execution/vocabulary"
@@ -182,7 +182,9 @@ import {
   type SessionRow,
 } from "./execution-shapes"
 import { vehicleColumns, vehicleLabel } from "./fleet-lookups"
+import { idsColumn } from "./id-sets"
 import { COMMAND_BACKDATE_MS, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS, primaryKeyOf, replayed } from "./shared"
+import { fractions as stationFractions } from "./unloading-stations"
 
 const MODULE = "operate.driver-app"
 const RoutePage = Page(Route)
@@ -260,28 +262,25 @@ async function dayRoutes(tx: Tx, principal: Principal, profile: DriverProfile, n
 type PickLists = Pick<DriverMe, "vehicles" | "unloadingStations" | "wasteFractions">
 
 /**
- * What the start screen and the unload screen pick from (#144): what #104
+ * What the start screen and the unload screen pick from (#144): the rows #104
  * §3's sync rules put in the `company` bucket, which a browser has no bucket
- * for. Three statements, one per list, each carrying the tenant and bounded
- * the way the command that names its rows is judged: the vehicles by the
- * driver profile's project — `start-route` takes a vehicle and a trailer of
- * the route's project, and the assignment's key puts every route of this
- * driver in the profile's (#125, Q5) — and `active`, the one status a start
- * accepts; the stations and the fractions by the company alone, since
- * `record-unload` takes any of the company's, and the stations `closed` left
- * out. Never Project Access, like the rest of the door: a Service Provider's
- * driver, whose account works in no project, picks from the same lists as
- * the employee beside them. Each list is by id, and so is each station's
- * set of fractions, the order every set of this API is read in
- * (routes/id-sets.ts).
+ * for, narrowed to what the commands that name them accept. Three
+ * statements, one per list — a station's fractions a column of its own row
+ * (`idsColumn`) — each carrying the tenant and bounded the way the command
+ * that names its rows is judged: the vehicles by the driver profile's
+ * project — `start-route` takes a vehicle and a trailer of the route's
+ * project, and the assignment's key puts every route of this driver in the
+ * profile's (#125, Q5) — and `active`, the one status a start accepts; the
+ * stations and the fractions by the company alone, since `record-unload`
+ * takes any of the company's, and the stations `closed` left out. Never
+ * Project Access, like the rest of the door: a Service Provider's driver,
+ * whose account works in no project, picks from the same lists as the
+ * employee beside them, the company's stations included, which the office's
+ * station reads do not show their account (routes/unloading-stations.ts).
+ * Each list is by id, and so is each station's set of fractions, the order
+ * every set of this API is read in (routes/id-sets.ts).
  */
 async function pickLists(tx: Tx, companyId: string, profile: DriverProfile): Promise<PickLists> {
-  // What a station accepts, as a column of the station's own row: the list stays one statement, and a station that accepts nothing answers an empty array.
-  const accepted = tx
-    .select({ id: unloadingStationFraction.wasteFractionId })
-    .from(unloadingStationFraction)
-    .where(and(eq(unloadingStationFraction.companyId, companyId), eq(unloadingStationFraction.unloadingStationId, unloadingStation.id)))
-    .orderBy(asc(unloadingStationFraction.wasteFractionId))
   const [vehicles, stations, wasteFractions] = await Promise.all([
     tx
       .select(vehicleColumns)
@@ -289,7 +288,7 @@ async function pickLists(tx: Tx, companyId: string, profile: DriverProfile): Pro
       .where(and(eq(vehicle.companyId, companyId), eq(vehicle.projectId, profile.projectId), eq(vehicle.status, "active")))
       .orderBy(asc(vehicle.id)),
     tx
-      .select({ id: unloadingStation.id, name: unloadingStation.name, location: unloadingStation.location, weighbridge: unloadingStation.weighbridge, wasteFractionIds: sql<string[]>`array${accepted}` })
+      .select({ id: unloadingStation.id, name: unloadingStation.name, location: unloadingStation.location, weighbridge: unloadingStation.weighbridge, wasteFractionIds: idsColumn(tx, stationFractions, companyId, unloadingStation.id) })
       .from(unloadingStation)
       .where(and(eq(unloadingStation.companyId, companyId), ne(unloadingStation.status, "closed")))
       .orderBy(asc(unloadingStation.id)),

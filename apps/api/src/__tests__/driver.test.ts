@@ -33,7 +33,7 @@ import {
 } from "@waste/domain/execution/commands"
 import { alreadyActive, alreadyDecided, doesNotChange, notActive, notDispatched } from "@waste/domain/execution/transitions"
 import type { DriverCommandKind } from "@waste/domain/execution/vocabulary"
-import { and, asc, count, eq, isNull, sql } from "drizzle-orm"
+import { and, asc, count, eq, inArray, isNull, sql } from "drizzle-orm"
 import { Hono } from "hono"
 
 import { createApp } from "../app"
@@ -335,10 +335,11 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
 
     test("GET /driver/me answers what an unload picks from: the company's stations that are not closed, by id, each with exactly the fractions it accepts, and the company's fractions — none of another company's", async () => {
       const { companyId } = a
-      const glass = { id: testId(), key: "glass", name: "Glass" }
-      const food = { id: testId(), key: "food", name: "Food waste" }
+      // Ids minted in order and the rows written in reverse, so the order the door answers in is its own and not the order the rows went in.
+      const glass = { id: mint(), key: "glass", name: "Glass" }
+      const food = { id: mint(), key: "food", name: "Food waste" }
       const station = (code: string, name: string, status: string, weighbridge: boolean, coordinates: [number, number]) => ({
-        id: testId(),
+        id: mint(),
         companyId,
         code,
         name,
@@ -351,33 +352,39 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
       const seasonal = station("TS-NORDKAJ", "Nordkaj transfer station", "seasonal", true, [12.6012, 55.7121])
       const draft = station("TS-SYDKAJ", "Sydkaj transfer station", "draft", false, [12.5741, 55.6523])
       const closed = station("TS-OSTKAJ", "Østkaj transfer station", "closed", true, [12.6305, 55.6907])
+      const accepts = (unloadingStationId: string, wasteFractionId: string) => ({ id: mint(), companyId, unloadingStationId, wasteFractionId })
+      const memberships = [accepts(fleet.stations.amager.id, fixtures.residual.id), accepts(fleet.stations.amager.id, glass.id), accepts(seasonal.id, food.id), accepts(closed.id, fixtures.residual.id)]
       await withCompany(pool.db, companyId, async (tx) => {
-        await tx.insert(wasteFraction).values([glass, food].map((fraction) => ({ ...fraction, companyId })))
-        await tx.insert(unloadingStation).values([seasonal, draft, closed])
-        await tx.insert(unloadingStationFraction).values([
-          { companyId, unloadingStationId: fleet.stations.amager.id, wasteFractionId: fixtures.residual.id },
-          { companyId, unloadingStationId: fleet.stations.amager.id, wasteFractionId: glass.id },
-          { companyId, unloadingStationId: seasonal.id, wasteFractionId: food.id },
-          { companyId, unloadingStationId: closed.id, wasteFractionId: fixtures.residual.id },
-        ])
+        await tx.insert(wasteFraction).values([food, glass].map((fraction) => ({ ...fraction, companyId })))
+        await tx.insert(unloadingStation).values([closed, draft, seasonal])
+        await tx.insert(unloadingStationFraction).values([...memberships].reverse())
       })
-      const me = DriverMe.parse(await (await mads("/driver/me")).json())
-      const accepting = (id: string, wasteFractionIds: string[]) => ({ id, wasteFractionIds: [...wasteFractionIds].sort() })
-      assert.deepEqual(
-        me.unloadingStations.map(({ id, wasteFractionIds }) => ({ id, wasteFractionIds })),
-        byId([accepting(fleet.stations.amager.id, [fixtures.residual.id, glass.id]), accepting(seasonal.id, [food.id]), accepting(draft.id, [])]),
-        "the active, the seasonal and the draft station, each with its own fractions sorted by id and the draft one with none; not the closed one, none of the other company's",
-      )
-      assert.deepEqual(
-        me.unloadingStations.find(({ id }) => id === seasonal.id),
-        { id: seasonal.id, name: seasonal.name, location: seasonal.location, weighbridge: true, wasteFractionIds: [food.id] },
-        "a station as the unload screen shows it",
-      )
-      assert.deepEqual(
-        me.wasteFractions,
-        byId([{ id: fixtures.residual.id, key: "residual", name: "Residual waste" }, glass, food]),
-        "the company's three, not the other company's residual",
-      )
+      try {
+        const me = DriverMe.parse(await (await mads("/driver/me")).json())
+        const accepting = (id: string, wasteFractionIds: string[]) => ({ id, wasteFractionIds: [...wasteFractionIds].sort() })
+        assert.deepEqual(
+          me.unloadingStations.map(({ id, wasteFractionIds }) => ({ id, wasteFractionIds })),
+          byId([accepting(fleet.stations.amager.id, [fixtures.residual.id, glass.id]), accepting(seasonal.id, [food.id]), accepting(draft.id, [])]),
+          "the active, the seasonal and the draft station, each with its own fractions sorted by id and the draft one with none; not the closed one, none of the other company's",
+        )
+        assert.deepEqual(
+          me.unloadingStations.find(({ id }) => id === seasonal.id),
+          { id: seasonal.id, name: seasonal.name, location: seasonal.location, weighbridge: true, wasteFractionIds: [food.id] },
+          "a station as the unload screen shows it",
+        )
+        assert.deepEqual(
+          me.wasteFractions,
+          byId([{ id: fixtures.residual.id, key: "residual", name: "Residual waste" }, glass, food]),
+          "the company's three, not the other company's residual",
+        )
+      } finally {
+        // The ground goes back to what the other tests stand on: the fixture's one station, accepting nothing on record, and its one fraction.
+        await withCompany(pool.db, companyId, async (tx) => {
+          await tx.delete(unloadingStationFraction).where(and(eq(unloadingStationFraction.companyId, companyId), inArray(unloadingStationFraction.id, memberships.map((row) => row.id))))
+          await tx.delete(unloadingStation).where(and(eq(unloadingStation.companyId, companyId), inArray(unloadingStation.id, [seasonal.id, draft.id, closed.id])))
+          await tx.delete(wasteFraction).where(and(eq(wasteFraction.companyId, companyId), inArray(wasteFraction.id, [glass.id, food.id])))
+        })
+      }
     })
 
     test("another company's driver sees their own routes and none of these", async () => {

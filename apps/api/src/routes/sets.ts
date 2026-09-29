@@ -2,8 +2,9 @@
 // round A). A set — a Property's parties, a Group's or a Point's members, a
 // Vehicle Type's container types, an Unloading Station's fractions, a
 // Collection Group's picked containers — is read for a whole page in one query
-// grouped by parent, and a body's entries are held to what their key allows
-// in one query too. routes/members.ts and routes/id-sets.ts each spelled both
+// grouped by parent (or, where a statement answers each parent with its set,
+// as a column of the parent's row: routes/id-sets.ts, `idsColumn`), and a
+// body's entries are held to what their key allows in one query too. routes/members.ts and routes/id-sets.ts each spelled both
 // (an entry there carries a role and a project, here neither), and
 // routes/scheme-groups.ts a third time; the mechanics are here once and each
 // module keeps only what is its own: which table, which columns, and what a
