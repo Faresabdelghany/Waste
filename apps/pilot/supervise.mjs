@@ -236,8 +236,8 @@ export function memoryLine() {
   const self = table.get(process.pid)
   if (self) parts.push(`supervisor=${mib(self.rss)}(hwm ${mib(self.hwm)})`)
   for (const [name, entry] of [
-    ["api", "src/server.ts"],
-    ["worker", "src/main.ts"],
+    ["api", "src/server."],
+    ["worker", "src/main."],
   ]) {
     const found = [...table].find(([, row]) => row.ppid === process.pid && row.cmdline.includes(entry))
     parts.push(found ? `${name}=${mib(found[1].rss)}(hwm ${mib(found[1].hwm)}, children ${mib(descendantsRss(found[0]))})` : `${name}=down`)
@@ -276,11 +276,13 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
       }
     }, memorySeconds * 1000).unref()
   }
+  // PROTOTYPE (#134): the bundle the image built where there is one (plain node, no tsx at boot), else the TypeScript source through tsx.
+  const entry = (dir, name) => (existsSync(`${dir}/src/${name}.mjs`) ? [`src/${name}.mjs`] : ["--import", "tsx", `src/${name}.ts`])
   const code = await supervise({
     api: {
       name: "api",
       command: process.execPath,
-      args: ["--import", "tsx", "src/server.ts"],
+      args: entry(apiDir, "server"),
       cwd: apiDir,
       env: {
         HOST: process.env.HOST ?? "0.0.0.0",
@@ -291,7 +293,7 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
     worker: {
       name: "worker",
       command: process.execPath,
-      args: ["--import", "tsx", "src/main.ts"],
+      args: entry(workerDir, "main"),
       cwd: workerDir,
       env: {
         HOST: process.env.WORKER_HOST ?? "127.0.0.1",

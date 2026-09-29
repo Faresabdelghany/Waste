@@ -55,6 +55,12 @@ COPY apps/pilot/supabase-root-2021-ca.crt /app/supabase-root-2021-ca.crt
 # Both tsconfig chains resolve (the refusal comes when tsx's loader registers).
 RUN cd /app/apps/api && TSX_TSCONFIG_PATH=tsconfig.json node --import tsx --eval "console.log('api tsconfig read')" \
  && cd /app/apps/worker && TSX_TSCONFIG_PATH=tsconfig.json node --import tsx --eval "console.log('worker tsconfig read')"
+# Each app bundled to one ESM file beside its source (src/, so the API's
+# ../build.json still resolves), which the supervisor runs with plain node:
+# at 0.1 vCPU, tsx booting both apps took 100–145 s on Suga (#134, gate 1).
+COPY apps/pilot/bundle.mjs apps/pilot/bundle.mjs
+RUN node apps/pilot/bundle.mjs api server.ts /app/apps/api/src/server.mjs \
+ && node apps/pilot/bundle.mjs worker main.ts /app/apps/worker/src/main.mjs
 
 FROM ${NODE_IMAGE} AS runtime
 ENV NODE_ENV=production \
