@@ -153,7 +153,9 @@ export const routingMeasure = defineJob<RoutingMeasureData>({
   queueOptions: ROUTING_QUEUE_OPTIONS,
   // The API sends optimiser Plans to `routing.optimise` (#170) and its worker arrives with #171 (S3): the queue is
   // created here so a send never meets a missing queue, the registry's rule, and a job waits on it until S3 works it.
-  publishes: [{ queue: ROUTING_OPTIMISE_QUEUE, queueOptions: ROUTING_QUEUE_OPTIONS }],
+  // Until then a queued job may wait weeks, so the queued-state bound is stretched past pg-boss's fourteen-day default;
+  // #171 drops the override when the queue gains its worker.
+  publishes: [{ queue: ROUTING_OPTIMISE_QUEUE, queueOptions: { ...ROUTING_QUEUE_OPTIONS, retentionSeconds: 60 * 24 * 60 * 60 } }],
   handler: async (jobs, context) => {
     for (const job of jobs) await measureOne(job.data, context)
   },

@@ -543,6 +543,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
           400: describeProblem("The path does not hold an id, or the body is missing `pickupIds`, names a member it does not own, names a pickup twice, or is not exactly the route's open pickups."),
           ...commandProblems("edit"),
           409: describeProblem("The route is active, completed or cancelled."),
+          503: describeProblem("No worker has started on this database yet, so the routing queue is not there to send the order's measurement to; nothing was written."),
         },
       }),
       guard,

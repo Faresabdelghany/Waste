@@ -11,7 +11,7 @@
 import type { Point } from "@waste/contracts/geojson"
 import type { ActivePlan, Plan, PlanLeg } from "@waste/contracts/plans"
 import type { Tx } from "@waste/db/client"
-import { activatePlan, createPlan, plansMatching, planStopIds, ROUTING_MEASURE_QUEUE, ROUTING_OPTIMISE_QUEUE, type RoutingJobData } from "@waste/db/commands/plans"
+import { activatePlan, createPlan, plansMatching, planStopIds, routingJobHeld, ROUTING_MEASURE_QUEUE, ROUTING_OPTIMISE_QUEUE, type RoutingJobData } from "@waste/db/commands/plans"
 import { QueueMissing, sendInTransaction, type JobSender } from "@waste/db/jobs"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup } from "@waste/db/schema/execution"
@@ -27,10 +27,8 @@ import { and, asc, eq, inArray, type SQL } from "drizzle-orm"
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { problem } from "../problem"
+import { WORKER_QUEUE_MISSING } from "./generation"
 import { stampsOf } from "./shared"
-
-/** What a request that needs the worker's queue and finds none is told: the deployment's order, in one sentence, as a 503 (#187's rule). */
-export const ROUTING_QUEUE_MISSING = "The worker has not started on this database yet, so its routing queue is not there; start it and ask again"
 
 export const noSuchPlan = (id: string) => problem(404, { detail: `No plan ${id} in the projects this account works in` })
 
@@ -127,6 +125,11 @@ const baselineIds = (stops: readonly SequencedStop[]): string[] =>
 
 const sequenceOver = (ordered: readonly string[]): Map<string, number> => new Map(ordered.map((id, index) => [id, index + 1]))
 
+/** The stops in execution order, each carrying its ordinal: the one spelling the office's detail and the driver's read share. */
+export function sequencedPickups<Stop extends { id: string }>(stops: readonly Stop[], context: PlanContext): (Stop & { sequence: number })[] {
+  return stops.map((stop) => ({ ...stop, sequence: context.sequence.get(stop.id) as number })).sort((a, b) => a.sequence - b.sequence)
+}
+
 /** The reading one route's detail needs, over stops the caller already loaded. */
 export async function planContextOf(tx: Tx, companyId: string, routeRef: { activePlanId: string | null }, stops: readonly SequencedStop[]): Promise<PlanContext> {
   const baseline = baselineIds(stops)
@@ -168,9 +171,17 @@ export async function activePlansByRoute(tx: Tx, companyId: string, rows: readon
   ])
   const planById = new Map(plans.map((row) => [row.id, row] as const))
   const namedByPlan = new Map<string, string[]>()
-  for (const stop of named) namedByPlan.set(stop.planId, [...(namedByPlan.get(stop.planId) ?? []), stop.pickupId])
+  for (const stop of named) {
+    const bucket = namedByPlan.get(stop.planId) ?? []
+    bucket.push(stop.pickupId)
+    namedByPlan.set(stop.planId, bucket)
+  }
   const stopsByRoute = new Map<string, SequencedStop[]>()
-  for (const stop of stops) stopsByRoute.set(stop.routeId, [...(stopsByRoute.get(stop.routeId) ?? []), stop])
+  for (const stop of stops) {
+    const bucket = stopsByRoute.get(stop.routeId) ?? []
+    bucket.push(stop)
+    stopsByRoute.set(stop.routeId, bucket)
+  }
   const readings = new Map<string, ActivePlan>()
   for (const row of withPlans) {
     const planRow = planById.get(row.activePlanId as string)
@@ -191,8 +202,8 @@ async function fingerprintParts(tx: Tx, companyId: string, routeRow: { id: strin
       : await tx
           .select({ id: pickup.id, property: property.location, point: sharedCollectionPoint.location })
           .from(pickup)
-          .leftJoin(property, eq(pickup.propertyId, property.id))
-          .leftJoin(sharedCollectionPoint, eq(pickup.sharedCollectionPointId, sharedCollectionPoint.id))
+          .leftJoin(property, and(eq(property.companyId, pickup.companyId), eq(pickup.propertyId, property.id)))
+          .leftJoin(sharedCollectionPoint, and(eq(sharedCollectionPoint.companyId, pickup.companyId), eq(pickup.sharedCollectionPointId, sharedCollectionPoint.id)))
           .where(and(eq(pickup.companyId, companyId), inArray(pickup.id, [...orderedPickupIds])))
   // An unlocated stop keys by its pickup id (#170): the request still fingerprints, and two orders over unlocated stops stay two.
   const at = new Map(located.map((row) => [row.id, positionOf(row.property) ?? positionOf(row.point)] as const))
@@ -241,14 +252,40 @@ export async function ensurePlan(
     station: parts.station,
     stops: parts.stops,
   })
+  // A match is reusable only when its stops are the request's very pickups: the
+  // fingerprint keys coordinates, and regeneration re-mints ids at the same
+  // places — replaying such a Plan would answer the baseline while claiming the
+  // order. An optimiser Plan still calculating has no stops to compare and its
+  // solver reads the route's stops when it runs, so it is reused as it stands.
+  const sameStops = async (matchId: string): Promise<boolean> => {
+    const named = await planStopIds(tx, { companyId: principal.companyId, planId: matchId })
+    return named.length === request.orderedPickupIds.length && new Set(named).size === new Set([...named, ...request.orderedPickupIds]).size
+  }
+  const queue = request.solver === "optimiser" ? ROUTING_OPTIMISE_QUEUE : ROUTING_MEASURE_QUEUE
+  const send = async (planId: string) => {
+    // The Plan's id keys the singleton: one live job per Plan, and Plans of one (route, fingerprint) are already
+    // deduplicated above — a queue-wide fingerprint key would let another route's identical trip swallow this send.
+    try {
+      await sendInTransaction(jobs.send, tx, queue, { planId, companyId: principal.companyId } satisfies RoutingJobData, { singletonKey: planId })
+    } catch (error) {
+      if (error instanceof QueueMissing) throw problem(503, { detail: WORKER_QUEUE_MISSING })
+      throw error
+    }
+  }
   const matches = await plansMatching(tx, { companyId: principal.companyId, routeId: routeRow.id, fingerprint })
   const ready = matches.find((match) => match.status === "ready")
-  if (ready !== undefined) {
+  if (ready !== undefined && (await sameStops(ready.id))) {
     await activatePlan(tx, { companyId: principal.companyId, routeId: routeRow.id, planId: ready.id })
     return { planId: ready.id, created: false }
   }
   const calculating = matches.find((match) => match.status === "calculating")
-  if (calculating !== undefined) return { planId: calculating.id, created: false }
+  if (calculating !== undefined && (request.solver === "optimiser" || (await sameStops(calculating.id)))) {
+    // The order is applied, not merely acknowledged: a manual or baseline match becomes the active Plan again.
+    if (activeOnCreation(request.solver)) await activatePlan(tx, { companyId: principal.companyId, routeId: routeRow.id, planId: calculating.id })
+    // And its job may be gone (retries exhausted, the row archived): re-send under the same key, #187's hardening.
+    if (!(await routingJobHeld(tx, queue, calculating.id))) await send(calculating.id)
+    return { planId: calculating.id, created: false }
+  }
   const planId = await createPlan(tx, {
     companyId: principal.companyId,
     projectId: routeRow.projectId,
@@ -260,12 +297,6 @@ export async function ensurePlan(
     stops: request.solver === "optimiser" ? [] : request.orderedPickupIds,
   })
   if (activeOnCreation(request.solver)) await activatePlan(tx, { companyId: principal.companyId, routeId: routeRow.id, planId })
-  const data: RoutingJobData = { planId, companyId: principal.companyId }
-  try {
-    await sendInTransaction(jobs.send, tx, request.solver === "optimiser" ? ROUTING_OPTIMISE_QUEUE : ROUTING_MEASURE_QUEUE, data, { singletonKey: fingerprint })
-  } catch (error) {
-    if (error instanceof QueueMissing) throw problem(503, { detail: ROUTING_QUEUE_MISSING })
-    throw error
-  }
+  await send(planId)
   return { planId, created: true }
 }

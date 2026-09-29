@@ -9,7 +9,10 @@ import { driverCommand, outboxEvent, session } from "@waste/db/schema/execution"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
 import { vehicle } from "@waste/db/schema/fleet"
 import { withCompany } from "@waste/db/tenant"
-import { and, asc, eq } from "drizzle-orm"
+import { ROUTING_MEASURE_QUEUE } from "@waste/db/commands/plans"
+import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
+import { and, asc, eq, sql } from "drizzle-orm"
+import { PgBoss } from "pg-boss"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
@@ -58,6 +61,14 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
   before(async () => {
     pool = createDb(database.url, { max: 4 })
     ownerPool = createDb(owner.url, { max: 1 })
+    // The reorder sends a measurement (#170); the queue is the worker's to create at boot, so this suite stands in
+    // for it, the way generation.test.ts and plans.test.ts do — never relying on another file's before() in a
+    // parallel run.
+    const boss = new PgBoss({ connectionString: owner.url, schema: PGBOSS_SCHEMA, migrate: false, supervise: false, schedule: false })
+    boss.on("error", () => undefined)
+    await boss.start()
+    await boss.createQueue(ROUTING_MEASURE_QUEUE, { policy: "exclusive" })
+    await boss.stop({ graceful: false, close: true })
     keys = await signingKeys()
     a = await seedTenant(pool)
     b = await seedTenant(pool)
@@ -75,6 +86,11 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
     harbors = await seedRoute(pool, a, fleet, ex, { project: "harbor", plannedDriverId: fleet.drivers.henrik.id, plannedVehicleId: fleet.vehicles.harborTruck.id })
   })
   after(async () => {
+    // Jobs first: nobody works the queue here, and a job names its company only in its data.
+    for (const companyId of [a?.companyId, b?.companyId]) {
+      if (companyId === undefined || !ownerPool) continue
+      await ownerPool.db.execute(sql`delete from ${sql.raw(PGBOSS_SCHEMA)}.job where name = ${ROUTING_MEASURE_QUEUE} and data ->> 'companyId' = ${companyId}`)
+    }
     if (a) await dropTenant(pool, a.companyId, ownerPool)
     if (b) await dropTenant(pool, b.companyId, ownerPool)
     await pool?.close()

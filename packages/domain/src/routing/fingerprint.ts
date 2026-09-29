@@ -1,6 +1,9 @@
 // The Plan fingerprint (#124 §4, corrected by #132 §6): the one key of
-// idempotency, deduplication and the adapter's cache, within a Route and
-// across Routes on an exact match. It keys request inputs only — the provider,
+// idempotency, deduplication and the cache. In S2 the cache is one Route's —
+// `plansMatching` (@waste/db/commands/plans) looks up by route and fingerprint,
+// and a job's singleton is the Plan's id — and #124's cross-route reuse ("two
+// Routes over the same stops on two days are one call") arrives with the
+// adapter's own cache in S3+. It keys request inputs only — the provider,
 // the profile, the solver and its configuration, the coordinates rounded to
 // about a metre, and every constraint that can affect the result — because
 // the provider reports its engine version and graph date only in the

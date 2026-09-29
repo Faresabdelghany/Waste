@@ -15,11 +15,13 @@
 // fingerprint, newest first, and the caller re-activates a `ready` match
 // instead of asking the provider again (#124 §4), enqueues nothing beside a
 // `calculating` one, and retries a `failed` one with a new Plan.
-import { asc, eq, and, desc } from "drizzle-orm"
+import { asc, eq, and, desc, sql } from "drizzle-orm"
 
 import type { Tx } from "../client"
+import { LIVE_JOB_STATES } from "../jobs"
 import { route } from "../schema/execution"
 import { plan, planStop } from "../schema/routing"
+import { PGBOSS_SCHEMA } from "../sql/pgboss"
 
 /** The queue a `baseline` or `manual` Plan's measurement is sent to and worked on. */
 export const ROUTING_MEASURE_QUEUE = "routing.measure"
@@ -93,6 +95,25 @@ export async function plansMatching(tx: Tx, keys: { companyId: string; routeId: 
     .from(plan)
     .where(and(eq(plan.companyId, keys.companyId), eq(plan.routeId, keys.routeId), eq(plan.fingerprint, keys.fingerprint)))
     .orderBy(desc(plan.id))
+}
+
+/**
+ * Whether a routing job for this Plan is still pg-boss's to run: a live row
+ * (created, retry or active) on the queue under the Plan's singleton key —
+ * `jobHeld`'s question (../jobs.ts) asked for routing, where the key is the
+ * plan's id. A `calculating` match whose job pg-boss lost (retries exhausted,
+ * the row archived) is re-sent by the caller rather than answered as on its
+ * way forever (#187's hardening, held here too).
+ */
+export async function routingJobHeld(tx: Tx, queue: string, planId: string): Promise<boolean> {
+  const states = sql.join(
+    LIVE_JOB_STATES.map((state) => sql`${state}`),
+    sql`, `,
+  )
+  const rows = await tx.execute<{ held: boolean }>(
+    sql`select exists (select 1 from ${sql.raw(PGBOSS_SCHEMA)}.job j where j.name = ${queue} and j.singleton_key = ${planId} and j.state in (${states})) as held`,
+  )
+  return rows[0]?.held === true
 }
 
 /** One Plan's stops in its order: the pickup ids position 1..n. */

@@ -126,6 +126,7 @@ export function planRoutes(guard: MiddlewareHandler<AuthEnv>, { routing, jobs }:
           403: describeProblem(`No active account here, or the caller's role does not allow \`edit\` on \`${MODULE}\`.`),
           404: describeProblem("No route with that id in the projects this account works in."),
           409: describeProblem("The route is active, completed or cancelled, or has no open pickups to order."),
+          503: describeProblem("No worker has started on this database yet, so the routing queue is not there to send to; nothing was written."),
         },
       }),
       guard,

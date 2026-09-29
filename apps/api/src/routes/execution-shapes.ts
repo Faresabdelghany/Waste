@@ -44,7 +44,7 @@ import { assignedTo, type DriverProfile } from "../auth/driver"
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { problem } from "../problem"
-import { planContextOf } from "./plan-shapes"
+import { planContextOf, sequencedPickups } from "./plan-shapes"
 import { instantOf, stampsOf, timeOf } from "./shared"
 
 export const noSuchRoute = (id: string) => problem(404, { detail: `No route ${id} in the projects this account works in` })
@@ -471,10 +471,7 @@ export async function routeWithSessions(tx: Tx, companyId: string, row: RouteRow
 export async function detailOf(tx: Tx, companyId: string, row: RouteRow): Promise<RouteDetail> {
   const [answered, pickups] = await Promise.all([routeWithSessions(tx, companyId, row), pickupsOfRoute(tx, companyId, row.id)])
   const context = await planContextOf(tx, companyId, row, pickups)
-  const sequenced = pickups
-    .map((stop) => ({ ...pickupOf(stop), sequence: context.sequence.get(stop.id) as number }))
-    .sort((a, b) => a.sequence - b.sequence)
-  return { ...answered, pickups: sequenced, activePlan: context.activePlan }
+  return { ...answered, pickups: sequencedPickups(pickups.map(pickupOf), context), activePlan: context.activePlan }
 }
 
 export const receiptColumns = {

@@ -173,7 +173,7 @@ import {
   routeWithProgress,
   routeWithSessions,
 } from "./execution-shapes"
-import { planContextOf } from "./plan-shapes"
+import { planContextOf, sequencedPickups } from "./plan-shapes"
 import {
   sessionColumns,
   sessionOf,
@@ -990,10 +990,7 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const [answered, pickups] = await Promise.all([routeWithSessions(tx, principal.companyId, row), driverPickupsOfRoute(tx, principal.companyId, id)])
         // The driver door orders by sequence and reads only the active Plan of a route assigned to them (#124 §5).
         const context = await planContextOf(tx, principal.companyId, row, pickups)
-        const sequenced = pickups
-          .map((stop) => ({ ...stop, sequence: context.sequence.get(stop.id) as number }))
-          .sort((a, b) => a.sequence - b.sequence)
-        const body: DriverRouteDetail = { ...answered, pickups: sequenced, activePlan: context.activePlan }
+        const body: DriverRouteDetail = { ...answered, pickups: sequencedPickups(pickups, context), activePlan: context.activePlan }
         return c.json(body)
       },
     )
