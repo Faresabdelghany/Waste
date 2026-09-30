@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test"
 
-import { expect, test } from "./fixtures"
+import { chainLanded, expect, test } from "./fixtures"
 import { uniqueName } from "./env"
 import { projectNamed, TESTER_PROJECT } from "./tester"
 
@@ -21,17 +21,12 @@ type WasteFraction = { id: string; key: string; name: string }
 const answerOf = (page: Page, method: string, path: string) =>
   page.waitForResponse((response) => response.request().method() === method && new URL(response.url()).pathname.startsWith(`/waste-api${path}`))
 
-/**
- * Opens a workspace page and waits for the switched module's rows to arrive
- * from the API, then for the store's whole chain of modules to land: each
- * later module re-renders the workspace, and a dialog opened before the last
- * one is rebuilt under the person's hands.
- */
+/** Opens a workspace page and waits for the switched module's rows to arrive from the API, then for the store's whole chain to land (fixtures.ts, `chainLanded`). */
 async function openLoaded(page: Page, url: string, listPath: string) {
   const loaded = answerOf(page, "GET", listPath)
   await page.goto(url)
   expect((await loaded).status()).toBe(200)
-  await page.waitForLoadState("networkidle")
+  await chainLanded(page)
 }
 
 /** The row's opener, after narrowing the list to the name through the module's own search. */

@@ -69,6 +69,20 @@ export async function signIn(page: Page, email: string, password: string): Promi
   if (outcome !== null) throw new Error(`sign-in as ${email} was refused: ${outcome.trim()}`)
 }
 
+/**
+ * Waits for the record store's chain of switched modules to land after a
+ * page load (business-record-store.tsx loads them one after another once a
+ * person is signed in). A spec that then acts on the account — deactivates
+ * it, ages its session — acts on a page with no read in flight, since a read
+ * still out would meet the refusal first and end the session before the
+ * test asks for it; and a page that has settled shows every switched
+ * module's server rows. Every slice of #81 lengthens the chain, so a spec
+ * waits here rather than for one module's list.
+ */
+export async function chainLanded(page: Page): Promise<void> {
+  await page.waitForLoadState("networkidle")
+}
+
 type Fixtures = {
   /** The API as the administrator the setup project signed in: the token the browser under test holds. */
   api: APIRequestContext
