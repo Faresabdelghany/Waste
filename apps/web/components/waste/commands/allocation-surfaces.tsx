@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
 import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
-import { useRelationPickers, useRowHistory } from "@/components/waste/commands/use-command-support"
+import { useOpenRecord, useRelationPickers, useRowHistory } from "@/components/waste/commands/use-command-support"
 import { allocationEvents, CONFIRM_ALLOCATION, RELEASE_ALLOCATION, VEHICLE_PLANNING_MODULE } from "@/lib/api/records/allocations"
 import { ALLOCATE_FORM, allocationChangeForm, allocationFormValues, changedAllocationRecord, createAllocationRecord, RELEASE_FORM } from "@/lib/data/allocations"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
@@ -24,6 +24,7 @@ const { workspaceId, moduleId } = VEHICLE_PLANNING_MODULE
 export function AllocateSurface({ label }: PrimarySurfaceProps) {
   const { upsertRecord } = useBusinessRecordStore()
   const pickers = useRelationPickers()
+  const openRecord = useOpenRecord(moduleId)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -35,6 +36,7 @@ export function AllocateSurface({ label }: PrimarySurfaceProps) {
       upsertRecord(workspaceId, moduleId, record),
       () => {
         setOpen(false)
+        openRecord(record.id)
         toast.success("Vehicle allocated", { description: "The reservation is on the vehicle's plan." })
       },
       () => setSaving(false),

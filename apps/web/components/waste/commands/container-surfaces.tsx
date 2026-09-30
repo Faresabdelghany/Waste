@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
 import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
-import { useRelationPickers, useRowHistory, useServerNames, WAREHOUSES } from "@/components/waste/commands/use-command-support"
+import { useOpenRecord, useRelationPickers, useRowHistory, useServerNames, WAREHOUSES } from "@/components/waste/commands/use-command-support"
 import { CONTAINERS_MODULE, containerMovements } from "@/lib/api/records/containers"
 import type { StockMovement } from "@waste/contracts/stock"
 import type { BusinessFormField, BusinessFormValues } from "@/lib/data/business-form-types"
@@ -35,6 +35,7 @@ const { workspaceId, moduleId } = CONTAINERS_MODULE
 export function AddContainerSurface({ label }: PrimarySurfaceProps) {
   const { upsertRecord } = useBusinessRecordStore()
   const pickers = useRelationPickers()
+  const openRecord = useOpenRecord(moduleId)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -46,6 +47,7 @@ export function AddContainerSurface({ label }: PrimarySurfaceProps) {
       upsertRecord(workspaceId, moduleId, record),
       () => {
         setOpen(false)
+        openRecord(record.id)
         toast.success("Container added", { description: `${record.name} is registered with no stock record: receive it into a warehouse next.` })
       },
       () => setSaving(false),

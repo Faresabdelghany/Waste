@@ -10,6 +10,7 @@
 // retired vehicle is listed with its status beside its name, and the API's
 // 409 says why it was refused.
 import { useEffect, useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import type { ApiClient } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
@@ -59,7 +60,15 @@ export function useRelationPickers(): RelationPickers {
   const drivers = useModuleRecords(DRIVERS.workspaceId, DRIVERS.moduleId, fixturesOf(DRIVERS))
   const depots = useModuleRecords(DEPOTS.workspaceId, DEPOTS.moduleId, fixturesOf(DEPOTS))
   const live = (records: readonly BusinessRecord[]) => records.filter((record) => !isSoftDeleted(record))
+  // The value a form opens with stays offered, as its id chip where the
+  // module has no such row loaded: an existing reference is never refused,
+  // and a row of a module not yet switched is named by its chip.
   const options = (field: BusinessFormField, values: BusinessFormValues, projectId?: string): readonly BusinessFormOption[] => {
+    const offered = rowsFor(field, values, projectId)
+    const current = values[field.id]
+    return typeof current === "string" && current !== "" && !offered.some((option) => option.value === current) ? [...offered, { value: current, label: current }] : offered
+  }
+  const rowsFor = (field: BusinessFormField, values: BusinessFormValues, projectId?: string): readonly BusinessFormOption[] => {
     const kind = MASTER_KIND_BY_FIELD[field.id]
     if (kind !== undefined) {
       const project = projectId ?? (typeof values.projectId === "string" ? values.projectId : undefined)
@@ -95,6 +104,24 @@ export function useServerNames(location: ModuleLocation, prefix: string): (serve
       if (id === serverId) return state?.records.find((record) => record.id === webId)?.name ?? webId
     }
     return `${prefix}-${serverId}`
+  }
+}
+
+/**
+ * Opens a row of the module in the workspace's details, through the address
+ * bar's `?record=` the workspace reads: what a create surface does once the
+ * API has answered, as the generic create path opens what it made. The
+ * minted id is the row's for the session (server-records.ts, `withCreated`).
+ */
+export function useOpenRecord(moduleId: string): (recordId: string) => void {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  return (recordId) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set("module", moduleId)
+    params.set("record", recordId)
+    router.push(`${pathname}?${params.toString()}`, { scroll: false })
   }
 }
 
