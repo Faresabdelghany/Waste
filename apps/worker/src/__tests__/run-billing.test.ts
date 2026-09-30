@@ -29,7 +29,6 @@ import { migrateDatabase } from "@waste/db/migrate"
 import { outboxEvent } from "@waste/db/schema/execution"
 import { billableEvent, billingRun, invoice } from "@waste/db/schema/finance"
 import { withCompany } from "@waste/db/tenant"
-import { FakeProvider } from "@waste/routing/fake"
 import type { BillableEventDraft } from "@waste/domain/finance/from-event"
 import { monthBefore } from "@waste/domain/finance/periods"
 import type { Job } from "pg-boss"
@@ -39,6 +38,7 @@ import type { JobContext } from "../jobs"
 import { runScheduledBilling, type ProjectRun, type RunBillingData } from "../jobs/run-billing"
 import { rolesUnderTest, withDatabaseName } from "./database"
 import { seedFinanceTenant, testId, type FinanceTenant } from "./finance-tenant"
+import { fakeRouting, settlesNothing } from "./routing-context"
 
 const roles = rolesUnderTest()
 const skip = roles.skip
@@ -60,7 +60,8 @@ describe("finance.run-billing against Postgres", { skip }, () => {
     now: () => now,
     log: (message) => void lines.push(message),
     send: async () => null,
-    routing: new FakeProvider(),
+    complete: settlesNothing,
+    routing: fakeRouting(),
   })
 
   before(async () => {

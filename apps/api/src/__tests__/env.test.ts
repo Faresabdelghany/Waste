@@ -114,4 +114,8 @@ describe("parseEnv", () => {
       assert.throws(() => parseEnv({ ...base, DATABASE_POOL_MAX: value }), (error: unknown) => error instanceof Error && /DATABASE_POOL_MAX/.test(error.message), value)
     }
   })
+
+  test("names the routing provider and never carries its key: the API calls no provider (#171; S5's preview will), so the key lives only where calls are made", () => {
+    assert.deepEqual(parseEnv({ ...base, ROUTING_PROVIDER: "openrouteservice", OPENROUTESERVICE_API_KEY: "test-only-not-a-key" }), { ...expected, ROUTING_PROVIDER: "openrouteservice" })
+  })
 })

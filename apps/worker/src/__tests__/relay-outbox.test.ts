@@ -26,7 +26,6 @@ import { outboxEvent } from "@waste/db/schema/execution"
 import { company, project } from "@waste/db/schema/organisation"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { withCompany } from "@waste/db/tenant"
-import { FakeProvider } from "@waste/routing/fake"
 import type { OutboxKind } from "@waste/contracts/execution"
 import { asc } from "drizzle-orm"
 import type { PgBoss } from "pg-boss"
@@ -36,6 +35,7 @@ import { defineJob, type JobContext } from "../jobs"
 import { BATCH_SIZE, OUTBOX_STALE_MS, RELAY_INTERVAL_SECONDS, RELAY_QUEUE, relayOnce, relayOutbox, staleOutboxCount } from "../jobs/relay-outbox"
 import { DEAD_LETTER_RETENTION_SECONDS, defineOutboxConsumer, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUES, outboxQueue, RelayedEvent } from "../outbox/subscribe"
 import { rolesUnderTest, withDatabaseName } from "./database"
+import { fakeRouting, settlesNothing } from "./routing-context"
 import { until } from "./until"
 
 const roles = rolesUnderTest()
@@ -71,7 +71,8 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     },
     now: () => new Date(),
     log: (message) => void lines.push(message),
-    routing: new FakeProvider(),
+    complete: settlesNothing,
+    routing: fakeRouting(),
     send: (queue, data, options) => {
       if (data && "id" in data && typeof data.id === "string") sent.push({ queue, id: data.id })
       return boss.send(queue, data, options)

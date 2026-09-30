@@ -15,14 +15,19 @@
 // the fingerprint (#132 §3): `plansMatching` answers the route's Plans of one
 // fingerprint, newest first, and the caller re-activates a `ready` match
 // instead of asking the provider again (#124 §4), enqueues nothing beside a
-// `calculating` one, and retries a `failed` one with a new Plan.
-import { asc, eq, and, desc, sql } from "drizzle-orm"
+// `calculating` one, and retries a `failed` one with a new Plan. Every job
+// carries its `class` (#132 §1), set by its sender — the office's requests
+// `interactive`, the horizon's `batch` — and its priority follows from the
+// class and the route's operating date (`routingSendOptions`), the first send
+// and a deferral's re-send alike, so a deferred job keeps its place.
+import { routingJobPriority } from "@waste/domain/routing/jobs"
+import { SUPERSEDED, type RoutingJobClass } from "@waste/domain/routing/vocabulary"
+import { asc, eq, and, desc, lt, ne, sql } from "drizzle-orm"
 
 import type { Tx } from "../client"
-import { LIVE_JOB_STATES } from "../jobs"
+import { jobHeld, sendInTransaction, type Send, type SendInTransactionOptions } from "../jobs"
 import { route } from "../schema/execution"
 import { plan, planStop } from "../schema/routing"
-import { PGBOSS_SCHEMA } from "../sql/pgboss"
 
 /** The queue a `baseline` or `manual` Plan's measurement is sent to and worked on. */
 export const ROUTING_MEASURE_QUEUE = "routing.measure"
@@ -36,6 +41,29 @@ export type RoutingJobData = {
   planId: string
   /** The Plan's company, so the handler opens the fenced transaction without a cross-tenant read. */
   companyId: string
+  /** Who waits on it (#132 §1): the quota engine spends an interactive job's calls down to zero and stops a batch job at the reserve. Absent on a job sent before #171, which only the office sent. */
+  class?: RoutingJobClass
+}
+
+/** The class a job's data carries; a job sent before #171 was the office's, so interactive. */
+export const classOf = (data: RoutingJobData): RoutingJobClass => data.class ?? "interactive"
+
+/**
+ * How every routing job is sent: under its Plan's id as the singleton key,
+ * at the priority its class and the route's operating date give it
+ * (@waste/domain/routing/jobs), and, for a deferral, not before `startAfter`.
+ */
+export function routingSendOptions({ data, operatingDate, startAfter }: { data: RoutingJobData; operatingDate: string; startAfter?: Date }): SendInTransactionOptions & { singletonKey: string } {
+  return {
+    singletonKey: data.planId,
+    priority: routingJobPriority({ class: classOf(data), operatingDate }),
+    ...(startAfter === undefined ? {} : { startAfter }),
+  }
+}
+
+/** Sends a Plan's job inside `tx`; null when pg-boss refused it because the Plan's job is already live. */
+export function sendRoutingJob(send: Send, tx: Tx, queue: string, data: RoutingJobData, route: { operatingDate: string }): Promise<string | null> {
+  return sendInTransaction(send, tx, queue, data, routingSendOptions({ data, operatingDate: route.operatingDate }))
 }
 
 export type NewPlan = {
@@ -81,12 +109,48 @@ export async function createPlan(tx: Tx, input: NewPlan): Promise<string> {
   return created.id
 }
 
-/** Makes the Plan the route's active one: what a `manual` or `baseline` Plan gets at creation and an `optimiser` one on `ready` (#124 §2). */
-export async function activatePlan(tx: Tx, keys: { companyId: string; routeId: string; planId: string }): Promise<void> {
+// Making a Plan active supersedes the optimisations it overtakes (#171,
+// amending #124 §2; ADR-0009): a later order wins, so an optimiser's answer
+// to an earlier request is never made active over it, and the waiting ones
+// are failed `superseded` where the activation is written rather than left
+// reading `calculating` until their jobs wake. Two ways, one each for who
+// activates: a request overtakes every optimisation waiting on the route
+// (`activatePlan`); an optimiser's answer only those asked for before it
+// (`activateSolved`), since an answer supersedes no request made after it.
+
+/** The route's optimisations still waiting, of those `which` names, failed as superseded. */
+async function supersedeWaiting(tx: Tx, keys: { companyId: string; routeId: string; planId: string }, which: "every other" | "older"): Promise<void> {
   await tx
+    .update(plan)
+    .set({ status: "failed", failureReason: SUPERSEDED, deferredUntil: null })
+    .where(
+      and(
+        eq(plan.companyId, keys.companyId),
+        eq(plan.routeId, keys.routeId),
+        eq(plan.solver, "optimiser"),
+        eq(plan.status, "calculating"),
+        // Plan ids are UUIDv7: an older Plan is a lesser id.
+        which === "older" ? lt(plan.id, keys.planId) : ne(plan.id, keys.planId),
+      ),
+    )
+}
+
+const setActive = (tx: Tx, keys: { companyId: string; routeId: string; planId: string }) =>
+  tx
     .update(route)
     .set({ activePlanId: keys.planId })
     .where(and(eq(route.companyId, keys.companyId), eq(route.id, keys.routeId)))
+
+/** Makes the Plan the route's active one at a request's word — a `manual` or `baseline` Plan at creation (#124 §2), a cached order re-activated — and fails every optimisation waiting on the route. */
+export async function activatePlan(tx: Tx, keys: { companyId: string; routeId: string; planId: string }): Promise<void> {
+  await setActive(tx, keys)
+  await supersedeWaiting(tx, keys, "every other")
+}
+
+/** Makes an optimiser's answer the route's active Plan on `ready` (#124 §2), and fails the optimisations waiting on the route that were asked for before it. */
+export async function activateSolved(tx: Tx, keys: { companyId: string; routeId: string; planId: string }): Promise<void> {
+  await setActive(tx, keys)
+  await supersedeWaiting(tx, keys, "older")
 }
 
 /** The route's Plans of one fingerprint, newest first: the cache and deduplication lookup (#124 §4). */
@@ -101,19 +165,13 @@ export async function plansMatching(tx: Tx, keys: { companyId: string; routeId: 
 /**
  * Whether a routing job for this Plan is still pg-boss's to run: a live row
  * (created, retry or active) on the queue under the Plan's singleton key —
- * `jobHeld`'s question (../jobs.ts) asked for routing, where the key is the
- * plan's id. A `calculating` match whose job pg-boss lost (retries exhausted,
- * the row archived) is re-sent by the caller rather than answered as on its
- * way forever (#187's hardening, held here too).
+ * `jobHeld` (../jobs.ts) asked by the plan's id. A `calculating` match whose
+ * job pg-boss lost (retries exhausted, the row archived) is re-sent by the
+ * caller rather than answered as on its way forever (#187's hardening, held
+ * here too).
  */
 export async function routingJobHeld(tx: Tx, queue: string, planId: string): Promise<boolean> {
-  const states = sql.join(
-    LIVE_JOB_STATES.map((state) => sql`${state}`),
-    sql`, `,
-  )
-  const rows = await tx.execute<{ held: boolean }>(
-    sql`select exists (select 1 from ${sql.raw(PGBOSS_SCHEMA)}.job j where j.name = ${queue} and j.singleton_key = ${planId} and j.state in (${states})) as held`,
-  )
+  const rows = await tx.execute<{ held: boolean }>(sql`select ${jobHeld({ queue, singletonKey: planId })} as held`)
   return rows[0]?.held === true
 }
 

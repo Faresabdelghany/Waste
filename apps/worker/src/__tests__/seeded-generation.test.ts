@@ -16,7 +16,6 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { createDb, type Database } from "@waste/db/client"
-import { FakeProvider } from "@waste/routing/fake"
 import { migrateDatabase } from "@waste/db/migrate"
 import { pickup, route } from "@waste/db/schema/execution"
 import { generationRun } from "@waste/db/schema/generation"
@@ -27,6 +26,7 @@ import type { JobContext } from "../jobs"
 import { runGeneration } from "../jobs/generate-routes"
 import { planAhead } from "../jobs/plan-ahead"
 import { databaseUnderTest, ownerUnderTest, withDatabaseName, workerUnderTest } from "./database"
+import { fakeRouting, settlesNothing } from "./routing-context"
 
 const owner = ownerUnderTest()
 const apiRole = databaseUnderTest()
@@ -44,7 +44,7 @@ describe("the Pilot's first generation over the seeded tenant", { skip }, () => 
   let worker: Database
   const lines: string[] = []
 
-  const context = (): JobContext => ({ api, worker, now: () => NOW, log: (message) => void lines.push(message), send: async () => `sent-${lines.length}`, routing: new FakeProvider() })
+  const context = (): JobContext => ({ api, worker, now: () => NOW, log: (message) => void lines.push(message), send: async () => `sent-${lines.length}`, complete: settlesNothing, routing: fakeRouting() })
 
   before(async () => {
     admin = createDb(owner.url, { max: 1 })

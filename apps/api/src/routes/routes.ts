@@ -50,12 +50,12 @@ import type { Tx } from "@waste/db/client"
 import { driverCommand, pickup, route, session } from "@waste/db/schema/execution"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
 import { notInService, THE_OPERATING_DATE } from "@waste/domain/execution/commands"
-import { activeAnd, doesNotChange, hasNotRun, openPickupsClose, routeCancellation, routeTransition } from "@waste/domain/execution/transitions"
+import { activeAnd, doesNotChange, hasNotRun, openPickupsClose, orderIsOpen, routeCancellation, routeTransition } from "@waste/domain/execution/transitions"
 import type { PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
 import { licenceRefusal, licenceSentence } from "@waste/domain/resources/licence"
 import type { VehicleStatus } from "@waste/domain/resources/vocabulary"
 import { count } from "@waste/domain/text"
-import type { RoutingProvider } from "@waste/routing/provider"
+import type { RoutingIdentity } from "@waste/routing/provider"
 import { and, asc, eq, gt, gte, inArray, isNull, lte } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -132,11 +132,9 @@ export async function lockedRoute(tx: Tx, principal: Principal, id: string): Pro
  * the same rule from the stop's side.
  */
 export function requireNotStarted(current: RouteRow, consequence: string): void {
+  if (orderIsOpen(current.status as RouteStatus)) return
   const label = labelOf(current)
   switch (current.status) {
-    case "planned":
-    case "ready":
-      return
     case "active":
       throw problem(409, { detail: activeAnd(label, consequence) })
     case "completed":
@@ -234,7 +232,7 @@ const commandProblems = (action: "view" | "edit") => ({
   404: describeProblem("No route with that id in the projects this account works in."),
 })
 
-export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), routing, jobs }: ClockOptions & { routing: RoutingProvider; jobs: JobSender }) {
+export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), routing, jobs }: ClockOptions & { routing: RoutingIdentity; jobs: JobSender }) {
   return new Hono<AuthEnv>()
     .get(
       "/routes",

@@ -16,7 +16,7 @@
 // names is the image's own file, read once here (build-info.ts): an image
 // whose file says nothing usable stops before it binds.
 import { createDb, DEFAULT_POOL_MAX } from "@waste/db/client"
-import { providerFromEnv } from "@waste/routing/select"
+import { providerNameFromEnv } from "@waste/routing/select"
 import { createRemoteJWKSet } from "jose"
 
 import { createApp } from "./app"
@@ -33,7 +33,7 @@ const probe = createDb(env.DATABASE_URL, probePoolOptions(DATABASE_CHECK_TIMEOUT
 const pool = createDb(env.DATABASE_URL, { max: env.DATABASE_POOL_MAX })
 const auth = supabaseAuth(env.SUPABASE_URL)
 const verifier = createVerifier({ keySet: createRemoteJWKSet(auth.jwks), issuer: auth.issuer })
-const listening = await listen(createApp({ probe, pool, verifier, databaseTimeoutMs: DATABASE_CHECK_TIMEOUT_MS, build, routing: providerFromEnv({ ROUTING_PROVIDER: env.ROUTING_PROVIDER }) }), {
+const listening = await listen(createApp({ probe, pool, verifier, databaseTimeoutMs: DATABASE_CHECK_TIMEOUT_MS, build, routing: { name: providerNameFromEnv({ ROUTING_PROVIDER: env.ROUTING_PROVIDER }) } }), {
   host: env.HOST,
   port: env.PORT,
 })

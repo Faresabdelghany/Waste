@@ -1,8 +1,10 @@
 // The Plan endpoints (#170, decided on #124 and #132): `GET /routes/:id/plans`
 // lists a route's Plans, `GET /plans/:id` answers one with its legs — fetched
 // only when a map draws — and `POST /routes/:id/optimise` asks for one: fifty
-// stops or fewer go to the optimiser, more become a `baseline` measurement
-// read "Not optimised" (#124 §4), both through `ensurePlan`
+// stops or fewer from a depot go to the optimiser, more, or a route naming no
+// depot, become a `baseline` measurement read "Not optimised" (#124 §4,
+// #171), the answer carrying the token that says which (`fallback`), both
+// through `ensurePlan`
 // (routes/plan-shapes.ts): the fingerprint's cache first, a `ready` match
 // re-activated without a call, then the Plan written `calculating` and its
 // job sent in the request's transaction under the Plan-id singleton. The
@@ -12,10 +14,10 @@
 // (#132). The grant is `route-studio.routes`, `view` to read and `edit` to
 // ask, the module the decisions name for Plans and legs (#124 §5).
 import { Page, PageRequest } from "@waste/contracts/pagination"
-import { Plan, PlanDetail } from "@waste/contracts/plans"
+import { OptimiseAnswer, Plan, PlanDetail, type OptimiseFallback } from "@waste/contracts/plans"
 import { plan } from "@waste/db/schema/routing"
-import { OPTIMISER_MAX_STOPS } from "@waste/domain/routing/plans"
-import type { RoutingProvider } from "@waste/routing/provider"
+import { optimiseSolver } from "@waste/domain/routing/plans"
+import type { RoutingIdentity } from "@waste/routing/provider"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -25,7 +27,7 @@ import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { findRoute, labelOf, noSuchRoute, pickupsOfRoute } from "./execution-shapes"
-import { ensurePlan, findPlan, legsOfPlan, noSuchPlan, planColumns, planOf, planScope } from "./plan-shapes"
+import { ensurePlan, findPlan, legsOfPlan, noSuchPlan, planColumns, planOf, planScope, type PlanRow } from "./plan-shapes"
 import type { JobSender } from "@waste/db/jobs"
 import { lockedRoute, ORDER_IS_FROZEN, requireNotStarted } from "./routes"
 import { describeJson, IdParam } from "./shared"
@@ -39,10 +41,13 @@ export const nothingToOrder = (label: string): string => `Route ${label} has no 
 
 export type PlanRouteOptions = {
   /** The routing provider: its name keys the fingerprint; no call is ever made on the request (#124 §4). */
-  routing: RoutingProvider
+  routing: RoutingIdentity
   /** pg-boss's send for this process (#187): the Plan's job rides the request's transaction through it. */
   jobs: JobSender
 }
+
+/** The optimise answer: the Plan, and why it is a baseline when it is. */
+const answerOf = (row: PlanRow, fallback: OptimiseFallback | null): OptimiseAnswer => ({ ...planOf(row), fallback })
 
 export function planRoutes(guard: MiddlewareHandler<AuthEnv>, { routing, jobs }: PlanRouteOptions) {
   return new Hono<AuthEnv>()
@@ -116,11 +121,11 @@ export function planRoutes(guard: MiddlewareHandler<AuthEnv>, { routing, jobs }:
         operationId: "optimiseRoute",
         summary: "Ask for a Plan over a route's open stops",
         description:
-          "Asks the routing provider for an ordered, measured Plan over the route's open pickups: fifty or fewer go to the optimiser; more become a `baseline` measurement of the generated order, read \"Not optimised\" (#124 §4: one optimisation call takes at most fifty locations). Answers at once with the Plan — 202 `calculating` when this request created it and its job now waits for the worker, 200 when an identical request's Plan already stood: a `ready` one is re-activated and consumes no provider call, a `calculating` one is already on its way (two clicks are one job). Accepted while the routing quota is exhausted — the Plan answers `calculating` with `deferredUntil` once the quota engine (#171) defers it — and the route beneath is never gated: dispatch and execution go on over the generated order, drawn dashed. A route that has started is refused (409): the sequence is frozen (ADR-0002); a completed or cancelled one does not change. Takes no body. Under the route's row lock.",
+          "Asks the routing provider for an ordered, measured Plan over the route's open pickups: fifty or fewer, from the route's depot, go to the optimiser; otherwise the request becomes a `baseline` measurement of the generated order, read \"Not optimised\", and the answer's `fallback` says why — `too-many-stops` (#124 §4: one optimisation call takes at most fifty locations) or `no-depot` (the optimiser orders the stops from the depot, #171); `fallback` is null when the optimiser took it. Answers at once with the Plan — 202 `calculating` when this request created it and its job now waits for the worker, 200 when an identical request's Plan already stood: a `ready` one is re-activated and consumes no provider call, a `calculating` one is already on its way (two clicks are one job). Accepted while the routing quota is exhausted — the Plan answers `calculating` and, once the worker's quota engine has deferred it, `deferredUntil` — and the route beneath is never gated: dispatch and execution go on over the generated order, drawn dashed. A route that has started is refused (409): the sequence is frozen (ADR-0002); a completed or cancelled one does not change. Takes no body. Under the route's row lock.",
         security: BEARER_SECURITY,
         responses: {
-          200: describeJson("An identical request's Plan already stood: re-activated if it was ready, or still calculating.", Plan),
-          202: describeJson("The Plan this request created, calculating; its job waits for the worker.", Plan),
+          200: describeJson("An identical request's Plan already stood: re-activated if it was ready, or still calculating; with the reason it is a baseline, when it is.", OptimiseAnswer),
+          202: describeJson("The Plan this request created, calculating; its job waits for the worker; with the reason it is a baseline, when it is.", OptimiseAnswer),
           400: describeProblem("The path does not hold an id."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, or the caller's role does not allow \`edit\` on \`${MODULE}\`.`),
@@ -141,16 +146,11 @@ export function planRoutes(guard: MiddlewareHandler<AuthEnv>, { routing, jobs }:
         requireNotStarted(current, ORDER_IS_FROZEN)
         const open = (await pickupsOfRoute(tx, principal.companyId, current.id)).filter((stop) => stop.status === "planned")
         if (open.length === 0) throw problem(409, { detail: nothingToOrder(labelOf(current)) })
-        const { planId, created } = await ensurePlan(
-          tx,
-          principal,
-          current,
-          { solver: open.length <= OPTIMISER_MAX_STOPS ? "optimiser" : "baseline", orderedPickupIds: open.map((stop) => stop.id) },
-          { routing, jobs },
-        )
+        const { solver, fallback } = optimiseSolver({ openStops: open.length, hasDepot: current.depotId !== null })
+        const { planId, created } = await ensurePlan(tx, principal, current, { solver, orderedPickupIds: open.map((stop) => stop.id) }, { routing, jobs })
         const answered = await findPlan(tx, principal, planId)
         if (answered === undefined) throw noSuchPlan(planId)
-        return c.json(planOf(answered), created ? 202 : 200)
+        return c.json(answerOf(answered, fallback), created ? 202 : 200)
       },
     )
 }

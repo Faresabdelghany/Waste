@@ -11,10 +11,11 @@ import { randomBytes, randomUUID } from "node:crypto"
 import { after, before, describe, test } from "node:test"
 
 import { sql } from "drizzle-orm"
+import { fromDrizzle, PgBoss } from "pg-boss"
 
 import { createDb, type Database } from "../client"
 import { GENERATE_ROUTES_QUEUE } from "../commands/generation"
-import { createJobSender, jobHeld, LIVE_JOB_STATES, QueueMissing, sendGenerateRoutes, sendInTransaction, type JobSender } from "../jobs"
+import { createJobSender, jobHeld, LIVE_JOB_STATES, QueueMissing, sendGenerateRoutes, sendInTransaction, succeedInTransaction, type Complete, type JobSender } from "../jobs"
 import { API_ROLE } from "../roles"
 import { PGBOSS_SCHEMA } from "../sql/pgboss"
 import { databaseUnderTest } from "./database"
@@ -90,6 +91,86 @@ describe("the shared send, as the API role", { skip: database.skip }, () => {
     )
   })
 
+  describe("a running job handing its place to its successor (#171: a deferral under the exclusive policy)", () => {
+    /** pg-boss's `complete` and `fetch` as the worker's instance has them: an instance over the API role's pool, never started. */
+    let boss: PgBoss
+    /** A queue of this block's own, so a fetch takes exactly the job the test just sent. */
+    const queue = `db.handover-${randomBytes(4).toString("hex")}`
+    before(async () => {
+      await owner.sql.unsafe(`select ${PGBOSS_SCHEMA}.create_queue($1, '{"policy": "exclusive"}'::jsonb)`, [queue])
+      boss = new PgBoss({ db: fromDrizzle(api.db, sql), schema: PGBOSS_SCHEMA, migrate: false, supervise: false, schedule: false, reindex: false, persistQueueStats: false, persistWarnings: false, useListenNotify: false })
+    })
+    after(async () => {
+      await owner?.sql.unsafe(`delete from ${PGBOSS_SCHEMA}.job where name = $1`, [queue])
+      await owner?.sql.unsafe(`select ${PGBOSS_SCHEMA}.delete_queue($1)`, [queue])
+    })
+
+    // pg-boss keeps its instants as UTC wall time without a zone, so they are compared as epoch seconds.
+    const jobs = async (key: string) =>
+      owner.sql<{ id: string; state: string; data: { n: number }; start_epoch: number }[]>`
+        select id, state, data, extract(epoch from start_after)::float8 as start_epoch from ${owner.sql(PGBOSS_SCHEMA)}.job where name = ${queue} and singleton_key = ${key} order by created_on`
+
+    /** A job of the queue under `key`, sent and fetched, so it is active the way a worker's handler holds it. */
+    const running = async (key: string): Promise<string> => {
+      const sent = await api.db.transaction((tx) => sendInTransaction(sender.send, tx, queue, { n: 1 }, { singletonKey: key }))
+      const [fetched] = await boss.fetch(queue)
+      assert.equal(fetched?.id, sent)
+      return fetched.id
+    }
+    const complete: Complete = (name, id, options) => boss.complete(name, id, undefined, options)
+    const at = new Date("2026-10-01T03:00:30.000Z")
+
+    test("the running job holds its key, so a plain send is refused; completing it first in the transaction lets the successor in, due at the reset", async () => {
+      const key = `defer-${randomBytes(3).toString("hex")}`
+      const id = await running(key)
+      const successor = await api.db.transaction(async (tx) => {
+        assert.equal(await sendInTransaction(sender.send, tx, queue, { n: 2 }, { singletonKey: key }), null, "exclusive: the active job still holds the key")
+        return succeedInTransaction(complete, sender.send, tx, { queue, id }, { n: 2 }, { singletonKey: key, startAfter: at })
+      })
+      assert.ok(successor)
+      const rows = await jobs(key)
+      assert.deepEqual(
+        rows.map((row) => [row.id, row.state, row.data.n]),
+        [
+          [id, "completed", 1],
+          [successor, "created", 2],
+        ],
+      )
+      assert.equal(rows[1].start_epoch, at.getTime() / 1000)
+    })
+
+    test("jobHeld by singleton key: a key's job is held while queued and while running, and not once it is done", async () => {
+      const key = `held-${randomBytes(3).toString("hex")}`
+      const held = async () => {
+        const [row] = await api.db.execute<{ held: boolean }>(sql`select ${jobHeld({ queue, singletonKey: key })} as held`)
+        return row.held
+      }
+      assert.equal(await held(), false, "nobody sent one")
+      await api.db.transaction((tx) => sendInTransaction(sender.send, tx, queue, { n: 1 }, { singletonKey: key }))
+      assert.equal(await held(), true, "queued")
+      const [fetched] = await boss.fetch(queue)
+      assert.equal(await held(), true, "running")
+      await boss.complete(queue, fetched.id)
+      assert.equal(await held(), false, "done")
+    })
+
+    test("a transaction that fails after the hand-over leaves the job running and no successor: both land or neither", async () => {
+      const key = `rollback-${randomBytes(3).toString("hex")}`
+      const id = await running(key)
+      await assert.rejects(
+        api.db.transaction(async (tx) => {
+          assert.ok(await succeedInTransaction(complete, sender.send, tx, { queue, id }, { n: 2 }, { singletonKey: key, startAfter: at }))
+          throw new Error("the Plan's own write failed")
+        }),
+        /the Plan's own write failed/,
+      )
+      assert.deepEqual(
+        (await jobs(key)).map((row) => [row.id, row.state]),
+        [[id, "active"]],
+      )
+    })
+  })
+
   test("sendGenerateRoutes spells the generation job once: its queue, its payload and the scheme as the singleton key", async () => {
     const seen: Array<{ name: string; data: object | null; singletonKey: string | undefined; inTransaction: boolean }> = []
     const send = async (name: string, data: object | null, options?: { singletonKey?: string; db?: unknown }) => {
@@ -108,7 +189,7 @@ describe("the shared send, as the API role", { skip: database.skip }, () => {
     if (existing === undefined) await owner.sql`select ${owner.sql(PGBOSS_SCHEMA)}.create_queue(${GENERATE_ROUTES_QUEUE}, ${'{"policy": "exclusive"}'}::jsonb)`
     const schemeKey = `scheme-${randomUUID()}`
     const held = async (id: string) => {
-      const [{ held }] = await api.db.execute<{ held: boolean }>(sql`select ${jobHeld(sql`${id}`)} as held`)
+      const [{ held }] = await api.db.execute<{ held: boolean }>(sql`select ${jobHeld({ queue: GENERATE_ROUTES_QUEUE, id: sql`${id}` })} as held`)
       return held
     }
     try {

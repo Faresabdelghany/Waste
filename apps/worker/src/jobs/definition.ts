@@ -9,8 +9,8 @@
 // here knows pg-boss's connection: a handler gets what it needs from the
 // context, so a test runs it with pools of its own.
 import type { Database } from "@waste/db/client"
-import type { Send } from "@waste/db/jobs"
-import type { RoutingProvider } from "@waste/routing/provider"
+import type { Complete, Send } from "@waste/db/jobs"
+import type { QuotaEngine } from "@waste/routing/quota"
 import type { Job, Queue, QueueOptions, ScheduleOptions, WorkOptions } from "pg-boss"
 
 /** What a handler runs with. Built once per process by main.ts, handed to every job; a test builds its own. */
@@ -46,13 +46,22 @@ export type JobContext = {
    */
   send: Send
   /**
-   * The routing provider (#169): the fake unless `ROUTING_PROVIDER` says
-   * otherwise, built once by main.ts through `providerFromEnv`
-   * (@waste/routing/select). Never called inside a database transaction
-   * (#124 §4); a test injects its own, scripted where a quota path is under
-   * proof (#171).
+   * `boss.complete(name, id, undefined, options)` as this process is
+   * connected: how a routing job settles its own job inside its transaction
+   * before sending its successor under the same singleton key
+   * (`succeedInTransaction`, `@waste/db/jobs`) — a deferral (#171).
    */
-  routing: RoutingProvider
+  complete: Complete
+  /**
+   * The routing adapter (#169, #171): the provider — the fake unless
+   * `ROUTING_PROVIDER` says otherwise, built by main.ts through
+   * `providerFromEnv` (@waste/routing/select) — behind the quota engine
+   * (@waste/routing/quota), which paces the calls, holds the reserve and
+   * reads every answer. One per process, so one key's quota is spent in one
+   * place. Never called inside a database transaction (#124 §4); a test
+   * builds its own over a scripted fake.
+   */
+  routing: QuotaEngine
   /**
    * The Pilot's polling knob, `WORKER_POLLING_INTERVAL_SECONDS` (#149): the
    * floor under every poll this process makes — each queue's, which the

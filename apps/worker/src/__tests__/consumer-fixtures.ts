@@ -38,7 +38,7 @@ import { vehicleType } from "@waste/db/schema/fleet-types"
 import { company, project } from "@waste/db/schema/organisation"
 import { depot, unloadingStation } from "@waste/db/schema/places"
 import { alert, ticket, ticketEvent } from "@waste/db/schema/resolution"
-import { plan, planLeg, planStop } from "@waste/db/schema/routing"
+import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
 import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import type { PickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
@@ -118,8 +118,8 @@ export async function seedConsumerTenant(pool: Database): Promise<ConsumerTenant
 export type SeededRoute = { id: string; number: number; label: string; pickupIds: string[]; collectionGroupId: string }
 
 export type RouteSeed = {
-  /** `completed` unless said otherwise: the route Mads went out on and ended; `cancelled` is the dispatcher's, started by nobody. */
-  status?: Extract<RouteStatus, "completed" | "cancelled" | "active">
+  /** `completed` unless said otherwise: the route Mads went out on and ended; `cancelled` is the dispatcher's, started by nobody; `planned` has gone nowhere yet, its order still the office's to change. */
+  status?: Extract<RouteStatus, "completed" | "cancelled" | "active" | "planned">
   /** The stops in position order; both bins, decided as given. */
   pickups?: { container: "bin1" | "bin2"; status: PickupStatus; reason?: PickupReason; note?: string }[]
 }
@@ -128,6 +128,8 @@ export type RouteSeed = {
 function stampsFor(status: NonNullable<RouteSeed["status"]>) {
   const none = { dispatchedAt: null, startedAt: null, completedAt: null, cancelledAt: null }
   switch (status) {
+    case "planned":
+      return none
     case "active":
       return { ...none, dispatchedAt: at("05:30"), startedAt: at("06:00") }
     case "completed":
@@ -347,6 +349,7 @@ export async function dropConsumerTenant(pool: Database, owner: Database, compan
   await owner.db.delete(planLeg).where(eq(planLeg.companyId, companyId))
   await owner.db.delete(planStop).where(eq(planStop.companyId, companyId))
   await withCompany(pool.db, companyId, async (tx: Tx) => {
+    await tx.delete(routingQuota).where(eq(routingQuota.companyId, companyId))
     await tx.delete(alert).where(eq(alert.companyId, companyId))
     await tx.delete(ticket).where(eq(ticket.companyId, companyId))
     await tx.delete(outboxEvent).where(eq(outboxEvent.companyId, companyId))

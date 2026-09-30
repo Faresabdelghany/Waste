@@ -44,7 +44,6 @@ import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-ar
 import { collectionGroup, collectionGroupContainer, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { withCompany } from "@waste/db/tenant"
-import { FakeProvider } from "@waste/routing/fake"
 import { NO_LONGER_SERVES_DATE, NO_PLANNING_AREA, REMOVED_FROM_DAY_PLAN } from "@waste/domain/planning/generation"
 import { asc, eq, sql } from "drizzle-orm"
 import { PgBoss } from "pg-boss"
@@ -54,6 +53,7 @@ import type { JobContext } from "../jobs"
 import { DRAFT_GENERATES_NOTHING, generateRoutes, runGeneration } from "../jobs/generate-routes"
 import { eligibleSchemes, PLAN_AHEAD_QUEUE, planAhead } from "../jobs/plan-ahead"
 import { databaseUnderTest, ownerUnderTest, workerUnderTest } from "./database"
+import { fakeRouting, settlesNothing } from "./routing-context"
 
 const owner = ownerUnderTest()
 const apiRole = databaseUnderTest()
@@ -215,7 +215,8 @@ describe("generation against a migrated database", { skip }, () => {
     worker,
     now: () => NOW,
     log: (message) => void lines.push(message),
-    routing: new FakeProvider(),
+    complete: settlesNothing,
+    routing: fakeRouting(),
     send: async (queue, data, options) => {
       sent.push({ queue, data, singletonKey: options?.singletonKey, inTransaction: options?.db !== undefined })
       if (running === undefined) return `sent-${sent.length}`

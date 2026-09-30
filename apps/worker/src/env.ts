@@ -5,7 +5,10 @@
 // fenced on. Then the knobs (#149): the sizes of the two pools and the
 // intervals the Pilot runs at, each absent unless set, and absent meaning
 // the code's own defaults — no Pilot value is a default here; the Pilot's
-// are its host's environment (apps/pilot/README.md). Every value arrives as
+// are its host's environment (apps/pilot/README.md). The routing provider,
+// its key and the quota engine's reserves and pace (#171) are read here too,
+// the reserves and the pace absent meaning the Standard plan's own figures
+// (@waste/routing/quota). Every value arrives as
 // a string, so the schemas do the reading. An empty variable counts as not
 // set, applied once in parseEnv for every variable, so a new field is a
 // plain schema with a default, or without one when the process cannot run
@@ -114,6 +117,13 @@ export const Env = z.object({
   WORKER_QUEUE_CACHE_INTERVAL_SECONDS: Seconds,
   /** How long pg-boss's pool keeps an idle connection, in seconds, 0 for ever; pg-pool's 10 unless set. At or above the longest interval that uses the pool, or every poll reopens a connection through the pooler (#134, gate 2). */
   WORKER_BOSS_IDLE_TIMEOUT_SECONDS: wholeNumber(0, " of seconds, 0 for never"),
+  /** OpenRouteService's key (#171), when ROUTING_PROVIDER names it: one person's, server-side only, never logged; `providerFromEnv` refuses the provider without it. */
+  OPENROUTESERVICE_API_KEY: z.string().optional(),
+  /** Where batch routing work stops, per family (#132 §1): the remaining it leaves for the office's own calls; the Standard plan's 500 directions and 100 optimisations unless set. */
+  ROUTING_DIRECTIONS_RESERVE: wholeNumber(0, " of requests"),
+  ROUTING_OPTIMISATION_RESERVE: wholeNumber(0, " of requests"),
+  /** How many calls a minute each routing family makes, under the provider's own limit; the Standard plan's 30 (under its 40) unless set. */
+  ROUTING_CALLS_PER_MINUTE: wholeNumber(1, " of calls a minute, at least 1"),
 })
 export type Env = z.infer<typeof Env>
 

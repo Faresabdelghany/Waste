@@ -15,7 +15,8 @@
     "test": "node --import tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
-    "@waste/contracts": "workspace:*"
+    "@waste/contracts": "workspace:*",
+    "@waste/domain": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22",

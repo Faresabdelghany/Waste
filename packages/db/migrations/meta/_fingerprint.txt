@@ -1640,6 +1640,27 @@ index wms.route_scheme route_scheme_project_key CREATE UNIQUE INDEX route_scheme
 index wms.route_scheme route_scheme_unloading_station_id_idx CREATE INDEX route_scheme_unloading_station_id_idx ON wms.route_scheme USING btree (company_id, unloading_station_id)
 trigger wms.route_scheme route_scheme_touch_updated_at enabled=O CREATE TRIGGER route_scheme_touch_updated_at BEFORE UPDATE ON wms.route_scheme FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.route_scheme route_scheme_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.routing_quota kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.routing_quota 1 id uuid not-null default=wms.uuidv7()
+column wms.routing_quota 2 company_id uuid not-null
+column wms.routing_quota 3 created_at timestamp with time zone not-null default=now()
+column wms.routing_quota 4 updated_at timestamp with time zone not-null default=now()
+column wms.routing_quota 5 provider text not-null
+column wms.routing_quota 6 family text not-null
+column wms.routing_quota 7 remaining integer
+column wms.routing_quota 8 limit integer
+column wms.routing_quota 9 reset_at timestamp with time zone
+column wms.routing_quota 10 exhausted_at timestamp with time zone
+column wms.routing_quota 11 key_refused_at timestamp with time zone
+constraint wms.routing_quota routing_quota_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.routing_quota routing_quota_counts_shape CHECK ((((remaining IS NULL) OR (remaining >= 0)) AND (("limit" IS NULL) OR ("limit" >= 0))))
+constraint wms.routing_quota routing_quota_family_one_of CHECK ((family = ANY (ARRAY['directions'::text, 'optimisation'::text])))
+constraint wms.routing_quota routing_quota_pkey PRIMARY KEY (id)
+constraint wms.routing_quota routing_quota_provider_family_key UNIQUE (company_id, provider, family)
+index wms.routing_quota routing_quota_pkey CREATE UNIQUE INDEX routing_quota_pkey ON wms.routing_quota USING btree (id)
+index wms.routing_quota routing_quota_provider_family_key CREATE UNIQUE INDEX routing_quota_provider_family_key ON wms.routing_quota USING btree (company_id, provider, family)
+trigger wms.routing_quota routing_quota_touch_updated_at enabled=O CREATE TRIGGER routing_quota_touch_updated_at BEFORE UPDATE ON wms.routing_quota FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.routing_quota routing_quota_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.service_area kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.service_area 1 id uuid not-null default=wms.uuidv7()
 column wms.service_area 2 company_id uuid not-null
@@ -2655,4 +2676,5 @@ journal 1790353500322 07ea348aca846931ca830eebf25c9e0d8f9acd5d9a6294d58d5447c6e7
 journal 1790370729141 17fe7f428e6ec8d22c32e9385147ce5b532614e30f8d0a16654ec5649583c4a3
 journal 1790383636636 c40e0a4b47bf76a6cb1e76f9e7750ecc36ffef0e5c4bbc19ceb469061f73f03e
 journal 1790711684369 f812e571a1ed7f0eb48027fee7d2c718fb759ac55cd11d3c4e68a6fa6a281f51
+journal 1790724616960 9cd2e4ce4f8e9009bff67362f1eb73d4bcab599e52beb22311fee0e415774f05
 pgboss-version 42

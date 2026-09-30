@@ -96,4 +96,19 @@ describe("parseEnv", () => {
       assert.throws(() => parseEnv({ ...base, WORKER_BOSS_IDLE_TIMEOUT_SECONDS: value }), naming("WORKER_BOSS_IDLE_TIMEOUT_SECONDS"), value)
     }
   })
+
+  test("reads the routing quota's knobs (#171) as whole numbers, each absent unless set — the Standard plan's figures then — and the provider's key as given", () => {
+    assert.deepEqual(
+      parseEnv({ ...base, ROUTING_PROVIDER: "openrouteservice", OPENROUTESERVICE_API_KEY: "test-only-not-a-key", ROUTING_DIRECTIONS_RESERVE: "800", ROUTING_OPTIMISATION_RESERVE: "0", ROUTING_CALLS_PER_MINUTE: "20" }),
+      { ...expected, ROUTING_PROVIDER: "openrouteservice", OPENROUTESERVICE_API_KEY: "test-only-not-a-key", ROUTING_DIRECTIONS_RESERVE: 800, ROUTING_OPTIMISATION_RESERVE: 0, ROUTING_CALLS_PER_MINUTE: 20 },
+    )
+    assert.deepEqual(parseEnv({ ...base, ROUTING_DIRECTIONS_RESERVE: "", OPENROUTESERVICE_API_KEY: "" }), expected, "empty is not set")
+  })
+
+  test("refuses a reserve that is not a whole number, and a pace of none, naming the variable", () => {
+    for (const name of ["ROUTING_DIRECTIONS_RESERVE", "ROUTING_OPTIMISATION_RESERVE"]) {
+      for (const value of ["-1", "1.5", "abc"]) assert.throws(() => parseEnv({ ...base, [name]: value }), naming(name), `${name}=${value}`)
+    }
+    for (const value of ["0", "-1", "2.5", "fast"]) assert.throws(() => parseEnv({ ...base, ROUTING_CALLS_PER_MINUTE: value }), naming("ROUTING_CALLS_PER_MINUTE"), value)
+  })
 })

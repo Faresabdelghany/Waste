@@ -59,6 +59,7 @@
 import { GenerationRequest, GenerationRun, GenerationRunListQuery } from "@waste/contracts/generation"
 import { Page } from "@waste/contracts/pagination"
 import type { GenerationRunStatus, GenerationTrigger } from "@waste/contracts/planning"
+import { GENERATE_ROUTES_QUEUE } from "@waste/db/commands/generation"
 import { jobHeld, QueueMissing, sendGenerateRoutes, type JobSender } from "@waste/db/jobs"
 import { generationRun } from "@waste/db/schema/generation"
 import { and, desc, eq, lt, sql, type SQL } from "drizzle-orm"
@@ -178,7 +179,7 @@ export function generationRoutes(guard: MiddlewareHandler<AuthEnv>, { jobs }: Ge
           const [inFlight] = await tx
             .select(runColumns)
             .from(generationRun)
-            .where(and(runScope(principal), eq(generationRun.routeSchemeId, scheme.id), jobHeld(sql`${generationRun.jobId}`)))
+            .where(and(runScope(principal), eq(generationRun.routeSchemeId, scheme.id), jobHeld({ queue: GENERATE_ROUTES_QUEUE, id: sql`${generationRun.jobId}` })))
             .orderBy(desc(generationRun.id))
             .limit(1)
           if (inFlight === undefined) throw problem(409, { detail: GENERATION_ALREADY_QUEUED })

@@ -13,6 +13,7 @@ import {
   notDispatched,
   nothingToCorrect,
   openPickupsClose,
+  orderIsOpen,
   PICKUP_COMMANDS,
   PICKUP_OUTCOME_OF,
   pickupCorrection,
@@ -110,6 +111,15 @@ describe("pickupTransition", () => {
     assert.deepEqual(pickupCorrection("planned", "completed", 12), { kind: "refuse", sentence: "Pickup 12 has no outcome to correct" })
     assert.equal(alreadyDecided(3, "skipped"), "Pickup 3 is already skipped")
     assert.equal(nothingToCorrect(3), "Pickup 3 has no outcome to correct")
+  })
+})
+
+describe("orderIsOpen: whose order the office may still change (ADR-0002's freeze)", () => {
+  test("a planned or a ready route's; not a running one's, nor a finished or cancelled one's", () => {
+    assert.deepEqual(
+      ROUTE_STATUSES.filter((status) => orderIsOpen(status)),
+      ["planned", "ready"],
+    )
   })
 })
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { ActivePlan, Plan, PlanDetail, PlanLeg } from "../plans"
+import { ActivePlan, OptimiseAnswer, Plan, PlanDetail, PlanLeg } from "../plans"
 
 const STAMPS = { createdAt: "2026-10-05T06:00:00.000Z", updatedAt: "2026-10-05T06:05:00.000Z" }
 const IDS = {
@@ -46,6 +46,22 @@ describe("Plan and PlanDetail (#170)", () => {
     assert.equal(Plan.safeParse({ ...ready, status: "waiting" }).success, false)
     assert.equal(Plan.safeParse({ ...ready, trip: "round" }).success, false)
     assert.equal(Plan.safeParse({ ...ready, distanceMetres: -1 }).success, false)
+  })
+})
+
+describe("OptimiseAnswer: the Plan an Optimise request got, and why it is a baseline when it is (#171)", () => {
+  test("the optimiser's Plan carries no fallback; a baseline says which rule sent it there", () => {
+    const optimised = { ...ready, solver: "optimiser", status: "calculating", distanceMetres: null, durationSeconds: null, fallback: null }
+    assert.deepEqual(OptimiseAnswer.parse(optimised), optimised)
+    for (const fallback of ["too-many-stops", "no-depot"]) {
+      const baseline = { ...ready, status: "calculating", distanceMetres: null, durationSeconds: null, fallback }
+      assert.deepEqual(OptimiseAnswer.parse(baseline), baseline)
+    }
+  })
+
+  test("refuses a fallback outside the vocabulary, and an answer without the member at all", () => {
+    assert.equal(OptimiseAnswer.safeParse({ ...ready, fallback: "too-far" }).success, false)
+    assert.equal(OptimiseAnswer.safeParse(ready).success, false)
   })
 })
 

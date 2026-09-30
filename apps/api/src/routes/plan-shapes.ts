@@ -7,12 +7,17 @@
 // `ready` match instead of asking the provider again (#124 §4), the Plan
 // written `calculating` with a known sequence's stops, activation on creation
 // for `manual` and `baseline` (#124 §2), and the job sent in the request's
-// transaction under the Plan-id singleton (#132 §3).
+// transaction under the Plan-id singleton (#132 §3), `interactive` — a
+// dispatcher waits on it (#132 §1) — at the priority that class gives it.
+// The optimiser orders the stops from the route's depot (#171), so an
+// optimiser Plan's fingerprint keys the depot whenever the route names one,
+// a stops-only trip's too; a measurement keys the ends only when it measures
+// them, the full trip.
 import type { Point } from "@waste/contracts/geojson"
 import type { ActivePlan, Plan, PlanLeg } from "@waste/contracts/plans"
 import type { Tx } from "@waste/db/client"
-import { activatePlan, createPlan, plansMatching, planStopIds, routingJobHeld, ROUTING_MEASURE_QUEUE, ROUTING_OPTIMISE_QUEUE, type RoutingJobData } from "@waste/db/commands/plans"
-import { QueueMissing, sendInTransaction, type JobSender } from "@waste/db/jobs"
+import { activatePlan, createPlan, plansMatching, planStopIds, routingJobHeld, ROUTING_MEASURE_QUEUE, ROUTING_OPTIMISE_QUEUE, sendRoutingJob } from "@waste/db/commands/plans"
+import { QueueMissing, type JobSender } from "@waste/db/jobs"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup } from "@waste/db/schema/execution"
 import { depot, unloadingStation } from "@waste/db/schema/places"
@@ -20,8 +25,7 @@ import { plan, planLeg, planStop } from "@waste/db/schema/routing"
 import type { PlanSolver, PlanStatus, PlanTrip } from "@waste/domain/routing/vocabulary"
 import { planFingerprint, type FingerprintPosition } from "@waste/domain/routing/fingerprint"
 import { activeOnCreation, executionOrder, planIsStale, tripOf } from "@waste/domain/routing/plans"
-import type { RoutingProvider } from "@waste/routing/provider"
-import { DEFAULT_PROFILE } from "@waste/routing/provider"
+import { DEFAULT_PROFILE, type RoutingIdentity } from "@waste/routing/provider"
 import { and, asc, eq, inArray, type SQL } from "drizzle-orm"
 
 import type { Principal } from "../auth/principal"
@@ -193,8 +197,8 @@ export async function activePlansByRoute(tx: Tx, companyId: string, rows: readon
 
 const positionOf = (location: Point | null): FingerprintPosition | null => (location === null ? null : [location.coordinates[0], location.coordinates[1]])
 
-/** What a Plan's fingerprint reads of the route (#124 §4, corrected by #132 §6): the trip's ends and each stop's coordinates, an unlocated one keying as none. */
-async function fingerprintParts(tx: Tx, companyId: string, routeRow: { id: string; depotId: string | null; unloadingStationId: string | null }, orderedPickupIds: readonly string[]) {
+/** What a Plan's fingerprint reads of the route (#124 §4, corrected by #132 §6): the ends the result depends on and each stop's coordinates, an unlocated one keying as none. */
+async function fingerprintParts(tx: Tx, companyId: string, routeRow: { id: string; depotId: string | null; unloadingStationId: string | null }, solver: PlanSolver, orderedPickupIds: readonly string[]) {
   const trip = tripOf({ hasDepot: routeRow.depotId !== null, hasStation: routeRow.unloadingStationId !== null })
   const located =
     orderedPickupIds.length === 0
@@ -207,22 +211,26 @@ async function fingerprintParts(tx: Tx, companyId: string, routeRow: { id: strin
           .where(and(eq(pickup.companyId, companyId), inArray(pickup.id, [...orderedPickupIds])))
   // An unlocated stop keys by its pickup id (#170): the request still fingerprints, and two orders over unlocated stops stay two.
   const at = new Map(located.map((row) => [row.id, positionOf(row.property) ?? positionOf(row.point)] as const))
-  let ends: { depot: FingerprintPosition | null; station: FingerprintPosition | null } = { depot: null, station: null }
-  if (trip === "full") {
-    const [[home], [station]] = await Promise.all([
-      tx
-        .select({ location: depot.location })
-        .from(depot)
-        .where(and(eq(depot.companyId, companyId), eq(depot.id, routeRow.depotId as string)))
-        .limit(1),
-      tx
-        .select({ location: unloadingStation.location })
-        .from(unloadingStation)
-        .where(and(eq(unloadingStation.companyId, companyId), eq(unloadingStation.id, routeRow.unloadingStationId as string)))
-        .limit(1),
-    ])
-    ends = { depot: positionOf(home?.location ?? null), station: positionOf(station?.location ?? null) }
-  }
+  // A full trip measures both ends; the optimiser orders from the depot on any trip (#171).
+  const depotId = trip === "full" || solver === "optimiser" ? routeRow.depotId : null
+  const stationId = trip === "full" ? routeRow.unloadingStationId : null
+  const [[home], [station]] = await Promise.all([
+    depotId === null
+      ? []
+      : tx
+          .select({ location: depot.location })
+          .from(depot)
+          .where(and(eq(depot.companyId, companyId), eq(depot.id, depotId)))
+          .limit(1),
+    stationId === null
+      ? []
+      : tx
+          .select({ location: unloadingStation.location })
+          .from(unloadingStation)
+          .where(and(eq(unloadingStation.companyId, companyId), eq(unloadingStation.id, stationId)))
+          .limit(1),
+  ])
+  const ends = { depot: positionOf(home?.location ?? null), station: positionOf(station?.location ?? null) }
   return { trip, ...ends, stops: orderedPickupIds.map((id) => at.get(id) ?? id) }
 }
 
@@ -239,11 +247,11 @@ export type EnsuredPlan = { planId: string; created: boolean }
 export async function ensurePlan(
   tx: Tx,
   principal: Principal,
-  routeRow: { id: string; projectId: string; depotId: string | null; unloadingStationId: string | null },
+  routeRow: { id: string; projectId: string; operatingDate: string; depotId: string | null; unloadingStationId: string | null },
   request: { solver: PlanSolver; orderedPickupIds: readonly string[] },
-  { routing, jobs }: { routing: RoutingProvider; jobs: JobSender },
+  { routing, jobs }: { routing: RoutingIdentity; jobs: JobSender },
 ): Promise<EnsuredPlan> {
-  const parts = await fingerprintParts(tx, principal.companyId, routeRow, request.orderedPickupIds)
+  const parts = await fingerprintParts(tx, principal.companyId, routeRow, request.solver, request.orderedPickupIds)
   const fingerprint = planFingerprint({
     provider: routing.name,
     profile: DEFAULT_PROFILE,
@@ -266,7 +274,7 @@ export async function ensurePlan(
     // The Plan's id keys the singleton: one live job per Plan, and Plans of one (route, fingerprint) are already
     // deduplicated above — a queue-wide fingerprint key would let another route's identical trip swallow this send.
     try {
-      await sendInTransaction(jobs.send, tx, queue, { planId, companyId: principal.companyId } satisfies RoutingJobData, { singletonKey: planId })
+      await sendRoutingJob(jobs.send, tx, queue, { planId, companyId: principal.companyId, class: "interactive" }, routeRow)
     } catch (error) {
       if (error instanceof QueueMissing) throw problem(503, { detail: WORKER_QUEUE_MISSING })
       throw error
