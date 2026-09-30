@@ -6,13 +6,26 @@
 // — the container weight (asset-management catalogue first, fallback table
 // second) and, since Issue #39, the container type's emptying time, which
 // the road basis adds to the routed drive time.
+//
+// On the Pilot (#178) every list is the API's: a module's rows once the
+// store has read them and none before — a fixture row names nothing the API
+// holds, and the create would be refused over it — and none of a module
+// still on fixtures (pickable-records.ts). The waste fractions are the
+// master data's; the asset-management catalogue is the browser's own, so it
+// lends no weight or emptying time there and the estimates read the
+// domain's fallback table.
 
 import { useMemo } from "react"
 
 import { useAssetManagementStore } from "@/components/settings/asset-management-store"
-import { useModuleRecords } from "@/components/waste/scheme-route-map"
-import type { BusinessRecord } from "@/lib/data/business-modules"
+import { useApiConfigured } from "@/components/waste/api-session-store"
+import { useModuleRecords as useStoreModuleRecords } from "@/components/waste/business-record-store"
+import { usePickableRecords } from "@/components/waste/pickable-records"
+import { isServerBacked } from "@/lib/api/records/modules"
+import { getModuleDefinition, type BusinessRecord, type WorkspaceId } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
+import { MASTER_DATA_MODULE } from "@/lib/data/master-data"
+import { masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import {
   fallbackContainerWeight,
@@ -37,6 +50,8 @@ export type WizardRecords = {
   vehicles: BusinessRecord[]
   drivers: BusinessRecord[]
   containers: BusinessRecord[]
+  /** Whether the containers are the API's (the Pilot), which the preview's matcher cannot place yet (lib/data/route-schemes.ts `validationOnApi`). */
+  containersOnApi: boolean
   schemes: BusinessRecord[]
   allocations: BusinessRecord[]
   /** Active waste fraction names from Settings master data — the step 1 options. */
@@ -56,7 +71,17 @@ const locationType = (record: BusinessRecord): "depot" | "unloading" | "unknown"
   return "unknown"
 }
 
+const NO_CATALOGUE: ReturnType<typeof useAssetManagementStore>["containerTypes"] = []
+
+/** A module's rows as the wizard may offer them: fixtures and the browser's, or on the Pilot the API's once read and none before. */
+function useModuleRecords(workspaceId: WorkspaceId, moduleId: string): BusinessRecord[] {
+  const fixtures = getModuleDefinition({ workspaceId, moduleId })?.records ?? []
+  const { records } = useStoreModuleRecords(workspaceId, moduleId, fixtures)
+  return usePickableRecords(workspaceId, moduleId, records)
+}
+
 export function useWizardRecords(): WizardRecords {
+  const onApi = useApiConfigured()
   const projects = useModuleRecords("configure", "organization")
   const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId)
   const calendars = useModuleRecords(
@@ -69,7 +94,9 @@ export function useWizardRecords(): WizardRecords {
   const containers = useModuleRecords("resources", "containers")
   const schemes = useModuleRecords("route-studio", "schemes")
   const allocations = useModuleRecords("fleet", "vehicle-planning")
-  const { containerTypes, wasteFractions } = useAssetManagementStore()
+  const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId)
+  const assets = useAssetManagementStore()
+  const containerTypes = onApi ? NO_CATALOGUE : assets.containerTypes
 
   const byName = useMemo(
     () => new Map(containerTypes.map((type) => [type.name.toLowerCase(), type])),
@@ -116,11 +143,12 @@ export function useWizardRecords(): WizardRecords {
     vehicles,
     drivers,
     containers,
+    containersOnApi: onApi && isServerBacked("resources", "containers"),
     schemes,
     allocations,
-    wasteFractions: wasteFractions
-      .filter((fraction) => fraction.status === "Active")
-      .map((fraction) => fraction.name),
+    wasteFractions: onApi
+      ? master.filter((record) => masterDataKindOf(record) === "waste-fraction").map((record) => record.name)
+      : assets.wasteFractions.filter((fraction) => fraction.status === "Active").map((fraction) => fraction.name),
     vehicleProfiles: vehicles.map(vehicleProfile),
     driverProfiles: drivers.map(driverProfile),
     weightKg,

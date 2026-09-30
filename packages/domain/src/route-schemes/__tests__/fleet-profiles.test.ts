@@ -5,6 +5,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { schemeLicenceDay } from "../../planning/checks"
 import {
   LICENCE_CLASSES,
   NO_LICENCE_ON_RECORD,
@@ -245,6 +246,37 @@ describe("drivers", () => {
   test("without a vehicle every driver is listed and nothing is judged", () => {
     assert.equal(eligibleDrivers([mads, emil, unknown], null).length, 3)
     assert.ok(driverOptions([unknown], null).every((option) => option.eligible))
+  })
+
+  describe("judged on the day the API judges a group's driver on (#178)", () => {
+    const truck = vehicleProfile(wh24)
+    const startsNextMonth = schemeLicenceDay("2026-10-01", "2026-09-30")
+    const startedInAugust = schemeLicenceDay("2026-08-04", "2026-09-30")
+
+    test("a licence that has run out by the scheme's first day does not hold: listed, disabled, in the API's own sentence", () => {
+      assert.deepEqual(
+        driverOptions([mads, lars], truck, startsNextMonth).map((option) => [option.driver.id, option.eligible, option.reason]),
+        [
+          ["driver-mads", true, undefined],
+          ["driver-lars", false, "Lars Møller's licence expires on 2026-09-05, before the scheme starts"],
+        ],
+      )
+    })
+
+    test("a scheme that started before today judges the licence on today", () => {
+      assert.equal(driverOptions([lars], truck, startedInAugust)[0].reason, "Lars Møller's licence expires on 2026-09-05, before today")
+    })
+
+    test("the expiry is the last day the licence holds", () => {
+      const onItsLastDay = schemeLicenceDay("2026-09-05", "2026-09-01")
+      assert.equal(driverOptions([lars], truck, onItsLastDay)[0].eligible, true)
+    })
+
+    test("the class is judged first, and nothing about a day is judged without one", () => {
+      assert.equal(driverOptions([emil], truck, startsNextMonth)[0].reason, "Needs C licence")
+      assert.equal(driverOptions([lars], truck)[0].eligible, true, "every other caller keeps the class-only reading")
+      assert.deepEqual(driverEligibility(lars, "C"), { driver: lars, eligible: true })
+    })
   })
 
   test("option labels carry the class, the name alone when it is unknown", () => {

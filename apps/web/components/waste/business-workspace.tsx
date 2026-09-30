@@ -42,7 +42,7 @@ import {
 } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
-import { ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
+import { ROUTE_SCHEMES_MODULE, schemeValuesOfDraft, validationOnApi } from "@/lib/data/route-schemes"
 import {
   clearedFactKeys,
   deriveFormRecord,
@@ -4359,43 +4359,21 @@ export function BusinessWorkspace({
     const allocationModule = businessWorkspaces.fleet.modules.find(
       (candidate) => candidate.id === "vehicle-planning",
     )
-    const validation = validateGuidedScheme(
-      data,
-      getRecords(workspace.id, activeModule.id, activeModule.records),
-      allocationModule
-        ? getRecords("fleet", allocationModule.id, allocationModule.records)
-        : [],
-      containerRecords,
-      vehicleRecords,
+    // With the API's containers the zero-match sentence is no evidence and does not make the scheme a Draft (#178; retires with #207).
+    const validation = validationOnApi(
+      validateGuidedScheme(
+        data,
+        getRecords(workspace.id, activeModule.id, activeModule.records),
+        allocationModule
+          ? getRecords("fleet", allocationModule.id, allocationModule.records)
+          : [],
+        containerRecords,
+        vehicleRecords,
+      ),
+      apiConfigured && isServerBacked("resources", "containers"),
     )
 
-    const submittedValues: NonNullable<BusinessRecord["submittedValues"]> = {
-      ...(origin.extraValues ?? {}),
-      schemeName: data.schemeName.trim(),
-      projectId: data.projectId ?? "",
-      planningAreaId: data.planningAreaId ?? "",
-      wasteFraction: data.wasteFraction,
-      serviceType: data.serviceType,
-      frequency: data.frequency,
-      weekRotation: data.frequency === "every-2-weeks" ? data.weekRotation : "",
-      serviceDays: data.serviceDays.join(", "),
-      effectiveFrom: data.effectiveFrom,
-      effectiveTo: data.effectiveTo,
-      plannedStartTime: data.plannedStartTime,
-      depotId: data.depotId ?? "",
-      unloadingStationId: data.unloadingStationId ?? "",
-      // Guided setup options (2026-09-16). Generation applies the holiday
-      // policy through the same occurrence generator the wizard previewed with.
-      holidayPolicy: data.holidayPolicy,
-      createAs: data.createAs,
-      // How a later edit of the running scheme applies (issue #38): step 5's
-      // choice, or the quick form's; the edit-save planner reads it here.
-      editPolicy: data.editPolicy,
-      // One group covering every service day stores as the legacy
-      // single-assignment shape; anything else stores the groups explicitly
-      // (D36) — never both, the group list is the single source of truth.
-      ...collectionGroupsToValues(groups, data.serviceDays),
-    }
+    const submittedValues: NonNullable<BusinessRecord["submittedValues"]> = schemeValuesOfDraft(data, groups, origin.extraValues)
     const recurrence = recurrenceFromValues(submittedValues)
 
     const projectIds = selectedProjectIds(
