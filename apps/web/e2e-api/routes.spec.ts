@@ -4,7 +4,7 @@ import { dispatchedRouteFor, driverNamed, SEEDED_DRIVER } from "./dispatched-rou
 import { E2E, uniqueName } from "./env"
 import { expect, freshContext, signIn, test } from "./fixtures"
 import { answerOf, openRoute, routeRead, schemeWithRoutes, toasts } from "./routes-support"
-import { listAll } from "./tester"
+import { ensureTester, listAll, roleNamed } from "./tester"
 
 // Route Studio's routes, stops and Live board on the API (Issue #179, slice
 // 6 of #81). A generated route is the API's row under the server's id, its
@@ -227,4 +227,40 @@ test("the Live board reads what the driver's device reports, and the office's ca
   expect(ended.session).toBeNull()
   expect(ended.sessions.at(-1)?.endedAt).not.toBeNull()
   expect((await listAll<LiveRoute>(api, "/routes/live", { projectId: route.projectId })).some((candidate) => candidate.id === route.id)).toBe(false)
+})
+
+test("a Dispatcher, who views neither the organisation nor the depots, sees the routes of their project and assigns one (#217)", async ({ api, browser }) => {
+  const { routes } = await schemeWithRoutes(api, uniqueName("E2E Dispatcher"))
+  const [route] = routes
+  const { user } = await ensureTester(api, E2E.testerEmail)
+  const dispatcher = await roleNamed(api, "Dispatcher")
+  const moved = await api.patch(`/users/${user.id}`, { data: { roleId: dispatcher.id } })
+  expect(moved.status(), await moved.text()).toBe(200)
+  const driver = await driverNamed(api, SEEDED_DRIVER.name)
+  const context = await freshContext(browser)
+  try {
+    const page = await context.newPage()
+    await signIn(page, E2E.testerEmail, E2E.loginPassword)
+    const listed = page.waitForResponse((response) => response.request().method() === "GET" && new URL(response.url()).pathname === "/waste-api/routes")
+    await page.goto("/route-studio?module=routes")
+    expect((await listed).status()).toBe(200)
+    // The rows name their project through /me's projects, so the pinned scope keeps them.
+    await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill(route.label)
+    await page.getByRole("main").getByText(route.label, { exact: true }).first().click()
+    const details = page.getByRole("dialog", { name: route.label })
+    await expect(details).toContainText("Copenhagen Central")
+    // The depots are not the Dispatcher's to view: Assign does not wait for them.
+    const assign = details.getByTestId("route-commands").getByRole("button", { name: "Assign" })
+    await expect(assign).toBeEnabled({ timeout: 30_000 })
+    await assign.click()
+    const dialog = page.getByRole("dialog", { name: "Assign" })
+    await pick(dialog, page, "Driver", "Mads Jensen · Active")
+    const [assigned] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/assign`), dialog.getByRole("button", { name: "Assign" }).click()])
+    expect(assigned.status()).toBe(200)
+    expect(assigned.request().postDataJSON()).toEqual({ driverId: driver.id })
+  } finally {
+    await context.close()
+    // Back to the tester's own shape, which the other specs stand on.
+    await ensureTester(api, E2E.testerEmail)
+  }
 })
