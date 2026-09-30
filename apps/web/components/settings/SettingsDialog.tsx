@@ -55,6 +55,7 @@ import { HolidayListsSettings } from "@/components/settings/holiday-lists-settin
 import { MasterDataSettings } from "@/components/settings/master-data-settings"
 import { useApiConfigured } from "@/components/waste/api-session-store"
 import { HOLIDAY_LISTS_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID } from "@/lib/data/business-links"
+import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
 import { PLANNING_AREAS_SETTINGS_PANE_ID } from "@/lib/data/planning-areas"
 import { COLLECTION_CALENDARS_SETTINGS_PANE_ID } from "@/lib/data/collection-calendars"
 import { migrateLegacyId } from "@/lib/data/legacy-ids"
@@ -130,7 +131,8 @@ const settingsSections: Array<{
     id: "operations",
     label: "Operations",
     items: [
-      { id: "asset-management", label: "Asset management", icon: Gear },
+      // Offered in fixture mode only: on the Pilot its store retires into Master data (slice 5b of #81).
+      { id: ASSET_MANAGEMENT_SETTINGS_PANE_ID, label: "Asset management", icon: Gear },
       // Areas & Zones moved here from the Plan workspace (2026-09-03, D37).
       { id: PLANNING_AREAS_SETTINGS_PANE_ID, label: "Areas & Zones", icon: MapTrifold },
       // Collection Calendars moved here from the Plan workspace (2026-09-16).
@@ -1491,11 +1493,14 @@ export function SettingsWorkspace({
   returnTo = "/",
 }: SettingsWorkspaceProps) {
   const router = useRouter()
-  // The master data pane reads the API alone: without the adapter the nav does not offer it.
+  // The master data pane reads the API alone, and Asset management's browser
+  // store retires on the Pilot (lib/data/settings-panes.ts): which of the two
+  // the nav offers, and where a link to Asset management lands, follow the adapter.
   const configured = useApiConfigured()
+  const openedPaneId = initialPaneId === undefined ? undefined : settingsPaneOpened(initialPaneId, configured)
   const [activeItemId, setActiveItemId] = useState(() =>
-    initialPaneId && visiblePaneDefinitions[initialPaneId]
-      ? initialPaneId
+    openedPaneId && visiblePaneDefinitions[openedPaneId]
+      ? openedPaneId
       : "account",
   )
   const [search, setSearch] = useState("")
@@ -1521,18 +1526,16 @@ export function SettingsWorkspace({
   }, [])
 
   useEffect(() => {
-    if (initialPaneId && visiblePaneDefinitions[initialPaneId]) {
-      setActiveItemId(initialPaneId)
+    if (openedPaneId && visiblePaneDefinitions[openedPaneId]) {
+      setActiveItemId(openedPaneId)
     }
-  }, [initialPaneId])
+  }, [openedPaneId])
 
   const filteredSections = useMemo(() => {
-    const offered = configured
-      ? settingsSections
-      : settingsSections.map((section) => ({
-          ...section,
-          items: section.items.filter((item) => item.id !== MASTER_DATA_SETTINGS_PANE_ID),
-        }))
+    const offered = settingsSections.map((section) => ({
+      ...section,
+      items: section.items.filter((item) => settingsPaneOffered(item.id, configured)),
+    }))
     const normalized = search.trim().toLowerCase()
     if (!normalized) return offered
 

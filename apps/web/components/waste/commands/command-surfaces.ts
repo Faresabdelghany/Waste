@@ -18,6 +18,9 @@ import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 import { moduleKeyOf } from "@/lib/api/records/adapter"
 import { isServerBacked } from "@/lib/api/records/modules"
 
+import { AllocateSurface, AllocationCommandsSurface } from "./allocation-surfaces"
+import { AddContainerSurface, ContainerCommandsSurface } from "./container-surfaces"
+
 /** What a primary surface is handed: the label the module's primary action carries. */
 export type PrimarySurfaceProps = { label: string }
 
@@ -39,7 +42,13 @@ export type CommandSurface = {
 }
 
 /** The surfaces, by `workspace.module`. */
-export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {}
+export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
+  // Slice 5b (#181): the identity by its own form, the lifecycle by command.
+  "resources.containers": { primary: AddContainerSurface, rowActions: ContainerCommandsSurface },
+  // The ledger is read-only on the wire: a movement is a container's command.
+  "resources.inventory": { primary: null },
+  "fleet.vehicle-planning": { primary: AllocateSurface, rowActions: AllocationCommandsSurface },
+}
 
 /** The module's surface while the adapter is configured and the module switched; undefined otherwise, and always in fixture mode. */
 export function commandSurfaceFor(workspaceId: WorkspaceId, moduleId: string, configured: boolean): CommandSurface | undefined {

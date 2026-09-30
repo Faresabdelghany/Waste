@@ -1209,6 +1209,12 @@ export function BusinessWorkspace({
   const formIsPrimary = commandSurface === undefined || commandSurface.primary === "form"
   const PrimarySurface = commandSurface && commandSurface.primary !== "form" ? commandSurface.primary : null
   const RowSurface = commandSurface?.rowActions
+  // A command replaces its row in the store: details with a row surface read
+  // the live row, so what the API answered shows at once.
+  const detailsRecord =
+    RowSurface && selectedRecord
+      ? (moduleRecords(workspace.id, activeModule.id).find((record) => record.id === selectedRecord.id) ?? selectedRecord)
+      : selectedRecord
   // Map Planning (2026-09-16) renders its own page below the header: no
   // search, filter, or table rows — the map owns its toolbar.
   const isMapPlanningView = workspace.id === "plan" && activeModule.id === "map-planning"
@@ -1509,14 +1515,19 @@ export function BusinessWorkspace({
   const mapPlanningRecords = useMemo(() => {
     if (!isMapPlanningView) return null
     return {
-      containers: moduleRecords("resources", "containers"),
+      // A server container carries no location until a placement's property
+      // gives it one (#184, slice 9b), so on the Pilot the map places the
+      // containers' fixtures, which carry the addresses it reads, until then.
+      containers: apiConfigured
+        ? [...(getModuleDefinition({ workspaceId: "resources", moduleId: "containers" })?.records ?? [])]
+        : moduleRecords("resources", "containers"),
       planningAreas: moduleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId),
       serviceAreas: moduleRecords("service-providers", "service-areas"),
       routes: moduleRecords("route-studio", "routes"),
       pickups: moduleRecords("route-studio", "pickups"),
       schemes: moduleRecords("route-studio", "schemes"),
     }
-  }, [isMapPlanningView, moduleRecords])
+  }, [apiConfigured, isMapPlanningView, moduleRecords])
   const containersModuleDefinition = getModuleDefinition({
     workspaceId: "resources",
     moduleId: "containers",
@@ -5535,18 +5546,18 @@ export function BusinessWorkspace({
       ) : (
         <RecordDetailsDialog
           module={activeModule}
-          record={selectedRecord}
+          record={detailsRecord}
           onClose={closeRecord}
           onAction={requestRecordAction}
           transitions={
-            selectedRecord ? offeredTransitions(workspace.id, activeModule, selectedRecord) : []
+            detailsRecord ? offeredTransitions(workspace.id, activeModule, detailsRecord) : []
           }
           showDeepLinks={showDeepLinks}
           onEdit={canEditRecords ? openEditRecord : undefined}
           onDelete={canDeleteRecords ? requestRecordDelete : undefined}
           showActions={canRunRecordActions}
           extraActions={selectedRecord ? schemeExtraActions(selectedRecord) : undefined}
-          commands={RowSurface && selectedRecord ? <RowSurface record={selectedRecord} /> : undefined}
+          commands={RowSurface && detailsRecord ? <RowSurface record={detailsRecord} /> : undefined}
           attention={
             isSchemesView && selectedRecord
               ? schemeRowsById.get(selectedRecord.id)?.attention

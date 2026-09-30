@@ -2,7 +2,9 @@
 // colour configured in Settings › Asset management; fractions the Settings
 // store does not define (the seeded Plastic and Metal containers, a
 // user-typed fraction) fall back to a stable hue from a fixed palette so a
-// legend swatch and its markers always agree. Pure data logic.
+// legend swatch and its markers always agree. On the Pilot, where that pane
+// is not offered and the fractions are master data carrying no colour (#181),
+// the colours stay the Settings store's defaults. Pure data logic.
 
 import { avalancheHash } from "@waste/domain/route-schemes/hash"
 
