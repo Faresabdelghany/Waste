@@ -35,6 +35,7 @@
 // that redeploys while the worker is still dialling gets a clean exit and
 // closed pools rather than Node's default 143 with the connections dropped.
 import { createDb, DEFAULT_POOL_MAX } from "@waste/db/client"
+import { QuotaEngine, quotaKnobs } from "@waste/routing/quota"
 import { providerFromEnv } from "@waste/routing/select"
 
 import { createApp } from "./app"
@@ -47,7 +48,11 @@ import { OUTBOX_DEAD_QUEUE } from "./outbox/subscribe"
 import { CHECK_TIMEOUT_MS, probePoolOptions } from "./readiness"
 
 const env = parseEnv(process.env)
-const routing = providerFromEnv({ ROUTING_PROVIDER: env.ROUTING_PROVIDER })
+// The routing provider behind the quota engine (#171): one per process, so one key's quota is spent in one place; the reserves and the pace are the Pilot's knobs, the Standard plan's figures where unset.
+const routing = new QuotaEngine(
+  providerFromEnv({ ROUTING_PROVIDER: env.ROUTING_PROVIDER, OPENROUTESERVICE_API_KEY: env.OPENROUTESERVICE_API_KEY }),
+  quotaKnobs({ directionsReserve: env.ROUTING_DIRECTIONS_RESERVE, optimisationReserve: env.ROUTING_OPTIMISATION_RESERVE, callsPerMinute: env.ROUTING_CALLS_PER_MINUTE }),
+)
 // The Pilot's knobs (#149), each the code's default where the environment
 // leaves it unset: the two pools' sizes (an unset knob is `max: undefined`,
 // which createDb reads as its default), and the intervals boss.ts applies.
@@ -78,6 +83,7 @@ async function boot() {
     now: () => new Date(),
     log: (message) => console.log(message),
     send: (name, data, options) => boss.send(name, data, options),
+    complete: (name, id, options) => boss.complete(name, id, undefined, options),
     routing,
     pollingIntervalSeconds: env.WORKER_POLLING_INTERVAL_SECONDS,
   })

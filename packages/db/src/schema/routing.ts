@@ -16,13 +16,22 @@
 // status, and the one structured failure reason is `superseded` — every
 // other reason is the provider's sentence, so the column has no closed list
 // (#132 §4).
-import { PLAN_SOLVERS, PLAN_STATUSES, PLAN_TRIPS } from "@waste/domain/routing/vocabulary"
+//
+// `routing_quota` (#171, migration 0014) is what the quota engine knows of
+// each request family — the provider's last reading and since when the
+// family is exhausted or its key refused — written by the worker after every
+// job that asked the provider and read by `GET /routing/quota` for the
+// office's banner. The key is one account every company shares; the row is
+// per company like every table (the tenant fence), so with the Pilot's one
+// company it is one row per provider and family, and a second company on
+// the same key is Gate B (#132 §1, ADR-0009).
+import { PLAN_SOLVERS, PLAN_STATUSES, PLAN_TRIPS, ROUTING_QUOTA_FAMILIES } from "@waste/domain/routing/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, date, integer, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
 import { oneOf, positive } from "./checks"
-import { id, projectScoped, recorded, timestamps } from "./columns"
+import { id, projectScoped, recorded, tenant, timestamps } from "./columns"
 import { pickup, route } from "./execution"
 import { geometry, validGeometry } from "./geometry"
 import { company, project } from "./organisation"
@@ -131,5 +140,33 @@ export const planLeg = wms.table(
     // A leg of nothing is a leg of zero metres, never a negative one; the totals' shape holds the same on the plan.
     check(tableObjectName(t.id.table, "measure_shape", "planLeg"), sql`${t.metres} >= 0 and ${t.seconds} >= 0`),
     tenantIndex(t, t.projectId),
+  ],
+)
+
+export const routingQuota = wms.table(
+  "routing_quota",
+  {
+    ...id,
+    ...tenant,
+    ...timestamps,
+    /** The provider the reading is of: `fake`, `openrouteservice`. */
+    provider: text().notNull(),
+    /** `directions` or `optimisation`: each family has its own daily quota (#132 §1). */
+    family: text().notNull(),
+    /** The provider's `x-ratelimit-remaining` and `x-ratelimit-limit`; null where it enforces none (the fake). */
+    remaining: integer(),
+    limit: integer(),
+    /** When the provider's daily window resets. */
+    resetAt: timestamp({ withTimezone: true }),
+    /** Since when the day's quota is spent (a 403 with rate-limit headers); cleared by the next answer. */
+    exhaustedAt: timestamp({ withTimezone: true }),
+    /** Since when the provider refuses the key (a 401, or a 403 without the headers); cleared by the next answer. */
+    keyRefusedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantUnique(t, t.provider, t.family),
+    oneOf(t.family, ROUTING_QUOTA_FAMILIES),
+    check(tableObjectName(t.id.table, "counts_shape", "routingQuota"), sql`(${t.remaining} is null or ${t.remaining} >= 0) and (${t.limit} is null or ${t.limit} >= 0)`),
   ],
 )

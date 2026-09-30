@@ -59,6 +59,28 @@ export function sendInTransaction(send: Send, tx: Tx, name: string, data: object
   return send(name, data, { ...options, db: inTransaction(tx) })
 }
 
+/** `boss.complete(name, id, undefined, options)` as the worker's instance has it: one job settled through the `db` it names. */
+export type Complete = (name: string, id: string, options: { db: Db }) => Promise<unknown>
+
+/**
+ * A running job hands its place to its successor inside `tx` (#171, #132
+ * §4's deferral): the job completed and the successor sent under the same
+ * singleton key, both through the caller's transaction, so they commit with
+ * the caller's rows — the Plan's `deferred_until` — or not at all. On an
+ * `exclusive` queue the running job itself holds its key until it is
+ * settled, which is why the relay's successor pattern (a `short` queue,
+ * where only a queued job counts) cannot be spelled as a plain send here;
+ * pg-boss settles a job through `{ db }` by design, and its own completion
+ * after the handler finds the job no longer active and updates nothing. Null
+ * when pg-boss still refused the successor, which only another job of the
+ * same key could cause.
+ */
+export async function succeedInTransaction(complete: Complete, send: Send, tx: Tx, running: { queue: string; id: string }, data: object, options: SendInTransactionOptions & { singletonKey: string }): Promise<string | null> {
+  const db = inTransaction(tx)
+  await complete(running.queue, running.id, { db })
+  return send(running.queue, data, { ...options, db })
+}
+
 /** A process's way of sending jobs without running pg-boss: the API's. */
 export type JobSender = {
   /** pg-boss's `send`, over the pool the sender was built on; use `inTransaction` for the `db` option, or `sendInTransaction`. Throws `QueueMissing` for a queue no worker has made. */
@@ -139,16 +161,18 @@ export function sendGenerateRoutes(send: Send, tx: Tx, run: GenerateRoutesData &
 export const LIVE_JOB_STATES = ["created", "retry", "active"] as const
 
 /**
- * Whether the generation job named by `jobId` — a column or a value, as text
- * — is still pg-boss's to run: a row of the generation queue in a live
- * state. The API role reads pg-boss's schema by migration 0011's grant; the
- * queue's table is partitioned by name, so the name is asked first. The one
- * place outside pg-boss that knows the job table's shape.
+ * Whether a job is still pg-boss's to run: a row of `queue` in a live state,
+ * named by its id — a column or a value, as text: the generation run's job —
+ * or by its singleton key: a Plan's routing job (#170, #171). The API role
+ * reads pg-boss's schema by migration 0011's grant; the queue's table is
+ * partitioned by name, so the name is asked first. The one place outside
+ * pg-boss that knows the job table's shape.
  */
-export function jobHeld(jobId: SQL): SQL {
+export function jobHeld(job: { queue: string } & ({ id: SQL } | { singletonKey: string })): SQL {
   const states = sql.join(
     LIVE_JOB_STATES.map((state) => sql`${state}`),
     sql`, `,
   )
-  return sql`exists (select 1 from ${sql.raw(PGBOSS_SCHEMA)}.job j where j.name = ${GENERATE_ROUTES_QUEUE} and j.id::text = ${jobId} and j.state in (${states}))`
+  const which = "id" in job ? sql`j.id::text = ${job.id}` : sql`j.singleton_key = ${job.singletonKey}`
+  return sql`exists (select 1 from ${sql.raw(PGBOSS_SCHEMA)}.job j where j.name = ${job.queue} and ${which} and j.state in (${states}))`
 }

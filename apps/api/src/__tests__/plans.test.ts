@@ -14,11 +14,13 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { Page } from "@waste/contracts/pagination"
-import { Plan, PlanDetail } from "@waste/contracts/plans"
+import { OptimiseAnswer, Plan, PlanDetail } from "@waste/contracts/plans"
+import { RoutingQuota } from "@waste/contracts/routing-quota"
 import { RouteDetail } from "@waste/contracts/routes"
 import { createDb, type Database } from "@waste/db/client"
-import { ROUTING_MEASURE_QUEUE, ROUTING_OPTIMISE_QUEUE, type RoutingJobData } from "@waste/db/commands/plans"
-import { plan, planLeg, planStop } from "@waste/db/schema/routing"
+import { activateSolved, ROUTING_MEASURE_QUEUE, ROUTING_OPTIMISE_QUEUE, type RoutingJobData } from "@waste/db/commands/plans"
+import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
+import { withCompany } from "@waste/db/tenant"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { FakeProvider } from "@waste/routing/fake"
 import { eq, sql } from "drizzle-orm"
@@ -37,6 +39,8 @@ const database = databaseUnderTest()
 const owner = ownerUnderTest()
 const MODULE = "route-studio.routes"
 const PlanPage = Page(Plan)
+/** What an interactive routing job is sent at: ahead of every batch job (@waste/domain/routing/jobs). */
+const INTERACTIVE_PRIORITY = 2_000_000
 
 describe("the Plan endpoints and the manual reorder", { skip: database.skip || owner.skip }, () => {
   let pool: Database
@@ -104,8 +108,8 @@ describe("the Plan endpoints and the manual reorder", { skip: database.skip || o
     return PlanPage.parse(await response.json())
   }
   const jobsFor = async (queue: string, planId: string) => {
-    const rows = await ownerPool.db.execute<{ data: RoutingJobData; singleton_key: string | null }>(
-      sql`select data, singleton_key from ${sql.raw(PGBOSS_SCHEMA)}.job where name = ${queue} and data ->> 'planId' = ${planId}`,
+    const rows = await ownerPool.db.execute<{ data: RoutingJobData; singleton_key: string | null; priority: number }>(
+      sql`select data, singleton_key, priority from ${sql.raw(PGBOSS_SCHEMA)}.job where name = ${queue} and data ->> 'planId' = ${planId}`,
     )
     return rows
   }
@@ -135,7 +139,9 @@ describe("the Plan endpoints and the manual reorder", { skip: database.skip || o
     const jobs = await jobsFor(ROUTING_MEASURE_QUEUE, plans.items[0].id)
     assert.equal(jobs.length, 1, "one measurement waits on the queue")
     assert.equal(jobs[0].data.companyId, a.companyId)
-    assert.ok(jobs[0].singleton_key, "keyed by the Plan's id")
+    assert.equal(jobs[0].singleton_key, plans.items[0].id, "keyed by the Plan's id")
+    assert.equal(jobs[0].data.class, "interactive", "a dispatcher waits on it (#132 §1)")
+    assert.equal(jobs[0].priority, INTERACTIVE_PRIORITY, "ahead of every batch job")
   })
 
   test("the same order twice is one Plan and one job; a second, different order is a second Plan, and the first stays as history", async () => {
@@ -153,12 +159,15 @@ describe("the Plan endpoints and the manual reorder", { skip: database.skip || o
   })
 
   test("optimise queues an optimiser Plan that is not yet active, 202; a second click answers the same Plan, 200, and one job waits", async () => {
-    const seeded = await seedRoute(pool, a, fleet, ex, {})
+    const seeded = await seedRoute(pool, a, fleet, ex, { depotId: fleet.depots.nordhavn.id })
     const first = await olivia(`/routes/${seeded.id}/optimise`, { method: "POST" })
     assert.equal(first.status, 202, JSON.stringify(await first.clone().json()))
-    const created = Plan.parse(await first.json())
+    const created = OptimiseAnswer.parse(await first.json())
     assert.equal(created.solver, "optimiser")
     assert.equal(created.status, "calculating")
+    assert.equal(created.fallback, null, "the optimiser took it")
+    const [job] = await jobsFor(ROUTING_OPTIMISE_QUEUE, created.id)
+    assert.deepEqual([job.data.class, job.priority], ["interactive", INTERACTIVE_PRIORITY])
     const detail = await detailOf(seeded.id)
     assert.equal(detail.activePlan, null, "an optimiser Plan activates atomically on ready (#124 §2), not before")
     const second = await olivia(`/routes/${seeded.id}/optimise`, { method: "POST" })
@@ -168,7 +177,7 @@ describe("the Plan endpoints and the manual reorder", { skip: database.skip || o
   })
 
   test("a ready Plan of the same fingerprint is re-activated without a job, and the read follows its stops", async () => {
-    const seeded = await seedRoute(pool, a, fleet, ex, {})
+    const seeded = await seedRoute(pool, a, fleet, ex, { depotId: fleet.depots.nordhavn.id })
     const first = await olivia(`/routes/${seeded.id}/optimise`, { method: "POST" })
     assert.equal(first.status, 202)
     const created = Plan.parse(await first.json())
@@ -187,6 +196,94 @@ describe("the Plan endpoints and the manual reorder", { skip: database.skip || o
     assert.equal(detail.activePlan?.stale, false)
     assert.deepEqual(detail.pickups.map((stop) => stop.id), solved, "the read orders by the solved sequence")
     assert.equal((await plansOf(seeded.id)).items.length, 1)
+  })
+
+  test("a route that names no depot is measured as a baseline instead, and the answer says why: no-depot", async () => {
+    const seeded = await seedRoute(pool, a, fleet, ex, {})
+    const response = await olivia(`/routes/${seeded.id}/optimise`, { method: "POST" })
+    assert.equal(response.status, 202, JSON.stringify(await response.clone().json()))
+    const answered = OptimiseAnswer.parse(await response.json())
+    assert.deepEqual([answered.solver, answered.status, answered.fallback], ["baseline", "calculating", "no-depot"])
+    assert.equal((await detailOf(seeded.id)).activePlan?.id, answered.id, "a baseline is active from creation (#124 §2)")
+    assert.equal((await jobsFor(ROUTING_MEASURE_QUEUE, answered.id)).length, 1, "measured, on the measurement queue")
+    const again = OptimiseAnswer.parse(await (await olivia(`/routes/${seeded.id}/optimise`, { method: "POST" })).json())
+    assert.deepEqual([again.id, again.fallback], [answered.id, "no-depot"], "the same request answers the same Plan and the same reason")
+  })
+
+  test("the optimiser's fingerprint keys the route's depot, which orders its stops: another depot is another Plan", async () => {
+    const seeded = await seedRoute(pool, a, fleet, ex, { depotId: fleet.depots.nordhavn.id })
+    const first = OptimiseAnswer.parse(await (await olivia(`/routes/${seeded.id}/optimise`, { method: "POST" })).json())
+    // A second depot of the route's own project, elsewhere in the city: the route moves to it.
+    const elsewhere = testId()
+    await ownerPool.db.execute(
+      sql`insert into wms.depot (id, company_id, project_id, code, name, address, location, ownership, status)
+          select ${elsewhere}, company_id, project_id, 'DEP-SYD', 'Sydhavn depot', 'Sydhavnsgade 1', extensions.st_geomfromgeojson('{"type":"Point","coordinates":[12.5467,55.6508]}'), ownership, status
+          from wms.depot where id = ${fleet.depots.nordhavn.id}`,
+    )
+    await ownerPool.db.execute(sql`update wms.route set depot_id = ${elsewhere} where id = ${seeded.id}`)
+    const moved = await olivia(`/routes/${seeded.id}/optimise`, { method: "POST" })
+    assert.equal(moved.status, 202, "a new request, not the first answered again")
+    assert.notEqual(OptimiseAnswer.parse(await moved.json()).id, first.id)
+  })
+
+  describe("a later order wins over a waiting optimisation (#171, amending #124 §2)", () => {
+    const planRow = async (id: string) => (await ownerPool.db.select().from(plan).where(eq(plan.id, id)))[0]
+    /** A Plan's result written by hand, the worker's part: the stops in its order, the totals, ready. */
+    const solve = async (made: { id: string; projectId: string; routeId: string }, order: readonly string[]) => {
+      await ownerPool.db
+        .insert(planStop)
+        .values(order.map((pickupId, index) => ({ companyId: a.companyId, projectId: made.projectId, routeId: made.routeId, planId: made.id, pickupId, position: index + 1 })))
+        .onConflictDoNothing()
+      await ownerPool.db.update(plan).set({ status: "ready", distanceMetres: 9_000, durationSeconds: 900, deferredUntil: null }).where(eq(plan.id, made.id))
+    }
+
+    test("an earlier order re-activated from the cache supersedes the optimisation still waiting on the route, at once", async () => {
+      const seeded = await seedRoute(pool, a, fleet, ex, { depotId: fleet.depots.nordhavn.id })
+      const reversed = [...seeded.pickupIds].reverse()
+      assert.equal((await olivia(`/routes/${seeded.id}/pickup-order`, { method: "PUT", body: { pickupIds: reversed } })).status, 200)
+      const [manual] = (await plansOf(seeded.id)).items
+      await solve(manual, reversed)
+      const waiting = OptimiseAnswer.parse(await (await olivia(`/routes/${seeded.id}/optimise`, { method: "POST" })).json())
+      assert.equal(waiting.solver, "optimiser")
+      // The dispatcher goes back to the order they had: the cache re-activates it without a new Plan, and without a newer id.
+      assert.equal((await olivia(`/routes/${seeded.id}/pickup-order`, { method: "PUT", body: { pickupIds: reversed } })).status, 200)
+      assert.equal((await detailOf(seeded.id)).activePlan?.id, manual.id)
+      const superseded = await planRow(waiting.id)
+      assert.deepEqual([superseded.status, superseded.failureReason, superseded.deferredUntil], ["failed", "superseded", null], "its answer would override the later order; it never will")
+    })
+
+    test("a fresh Optimise after the route moved on is a new request, not the superseded one answered again", async () => {
+      const seeded = await seedRoute(pool, a, fleet, ex, { depotId: fleet.depots.nordhavn.id })
+      const first = OptimiseAnswer.parse(await (await olivia(`/routes/${seeded.id}/optimise`, { method: "POST" })).json())
+      assert.equal((await olivia(`/routes/${seeded.id}/pickup-order`, { method: "PUT", body: { pickupIds: [...seeded.pickupIds].reverse() } })).status, 200)
+      assert.equal((await planRow(first.id)).failureReason, "superseded")
+      const again = await olivia(`/routes/${seeded.id}/optimise`, { method: "POST" })
+      assert.equal(again.status, 202, "a failed match is retried with a new Plan")
+      const fresh = OptimiseAnswer.parse(await again.json())
+      assert.notEqual(fresh.id, first.id)
+      assert.equal((await jobsFor(ROUTING_OPTIMISE_QUEUE, fresh.id)).length, 1)
+    })
+
+    test("a waiting optimisation the optimiser's own newer answer has passed is failed by it, so the same request again is a new Plan", async () => {
+      const seeded = await seedRoute(pool, a, fleet, ex, { depotId: fleet.depots.nordhavn.id })
+      const older = OptimiseAnswer.parse(await (await olivia(`/routes/${seeded.id}/optimise`, { method: "POST" })).json())
+      // The stops move, a second request answers and becomes active as the worker would make it, and the stops move back.
+      const [moved] = await ownerPool.db.execute<{ location: string }>(sql`select extensions.st_asgeojson(location) as location from wms.property where id = ${ex.properties.havnegade.id}`)
+      await ownerPool.db.execute(sql`update wms.property set location = extensions.st_geomfromgeojson('{"type":"Point","coordinates":[12.59,55.69]}') where id = ${ex.properties.havnegade.id}`)
+      try {
+        const newer = OptimiseAnswer.parse(await (await olivia(`/routes/${seeded.id}/optimise`, { method: "POST" })).json())
+        assert.notEqual(newer.id, older.id, "another request, another fingerprint")
+        await solve(newer, seeded.pickupIds)
+        // Made active as the worker makes an answer active.
+        await withCompany(pool.db, a.companyId, (tx) => activateSolved(tx, { companyId: a.companyId, routeId: seeded.id, planId: newer.id }))
+      } finally {
+        await ownerPool.db.execute(sql`update wms.property set location = extensions.st_geomfromgeojson(${moved.location}) where id = ${ex.properties.havnegade.id}`)
+      }
+      assert.equal((await planRow(older.id)).failureReason, "superseded")
+      const again = await olivia(`/routes/${seeded.id}/optimise`, { method: "POST" })
+      assert.equal(again.status, 202, "a failed match is retried with a new Plan")
+      assert.notEqual(OptimiseAnswer.parse(await again.json()).id, older.id)
+    })
   })
 
   test("GET /plans/:id answers the legs in driving order; another company reads a 404 and an ungranted role a 403", async () => {
@@ -280,6 +377,34 @@ describe("the Plan endpoints and the manual reorder", { skip: database.skip || o
     assert.notEqual(detail.activePlan?.id, made.id, "the old Plan's stops are dead ids; replaying it would answer the baseline while claiming the order")
     assert.equal(detail.activePlan?.status, "calculating")
     assert.deepEqual(detail.pickups.slice(0, 3).map((stop) => stop.id), order, "the submitted order holds")
+  })
+
+  describe("GET /routing/quota (#132 §5)", () => {
+    test("answers the provider and the caller's company's rows in the vocabulary's order; another company reads its own, and none before its first call", async () => {
+      await withCompany(pool.db, a.companyId, (tx) =>
+        tx.insert(routingQuota).values([
+          { companyId: a.companyId, provider: "fake", family: "optimisation", remaining: 0, limit: 500, resetAt: new Date("2026-10-01T03:00:00.000Z"), exhaustedAt: new Date("2026-10-01T01:12:00.000Z") },
+          { companyId: a.companyId, provider: "fake", family: "directions", remaining: 1_480, limit: 2_000, resetAt: new Date("2026-10-01T03:00:00.000Z") },
+          { companyId: a.companyId, provider: "openrouteservice", family: "directions", remaining: 12, limit: 2_000 },
+        ]),
+      )
+      const response = await olivia("/routing/quota")
+      assert.equal(response.status, 200)
+      const quota = RoutingQuota.parse(await response.json())
+      assert.equal(quota.provider, "fake", "the provider this deployment routes with; another provider's rows are not its readings")
+      assert.deepEqual(
+        quota.families.map((family) => [family.family, family.remaining, family.limit, family.exhaustedAt, family.keyRefusedAt]),
+        [
+          ["directions", 1_480, 2_000, null, null],
+          ["optimisation", 0, 500, "2026-10-01T01:12:00.000Z", null],
+        ],
+      )
+      assert.deepEqual(RoutingQuota.parse(await (await other("/routing/quota")).json()), { provider: "fake", families: [] })
+    })
+
+    test("is route-studio.routes view: a role without it reads a 403", async () => {
+      assert.equal((await ungranted("/routing/quota")).status, 403)
+    })
   })
 
   test("a stop the Plan does not name reads stale and appends in baseline order; the sequence never loses a stop", async () => {

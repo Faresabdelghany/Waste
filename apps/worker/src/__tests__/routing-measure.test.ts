@@ -17,13 +17,13 @@ import { depot, unloadingStation } from "@waste/db/schema/places"
 import { plan, planLeg, planStop } from "@waste/db/schema/routing"
 import { withCompany } from "@waste/db/tenant"
 import { planFingerprint } from "@waste/domain/routing/fingerprint"
-import { FakeProvider } from "@waste/routing/fake"
 import { asc, eq } from "drizzle-orm"
 
 import type { JobContext } from "../jobs/definition"
 import { routingMeasure, ROUTING_MEASURE_QUEUE, type RoutingMeasureData } from "../jobs/routing-measure"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { dropConsumerTenant, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "./consumer-fixtures"
+import { fakeRouting, settlesNothing } from "./routing-context"
 
 const database = databaseUnderTest()
 const owner = ownerUnderTest()
@@ -51,7 +51,8 @@ describe("routing.measure through the fake provider", { skip: database.skip || o
     now: () => new Date("2026-10-05T04:00:00Z"),
     log: (message) => void lines.push(message),
     send: async () => null,
-    routing: new FakeProvider(),
+    complete: settlesNothing,
+    routing: fakeRouting(),
   })
 
   before(async () => {
@@ -74,7 +75,7 @@ describe("routing.measure through the fake provider", { skip: database.skip || o
     await api?.close()
   })
 
-  /** A calculating Plan with its stops written at creation, the way #124 §1 has it, over the seeded route's pickups in position order. */
+  /** A calculating Plan with its stops written at creation, the way #124 §1 has it, over the seeded route's pickups in position order — and, being a known sequence, the route's active Plan from creation (#124 §2), as a sender makes it. */
   async function seedPlan(seeded: SeededRoute, trip: "full" | "stops-only", solver: "baseline" | "optimiser" = "baseline"): Promise<string> {
     const planId = testId()
     const stops = seeded.pickupIds
@@ -91,6 +92,7 @@ describe("routing.measure through the fake provider", { skip: database.skip || o
         fingerprint: planFingerprint({ provider: "fake", profile: "driving-hgv", solver, depot: trip === "full" ? DEPOT : null, station: trip === "full" ? STATION : null, stops: [PARKVEJ, HAVNEGADE] }),
       })
       await tx.insert(planStop).values(stops.map((pickupId, index) => ({ id: testId(), companyId: tenant.companyId, projectId: tenant.projectId, routeId: seeded.id, planId, pickupId, position: index + 1 })))
+      if (solver !== "optimiser") await tx.update(route).set({ activePlanId: planId }).where(eq(route.id, seeded.id))
     })
     return planId
   }
@@ -193,12 +195,14 @@ describe("routing.measure through the fake provider", { skip: database.skip || o
     assert.ok(lines.some((line) => /is not there|writes nothing|no such plan/i.test(line)))
   })
 
-  test("the queue is #132's: exclusive under the Plan-id singleton, ten minutes to run, done jobs kept a week", () => {
+  test("the queue is #132's: exclusive under the Plan-id singleton, ten minutes to run, done jobs kept a week, a queued one a fortnight, settled per job", () => {
     assert.equal(routingMeasure.queue, "routing.measure")
+    assert.deepEqual(routingMeasure.workOptions, { perJobResults: true })
     assert.deepEqual(routingMeasure.queueOptions, {
       policy: "exclusive",
       expireInSeconds: 600,
       deleteAfterSeconds: 7 * 24 * 60 * 60,
+      retentionSeconds: 14 * 24 * 60 * 60,
       retryLimit: 3,
       retryDelay: 30,
       retryBackoff: true,

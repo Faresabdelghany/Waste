@@ -6,11 +6,13 @@
 // accepts, every scheduled job carrying its data, every consumer's queue one
 // the relay publishes.
 //
-// Thirteen entries today, seven jobs and two consumers. Planning's two (#97
+// Fourteen entries today, seven jobs and two consumers. Planning's two (#97
 // part B): `planning.generate-routes`, one run of generation over a scheme and
 // a window, and the nightly `planning.plan-ahead`, which sweeps for the
-// schemes to run it over. Routing's `routing.measure` (#169): a baseline or
-// manual Plan's legs and totals through the routing provider. Execution's
+// schemes to run it over. Routing's two (#169, #171): `routing.measure`, a
+// baseline or manual Plan's legs and totals, and `routing.optimise`, an
+// optimiser Plan's order, both through the routing provider and its quota
+// engine. Execution's
 // `execution.relay-outbox` (#104 part C), which sends the outbox to the
 // `outbox.<kind>` queues. Resolution's consumer (#109 part B), four entries
 // on the queues of the kinds that become a ticket. And Finance's (#112 part
@@ -26,9 +28,10 @@ import { planAheadJob } from "./plan-ahead"
 import { recordBillableEvents } from "./record-billable-events"
 import { relayOutbox } from "./relay-outbox"
 import { routingMeasure } from "./routing-measure"
+import { routingOptimise } from "./routing-optimise"
 import { runScheduledBilling } from "./run-billing"
 
-export const JOBS: readonly AnyJob[] = [heartbeat, generateRoutes, planAheadJob, routingMeasure, relayOutbox, ...openTickets, ...recordBillableEvents, runScheduledBilling]
+export const JOBS: readonly AnyJob[] = [heartbeat, generateRoutes, planAheadJob, routingMeasure, routingOptimise, relayOutbox, ...openTickets, ...recordBillableEvents, runScheduledBilling]
 
 export type { AnyJob, JobContext, JobDefinition, JobQueueOptions, PublishedQueue } from "./definition"
 export { defineJob } from "./definition"

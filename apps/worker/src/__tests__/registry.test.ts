@@ -109,6 +109,7 @@ describe("the job registry", () => {
       "planning.generate-routes",
       "planning.plan-ahead",
       "routing.measure",
+      "routing.optimise",
       "execution.relay-outbox",
       ...RESOLUTION_KINDS.map(outboxQueue),
       ...FINANCE_EVENT_KINDS.map(outboxQueue),
@@ -163,7 +164,7 @@ describe("the job registry", () => {
     assert.ok(!runScheduledBilling.queue.startsWith("outbox."), "sent by the schedule, never by the relay")
   })
 
-  test("publishes each queue once, and the queues a job publishes and nobody works are the outbox kinds no consumer takes, the dead-letter queue, and routing.optimise until #171 works it", () => {
+  test("publishes each queue once, and the queues a job publishes and nobody works are the outbox kinds no consumer takes and the dead-letter queue; routing.optimise has its worker (#171)", () => {
     const worked = new Set(JOBS.map((job) => job.queue))
     const published = JOBS.flatMap((job) => (job.publishes ?? []).map((queue) => queue.queue))
     assert.deepEqual([...new Set(published)], published, "each published queue once")
@@ -172,8 +173,8 @@ describe("the job registry", () => {
     assert.deepEqual(consumed.sort(), [...RESOLUTION_KINDS, ...FINANCE_EVENT_KINDS].map(outboxQueue).sort())
     const waiting = published.filter((queue) => !worked.has(queue))
     assert.ok(waiting.includes(OUTBOX_DEAD_QUEUE), "the dead-letter queue is published and worked by nobody")
-    assert.ok(waiting.includes(ROUTING_OPTIMISE_QUEUE), "the API sends optimiser Plans here (#170); a job waits until #171's worker takes the queue")
-    assert.equal(waiting.length - 2, OUTBOX_KINDS.length - RESOLUTION_KINDS.length - FINANCE_EVENT_KINDS.length, "the kinds nobody consumes yet")
+    assert.ok(worked.has(ROUTING_OPTIMISE_QUEUE) && !published.includes(ROUTING_OPTIMISE_QUEUE), "the API sends optimiser Plans (#170) to a queue with a worker of its own (#171), which nobody publishes to hold it open")
+    assert.equal(waiting.length - 1, OUTBOX_KINDS.length - RESOLUTION_KINDS.length - FINANCE_EVENT_KINDS.length, "the kinds nobody consumes yet")
   })
 
   test("updatableOptions drops the policy and nothing else, the dead letter among what it keeps", () => {

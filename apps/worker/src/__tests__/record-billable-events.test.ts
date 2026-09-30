@@ -36,7 +36,6 @@ import { pickup } from "@waste/db/schema/execution"
 import { billableEvent, billingRun } from "@waste/db/schema/finance"
 import { ticket } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
-import { FakeProvider } from "@waste/routing/fake"
 import type { OutboxKind } from "@waste/domain/execution/vocabulary"
 import type { Job } from "pg-boss"
 import { and, asc, eq } from "drizzle-orm"
@@ -46,6 +45,7 @@ import { FINANCE_EVENT_KINDS, recordBillableEvents, type PublishedEvent, type Re
 import { outboxQueue } from "../outbox/subscribe"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { at, dropFinanceTenant, FIXTURE_DAY, movePickup, placeBin, seedCompletedRoute, seedFinanceTenant, seedTicket, testId, type FinanceTenant } from "./finance-tenant"
+import { fakeRouting, settlesNothing } from "./routing-context"
 
 const database = databaseUnderTest()
 const owner = ownerUnderTest()
@@ -66,7 +66,8 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     now: () => NOON,
     log: (message) => void lines.push(message),
     send: async () => null,
-    routing: new FakeProvider(),
+    complete: settlesNothing,
+    routing: fakeRouting(),
   })
 
   before(async () => {

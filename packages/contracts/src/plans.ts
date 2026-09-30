@@ -12,7 +12,7 @@
 // reads into its CHECKs, so the two cannot drift.
 import * as z from "zod"
 
-import { PLAN_SOLVERS, PLAN_STATUSES, PLAN_TRIPS } from "@waste/domain/routing/vocabulary"
+import { OPTIMISE_FALLBACKS, PLAN_SOLVERS, PLAN_STATUSES, PLAN_TRIPS } from "@waste/domain/routing/vocabulary"
 
 import { IsoDate, IsoDateTime } from "./dates"
 import { LineString } from "./geojson"
@@ -55,6 +55,22 @@ export const PlanLeg = z.object({
   seconds: NonNegativeInt,
 })
 export type PlanLeg = z.infer<typeof PlanLeg>
+
+export const OptimiseFallback = z.enum(OPTIMISE_FALLBACKS)
+export type OptimiseFallback = z.infer<typeof OptimiseFallback>
+
+/**
+ * `POST /routes/{id}/optimise`'s answer (#171): the Plan the request got,
+ * and, when that is a `baseline` measurement rather than the optimiser's
+ * order, the rule that sent it there — more open stops than one optimisation
+ * takes, or no depot to order from — so the office can say why the route
+ * was not optimised. Null when the optimiser took it.
+ */
+export const OptimiseAnswer = z.object({
+  ...Plan.shape,
+  fallback: OptimiseFallback.nullable(),
+})
+export type OptimiseAnswer = z.infer<typeof OptimiseAnswer>
 
 /** `GET /plans/{id}`: the Plan with its legs, fetched only when a map draws. */
 export const PlanDetail = z.object({

@@ -16,7 +16,6 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { createDb, type Database } from "@waste/db/client"
-import { FakeProvider } from "@waste/routing/fake"
 import { migrateDatabase } from "@waste/db/migrate"
 import { PGBOSS_SCHEMA, PGBOSS_SCHEMA_VERSION } from "@waste/db/sql/pgboss"
 import { PgBoss } from "pg-boss"
@@ -27,10 +26,10 @@ import { heartbeat } from "../jobs/heartbeat"
 import { OPEN_TICKETS_QUEUE_OPTIONS, openTickets } from "../jobs/open-tickets"
 import { RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, recordBillableEvents } from "../jobs/record-billable-events"
 import { relayOutbox } from "../jobs/relay-outbox"
-import { ROUTING_OPTIMISE_QUEUE } from "@waste/db/commands/plans"
 import { CONSUMED_RETENTION_SECONDS, DEAD_LETTER_RETENTION_SECONDS, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUES, outboxQueue, UNCONSUMED_RETENTION_SECONDS, type RelayedEvent } from "../outbox/subscribe"
 import { checkBoss } from "../readiness"
 import { ownerUnderTest, withDatabaseName } from "./database"
+import { fakeRouting } from "./routing-context"
 import { until } from "./until"
 import { REFUSED_URL } from "./unreachable"
 
@@ -51,7 +50,8 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     now: () => new Date("2026-09-25T12:00:00Z"),
     log: (message) => void lines.push(message),
     send: (queue, data, options) => running!.boss.send(queue, data, options),
-    routing: new FakeProvider(),
+    complete: (queue, id, options) => running!.boss.complete(queue, id, undefined, options),
+    routing: fakeRouting(),
   })
 
   before(async () => {
@@ -87,8 +87,8 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     assert.deepEqual(running.queues, JOBS.map((job) => job.queue))
     assert.deepEqual(
       running.published,
-      [ROUTING_OPTIMISE_QUEUE, OUTBOX_DEAD_QUEUE, ...OUTBOX_QUEUES.map((queue) => queue.queue)],
-      "routing.optimise (the API sends, #171's worker works), then the dead-letter queue and the relay's outbox.<kind> queues, each once",
+      [OUTBOX_DEAD_QUEUE, ...OUTBOX_QUEUES.map((queue) => queue.queue)],
+      "the dead-letter queue and the relay's outbox.<kind> queues, each once; routing.optimise is a worked queue since #171",
     )
     assert.equal(await boss.schemaVersion(), PGBOSS_SCHEMA_VERSION)
     const queues = await boss.getQueues([...running.queues, ...running.published])

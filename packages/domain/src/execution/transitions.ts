@@ -63,6 +63,14 @@ export const hasNotRun = (label: string): string => `Route ${label} has not run`
 /** An office command refused because the route is running, with what that means for it: "Route RC-1042 is active; its order is frozen". */
 export const activeAnd = (label: string, consequence: string): string => `Route ${label} is active; ${consequence}`
 
+/**
+ * Whether the office may still change the route's order (ADR-0002's freeze):
+ * before it runs, `planned` or `ready`. The office's reorder and Optimise are
+ * refused otherwise (the API's `requireNotStarted` says which way), and an
+ * optimiser's answer is never made active on a route past it (#171).
+ */
+export const orderIsOpen = (status: RouteStatus): boolean => status === "planned" || status === "ready"
+
 /** The one place the route machine is spelled: status by status, what each command does. */
 export function routeTransition(status: RouteStatus, command: RouteCommand, label: string): Transition<RouteStatus> {
   switch (status) {

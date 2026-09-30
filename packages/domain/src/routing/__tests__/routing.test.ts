@@ -1,9 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { activeOnCreation, executionOrder, OPTIMISER_MAX_STOPS, planIsStale, tripOf } from "../plans"
+import { activeOnCreation, executionOrder, isSuperseded, OPTIMISER_MAX_STOPS, optimiseSolver, planIsStale, tripOf } from "../plans"
 import { FINGERPRINT_DECIMALS, planFingerprint, roundCoordinate } from "../fingerprint"
-import { PLAN_SOLVERS, PLAN_STATUSES, PLAN_TRIPS, ROUTING_JOB_CLASSES, ROUTING_VOCABULARIES, SUPERSEDED } from "../vocabulary"
+import { routingJobPriority } from "../jobs"
+import { OPTIMISE_FALLBACKS, PLAN_SOLVERS, PLAN_STATUSES, PLAN_TRIPS, ROUTING_JOB_CLASSES, ROUTING_QUOTA_FAMILIES, ROUTING_VOCABULARIES, SUPERSEDED } from "../vocabulary"
 
 describe("the routing vocabularies", () => {
   test("every value is a kebab-case token, fit for a CHECK literal and a z.enum member", () => {
@@ -20,6 +21,62 @@ describe("the routing vocabularies", () => {
     assert.deepEqual(PLAN_TRIPS, ["full", "stops-only"])
     assert.deepEqual(ROUTING_JOB_CLASSES, ["interactive", "batch"])
     assert.equal(SUPERSEDED, "superseded")
+    assert.deepEqual(ROUTING_QUOTA_FAMILIES, ["directions", "optimisation"])
+    assert.deepEqual(OPTIMISE_FALLBACKS, ["too-many-stops", "no-depot"])
+  })
+})
+
+describe("which solver an Optimise request gets (#124 §4, #171)", () => {
+  test("fifty open stops or fewer, from a depot: the optimiser, no fallback", () => {
+    assert.deepEqual(optimiseSolver({ openStops: 50, hasDepot: true }), { solver: "optimiser", fallback: null })
+    assert.deepEqual(optimiseSolver({ openStops: 1, hasDepot: true }), { solver: "optimiser", fallback: null })
+  })
+
+  test("more than fifty: a baseline measurement, and the token that says why", () => {
+    assert.deepEqual(optimiseSolver({ openStops: 51, hasDepot: true }), { solver: "baseline", fallback: "too-many-stops" })
+  })
+
+  test("a route that names no depot: a baseline, since the optimiser orders from the depot", () => {
+    assert.deepEqual(optimiseSolver({ openStops: 12, hasDepot: false }), { solver: "baseline", fallback: "no-depot" })
+  })
+
+  test("both at once reads the size first, the older of the two rules", () => {
+    assert.deepEqual(optimiseSolver({ openStops: 80, hasDepot: false }), { solver: "baseline", fallback: "too-many-stops" })
+  })
+})
+
+describe("supersession (#132 §4, amending #124 §2 for the optimiser)", () => {
+  const older = "01900000-0000-7000-8000-000000000001"
+  const plan = "01900000-0000-7000-8000-000000000002"
+  const newer = "01900000-0000-7000-8000-000000000003"
+
+  test("a measurement is superseded once its Plan is not the route's active one, whoever replaced it", () => {
+    assert.equal(isSuperseded({ solver: "manual", planId: plan, activePlanId: plan }), false)
+    assert.equal(isSuperseded({ solver: "manual", planId: plan, activePlanId: newer }), true)
+    assert.equal(isSuperseded({ solver: "baseline", planId: plan, activePlanId: older }), true)
+    assert.equal(isSuperseded({ solver: "baseline", planId: plan, activePlanId: null }), true)
+  })
+
+  test("an optimiser Plan, never active before it is ready, is superseded only by an active Plan newer than itself: a later order wins", () => {
+    assert.equal(isSuperseded({ solver: "optimiser", planId: plan, activePlanId: null }), false)
+    assert.equal(isSuperseded({ solver: "optimiser", planId: plan, activePlanId: older }), false)
+    assert.equal(isSuperseded({ solver: "optimiser", planId: plan, activePlanId: newer }), true)
+  })
+})
+
+describe("routing job priority (#132 §1: the class first, then batch by the nearest operating date)", () => {
+  test("every interactive job runs before any batch job, whatever the dates", () => {
+    const interactive = routingJobPriority({ class: "interactive", operatingDate: "2026-11-30" })
+    assert.equal(interactive, 2_000_000)
+    assert.ok(interactive > routingJobPriority({ class: "batch", operatingDate: "1970-01-02" }))
+    assert.equal(routingJobPriority({ class: "interactive", operatingDate: "2026-10-02" }), interactive)
+  })
+
+  test("within batch, the earlier operating date runs first: one step lower per day, counted from the date alone", () => {
+    // 2026-10-01 is day 20 727 of the Unix epoch.
+    assert.equal(routingJobPriority({ class: "batch", operatingDate: "2026-10-01" }), 979_273)
+    assert.equal(routingJobPriority({ class: "batch", operatingDate: "2026-10-02" }), 979_272)
+    assert.equal(routingJobPriority({ class: "batch", operatingDate: "2026-10-08" }), 979_266)
   })
 })
 
