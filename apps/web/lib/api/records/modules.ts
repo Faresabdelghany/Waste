@@ -9,7 +9,8 @@
 //
 // Switching a module is adding it here and, where the wire does not carry
 // what the prototype's form says, a mapping under records/. The store reads
-// this list and nothing else to decide.
+// this list, narrowed to what the person's grants let them view
+// (`viewableModules`), and nothing else to decide.
 import type { WorkspaceId } from "@/lib/data/business-modules"
 
 import { moduleKeyOf, type ServerModule } from "./adapter"
@@ -35,3 +36,16 @@ export function isServerBacked(workspaceId: WorkspaceId, moduleId: string): bool
 
 /** The `workspace.module` keys switched so far, in load order. */
 export const SERVER_MODULE_KEYS: readonly string[] = SERVER_MODULES.map((module) => moduleKeyOf(module.workspaceId, module.moduleId))
+
+/**
+ * The modules a person's grants let the store read, in the order given: those
+ * whose key — the store's key is the API's module key — the `/me` role grants
+ * `view` on (the API normalises `view` wherever anything is granted, so it is
+ * the one action to look for). A module the grants do not cover is never
+ * requested and stays idle, so nobody meets a refusal for a pane they cannot
+ * open — a driver on the Driver App least of all (Issue #145).
+ */
+export function viewableModules(grants: readonly { moduleKey: string; actions: readonly string[] }[], modules: readonly ServerModule[]): ServerModule[] {
+  const viewed = new Set<string>(grants.filter((grant) => grant.actions.includes("view")).map((grant) => grant.moduleKey))
+  return modules.filter((module) => viewed.has(moduleKeyOf(module.workspaceId, module.moduleId)))
+}
