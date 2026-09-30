@@ -21,6 +21,7 @@ import { isServerBacked } from "@/lib/api/records/modules"
 import { AllocateSurface, AllocationCommandsSurface } from "./allocation-surfaces"
 import { AddContainerSurface, ContainerCommandsSurface } from "./container-surfaces"
 import { AddPropertyGroupSurface, AddPropertySurface, AddSharedPointSurface, PropertyCommandsSurface, PropertyGroupCommandsSurface, SharedPointCommandsSurface } from "./place-surfaces"
+import { LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface } from "./route-surfaces"
 
 /** What a primary surface is handed: the label the module's primary action carries. */
 export type PrimarySurfaceProps = { label: string }
@@ -53,6 +54,12 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "customers.properties": { primary: AddPropertySurface, rowActions: PropertyCommandsSurface },
   "customers.groups": { primary: AddPropertyGroupSurface, rowActions: PropertyGroupCommandsSurface },
   "customers.shared": { primary: AddSharedPointSurface, rowActions: SharedPointCommandsSurface },
+  // Slice 6 (#179): generation writes routes and their stops, so there is no
+  // create; a route and a stop move by their commands, and the Live board
+  // only reads. A route's details are these, not the fixture route page.
+  "route-studio.routes": { primary: null, rowActions: RouteCommandsSurface },
+  "route-studio.pickups": { primary: null, rowActions: PickupCommandsSurface },
+  "route-studio.live": { primary: null, rowActions: LiveRouteSurface },
 }
 
 /** The module's surface while the adapter is configured and the module switched; undefined otherwise, and always in fixture mode. */

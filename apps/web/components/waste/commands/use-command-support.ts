@@ -17,6 +17,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import type { ApiClient } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
+import { depotAdapter, unloadingStationAdapter } from "@/lib/api/records/places"
 import { problemOfError } from "@/lib/api/records/server-records"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import { DEPOTS_MODULE, DRIVERS_MODULE, VEHICLES_MODULE } from "@/lib/data/allocations"
@@ -62,7 +63,7 @@ export type RelationPickers = {
   timezoneOf: (projectId: string | undefined) => string | undefined
 }
 
-/** The pickers the containers', the allocations' and the places' dialogs read. */
+/** The pickers the containers', the allocations', the places' and the routes' dialogs read. */
 export function useRelationPickers(): RelationPickers {
   const organisation = useModuleRecords(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId, fixturesOf(ORGANISATION_MODULE))
   const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId, fixturesOf(MASTER_DATA_MODULE))
@@ -117,8 +118,11 @@ export function useRelationPickers(): RelationPickers {
         return live(vehicles.records).map((record) => optionOf(record, true))
       case "driverId":
         return live(drivers.records).map((record) => optionOf(record, true))
+      // The places module holds the depots and the unloading stations: each field offers its own kind (#179).
       case "depotId":
-        return live(depots.records).map((record) => optionOf(record, true))
+        return live(depots.records).filter(depotAdapter.owns).map((record) => optionOf(record, true))
+      case "unloadingStationId":
+        return live(depots.records).filter(unloadingStationAdapter.owns).map((record) => optionOf(record, true))
       default:
         return field.options ?? []
     }

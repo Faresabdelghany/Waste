@@ -1417,10 +1417,14 @@ export function BusinessWorkspace({
         : activeRecords,
     [activeRecords, getRecords, relatedCreateModule],
   )
+  // On the Pilot a route opens the generic details with its command surface
+  // (#179, as #181's containers skip their sheet): the route page is fixture
+  // mode's.
   const isRouteDetails =
     workspace.id === "route-studio" &&
     activeModule.id === "routes" &&
-    Boolean(selectedRecord)
+    Boolean(selectedRecord) &&
+    RowSurface === undefined
   // Scheme detail is a dedicated full page (issue #29, D8) — same routing
   // contract as the record sheet (?module=schemes&record=), rendered instead
   // of it. Re-resolved from activeRecords so the page always shows the live
@@ -1743,11 +1747,14 @@ export function BusinessWorkspace({
   // Generic row Edit/Delete: a rich module that exposes them (tickets do not —
   // they are worked through lifecycle transitions and the details view), the
   // viewer's grants, and for edits a form execution policy.
+  // A module with a row surface on the Pilot is changed through it (#179: a
+  // route or a stop moves by its commands), so the generic Edit is not offered.
   const offersRowActions = moduleOffersRowActions(activeModule.id)
   const canEditRecords =
     offersRowActions &&
     Boolean(activeModuleFormSchema?.execution) &&
-    hasGrant("edit")
+    hasGrant("edit") &&
+    RowSurface === undefined
   // The API has no delete (Issue #81): a switched module's record is
   // deactivated or moved to another status, never soft-deleted, so the
   // action is not offered there — and the store refuses one that arrives
