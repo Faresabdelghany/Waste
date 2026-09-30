@@ -38,14 +38,33 @@ import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/
 import { ROUTE_ACTIVE_PLAN_KEY } from "@/lib/data/routes"
 
 import { command, get, listAll, put } from "../client"
-import { hasPrefix, inheritedPresentation, ofKind, stampFacts, statusLabel, typed, webIdOf, type Client, type CommandInput, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { hasPrefix, inheritedPresentation, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { FLEET_AND_DEPOT_PICKS } from "./allocations"
 import { shownOn } from "./clock"
-import { driverAdapter, vehicleAdapter } from "./fleet"
-import { depotAdapter, referenced, refusal, unloadingStationAdapter } from "./places"
+import { referenced, refusal, unloadingStationAdapter } from "./places"
 import { nameVia, referencedServerId, webIdVia, type ReferenceRule } from "./references"
 
 /** The workspace module the routes are the rows of. */
 export const ROUTES_MODULE: ModuleLocation = { workspaceId: "route-studio", moduleId: "routes" }
+
+/**
+ * How far back the routes and their stops are read: a window from this many
+ * days ago with no end, the recent routes and every future one. Named here
+ * once; the stops read by it too (pickups.ts). The bound is the UTC day's, a
+ * day's slack either side being nothing against 35.
+ */
+export const ROUTES_WINDOW_DAYS = 35
+
+/** The first operating day the routes are read from, `from` on their lists. */
+export function routesWindowFrom(now = new Date()): string {
+  const from = new Date(now.getTime())
+  from.setUTCDate(from.getUTCDate() - ROUTES_WINDOW_DAYS)
+  return from.toISOString().slice(0, 10)
+}
+
+// The modules a route's command changes the rows of too, spelled here: their own constants sit in files built on this one (live.ts, pickups.ts).
+const LIVE_KEY = moduleKeyOf(ROUTES_MODULE.workspaceId, "live")
+const PICKUPS_KEY = moduleKeyOf(ROUTES_MODULE.workspaceId, "pickups")
 
 /** The route's commands, by the names the surfaces send. */
 export const ASSIGN_ROUTE = "assign"
@@ -63,14 +82,12 @@ const PICKUP_PREFIX = "pickup"
 type RouteRead = Route & { activePlan?: RouteDetail["activePlan"] }
 
 /** "WH-24" for "WH-24 · CN 42 018": a vehicle as the fixtures and the map name it, its callsign; an id chip as it stands. */
-const callsignOf = (name: string) => name.split(" · ")[0] ?? name
+export const callsignOf = (name: string) => name.split(" · ")[0] ?? name
 
-/** A dialog value as a non-blank string, or undefined. */
-function said(input: CommandInput, key: string): string | undefined {
-  const value = input[key]
-  if (typeof value !== "string") return undefined
-  const trimmed = value.trim()
-  return trimmed === "" ? undefined : trimmed
+/** "Mads Jensen · WH-31 · TR-12": a driver, a vehicle and a trailer as an assignment — planned, actual, a session's — reads; undefined when it names none. */
+export function assignmentOf(context: MappingContext, { driverId, vehicleId, trailerId }: { driverId: string | null; vehicleId: string | null; trailerId: string | null }): string | undefined {
+  const parts = [driverId === null ? undefined : nameVia(context, "driver", driverId), ...[vehicleId, trailerId].map((id) => (id === null ? undefined : callsignOf(nameVia(context, "vehicle", id))))].filter(Boolean)
+  return parts.length === 0 ? undefined : parts.join(" · ")
 }
 
 /** "3 stops", "1 stop", "2/3 stops" once any stop is decided: the map counts a route's stops off the first. */
@@ -117,15 +134,8 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
     ["Cancelled at", at(route.cancelledAt)],
   ]
   for (const [fact, value] of stamps) if (value !== undefined) facts[fact] = value
-  if (route.actual.driverId !== null || route.actual.vehicleId !== null) {
-    facts["Actual assignment"] = [
-      route.actual.driverId === null ? undefined : nameVia(context, "driver", route.actual.driverId),
-      route.actual.vehicleId === null ? undefined : callsignOf(nameVia(context, "vehicle", route.actual.vehicleId)),
-      route.actual.trailerId === null ? undefined : callsignOf(nameVia(context, "vehicle", route.actual.trailerId)),
-    ]
-      .filter(Boolean)
-      .join(" · ")
-  }
+  const actual = assignmentOf(context, route.actual)
+  if (actual !== undefined) facts["Actual assignment"] = actual
   const reference = (prefix: string, serverId: string | null) => (serverId === null ? "" : webIdVia(context, prefix, serverId))
   return {
     id: webIdOf(ROUTE_PREFIX, route.id),
@@ -145,7 +155,8 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
     submittedValues: {
       projectId: project.webId,
       schemeId: webIdVia(context, SCHEME_PREFIX, route.routeSchemeId),
-      collectionGroupId: webIdVia(context, GROUP_PREFIX, route.collectionGroupId),
+      // A group is no record of its own (it rides in its scheme's JSON, #201): the resolver would miss it every time.
+      collectionGroupId: webIdOf(GROUP_PREFIX, route.collectionGroupId),
       serviceDate: route.serviceDate,
       operatingDate: route.operatingDate,
       // The date the map, the stop index and the scheme's tabs read a generated route by.
@@ -172,12 +183,9 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
 // assign and a reschedule send only what moved: the API checks every field
 // a body names again (a licence, a status), so an unchanged one is left out.
 
-/** What an assign may move: the field, the id chip's prefix, the sentence a miss is refused in, the kind a loaded row is held to. */
+/** What an assign may move — the field, the id chip's prefix, the sentence a miss is refused in, the kind a loaded row is held to: the fleet's and the depot's chips as the allocations name them (allocations.ts), and the unloading station. */
 const ASSIGNED: ReadonlyArray<readonly [string, string, string, ReferenceRule]> = [
-  ["vehicleId", "vehicle", "Pick a vehicle the API holds", { owns: vehicleAdapter.owns }],
-  ["driverId", "driver", "Pick a driver the API holds", { owns: driverAdapter.owns }],
-  ["trailerId", "vehicle", "Pick a trailer the API holds", { owns: vehicleAdapter.owns }],
-  ["depotId", "depot", "Pick a depot the API holds", { owns: depotAdapter.owns }],
+  ...(Object.entries(FLEET_AND_DEPOT_PICKS) as ReadonlyArray<[string, readonly [string, string, ReferenceRule]]>).map(([field, [prefix, sentence, rule]]) => [field, prefix, sentence, rule] as const),
   ["unloadingStationId", "station", "Pick an unloading station the API holds", { owns: unloadingStationAdapter.owns }],
 ]
 
@@ -186,11 +194,12 @@ const NOTHING_TO_RESCHEDULE = "Nothing to reschedule: move the day it runs or it
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
 const CLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 
-/** A command posted to its path on the route. */
-const onRoute = (path: string, verb: string, toBody?: RecordCommand<Route>["toBody"]): RecordCommand<Route> => ({
+/** A command posted to its path on the route. The Live board reads the routes' rows, so every one touches it; a cancel closes the route's open stops too. */
+const onRoute = (path: string, verb: string, toBody?: RecordCommand<Route>["toBody"], touches: readonly string[] = [LIVE_KEY]): RecordCommand<Route> => ({
   ...(toBody === undefined ? {} : { toBody }),
   run: (client, serverId, body) => command<RouteDetail>(client, `/routes/${serverId}/${path}`, body),
   refused: (record) => `${record.name} was not ${verb}`,
+  touches,
 })
 
 export const ROUTE_COMMANDS = {
@@ -224,10 +233,15 @@ export const ROUTE_COMMANDS = {
     if (start !== typed(record, "plannedStartTime")) body.plannedStartTime = start ?? null
     return Object.keys(body).length === 0 ? refusal("operatingDate", NOTHING_TO_RESCHEDULE) : body
   }),
-  [CANCEL_ROUTE]: onRoute("cancel", "cancelled", (input) => {
-    const reason = said(input, "reason")
-    return reason === undefined ? refusal("reason", "Say why the route is cancelled") : { reason }
-  }),
+  [CANCEL_ROUTE]: onRoute(
+    "cancel",
+    "cancelled",
+    (input) => {
+      const reason = said(input, "reason")
+      return reason === undefined ? refusal("reason", "Say why the route is cancelled") : { reason }
+    },
+    [PICKUPS_KEY, LIVE_KEY],
+  ),
   // Every open stop once, in the order they will be visited: the API makes it a manual Plan.
   [REORDER_ROUTE]: {
     toBody: (input, _record, context) => {
@@ -239,6 +253,7 @@ export const ROUTE_COMMANDS = {
     },
     run: (client, serverId, body) => put<RouteDetail>(client, `/routes/${serverId}/pickup-order`, body),
     refused: (record) => `The stops of ${record.name} were not reordered`,
+    touches: [LIVE_KEY],
   },
 } satisfies Record<string, RecordCommand<Route>>
 
@@ -259,7 +274,7 @@ export const routeAdapter: ResourceAdapter<Route> = {
   owns: ofKind(ROUTE_PREFIX, ["Route"]),
   // Planned, ready, active, completed and cancelled move by the route's commands and the driver's session alone.
   statuses: undefined,
-  list: (client) => listAll<Route>(client, "/routes"),
+  list: (client) => listAll<Route>(client, "/routes", { from: routesWindowFrom() }),
   toRecord: toRouteRecord,
   toPatchBody: () => refusal("", CHANGED_BY_COMMANDS),
   update: () => Promise.reject(new Error(CHANGED_BY_COMMANDS)),

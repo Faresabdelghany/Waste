@@ -182,8 +182,8 @@ describe("the route schemes module", () => {
     for (const before of ["configure.organization", "service-providers.service-providers", "configure.areas", "configure.master", "resources.depots", "fleet.vehicles", "fleet.drivers"]) {
       assert.ok(SERVER_MODULE_KEYS.indexOf(before) < at, before)
     }
-    // Only the routes' modules follow it (#179): a module switched later goes in ahead of the schemes (the order on #191).
-    assert.deepEqual(SERVER_MODULE_KEYS.slice(at + 1), ["route-studio.routes", "route-studio.pickups", "route-studio.live"])
+    // Only the routes' modules follow it (#179), the Live board's short read ahead of the two windowed ones: a module switched later goes in ahead of the schemes (the order on #191).
+    assert.deepEqual(SERVER_MODULE_KEYS.slice(at + 1), ["route-studio.live", "route-studio.routes", "route-studio.pickups"])
   })
 
   test("loads one list, and lends no fixture its id: a scheme is `scheme-<uuid>` from the start", async () => {

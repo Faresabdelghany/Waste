@@ -131,6 +131,14 @@ type BusinessRecordStoreValue = {
     moduleId: string,
     recordId: string,
   ) => Promise<RereadOutcome>
+  /**
+   * Reads a switched module again whole, as the store does after a command
+   * that touches it (#213's re-read, the one read path), for a module whose
+   * rows the server moves on its own account while a person watches it — the
+   * Live board every 30 s. Only while the module is ready, and a failed read
+   * leaves its rows as they were; nothing to do on any other module.
+   */
+  refreshModule: (workspaceId: WorkspaceId, moduleId: string) => Promise<void>
 }
 
 type BusinessRecordStores = {
@@ -677,9 +685,21 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
     [stores],
   )
 
+  const refreshModule = useCallback(
+    (workspaceId: WorkspaceId, moduleId: string): Promise<void> => {
+      const module = serverModuleOf(workspaceId, moduleId)
+      const client = stores.client.getSnapshot()
+      if (module === undefined || client === null) return Promise.resolve()
+      // The session this read belongs to, as for a command's re-read: one the session outlives is abandoned.
+      const generation = stores.generation.getSnapshot()
+      return rereadModule(stores, module, () => stores.generation.getSnapshot() !== generation, client)
+    },
+    [stores],
+  )
+
   return useMemo(
-    () => ({ getRecords, upsertRecord, sendCommand, sendAction, refreshRecord }),
-    [getRecords, upsertRecord, sendCommand, sendAction, refreshRecord],
+    () => ({ getRecords, upsertRecord, sendCommand, sendAction, refreshRecord, refreshModule }),
+    [getRecords, upsertRecord, sendCommand, sendAction, refreshRecord, refreshModule],
   )
 }
 

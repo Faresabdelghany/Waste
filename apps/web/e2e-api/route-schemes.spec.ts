@@ -1,8 +1,9 @@
-import type { APIRequestContext, Locator, Page } from "@playwright/test"
+import type { APIRequestContext, Page } from "@playwright/test"
 
 import { expect, test } from "./fixtures"
 import { uniqueName } from "./env"
-import { listAll, projectNamed } from "./tester"
+import { createScheme, openEdit, pick, toasts } from "./routes-support"
+import { listAll } from "./tester"
 
 // Slice 3 of #81 (Issue #177): Route Studio's schemes read and written
 // through the API. The fixture suite's quick create and running-scheme edit
@@ -42,47 +43,12 @@ async function openScheme(page: Page, name: string) {
   await expect(page.getByRole("tab", { name: "Details" })).toBeVisible()
 }
 
-/** Picks `option` in the select whose label starts with `label`. */
-async function pick(within: Locator, page: Page, label: string, option: string) {
-  await within.getByRole("combobox", { name: new RegExp(`^${label}`) }).click()
-  await page.getByRole("option", { name: option, exact: true }).click()
-}
-
-async function openEdit(page: Page) {
-  await page.getByRole("button", { name: "Actions", exact: true }).click()
-  await page.getByRole("menuitem", { name: "Edit scheme" }).click()
-  const dialog = page.getByRole("dialog", { name: "Edit route scheme" })
-  await expect(dialog).toBeVisible()
-  return dialog
-}
-
-const toasts = (page: Page) => page.getByRole("region", { name: "Notifications alt+T" })
-
 /** A day a week ahead, which the forms accept as a first day in force. */
 const nextWeek = () => new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10)
 
-/** A validated scheme with one rule group, made through the API: Residual inside Indre By Operations, Mondays and Thursdays. */
-async function schemeThroughApi(api: APIRequestContext, name: string): Promise<Scheme> {
-  const project = await projectNamed(api, "Copenhagen Central")
-  const area = (await listAll<Named>(api, "/planning-areas")).find((row) => row.name === "Indre By Operations")
-  const residual = (await listAll<Named>(api, "/waste-fractions")).find((row) => row.name === "Residual")
-  expect(area && residual, "the seed holds Indre By Operations and Residual").toBeTruthy()
-  const response = await api.post("/route-schemes", {
-    data: {
-      projectId: project.id,
-      name,
-      planningAreaId: area?.id,
-      serviceType: "container-collection",
-      frequency: "weekly",
-      serviceDays: ["monday", "thursday"],
-      plannedStartTime: "06:30",
-      status: "validated",
-      validFrom: nextWeek(),
-      collectionGroups: [{ name, days: ["monday", "thursday"], stopSource: "rule", rule: { wasteFractionIds: [residual?.id], containerTypeIds: [], vehicleTypeId: null } }],
-    },
-  })
-  expect(response.status(), await response.text()).toBe(201)
-  return (await response.json()) as Scheme
+/** A validated scheme with one rule group, made through the API (routes-support.ts): Residual inside Indre By Operations, Mondays and Thursdays from next week. */
+function schemeThroughApi(api: APIRequestContext, name: string) {
+  return createScheme(api, name, { serviceDays: ["monday", "thursday"], validFrom: nextWeek() })
 }
 
 test("the seeded schemes are the API's: listed under their derived status, opened under the server's id, their next collections read from the API", async ({ api, page }) => {

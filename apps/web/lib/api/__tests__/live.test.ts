@@ -16,7 +16,7 @@ import type { Session } from "@waste/contracts/sessions"
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { driverAdapter, vehicleAdapter } from "../records/fleet"
-import { LIVE_MODULE, liveModule, liveRouteAdapter, routeSessions } from "../records/live"
+import { LIVE_BOARD_REFRESH_MS, LIVE_MODULE, liveModule, liveRouteAdapter, routeSessions, whileWatched } from "../records/live"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
@@ -31,6 +31,7 @@ const fixtures = fixturesOf("route-studio", "live")
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays" }
 const wh24: Vehicle = { id: "01a0d2a4-a280-7013-8000-000000000001", ...STAMPS, projectId: copenhagen.id, registration: "CN 42 018", callsign: "WH-24", kind: "powered-vehicle", vehicleTypeId: "01a0d2a4-a280-7008-8000-000000000001", ownership: "company", serviceProviderId: null, status: "active", capacityKg: 18_000, requiredLicenceClass: "c", homeDepotId: null, fuel: "hvo", telematicsDeviceId: null, notes: null, compartments: [] }
 const wh31: Vehicle = { ...wh24, id: "01a0d2a4-a280-7013-8000-000000000002", registration: "CN 42 031", callsign: "WH-31" }
+const tr12: Vehicle = { ...wh24, id: "01a0d2a4-a280-7013-8000-000000000003", registration: "TR 12 001", callsign: "TR-12", kind: "trailer", compartments: [] }
 const mads: Driver = { id: "01a0d2a4-a280-7014-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Mads Jensen", workforceReference: null, employment: "employee", serviceProviderId: null, homeDepotId: null, licenceClass: "ce", licenceNumber: null, licenceExpiry: "2028-12-31", userAccountId: null, status: "active", notes: null }
 
 const route: Route = {
@@ -63,22 +64,41 @@ const dueToday: LiveRoute = { ...route, id: "01a0d2a4-a280-7030-8000-00000000000
 const noResolve = (moduleFixtures: readonly BusinessRecord[], resolver: Resolver = NOTHING_RESOLVED): MappingContext => ({ fixtures: moduleFixtures, resolve: resolver, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
 const serverIdsOf = (records: readonly BusinessRecord[], ids: readonly string[]) => new Map(records.map((record, index) => [record.id, ids[index]]))
 const projectRecord = projectAdapter.toRecord(copenhagen, noResolve(fixturesOf("configure", "organization")))
-const vehicleRecords = [wh24, wh31].map((vehicle) => vehicleAdapter.toRecord(vehicle, noResolve(fixturesOf("fleet", "vehicles"))))
+const vehicleRecords = [wh24, wh31, tr12].map((vehicle) => vehicleAdapter.toRecord(vehicle, noResolve(fixturesOf("fleet", "vehicles"))))
 const driverRecord = driverAdapter.toRecord(mads, noResolve(fixturesOf("fleet", "drivers")))
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [projectRecord], serverIds: serverIdsOf([projectRecord], [copenhagen.id]) }, 1)],
-  ["fleet.vehicles", loaded({ records: vehicleRecords, serverIds: serverIdsOf(vehicleRecords, [wh24.id, wh31.id]) }, 1)],
+  ["fleet.vehicles", loaded({ records: vehicleRecords, serverIds: serverIdsOf(vehicleRecords, [wh24.id, wh31.id, tr12.id]) }, 1)],
   ["fleet.drivers", loaded({ records: [driverRecord], serverIds: serverIdsOf([driverRecord], [mads.id]) }, 1)],
 ])
 const context = (resolver: Resolver = resolverOver(state)): MappingContext => ({ fixtures, resolve: resolver, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
 
 describe("the live module", () => {
-  test("is switched, after the routes and the fleet its rows name", () => {
+  test("is switched, after the fleet and the schemes its rows name, and ahead of the routes and the stops, the long windowed reads", () => {
     assert.ok(isServerBacked(LIVE_MODULE.workspaceId, LIVE_MODULE.moduleId))
     const at = SERVER_MODULE_KEYS.indexOf("route-studio.live")
-    for (const named of ["configure.organization", "fleet.vehicles", "fleet.drivers", "route-studio.routes"]) {
+    for (const named of ["configure.organization", "fleet.vehicles", "fleet.drivers", "route-studio.schemes"]) {
       assert.ok(at > SERVER_MODULE_KEYS.indexOf(named), `after ${named}`)
     }
+    for (const later of ["route-studio.routes", "route-studio.pickups"]) assert.ok(at < SERVER_MODULE_KEYS.indexOf(later), `before ${later}`)
+  })
+
+  test("while the board is watched it is read again every 30 s, on one interval, and no more once it is left", (t) => {
+    t.mock.timers.enable({ apis: ["setInterval"] })
+    let reads = 0
+    const stop = whileWatched(() => {
+      reads += 1
+    })
+    t.mock.timers.tick(LIVE_BOARD_REFRESH_MS - 1)
+    assert.equal(reads, 0, "the load that mounted the board is its first read")
+    t.mock.timers.tick(1)
+    assert.equal(reads, 1)
+    t.mock.timers.tick(LIVE_BOARD_REFRESH_MS * 2)
+    assert.equal(reads, 3)
+    stop()
+    t.mock.timers.tick(LIVE_BOARD_REFRESH_MS * 2)
+    assert.equal(reads, 3, "cleared on unmount")
+    assert.equal(LIVE_BOARD_REFRESH_MS, 30_000)
   })
 
   test("reads the routes running or due today from /routes/live", async () => {
@@ -100,6 +120,14 @@ describe("a live route", () => {
   test("the wire fixtures are the contracts' shapes", () => {
     assert.ok(LiveRoute.safeParse(live).success)
     assert.ok(LiveRoute.safeParse(dueToday).success)
+  })
+
+  test("an assignment names the trailer after the vehicle, the planned and the actual alike", () => {
+    const hauling: LiveRoute = { ...live, planned: { ...live.planned, trailerId: tr12.id }, actual: { ...live.actual, trailerId: tr12.id }, session: { ...session, trailerId: tr12.id } }
+    const record = liveRouteAdapter.toRecord(hauling, context())
+    assert.equal(record.facts["Planned assignment"], "Mads Jensen · WH-24 · TR-12")
+    assert.equal(record.facts["Actual assignment"], "Mads Jensen · WH-31 · TR-12")
+    assert.equal(record.context, "Mads Jensen · WH-31 · TR-12")
   })
 
   test("reads its progress, its actual assignment and where its device last was", () => {

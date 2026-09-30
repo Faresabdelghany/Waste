@@ -46,10 +46,10 @@ import { routesModule } from "./routes"
  * name, and the allocations after the fleet and the places they reserve (#181);
  * the route schemes after everything a scheme and its groups name — the
  * areas, the master data, the providers, the fleet and the places — so none
- * of it is left an id chip on a scheme (#177); then the routes, which name
- * their scheme and the fleet and the places of their Planned Assignment, the
- * pickups after the routes and the containers they name, and the Live board
- * after the routes whose rows it reads (#179).
+ * of it is left an id chip on a scheme (#177); then the Live board, today's
+ * routes, the short read ahead of the two windowed ones: the routes, which
+ * name their scheme and the fleet and the places of their Planned Assignment,
+ * and the pickups after the routes and the containers they name (#179).
  */
 export const SERVER_MODULES: readonly ServerModule[] = [
   organisationModule,
@@ -71,9 +71,9 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   inventoryModule,
   vehiclePlanningModule,
   routeSchemesModule,
+  liveModule,
   routesModule,
   pickupsModule,
-  liveModule,
 ]
 
 const byKey = new Map(SERVER_MODULES.map((module) => [moduleKeyOf(module.workspaceId, module.moduleId), module]))

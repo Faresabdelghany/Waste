@@ -279,6 +279,14 @@ export function typed(record: Pick<BusinessRecord, "submittedValues">, key: stri
   return trimmed === "" ? undefined : trimmed
 }
 
+/** A command dialog's value read as a non-blank string, or undefined: `typed`, for what a person said. */
+export function said(input: CommandInput, key: string): string | undefined {
+  const value = input[key]
+  if (typeof value !== "string") return undefined
+  const trimmed = value.trim()
+  return trimmed === "" ? undefined : trimmed
+}
+
 /** A typed form value read as a boolean, or undefined when it is not one. */
 export function typedFlag(record: Pick<BusinessRecord, "submittedValues">, key: string): boolean | undefined {
   const value = record.submittedValues?.[key]

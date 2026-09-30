@@ -5,7 +5,7 @@
 // fact second, when that date is not already in the past. Pure data logic.
 
 import type { BusinessRecord } from "../prototype-record"
-import { typedString } from "../record-values"
+import { cleanFact, typedString } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
 import { addDays, isIsoDate } from "../route-schemes/recurrence"
 
@@ -54,17 +54,25 @@ const DEAD_STATUSES: ReadonlySet<string> = new Set(["Cancelled", "Skipped", "Fai
 /**
  * Container id → sorted ISO dates on which a generated route collects it.
  * The date is the route's actual (possibly shifted) date, falling back to
- * the pickup's own service date.
+ * the pickup's own service date. A stop names its container by id, and by
+ * its `Container ID` label: given the containers, a stop whose label is one
+ * of theirs counts for that container too, as routes.ts links them (#179).
  */
 export function routeStopIndex(
   routes: readonly BusinessRecord[],
   pickups: readonly BusinessRecord[],
+  containers: readonly BusinessRecord[] = [],
 ): Map<string, string[]> {
   const routeDates = new Map<string, string>()
   for (const route of routes) {
     if (isSoftDeleted(route) || DEAD_STATUSES.has(route.status)) continue
     const date = typedString(route.submittedValues, "actualDate") ?? typedString(route.submittedValues, "serviceDate")
     if (date && isIsoDate(date)) routeDates.set(route.id, date)
+  }
+  const containerIdsByLabel = new Map<string, string>()
+  for (const container of containers) {
+    const label = cleanFact(container.facts["Container ID"])
+    if (label) containerIdsByLabel.set(label.toLowerCase(), container.id)
   }
   const index = new Map<string, Set<string>>()
   for (const pickup of pickups) {
@@ -74,9 +82,13 @@ export function routeStopIndex(
     if (!containerId || !routeId) continue
     const date = routeDates.get(routeId)
     if (!date) continue
-    const dates = index.get(containerId) ?? new Set<string>()
-    dates.add(date)
-    index.set(containerId, dates)
+    const label = cleanFact(pickup.facts["Container ID"])?.toLowerCase()
+    const labelled = label === undefined ? undefined : containerIdsByLabel.get(label)
+    for (const key of labelled === undefined || labelled === containerId ? [containerId] : [containerId, labelled]) {
+      const dates = index.get(key) ?? new Set<string>()
+      dates.add(date)
+      index.set(key, dates)
+    }
   }
   return new Map(
     Array.from(index.entries()).map(([containerId, dates]) => [containerId, [...dates].sort()]),

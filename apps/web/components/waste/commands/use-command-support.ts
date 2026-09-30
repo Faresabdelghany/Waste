@@ -18,9 +18,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import type { ApiClient } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { depotAdapter, unloadingStationAdapter } from "@/lib/api/records/places"
-import { problemOfError } from "@/lib/api/records/server-records"
+import { problemOfError, type CommandOutcome, type WriteOutcome } from "@/lib/api/records/server-records"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
-import { DEPOTS_MODULE, DRIVERS_MODULE, VEHICLES_MODULE } from "@/lib/data/allocations"
+import { DEPOTS_MODULE, DRIVERS_MODULE, isTrailerRecord, VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import { getModuleDefinition, type BusinessRecord, type ModuleLocation, type WorkspaceId } from "@/lib/data/business-modules"
 import { ORGANISATION_MODULE, WAREHOUSES_MODULE } from "@/lib/data/containers"
@@ -31,7 +31,53 @@ import { CONTACTS_MODULE, PROPERTIES_MODULE } from "@/lib/data/properties"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 import { useApiClient } from "../api-session-store"
-import { useMeProjects, useModuleRecords, useServerModuleState } from "../business-record-store"
+import { useBusinessRecordStore, useMeProjects, useModuleRecords, useServerModuleState, whenSaved } from "../business-record-store"
+import type { CommandInput } from "@/lib/api/records/adapter"
+
+/** What a command the API took answers: the row as the API now holds it. */
+export type CommandDone = Extract<CommandOutcome, { kind: "done" }>
+
+/**
+ * A row's commands and writes sent one at a time from its surface: `busy`
+ * while one is out, `version` bumped after each the API took, so the row's
+ * own reads (`useRowHistory`: a ledger, a history, a route's stops) are read
+ * again. `run` sends a command and tells `done` what the API answered; `save`
+ * waits on a write the surface made and tells `done` it landed. A refusal is
+ * the store's toast, in the API's words, and the surface stands as it was.
+ */
+export function useCommandRunner(module: ModuleLocation, recordId: string): {
+  busy: boolean
+  version: number
+  run: (name: string, input: CommandInput | undefined, done: (outcome: CommandDone) => void) => void
+  save: (outcome: Promise<WriteOutcome> | undefined, done: () => void) => void
+} {
+  const { sendCommand } = useBusinessRecordStore()
+  const [busy, setBusy] = useState(false)
+  const [version, setVersion] = useState(0)
+  const bump = () => setVersion((current) => current + 1)
+  const run = (name: string, input: CommandInput | undefined, done: (outcome: CommandDone) => void) => {
+    if (busy) return
+    setBusy(true)
+    void sendCommand(module.workspaceId, module.moduleId, recordId, name, input).then((outcome) => {
+      setBusy(false)
+      if (outcome.kind !== "done") return
+      bump()
+      done(outcome)
+    })
+  }
+  const save = (outcome: Promise<WriteOutcome> | undefined, done: () => void) => {
+    setBusy(true)
+    whenSaved(
+      outcome,
+      () => {
+        done()
+        bump()
+      },
+      () => setBusy(false),
+    )
+  }
+  return { busy, version, run, save }
+}
 
 const NO_RECORDS: readonly BusinessRecord[] = []
 const fixturesOf = (location: ModuleLocation) => getModuleDefinition(location)?.records ?? NO_RECORDS
@@ -113,9 +159,13 @@ export function useRelationPickers(): RelationPickers {
         return (organisation.notGranted ? meProjects : live(organisation.records).filter((record) => record.id.startsWith("project-"))).map((record) => optionOf(record, false))
       case "warehouseId":
         return live(warehouses.records).map((record) => optionOf(record, true))
+      // The fleet module holds the powered vehicles and the trailers: each field offers its own kind (#179).
       case "vehicleId":
+        return live(vehicles.records)
+          .filter((record) => !isTrailerRecord(record))
+          .map((record) => optionOf(record, true))
       case "trailerId":
-        return live(vehicles.records).map((record) => optionOf(record, true))
+        return live(vehicles.records).filter(isTrailerRecord).map((record) => optionOf(record, true))
       case "driverId":
         return live(drivers.records).map((record) => optionOf(record, true))
       // The places module holds the depots and the unloading stations: each field offers its own kind (#179).

@@ -11,7 +11,7 @@
 // active route. A route without a Plan is complete — nothing here waits on
 // routing. The forms are lib/data/routes.ts's; nothing is offered until the
 // module reads the API's rows.
-import { useState, type ReactNode } from "react"
+import { useEffect, useState } from "react"
 import { ArrowDown, ArrowSquareOut, ArrowUp } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
@@ -20,17 +20,18 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import type { RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
-import { useModuleReady, useOpenRecord, useRelationPickers, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
+import { ReadRows } from "@/components/waste/commands/read-rows"
+import { useCommandRunner, useModuleReady, useOpenRecord, useRelationPickers, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
 import type { ApiClient } from "@/lib/api/client"
-import { webIdOf, type CommandInput } from "@/lib/api/records/adapter"
+import { statusLabel, webIdOf, type CommandInput } from "@/lib/api/records/adapter"
 import { shownOn } from "@/lib/api/records/clock"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
-import { LIVE_MODULE, routeSessions } from "@/lib/api/records/live"
+import { LIVE_MODULE, routeSessions, whileWatched } from "@/lib/api/records/live"
 import { CORRECT_PICKUP, PICKUPS_MODULE, pickupProofs, REMOVE_PICKUP } from "@/lib/api/records/pickups"
-import { ASSIGN_ROUTE, CANCEL_ROUTE, DISPATCH_ROUTE, REORDER_ROUTE, RESCHEDULE_ROUTE, routeCommandLog, routeDetail, ROUTES_MODULE } from "@/lib/api/records/routes"
+import { ASSIGN_ROUTE, callsignOf, CANCEL_ROUTE, DISPATCH_ROUTE, REORDER_ROUTE, RESCHEDULE_ROUTE, routeCommandLog, routeDetail, ROUTES_MODULE } from "@/lib/api/records/routes"
 import { DRIVERS_MODULE, VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
-import { PICKUP_COMMAND_FORMS, ROUTE_COMMAND_FORMS, routeCommandValues, type PickupCommandWithForm, type RouteCommandWithForm } from "@/lib/data/routes"
+import { PICKUP_COMMAND_FORMS, pickupReasonLabel, ROUTE_COMMAND_FORMS, routeCommandValues, type PickupCommandWithForm, type RouteCommandWithForm } from "@/lib/data/routes"
 import type { Pickup } from "@waste/contracts/pickups"
 import type { RouteDetail } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
@@ -39,30 +40,16 @@ import type { Session } from "@waste/contracts/sessions"
 const readRoute = (client: ApiClient, serverId: string) => routeDetail(client, serverId).then((detail): RouteDetail[] => [detail])
 
 /** A status token as a person reads it. */
-const word = (token: string) => token.charAt(0).toUpperCase() + token.slice(1).replace(/-/g, " ")
+/** The command each of the route's dialogs sends. */
+const ROUTE_COMMAND_OF: Readonly<Record<RouteCommandWithForm, string>> = { assign: ASSIGN_ROUTE, reschedule: RESCHEDULE_ROUTE, cancel: CANCEL_ROUTE }
 
 /** A read's rows, or the sentence of its refusal, or that it is being read. */
-function ReadRows<T>({ read, empty, label, testId, line }: { read: { rows: T[] | null; problem: string | null }; empty: string; label: string; testId: string; line: (row: T, index: number) => ReactNode }) {
-  if (read.problem !== null) return <p className="text-sm text-destructive">{read.problem}</p>
-  if (read.rows === null) return <p className="text-sm text-muted-foreground">{label}</p>
-  if (read.rows.length === 0) return <p className="text-sm text-muted-foreground">{empty}</p>
-  return (
-    <ol className="divide-y divide-border/60 border-y border-border/60 text-sm" data-testid={testId}>
-      {read.rows.map((row, index) => (
-        <li key={index} className="py-2">
-          {line(row, index)}
-        </li>
-      ))}
-    </ol>
-  )
-}
-
 /** "Mads Jensen · WH-31" for a session: who drove, with what. */
 function useSessionLine(): (session: Session, timezone: string | undefined) => string {
   const driverName = useServerNames(DRIVERS_MODULE, "driver")
   const vehicleName = useServerNames(VEHICLES_MODULE, "vehicle")
   return (session, timezone) =>
-    `${shownOn(session.startedAt, timezone)} → ${session.endedAt === null ? (session.pausedAt === null ? "open" : "paused") : shownOn(session.endedAt, timezone)} · ${driverName(session.driverId)} · ${vehicleName(session.vehicleId).split(" · ")[0]}`
+    `${shownOn(session.startedAt, timezone)} → ${session.endedAt === null ? (session.pausedAt === null ? "open" : "paused") : shownOn(session.endedAt, timezone)} · ${driverName(session.driverId)} · ${callsignOf(vehicleName(session.vehicleId))}`
 }
 
 /** What each of the route's commands is told once the API has taken it. */
@@ -78,38 +65,30 @@ type RouteOpen = { kind: "form"; name: RouteCommandWithForm; values: BusinessFor
 
 /** A route's commands, its stops in sequence, its sessions and the device's command log, in its details. */
 export function RouteCommandsSurface({ record }: RowSurfaceProps) {
-  const { sendCommand } = useBusinessRecordStore()
   const pickers = useRelationPickers()
   const moduleReady = useModuleReady(ROUTES_MODULE)
-  // Bumped after each command the surface sends: the stops and the log are the route's own reads.
-  const [version, setVersion] = useState(0)
+  // The version is bumped after each command the API took: the stops and the log are the route's own reads.
+  const { busy, version, run: send } = useCommandRunner(ROUTES_MODULE, record.id)
   const reads = useRowHistory(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId, record, version, readRoute)
   const log = useRowHistory(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId, record, version, routeCommandLog)
   const containerName = useServerNames(CONTAINERS_MODULE, "asset")
   const sessionLine = useSessionLine()
   const openPickup = useOpenRecord(PICKUPS_MODULE.moduleId)
   const [open, setOpen] = useState<RouteOpen | null>(null)
-  const [busy, setBusy] = useState(false)
   const projectId = typeof record.submittedValues?.projectId === "string" ? record.submittedValues.projectId : undefined
   const timezone = pickers.timezoneOf(projectId)
   const detail = reads.rows?.[0]
   const openStops = detail?.pickups.filter((pickup) => pickup.status === "planned") ?? []
 
-  const run = (name: string, input?: CommandInput) => {
-    if (busy) return
-    setBusy(true)
-    void sendCommand(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId, record.id, name, input).then((outcome) => {
-      setBusy(false)
-      if (outcome.kind !== "done") return
+  const run = (name: string, input?: CommandInput) =>
+    send(name, input, (outcome) => {
       setOpen(null)
-      setVersion((current) => current + 1)
       toast.success(DONE[name]?.(outcome.record.name) ?? `${outcome.record.name} updated`, { description: `Status: ${outcome.record.status}` })
     })
-  }
 
   const offered = moduleReady && !busy
   const openForm = (name: RouteCommandWithForm) => setOpen({ kind: "form", name, values: name === "cancel" ? {} : routeCommandValues(record) })
-  const stopLine = (pickup: Pickup & { sequence?: number }) => `${pickup.sequence ?? pickup.position}. ${containerName(pickup.containerId)} · ${word(pickup.status)}${pickup.reason === null ? "" : ` · ${word(pickup.reason)}`}`
+  const stopLine = (pickup: Pickup & { sequence?: number }) => `${pickup.sequence ?? pickup.position}. ${containerName(pickup.containerId)} · ${statusLabel(pickup.status)}${pickup.reason === null ? "" : ` · ${pickupReasonLabel(pickup.reason)}`}`
 
   return (
     <section className="space-y-4" data-testid="route-commands">
@@ -161,7 +140,7 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
           label="Reading the device's command log…"
           empty="The driver's device has sent nothing for this route."
           testId="route-command-log"
-          line={(receipt) => `${shownOn(receipt.occurredAt, timezone)} · ${word(receipt.kind)} · ${word(receipt.outcome)}${receipt.problem?.detail ? ` · ${receipt.problem.detail}` : ""}`}
+          line={(receipt) => `${shownOn(receipt.occurredAt, timezone)} · ${statusLabel(receipt.kind)} · ${statusLabel(receipt.outcome)}${receipt.problem?.detail ? ` · ${receipt.problem.detail}` : ""}`}
         />
       </div>
       {open?.kind === "form" && (
@@ -169,7 +148,7 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
           schema={ROUTE_COMMAND_FORMS[open.name]}
           open
           onOpenChange={(isOpen) => !isOpen && setOpen(null)}
-          onSubmit={(values) => run(open.name === "assign" ? ASSIGN_ROUTE : open.name === "reschedule" ? RESCHEDULE_ROUTE : CANCEL_ROUTE, values)}
+          onSubmit={(values) => run(ROUTE_COMMAND_OF[open.name], values)}
           relationOptions={(field, values) => pickers.options(field, values, projectId)}
           initialValueOverrides={open.values}
         />
@@ -238,29 +217,21 @@ function ReorderStopsDialog({ order, label, busy, onChange, onClose, onSave }: {
 
 /** A stop's commands and its proofs, in its details. */
 export function PickupCommandsSurface({ record }: RowSurfaceProps) {
-  const { sendCommand } = useBusinessRecordStore()
   const pickers = useRelationPickers()
   const moduleReady = useModuleReady(PICKUPS_MODULE)
-  const [version, setVersion] = useState(0)
+  const { busy, version, run: send } = useCommandRunner(PICKUPS_MODULE, record.id)
   const proofs = useRowHistory(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId, record, version, pickupProofs)
   const openRoute = useOpenRecord(ROUTES_MODULE.moduleId)
   const [open, setOpen] = useState<PickupCommandWithForm | null>(null)
-  const [busy, setBusy] = useState(false)
   const projectId = record.projectIds?.[0]
   const timezone = pickers.timezoneOf(projectId)
   const routeId = typeof record.submittedValues?.routeId === "string" ? record.submittedValues.routeId : undefined
 
-  const run = (name: PickupCommandWithForm, values: BusinessFormValues) => {
-    if (busy) return
-    setBusy(true)
-    void sendCommand(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId, record.id, name === "remove" ? REMOVE_PICKUP : CORRECT_PICKUP, values).then((outcome) => {
-      setBusy(false)
-      if (outcome.kind !== "done") return
+  const run = (name: PickupCommandWithForm, values: BusinessFormValues) =>
+    send(name === "remove" ? REMOVE_PICKUP : CORRECT_PICKUP, values, (outcome) => {
       setOpen(null)
-      setVersion((current) => current + 1)
       toast.success(PICKUP_COMMAND_FORMS[name].execution?.completionMessage ?? "Recorded", { description: `${outcome.record.name} is now ${outcome.record.status.toLowerCase()}.` })
     })
-  }
 
   return (
     <section className="space-y-4" data-testid="pickup-commands">
@@ -287,7 +258,7 @@ export function PickupCommandsSurface({ record }: RowSurfaceProps) {
           label="Reading the stop's proofs…"
           empty="No proof yet."
           testId="pickup-proofs"
-          line={(proof) => `${shownOn(proof.occurredAt, timezone)} · ${word(proof.kind)} · ${word(proof.source)}${proof.outcome ? ` · ${word(proof.outcome)}` : ""}${proof.note ? ` · ${proof.note}` : ""}`}
+          line={(proof) => `${shownOn(proof.occurredAt, timezone)} · ${statusLabel(proof.kind)} · ${statusLabel(proof.source)}${proof.outcome ? ` · ${statusLabel(proof.outcome)}` : ""}${proof.note ? ` · ${proof.note}` : ""}`}
         />
       </div>
       {open !== null && <BusinessRecordFormDialog schema={PICKUP_COMMAND_FORMS[open]} open onOpenChange={(isOpen) => !isOpen && setOpen(null)} onSubmit={(values) => run(open, values)} relationOptions={pickers.options} />}
@@ -296,6 +267,18 @@ export function PickupCommandsSurface({ record }: RowSurfaceProps) {
 }
 
 /** A live route's sessions, and the way to the route itself, in its details. */
+/**
+ * Mounted beside the Live board while it is shown (the registry's
+ * `whileShown`), rendering nothing: the board is read again every 30 s
+ * through the store's `refreshModule` — #213's re-read exposed, no second
+ * read path — on one interval, cleared when the board is left.
+ */
+export function LiveBoardRefresh() {
+  const { refreshModule } = useBusinessRecordStore()
+  useEffect(() => whileWatched(() => void refreshModule(LIVE_MODULE.workspaceId, LIVE_MODULE.moduleId)), [refreshModule])
+  return null
+}
+
 export function LiveRouteSurface({ record }: RowSurfaceProps) {
   const pickers = useRelationPickers()
   const sessions = useRowHistory(LIVE_MODULE.workspaceId, LIVE_MODULE.moduleId, record, 0, routeSessions)

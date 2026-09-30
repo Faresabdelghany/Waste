@@ -1,9 +1,7 @@
-import type { Locator, Page } from "@playwright/test"
-
 import { dispatchedRouteFor, driverNamed, SEEDED_DRIVER } from "./dispatched-route"
 import { E2E, uniqueName } from "./env"
 import { expect, freshContext, signIn, test } from "./fixtures"
-import { answerOf, openRoute, routeRead, schemeWithRoutes, toasts } from "./routes-support"
+import { answerOf, onCopenhagenClock, openRoute, pick, routeRead, schemeWithRoutes, toasts } from "./routes-support"
 import { ensureTester, listAll, roleNamed } from "./tester"
 
 // Route Studio's routes, stops and Live board on the API (Issue #179, slice
@@ -21,12 +19,6 @@ type LiveRoute = { id: string }
 
 /** Where the driver's phone stands, so every located command says it stood there. */
 const POSITION = { latitude: 55.6867, longitude: 12.5701, accuracy: 12 }
-
-/** Picks `option` in the select whose label starts with `label`. */
-async function pick(within: Locator, page: Page, label: string, option: string) {
-  await within.getByRole("combobox", { name: new RegExp(`^${label}`) }).click()
-  await page.getByRole("option", { name: option, exact: true }).click()
-}
 
 const labels = async (api: Parameters<typeof listAll>[0]) => new Map((await listAll<Container>(api, "/containers")).map((container) => [container.id, container.label]))
 
@@ -53,6 +45,13 @@ test("a generated route is the API's row: listed under its label, opened under t
   await expect(stops.first()).toContainText(`1. ${label.get(detail.pickups[0].containerId)} · Planned`)
   await expect(details.getByTestId("route-sessions")).toHaveCount(0)
   await expect(details).toContainText("Not started: no driver has started this route.")
+
+  // The scheme's page lists its routes, the API's, once read; a row opens the same details.
+  await page.goto(`/route-studio?module=schemes&record=scheme-${scheme.id}`)
+  await page.getByRole("tab", { name: "Routes" }).click()
+  await page.getByRole("button", { name: `Open ${route.label}` }).click()
+  await expect(page).toHaveURL(new RegExp(`module=routes&record=route-${route.id}`))
+  await expect(page.getByRole("dialog", { name: route.label })).toBeVisible()
 })
 
 test("the dispatcher's commands: an unassigned dispatch is the API's 409, assign names the driver and the vehicle, reschedule moves the start, dispatch makes it Ready, and cancel's reason is its deviation", async ({ api, page }) => {
@@ -196,6 +195,8 @@ test("the Live board reads what the driver's device reports, and the office's ca
     await phone.close()
   }
 
+  // What the device did, as the API stamped it: the session's start on the project's clock is what the board shows.
+  const started = onCopenhagenClock((await routeRead(api, route.id)).session?.startedAt ?? "")
   const read = page.waitForResponse((response) => new URL(response.url()).pathname === "/waste-api/routes/live")
   await page.goto("/route-studio?module=live")
   expect((await read).status()).toBe(200)
@@ -206,8 +207,9 @@ test("the Live board reads what the driver's device reports, and the office's ca
   await row.click()
   const live = page.getByRole("dialog", { name: route.label })
   await expect(live).toContainText(`${POSITION.latitude.toFixed(5)}, ${POSITION.longitude.toFixed(5)}`)
+  await expect(live).toContainText(started)
   await expect(live.getByTestId("live-sessions").locator("li")).toHaveCount(1)
-  await expect(live.getByTestId("live-sessions")).toContainText("→ open · Mads Jensen · WH-24")
+  await expect(live.getByTestId("live-sessions")).toContainText(`${started} → open · Mads Jensen · WH-24`)
 
   // The live row is its route: the office reads the device's log there, and its cancel ends the session.
   await live.getByRole("button", { name: "Open route" }).click()
@@ -225,7 +227,8 @@ test("the Live board reads what the driver's device reports, and the office's ca
   const ended = await routeRead(api, route.id)
   expect(ended.status).toBe("cancelled")
   expect(ended.session).toBeNull()
-  expect(ended.sessions.at(-1)?.endedAt).not.toBeNull()
+  // The one session the driver opened, ended at the cancel's own instant.
+  expect(ended.sessions.map((session) => session.endedAt)).toEqual([ended.cancelledAt])
   expect((await listAll<LiveRoute>(api, "/routes/live", { projectId: route.projectId })).some((candidate) => candidate.id === route.id)).toBe(false)
 })
 

@@ -58,6 +58,16 @@ describe("routeStopIndex", () => {
     assert.equal(index.has("bin-b"), false, "cancelled routes count for nothing")
     assert.equal(index.has("bin-c"), false, "skipped pickups count for nothing")
   })
+
+  test("a stop that names its container by the Container ID label — an API stop over the fixture containers (#179) — counts for the container carrying that label, as the routes link it", () => {
+    const stops = [stub({ id: "p5", facts: { "Container ID": "BIN-91001" }, submittedValues: { routeId: "route-1", containerId: "asset-0193" } })]
+    const containers = [stub({ id: "asset-seed-91001", facts: { "Container ID": "bin-91001" } }), stub({ id: "asset-seed-91002", facts: { "Container ID": "BIN-91002" } })]
+    const index = routeStopIndex(routes, stops, containers)
+    assert.deepEqual(index.get("asset-seed-91001"), ["2026-09-18"], "by label, whatever the case")
+    assert.deepEqual(index.get("asset-0193"), ["2026-09-18"], "and under the id it names")
+    assert.equal(index.has("asset-seed-91002"), false)
+    assert.equal(routeStopIndex(routes, stops).has("asset-seed-91001"), false, "without the containers, the id alone")
+  })
 })
 
 describe("nextCollectionDate", () => {

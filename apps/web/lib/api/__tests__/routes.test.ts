@@ -31,10 +31,12 @@ import {
   REORDER_ROUTE,
   RESCHEDULE_ROUTE,
   ROUTES_MODULE,
+  ROUTES_WINDOW_DAYS,
   routeAdapter,
   routeCommandLog,
   routeDetail,
   routesModule,
+  routesWindowFrom,
 } from "../records/routes"
 import { commandRecord, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
@@ -119,13 +121,20 @@ describe("the routes module", () => {
     }
   })
 
-  test("reads every route, page after page, and no fixture lends its id", async () => {
+  test("reads the routes over a window from 35 days back with no end — the recent and every future route — named once, for the stops to read by too", () => {
+    assert.equal(ROUTES_WINDOW_DAYS, 35)
+    assert.equal(routesWindowFrom(new Date("2026-10-01T12:00:00Z")), "2026-08-27")
+    assert.equal(routesWindowFrom(new Date("2026-01-20T00:30:00Z")), "2025-12-16")
+  })
+
+  test("reads every route of the window, page after page, and no fixture lends its id", async () => {
     const second: Route = { ...planned, id: "01a0d2a4-a280-7030-8000-000000000002", number: 1043, label: "RC-1043" }
     const { fetch, calls } = scripted([() => pageOf([planned], "next-page"), () => pageOf([second])])
+    const from = routesWindowFrom()
     const result = await loadModule(clientOver(fetch), routesModule, options)
     assert.deepEqual(
       calls.map((call) => call.url),
-      ["http://api.test/routes?limit=200", "http://api.test/routes?limit=200&cursor=next-page"],
+      [`http://api.test/routes?limit=200&from=${from}`, `http://api.test/routes?limit=200&from=${from}&cursor=next-page`],
     )
     assert.deepEqual(
       result.records.map((record) => record.id),
@@ -274,6 +283,11 @@ describe("the route's commands", () => {
   const reschedule = routeAdapter.commands?.[RESCHEDULE_ROUTE]
   const cancel = routeAdapter.commands?.[CANCEL_ROUTE]
   const reorder = routeAdapter.commands?.[REORDER_ROUTE]
+
+  test("each names the modules whose rows it changes too (`touches`): the Live board reads the routes' rows, and a cancel closes the route's open stops", () => {
+    for (const name of [ASSIGN_ROUTE, DISPATCH_ROUTE, RESCHEDULE_ROUTE, REORDER_ROUTE]) assert.deepEqual(routeAdapter.commands?.[name]?.touches, ["route-studio.live"], name)
+    assert.deepEqual(cancel?.touches, ["route-studio.pickups", "route-studio.live"])
+  })
 
   test("assign sends only what moved, by server id, a cleared field as null", () => {
     const body = assign?.toBody?.({ vehicleId: wh31Record.id, driverId: frejaRecord.id, trailerId: "", depotId: depotRecord.id, unloadingStationId: "" }, record, context())

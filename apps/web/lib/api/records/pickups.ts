@@ -17,10 +17,10 @@
 // before, so a stop reads its label, its scheme and its dates), the
 // container (5b's, by its label) and the fraction (the master data), each an
 // id chip where its module has not loaded. The office pickup carries no
-// place: the map puts a stop where its container stands, and on the Pilot
-// that is the fixture container of the same label (`Container ID`), until
-// #184 gives a server container its place through its placement's property.
-// The time a stop was decided is shown on its project's clock.
+// place: the map puts a stop where its container stands — on the Pilot where
+// its placement in force delivers (#184) — linking the two by the container's
+// id and by its label (`Container ID`), which the stop carries as a fact. The
+// time a stop was decided is shown on its project's clock.
 import type { Pickup, PickupDetail } from "@waste/contracts/pickups"
 import type { ProofOfService } from "@waste/contracts/proofs"
 import { PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
@@ -28,10 +28,12 @@ import { PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabul
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 
 import { command, get, listAll } from "../client"
-import { inheritedPresentation, ofKind, stampFacts, statusLabel, typed, webIdOf, type Client, type CommandInput, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { inheritedPresentation, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { wallClockIn } from "./clock"
+import { LIVE_MODULE } from "./live"
 import { referenced, refusal } from "./places"
 import { webIdVia } from "./references"
+import { ROUTES_MODULE, routesWindowFrom } from "./routes"
 
 /** The workspace module the pickups are the rows of. */
 export const PICKUPS_MODULE: ModuleLocation = { workspaceId: "route-studio", moduleId: "pickups" }
@@ -47,14 +49,6 @@ const PICKUP_PREFIX = "pickup"
 
 /** "06:15": when an instant was, on the project's clock. */
 const clockOn = (instant: string, timezone: string | undefined) => wallClockIn(instant, timezone).slice(11, 16)
-
-/** A dialog value as a non-blank string, or undefined. */
-function said(input: CommandInput, key: string): string | undefined {
-  const value = input[key]
-  if (typeof value !== "string") return undefined
-  const trimmed = value.trim()
-  return trimmed === "" ? undefined : trimmed
-}
 
 export function toPickupRecord(pickup: Pickup, context: MappingContext): BusinessRecord {
   const project = referenced(context, "project", pickup.projectId)
@@ -118,11 +112,12 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
 // The dispatcher's commands on a stop
 // ---------------------------------------------------------------------------
 
-/** A command posted to its path on the stop, which answers the stop with its proofs. */
+/** A command posted to its path on the stop, which answers the stop with its proofs. A stop removed or corrected moves its route's progress, on the Routes table and the Live board. */
 const onPickup = (path: string, verb: string, toBody: NonNullable<RecordCommand<Pickup>["toBody"]>): RecordCommand<Pickup> => ({
   toBody,
   run: (client, serverId, body) => command<PickupDetail>(client, `/pickups/${serverId}/${path}`, body),
   refused: (record) => `${record.name} was not ${verb}`,
+  touches: [moduleKeyOf(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId), moduleKeyOf(LIVE_MODULE.workspaceId, LIVE_MODULE.moduleId)],
 })
 
 const isOneOf = <T extends string>(words: readonly T[], value: string): value is T => (words as readonly string[]).includes(value)
@@ -157,7 +152,8 @@ export const pickupAdapter: ResourceAdapter<Pickup> = {
   owns: ofKind(PICKUP_PREFIX, ["Pickup"]),
   // Planned, completed, skipped and failed move by the driver's device and the dispatcher's commands alone.
   statuses: undefined,
-  list: (client) => listAll<Pickup>(client, "/pickups"),
+  // The routes' window (routes.ts): a stop is read with its route.
+  list: (client) => listAll<Pickup>(client, "/pickups", { from: routesWindowFrom() }),
   toRecord: toPickupRecord,
   toPatchBody: () => refusal("", CHANGED_BY_COMMANDS),
   update: () => Promise.reject(new Error(CHANGED_BY_COMMANDS)),

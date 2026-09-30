@@ -16,6 +16,8 @@ export const ROUTE_ACTIVE_PLAN_KEY = "activePlan"
 // station (the places), and a dialog opens on what the route holds.
 import { PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
 
+import { statusLabel } from "../api/records/adapter"
+import { DRIVER_REASON_LABELS } from "../driver/route-view"
 import { DEPOTS_MODULE, DRIVERS_MODULE, VEHICLES_MODULE } from "./allocations"
 import type { BusinessRecord } from "./business-modules"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
@@ -59,8 +61,8 @@ export const ROUTE_COMMAND_FORMS: Readonly<Record<RouteCommandWithForm, Business
 }
 
 const MISSED = { fieldId: "outcome", oneOf: ["skipped", "failed"] } as const
-const OUTCOME_LABELS: Readonly<Record<(typeof PICKUP_OUTCOMES)[number], string>> = { completed: "Completed", skipped: "Skipped", failed: "Failed" }
-const reasonLabel = (reason: string) => reason.charAt(0).toUpperCase() + reason.slice(1).replace(/-/g, " ")
+/** A stop's reason in the Driver App's words ("Over capacity" for `capacity`, lib/driver/route-view.ts); the system's four as any token is spelled. */
+export const pickupReasonLabel = (reason: string) => (DRIVER_REASON_LABELS as Readonly<Record<string, string>>)[reason] ?? statusLabel(reason)
 
 /** Each stop command's dialog. */
 export const PICKUP_COMMAND_FORMS: Readonly<Record<PickupCommandWithForm, BusinessFormSchema>> = {
@@ -68,26 +70,14 @@ export const PICKUP_COMMAND_FORMS: Readonly<Record<PickupCommandWithForm, Busine
     { id: "reason", label: "Reason", type: "textarea", required: true },
   ]),
   correct: pickupForm("Correct outcome", "The audited correction after the fact: the stop's outcome moves and a correction proof is appended.", "Correct outcome", [
-    { id: "outcome", label: "Outcome", type: "select", required: true, options: PICKUP_OUTCOMES.map((value) => ({ value, label: OUTCOME_LABELS[value] })) },
-    { id: "reason", label: "Reason", type: "select", options: PICKUP_REASONS.map((value) => ({ value, label: reasonLabel(value) })), visibleWhen: MISSED, requiredWhen: MISSED },
+    { id: "outcome", label: "Outcome", type: "select", required: true, options: PICKUP_OUTCOMES.map((value) => ({ value, label: statusLabel(value) })) },
+    { id: "reason", label: "Reason", type: "select", options: PICKUP_REASONS.map((value) => ({ value, label: pickupReasonLabel(value) })), visibleWhen: MISSED, requiredWhen: MISSED },
     { id: "note", label: "Why it is corrected", type: "textarea", required: true },
   ]),
 }
 
-const valueOf = (record: BusinessRecord, key: string) => {
-  const value = record.submittedValues?.[key]
-  return typeof value === "string" ? value : ""
-}
-
-/** What the route's dialogs open on: its Planned Assignment by web id, the day it runs and its planned start. */
+/** What the route's dialogs open on: the fields of its command forms as the route holds them — its Planned Assignment by web id, the day it runs and its planned start. */
 export function routeCommandValues(record: BusinessRecord): BusinessFormValues {
-  return {
-    vehicleId: valueOf(record, "vehicleId"),
-    driverId: valueOf(record, "driverId"),
-    trailerId: valueOf(record, "trailerId"),
-    depotId: valueOf(record, "depotId"),
-    unloadingStationId: valueOf(record, "unloadingStationId"),
-    operatingDate: valueOf(record, "operatingDate"),
-    plannedStartTime: valueOf(record, "plannedStartTime"),
-  }
+  const fieldIds = new Set(Object.values(ROUTE_COMMAND_FORMS).flatMap((form) => form.sections.flatMap((section) => section.fields.map((field) => field.id))))
+  return Object.fromEntries(Object.entries(record.submittedValues ?? {}).filter(([key, value]) => fieldIds.has(key) && typeof value === "string"))
 }

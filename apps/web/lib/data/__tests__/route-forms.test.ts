@@ -15,8 +15,8 @@ import { driverAdapter } from "../../api/records/fleet"
 import { CORRECT_PICKUP, pickupAdapter, REMOVE_PICKUP } from "../../api/records/pickups"
 import { ASSIGN_ROUTE, CANCEL_ROUTE, RESCHEDULE_ROUTE, routeAdapter } from "../../api/records/routes"
 import { loaded, resolverOver, type ServerRecordsState } from "../../api/records/server-records"
-import { DEPOTS_MODULE, DRIVERS_MODULE, VEHICLES_MODULE } from "../allocations"
-import { FIXTURE_COMPANY_ID } from "../business-modules"
+import { DEPOTS_MODULE, DRIVERS_MODULE, isTrailerRecord, VEHICLES_MODULE } from "../allocations"
+import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../business-modules"
 import type { BusinessFormSchema } from "../business-form-types"
 import { PICKUP_COMMAND_FORMS, ROUTE_COMMAND_FORMS, routeCommandValues } from "../routes"
 
@@ -54,6 +54,17 @@ const record = routeAdapter.toRecord(route, context)
 const fieldIdsOf = (schema: BusinessFormSchema) => schema.sections.flatMap((section) => section.fields.map((field) => field.id))
 const requiredOf = (schema: BusinessFormSchema) => schema.sections.flatMap((section) => section.fields.filter((field) => field.required).map((field) => field.id))
 const fieldOf = (schema: BusinessFormSchema, id: string) => schema.sections.flatMap((section) => section.fields).find((field) => field.id === id)
+
+describe("the vehicle pickers", () => {
+  const row = (id: string, submittedValues?: BusinessRecord["submittedValues"]): BusinessRecord => ({ id, name: id, context: "", status: "Active", owner: "", value: "", updated: "", description: "", facts: {}, related: [], source: "", freshness: "", submittedValues })
+
+  test("a trailer is told by its typed kind — the server's rows, the fixture form's — else by the fixture id's prefix, so Vehicle offers no trailer and Trailer nothing else", () => {
+    assert.equal(isTrailerRecord(row("vehicle-01a0d2a4", { resourceKind: "trailer" })), true)
+    assert.equal(isTrailerRecord(row("vehicle-01a0d2a5", { resourceKind: "powered-vehicle" })), false)
+    assert.equal(isTrailerRecord(row("trailer-wh12", { requiredLicenceClass: "CE" })), true)
+    assert.equal(isTrailerRecord(row("vehicle-wh24", { requiredLicenceClass: "C" })), false)
+  })
+})
 
 describe("the route's dialogs", () => {
   test("assign names the Planned Assignment's five fields, each a picker of the module that holds it, none required", () => {
@@ -121,6 +132,11 @@ describe("the stop's dialogs", () => {
     assert.deepEqual(fieldOf(form, "outcome")?.options?.map((option) => option.value), [...PICKUP_OUTCOMES])
     assert.deepEqual(fieldOf(form, "reason")?.visibleWhen, { fieldId: "outcome", oneOf: ["skipped", "failed"] })
     assert.deepEqual(fieldOf(form, "reason")?.requiredWhen, { fieldId: "outcome", oneOf: ["skipped", "failed"] })
+    // The reasons in the Driver App's words (lib/driver/route-view.ts), the system's four spelled out.
+    const reasons = new Map(fieldOf(form, "reason")?.options?.map((option) => [option.value, option.label]))
+    assert.equal(reasons.get("capacity"), "Over capacity")
+    assert.equal(reasons.get("not-presented"), "Not presented")
+    assert.equal(reasons.get("route-cancelled"), "Route cancelled")
     const body = pickupAdapter.commands?.[CORRECT_PICKUP]?.toBody?.({ outcome: "failed", reason: "inaccessible", note: "Gate locked" }, stop, context)
     assert.deepEqual(body, { outcome: "failed", reason: "inaccessible", note: "Gate locked" })
     assert.ok(PickupCorrection.safeParse(body).success)

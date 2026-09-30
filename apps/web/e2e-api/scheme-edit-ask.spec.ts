@@ -1,9 +1,9 @@
-import type { Locator, Page } from "@playwright/test"
+import type { Page } from "@playwright/test"
 
 import { dayIn } from "./dispatched-route"
 import { uniqueName } from "./env"
 import { expect, test } from "./fixtures"
-import { answerOf, schemeWithRoutes, toasts, type Scheme } from "./routes-support"
+import { answerOf, openEdit, openScheme, pick, schemeWithRoutes, toasts, type Scheme } from "./routes-support"
 
 // A running scheme's edit asks "How should this change apply?" on the Pilot
 // (Issue #179), ported from the fixture suite's edit-policy.spec.ts, which
@@ -14,31 +14,6 @@ import { answerOf, schemeWithRoutes, toasts, type Scheme } from "./routes-suppor
 // not offered, since the API keeps no one-off yet (#209). The stored policy
 // decides, and a rename never asks. Each test's scheme is made and
 // generated through the API for the run (routes-support.ts).
-
-/** Opens a scheme's page from the list, narrowed to its name. */
-async function openScheme(page: Page, name: string) {
-  const loaded = page.waitForResponse((response) => response.request().method() === "GET" && new URL(response.url()).pathname === "/waste-api/route-schemes")
-  await page.goto("/route-studio?module=schemes")
-  expect((await loaded).status()).toBe(200)
-  // The question counts the routes, which the store reads after the schemes.
-  await page.waitForLoadState("networkidle")
-  await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill(name)
-  await page.getByRole("button", { name: `Open ${name}` }).click()
-  await expect(page.getByRole("tab", { name: "Details" })).toBeVisible()
-}
-
-async function openEdit(page: Page): Promise<Locator> {
-  await page.getByRole("button", { name: "Actions", exact: true }).click()
-  await page.getByRole("menuitem", { name: "Edit scheme" }).click()
-  const dialog = page.getByRole("dialog", { name: "Edit route scheme" })
-  await expect(dialog).toBeVisible()
-  return dialog
-}
-
-async function pick(within: Locator, page: Page, label: string, option: string) {
-  await within.getByRole("combobox", { name: new RegExp(`^${label}`) }).click()
-  await page.getByRole("option", { name: option, exact: true }).click()
-}
 
 const question = (page: Page) => page.getByRole("dialog", { name: "How should this change apply?" })
 
@@ -78,7 +53,7 @@ test("a shaping edit of a running scheme asks how it applies, counting the API's
   expect(saved.request().postDataJSON()).toEqual({ plannedStartTime: "08:15" })
   await expect(dialog).toBeHidden()
   await expect(toasts(page)).toContainText(`${scheme.name} updated`)
-  await expect(toasts(page)).toContainText(`The next generation run brings ${count} future routes to it.`)
+  await expect(toasts(page)).toContainText(`The next generation of its routes brings ${count} planned routes to it.`)
   const read = (await (await api.get(`/route-schemes/${scheme.id}`)).json()) as Scheme
   expect(read.plannedStartTime).toBe("08:15")
 })

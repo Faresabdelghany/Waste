@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test"
 
-import { expect, test } from "./fixtures"
+import { chainLanded, expect, test } from "./fixtures"
 import { uniqueName } from "./env"
 import { routeRead, schemeWithRoutes } from "./routes-support"
 import { listAll } from "./tester"
@@ -9,26 +9,30 @@ import { listAll } from "./tester"
 // Routes layer, the route card, Play route and the Selected area's route
 // rows, ported from the fixture suite's map-planning.spec.ts, whose seeded
 // browser routes they replace, onto the routes generation wrote through the
-// API. The map places an API route's stops through the fixture containers of
-// the same label until a server container has a place of its own (#184). No
+// API. The map places an API route's stops at its containers, which stand
+// where their placements in force deliver (#184). No
 // road geometry is asserted here: how a route's line is measured is the legs
-// layer's (#173); the routing server is refused so the suite needs no
-// network, and every route is still drawn.
+// layer's (#173), and roads come through the API alone (#214), so the suite
+// asks no routing server; every route is drawn as the dashed estimate.
 
 const MARKERS = '[data-testid="planning-map-markers"]'
 const DRAW = '[data-testid="planning-map-draw"]'
 
 type Container = { id: string; label: string }
 
-async function openMapPlanning(page: Page): Promise<void> {
+/** The map without its tiles, which the suite never asks for. */
+async function showMapPlanning(page: Page): Promise<void> {
   await page.route("**/tiles.openfreemap.org/**", (route) => route.abort())
   await page.route("**/server.arcgisonline.com/**", (route) => route.abort())
-  await page.route("https://router.project-osrm.org/**", (route) => route.abort("failed"))
   await page.goto("/plan")
   await expect(page.getByTestId("map-planning")).toBeVisible()
   await expect(page.locator(MARKERS)).toBeVisible()
-  // The routes are the last modules the store reads: until they land, the map shows the fixtures' route days.
-  await page.waitForLoadState("networkidle")
+}
+
+async function openMapPlanning(page: Page): Promise<void> {
+  await showMapPlanning(page)
+  // The routes and the stops are the last modules the store reads: until they land, the map draws no route (#179).
+  await chainLanded(page)
 }
 
 async function routesLayer(page: Page) {
@@ -72,7 +76,7 @@ test("the Routes layer counts the API's routes by status and draws them only onc
   await expect(layer).toContainText("Any date")
   const toggle = layer.getByRole("checkbox", { name: /Routes in the collection window/ })
   await expect(toggle).toBeEnabled()
-  // Every planned route the tenant holds is awaiting, the run's own among them.
+  // Every planned route of the project is awaiting, the run's own among them: a lower bound, since the specs running beside this one generate routes of their own.
   const awaiting = Number((await layer.innerText()).match(/(\d+) awaiting/)?.[1] ?? 0)
   expect(awaiting).toBeGreaterThanOrEqual(routes.length)
   await expect(page.locator("[data-route-line]")).toHaveCount(0)
@@ -83,6 +87,28 @@ test("the Routes layer counts the API's routes by status and draws them only onc
     await expect(line).toBeVisible()
     await expect(line).toHaveAttribute("data-route-status", "awaiting")
   }
+})
+
+test("until the API's routes and stops are read the map draws no route: nothing before, never the fixtures' (#179)", async ({ api, page }) => {
+  const { routes } = await schemeWithRoutes(api, uniqueName("E2E Map held"))
+  let release: () => void = () => {}
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  for (const list of ["**/waste-api/routes?*", "**/waste-api/pickups?*"]) {
+    await page.route(list, async (route) => {
+      await held
+      await route.continue()
+    })
+  }
+  await showMapPlanning(page)
+  const layer = await routesLayer(page)
+  await layer.getByRole("checkbox", { name: /Routes in the collection window/ }).click()
+  // The fixtures' routes would count and draw here, over the Pilot's containers, were they shown before the API's rows.
+  expect(Number((await layer.innerText()).match(/(\d+) awaiting/)?.[1] ?? 0)).toBe(0)
+  await expect(page.locator("[data-route-line]")).toHaveCount(0)
+  release()
+  for (const route of routes) await expect(page.locator(`[data-route-line="route-${route.id}"]`)).toBeVisible()
 })
 
 test("a click on an API route's line opens its card with the route's own facts, and Open route lands on its details", async ({ api, page }) => {

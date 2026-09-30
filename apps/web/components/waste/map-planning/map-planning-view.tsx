@@ -210,7 +210,7 @@ export function MapPlanningView({
     () => containers.filter((record) => !isSoftDeleted(record) && containerLocation(record, FIXTURE_GAZETTEER) !== null),
     [containers],
   )
-  const stopIndex = useMemo(() => routeStopIndex(routes, pickups), [routes, pickups])
+  const stopIndex = useMemo(() => routeStopIndex(routes, pickups, containers), [containers, routes, pickups])
   // The containers a filter set and window leave on the map — the live view
   // reads the current pair; loading a saved selection reads the saved one.
   const containersFor = useCallback(

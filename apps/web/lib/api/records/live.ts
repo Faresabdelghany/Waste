@@ -25,22 +25,26 @@ import { listAll } from "../client"
 import { ofKind, typed, type Client, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
 import { refusal } from "./places"
-import { nameVia } from "./references"
-import { toRouteRecord } from "./routes"
+import { assignmentOf, toRouteRecord } from "./routes"
 
 /** The workspace module the live routes are the rows of. */
 export const LIVE_MODULE: ModuleLocation = { workspaceId: "route-studio", moduleId: "live" }
 
-const ROUTE_PREFIX = "route"
+/** How often the board is read again while a person watches it. */
+export const LIVE_BOARD_REFRESH_MS = 30_000
 
-/** "WH-24" for "WH-24 · CN 42 018": a vehicle as the board names it. */
-const callsignOf = (name: string) => name.split(" · ")[0] ?? name
-
-/** "Mads Jensen · WH-31": a driver and a vehicle as the board reads an assignment; undefined when it names neither. */
-function assignmentOf(context: MappingContext, driverId: string | null, vehicleId: string | null): string | undefined {
-  const parts = [driverId === null ? undefined : nameVia(context, "driver", driverId), vehicleId === null ? undefined : callsignOf(nameVia(context, "vehicle", vehicleId))].filter(Boolean)
-  return parts.length === 0 ? undefined : parts.join(" · ")
+/**
+ * Reads the board again every 30 s while it is watched — the store's
+ * `refreshModule`, #213's re-read exposed — on one interval; the stop it
+ * answers clears it when the board is left. The load that showed the board
+ * is its first read.
+ */
+export function whileWatched(read: () => void, every = LIVE_BOARD_REFRESH_MS): () => void {
+  const timer = setInterval(read, every)
+  return () => clearInterval(timer)
 }
+
+const ROUTE_PREFIX = "route"
 
 /** "4 minutes ago": how long since the device was last seen, to the minute; the board's freshness. */
 function freshnessOf(instant: string, now: Date): string {
@@ -55,8 +59,8 @@ export function toLiveRecord(live: LiveRoute, context: MappingContext): Business
   const route = toRouteRecord(live, context)
   const project = context.resolve.byServerId(live.projectId)
   const timezone = project === undefined ? undefined : typed(project, "timezone")
-  const planned = assignmentOf(context, live.planned.driverId, live.planned.vehicleId)
-  const actual = live.session === null ? undefined : assignmentOf(context, live.session.driverId, live.session.vehicleId)
+  const planned = assignmentOf(context, live.planned)
+  const actual = live.session === null ? undefined : assignmentOf(context, live.session)
   const { total, planned: open } = live.progress
   const facts: Record<string, string> = {
     ...route.facts,

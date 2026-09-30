@@ -269,7 +269,7 @@ import { CollectionGroupsEditorDialog } from "@/components/waste/collection-grou
 import { SchemeGenerateRoutesDialog } from "@/components/waste/scheme-generate-routes"
 import { SchemeDetailsPage } from "@/components/waste/scheme-details-page"
 import { SchemePlanAheadRunner } from "@/components/waste/scheme-plan-ahead"
-import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { commandSurfaceFor } from "@/components/waste/commands/command-surfaces"
 import { offersRowsOf } from "@/components/waste/pickable-records"
@@ -728,9 +728,11 @@ function offeredTransitions(
   workspaceId: WorkspaceId,
   module: ModuleDefinition,
   record: BusinessRecord,
+  onApi: boolean,
 ): string[] {
   const transitions = record.allowedTransitions ?? module.lifecycle.slice(1, 3)
-  const server = serverModuleOf(workspaceId, module.id)
+  // Only where the module reads the API: in fixture mode every transition stands (#179).
+  const server = onApi ? serverModuleOf(workspaceId, module.id) : undefined
   if (server === undefined) return transitions
   return transitions.filter((action) => {
     const outcome = actionOutcome(module, action, record.status)
@@ -1095,6 +1097,9 @@ export function BusinessWorkspace({
 }: BusinessWorkspaceProps) {
   const sourceWorkspace = getWorkspaceDefinition(workspaceId)
   const { getRecords, upsertRecord } = useBusinessRecordStore()
+  // The API's routes and stops reach the map once they are read, and nothing before (#179): a fixture route drawn over the Pilot's containers is a route that does not exist.
+  const routesOnApi = useServerModuleState("route-studio", "routes")
+  const pickupsOnApi = useServerModuleState("route-studio", "pickups")
   // Whether the adapter is on (Issue #81): what the switched modules' own surfaces show, and fixture mode does not.
   const apiConfigured = useApiConfigured()
   // On the API a customer field names a Customer in the glossary's sense — a
@@ -1254,6 +1259,7 @@ export function BusinessWorkspace({
   const formIsPrimary = commandSurface === undefined || commandSurface.primary === "form"
   const PrimarySurface = commandSurface && commandSurface.primary !== "form" ? commandSurface.primary : null
   const RowSurface = commandSurface?.rowActions
+  const WhileShown = commandSurface?.whileShown
   // A command replaces its row in the store: details with a row surface read
   // the live row, so what the API answered shows at once.
   const detailsRecord =
@@ -1572,11 +1578,11 @@ export function BusinessWorkspace({
       containers: moduleRecords("resources", "containers"),
       planningAreas: moduleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId),
       serviceAreas: moduleRecords("service-providers", "service-areas"),
-      routes: moduleRecords("route-studio", "routes"),
-      pickups: moduleRecords("route-studio", "pickups"),
+      routes: apiConfigured && routesOnApi !== null ? (routesOnApi.status === "ready" ? routesOnApi.records : []) : moduleRecords("route-studio", "routes"),
+      pickups: apiConfigured && pickupsOnApi !== null ? (pickupsOnApi.status === "ready" ? pickupsOnApi.records : []) : moduleRecords("route-studio", "pickups"),
       schemes: moduleRecords("route-studio", "schemes"),
     }
-  }, [isMapPlanningView, moduleRecords])
+  }, [apiConfigured, isMapPlanningView, moduleRecords, pickupsOnApi, routesOnApi])
   const containersModuleDefinition = getModuleDefinition({
     workspaceId: "resources",
     moduleId: "containers",
@@ -1758,9 +1764,9 @@ export function BusinessWorkspace({
   // The API has no delete (Issue #81): a switched module's record is
   // deactivated or moved to another status, never soft-deleted, so the
   // action is not offered there — and the store refuses one that arrives
-  // another way.
+  // another way. In fixture mode the module deletes as it always did.
   const canDeleteRecords =
-    offersRowActions && hasGrant("delete") && !isServerBacked(workspace.id, activeModule.id)
+    offersRowActions && hasGrant("delete") && !(apiConfigured && isServerBacked(workspace.id, activeModule.id))
   const canRunRecordActions = hasGrant("edit")
   // Generate routes (spec FR-6, ticket #7) and the Plan Ahead toggle (FR-11,
   // ticket #8) on a scheme: row menu + detail view, only for schemes whose
@@ -4907,6 +4913,7 @@ export function BusinessWorkspace({
                   <span className="hidden sm:inline">Export</span>
                 </Button>
               )}
+              {WhileShown ? <WhileShown /> : null}
               {effectiveShowPrimaryAction && canOpenBusinessForm && formSchema && (
                 !formIsPrimary ? (
                   PrimarySurface ? <PrimarySurface label={activeModule.primaryAction} /> : null
@@ -5711,7 +5718,7 @@ export function BusinessWorkspace({
           onClose={closeRecord}
           onAction={requestRecordAction}
           transitions={
-            detailsRecord ? offeredTransitions(workspace.id, activeModule, detailsRecord) : []
+            detailsRecord ? offeredTransitions(workspace.id, activeModule, detailsRecord, apiConfigured) : []
           }
           showDeepLinks={showDeepLinks}
           onEdit={canEditRecords ? openEditRecord : undefined}

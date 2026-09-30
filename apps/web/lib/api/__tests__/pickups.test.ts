@@ -27,7 +27,7 @@ import { containerTypeAdapter, wasteFractionAdapter } from "../records/master-da
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { CORRECT_PICKUP, PICKUPS_MODULE, pickupAdapter, pickupProofs, pickupsModule, REASON_WITH_A_MISS as LOCAL_REASON_WITH_A_MISS, REMOVE_PICKUP } from "../records/pickups"
-import { routeAdapter } from "../records/routes"
+import { routeAdapter, routesWindowFrom } from "../records/routes"
 import { commandRecord, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
@@ -119,12 +119,13 @@ describe("the pickups module", () => {
     }
   })
 
-  test("reads every pickup, page after page, each pickup-<uuid>", async () => {
+  test("reads every pickup of the routes' window, page after page, each pickup-<uuid>", async () => {
     const { fetch, calls } = scripted([() => pageOf([first, second], "next"), () => pageOf([third])])
+    const from = routesWindowFrom()
     const result = await loadModule(clientOver(fetch), pickupsModule, options)
     assert.deepEqual(
       calls.map((call) => call.url),
-      ["http://api.test/pickups?limit=200", "http://api.test/pickups?limit=200&cursor=next"],
+      [`http://api.test/pickups?limit=200&from=${from}`, `http://api.test/pickups?limit=200&from=${from}&cursor=next`],
     )
     assert.deepEqual(
       result.records.map((record) => record.id),
@@ -222,6 +223,10 @@ describe("the pickup's commands", () => {
   const remove = pickupAdapter.commands?.[REMOVE_PICKUP]
   const correct = pickupAdapter.commands?.[CORRECT_PICKUP]
   const detail = (pickup: Pickup, proofs: ProofOfService[] = []): PickupDetail => ({ ...pickup, proofs })
+
+  test("each names the route's modules too (`touches`): a stop removed or corrected moves its route's progress, on the Routes table and the Live board", () => {
+    for (const [name, command] of Object.entries(pickupAdapter.commands ?? {})) assert.deepEqual(command.touches, ["route-studio.routes", "route-studio.live"], name)
+  })
 
   test("remove carries its reason; without one it is refused here", async () => {
     const body = remove?.toBody?.({ reason: "Blocked by roadworks" }, record, context())

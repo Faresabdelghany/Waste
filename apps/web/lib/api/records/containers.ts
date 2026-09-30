@@ -49,7 +49,7 @@ import { masterDataKindOf } from "@/lib/data/master-data"
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 
 import { command, create, get, listAll, patch } from "../client"
-import { inheritedPresentation, isLocalRefusal, moduleKeyOf, ofKind, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { inheritedPresentation, isLocalRefusal, moduleKeyOf, ofKind, patchOf, said, stampFacts, statusLabel, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, projectTimezoneOf, shownOn } from "./clock"
 import { containerPlace } from "./container-places"
 import { projectMoved, projectServerIdOf, refusal, warehouseAdapter } from "./places"
@@ -178,14 +178,6 @@ function placementPatchOf(before: BusinessRecord, after: BusinessRecord, context
 export const WAREHOUSE_WITH_A_STOCK_PLACE = "Name the warehouse with warehouse or maintenance and not with scrap"
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
-
-/** A dialog value as a non-blank string, or undefined. */
-function said(input: CommandInput, key: string): string | undefined {
-  const value = input[key]
-  if (typeof value !== "string") return undefined
-  const trimmed = value.trim()
-  return trimmed === "" ? undefined : trimmed
-}
 
 /** The server id a dialog names a row by (references.ts), undefined when it names none the API holds. */
 function inputReference(input: CommandInput, key: string, prefix: string, context: MappingContext, rule: ReferenceRule): string | undefined {
