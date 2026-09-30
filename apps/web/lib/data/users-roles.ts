@@ -82,12 +82,16 @@ export const coversEveryProject = (roleId: string): boolean => roleId === COMPAN
 
 /**
  * What a table says on the Pilot while it has no rows: the list is still
- * being read, or the read failed with the API's own detail — never the
+ * being read, the read failed with the API's own detail, or the person's
+ * role does not view the module, in the store's sentence — never the
  * fixtures. Null once the module is ready, when an empty table means what
  * it says.
  */
 export function pilotEmptyState(module: ModuleState, noun: "users" | "roles"): { message: string; hint: string } | null {
   if (module.status === "ready") return null
+  if (module.status === "not-granted") {
+    return { message: `The ${noun} are not shown to your role.`, hint: module.problem?.detail ?? "" }
+  }
   if (module.status === "failed") {
     return { message: `The ${noun} could not be read from the API.`, hint: module.problem === null ? "The API did not answer." : (module.problem.detail ?? module.problem.title) }
   }

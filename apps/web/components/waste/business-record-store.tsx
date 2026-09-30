@@ -33,13 +33,16 @@ import {
   loadModule,
   loaded,
   loading,
+  paneAnswerOf,
   problemOfError,
   recordsOf,
   withCreated,
+  withNotGranted,
   withRecord,
   writeRecord,
   type CommandOutcome,
   type ModuleState,
+  type PaneAnswer,
   type ServerRecordsState,
   type WriteOutcome,
 } from "@/lib/api/records/server-records"
@@ -119,10 +122,10 @@ type BusinessRecordStores = {
    * as the prototype shows them once its read has landed. Empty while the
    * adapter is off or nobody is signed in, so every module reads the
    * browser's own path then. Until a module is `ready` — the load pending,
-   * or failed — `getRecords` answers its fixtures alone: the browser's own
-   * bucket for that module is not shown in that window, and a write made in
-   * it goes to that bucket, which the module stops reading once the server
-   * has answered. Never a mixture.
+   * failed, or not granted — `getRecords` answers its fixtures alone: the
+   * browser's own bucket for that module is not shown in that window, and a
+   * write made in it goes to that bucket, which the module stops reading
+   * once the server has answered. Never a mixture.
    */
   server: ExternalStore<ServerRecordsState>
   /**
@@ -278,14 +281,15 @@ export function BusinessRecordStoreProvider({
   // session by then, so the load stops there, reported nowhere but /login
   // and never falling back on fixtures. Only the modules the person's `/me`
   // role grants `view` on are read (`viewableModules`, Issue #145); the rest
-  // are never requested and stay idle, so nobody meets a refusal for a pane
-  // they cannot open. A `/me` that cannot be read leaves the grants unknown,
-  // and every module is tried as before. A load the session outlives — the
-  // person signs out mid-way — is aborted, not left to finish into a store
-  // that no longer wants it, and a write it outlives is dropped when it
-  // answers (`generation`). Every change of person or API empties the
-  // modules first, a sign-in as someone else included: the last person's
-  // rows are never shown under the next one while theirs load.
+  // are never requested and are marked not granted, told to nobody (Issue
+  // #200), so nobody meets a refusal for a pane they cannot open and a pane
+  // they do open says why it is empty. A `/me` that cannot be read leaves
+  // the grants unknown, and every module is tried as before. A load the
+  // session outlives — the person signs out mid-way — is aborted, not left
+  // to finish into a store that no longer wants it, and a write it outlives
+  // is dropped when it answers (`generation`). Every change of person or API
+  // empties the modules first, a sign-in as someone else included: the last
+  // person's rows are never shown under the next one while theirs load.
   useEffect(() => {
     const server = stores.server
     stores.generation.set((generation) => generation + 1)
@@ -302,6 +306,8 @@ export function BusinessRecordStoreProvider({
         // The account's refusal has ended the session; anything else leaves the grants unknown.
         if (controller.signal.aborted || isAccountRefusal(problemOfError(error))) return
       }
+      if (controller.signal.aborted) return
+      server.set((state) => withNotGranted(state, SERVER_MODULES.filter((module) => !modules.includes(module))))
       for (const module of modules) {
         if (controller.signal.aborted) return
         // The token as it stands when this module's read is sent; the one the
@@ -527,10 +533,10 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
 }
 
 /**
- * The state of a switched module — idle, loading, ready or failed, with its
- * problem — or null for a module on the browser's own path. For a pane that
- * must show nothing rather than the fixtures until the API has answered
- * (Settings › Users & roles on the Pilot, Issue #163).
+ * The state of a switched module — idle, not granted, loading, ready or
+ * failed, with its problem — or null for a module on the browser's own
+ * path. For a pane that must show nothing rather than the fixtures until
+ * the API has answered (Settings › Users & roles on the Pilot, Issue #163).
  */
 export function useServerModuleState(workspaceId: WorkspaceId, moduleId: string): ModuleState | null {
   const stores = useContext(BusinessRecordStoreContext)
@@ -554,19 +560,19 @@ export function useServerModuleState(workspaceId: WorkspaceId, moduleId: string)
  * before — never the fixtures, since a fixture row shown on the Pilot is a
  * row that does not exist — with the load's state beside them, for the
  * pane's empty row and its create button (Issue #163's rule for Settings ›
- * Users & roles, here for every pane that reads its own module).
+ * Users & roles, here for every pane that reads its own module). A module
+ * the person's role does not view is not pending: its problem says so, and
+ * nobody is toasted (`paneAnswerOf`, Issue #200).
  */
 export function useModuleRecords(
   workspaceId: WorkspaceId,
   moduleId: string,
   fixtures: readonly BusinessRecord[],
-): { records: BusinessRecord[]; ready: boolean; pending: boolean; problem: Problem | null } {
+): PaneAnswer {
   const configured = useApiConfigured()
   const state = useServerModuleState(workspaceId, moduleId)
   const { getRecords } = useBusinessRecordStore()
-  if (configured && state !== null && state.status !== "ready") {
-    return { records: [], ready: false, pending: state.status !== "failed", problem: state.problem }
-  }
+  if (configured && state !== null) return paneAnswerOf(state)
   return { records: getRecords(workspaceId, moduleId, fixtures), ready: true, pending: false, problem: null }
 }
 

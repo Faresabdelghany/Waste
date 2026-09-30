@@ -1,6 +1,6 @@
 import type { Request } from "@playwright/test"
 
-import { accessTokenOf, apiAs, expect, freshContext, signIn, test } from "./fixtures"
+import { accessTokenOf, apiAs, chainLanded, expect, freshContext, signIn, test } from "./fixtures"
 import { E2E, uniqueName } from "./env"
 import { ensureTester } from "./tester"
 
@@ -8,12 +8,14 @@ import { ensureTester } from "./tester"
 // views the customers and edits none of them, and views nothing of the
 // organisation. The record store reads only the switched modules the role
 // views (`viewableModules`, lib/api/records/modules.ts; Issue #145), so
-// Company & Projects is never asked for and nobody is told of it; a change
-// the role may not make is still sent, the API refuses it — `about:blank`
-// 403 — and the person is told in the API's own words (business-record-
-// store.tsx, `reportProblem`) while the session stays open: authentication
-// and authorization are apart (lib/api/session.ts), and only the account's
-// own refusal ends a session.
+// Company & Projects is never asked for and nobody is told of it: it is not
+// granted, a state of its own and not a failed read (Issue #200), and the
+// customers the API returns are listed, found and opened beside it. A
+// change the role may not make is still sent, the API refuses it —
+// `about:blank` 403 — and the person is told in the API's own words
+// (business-record-store.tsx, `reportProblem`) while the session stays
+// open: authentication and authorization are apart (lib/api/session.ts),
+// and only the account's own refusal ends a session.
 test("a role without the grant is refused in the API's words and stays signed in", async ({ api, browser }) => {
   await ensureTester(api, E2E.testerEmail)
   const name = uniqueName("E2E Refused Organisation")
@@ -38,13 +40,9 @@ test("a role without the grant is refused in the API's words and stays signed in
     await expect(page.getByText("configure.organization could not be read from the API")).toHaveCount(0)
 
     // A status change on a customer is an edit the role does not hold: sent, refused in the API's words.
-    // The list is rebuilt when the server's rows land after the response, which can clear a search typed a moment before: typed again until the row shows.
-    const opener = page.getByRole("button", { name: `Open ${name}` })
-    await expect(async () => {
-      await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill(name)
-      await expect(opener).toBeVisible({ timeout: 2_000 })
-    }).toPass({ timeout: 30_000 })
-    await opener.click()
+    // The search is typed once: the modules landing after it no longer clear it (#197), and a module not granted loses no row (#200).
+    await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill(name)
+    await page.getByRole("button", { name: `Open ${name}` }).click()
     const sheet = page.getByRole("dialog")
     await expect(sheet.getByRole("heading", { name })).toBeVisible()
     await sheet.getByRole("button", { name: "Inactive" }).click()
@@ -73,6 +71,40 @@ test("a role without the grant is refused in the API's words and stays signed in
     } finally {
       await tester.dispose()
     }
+  } finally {
+    await context.close()
+  }
+})
+
+// Issue #200: a pane backed by a module the role does not view says so, in
+// the store's sentence, rather than reading forever — the Route Planner holds
+// no grant on the master data nor on the accounts — and the store neither
+// asks the API for those modules nor tells anyone of them.
+test("a pane backed by a module the role does not view says so in place of rows, with nothing asked and nobody toasted", async ({ api, browser }) => {
+  await ensureTester(api, E2E.testerEmail)
+  const context = await freshContext(browser)
+  try {
+    const page = await context.newPage()
+    const asked: string[] = []
+    page.on("request", (request: Request) => {
+      const path = new URL(request.url()).pathname
+      if (path.startsWith("/waste-api/")) asked.push(`${request.method()} ${path}`)
+    })
+    await signIn(page, E2E.testerEmail, E2E.loginPassword)
+
+    await page.goto("/settings?pane=master-data")
+    await expect(page.getByText("The master data could not be read from the API: Your role does not allow view on configure.master")).toBeVisible()
+    await expect(page.getByText("Reading the master data from the API…")).toHaveCount(0)
+
+    await page.goto("/settings?pane=access")
+    await expect(page.getByText("The users are not shown to your role.")).toBeVisible()
+    await expect(page.getByText("Your role does not allow view on configure.access").first()).toBeVisible()
+    await expect(page.getByText("Reading the company's users from the API…")).toHaveCount(0)
+
+    // The whole load has run by now, the modules the role views included, and nothing was told.
+    await chainLanded(page)
+    await expect(page.locator("[data-sonner-toast]")).toHaveCount(0)
+    expect(asked.filter((call) => /\/waste-api\/(waste-fractions|container-types|service-frequencies|vehicle-types|users|roles|company|projects)\b/.test(call))).toEqual([])
   } finally {
     await context.close()
   }

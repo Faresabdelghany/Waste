@@ -28,7 +28,7 @@ import {
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { accessModule, companyAdapter, projectAdapter, roleAdapter, roleWebIdOf, SERVICE_PROVIDER_ACCESS, serviceProviderAdapter, userAdapter } from "../records/organisation"
-import { IDLE, loaded, loadFailed, loading, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
+import { IDLE, loaded, loadFailed, loading, notGranted, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-25T12:00:00Z")
@@ -304,6 +304,11 @@ describe("what the pane says while it has no rows on the Pilot", () => {
     assert.deepEqual(pilotEmptyState(failed, "roles"), { message: "The roles could not be read from the API.", hint: "Your role does not allow view on configure.access" })
     assert.deepEqual(pilotEmptyState(loadFailed(loading(IDLE), { type: "about:blank", title: "Service Unavailable", status: 503 }), "users"), { message: "The users could not be read from the API.", hint: "Service Unavailable" })
     assert.equal(pilotEmptyState(access, "users"), null)
+  })
+
+  test("a module the role does not view: the pane says it is not the role's to see, in the store's sentence, and never that a read is out or broke", () => {
+    assert.deepEqual(pilotEmptyState(notGranted("configure.access"), "users"), { message: "The users are not shown to your role.", hint: "Your role does not allow view on configure.access" })
+    assert.deepEqual(pilotEmptyState(notGranted("configure.access"), "roles"), { message: "The roles are not shown to your role.", hint: "Your role does not allow view on configure.access" })
   })
 })
 
