@@ -4865,6 +4865,8 @@ export function BusinessWorkspace({
         />
       ) : (
         <>
+      {/* What a switched module does on its own while it is shown (the registry's `whileShown`): mounted with the module's view, whatever the toolbar offers. */}
+      {WhileShown ? <WhileShown /> : null}
       <header className="flex flex-col border-b border-border/40">
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
           <div className="flex items-center gap-3 min-w-0">
@@ -4913,7 +4915,6 @@ export function BusinessWorkspace({
                   <span className="hidden sm:inline">Export</span>
                 </Button>
               )}
-              {WhileShown ? <WhileShown /> : null}
               {effectiveShowPrimaryAction && canOpenBusinessForm && formSchema && (
                 !formIsPrimary ? (
                   PrimarySurface ? <PrimarySurface label={activeModule.primaryAction} /> : null

@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test"
 
+import { dayIn } from "./dispatched-route"
 import { chainLanded, expect, test } from "./fixtures"
 import { uniqueName } from "./env"
 import { routeRead, schemeWithRoutes } from "./routes-support"
@@ -103,11 +104,14 @@ test("until the API's routes and stops are read the map draws no route: nothing 
   }
   await showMapPlanning(page)
   const layer = await routesLayer(page)
-  await layer.getByRole("checkbox", { name: /Routes in the collection window/ }).click()
-  // The fixtures' routes would count and draw here, over the Pilot's containers, were they shown before the API's rows.
+  const toggle = layer.getByRole("checkbox", { name: /Routes in the collection window/ })
+  // Nothing to draw yet, so the layer cannot be switched on: the fixtures' routes would count, enable it and draw here, were they shown before the API's rows.
+  await expect(toggle).toBeDisabled()
   expect(Number((await layer.innerText()).match(/(\d+) awaiting/)?.[1] ?? 0)).toBe(0)
   await expect(page.locator("[data-route-line]")).toHaveCount(0)
   release()
+  await expect(toggle).toBeEnabled()
+  await toggle.click()
   for (const route of routes) await expect(page.locator(`[data-route-line="route-${route.id}"]`)).toBeVisible()
 })
 
@@ -143,8 +147,16 @@ test("a click on an API route's line opens its card with the route's own facts, 
 test("Play route replays an API route stop by stop, from its card", async ({ api, page }) => {
   const { routes } = await schemeWithRoutes(api, uniqueName("E2E Map play"))
   const [route] = routes
-  const [detail, containers] = await Promise.all([routeRead(api, route.id), listAll<Container>(api, "/containers")])
-  const first = containers.find((container) => container.id === detail.pickups[0]?.containerId)?.label
+  const [detail, containers, placements] = await Promise.all([
+    routeRead(api, route.id),
+    listAll<Container>(api, "/containers"),
+    listAll<{ containerId: string }>(api, "/placements", { validOn: dayIn("Europe/Copenhagen") }),
+  ])
+  // The replay walks the stops the map can place: a container stands where its placement in force today delivers (#184); one without is no stop on the map.
+  const placed = new Set(placements.map((placement) => placement.containerId))
+  const stops = detail.pickups.filter((pickup) => placed.has(pickup.containerId))
+  expect(stops.length, "the rule matched placed containers").toBeGreaterThan(0)
+  const first = containers.find((container) => container.id === stops[0]?.containerId)?.label
 
   await openMapPlanning(page)
   await (await routesLayer(page)).getByRole("checkbox", { name: /Routes in the collection window/ }).click()
@@ -161,11 +173,11 @@ test("Play route replays an API route stop by stop, from its card", async ({ api
   await bar.getByRole("button", { name: "Pause", exact: true }).click()
   await bar.getByRole("slider", { name: "Route progress" }).focus()
   await page.keyboard.press("Home")
-  await expect(bar.getByTestId("playback-position")).toHaveText(`Stop 1 of ${detail.pickups.length}`)
+  await expect(bar.getByTestId("playback-position")).toHaveText(`Stop 1 of ${stops.length}`)
   await expect(bar.getByTestId("playback-caption")).toContainText(`1. ${first}`)
   await expect(bar.getByTestId("playback-times")).toHaveText("No times recorded")
   await page.keyboard.press("End")
-  await expect(bar.getByTestId("playback-position")).toHaveText(`Stop ${detail.pickups.length} of ${detail.pickups.length}`)
+  await expect(bar.getByTestId("playback-position")).toHaveText(`Stop ${stops.length} of ${stops.length}`)
 
   await bar.getByRole("button", { name: "Close playback" }).click()
   await expect(bar).toHaveCount(0)

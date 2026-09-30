@@ -48,6 +48,8 @@ test("a generated route is the API's row: listed under its label, opened under t
 
   // The scheme's page lists its routes, the API's, once read; a row opens the same details.
   await page.goto(`/route-studio?module=schemes&record=scheme-${scheme.id}`)
+  // The scheme's page stands in for the workspace once the schemes are read; before it does, "Routes" is the workspace's module tab.
+  await expect(page.getByRole("tab", { name: "Details" })).toBeVisible()
   await page.getByRole("tab", { name: "Routes" }).click()
   await page.getByRole("button", { name: `Open ${route.label}` }).click()
   await expect(page).toHaveURL(new RegExp(`module=routes&record=route-${route.id}`))
@@ -230,6 +232,18 @@ test("the Live board reads what the driver's device reports, and the office's ca
   // The one session the driver opened, ended at the cancel's own instant.
   expect(ended.sessions.map((session) => session.endedAt)).toEqual([ended.cancelledAt])
   expect((await listAll<LiveRoute>(api, "/routes/live", { projectId: route.projectId })).some((candidate) => candidate.id === route.id)).toBe(false)
+})
+
+test("the Live board is read again every 30 s while it is shown (#213's re-read, through the store's refreshModule)", async ({ page }) => {
+  test.setTimeout(90_000)
+  const live = (response: { url: () => string; request: () => { method: () => string } }) => response.request().method() === "GET" && new URL(response.url()).pathname === "/waste-api/routes/live"
+  const first = page.waitForResponse(live)
+  await page.goto("/route-studio?module=live")
+  expect((await first).status()).toBe(200)
+  // One interval, mounted with the board: the second read lands within the next 30 s, the board's rows staying in place meanwhile.
+  const again = await page.waitForResponse(live, { timeout: 45_000 })
+  expect(again.status()).toBe(200)
+  await expect(page.getByRole("main").getByRole("heading", { name: "Live Operations" })).toBeVisible()
 })
 
 test("a Dispatcher, who views neither the organisation nor the depots, sees the routes of their project and assigns one (#217)", async ({ api, browser }) => {
