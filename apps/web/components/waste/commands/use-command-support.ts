@@ -28,7 +28,8 @@ import { isSoftDeleted } from "@waste/domain/record-visibility"
 import { useApiClient } from "../api-session-store"
 import { useModuleRecords, useServerModuleState } from "../business-record-store"
 
-const fixturesOf = (location: ModuleLocation) => getModuleDefinition(location)?.records ?? []
+const NO_RECORDS: readonly BusinessRecord[] = []
+const fixturesOf = (location: ModuleLocation) => getModuleDefinition(location)?.records ?? NO_RECORDS
 const keyOf = (location: ModuleLocation) => `${location.workspaceId}.${location.moduleId}`
 
 /** Which master-data kind a field picks, by its id. */
