@@ -23,12 +23,12 @@ export type User = { id: string; email: string; fullName: string; roleId: string
 export const TESTER_ROLE = "Route Planner"
 export const TESTER_PROJECT = "Copenhagen Central"
 
-/** Every item of a list, page after page, as the web's `listAll` walks it. */
-export async function listAll<Item>(api: APIRequestContext, path: string): Promise<Item[]> {
+/** Every item of a list, page after page, as the web's `listAll` walks it, narrowed by `query`. */
+export async function listAll<Item>(api: APIRequestContext, path: string, query: Readonly<Record<string, string>> = {}): Promise<Item[]> {
   const items: Item[] = []
   let cursor: string | undefined
   do {
-    const response = await api.get(path, { params: { limit: 200, ...(cursor === undefined ? {} : { cursor }) } })
+    const response = await api.get(path, { params: { ...query, limit: 200, ...(cursor === undefined ? {} : { cursor }) } })
     expect(response.status(), `GET ${path}`).toBe(200)
     const page = (await response.json()) as Page<Item>
     items.push(...page.items)

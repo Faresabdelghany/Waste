@@ -53,6 +53,9 @@ export const API_SESSION_STORAGE_KEY = "waste.api-session.v1"
 /** The API session's tab-scoped half, in sessionStorage: the refresh token, the one long-lived credential (Issue #81; api-session-store.tsx says why it is kept apart). Never carried a legacy name. */
 export const API_REFRESH_TOKEN_STORAGE_KEY = "waste.api-session.refresh-token.v1"
 
+/** The Driver App's Command Queue, an IndexedDB database with two stores, the installation id and the queue (Issue #145, lib/driver/command-queue.ts). Never carried a legacy name. */
+export const DRIVER_COMMAND_QUEUE_DATABASE = "waste.driver-command-queue"
+
 /** The selected app theme (a preset id or "custom"). */
 export const APP_THEME_SELECTION_STORAGE_KEY = "waste.theme.selection.v1"
 

@@ -3,7 +3,7 @@
 // in the browser — a `Location` the browser followed, a row's shape — under
 // the very token the page holds, and can prepare what the product's surfaces
 // do not yet write (an Invitation, until #163 lands).
-import { test as baseTest, request, type APIRequestContext, type APIResponse, type Browser, type BrowserContext, type Page } from "@playwright/test"
+import { test as baseTest, request, type APIRequestContext, type APIResponse, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from "@playwright/test"
 
 import { API_SESSION_STORAGE_KEY } from "../lib/storage-keys"
 import { E2E } from "./env"
@@ -46,8 +46,8 @@ export async function problemOf(response: APIResponse): Promise<Problem> {
  * takes the project's `use` options, the administrator's storage state
  * among them, so a second person's context has to say so.
  */
-export function freshContext(browser: Browser): Promise<BrowserContext> {
-  return browser.newContext({ storageState: { cookies: [], origins: [] } })
+export function freshContext(browser: Browser, options: BrowserContextOptions = {}): Promise<BrowserContext> {
+  return browser.newContext({ ...options, storageState: { cookies: [], origins: [] } })
 }
 
 /**

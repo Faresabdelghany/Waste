@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation"
+import { DriverStartScreen } from "@/components/waste/driver/driver-start-screen"
 
 // @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
 // Remove this opt-out after verifying the segment passes validation without it.
@@ -6,5 +6,5 @@ import { redirect } from "next/navigation"
 export const instant = false;
 
 export default function DriverAppPage() {
-  redirect("/tickets")
+  return <DriverStartScreen />
 }

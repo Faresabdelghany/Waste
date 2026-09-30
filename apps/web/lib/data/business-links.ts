@@ -178,8 +178,9 @@ function moduleHref({
   moduleId,
   recordId,
 }: ModuleLocation & { recordId?: string }): string {
+  // The Driver App is a surface of its own (Issue #145), never a workspace module.
   if (workspaceId === "operate" && moduleId === "driver-app") {
-    return "/tickets"
+    return "/driver"
   }
 
   if (workspaceId === "configure") {
