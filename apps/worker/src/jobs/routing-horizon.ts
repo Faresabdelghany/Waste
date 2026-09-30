@@ -14,22 +14,26 @@
 //                cross-tenant read on the worker role of every planned or
 //                ready route of an active project operating inside the
 //                window with an open stop, Plan Ahead on or not, nearest date
-//                first, of which it asks for each with no active Plan or a
-//                stale one (`planIsStale`); then every calculating Plan more
-//                than a day old whose job pg-boss no longer holds — its
-//                retries spent, or lost across an outage — has its job
-//                re-sent under its key.
+//                first, of which it asks for each whose active Plan is
+//                missing or no longer answers it: stale (`planIsStale`), or
+//                keyed on ends or places that have moved since (`planKey`),
+//                so a generation whose ask failed is asked again; then every
+//                calculating Plan more than a day old whose job pg-boss no
+//                longer holds — its retries spent, or lost across an outage
+//                — has its job re-sent under its key.
 //
 // Each route is its own transaction as `wms_api` under `withCompany`, under
 // the route's row lock (the office's order: a route before its Plans), so the
 // route read is the route asked for, and one route's trouble is a line in the
 // log, never another route's and never the run's failure: the sweep is the
 // net under a generation whose ask failed, and a Route without a Plan is
-// complete (#132 §2). What is asked is `horizonRequest`
+// complete (#132 §2). Only an active project's routes are the horizon's,
+// generation's as much as the sweep's. What is asked is `horizonRequest`
 // (@waste/domain/routing/plans): the Optimise request's size rule — the
 // optimiser for fifty open stops or fewer from a depot, a baseline above or
 // without one — unless the active Plan is a dispatcher's manual order, which
-// the horizon extends and never replaces. The door is the office's own,
+// the horizon extends and never replaces, and leaves alone while an Optimise
+// the dispatcher asked after it still waits. The door is the office's own,
 // `ensurePlan` (@waste/db/commands/plans), asked `batch`: its cache
 // re-activates a ready match and holds a calculating one, so a second run
 // over unchanged inputs or a second sweep in a night enqueues nothing, and
@@ -37,18 +41,19 @@
 // priority the batch class and the operating date give it. No provider is
 // called here: the jobs call it, outside any transaction (#124 §4).
 import type { Database, Tx } from "@waste/db/client"
-import { ensurePlan, planStopIds, routingJobHeld, routingQueueOf, sendRoutingJob } from "@waste/db/commands/plans"
+import { ensurePlan, planKey, planStopIds, routingJobHeld, routingQueueOf, sendRoutingJob } from "@waste/db/commands/plans"
 import { projectToday } from "@waste/db/commands/project-clock"
 import { pickup, route } from "@waste/db/schema/execution"
+import { project } from "@waste/db/schema/organisation"
 import { plan } from "@waste/db/schema/routing"
 import { withCompany } from "@waste/db/tenant"
 import { orderIsOpen } from "@waste/domain/execution/transitions"
 import type { RouteStatus } from "@waste/domain/execution/vocabulary"
-import { planAheadWindow } from "@waste/domain/route-schemes/plan-ahead"
+import { PLAN_AHEAD_DAYS, planAheadWindow } from "@waste/domain/route-schemes/plan-ahead"
 import { horizonRequest, planIsStale } from "@waste/domain/routing/plans"
 import type { PlanSolver } from "@waste/domain/routing/vocabulary"
 import { DEFAULT_PROFILE } from "@waste/routing/provider"
-import { and, asc, eq, sql } from "drizzle-orm"
+import { and, asc, eq, gt, sql } from "drizzle-orm"
 
 import { defineJob, type JobContext } from "./definition"
 import { loggable } from "./loggable"
@@ -65,27 +70,43 @@ export type SweepHorizonData = {
 /** The horizon on one project's clock: tomorrow through today + 7. */
 type Horizon = ReturnType<typeof planAheadWindow>
 
-/** What one route's turn came to: a Plan asked for (written, or found in the cache), a Plan that still reads fresh, or not a route of the horizon at all. */
-type Turn = "asked" | "fresh" | "outside"
+/**
+ * What one route's turn came to: a Plan asked for (written, or found in the
+ * cache), an active Plan that still answers the route, a dispatcher's own
+ * Optimise left to answer, or not a route of the horizon at all.
+ */
+type Turn = "asked" | "fresh" | "waiting" | "outside"
 
-/** When a route is asked for: generation's reshaped route whatever its Plan reads, the sweep's only with no active Plan or a stale one. */
-type Occasion = "reshaped" | "missing-or-stale"
+/** When a route is asked for: generation's reshaped route whatever its Plan reads; the sweep's only when its active Plan is missing or no longer answers it. */
+type Occasion = "reshaped" | "unanswered"
 
-/** The active Plan as `horizonRequest` reads it: its solver and the stops it names; null when its row is gone. */
-async function activePlanOf(tx: Tx, companyId: string, planId: string): Promise<{ solver: PlanSolver; named: string[] } | null> {
+/** The active Plan as the horizon reads it: its solver, its fingerprint and the stops it names; null when its row is gone. */
+async function activePlanOf(tx: Tx, companyId: string, planId: string): Promise<{ id: string; solver: PlanSolver; fingerprint: string; named: string[] } | null> {
   const [row] = await tx
-    .select({ solver: plan.solver })
+    .select({ solver: plan.solver, fingerprint: plan.fingerprint })
     .from(plan)
     .where(and(eq(plan.companyId, companyId), eq(plan.id, planId)))
   if (row === undefined) return null
-  return { solver: row.solver as PlanSolver, named: await planStopIds(tx, { companyId, planId }) }
+  return { id: planId, solver: row.solver as PlanSolver, fingerprint: row.fingerprint, named: await planStopIds(tx, { companyId, planId }) }
+}
+
+/** Whether an optimiser Plan asked after `planId` is still calculating on the route — Plan ids are UUIDv7, so asked later is a greater id: a dispatcher's Optimise after their reorder. */
+async function optimisationAskedAfter(tx: Tx, companyId: string, routeId: string, planId: string): Promise<boolean> {
+  const [waiting] = await tx
+    .select({ id: plan.id })
+    .from(plan)
+    .where(and(eq(plan.companyId, companyId), eq(plan.routeId, routeId), eq(plan.solver, "optimiser"), eq(plan.status, "calculating"), gt(plan.id, planId)))
+    .limit(1)
+  return waiting !== undefined
 }
 
 /**
  * One route's turn, in a fenced transaction under its row lock: a planned or
- * ready route operating inside the horizon with an open stop is asked a Plan
- * through the office's door, `batch`; the sweep leaves one whose active Plan
- * still reads fresh.
+ * ready route of an active project, operating inside the horizon with an
+ * open stop, is asked a Plan through the office's door, `batch`. The sweep
+ * leaves one whose active Plan still answers it — names its stops as they
+ * stand and keys the request it would make now, its ends and places too — and
+ * either leaves a route whose dispatcher asked to optimise after reordering.
  */
 async function planRoute(context: JobContext, companyId: string, routeId: string, horizon: Horizon, occasion: Occasion): Promise<Turn> {
   return withCompany(context.api.db, companyId, async (tx: Tx): Promise<Turn> => {
@@ -95,6 +116,12 @@ async function planRoute(context: JobContext, companyId: string, routeId: string
       .where(and(eq(route.companyId, companyId), eq(route.id, routeId)))
       .for("update")
     if (row === undefined || !orderIsOpen(row.status as RouteStatus) || row.operatingDate < horizon.from || row.operatingDate > horizon.to) return "outside"
+    // A project still onboarding spends no routing quota: the horizon is an active project's (#132 §2).
+    const [owner] = await tx
+      .select({ status: project.status })
+      .from(project)
+      .where(and(eq(project.companyId, companyId), eq(project.id, row.projectId)))
+    if (owner?.status !== "active") return "outside"
     const stops = await tx
       .select({ id: pickup.id, status: pickup.status, reason: pickup.reason })
       .from(pickup)
@@ -104,12 +131,15 @@ async function planRoute(context: JobContext, companyId: string, routeId: string
     // Nothing open is no order to measure: a route whose rule matched nothing, or whose stops are all decided.
     if (open.length === 0) return "outside"
     const active = row.activePlanId === null ? null : await activePlanOf(tx, companyId, row.activePlanId)
-    if (occasion === "missing-or-stale" && active !== null) {
+    const optimisationWaiting = active?.solver === "manual" && (await optimisationAskedAfter(tx, companyId, routeId, active.id))
+    const request = horizonRequest({ open, hasDepot: row.depotId !== null, active, optimisationWaiting })
+    if (request === null) return "waiting"
+    const routing = { name: context.routing.name, profile: DEFAULT_PROFILE }
+    if (occasion === "unanswered" && active !== null) {
       const removed = stops.filter((stop) => stop.status === "skipped" && stop.reason === "regeneration").map((stop) => stop.id)
-      if (!planIsStale({ named: active.named, open, removed })) return "fresh"
+      if (!planIsStale({ named: active.named, open, removed }) && (await planKey(tx, companyId, row, request, routing)).fingerprint === active.fingerprint) return "fresh"
     }
-    const request = horizonRequest({ open, hasDepot: row.depotId !== null, active })
-    await ensurePlan(tx, companyId, row, { ...request, class: "batch" }, { routing: { name: context.routing.name, profile: DEFAULT_PROFILE }, send: context.send })
+    await ensurePlan(tx, companyId, row, { ...request, class: "batch" }, { routing, send: context.send })
     return "asked"
   })
 }
@@ -156,7 +186,7 @@ type HorizonRoute = { companyId: string; routeId: string; today: string }
 
 /**
  * Every planned or ready route of an active project operating inside
- * tomorrow…today + 7 (`planAheadWindow`'s bounds, spelled in SQL), today
+ * tomorrow…today + `PLAN_AHEAD_DAYS` (`planAheadWindow`'s bounds), today
  * being `at` rendered in the project's timezone by Postgres, with an open
  * stop: across companies, as the worker role — plan-ahead's precedent —
  * nearest date first. It reads and writes nothing else.
@@ -169,7 +199,7 @@ async function horizonRoutes(worker: Database, at: Date): Promise<HorizonRoute[]
     cross join lateral (select (${at.toISOString()}::timestamptz at time zone p.timezone)::date as today) d
     where p.status = 'active'
       and r.status in ('planned', 'ready')
-      and r.operating_date between d.today + 1 and d.today + 7
+      and r.operating_date between d.today + 1 and d.today + ${PLAN_AHEAD_DAYS}::int
       and exists (select 1 from wms.pickup k where k.company_id = r.company_id and k.route_id = r.id and k.status = 'planned')
     order by r.operating_date, r.company_id, r.id
   `)
@@ -219,10 +249,10 @@ async function recoverPlan(context: JobContext, aged: AgedPlan): Promise<boolean
 export type SweepOutcome = { inWindow: number; asked: string[]; recovered: string[]; failed: string[] }
 
 /**
- * The night's sweep: every route inside the horizon with no active Plan or a
- * stale one asked a Plan, then every aged calculating Plan whose job is gone
- * given its job back. Each route and each Plan is its own transaction, so one
- * company's trouble is logged and the sweep goes on.
+ * The night's sweep: every route inside the horizon whose active Plan is
+ * missing or no longer answers it asked a Plan, then every aged calculating
+ * Plan whose job is gone given its job back. Each route and each Plan is its
+ * own transaction, so one company's trouble is logged and the sweep goes on.
  */
 export async function sweepHorizon(context: JobContext, jobId: string | null = null): Promise<SweepOutcome> {
   const at = context.now()
@@ -230,7 +260,7 @@ export async function sweepHorizon(context: JobContext, jobId: string | null = n
   const outcome: SweepOutcome = { inWindow: routes.length, asked: [], recovered: [], failed: [] }
   for (const candidate of routes) {
     try {
-      if ((await planRoute(context, candidate.companyId, candidate.routeId, planAheadWindow(candidate.today), "missing-or-stale")) === "asked") outcome.asked.push(candidate.routeId)
+      if ((await planRoute(context, candidate.companyId, candidate.routeId, planAheadWindow(candidate.today), "unanswered")) === "asked") outcome.asked.push(candidate.routeId)
     } catch (error) {
       context.log(`${SWEEP_HORIZON_QUEUE}: company ${candidate.companyId}, route ${candidate.routeId} failed: ${JSON.stringify(loggable(error))}`)
       outcome.failed.push(candidate.routeId)
@@ -252,13 +282,13 @@ export async function sweepHorizon(context: JobContext, jobId: string | null = n
 
 export const sweepHorizonJob = defineJob<SweepHorizonData>({
   queue: SWEEP_HORIZON_QUEUE,
-  description: "Asks a Plan, across companies, for every planned or ready route of an active project operating inside tomorrow…today + 7 with no active Plan or a stale one, and re-sends the job of a calculating Plan a day old whose job is gone.",
+  description: "Asks a Plan, across companies, for every planned or ready route of an active project operating inside tomorrow…today + 7 whose active Plan is missing or no longer answers it, and re-sends the job of a calculating Plan a day old whose job is gone.",
   schedule: SWEEP_HORIZON_SCHEDULE,
   scheduleData: { source: "schedule" },
   // A worker back after a night off sweeps once, not once per missed night: the horizon is tonight's.
   scheduleOptions: { tz: "UTC", missed: "once" },
-  // A second sweep re-asks only what the first left unasked, and at most a route whose optimisation failed finally; one retry is enough.
-  queueOptions: { retryLimit: 1, retryDelay: 60, deleteAfterSeconds: 60 * 60 * 24 * 7 },
+  // No retry: the next night is the retry. A second pass the same night would take every lock again and re-ask a route whose optimisation failed finally in the minute between, paying the provider twice; a failed sweep shows on /readyz meanwhile.
+  queueOptions: { retryLimit: 0, deleteAfterSeconds: 60 * 60 * 24 * 7 },
   handler: async (jobs, context) => {
     const sweeps: SweepOutcome[] = []
     for (const job of jobs) {

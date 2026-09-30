@@ -119,13 +119,13 @@ describe("the job registry", () => {
     ])
   })
 
-  test("holds routing's horizon sweep (#172, #132 §2): nightly at 03:30 UTC, half an hour after Plan Ahead, once for every night missed, sent as the schedule's, one retry", () => {
+  test("holds routing's horizon sweep (#172, #132 §2): nightly at 03:30 UTC, half an hour after Plan Ahead, once for every night missed, sent as the schedule's, no retry — the next night is the retry", () => {
     assert.ok(JOBS.includes(sweepHorizonJob))
     assert.equal(sweepHorizonJob.queue, "routing.sweep-horizon")
     assert.equal(sweepHorizonJob.schedule, "30 3 * * *")
     assert.deepEqual(sweepHorizonJob.scheduleData, { source: "schedule" })
     assert.deepEqual(sweepHorizonJob.scheduleOptions, { tz: "UTC", missed: "once" })
-    assert.deepEqual(sweepHorizonJob.queueOptions, { retryLimit: 1, retryDelay: 60, deleteAfterSeconds: 604_800 })
+    assert.deepEqual(sweepHorizonJob.queueOptions, { retryLimit: 0, deleteAfterSeconds: 604_800 })
   })
 
   test("holds the relay: every minute as the backstop of its five-second successor, UTC, one tick queued at a time, no retry, publishing the dead-letter queue and then one queue per outbox kind, each kept ninety days for a consumer to come", () => {

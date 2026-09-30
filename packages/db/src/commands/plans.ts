@@ -25,7 +25,7 @@ import type { Point } from "@waste/contracts/geojson"
 import { planFingerprint, type FingerprintPosition } from "@waste/domain/routing/fingerprint"
 import { routingJobPriority } from "@waste/domain/routing/jobs"
 import { activeOnCreation, tripOf } from "@waste/domain/routing/plans"
-import { SUPERSEDED, type PlanSolver, type RoutingJobClass } from "@waste/domain/routing/vocabulary"
+import { SUPERSEDED, type PlanSolver, type PlanTrip, type RoutingJobClass } from "@waste/domain/routing/vocabulary"
 import { asc, eq, and, desc, inArray, lt, ne, sql } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -233,6 +233,31 @@ async function fingerprintParts(tx: Tx, companyId: string, routeRow: { id: strin
   return { trip, ...ends, stops: orderedPickupIds.map((id) => at.get(id) ?? id) }
 }
 
+/**
+ * What a request over the route keys on: its trip, and its fingerprint over
+ * the ends the result depends on and each stop's place (#124 §4, corrected by
+ * #132 §6). The one spelling the cache lookup below and the horizon's
+ * question — does the active Plan still answer the route? — share.
+ */
+export async function planKey(
+  tx: Tx,
+  companyId: string,
+  routeRow: { id: string; depotId: string | null; unloadingStationId: string | null },
+  request: { solver: PlanSolver; orderedPickupIds: readonly string[] },
+  routing: { name: string; profile: string },
+): Promise<{ trip: PlanTrip; fingerprint: string }> {
+  const parts = await fingerprintParts(tx, companyId, routeRow, request.solver, request.orderedPickupIds)
+  const fingerprint = planFingerprint({
+    provider: routing.name,
+    profile: routing.profile,
+    solver: request.solver,
+    depot: parts.depot,
+    station: parts.station,
+    stops: parts.stops,
+  })
+  return { trip: parts.trip, fingerprint }
+}
+
 export type EnsuredPlan = { planId: string; created: boolean }
 
 /**
@@ -252,15 +277,7 @@ export async function ensurePlan(
   request: { solver: PlanSolver; orderedPickupIds: readonly string[]; class: RoutingJobClass },
   { routing, send: sendJob }: { routing: { name: string; profile: string }; send: Send },
 ): Promise<EnsuredPlan> {
-  const parts = await fingerprintParts(tx, companyId, routeRow, request.solver, request.orderedPickupIds)
-  const fingerprint = planFingerprint({
-    provider: routing.name,
-    profile: routing.profile,
-    solver: request.solver,
-    depot: parts.depot,
-    station: parts.station,
-    stops: parts.stops,
-  })
+  const { trip, fingerprint } = await planKey(tx, companyId, routeRow, request, routing)
   // A match is reusable only when its stops are the request's very pickups: the
   // fingerprint keys coordinates, and regeneration re-mints ids at the same
   // places — replaying such a Plan would answer the baseline while claiming the
@@ -295,7 +312,7 @@ export async function ensurePlan(
     projectId: routeRow.projectId,
     routeId: routeRow.id,
     solver: request.solver,
-    trip: parts.trip,
+    trip,
     provider: routing.name,
     fingerprint,
     stops: request.solver === "optimiser" ? [] : request.orderedPickupIds,

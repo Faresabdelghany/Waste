@@ -595,10 +595,49 @@ describe("the horizon: generation's routing jobs and routing.sweep-horizon", { s
     assert.deepEqual(await plansOf(nextMonday.id), [])
   })
 
+  test("a dispatcher's Optimise asked after their reorder is left to answer: the horizon extends the reorder only while no such request waits", async () => {
+    const [monday] = await routesOf(a.residualScheme)
+    const reorder = await activeOf(monday.id)
+    const open = (await pickupsOf(monday.id)).filter((row) => row.status === "planned").map((row) => row.id)
+    // The dispatcher asks to optimise the reordered route, through the office's door.
+    const optimise = await withCompany(api.db, a.company, (tx: Tx) =>
+      ensurePlan(tx, a.company, monday, { solver: "optimiser", orderedPickupIds: open, class: "interactive" }, { routing: { name: "fake", profile: DEFAULT_PROFILE }, send: (queue, data, options) => boss.send(queue, data, options ?? {}) }),
+    )
+    assert.equal(optimise.created, true)
+    // Nordhavn again: the route is reshaped while the request waits.
+    await owner.db.update(routeScheme).set({ depotId: a.depot }).where(eq(routeScheme.id, a.residualScheme))
+    const outcome = await generate(a.residualScheme)
+    assert.ok(!outcome.horizon.asked.includes(monday.id), "the route waits on the dispatcher's own request")
+    assert.equal((await planRow(optimise.planId)).status, "calculating", "which nothing superseded")
+    assert.equal(await activeOf(monday.id), reorder, "and the reorder stays active until it answers")
+  })
+
+  test("a project still onboarding is asked nothing: generation reshapes its route and leaves it, as the sweep reads active projects alone", async () => {
+    const [tuesday] = await routesOf(a.plainScheme)
+    const [plans, jobs] = [(await plansOf(tuesday.id)).length, await jobCount()]
+    await owner.db.update(project).set({ status: "onboarding" }).where(eq(project.id, a.project))
+    try {
+      // Amager leaves Tuesday's picks: the route is reshaped, and nothing is asked.
+      await owner.db.delete(collectionGroupContainer).where(and(eq(collectionGroupContainer.collectionGroupId, a.plainGroup), eq(collectionGroupContainer.containerId, a.bin4)))
+      const onboarding = await generate(a.plainScheme)
+      assert.equal((await pickupOf(tuesday.id, a.bin4)).status, "skipped")
+      assert.deepEqual(onboarding.horizon, { asked: [], failed: [] })
+    } finally {
+      await owner.db.update(project).set({ status: "active" }).where(eq(project.id, a.project))
+    }
+    assert.deepEqual([(await plansOf(tuesday.id)).length, await jobCount()], [plans, jobs])
+    // Active again, and Amager back: its pickup returns, and the Plan over exactly these stops is active again, with no job.
+    await owner.db.insert(collectionGroupContainer).values({ companyId: a.company, projectId: a.project, collectionGroupId: a.plainGroup, containerId: a.bin4, position: 3 })
+    const active = await generate(a.plainScheme)
+    assert.deepEqual(active.horizon.asked, [tuesday.id])
+    assert.deepEqual([(await plansOf(tuesday.id)).length, await jobCount()], [plans, jobs])
+  })
+
   test("a failing enqueue never fails the run: the routes it wrote stand, the route's Plan rolls back with its send, and the failure is a line in the log", async () => {
-    // Fridays join the Tuesday round, and every routing send is refused.
+    // Fridays join the Tuesday round, the hospital's glass leaves from Sydhavn, and every routing send is refused.
     await owner.db.update(routeScheme).set({ serviceDays: ["tuesday", "friday"] }).where(eq(routeScheme.id, a.plainScheme))
     await owner.db.update(collectionGroup).set({ days: ["tuesday", "friday"] }).where(eq(collectionGroup.id, a.plainGroup))
+    await owner.db.update(routeScheme).set({ depotId: a.southDepot }).where(eq(routeScheme.id, a.hospitalScheme))
     const refusing = contextOf(undefined, {
       send: async (queue, data, options) => {
         if (queue.startsWith("routing.")) throw new Error("the routing queue refused the send")
@@ -614,6 +653,13 @@ describe("the horizon: generation's routing jobs and routing.sweep-horizon", { s
       lines.some((line) => line.includes(friday?.id as string) && line.includes("the routing queue refused the send")),
       lines.slice(-3).join("\n"),
     )
+    // Wednesday is reshaped by its new end alone, and its ask is refused too: it keeps the Plan measured from Nordhavn.
+    const [wednesday] = await routesOf(a.hospitalScheme)
+    const [nordhavn] = await plansOf(wednesday.id)
+    const moved = await generate(a.hospitalScheme, TWO_WEEKS, refusing)
+    assert.deepEqual(moved.horizon.failed, [wednesday.id])
+    assert.equal((await plansOf(wednesday.id)).length, 1)
+    assert.equal(await activeOf(wednesday.id), nordhavn.id)
   })
 
   test("the sweep, as wms_worker across companies, asks exactly for the window's planned and ready routes of active projects with no active Plan or a stale one, nearest date first; every other route is left as it was", async () => {
@@ -640,11 +686,13 @@ describe("the horizon: generation's routing jobs and routing.sweep-horizon", { s
     ]
     const friday = (await routesOf(a.plainScheme)).find((row) => row.operatingDate === "2026-10-09")
     assert.ok(friday, "the Friday whose Plan went with the refused send")
-    const generated = [...(await routesOf(a.residualScheme)), ...(await routesOf(a.plainScheme)), ...(await routesOf(a.hospitalScheme)), ...(await routesOf(a.paperScheme))].filter((row) => row.id !== friday.id)
+    // Wednesday's Plan names exactly its open stops and reads fresh, but was measured from the depot the route no longer names.
+    const [wednesday] = await routesOf(a.hospitalScheme)
+    const generated = [...(await routesOf(a.residualScheme)), ...(await routesOf(a.plainScheme)), ...(await routesOf(a.hospitalScheme)), ...(await routesOf(a.paperScheme))].filter((row) => row.id !== friday.id && row.id !== wednesday.id)
     const plansBefore = new Map(await Promise.all(generated.map(async (row) => [row.id, (await plansOf(row.id)).length] as const)))
 
     const outcome = await sweepHorizon(contextOf())
-    assert.deepEqual(outcome.asked, [tomorrow.id, elsewhere.id, stale.id, friday.id, lastDay.id], "nearest date first")
+    assert.deepEqual(outcome.asked, [tomorrow.id, elsewhere.id, wednesday.id, stale.id, friday.id, lastDay.id], "nearest date first")
     const newest = async (routeId: string) => (await plansOf(routeId)).at(-1) as typeof plan.$inferSelect
     const readings = []
     for (const routeId of outcome.asked) {
@@ -656,6 +704,7 @@ describe("the horizon: generation's routing jobs and routing.sweep-horizon", { s
     assert.deepEqual(readings, [
       ["optimiser", false, ROUTING_OPTIMISE_QUEUE, a.company, "batch", batchPriority["2026-10-04"]],
       ["baseline", true, ROUTING_MEASURE_QUEUE, b.company, "batch", batchPriority["2026-10-05"]],
+      ["baseline", true, ROUTING_MEASURE_QUEUE, a.company, "batch", batchPriority["2026-10-07"]],
       ["manual", true, ROUTING_MEASURE_QUEUE, a.company, "batch", batchPriority["2026-10-08"]],
       ["baseline", true, ROUTING_MEASURE_QUEUE, a.company, "batch", batchPriority["2026-10-09"]],
       ["baseline", true, ROUTING_MEASURE_QUEUE, a.company, "batch", batchPriority["2026-10-10"]],
