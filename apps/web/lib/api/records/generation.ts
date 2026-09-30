@@ -60,7 +60,8 @@ export function runCounts(run: GenerationRun): string {
     run.holidaysSkipped > 0 ? `${counted(run.holidaysSkipped, "holiday", "holidays")} skipped` : "",
     run.unlocated > 0 ? `${counted(run.unlocated, "container", "containers")} not placed` : "",
   ].filter((part) => part !== "")
-  return parts.length === 0 ? "Nothing was planned in the window" : parts.join(" · ")
+  // All nought: a rerun over routes already as planned, or a window with nothing to plan — either way no route changed.
+  return parts.length === 0 ? "No route changed" : parts.join(" · ")
 }
 
 /**

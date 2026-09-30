@@ -184,7 +184,8 @@ describe("a scheme's runs", () => {
   test("what a run did reads as its counts, leaving out the ones it did not do", () => {
     assert.equal(runCounts(runOf({ status: "succeeded", routesCreated: 5, pickupsWritten: 39 })), "5 routes created · 39 pickups written")
     assert.equal(runCounts(runOf({ status: "succeeded", routesRefreshed: 1, routesCancelled: 2, holidaysSkipped: 2, unlocated: 1 })), "1 route refreshed, 2 cancelled · 2 holidays skipped · 1 container not placed")
-    assert.equal(runCounts(runOf({ status: "succeeded" })), "Nothing was planned in the window")
+    // A rerun over routes already as planned changes nothing, which is not the same as a window with nothing to plan.
+    assert.equal(runCounts(runOf({ status: "succeeded" })), "No route changed")
   })
 
   test("a run is read by its own id", async () => {
