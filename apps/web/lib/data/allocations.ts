@@ -10,21 +10,21 @@
 // the adapter itself. The window is a wall-clock time on the project's clock,
 // the shape the scheme-save conflict check reads. A status is never a field of
 // a change: confirm and release are the row's commands.
-import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "./business-modules"
+import type { BusinessRecord, ModuleLocation } from "./business-modules"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
+import { mintedRecord, ORGANISATION_MODULE } from "./containers"
 import { MASTER_DATA_MODULE } from "./master-data"
 
-const ORGANISATION: ModuleLocation = { workspaceId: "configure", moduleId: "organization" }
-const VEHICLES: ModuleLocation = { workspaceId: "fleet", moduleId: "vehicles" }
-const DRIVERS: ModuleLocation = { workspaceId: "fleet", moduleId: "drivers" }
-const DEPOTS: ModuleLocation = { workspaceId: "resources", moduleId: "depots" }
+export const VEHICLES_MODULE: ModuleLocation = { workspaceId: "fleet", moduleId: "vehicles" }
+export const DRIVERS_MODULE: ModuleLocation = { workspaceId: "fleet", moduleId: "drivers" }
+export const DEPOTS_MODULE: ModuleLocation = { workspaceId: "resources", moduleId: "depots" }
 
 const RESERVATION_FIELDS: readonly BusinessFormField[] = [
-  { id: "projectId", label: "Project", type: "select", required: true, relation: ORGANISATION },
-  { id: "vehicleId", label: "Vehicle", type: "select", required: true, relation: VEHICLES },
-  { id: "driverId", label: "Driver", type: "select", relation: DRIVERS },
-  { id: "trailerId", label: "Trailer", type: "select", relation: VEHICLES },
-  { id: "depotId", label: "Depot", type: "select", relation: DEPOTS },
+  { id: "projectId", label: "Project", type: "select", required: true, relation: ORGANISATION_MODULE },
+  { id: "vehicleId", label: "Vehicle", type: "select", required: true, relation: VEHICLES_MODULE },
+  { id: "driverId", label: "Driver", type: "select", relation: DRIVERS_MODULE },
+  { id: "trailerId", label: "Trailer", type: "select", relation: VEHICLES_MODULE },
+  { id: "depotId", label: "Depot", type: "select", relation: DEPOTS_MODULE },
   { id: "plannedFraction", label: "Waste fraction", type: "select", relation: MASTER_DATA_MODULE },
   { id: "requiredCapacity", label: "Required capacity", type: "number", min: 1, unit: "kg" },
   { id: "plannedStart", label: "Planned start", type: "datetime", required: true, description: "On the project's clock." },
@@ -107,25 +107,7 @@ export function allocationFormValues(record: BusinessRecord): BusinessFormValues
 
 /** An allocation the allocate form made: the generic create path's id and kind, so the adapter owns it until the API's answer replaces it. */
 export function createAllocationRecord(values: BusinessFormValues, { now }: { now: number }): BusinessRecord {
-  const projectId = typeof values.projectId === "string" ? values.projectId : ""
-  return {
-    id: `vehicle-planning-vehicle-allocation-${now}`,
-    name: "New allocation",
-    context: "",
-    status: values.allocationStatus === "confirmed" ? "Confirmed" : "Planned",
-    owner: "",
-    value: "",
-    updated: "Now",
-    description: "",
-    facts: {},
-    related: [],
-    source: "Waste API",
-    freshness: "Now",
-    companyId: FIXTURE_COMPANY_ID,
-    projectIds: projectId === "" ? [] : [projectId],
-    recordKind: "Vehicle allocation",
-    submittedValues: values,
-  }
+  return mintedRecord({ id: `vehicle-planning-vehicle-allocation-${now}`, name: "New allocation", status: values.allocationStatus === "confirmed" ? "Confirmed" : "Planned", recordKind: "Vehicle allocation", values })
 }
 
 /** A changed allocation: its identity and status kept, the form's values over its typed ones. */

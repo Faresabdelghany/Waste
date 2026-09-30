@@ -24,7 +24,8 @@ import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "./
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import { MASTER_DATA_MODULE } from "./master-data"
 
-const ORGANISATION: ModuleLocation = { workspaceId: "configure", moduleId: "organization" }
+/** Where the projects a form names live. */
+export const ORGANISATION_MODULE: ModuleLocation = { workspaceId: "configure", moduleId: "organization" }
 /** Where the warehouses a command names live (slice 5a). */
 export const WAREHOUSES_MODULE: ModuleLocation = { workspaceId: "resources", moduleId: "warehouses" }
 
@@ -32,11 +33,12 @@ export const WAREHOUSES_MODULE: ModuleLocation = { workspaceId: "resources", mod
 export const CONTAINER_COMMANDS_OFFERED = ["receive", "issue", "return", "transfer", "decommission", "adjust"] as const
 export type OfferedContainerCommand = (typeof CONTAINER_COMMANDS_OFFERED)[number]
 
-const OWNERSHIP_LABELS: Readonly<Record<(typeof CONTAINER_OWNERSHIPS)[number], string>> = { company: "Company owned", customer: "Customer owned", unrecorded: "Unrecorded" }
+/** How a form and a fact spell an ownership, as the fixtures do. */
+export const OWNERSHIP_LABELS: Readonly<Record<(typeof CONTAINER_OWNERSHIPS)[number], string>> = { company: "Company owned", customer: "Customer owned", unrecorded: "Unrecorded" }
 const PLACE_LABELS: Readonly<Record<(typeof ADJUSTMENT_TARGETS)[number], string>> = { warehouse: "Warehouse", maintenance: "Maintenance at the warehouse", scrap: "Scrap" }
 
 const IDENTITY_FIELDS: readonly BusinessFormField[] = [
-  { id: "projectId", label: "Operating project", type: "select", required: true, relation: ORGANISATION },
+  { id: "projectId", label: "Operating project", type: "select", required: true, relation: ORGANISATION_MODULE },
   { id: "containerId", label: "Container ID", type: "text", required: true, placeholder: "BIN-82014", description: "What a person reads off the bin; unique across the company." },
   { id: "barcode", label: "Barcode", type: "text" },
   { id: "rfid", label: "RFID", type: "text" },
@@ -93,23 +95,33 @@ export function containerFormValues(record: BusinessRecord): BusinessFormValues 
 /** A container the create form made: the generic create path's id and kind, so the adapter owns it until the API's answer replaces it. */
 export function createContainerRecord(values: BusinessFormValues, { now }: { now: number }): BusinessRecord {
   const label = typeof values.containerId === "string" ? values.containerId.trim() : ""
+  return mintedRecord({ id: `resources-container-${now}`, name: label, status: "No stock record", recordKind: "Container", facts: { "Container ID": label }, values })
+}
+
+/**
+ * A row a Pilot form has just made, before the API has answered: the
+ * generic create path's id shape and the form's `recordKind`, which the
+ * adapter owns it by (adapter.ts, `ofKind`), its values as its typed ones and
+ * its project from them. The API's answer replaces everything but the id.
+ */
+export function mintedRecord({ id, name, status, recordKind, facts = {}, values }: { id: string; name: string; status: string; recordKind: string; facts?: Record<string, string>; values: BusinessFormValues }): BusinessRecord {
   const projectId = typeof values.projectId === "string" ? values.projectId : ""
   return {
-    id: `resources-container-${now}`,
-    name: label,
+    id,
+    name,
     context: "",
-    status: "No stock record",
+    status,
     owner: "",
     value: "",
     updated: "Now",
     description: "",
-    facts: { "Container ID": label },
+    facts,
     related: [],
     source: "Waste API",
     freshness: "Now",
     companyId: FIXTURE_COMPANY_ID,
     projectIds: projectId === "" ? [] : [projectId],
-    recordKind: "Container",
+    recordKind,
     submittedValues: values,
   }
 }

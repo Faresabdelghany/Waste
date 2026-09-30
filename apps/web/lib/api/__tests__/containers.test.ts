@@ -344,6 +344,8 @@ describe("the container's commands", () => {
       ["decommission", { reason: "Burnt out" }, Decommission, { reason: "Burnt out" }],
       ["adjust", { toKind: "scrap", reason: "Counted twice at import" }, Adjust, { toKind: "scrap", warehouseId: null, reason: "Counted twice at import" }],
       ["adjust", { toKind: "warehouse", warehouseId: nordhavn.webId, reason: "Imported without its receipt" }, Adjust, { toKind: "warehouse", warehouseId, reason: "Imported without its receipt" }],
+      // The movement it corrects by the web id Inventory shows it under, and when it happened on the project's clock (Copenhagen, summer time).
+      ["adjust", { toKind: "scrap", reason: "Wrong receipt", correctsMovementId: `movement-${movement.id}`, occurredAt: "2026-09-30T10:00" }, Adjust, { toKind: "scrap", warehouseId: null, reason: "Wrong receipt", correctsMovementId: movement.id, occurredAt: "2026-09-30T08:00:00.000Z" }],
       ["issue", { subscriptionId: `subscription-${subscriptionId}`, wasteFractionId: organicWebId, validFrom: "2026-10-01" }, ContainerServicePlacementCreate, { subscriptionId, wasteFractionId: organic.id, validFrom: "2026-10-01" }],
     ]
     for (const [name, input, schema, expected] of cases) {

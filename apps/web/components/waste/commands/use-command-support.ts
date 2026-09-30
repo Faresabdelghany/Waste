@@ -1,12 +1,14 @@
 "use client"
 // What the command surfaces share (Issue #181): the pickers their dialogs
-// name other modules' rows by, and a read of one row's appended history (a
-// container's ledger, an allocation's events) from the API.
+// name other modules' rows by, whether a surface's own module and its forms'
+// modules have answered, a read of one row's appended history (a container's
+// ledger, an allocation's events) from the API, and opening a row made.
 //
-// A picker reads the module the store loaded and offers nothing until that
-// module is ready (the rules on #81): on the Pilot `useModuleRecords` answers
-// no rows before the API has. It shows every row — a status gates a new
-// reference and never an existing one (#79), so a closed warehouse or a
+// A picker reads the module the store loaded: a switched module's rows once
+// the API has answered and nothing before (`useModuleRecords` on the Pilot),
+// a module not switched yet its fixtures, which the adapter then refuses by
+// name since the API holds no such row. It shows every row — a status gates
+// a new reference and never an existing one (#79), so a closed warehouse or a
 // retired vehicle is listed with its status beside its name, and the API's
 // 409 says why it was refused.
 import { useEffect, useState } from "react"
@@ -15,8 +17,10 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import type { ApiClient } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"
-import type { BusinessFormField, BusinessFormOption, BusinessFormValues } from "@/lib/data/business-form-types"
+import { DEPOTS_MODULE, DRIVERS_MODULE, VEHICLES_MODULE } from "@/lib/data/allocations"
+import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import { getModuleDefinition, type BusinessRecord, type ModuleLocation, type WorkspaceId } from "@/lib/data/business-modules"
+import { ORGANISATION_MODULE, WAREHOUSES_MODULE } from "@/lib/data/containers"
 import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
 import type { MasterDataKind } from "@/lib/data/master-data-kinds"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
@@ -24,13 +28,8 @@ import { isSoftDeleted } from "@waste/domain/record-visibility"
 import { useApiClient } from "../api-session-store"
 import { useModuleRecords, useServerModuleState } from "../business-record-store"
 
-const ORGANISATION: ModuleLocation = { workspaceId: "configure", moduleId: "organization" }
-export const WAREHOUSES: ModuleLocation = { workspaceId: "resources", moduleId: "warehouses" }
-const VEHICLES: ModuleLocation = { workspaceId: "fleet", moduleId: "vehicles" }
-const DRIVERS: ModuleLocation = { workspaceId: "fleet", moduleId: "drivers" }
-const DEPOTS: ModuleLocation = { workspaceId: "resources", moduleId: "depots" }
-
 const fixturesOf = (location: ModuleLocation) => getModuleDefinition(location)?.records ?? []
+const keyOf = (location: ModuleLocation) => `${location.workspaceId}.${location.moduleId}`
 
 /** Which master-data kind a field picks, by its id. */
 const MASTER_KIND_BY_FIELD: Readonly<Record<string, MasterDataKind>> = {
@@ -45,29 +44,31 @@ const MASTER_KIND_BY_FIELD: Readonly<Record<string, MasterDataKind>> = {
 const optionOf = (record: BusinessRecord, withStatus: boolean): BusinessFormOption => ({ value: record.id, label: withStatus ? `${record.name} · ${record.status}` : record.name })
 
 export type RelationPickers = {
-  /** Whether every module the pickers read has answered. */
-  ready: boolean
+  /** Whether every module a form's relation fields read has answered: one module that failed holds back only the forms that pick from it. */
+  readyFor: (schema: BusinessFormSchema) => boolean
   /** The options a relation field offers, by its id; a frequency only of the project the form names (or `projectId`). */
   options: (field: BusinessFormField, values: BusinessFormValues, projectId?: string) => readonly BusinessFormOption[]
+  /** The timezone of a project, by its web id, as the organisation module holds it. */
+  timezoneOf: (projectId: string | undefined) => string | undefined
 }
 
 /** The pickers the containers' and the allocations' dialogs read. */
 export function useRelationPickers(): RelationPickers {
-  const organisation = useModuleRecords(ORGANISATION.workspaceId, ORGANISATION.moduleId, fixturesOf(ORGANISATION))
+  const organisation = useModuleRecords(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId, fixturesOf(ORGANISATION_MODULE))
   const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId, fixturesOf(MASTER_DATA_MODULE))
-  const warehouses = useModuleRecords(WAREHOUSES.workspaceId, WAREHOUSES.moduleId, fixturesOf(WAREHOUSES))
-  const vehicles = useModuleRecords(VEHICLES.workspaceId, VEHICLES.moduleId, fixturesOf(VEHICLES))
-  const drivers = useModuleRecords(DRIVERS.workspaceId, DRIVERS.moduleId, fixturesOf(DRIVERS))
-  const depots = useModuleRecords(DEPOTS.workspaceId, DEPOTS.moduleId, fixturesOf(DEPOTS))
+  const warehouses = useModuleRecords(WAREHOUSES_MODULE.workspaceId, WAREHOUSES_MODULE.moduleId, fixturesOf(WAREHOUSES_MODULE))
+  const vehicles = useModuleRecords(VEHICLES_MODULE.workspaceId, VEHICLES_MODULE.moduleId, fixturesOf(VEHICLES_MODULE))
+  const drivers = useModuleRecords(DRIVERS_MODULE.workspaceId, DRIVERS_MODULE.moduleId, fixturesOf(DRIVERS_MODULE))
+  const depots = useModuleRecords(DEPOTS_MODULE.workspaceId, DEPOTS_MODULE.moduleId, fixturesOf(DEPOTS_MODULE))
+  const byKey = new Map([
+    [keyOf(ORGANISATION_MODULE), organisation],
+    [keyOf(MASTER_DATA_MODULE), master],
+    [keyOf(WAREHOUSES_MODULE), warehouses],
+    [keyOf(VEHICLES_MODULE), vehicles],
+    [keyOf(DRIVERS_MODULE), drivers],
+    [keyOf(DEPOTS_MODULE), depots],
+  ])
   const live = (records: readonly BusinessRecord[]) => records.filter((record) => !isSoftDeleted(record))
-  // The value a form opens with stays offered, as its id chip where the
-  // module has no such row loaded: an existing reference is never refused,
-  // and a row of a module not yet switched is named by its chip.
-  const options = (field: BusinessFormField, values: BusinessFormValues, projectId?: string): readonly BusinessFormOption[] => {
-    const offered = rowsFor(field, values, projectId)
-    const current = values[field.id]
-    return typeof current === "string" && current !== "" && !offered.some((option) => option.value === current) ? [...offered, { value: current, label: current }] : offered
-  }
   const rowsFor = (field: BusinessFormField, values: BusinessFormValues, projectId?: string): readonly BusinessFormOption[] => {
     const kind = MASTER_KIND_BY_FIELD[field.id]
     if (kind !== undefined) {
@@ -93,7 +94,26 @@ export function useRelationPickers(): RelationPickers {
         return field.options ?? []
     }
   }
-  return { ready: [organisation, master, warehouses, vehicles, drivers, depots].every((module) => module.ready), options }
+  // The value a form opens with stays offered, as its id chip where the
+  // module has no such row loaded: an existing reference is never refused.
+  const options = (field: BusinessFormField, values: BusinessFormValues, projectId?: string): readonly BusinessFormOption[] => {
+    const offered = rowsFor(field, values, projectId)
+    const current = values[field.id]
+    return typeof current === "string" && current !== "" && !offered.some((option) => option.value === current) ? [...offered, { value: current, label: current }] : offered
+  }
+  const readyFor = (schema: BusinessFormSchema) =>
+    schema.sections.every((section) => section.fields.every((field) => field.relation === undefined || (byKey.get(keyOf(field.relation))?.ready ?? true)))
+  const timezoneOf = (projectId: string | undefined) => {
+    const project = projectId === undefined ? undefined : organisation.records.find((record) => record.id === projectId)
+    const timezone = project?.submittedValues?.timezone
+    return typeof timezone === "string" && timezone !== "" ? timezone : undefined
+  }
+  return { readyFor, options, timezoneOf }
+}
+
+/** Whether a surface's own module reads the API's rows now: on the Pilot, nothing is written or commanded through it before, nor after its load failed. */
+export function useModuleReady(location: ModuleLocation): boolean {
+  return useModuleRecords(location.workspaceId, location.moduleId, fixturesOf(location)).ready
 }
 
 /** The name a switched module's row goes by, from its server id; its id chip where the module has not loaded it. */
@@ -129,13 +149,15 @@ type Read<T> = { key: string; rows: T[] | null; problem: string | null }
 
 /**
  * One row's appended history read from the API — `read(client, serverId)` —
- * again whenever the row changes (`record.updated` moves with every answer
- * the store puts in its place). Nothing until the row is on the API.
+ * again whenever `version` moves: the surface bumps it after each command or
+ * write it sent, since a movement need not change anything the row shows
+ * (a transfer between two warehouses keeps the status) nor its stamps.
+ * Nothing until the row is on the API.
  */
-export function useRowHistory<T>(workspaceId: WorkspaceId, moduleId: string, record: BusinessRecord, read: (client: ApiClient, serverId: string) => Promise<T[]>): { rows: T[] | null; problem: string | null } {
+export function useRowHistory<T>(workspaceId: WorkspaceId, moduleId: string, record: BusinessRecord, version: number, read: (client: ApiClient, serverId: string) => Promise<T[]>): { rows: T[] | null; problem: string | null } {
   const client = useApiClient()
   const serverId = useServerModuleState(workspaceId, moduleId)?.serverIds.get(record.id)
-  const key = `${serverId ?? ""}|${record.updated}|${record.status}`
+  const key = `${serverId ?? ""}|${version}`
   const [state, setState] = useState<Read<T>>({ key: "", rows: null, problem: null })
   useEffect(() => {
     if (client === null || serverId === undefined) return

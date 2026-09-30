@@ -3,13 +3,12 @@
 // loaded, and as an id chip — `<prefix>-<uuid>`, the shape `webIdOf` gives a
 // row no fixture names — where it is not yet, so a reference a record shows
 // before its module is switched still travels back to the API as its id.
+import type { BusinessRecord } from "@/lib/data/business-modules"
+
 import type { LocalRefusal, MappingContext } from "./adapter"
-import { webIdOf } from "./adapter"
+import { typed, webIdOf } from "./adapter"
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-/** Whether a mapping's answer is a refusal naming a field. */
-export const isRefusal = (value: unknown): value is LocalRefusal => typeof value === "object" && value !== null && "path" in value && "message" in value
 
 /** The web id a server id stands for: the loaded row's, else its id chip. */
 export const webIdVia = (context: MappingContext, prefix: string, serverId: string): string => context.resolve.byServerId(serverId)?.id ?? webIdOf(prefix, serverId)
@@ -31,5 +30,9 @@ export function referencedServerId(webId: string, prefix: string, context: Mappi
   return bare && UUID.test(webId) ? webId.toLowerCase() : undefined
 }
 
-/** Whether text is an id as the API spells one. */
-export const isServerId = (value: string): boolean => UUID.test(value)
+/** A reference a record's form names under `key`, as a server id: undefined when blank, a refusal in `refused`'s words when the API holds no such row. */
+export function typedReference(record: BusinessRecord, key: string, prefix: string, context: MappingContext, refused: string): string | undefined | LocalRefusal {
+  const webId = typed(record, key)
+  if (webId === undefined) return undefined
+  return referencedServerId(webId, prefix, context) ?? { path: key, message: refused }
+}

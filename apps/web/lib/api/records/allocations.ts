@@ -31,8 +31,9 @@ import type { VehicleAllocation, VehicleAllocationEvent } from "@waste/contracts
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 
 import { command, create, listAll } from "../client"
-import { inheritedPresentation, ofKind, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
-import { isRefusal, nameVia, referencedServerId, webIdVia } from "./references"
+import { inheritedPresentation, isLocalRefusal, ofKind, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { instantOn, projectTimezoneOf, wallClockIn } from "./clock"
+import { nameVia, typedReference, webIdVia } from "./references"
 
 /** The workspace module the allocations are the rows of. */
 export const VEHICLE_PLANNING_MODULE: ModuleLocation = { workspaceId: "fleet", moduleId: "vehicle-planning" }
@@ -43,63 +44,6 @@ export const RELEASE_ALLOCATION = "release"
 
 const ALLOCATION_PREFIX = "allocation"
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
-
-// ---------------------------------------------------------------------------
-// The window on the project's clock
-// ---------------------------------------------------------------------------
-
-const WALL_CLOCK = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/
-
-/** The wall clock an instant reads in a timezone, by its parts. */
-function partsIn(instant: Date, timezone: string): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(instant)
-  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((candidate) => candidate.type === type)?.value)
-  return { year: part("year"), month: part("month"), day: part("day"), hour: part("hour"), minute: part("minute"), second: part("second") }
-}
-
-/** How far a timezone's clock runs ahead of UTC at an instant, in milliseconds. */
-function offsetAt(instantMs: number, timezone: string): number {
-  const wall = partsIn(new Date(instantMs), timezone)
-  return Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second) - Math.floor(instantMs / 1000) * 1000
-}
-
-/** A timezone Intl knows, or undefined, so a project's unknown zone falls back on the browser's clock rather than throwing. */
-function knownZone(timezone: string | undefined): string | undefined {
-  if (!timezone) return undefined
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: timezone })
-    return timezone
-  } catch {
-    return undefined
-  }
-}
-
-const pad = (value: number) => String(value).padStart(2, "0")
-
-/** The form's wall-clock time (`YYYY-MM-DDTHH:mm`) an instant reads on the project's clock. */
-export function wallClockIn(instant: string, timezone: string | undefined): string {
-  const date = new Date(instant)
-  const zone = knownZone(timezone)
-  if (zone === undefined) return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
-  const wall = partsIn(date, zone)
-  return `${wall.year}-${pad(wall.month)}-${pad(wall.day)}T${pad(wall.hour)}:${pad(wall.minute)}`
-}
-
-/** The instant a form's wall-clock time is on the project's clock; an instant with its own offset stands as it is; undefined for text that is neither. */
-export function instantOn(value: string, timezone: string | undefined): string | undefined {
-  const match = WALL_CLOCK.exec(value)
-  if (match === null) {
-    const instant = new Date(value)
-    return /[zZ]|[+-]\d{2}:?\d{2}$/.test(value) && !Number.isNaN(instant.getTime()) ? instant.toISOString() : undefined
-  }
-  const [year, month, day, hour, minute, second] = match.slice(1).map((part) => Number(part ?? 0))
-  const zone = knownZone(timezone)
-  if (zone === undefined) return new Date(year, month - 1, day, hour, minute, second).toISOString()
-  const asUtc = Date.UTC(year, month - 1, day, hour, minute, second)
-  // Twice: the offset at the first guess may be the other side of a clock change.
-  const first = asUtc - offsetAt(asUtc, zone)
-  return new Date(asUtc - offsetAt(first, zone)).toISOString()
-}
 
 /** "1 Oct" for a wall-clock time, as the fixtures name an allocation's day. */
 const dayLabel = (wall: string) => new Date(`${wall.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })
@@ -112,15 +56,7 @@ const dayLabel = (wall: string) => new Date(`${wall.slice(0, 10)}T00:00:00Z`).to
 function projectOf(record: BusinessRecord, context: MappingContext): { webId: string | undefined; serverId: string | undefined; timezone: string | undefined } {
   const webId = typed(record, "projectId") ?? record.projectIds?.[0]
   const serverId = webId === undefined ? undefined : context.resolve.serverIdOf(webId)
-  const project = serverId === undefined ? undefined : context.resolve.byServerId(serverId)
-  return { webId, serverId, timezone: project === undefined ? undefined : typed(project, "timezone") }
-}
-
-/** A reference the record names by web id, as a server id; undefined when blank, a refusal when the store holds no such row. */
-function referenceOf(record: BusinessRecord, key: string, prefix: string, context: MappingContext, refused: string): string | undefined | LocalRefusal {
-  const value = typed(record, key)
-  if (value === undefined) return undefined
-  return referencedServerId(value, prefix, context) ?? refusal(key, refused)
+  return { webId, serverId, timezone: projectTimezoneOf(record, context) }
 }
 
 const PICK = {
@@ -161,8 +97,8 @@ function referencesOf(record: BusinessRecord, context: MappingContext): Record<s
   const body: Record<string, string | null> = {}
   for (const field of Object.keys(PICK) as ReferenceField[]) {
     const [prefix, refused] = PICK[field]
-    const id = referenceOf(record, field, prefix, context, refused)
-    if (isRefusal(id)) return id
+    const id = typedReference(record, field, prefix, context, refused)
+    if (isLocalRefusal(id)) return id
     body[WIRE_MEMBERS[field]] = id ?? null
   }
   return body
@@ -175,8 +111,8 @@ function changeableOf(record: BusinessRecord, context: MappingContext, timezone:
   const start = typed(record, "plannedStart")
   const end = typed(record, "plannedEnd")
   return {
-    ...(isRefusal(references) ? {} : references),
-    requiredCapacityKg: isRefusal(capacity) ? undefined : (capacity ?? null),
+    ...(isLocalRefusal(references) ? {} : references),
+    requiredCapacityKg: isLocalRefusal(capacity) ? undefined : (capacity ?? null),
     plannedFrom: start === undefined ? undefined : instantOn(start, timezone),
     plannedTo: end === undefined ? undefined : instantOn(end, timezone),
     note: typed(record, "note") ?? null,
@@ -243,11 +179,11 @@ export const allocationAdapter: ResourceAdapter<VehicleAllocation> = {
     if (project.serverId === undefined) return refusal("projectId", "Pick a project")
     if (typed(record, "vehicleId") === undefined) return refusal("vehicleId", PICK.vehicleId[1])
     const references = referencesOf(record, context)
-    if (isRefusal(references)) return references
+    if (isLocalRefusal(references)) return references
     const capacity = capacityOf(record)
-    if (isRefusal(capacity)) return capacity
+    if (isLocalRefusal(capacity)) return capacity
     const window = windowOf(record, project.timezone)
-    if (isRefusal(window)) return window
+    if (isLocalRefusal(window)) return window
     const status = typed(record, "allocationStatus")
     if (status === "released") return refusal("allocationStatus", "An allocation is released by its release command")
     const note = typed(record, "note")
@@ -265,11 +201,11 @@ export const allocationAdapter: ResourceAdapter<VehicleAllocation> = {
     const project = projectOf(before, context)
     if (projectOf(after, context).webId !== project.webId) return refusal("projectId", "An allocation stays in its project")
     const references = referencesOf(after, context)
-    if (isRefusal(references)) return references
+    if (isLocalRefusal(references)) return references
     const capacity = capacityOf(after)
-    if (isRefusal(capacity)) return capacity
+    if (isLocalRefusal(capacity)) return capacity
     const window = windowOf(after, project.timezone)
-    if (isRefusal(window)) return window
+    if (isLocalRefusal(window)) return window
     const moved = patchOf(before, after, (record) => changeableOf(record, context, project.timezone))
     if (moved === null) return null
     const reason = typed(after, "changeReason")

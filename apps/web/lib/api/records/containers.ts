@@ -40,10 +40,13 @@ import { ADJUSTMENT_TARGETS, STOCK_PLACES } from "@waste/domain/resources/vocabu
 import { addDays } from "@waste/domain/route-schemes/recurrence"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import { OWNERSHIP_LABELS } from "@/lib/data/containers"
+import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 
 import { command, create, get, listAll, patch } from "../client"
-import { inheritedPresentation, ofKind, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
-import { isRefusal, isServerId, nameVia, referencedServerId, webIdVia } from "./references"
+import { inheritedPresentation, isLocalRefusal, ofKind, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { instantOn, projectTimezoneOf, shownOn } from "./clock"
+import { nameVia, referencedServerId, typedReference, webIdVia } from "./references"
 
 /** The workspace module the containers are the rows of. */
 export const CONTAINERS_MODULE: ModuleLocation = { workspaceId: "resources", moduleId: "containers" }
@@ -55,15 +58,14 @@ export type ContainerResource = Container & { placements: ContainerServicePlacem
 export const NO_STOCK_RECORD = "No stock record"
 
 const CONTAINER_PREFIX = "asset"
-const CONTAINER_TYPE_PREFIX = "container-type"
+const MOVEMENT_PREFIX = "movement"
+const CONTAINER_TYPE_PREFIX = MASTER_DATA_KIND_DETAILS["container-type"].prefix
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
 /** The form's last day in from the wire's first day out (half-open), and back. */
 const lastDayIn = (firstDayOut: string) => addDays(firstDayOut, -1)
 const firstDayOut = (lastDayIn: string) => addDays(lastDayIn, 1)
 
-/** How the Add container form spells an ownership, which the fixtures read too. */
-const OWNERSHIP_LABELS: Readonly<Record<ContainerOwnership, string>> = { company: "Company owned", customer: "Customer owned", unrecorded: "Unrecorded" }
 const isOwnership = (value: string): value is ContainerOwnership => (CONTAINER_OWNERSHIPS as readonly string[]).includes(value)
 
 /** The placement a record shows: the one the ledger has the container in service at, else the latest by start. */
@@ -78,13 +80,6 @@ function placementShown(resource: ContainerResource): ContainerServicePlacement 
 
 /** A placement's period as a person reads it: its first day, and its last or "open". */
 const periodOf = (placement: ContainerServicePlacement) => (placement.validTo === null ? `From ${placement.validFrom}, open` : `From ${placement.validFrom} to ${lastDayIn(placement.validTo)}`)
-
-/** The server id a typed web id stands for, undefined when blank, a refusal when the API holds no such row. */
-function serverIdOfTyped(record: BusinessRecord, key: string, prefix: string, context: MappingContext, refused: string): string | undefined | LocalRefusal {
-  const webId = typed(record, key)
-  if (webId === undefined) return undefined
-  return referencedServerId(webId, prefix, context) ?? refusal(key, refused)
-}
 
 const PICK_CONTAINER_TYPE = "Pick a container type the API holds"
 const PICK_FRACTION = "Pick a waste fraction the API holds"
@@ -121,14 +116,14 @@ function placementPatchOf(before: BusinessRecord, after: BusinessRecord, context
   if (placementId === undefined) return refusal("wasteFraction", `${before.name} serves nowhere yet: issue it into service first`)
   const body: Record<string, unknown> = {}
   if (moved("wasteFraction")) {
-    const id = serverIdOfTyped(after, "wasteFraction", "fraction", context, PICK_FRACTION)
+    const id = typedReference(after, "wasteFraction", "fraction", context, PICK_FRACTION)
     if (id === undefined) return refusal("wasteFraction", PICK_FRACTION)
-    if (isRefusal(id)) return id
+    if (isLocalRefusal(id)) return id
     body.wasteFractionId = id
   }
   if (moved("serviceFrequencyId")) {
-    const id = serverIdOfTyped(after, "serviceFrequencyId", "frequency", context, PICK_FREQUENCY)
-    if (isRefusal(id)) return id
+    const id = typedReference(after, "serviceFrequencyId", "frequency", context, PICK_FREQUENCY)
+    if (isLocalRefusal(id)) return id
     body.serviceFrequencyId = id ?? null
   }
   if (moved("placementTo")) {
@@ -176,12 +171,12 @@ function referenced(input: CommandInput, key: string, prefix: string, context: M
   return value === undefined ? undefined : referencedServerId(value, prefix, context, bare)
 }
 
-/** When it happened, on the person's word, as an instant; absent is the request's clock. */
-function occurredOf(input: CommandInput): { occurredAt?: string } | LocalRefusal {
+/** When it happened, on the person's word and the container's project's clock, as an instant; absent is the request's clock. */
+function occurredOf(input: CommandInput, record: BusinessRecord, context: MappingContext): { occurredAt?: string } | LocalRefusal {
   const value = said(input, "occurredAt")
   if (value === undefined) return {}
-  const instant = new Date(value)
-  return Number.isNaN(instant.getTime()) ? refusal("occurredAt", "Give when it happened as a date and a time") : { occurredAt: instant.toISOString() }
+  const occurredAt = instantOn(value, projectTimezoneOf(record, context))
+  return occurredAt === undefined ? refusal("occurredAt", "Give when it happened as a date and a time") : { occurredAt }
 }
 
 /** The optional words a movement carries: the paper it quotes and why. */
@@ -211,7 +206,7 @@ function endOf(input: CommandInput): string | undefined | LocalRefusal {
 
 /** Composes a body from its parts, the first refusal among them winning. */
 function bodyOf(...parts: Array<Record<string, unknown> | LocalRefusal>): Record<string, unknown> | LocalRefusal {
-  const refused = parts.find(isRefusal)
+  const refused = parts.find(isLocalRefusal)
   if (refused !== undefined) return refused
   return Object.assign({}, ...parts) as Record<string, unknown>
 }
@@ -239,36 +234,37 @@ const reasonOf = (input: CommandInput): { reason: string } | LocalRefusal => {
 }
 
 export const CONTAINER_COMMANDS = {
-  receive: lifecycle("receive", "received", (input, _record, context) => {
+  receive: lifecycle("receive", "received", (input, record, context) => {
     const warehouseId = warehouseOf(input, context)
-    return bodyOf(isRefusal(warehouseId) ? warehouseId : { warehouseId }, occurredOf(input), wordsOf(input, ["reference"]))
+    return bodyOf(isLocalRefusal(warehouseId) ? warehouseId : { warehouseId }, occurredOf(input, record, context), wordsOf(input, ["reference"]))
   }),
-  return: lifecycle("return", "returned", (input, _record, context) => {
+  return: lifecycle("return", "returned", (input, record, context) => {
     const warehouseId = warehouseOf(input, context)
     const validTo = endOf(input) ?? refusal("lastDay", "Give the last day it serves")
-    return bodyOf(isRefusal(warehouseId) ? warehouseId : { warehouseId }, stockPlaceOf(input), isRefusal(validTo) ? validTo : { validTo }, occurredOf(input), wordsOf(input, ["reason", "reference"]))
+    return bodyOf(isLocalRefusal(warehouseId) ? warehouseId : { warehouseId }, stockPlaceOf(input), isLocalRefusal(validTo) ? validTo : { validTo }, occurredOf(input, record, context), wordsOf(input, ["reason", "reference"]))
   }),
-  transfer: lifecycle("transfer", "transferred", (input, _record, context) => {
+  transfer: lifecycle("transfer", "transferred", (input, record, context) => {
     const warehouseId = warehouseOf(input, context)
-    return bodyOf(isRefusal(warehouseId) ? warehouseId : { warehouseId }, stockPlaceOf(input), occurredOf(input), wordsOf(input, ["reason", "reference"]))
+    return bodyOf(isLocalRefusal(warehouseId) ? warehouseId : { warehouseId }, stockPlaceOf(input), occurredOf(input, record, context), wordsOf(input, ["reason", "reference"]))
   }),
-  decommission: lifecycle("decommission", "decommissioned", (input) => {
+  decommission: lifecycle("decommission", "decommissioned", (input, record, context) => {
     // In service the API requires the last day, out of service it refuses one: the route knows which.
     const validTo = endOf(input)
-    return bodyOf(reasonOf(input), validTo === undefined ? {} : isRefusal(validTo) ? validTo : { validTo }, occurredOf(input), wordsOf(input, ["reference"]))
+    return bodyOf(reasonOf(input), validTo === undefined ? {} : isLocalRefusal(validTo) ? validTo : { validTo }, occurredOf(input, record, context), wordsOf(input, ["reference"]))
   }),
-  adjust: lifecycle("adjust", "adjusted", (input, _record, context) => {
+  adjust: lifecycle("adjust", "adjusted", (input, record, context) => {
     const toKind = said(input, "toKind")
     if (toKind === undefined || !(ADJUSTMENT_TARGETS as readonly string[]).includes(toKind)) return refusal("toKind", "Say where the ledger should have it: a warehouse, maintenance at one, or scrap")
     const named = said(input, "warehouseId") !== undefined
     if ((toKind === "scrap") === named) return refusal("warehouseId", WAREHOUSE_WITH_A_STOCK_PLACE)
     const warehouseId = toKind === "scrap" ? null : warehouseOf(input, context)
     const corrects = said(input, "correctsMovementId")
-    const correctsMovementId = corrects === undefined ? {} : isServerId(corrects) ? { correctsMovementId: corrects.toLowerCase() } : refusal("correctsMovementId", "Give the id of the movement it corrects")
-    return bodyOf({ toKind }, isRefusal(warehouseId) ? warehouseId : { warehouseId }, reasonOf(input), correctsMovementId, occurredOf(input))
+    const correctedId = corrects === undefined ? undefined : referencedServerId(corrects, MOVEMENT_PREFIX, context, true)
+    const correctsMovementId = corrects === undefined ? {} : correctedId !== undefined ? { correctsMovementId: correctedId } : refusal("correctsMovementId", "Give the id of the movement it corrects")
+    return bodyOf({ toKind }, isLocalRefusal(warehouseId) ? warehouseId : { warehouseId }, reasonOf(input), correctsMovementId, occurredOf(input, record, context))
   }),
   // The Registry's one door into service: the placement and the issue movement together.
-  issue: lifecycle("placements", "issued into service", (input, _record, context) => {
+  issue: lifecycle("placements", "issued into service", (input, record, context) => {
     const subscriptionId = referenced(input, "subscriptionId", "subscription", context, true)
     if (subscriptionId === undefined) return refusal("subscriptionId", "Give the subscription's id")
     const wasteFractionId = referenced(input, "wasteFractionId", "fraction", context)
@@ -278,7 +274,7 @@ export const CONTAINER_COMMANDS = {
     if (frequencyNamed && serviceFrequencyId === undefined) return refusal("serviceFrequencyId", PICK_FREQUENCY)
     const validFrom = said(input, "validFrom")
     if (validFrom === undefined || !ISO_DAY.test(validFrom)) return refusal("validFrom", "Give the first day it serves")
-    return bodyOf({ subscriptionId, wasteFractionId }, serviceFrequencyId === undefined ? {} : { serviceFrequencyId }, { validFrom }, occurredOf(input), wordsOf(input, ["reference"]))
+    return bodyOf({ subscriptionId, wasteFractionId }, serviceFrequencyId === undefined ? {} : { serviceFrequencyId }, { validFrom }, occurredOf(input, record, context), wordsOf(input, ["reference"]))
   }),
 } satisfies Record<string, RecordCommand<ContainerResource>>
 
@@ -298,7 +294,11 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
   list: async (client) => {
     const [containers, placements] = await Promise.all([listAll<Container>(client, "/containers"), listAll<ContainerServicePlacement>(client, "/placements")])
     const byContainer = new Map<string, ContainerServicePlacement[]>()
-    for (const placement of placements) byContainer.set(placement.containerId, [...(byContainer.get(placement.containerId) ?? []), placement])
+    for (const placement of placements) {
+      const filed = byContainer.get(placement.containerId)
+      if (filed === undefined) byContainer.set(placement.containerId, [placement])
+      else filed.push(placement)
+    }
     return containers.map((container) => ({ ...container, placements: byContainer.get(container.id) ?? [] }))
   },
   toRecord: (resource, context) => {
@@ -320,7 +320,7 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
     }
     if (state !== null) {
       if (state.warehouseId !== null) facts.Warehouse = nameVia(context, "warehouse", state.warehouseId)
-      facts["State since"] = state.since.slice(0, 10)
+      facts["State since"] = shownOn(state.since, project === undefined ? undefined : typed(project, "timezone"))
     }
     if (placement !== undefined) {
       facts["Waste fractions"] = nameVia(context, "fraction", placement.wasteFractionId)
@@ -367,9 +367,9 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
     if (projectId === undefined) return refusal("projectId", "Pick a project")
     const label = typed(record, "containerId")
     if (label === undefined) return refusal("containerId", "A container needs its Container ID")
-    const containerTypeId = serverIdOfTyped(record, "containerType", CONTAINER_TYPE_PREFIX, context, PICK_CONTAINER_TYPE)
+    const containerTypeId = typedReference(record, "containerType", CONTAINER_TYPE_PREFIX, context, PICK_CONTAINER_TYPE)
     if (containerTypeId === undefined) return refusal("containerType", PICK_CONTAINER_TYPE)
-    if (isRefusal(containerTypeId)) return containerTypeId
+    if (isLocalRefusal(containerTypeId)) return containerTypeId
     const ownership = typed(record, "ownership")
     if (ownership !== undefined && !isOwnership(ownership)) return refusal("ownership", OWNERSHIP_WORDS)
     const optional = (key: string, member: string) => {
@@ -391,15 +391,15 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
     if ((typed(after, "projectId") ?? after.projectIds?.[0]) !== (typed(before, "projectId") ?? before.projectIds?.[0])) return refusal("projectId", "A container stays in its project")
     if (typed(after, "containerId") === undefined && after.name.trim() === "") return refusal("containerId", "A container needs its Container ID")
     if (typed(before, "containerType") !== typed(after, "containerType")) {
-      const id = serverIdOfTyped(after, "containerType", CONTAINER_TYPE_PREFIX, context, PICK_CONTAINER_TYPE)
+      const id = typedReference(after, "containerType", CONTAINER_TYPE_PREFIX, context, PICK_CONTAINER_TYPE)
       if (id === undefined) return refusal("containerType", PICK_CONTAINER_TYPE)
-      if (isRefusal(id)) return id
+      if (isLocalRefusal(id)) return id
     }
     const ownership = typed(after, "ownership")
     if (ownership !== undefined && !isOwnership(ownership)) return refusal("ownership", OWNERSHIP_WORDS)
     const container = patchOf(before, after, (record) => identityOf(record, context))
     const placement = placementPatchOf(before, after, context)
-    if (isRefusal(placement)) return placement
+    if (isLocalRefusal(placement)) return placement
     if (container === null && placement === null) return null
     const write: ContainerWrite = { ...(container === null ? {} : { container }), ...(placement === null ? {} : { placement }) }
     return write
@@ -445,7 +445,6 @@ export const containersModule: ServerModule = {
 /** The workspace module the ledger is the rows of. */
 export const INVENTORY_MODULE: ModuleLocation = { workspaceId: "resources", moduleId: "inventory" }
 
-const MOVEMENT_PREFIX = "movement"
 const APPEND_ONLY = "The ledger is append-only: a wrong movement is corrected by adjusting its container"
 
 /** Where a movement leaves from or arrives at, as a person reads it: a supplier, a warehouse, maintenance at one, service, scrap. */
@@ -467,6 +466,7 @@ export const stockMovementAdapter: ResourceAdapter<LedgerRow> = {
   list: async (client) => (await listAll<StockMovement>(client, "/stock-movements")).map(ledgerRow),
   toRecord: (movement, context) => {
     const project = context.resolve.byServerId(movement.projectId)
+    const timezone = project === undefined ? undefined : typed(project, "timezone")
     const projectWebId = project?.id ?? webIdOf("project", movement.projectId)
     const container = nameVia(context, CONTAINER_PREFIX, movement.containerId)
     const kind = statusLabel(movement.kind)
@@ -477,8 +477,8 @@ export const stockMovementAdapter: ResourceAdapter<LedgerRow> = {
       Container: container,
       From: from,
       To: to,
-      "Occurred at": movement.occurredAt,
-      "Recorded at": movement.recordedAt,
+      "Occurred at": shownOn(movement.occurredAt, timezone),
+      "Recorded at": shownOn(movement.recordedAt, timezone),
       Project: project?.name ?? projectWebId,
     }
     if (movement.reason !== null) facts.Reason = movement.reason
@@ -491,7 +491,7 @@ export const stockMovementAdapter: ResourceAdapter<LedgerRow> = {
       context: `${from} → ${to}`,
       status: kind,
       ...inheritedPresentation(undefined),
-      value: movement.occurredAt.slice(0, 10),
+      value: shownOn(movement.occurredAt, timezone).slice(0, 10),
       ...stampFacts(movement, context.now),
       description: "A Stock Movement of the container ledger, append-only.",
       facts,

@@ -593,6 +593,11 @@ const allocationMonthIndexes: Record<string, number> = {
 }
 
 function allocationDate(record: BusinessRecord, fallbackOffset: number) {
+  // The typed start where the allocation has one (a server allocation's, on
+  // its project's clock, Issue #181), since its name carries no year.
+  const start = record.submittedValues?.plannedStart
+  const typedDay = typeof start === "string" ? /^(\d{4})-(\d{2})-(\d{2})/.exec(start) : null
+  if (typedDay) return new Date(Number(typedDay[1]), Number(typedDay[2]) - 1, Number(typedDay[3]), 12)
   const match = record.name.match(/^(\d{1,2})\s+([a-z]{3})/i)
   const month = match ? allocationMonthIndexes[match[2].toLowerCase()] : undefined
 
