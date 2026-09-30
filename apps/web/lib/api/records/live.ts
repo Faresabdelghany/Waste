@@ -76,7 +76,6 @@ export function toLiveRecord(live: LiveRoute, context: MappingContext): Business
     context: actual ?? planned ?? "Unassigned",
     status: live.paused ? "Paused" : route.status,
     value: `${Math.round(live.progress.fraction * 100)}% · ${total - open}/${total} stops`,
-    description: "A route running or due today, as its driver's device last reported it.",
     facts,
     recordKind: "Active route",
     submittedValues: {

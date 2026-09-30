@@ -122,7 +122,7 @@ export function validationOnApi(result: SchemeValidationResult, containersOnApi:
 }
 
 /** Why the Pilot's question offers "This collection only" disabled, until the API keeps a one-off (#209). */
-export const ONE_OFF_NOT_KEPT = "The API keeps no one-off change yet: the next generation run would bring these routes back to the scheme."
+export const ONE_OFF_NOT_KEPT = "Not offered yet: the API keeps no one-off change, and the next generation run would bring these routes back to the scheme."
 
 const typedValue = (record: BusinessRecord, key: string) => {
   const value = record.submittedValues?.[key]

@@ -65,6 +65,15 @@ function useSessionLine(): (session: Session, timezone: string | undefined) => s
     `${shownOn(session.startedAt, timezone)} → ${session.endedAt === null ? (session.pausedAt === null ? "open" : "paused") : shownOn(session.endedAt, timezone)} · ${driverName(session.driverId)} · ${vehicleName(session.vehicleId).split(" · ")[0]}`
 }
 
+/** What each of the route's commands is told once the API has taken it. */
+const DONE: Readonly<Record<string, (name: string) => string>> = {
+  [ASSIGN_ROUTE]: (name) => `${name} assigned`,
+  [DISPATCH_ROUTE]: (name) => `${name} dispatched`,
+  [RESCHEDULE_ROUTE]: (name) => `${name} rescheduled`,
+  [CANCEL_ROUTE]: (name) => `${name} cancelled`,
+  [REORDER_ROUTE]: (name) => `The stops of ${name} are reordered`,
+}
+
 type RouteOpen = { kind: "form"; name: RouteCommandWithForm; values: BusinessFormValues } | { kind: "reorder"; order: string[] }
 
 /** A route's commands, its stops in sequence, its sessions and the device's command log, in its details. */
@@ -94,7 +103,7 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
       if (outcome.kind !== "done") return
       setOpen(null)
       setVersion((current) => current + 1)
-      toast.success(`${outcome.record.name} · ${outcome.record.status}`, { description: `The route is ${outcome.record.status.toLowerCase()}, as the API now holds it.` })
+      toast.success(DONE[name]?.(outcome.record.name) ?? `${outcome.record.name} updated`, { description: `Status: ${outcome.record.status}` })
     })
   }
 
@@ -195,7 +204,7 @@ function ReorderStopsDialog({ order, label, busy, onChange, onClose, onSave }: {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Reorder stops</DialogTitle>
-          <DialogDescription>The open stops in the order the driver will visit them. The order becomes the route's Plan; the stops already decided keep their place.</DialogDescription>
+          <DialogDescription>The open stops in the order the driver will visit them. The order becomes the route&apos;s Plan; the stops already decided keep their place.</DialogDescription>
         </DialogHeader>
         <ol className="divide-y divide-border/60 border-y border-border/60 text-sm" data-testid="reorder-stops">
           {order.map((id, index) => (

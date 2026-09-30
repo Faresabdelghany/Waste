@@ -93,8 +93,11 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
   const driver = route.planned.driverId === null ? undefined : nameVia(context, "driver", route.planned.driverId)
   const trailer = route.planned.trailerId === null ? undefined : callsignOf(nameVia(context, "vehicle", route.planned.trailerId))
   const scheme = context.resolve.byServerId(route.routeSchemeId)
+  // The route carries no area on the wire: it is filed under its scheme's, once the schemes are loaded (#177).
+  const area = scheme?.facts["Planning area"]
   const facts: Record<string, string> = {
     Project: project.name ?? project.webId,
+    ...(area === undefined ? {} : { Area: area }),
     "Route scheme": nameVia(context, SCHEME_PREFIX, route.routeSchemeId),
     "Service date": route.serviceDate,
     "Operating date": route.operatingDate,
@@ -127,13 +130,13 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
   return {
     id: webIdOf(ROUTE_PREFIX, route.id),
     name: route.label,
-    context: [project.name ?? project.webId, scheme?.name].filter(Boolean).join(" · "),
+    context: [project.name ?? project.webId, area].filter(Boolean).join(" · "),
     status: statusLabel(route.status),
     ...inheritedPresentation(undefined),
     ...stampFacts(route, context.now),
     owner: driver ?? "Unassigned",
     value: stopsValue(route.progress),
-    description: `A dated route generation wrote for the service date ${route.serviceDate}; it moves by its commands.`,
+    description: `Generated from ${scheme?.name ?? "its route scheme"} for ${route.serviceDate}${route.operatingDate === route.serviceDate ? "" : `, running ${route.operatingDate}`}.`,
     facts,
     companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [project.webId],

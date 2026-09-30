@@ -195,6 +195,19 @@ describe("a route", () => {
     assert.deepEqual(record.projectIds, [`project-${copenhagen.id}`])
   })
 
+  test("once the schemes are loaded, names its scheme and files itself under the scheme's planning area", () => {
+    const schemeRecord: BusinessRecord = { ...projectRecord, id: `scheme-${schemeId}`, name: "RS-Central · Week A", recordKind: "Route Scheme", facts: { "Planning area": "Indre By Operations" } }
+    const withSchemes: ServerRecordsState = new Map([...state, ["route-studio.schemes", loaded({ records: [schemeRecord], serverIds: new Map([[schemeRecord.id, schemeId]]) }, 1)]])
+    const record = routeAdapter.toRecord(planned, context(resolverOver(withSchemes)))
+    assert.equal(record.facts["Route scheme"], "RS-Central · Week A")
+    assert.equal(record.facts.Area, "Indre By Operations", "the Routes table's Area column")
+    assert.equal(record.context, "Copenhagen Central · Indre By Operations")
+    assert.equal(record.description, "Generated from RS-Central · Week A for 2026-10-01.")
+    assert.equal(record.submittedValues?.schemeId, schemeRecord.id)
+    const moved = routeAdapter.toRecord({ ...planned, operatingDate: "2026-10-02" }, context(resolverOver(withSchemes)))
+    assert.equal(moved.description, "Generated from RS-Central · Week A for 2026-10-01, running 2026-10-02.")
+  })
+
   test("reads each status as the table, the map and the lifecycle spell it", () => {
     const words = { planned: "Planned", ready: "Ready", active: "Active", completed: "Completed", cancelled: "Cancelled" } as const
     for (const [token, word] of Object.entries(words)) {
