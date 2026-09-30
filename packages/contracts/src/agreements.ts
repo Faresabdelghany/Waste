@@ -175,3 +175,15 @@ export const SubscriptionListQuery = PageRequest.extend({
   validOn: IsoDate.optional(),
 })
 export type SubscriptionListQuery = z.infer<typeof SubscriptionListQuery>
+
+/**
+ * A page of subscriptions across agreements (`GET /subscriptions`, Issue
+ * #183): one project's, one agreement's, valid on a day — the flat list a
+ * client that holds a module whole reads once, as placements are read across
+ * containers, where the list under an agreement answers one agreement's.
+ */
+export const SubscriptionsQuery = ProjectScopedListQuery.extend({
+  agreementId: Id.optional(),
+  validOn: IsoDate.optional(),
+})
+export type SubscriptionsQuery = z.infer<typeof SubscriptionsQuery>

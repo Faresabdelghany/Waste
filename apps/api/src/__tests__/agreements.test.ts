@@ -618,6 +618,79 @@ describe("the agreement and subscription endpoints", { skip: database.skip || ow
     })
   })
 
+  describe("GET /subscriptions", () => {
+    const across = async (call: Call, query = "") => SubscriptionPage.parse(await (await call(`/subscriptions${query}`)).json())
+
+    test("answers the subscriptions of every agreement in the caller's projects in one page, in id order, and none of a project the caller does not work in", async () => {
+      const first = await agreement("AGR-2480")
+      const second = await agreement("AGR-2481")
+      const harbor = await agreement("AGR-2482", { projectId: a.projects.harbor.id })
+      const one = await subscribe(first.id)
+      const two = await subscribe(second.id, { propertyId: null, sharedCollectionPointId: bank.id })
+      const afloat = await create(olivia, `/agreements/${harbor.id}/subscriptions`, { productId: harborResidual.id, propertyId: harborProperty.id, validFrom: JANUARY }, Subscription)
+
+      const everything = (await across(olivia, "?limit=200")).items.map((row) => row.id)
+      for (const id of [one.id, two.id, afloat.id]) assert.ok(everything.includes(id), `${id} is listed`)
+      assert.deepEqual(everything, [...everything].sort(), "ascending by id")
+
+      const copenhagenOnly = (await across(viewer, "?limit=200")).items
+      assert.ok(copenhagenOnly.some((row) => row.id === one.id))
+      assert.ok(copenhagenOnly.some((row) => row.id === two.id))
+      assert.ok(!copenhagenOnly.some((row) => row.id === afloat.id), "a subscription of a project the account does not work in is not here")
+      for (const row of copenhagenOnly) assert.equal(row.projectId, a.projects.copenhagen.id)
+
+      assert.ok(!(await across(other, "?limit=200")).items.some((row) => everything.includes(row.id)), "another company's page holds none of ours")
+      const { items, nextCursor } = await across(lars, "?limit=200")
+      assert.deepEqual(items, [])
+      assert.equal(nextCursor, null)
+    })
+
+    test("narrows to one agreement, to one project and to the day the period covers", async () => {
+      const created = await agreement("AGR-2483")
+      const early = await subscribe(created.id, { validFrom: JANUARY, validTo: JULY })
+      const late = await subscribe(created.id, { validFrom: OCTOBER })
+      const elsewhere = await agreement("AGR-2484", { projectId: a.projects.harbor.id })
+      const afloat = await create(olivia, `/agreements/${elsewhere.id}/subscriptions`, { productId: harborResidual.id, propertyId: harborProperty.id, validFrom: JANUARY }, Subscription)
+
+      assert.deepEqual((await across(olivia, `?limit=200&agreementId=${created.id}`)).items.map((row) => row.id).sort(), [early.id, late.id].sort())
+      const inHarbor = (await across(olivia, `?limit=200&projectId=${a.projects.harbor.id}`)).items
+      assert.ok(inHarbor.some((row) => row.id === afloat.id))
+      for (const row of inHarbor) assert.equal(row.projectId, a.projects.harbor.id)
+      assert.deepEqual((await across(olivia, `?limit=200&agreementId=${created.id}&validOn=${APRIL}`)).items.map((row) => row.id), [early.id])
+      assert.deepEqual((await across(olivia, `?limit=200&agreementId=${created.id}&validOn=${NEXT_YEAR}`)).items.map((row) => row.id), [late.id])
+      assert.deepEqual((await across(olivia, `?limit=200&agreementId=${created.id}&validOn=${JULY}`)).items, [], "no subscription covers the gap between them")
+      assert.deepEqual((await across(olivia, `?limit=200&agreementId=${theirAgreement.id}`)).items, [], "another company's agreement has no subscriptions here")
+    })
+
+    test("refuses a malformed filter and a project the caller does not work in, each as a 400 naming the query member", async () => {
+      const day = await refused(await olivia("/subscriptions?validOn=yesterday"), 400)
+      assert.deepEqual(day.errors?.map((error) => error.path), ["validOn"])
+      const id = await refused(await olivia("/subscriptions?agreementId=AGR-2408"), 400)
+      assert.deepEqual(id.errors?.map((error) => error.path), ["agreementId"])
+      const project = await refused(await viewer(`/subscriptions?projectId=${a.projects.harbor.id}`), 400)
+      assert.deepEqual(project.errors, [{ path: "projectId", message: "Not a project this account works in" }])
+      const size = await refused(await olivia("/subscriptions?limit=0"), 400)
+      assert.deepEqual(size.errors?.map((error) => error.path), ["limit"])
+    })
+
+    test("walks the cursor: two pages of one row each are the two rows in id order, and the last page says there is no more", async () => {
+      const created = await agreement("AGR-2485")
+      const one = await subscribe(created.id, { validFrom: JANUARY, validTo: APRIL })
+      const two = await subscribe(created.id, { validFrom: APRIL })
+      const firstPage = await across(olivia, `?limit=1&agreementId=${created.id}`)
+      assert.equal(firstPage.items.length, 1)
+      assert.ok(firstPage.nextCursor !== null, "a second row is left")
+      const secondPage = await across(olivia, `?limit=1&agreementId=${created.id}&cursor=${encodeURIComponent(firstPage.nextCursor ?? "")}`)
+      assert.equal(secondPage.items.length, 1)
+      assert.equal(secondPage.nextCursor, null)
+      assert.deepEqual([...firstPage.items, ...secondPage.items].map((row) => row.id), [one.id, two.id].sort())
+    })
+
+    test("refuses a role without customers.agreements view", async () => {
+      assert.match((await refused(await ungranted("/subscriptions"), 403)).detail ?? "", /view on customers\.agreements/)
+    })
+  })
+
   describe("GET and PATCH /subscriptions/:id", () => {
     test("answers 404 for another company's subscription and for an id nobody minted", async () => {
       const theirs = await create(

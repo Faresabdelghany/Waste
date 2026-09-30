@@ -2610,7 +2610,8 @@ const customers: WorkspaceDefinition = {
         { label: "Draft", value: "31", helper: "9 missing payer data" },
         { label: "Price issues", value: "7", helper: "Cannot activate", tone: "danger" },
       ],
-      lifecycle: ["Draft", "Pending", "Active", "Expiring", "Expired", "Terminated"],
+      // Cancelled is the wire's third status (slice 9a of #81): a signed agreement withdrawn, where Terminated is a period ended by its `validTo`.
+      lifecycle: ["Draft", "Pending", "Active", "Expiring", "Expired", "Terminated", "Cancelled"],
       rules: [
         "Agreements, subscriptions, products, and invoices retain effective-dated historical meaning.",
         "Customer, service address, and payer may be different parties.",

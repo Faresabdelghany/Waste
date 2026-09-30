@@ -15,7 +15,9 @@ export default defineConfig([
     "**/dist/**",
     "**/.turbo/**",
     "**/playwright-report/**",
+    "**/playwright-report-api/**",
     "**/test-results/**",
+    "**/test-results-api/**",
     "apps/web/next-env.d.ts",
   ]),
 

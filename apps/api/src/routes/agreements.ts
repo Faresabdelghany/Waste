@@ -61,6 +61,7 @@ import {
   SubscriptionCreate,
   SubscriptionListQuery,
   SubscriptionPatch,
+  SubscriptionsQuery,
   type AgreementStatus,
   type BillingCadence,
 } from "@waste/contracts/agreements"
@@ -560,6 +561,47 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .returning(subscriptionColumns),
         )
         return created(c, "/subscriptions", subscriptionOf(row))
+      },
+    )
+    .get(
+      "/subscriptions",
+      describeRoute({
+        operationId: "listSubscriptions",
+        summary: "The subscriptions the caller's projects hold",
+        description:
+          "One page of subscriptions across agreements, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none reads an empty page. The list under an agreement (`GET /agreements/{id}/subscriptions`) answers one agreement's; this one answers a client that holds the family whole, as `GET /placements` does for placements (Issue #183). `projectId` narrows it to one of those projects; naming another is refused. `agreementId` narrows it to one agreement's, an agreement of another company or project being one that has none here. `validOn` asks for the subscriptions in force on that day, `validFrom` inclusive and `validTo` exclusive. Hand `nextCursor` back as `cursor` for the next page.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("One page of subscriptions.", SubscriptionPage),
+          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, or `projectId` is not a project this account works in."),
+          401: describeProblem("No usable token (see WWW-Authenticate)."),
+          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.agreements`."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "view"),
+      validate("query", SubscriptionsQuery),
+      async (c) => {
+        const { limit, cursor, projectId, agreementId, validOn: day } = c.req.valid("query")
+        const after = afterCursor(cursor)
+        const principal = c.get("principal")
+        if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
+        const rows = await c
+          .get("tx")
+          .select(subscriptionColumns)
+          .from(subscription)
+          .where(
+            and(
+              subscriptionScope(principal),
+              projectId === undefined ? undefined : eq(subscription.projectId, projectId),
+              agreementId === undefined ? undefined : eq(subscription.agreementId, agreementId),
+              day === undefined ? undefined : validOn(subscription, day),
+              after === undefined ? undefined : gt(subscription.id, after),
+            ),
+          )
+          .orderBy(asc(subscription.id))
+          .limit(fetchLimit(limit))
+        return c.json(pageOf(rows.map(subscriptionOf), limit))
       },
     )
     .get(
