@@ -348,6 +348,10 @@ describe("a vehicle", () => {
     assert.deepEqual(patch({ projectId: FIXTURE_PROJECT_IDS.harbor }), { path: "projectId", message: "A vehicle stays in its project" })
     assert.deepEqual(patch({ ownershipType: "leased", serviceProviderId: FIXTURE_SERVICE_PROVIDER_IDS.nordren }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP })
     assert.deepEqual(patch({ homeDepotId: "" }), { vehicle: { homeDepotId: null } })
+    // A callsign cleared is null on the wire, which the contract takes.
+    const uncalled = patch({ assetReference: "" }) as { vehicle: unknown }
+    assert.deepEqual(uncalled, { vehicle: { callsign: null } })
+    assert.ok(VehiclePatch.safeParse(uncalled.vehicle).success)
   })
 
   test("the update patches the vehicle, then puts the whole list through its own route, and answers the vehicle as it now stands", async () => {
@@ -505,6 +509,10 @@ describe("a driver", () => {
     assert.deepEqual(patch({ employmentType: "employee" }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_EMPLOYMENT }, "the rule is held against the row the patch leaves behind")
     assert.deepEqual(patch({ employmentType: "employee", serviceProviderId: "" }), { employment: "employee", serviceProviderId: null })
     assert.deepEqual(patch({ driverName: "Lars Møller Hansen", licenceExpiry: "" }), { name: "Lars Møller Hansen", licenceExpiry: null })
+    // A licence class taken off the record is null on the wire — no class on record, eligible for nothing — which the contract takes.
+    const unlicensed = patch({ licenceClass: "" })
+    assert.deepEqual(unlicensed, { licenceClass: null })
+    assert.ok(DriverPatch.safeParse(unlicensed).success)
   })
 
   test("through the store's write, an edit patches the row's own route and the API's 409 comes back as its sentence", async () => {

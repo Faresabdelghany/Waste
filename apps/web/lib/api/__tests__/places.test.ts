@@ -478,6 +478,11 @@ describe("a warehouse", () => {
     assert.deepEqual(body, { name: "Nordhavn Stock", location: at(12.5958, 55.7091), depotId: null, status: "restricted" })
     assert.ok(WarehousePatch.safeParse(body).success)
     assert.equal(warehouseAdapter.toPatchBody(record, record, context(warehouseFixtures, resolveDepots)), null)
+    // A location cleared on a geocoded warehouse is null on the wire, which the contract takes.
+    const located = warehouseAdapter.toRecord({ ...west, location: at(12.5, 55.66) }, context(warehouseFixtures, resolveDepots))
+    const ungeocoded = warehouseAdapter.toPatchBody(located, { ...located, submittedValues: { ...located.submittedValues, latitude: "", longitude: "" } }, context(warehouseFixtures, resolveDepots))
+    assert.deepEqual(ungeocoded, { location: null })
+    assert.ok(WarehousePatch.safeParse(ungeocoded).success)
     const patch = (over: Record<string, string>) => warehouseAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, ...over } }, context(warehouseFixtures, resolveDepots))
     assert.deepEqual(patch({ code: "WH-NORD" }), { path: "code", message: "The code is set once: a warehouse that needs another code is another warehouse" })
     assert.deepEqual(patch({ projectId: FIXTURE_PROJECT_IDS.harbor }), { path: "projectId", message: "A warehouse stays in its project" })
