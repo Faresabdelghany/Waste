@@ -441,6 +441,9 @@ export const containersModule: ServerModule = {
 // read-only — a row per movement, its container named by label from the
 // containers loaded before it — and every write is refused: the ledger is
 // append-only, and a wrong movement is corrected by adjusting its container.
+// Residual (#198): the ledger is read once per sign-in, and a container's
+// command replaces only the container's row, so a movement it appends shows
+// here after the next load; the container's own ledger shows it at once.
 
 /** The workspace module the ledger is the rows of. */
 export const INVENTORY_MODULE: ModuleLocation = { workspaceId: "resources", moduleId: "inventory" }
