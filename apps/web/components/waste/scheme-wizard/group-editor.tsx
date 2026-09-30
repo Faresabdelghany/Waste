@@ -86,16 +86,22 @@ export function newWizardGroup(): CollectionGroup {
   }
 }
 
-/** The container types the container records actually carry, limited to the scheme's service type. */
+/**
+ * The container types a rule may name, limited to the scheme's service type:
+ * those the container records actually carry, or on the Pilot the master
+ * data's (#178), which the rule names by name and the API matches at
+ * generation — the API's containers name their type by id, which the
+ * preview's matcher does not read (#207).
+ */
 function useContainerVocabulary(records: WizardRecords, serviceType: string) {
   return useMemo(() => {
     const allowed = allowedContainerTypes(serviceType)
     const types = new Set<string>()
-    for (const record of records.containers) {
-      const profile = containerMatchProfile(record)
-      if (!profile.containerType) continue
-      if (allowed && !allowed.includes(profile.containerType)) continue
-      types.add(profile.containerType)
+    const carried = records.containerTypeNames ?? records.containers.map((record) => containerMatchProfile(record).containerType)
+    for (const containerType of carried) {
+      if (!containerType) continue
+      if (allowed && !allowed.includes(containerType)) continue
+      types.add(containerType)
     }
     const order = (type: string) => {
       const index = CONTAINER_TYPE_VOCABULARY.indexOf(type)
@@ -104,7 +110,7 @@ function useContainerVocabulary(records: WizardRecords, serviceType: string) {
     return {
       containerTypes: [...types].sort((a, b) => order(a) - order(b) || a.localeCompare(b)),
     }
-  }, [records.containers, serviceType])
+  }, [records.containerTypeNames, records.containers, serviceType])
 }
 
 export function GroupEditor({

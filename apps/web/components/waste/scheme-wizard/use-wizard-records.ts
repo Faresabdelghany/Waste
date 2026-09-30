@@ -52,6 +52,8 @@ export type WizardRecords = {
   containers: BusinessRecord[]
   /** Whether the containers are the API's (the Pilot), which the preview's matcher cannot place yet (lib/data/route-schemes.ts `validationOnApi`). */
   containersOnApi: boolean
+  /** On the Pilot, the master data's container types, which a rule names; null in fixture mode, where they are the ones the containers carry. */
+  containerTypeNames: string[] | null
   schemes: BusinessRecord[]
   allocations: BusinessRecord[]
   /** Active waste fraction names from Settings master data — the step 1 options. */
@@ -144,6 +146,7 @@ export function useWizardRecords(): WizardRecords {
     drivers,
     containers,
     containersOnApi: onApi && isServerBacked("resources", "containers"),
+    containerTypeNames: onApi ? master.filter((record) => masterDataKindOf(record) === "container-type").map((record) => record.name) : null,
     schemes,
     allocations,
     wasteFractions: onApi
