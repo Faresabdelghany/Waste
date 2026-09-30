@@ -14,10 +14,8 @@ export function PlanReadingRow({ reading = NOT_MEASURED, onRetry }: { reading?: 
   return (
     <>
       <dt className="text-muted-foreground">Routing</dt>
-      <dd className="flex min-w-0 items-center gap-2" data-testid="route-card-routing" data-reading={reading.kind}>
-        <span className="min-w-0 flex-1 truncate tabular-nums" title={reading.sentence}>
-          {reading.sentence}
-        </span>
+      <dd className="flex min-w-0 items-start gap-2" data-testid="route-card-routing" data-reading={reading.kind}>
+        <span className="min-w-0 flex-1 break-words tabular-nums">{reading.sentence}</span>
         {reading.retry && (
           <Button variant="outline" size="sm" className="h-6 shrink-0 px-2 text-xs" disabled={onRetry === null} onClick={onRetry ?? undefined}>
             Retry
