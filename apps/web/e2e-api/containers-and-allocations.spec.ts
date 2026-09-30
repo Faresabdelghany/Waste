@@ -7,9 +7,10 @@ import { uniqueName } from "./env"
 // API, through their command surfaces (components/waste/commands). A
 // container is registered in the browser, received into a seeded warehouse,
 // refused a second receipt in the API's own sentence, moved into
-// maintenance and decommissioned, its ledger read back in its details; an
-// allocation is made over a window of its own, confirmed and released, its
-// history read back. Records are uniquely named and never cleaned up; the
+// maintenance and decommissioned, its ledger read back in its details and,
+// without a reload, in Resources › Inventory, which the store reads again
+// after each command (#198); an allocation is made over a window of its own,
+// confirmed and released, its history read back. Records are uniquely named and never cleaned up; the
 // released allocation frees its window, and each run picks another.
 //
 // The map's Containers list test stays in e2e/tests/map-planning.spec.ts: a
@@ -47,6 +48,12 @@ async function runCommand(page: Page, button: string, path: RegExp, fill: () => 
 
 test("Containers: registered, received, refused a second receipt by sentence, moved to maintenance and decommissioned, the ledger read back", async ({ page, api }) => {
   const label = uniqueName("E2E-BIN").replace(/\s+/g, "-")
+  // The ledger's reads: its first page each time, whatever the ledger's length on a long-lived stack.
+  let ledgerReads = 0
+  page.on("request", (request) => {
+    const url = new URL(request.url())
+    if (request.method() === "GET" && url.pathname === "/waste-api/stock-movements" && !url.searchParams.has("cursor")) ledgerReads += 1
+  })
   await openLoaded(page, "/resources?module=containers", /^\/containers$/)
 
   await page.getByRole("button", { name: "Add container" }).click()
@@ -95,6 +102,14 @@ test("Containers: registered, received, refused a second receipt by sentence, mo
 
   const read = await api.get(`/containers/${container.id}`)
   expect(((await read.json()) as Container).assetState?.status).toBe("retired")
+
+  // The ledger across containers holds the three movements in this session, its tab reached with no reload: the sign-in's read, and one again after each command the API took.
+  await page.keyboard.press("Escape")
+  await expect(details).toBeHidden()
+  await page.getByRole("tab", { name: "Inventory" }).click()
+  await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill(label)
+  await expect(page.getByRole("button", { name: new RegExp(`^Open .+ · ${label}$`) })).toHaveCount(3)
+  expect(ledgerReads).toBe(4)
 })
 
 test("Vehicle Planning: allocated over a window of its own, confirmed and released, the history read back", async ({ page, api }) => {

@@ -44,12 +44,19 @@
 //   marker is a fact, and a fact travels nowhere). `spellsStatus` is the
 //   same rule read the other way, for the workspace to offer no transition
 //   that would be refused.
+//
+//   A command answers its own row, which replaces the one the store holds
+//   (`commandRecord`). A command that changes another module's rows too —
+//   a container's movement appended to the ledger — names that module in
+//   `touches`, and once it is done the store reads the module again through
+//   the read the load makes (`readModuleInto`, `rereadsOf`), keeping the
+//   rows it has while the read is out (Issue #198).
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 
 import type { ApiClient } from "../client"
-import { ApiProblem, genericProblem, type Problem } from "../problem"
+import { ApiProblem, genericProblem, isAccountRefusal, type Problem } from "../problem"
 import { isLocalRefusal, moduleKeyOf, PartialWrite, statusToken, webIdOf, type CommandInput, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 import { isCompanyRecord } from "./organisation"
 
@@ -249,6 +256,61 @@ export function loadFailed(module: ModuleState, problem: Problem): ModuleState {
   return { ...module, status: module.status === "ready" ? "ready" : "failed", problem }
 }
 
+/** The store's server-backed state as a read writes it: the external store's own two members. */
+export type ServerStore = {
+  getSnapshot: () => ServerRecordsState
+  set: (update: (state: ServerRecordsState) => ServerRecordsState) => void
+}
+
+export type ReadOptions = {
+  /** The module's fixtures, the seed's origin. */
+  fixtures: readonly BusinessRecord[]
+  /** Whether the session the read belongs to is still the store's: false once the person or the API has changed. */
+  alive: () => boolean
+  /** The clock a read that lands is stamped with. */
+  now?: () => number
+}
+
+/**
+ * One module read into the store: the load's read of each module, and the
+ * read again after a command changed its rows (Issue #198). The module is
+ * `loading` while the read is out, so one that was ready keeps its rows;
+ * then it holds the API's rows, or the problem beside the rows it had. Once
+ * `alive` says the session is over nothing is written, not even the
+ * `loading` mark, which would land in the next session's store. The account's
+ * own refusal is written nowhere either, since it has ended the session and
+ * /login says why. The problem comes back for the caller to report.
+ */
+export async function readModuleInto(store: ServerStore, client: ApiClient, module: ServerModule, { fixtures, alive, now = Date.now }: ReadOptions): Promise<Problem | null> {
+  if (!alive()) return null
+  const key = moduleKeyOf(module.workspaceId, module.moduleId)
+  store.set((state) => new Map(state).set(key, loading(state.get(key) ?? IDLE)))
+  try {
+    const result = await loadModule(client, module, { fixtures, state: store.getSnapshot() })
+    if (alive()) store.set((state) => new Map(state).set(key, loaded(result, now())))
+    return null
+  } catch (error) {
+    const problem = problemOfError(error)
+    if (alive() && !isAccountRefusal(problem)) store.set((state) => new Map(state).set(key, loadFailed(state.get(key) ?? IDLE, problem)))
+    return problem
+  }
+}
+
+/**
+ * Of `modules`, in their order, the ones a done command touched
+ * (`CommandOutcome.touches`) that the store is to read again: each it holds
+ * ready, or still on its first read, which the read again then follows. A
+ * module the store holds in any other state — never asked for, not the
+ * person's to view, or whose read failed — is left as it stands.
+ */
+export function rereadsOf(state: ServerRecordsState, touches: readonly string[], modules: readonly ServerModule[]): ServerModule[] {
+  return modules.filter((module) => {
+    const key = moduleKeyOf(module.workspaceId, module.moduleId)
+    const status = state.get(key)?.status
+    return touches.includes(key) && (status === "ready" || status === "loading")
+  })
+}
+
 /** The module with one record replaced or, when it is new, put first — the browser store's own order. */
 export function withRecord(module: ModuleState, record: BusinessRecord, serverId?: string): ModuleState {
   const exists = module.records.some((candidate) => candidate.id === record.id)
@@ -359,7 +421,8 @@ export async function writeRecord(client: ApiClient, module: ServerModule, curre
 }
 
 export type CommandOutcome =
-  | { kind: "done"; record: BusinessRecord; serverId: string }
+  /** `touches` are the other modules the command changed rows of (`RecordCommand.touches`), which the store reads again. */
+  | { kind: "done"; record: BusinessRecord; serverId: string; touches: readonly string[] }
   /** `what` is the heading the person is told the refusal under; the problem is the API's, or the store's own for a command that was never sent. */
   | { kind: "refused"; what: string; problem: Problem; recordId: string }
 
@@ -388,7 +451,7 @@ export async function commandRecord(client: ApiClient, module: ServerModule, cur
     const body = command.toBody?.(input ?? {}, record, context)
     if (isLocalRefusal(body)) return refused(refusalProblem(body))
     const resource = await command.run(client, serverId, body)
-    return { kind: "done", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId: resource.id }
+    return { kind: "done", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId: resource.id, touches: command.touches ?? [] }
   } catch (error) {
     return refused(problemOfError(error))
   }
