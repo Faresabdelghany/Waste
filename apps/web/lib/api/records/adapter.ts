@@ -66,15 +66,22 @@ export type MappingContext = {
 /** A write the adapter refused before the API saw it, in the API's own words: a 400 with the field it names. */
 export type LocalRefusal = { path: string; message: string }
 
+/** What a command's dialog hands the store: its values by field, opaque to the store and read only by the command's `toBody`. */
+export type CommandInput = Readonly<Record<string, unknown>>
+
 /**
  * A command on one row (`POST /users/:id/deactivate`): the request, which
  * answers the row as it now stands, and the heading a person is told a
  * refusal under ("Olivia Larsen was not deactivated"), the API's own
  * sentence beneath it. The store sends one through `commandRecord`
- * (server-records.ts).
+ * (server-records.ts). A command that says something — a warehouse, a reason
+ * (Issue #181) — maps the dialog's input to its body in `toBody`, web ids to
+ * server ids through the resolver, or refuses it naming the field before
+ * the API sees it; a command without `toBody` runs with no body.
  */
 export type RecordCommand<R extends Resource> = {
-  run: (client: Client, serverId: string) => Promise<R>
+  toBody?: (input: CommandInput, record: BusinessRecord, context: MappingContext) => unknown | LocalRefusal
+  run: (client: Client, serverId: string, body: unknown) => Promise<R>
   refused: (record: Pick<BusinessRecord, "name">) => string
 }
 

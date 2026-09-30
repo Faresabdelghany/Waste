@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
@@ -258,6 +259,8 @@ import { SchemeGenerateRoutesDialog } from "@/components/waste/scheme-generate-r
 import { SchemeDetailsPage } from "@/components/waste/scheme-details-page"
 import { SchemePlanAheadRunner } from "@/components/waste/scheme-plan-ahead"
 import { useBusinessRecordStore } from "@/components/waste/business-record-store"
+import { useApiConfigured } from "@/components/waste/api-session-store"
+import { commandSurfaceFor } from "@/components/waste/commands/command-surfaces"
 import { isServerBacked, serverModuleOf } from "@/lib/api/records/modules"
 import { spellsStatus } from "@/lib/api/records/server-records"
 import { useActiveRoutes } from "@/components/waste/active-routes-store"
@@ -590,6 +593,11 @@ const allocationMonthIndexes: Record<string, number> = {
 }
 
 function allocationDate(record: BusinessRecord, fallbackOffset: number) {
+  // The typed start where the allocation has one (a server allocation's, on
+  // its project's clock, Issue #181), since its name carries no year.
+  const start = record.submittedValues?.plannedStart
+  const typedDay = typeof start === "string" ? /^(\d{4})-(\d{2})-(\d{2})/.exec(start) : null
+  if (typedDay) return new Date(Number(typedDay[1]), Number(typedDay[2]) - 1, Number(typedDay[3]), 12)
   const match = record.name.match(/^(\d{1,2})\s+([a-z]{3})/i)
   const month = match ? allocationMonthIndexes[match[2].toLowerCase()] : undefined
 
@@ -1074,6 +1082,7 @@ export function BusinessWorkspace({
 }: BusinessWorkspaceProps) {
   const sourceWorkspace = getWorkspaceDefinition(workspaceId)
   const { getRecords, upsertRecord } = useBusinessRecordStore()
+  const apiConfigured = useApiConfigured()
   // The live records of any workspace module (fixtures merged with stored
   // records) — what the scheme lifecycle planners read their related
   // records from.
@@ -1198,6 +1207,19 @@ export function BusinessWorkspace({
   }
   const isContainersAssetsView =
     workspace.id === "resources" && activeModule.id === "containers"
+  // How a switched module is operated on the Pilot beyond its own forms
+  // (Issue #181): what stands in for its primary action, and its rows'
+  // commands in their details — one registry, never reached in fixture mode.
+  const commandSurface = commandSurfaceFor(workspace.id, activeModule.id, apiConfigured)
+  const formIsPrimary = commandSurface === undefined || commandSurface.primary === "form"
+  const PrimarySurface = commandSurface && commandSurface.primary !== "form" ? commandSurface.primary : null
+  const RowSurface = commandSurface?.rowActions
+  // A command replaces its row in the store: details with a row surface read
+  // the live row, so what the API answered shows at once.
+  const detailsRecord =
+    RowSurface && selectedRecord
+      ? (moduleRecords(workspace.id, activeModule.id).find((record) => record.id === selectedRecord.id) ?? selectedRecord)
+      : selectedRecord
   // Map Planning (2026-09-16) renders its own page below the header: no
   // search, filter, or table rows — the map owns its toolbar.
   const isMapPlanningView = workspace.id === "plan" && activeModule.id === "map-planning"
@@ -1498,14 +1520,19 @@ export function BusinessWorkspace({
   const mapPlanningRecords = useMemo(() => {
     if (!isMapPlanningView) return null
     return {
-      containers: moduleRecords("resources", "containers"),
+      // A server container carries no location until a placement's property
+      // gives it one (#184, slice 9b), so on the Pilot the map places the
+      // containers' fixtures, which carry the addresses it reads, until then.
+      containers: apiConfigured
+        ? [...(getModuleDefinition({ workspaceId: "resources", moduleId: "containers" })?.records ?? [])]
+        : moduleRecords("resources", "containers"),
       planningAreas: moduleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId),
       serviceAreas: moduleRecords("service-providers", "service-areas"),
       routes: moduleRecords("route-studio", "routes"),
       pickups: moduleRecords("route-studio", "pickups"),
       schemes: moduleRecords("route-studio", "schemes"),
     }
-  }, [isMapPlanningView, moduleRecords])
+  }, [apiConfigured, isMapPlanningView, moduleRecords])
   const containersModuleDefinition = getModuleDefinition({
     workspaceId: "resources",
     moduleId: "containers",
@@ -1669,6 +1696,7 @@ export function BusinessWorkspace({
   const effectiveShowPrimaryAction = showPrimaryAction && hasGrant("create")
   const canCreateFromView =
     effectiveShowPrimaryAction &&
+    formIsPrimary &&
     canOpenBusinessForm &&
     Boolean(formSchema) &&
     !isPriceEngineProducts
@@ -4724,7 +4752,9 @@ export function BusinessWorkspace({
                 </Button>
               )}
               {effectiveShowPrimaryAction && canOpenBusinessForm && formSchema && (
-                isPriceEngineProducts ? (
+                !formIsPrimary ? (
+                  PrimarySurface ? <PrimarySurface label={activeModule.primaryAction} /> : null
+                ) : isPriceEngineProducts ? (
                   <Button
                     size="sm"
                     onClick={() =>
@@ -5510,7 +5540,7 @@ export function BusinessWorkspace({
 
       {isTicketDetails && selectedRecord ? (
         <TicketDetailsDialog record={selectedRecord} onClose={closeRecord} />
-      ) : isContainersAssetsView ? (
+      ) : isContainersAssetsView && RowSurface === undefined ? (
         <ContainerDetailsSheet
           key={selectedRecord?.id ?? "closed-container"}
           module={activeModule}
@@ -5521,17 +5551,18 @@ export function BusinessWorkspace({
       ) : (
         <RecordDetailsDialog
           module={activeModule}
-          record={selectedRecord}
+          record={detailsRecord}
           onClose={closeRecord}
           onAction={requestRecordAction}
           transitions={
-            selectedRecord ? offeredTransitions(workspace.id, activeModule, selectedRecord) : []
+            detailsRecord ? offeredTransitions(workspace.id, activeModule, detailsRecord) : []
           }
           showDeepLinks={showDeepLinks}
           onEdit={canEditRecords ? openEditRecord : undefined}
           onDelete={canDeleteRecords ? requestRecordDelete : undefined}
           showActions={canRunRecordActions}
           extraActions={selectedRecord ? schemeExtraActions(selectedRecord) : undefined}
+          commands={RowSurface && detailsRecord ? <RowSurface record={detailsRecord} /> : undefined}
           attention={
             isSchemesView && selectedRecord
               ? schemeRowsById.get(selectedRecord.id)?.attention
@@ -5659,12 +5690,15 @@ function RecordDetailsDialog({
   onDelete,
   showActions = true,
   extraActions,
+  commands,
   attention,
 }: {
   module: ModuleDefinition
   record: BusinessRecord | null
   onClose: () => void
   onAction: (action: string) => void
+  /** The row's commands on the Pilot (the command surfaces' `rowActions`), under its facts. */
+  commands?: ReactNode
   /** The transitions offered as buttons — `offeredTransitions`, which the parent computes since it knows the workspace. */
   transitions: string[]
   showDeepLinks: boolean
@@ -5714,6 +5748,8 @@ function RecordDetailsDialog({
                   ))}
                 </div>
               </section>
+
+              {commands}
 
               <section className="space-y-4">
                 <h3 className="text-sm font-semibold">Lifecycle</h3>
