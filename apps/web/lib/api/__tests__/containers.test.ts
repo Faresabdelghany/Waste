@@ -122,10 +122,11 @@ const formRecord = (values: Record<string, string>): BusinessRecord => ({
 })
 
 describe("the containers module", () => {
-  test("is switched, after the organisation and the master data its rows name", () => {
+  test("is switched, after the organisation, the master data and the warehouses its rows name", () => {
     assert.ok(isServerBacked("resources", "containers"))
-    assert.ok(SERVER_MODULE_KEYS.indexOf("resources.containers") > SERVER_MODULE_KEYS.indexOf("configure.organization"))
-    assert.ok(SERVER_MODULE_KEYS.indexOf("resources.containers") > SERVER_MODULE_KEYS.indexOf("configure.master"))
+    for (const named of ["configure.organization", "configure.master", "resources.warehouses"]) {
+      assert.ok(SERVER_MODULE_KEYS.indexOf("resources.containers") > SERVER_MODULE_KEYS.indexOf(named), `after ${named}`)
+    }
   })
 
   test("reads the containers and the placements together and files every placement under its container", async () => {
@@ -358,6 +359,8 @@ describe("the container's commands", () => {
   test("a command's body is refused here, naming the field, when it names nothing the API holds or leaves out what it needs", () => {
     assert.deepEqual(bodyFor("receive", {}), { path: "warehouseId", message: "Pick a warehouse the API holds" })
     assert.deepEqual(bodyFor("receive", { warehouseId: "warehouse-west" }), { path: "warehouseId", message: "Pick a warehouse the API holds" }, "a fixture warehouse is no row of the API's")
+    assert.deepEqual(bodyFor("receive", { warehouseId: organicWebId }), { path: "warehouseId", message: "Pick a warehouse the API holds" }, "a row the store holds, of another kind")
+    assert.deepEqual(bodyFor("issue", { subscriptionId, wasteFractionId: bin240WebId, validFrom: "2026-10-01" }), { path: "wasteFractionId", message: "Pick a waste fraction the API holds" }, "a container type is no fraction")
     assert.deepEqual(bodyFor("return", { warehouseId: nordhavn.webId }), { path: "lastDay", message: "Give the last day it serves" })
     assert.deepEqual(bodyFor("transfer", { warehouseId: nordhavn.webId, toKind: "service" }), { path: "toKind", message: "It arrives in a warehouse or in maintenance at one" })
     assert.deepEqual(bodyFor("decommission", { reason: " " }), { path: "reason", message: "Say why" })

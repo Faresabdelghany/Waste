@@ -29,11 +29,14 @@
 import type { VehicleAllocation, VehicleAllocationEvent } from "@waste/contracts/allocations"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import { masterDataKindOf } from "@/lib/data/master-data"
 
 import { command, create, listAll } from "../client"
 import { inheritedPresentation, isLocalRefusal, ofKind, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, projectTimezoneOf, wallClockIn } from "./clock"
-import { nameVia, typedReference, webIdVia } from "./references"
+import { driverAdapter, vehicleAdapter } from "./fleet"
+import { depotAdapter, projectMoved, refusal } from "./places"
+import { nameVia, typedReference, webIdVia, type ReferenceRule } from "./references"
 
 /** The workspace module the allocations are the rows of. */
 export const VEHICLE_PLANNING_MODULE: ModuleLocation = { workspaceId: "fleet", moduleId: "vehicle-planning" }
@@ -43,7 +46,6 @@ export const CONFIRM_ALLOCATION = "confirm"
 export const RELEASE_ALLOCATION = "release"
 
 const ALLOCATION_PREFIX = "allocation"
-const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
 /** "1 Oct" for a wall-clock time, as the fixtures name an allocation's day. */
 const dayLabel = (wall: string) => new Date(`${wall.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })
@@ -59,13 +61,15 @@ function projectOf(record: BusinessRecord, context: MappingContext): { webId: st
   return { webId, serverId, timezone: projectTimezoneOf(record, context) }
 }
 
+// Each reference field: the prefix its id chip carries, the sentence a miss is refused in, and the kind a loaded row is held to.
+const isFraction = (record: BusinessRecord) => masterDataKindOf(record) === "waste-fraction"
 const PICK = {
-  vehicleId: ["vehicle", "Pick a vehicle the API holds"],
-  driverId: ["driver", "Pick a driver the API holds"],
-  trailerId: ["vehicle", "Pick a trailer the API holds"],
-  depotId: ["depot", "Pick a depot the API holds"],
-  plannedFraction: ["fraction", "Pick a waste fraction the API holds"],
-} as const
+  vehicleId: ["vehicle", "Pick a vehicle the API holds", { owns: vehicleAdapter.owns }],
+  driverId: ["driver", "Pick a driver the API holds", { owns: driverAdapter.owns }],
+  trailerId: ["vehicle", "Pick a trailer the API holds", { owns: vehicleAdapter.owns }],
+  depotId: ["depot", "Pick a depot the API holds", { owns: depotAdapter.owns }],
+  plannedFraction: ["fraction", "Pick a waste fraction the API holds", { owns: isFraction }],
+} as const satisfies Record<string, readonly [string, string, ReferenceRule]>
 type ReferenceField = keyof typeof PICK
 
 const WIRE_MEMBERS: Readonly<Record<ReferenceField, string>> = { vehicleId: "vehicleId", driverId: "driverId", trailerId: "trailerId", depotId: "depotId", plannedFraction: "wasteFractionId" }
@@ -96,8 +100,8 @@ function windowOf(record: BusinessRecord, timezone: string | undefined): { plann
 function referencesOf(record: BusinessRecord, context: MappingContext): Record<string, string | null> | LocalRefusal {
   const body: Record<string, string | null> = {}
   for (const field of Object.keys(PICK) as ReferenceField[]) {
-    const [prefix, refused] = PICK[field]
-    const id = typedReference(record, field, prefix, context, refused)
+    const [prefix, refused, rule] = PICK[field]
+    const id = typedReference(record, field, prefix, context, refused, rule)
     if (isLocalRefusal(id)) return id
     body[WIRE_MEMBERS[field]] = id ?? null
   }
@@ -199,7 +203,7 @@ export const allocationAdapter: ResourceAdapter<VehicleAllocation> = {
   },
   toPatchBody: (before, after, context) => {
     const project = projectOf(before, context)
-    if (projectOf(after, context).webId !== project.webId) return refusal("projectId", "An allocation stays in its project")
+    if (projectMoved(before, after)) return refusal("projectId", "An allocation stays in its project")
     const references = referencesOf(after, context)
     if (isLocalRefusal(references)) return references
     const capacity = capacityOf(after)

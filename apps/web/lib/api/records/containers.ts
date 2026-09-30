@@ -41,12 +41,14 @@ import { addDays } from "@waste/domain/route-schemes/recurrence"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { OWNERSHIP_LABELS } from "@/lib/data/containers"
+import { masterDataKindOf } from "@/lib/data/master-data"
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 
 import { command, create, get, listAll, patch } from "../client"
 import { inheritedPresentation, isLocalRefusal, ofKind, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, projectTimezoneOf, shownOn } from "./clock"
-import { nameVia, referencedServerId, typedReference, webIdVia } from "./references"
+import { projectMoved, projectServerIdOf, refusal, warehouseAdapter } from "./places"
+import { nameVia, referencedServerId, typedReference, webIdVia, type ReferenceRule } from "./references"
 
 /** The workspace module the containers are the rows of. */
 export const CONTAINERS_MODULE: ModuleLocation = { workspaceId: "resources", moduleId: "containers" }
@@ -60,7 +62,15 @@ export const NO_STOCK_RECORD = "No stock record"
 const CONTAINER_PREFIX = "asset"
 const MOVEMENT_PREFIX = "movement"
 const CONTAINER_TYPE_PREFIX = MASTER_DATA_KIND_DETAILS["container-type"].prefix
-const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
+// What each reference is held to when the store holds the row: its kind.
+const KIND = {
+  warehouse: { owns: warehouseAdapter.owns },
+  containerType: { owns: (record: BusinessRecord) => masterDataKindOf(record) === "container-type" },
+  fraction: { owns: (record: BusinessRecord) => masterDataKindOf(record) === "waste-fraction" },
+  frequency: { owns: (record: BusinessRecord) => masterDataKindOf(record) === "service-frequency" },
+  movement: { owns: (record: BusinessRecord) => record.recordKind === "Stock movement", bare: true },
+  subscription: { bare: true },
+} satisfies Record<string, ReferenceRule>
 
 /** The form's last day in from the wire's first day out (half-open), and back. */
 const lastDayIn = (firstDayOut: string) => addDays(firstDayOut, -1)
@@ -93,7 +103,7 @@ function identityOf(record: BusinessRecord, context: MappingContext) {
   const ownership = typed(record, "ownership")
   return {
     label: typed(record, "containerId") ?? record.name,
-    containerTypeId: referencedServerId(typed(record, "containerType") ?? "", CONTAINER_TYPE_PREFIX, context),
+    containerTypeId: referencedServerId(typed(record, "containerType") ?? "", CONTAINER_TYPE_PREFIX, context, KIND.containerType),
     barcode: typed(record, "barcode") ?? null,
     rfid: typed(record, "rfid") ?? null,
     serialNumber: typed(record, "serialNumber") ?? null,
@@ -116,13 +126,13 @@ function placementPatchOf(before: BusinessRecord, after: BusinessRecord, context
   if (placementId === undefined) return refusal("wasteFraction", `${before.name} serves nowhere yet: issue it into service first`)
   const body: Record<string, unknown> = {}
   if (moved("wasteFraction")) {
-    const id = typedReference(after, "wasteFraction", "fraction", context, PICK_FRACTION)
+    const id = typedReference(after, "wasteFraction", "fraction", context, PICK_FRACTION, KIND.fraction)
     if (id === undefined) return refusal("wasteFraction", PICK_FRACTION)
     if (isLocalRefusal(id)) return id
     body.wasteFractionId = id
   }
   if (moved("serviceFrequencyId")) {
-    const id = typedReference(after, "serviceFrequencyId", "frequency", context, PICK_FREQUENCY)
+    const id = typedReference(after, "serviceFrequencyId", "frequency", context, PICK_FREQUENCY, KIND.frequency)
     if (isLocalRefusal(id)) return id
     body.serviceFrequencyId = id ?? null
   }
@@ -166,9 +176,9 @@ function said(input: CommandInput, key: string): string | undefined {
 }
 
 /** The server id a dialog names a row by (references.ts), undefined when it names none the API holds. */
-function referenced(input: CommandInput, key: string, prefix: string, context: MappingContext, bare = false): string | undefined {
+function inputReference(input: CommandInput, key: string, prefix: string, context: MappingContext, rule: ReferenceRule): string | undefined {
   const value = said(input, key)
-  return value === undefined ? undefined : referencedServerId(value, prefix, context, bare)
+  return value === undefined ? undefined : referencedServerId(value, prefix, context, rule)
 }
 
 /** When it happened, on the person's word and the container's project's clock, as an instant; absent is the request's clock. */
@@ -187,7 +197,7 @@ const IN_STOCK = "It arrives in a warehouse or in maintenance at one"
 
 /** The warehouse a command arrives at, required. */
 function warehouseOf(input: CommandInput, context: MappingContext): string | LocalRefusal {
-  return referenced(input, "warehouseId", "warehouse", context) ?? refusal("warehouseId", PICK_WAREHOUSE)
+  return inputReference(input, "warehouseId", "warehouse", context, KIND.warehouse) ?? refusal("warehouseId", PICK_WAREHOUSE)
 }
 
 /** A place in stock the dialog names; the contract's default (a warehouse) when it names none. */
@@ -259,18 +269,18 @@ export const CONTAINER_COMMANDS = {
     if ((toKind === "scrap") === named) return refusal("warehouseId", WAREHOUSE_WITH_A_STOCK_PLACE)
     const warehouseId = toKind === "scrap" ? null : warehouseOf(input, context)
     const corrects = said(input, "correctsMovementId")
-    const correctedId = corrects === undefined ? undefined : referencedServerId(corrects, MOVEMENT_PREFIX, context, true)
+    const correctedId = corrects === undefined ? undefined : referencedServerId(corrects, MOVEMENT_PREFIX, context, KIND.movement)
     const correctsMovementId = corrects === undefined ? {} : correctedId !== undefined ? { correctsMovementId: correctedId } : refusal("correctsMovementId", "Give the id of the movement it corrects")
     return bodyOf({ toKind }, isLocalRefusal(warehouseId) ? warehouseId : { warehouseId }, reasonOf(input), correctsMovementId, occurredOf(input, record, context))
   }),
   // The Registry's one door into service: the placement and the issue movement together.
   issue: lifecycle("placements", "issued into service", (input, record, context) => {
-    const subscriptionId = referenced(input, "subscriptionId", "subscription", context, true)
+    const subscriptionId = inputReference(input, "subscriptionId", "subscription", context, KIND.subscription)
     if (subscriptionId === undefined) return refusal("subscriptionId", "Give the subscription's id")
-    const wasteFractionId = referenced(input, "wasteFractionId", "fraction", context)
+    const wasteFractionId = inputReference(input, "wasteFractionId", "fraction", context, KIND.fraction)
     if (wasteFractionId === undefined) return refusal("wasteFractionId", PICK_FRACTION)
     const frequencyNamed = said(input, "serviceFrequencyId") !== undefined
-    const serviceFrequencyId = referenced(input, "serviceFrequencyId", "frequency", context)
+    const serviceFrequencyId = inputReference(input, "serviceFrequencyId", "frequency", context, KIND.frequency)
     if (frequencyNamed && serviceFrequencyId === undefined) return refusal("serviceFrequencyId", PICK_FREQUENCY)
     const validFrom = said(input, "validFrom")
     if (validFrom === undefined || !ISO_DAY.test(validFrom)) return refusal("validFrom", "Give the first day it serves")
@@ -362,12 +372,11 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
     }
   },
   toCreateBody: (record, context) => {
-    const projectWebId = typed(record, "projectId") ?? record.projectIds?.[0]
-    const projectId = projectWebId ? context.resolve.serverIdOf(projectWebId) : undefined
-    if (projectId === undefined) return refusal("projectId", "Pick a project")
+    const projectId = projectServerIdOf(record, context)
+    if (isLocalRefusal(projectId)) return projectId
     const label = typed(record, "containerId")
     if (label === undefined) return refusal("containerId", "A container needs its Container ID")
-    const containerTypeId = typedReference(record, "containerType", CONTAINER_TYPE_PREFIX, context, PICK_CONTAINER_TYPE)
+    const containerTypeId = typedReference(record, "containerType", CONTAINER_TYPE_PREFIX, context, PICK_CONTAINER_TYPE, KIND.containerType)
     if (containerTypeId === undefined) return refusal("containerType", PICK_CONTAINER_TYPE)
     if (isLocalRefusal(containerTypeId)) return containerTypeId
     const ownership = typed(record, "ownership")
@@ -388,10 +397,10 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
     }
   },
   toPatchBody: (before, after, context) => {
-    if ((typed(after, "projectId") ?? after.projectIds?.[0]) !== (typed(before, "projectId") ?? before.projectIds?.[0])) return refusal("projectId", "A container stays in its project")
+    if (projectMoved(before, after)) return refusal("projectId", "A container stays in its project")
     if (typed(after, "containerId") === undefined && after.name.trim() === "") return refusal("containerId", "A container needs its Container ID")
     if (typed(before, "containerType") !== typed(after, "containerType")) {
-      const id = typedReference(after, "containerType", CONTAINER_TYPE_PREFIX, context, PICK_CONTAINER_TYPE)
+      const id = typedReference(after, "containerType", CONTAINER_TYPE_PREFIX, context, PICK_CONTAINER_TYPE, KIND.containerType)
       if (id === undefined) return refusal("containerType", PICK_CONTAINER_TYPE)
       if (isLocalRefusal(id)) return id
     }
