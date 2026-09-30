@@ -27,20 +27,25 @@ import { genericProblem, isAccountRefusal, problemSentence, type Problem } from 
 import { moduleKeyOf, type CommandInput, type ServerModule } from "@/lib/api/records/adapter"
 import { SERVER_MODULES, serverModuleOf, viewableModules } from "@/lib/api/records/modules"
 import {
+  actOnRecord,
   commandRecord,
   IDLE,
   paneAnswerOf,
   problemOfError,
   readModuleInto,
   recordsOf,
+  rereadRecord,
   rereadsOf,
   withCreated,
   withNotGranted,
   withRecord,
   writeRecord,
+  type ActionOutcome,
   type CommandOutcome,
   type ModuleState,
   type PaneAnswer,
+  type RereadOutcome,
+  type SendAction,
   type ServerRecordsState,
   type WriteOutcome,
 } from "@/lib/api/records/server-records"
@@ -103,6 +108,27 @@ type BusinessRecordStoreValue = {
     name: string,
     input?: CommandInput,
   ) => Promise<CommandOutcome>
+  /**
+   * Sends one of a row's actions (the adapter's `actions`: a scheme's
+   * generate) on a switched module that is ready, and hands back what it
+   * answered — another resource; the row stays as it is. It takes its turn
+   * on the row as a command does. A refusal is told in the API's words
+   * unless `report: false` leaves that to the caller (a dialog that stays
+   * open), and handed back. A page reaches an action through its adapter's
+   * typed wrapper (`generateScheme`), never by name.
+   */
+  sendAction: SendAction
+  /**
+   * Reads one row of a switched module back from the API and puts it in
+   * the row's place, for a row the server changed on its own account — a
+   * scheme whose generation run has finished. It takes its turn on the row,
+   * and a failed read leaves the row as it was.
+   */
+  refreshRecord: (
+    workspaceId: WorkspaceId,
+    moduleId: string,
+    recordId: string,
+  ) => Promise<RereadOutcome>
 }
 
 type BusinessRecordStores = {
@@ -575,9 +601,75 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
     [stores],
   )
 
+  const sendAction = useCallback<SendAction>(
+    (workspaceId, moduleId, recordId, name, input, options): Promise<ActionOutcome> => {
+      const key = moduleKey(workspaceId, moduleId)
+      const module = serverModuleOf(workspaceId, moduleId)
+      const serverStore = stores.server
+      const current = module === undefined ? undefined : serverStore.getSnapshot().get(key)
+      const record = current?.records.find((candidate) => candidate.id === recordId)
+      const report = options?.report ?? true
+      if (module === undefined || current === undefined || current.status !== "ready" || record === undefined || stores.client.getSnapshot() === null) {
+        // As for a command: a module on the browser's own path has no actions.
+        const refused: ActionOutcome = { kind: "refused", what: "Nothing was done", recordId, problem: genericProblem(400, `${key} is not read from the API, or holds no record ${recordId}`) }
+        if (report) reportProblem(refused.what, refused.problem)
+        return Promise.resolve(refused)
+      }
+      // The session this action belongs to, as for a command above.
+      const generation = stores.generation.getSnapshot()
+      const outlived = () => stores.generation.getSnapshot() !== generation
+      const ended = (): ActionOutcome => ({ kind: "refused", what: `Nothing was done to ${record.name}`, recordId, problem: genericProblem(UNREACHABLE_STATUS, "The session ended before the action was sent") })
+      const run = async (): Promise<ActionOutcome> => {
+        if (outlived()) return ended()
+        const latest = serverStore.getSnapshot().get(key) ?? current
+        const row = latest.records.find((candidate) => candidate.id === recordId) ?? record
+        const client = stores.client.getSnapshot()
+        if (client === null) return ended()
+        const outcome = await actOnRecord(client, module, latest, row, name, input, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
+        if (outlived()) return outcome
+        if (outcome.kind === "refused" && report && !isAccountRefusal(outcome.problem)) reportProblem(outcome.what, outcome.problem)
+        return outcome
+      }
+      return enqueue(stores.pendingWrites, recordId, run)
+    },
+    [stores],
+  )
+
+  const refreshRecord = useCallback(
+    (workspaceId: WorkspaceId, moduleId: string, recordId: string): Promise<RereadOutcome> => {
+      const key = moduleKey(workspaceId, moduleId)
+      const module = serverModuleOf(workspaceId, moduleId)
+      const serverStore = stores.server
+      const current = module === undefined ? undefined : serverStore.getSnapshot().get(key)
+      const record = current?.records.find((candidate) => candidate.id === recordId)
+      if (module === undefined || current === undefined || current.status !== "ready" || record === undefined || stores.client.getSnapshot() === null) {
+        return Promise.resolve({ kind: "refused", recordId, problem: genericProblem(400, `${key} is not read from the API, or holds no record ${recordId}`) })
+      }
+      // The session this read belongs to, as for a write above, and under its signal, as a module read again after a
+      // command goes out (rereadModule): a read the session outlives is abandoned, its answer never in the next person's store.
+      const generation = stores.generation.getSnapshot()
+      const outlived = () => stores.generation.getSnapshot() !== generation
+      const ended = (): RereadOutcome => ({ kind: "refused", recordId, problem: genericProblem(UNREACHABLE_STATUS, "The session ended before the record was read") })
+      const run = async (): Promise<RereadOutcome> => {
+        const signal = stores.sessionSignal.getSnapshot()
+        if (signal === null || outlived()) return ended()
+        const latest = serverStore.getSnapshot().get(key) ?? current
+        const row = latest.records.find((candidate) => candidate.id === recordId) ?? record
+        const client = stores.client.getSnapshot()
+        if (client === null) return ended()
+        const outcome = await rereadRecord({ ...client, signal }, module, latest, row, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
+        if (outlived() || signal.aborted) return outcome
+        if (outcome.kind === "done") serverStore.set((state) => new Map(state).set(key, withRecord(state.get(key) ?? latest, outcome.record, outcome.serverId)))
+        return outcome
+      }
+      return enqueue(stores.pendingWrites, recordId, run)
+    },
+    [stores],
+  )
+
   return useMemo(
-    () => ({ getRecords, upsertRecord, sendCommand }),
-    [getRecords, upsertRecord, sendCommand],
+    () => ({ getRecords, upsertRecord, sendCommand, sendAction, refreshRecord }),
+    [getRecords, upsertRecord, sendCommand, sendAction, refreshRecord],
   )
 }
 
