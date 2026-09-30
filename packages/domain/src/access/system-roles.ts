@@ -228,11 +228,11 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
     scope: "Assigned routes",
     description: "Driver app and assigned route execution",
     system: true,
-    grants: charter(
-      only("operate.driver-app", VIEW_EDIT),
-      only("route-studio.routes", VIEW),
-      only("route-studio.pickups", VIEW_EDIT),
-    ),
+    // The driver door alone (#179): the Driver App reads and commands nothing
+    // but `operate.driver-app` (apps/api/src/routes/driver.ts), and the
+    // office's routes and pickups are not a driver's surface — granted, they
+    // would have the phone read every route and pickup at sign-in.
+    grants: charter(only("operate.driver-app", VIEW_EDIT)),
   },
   {
     key: "integration-writer",

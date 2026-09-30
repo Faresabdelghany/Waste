@@ -55,16 +55,12 @@ describe("the seeded system roles", () => {
     for (const grant of administrator.grants) assert.deepEqual([...grant.actions], [...ACTIONS])
   })
 
-  test("a hand-spelled role carries exactly its own modules: the driver's three", () => {
+  test("a hand-spelled role carries exactly its own modules: the driver's one, the driver door (#179)", () => {
     const driver = SYSTEM_ROLES.find((role) => role.key === "driver")
     assert.ok(driver)
     assert.deepEqual(
       driver.grants.map((grant) => ({ moduleKey: grant.moduleKey, actions: [...grant.actions] })),
-      [
-        { moduleKey: "operate.driver-app", actions: ["view", "edit"] },
-        { moduleKey: "route-studio.pickups", actions: ["view", "edit"] },
-        { moduleKey: "route-studio.routes", actions: ["view"] },
-      ],
+      [{ moduleKey: "operate.driver-app", actions: ["view", "edit"] }],
     )
   })
 })
