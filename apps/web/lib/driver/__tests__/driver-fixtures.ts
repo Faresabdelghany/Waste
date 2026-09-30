@@ -121,7 +121,13 @@ export const offline = () => {
   throw new TypeError("Failed to fetch")
 }
 
-export type DoorCall = { method: string; path: string; body: unknown }
+export type DoorCall = { method: string; path: string; body: unknown; signal: AbortSignal | null }
+
+/** An answer that never comes, unless the request is aborted, which fails it the way the browser's fetch does. */
+export const hang = ({ signal }: DoorCall) =>
+  new Promise<Response>((_resolve, reject) => {
+    signal?.addEventListener("abort", () => reject(new DOMException("The operation was aborted.", "AbortError")))
+  })
 type Answer = (call: DoorCall) => Response | Promise<Response>
 
 /**
@@ -136,7 +142,7 @@ export function fakeDoor() {
   const fetchImpl = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = new URL(String(input))
     const method = init.method ?? "GET"
-    const call: DoorCall = { method, path: url.pathname, body: typeof init.body === "string" ? JSON.parse(init.body) : undefined }
+    const call: DoorCall = { method, path: url.pathname, body: typeof init.body === "string" ? JSON.parse(init.body) : undefined, signal: init.signal ?? null }
     calls.push(call)
     const key = `${method} ${url.pathname}`
     const answer = queued.get(key)?.shift() ?? standing.get(key)

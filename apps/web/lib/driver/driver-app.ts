@@ -46,16 +46,20 @@
 import type { DriverMe, DriverRouteDetail } from "@waste/contracts/driver-commands"
 
 import type { ApiClient } from "../api/client"
-import { problemSentence } from "../api/problem"
+import { problemSentence, type Problem } from "../api/problem"
+import { problemOfError } from "../api/records/server-records"
 import { createExternalStore, type ExternalStore } from "../external-store"
 import type { CommandQueueStore, QueueEntry } from "./command-queue"
 import { BATCH_LIMIT, createCommandIds, pickupIdOf, takesLocation, type PilotBody, type PilotCommand, type PilotCommandKind } from "./commands"
 import { lookupFix } from "./location"
-import { outOfReach, problemOfFailure, readDriverMe, readDriverRoute, sendCommands } from "./reads"
+import { outOfReach, readDriverMe, readDriverRoute, sendCommands } from "./reads"
 import { BROWSER_TIMERS, type Timers } from "./timers"
 
 /** How long the queue waits before trying again while anything waits. */
 export const DRAIN_RETRY_MS = 30_000
+
+/** How long a request may go unanswered before it counts as the server out of reach: a weak signal can hold a fetch open for minutes, and one batch in flight at a time would hold the queue with it. A batch the server did apply is replayed when it is sent again. */
+export const REQUEST_TIMEOUT_MS = 30_000
 
 /** Who is signed in — `whoOf` their session — and the client for their token, null while it has expired unrefreshed. */
 export type DriverSession = { who: string; client: ApiClient | null }
@@ -144,6 +148,10 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
   const watched = new Map<string, number>()
   /** Rejections a successful read has already seen: the next one clears them. */
   const aged = new Set<string>()
+  /** Rejections the drain in progress answered: kept through the reads of its own later batches, so none is read away before the drain is over. */
+  const fresh = new Set<string>()
+  /** A read the screens wait on that no token could make, or that the door answered 401: the next token makes it. */
+  let owed = false
   let loaded = false
   let draining = false
   let again = false
@@ -193,32 +201,43 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
 
   const ageRejections = () => {
     store.set((state) => {
-      const kept = state.rejections.filter((rejection) => !aged.has(rejection.commandId))
+      const kept = state.rejections.filter((rejection) => fresh.has(rejection.commandId) || !aged.has(rejection.commandId))
       aged.clear()
       for (const rejection of kept) aged.add(rejection.commandId)
-      return kept.length === state.rejections.length && kept.length === 0 ? state : { ...state, rejections: kept }
+      return state.rejections.length === 0 ? state : { ...state, rejections: kept }
     })
+  }
+
+  /** A call under a deadline of its own: past it the request is aborted, which the client answers as the server out of reach. */
+  const withDeadline = async <Answer>(client: ApiClient, call: (client: ApiClient) => Promise<Answer>): Promise<Answer> => {
+    const deadline = new AbortController()
+    const handle = timers.set(() => deadline.abort(), REQUEST_TIMEOUT_MS)
+    try {
+      return await call({ ...client, signal: deadline.signal })
+    } finally {
+      timers.clear(handle)
+    }
   }
 
   /** Whether the start screen was read; a failure leaves the last read standing. */
   const readMe = async (client: ApiClient): Promise<boolean> => {
     try {
-      const me = await readDriverMe(client)
+      const me = await withDeadline(client, readDriverMe)
       store.set((state) => ({ ...state, me, status: "ready", refusal: null, unreachable: false }))
       return true
     } catch (error) {
-      failedRead(problemOfFailure(error))
+      failedRead(problemOfError(error))
       return false
     }
   }
 
   const readRoute = async (client: ApiClient, id: string): Promise<boolean> => {
     try {
-      const detail = await readDriverRoute(client, id)
+      const detail = await withDeadline(client, (under) => readDriverRoute(under, id))
       store.set((state) => ({ ...state, routes: { ...state.routes, [id]: { status: "ready", detail } }, unreachable: false }))
       return true
     } catch (error) {
-      const problem = problemOfFailure(error)
+      const problem = problemOfError(error)
       if (problem.status !== 404) {
         failedRead(problem)
         return false
@@ -228,9 +247,12 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
     }
   }
 
-  const failedRead = (problem: ReturnType<typeof problemOfFailure>) => {
-    // A 401 waits for the session's refresh or the sign-in.
-    if (problem.status === 401) return
+  const failedRead = (problem: Problem) => {
+    // A 401 waits for the session's refresh or the sign-in, whose token reads again.
+    if (problem.status === 401) {
+      owed = true
+      return
+    }
     if (problem.status === 403) {
       store.set((state) => ({ ...state, status: "not-a-driver", refusal: problemSentence(problem), me: null, routes: {} }))
       return
@@ -239,8 +261,13 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
   }
 
   const refresh = async (): Promise<void> => {
+    if (!loaded) return
     const client = session?.client
-    if (!loaded || !client) return
+    if (!client) {
+      owed = true
+      return
+    }
+    owed = false
     const reads = await Promise.all([readMe(client), ...[...watched.keys()].map((id) => readRoute(client, id))])
     if (reads.every(Boolean)) ageRejections()
   }
@@ -272,10 +299,11 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
 
     let rows: unknown
     try {
-      rows = (await sendCommands(current.client, batch.map((entry) => entry.command))).outcomes
+      rows = (await withDeadline(current.client, (under) => sendCommands(under, batch.map((entry) => entry.command)))).outcomes
     } catch (error) {
-      const problem = problemOfFailure(error)
-      if (problem.status === 401) return
+      const problem = problemOfError(error)
+      // A refusal of the last person's batch is nothing the next one is told.
+      if (problem.status === 401 || session?.who !== current.who) return
       if (outOfReach(problem.status)) store.set((state) => ({ ...state, unreachable: true }))
       else store.set((state) => ({ ...state, refused: problemSentence(problem) }))
       return
@@ -295,6 +323,12 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
     })
     const doneIds = new Set(done.map((entry) => entry.command.id))
     entries = entries.filter((entry) => !doneIds.has(entry.command.id))
+    if (session?.who !== current.who) {
+      // Answered for someone no longer signed in here: the rows leave the queue, and nothing of the answer reaches the screen.
+      await forget([...doneIds])
+      return
+    }
+    for (const rejection of rejections) fresh.add(rejection.commandId)
     store.set((state) => ({ ...state, unreachable: false, refused: null, rejections: [...state.rejections, ...rejections], waiting: mine() }))
     await forget([...doneIds])
     await refresh()
@@ -316,6 +350,7 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
       } while (again && !disposed)
     } finally {
       draining = false
+      fresh.clear()
       scheduleRetry()
     }
   }
@@ -341,13 +376,16 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
       if (before?.who !== next?.who) {
         // Another person: nothing the last one read or was told stays on screen.
         aged.clear()
+        fresh.clear()
         store.set({ ...INITIAL, waiting: mine() })
         if (loaded && next?.client) void refresh().then(drain)
         return
       }
       publishWaiting()
       if (!loaded || !next?.client || next.client === before?.client) return
-      void (store.getSnapshot().status === "ready" ? drain() : refresh().then(drain))
+      // A new token: what waited for one is sent, and what could not be read without one is read.
+      const { status, unreachable } = store.getSnapshot()
+      void (status === "ready" && !unreachable && !owed ? drain() : refresh().then(drain))
     },
     load: async () => {
       await open()
@@ -359,6 +397,7 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
       watched.set(id, (watched.get(id) ?? 0) + 1)
       const client = session?.client
       if (loaded && client) void readRoute(client, id)
+      else if (loaded) owed = true
       return () => {
         const count = (watched.get(id) ?? 1) - 1
         if (count > 0) watched.set(id, count)

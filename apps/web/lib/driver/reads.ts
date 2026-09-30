@@ -8,7 +8,6 @@
 import type { DriverCommandBatchOutcome, DriverMe, DriverRouteDetail } from "@waste/contracts/driver-commands"
 
 import { command, get, UNREACHABLE_STATUS, type ApiClient } from "../api/client"
-import { ApiProblem, genericProblem, type Problem } from "../api/problem"
 import type { PilotCommand } from "./commands"
 
 export const readDriverMe = (client: ApiClient): Promise<DriverMe> => get<DriverMe>(client, "/driver/me")
@@ -17,16 +16,12 @@ export const readDriverRoute = (client: ApiClient, id: string): Promise<DriverRo
 
 export const sendCommands = (client: ApiClient, commands: readonly PilotCommand[]): Promise<DriverCommandBatchOutcome> => command<DriverCommandBatchOutcome>(client, "/driver/commands", { commands })
 
-/** The problem a failed call stands for; anything the client did not throw as one is the server out of reach. */
-export function problemOfFailure(error: unknown): Problem {
-  return error instanceof ApiProblem ? error.problem : genericProblem(UNREACHABLE_STATUS, error instanceof Error ? error.message : undefined)
-}
-
 /**
  * Whether a failure is the server out of reach rather than its answer: no
- * answer at all, a timeout, a rate limit, or a 5xx — which is also what the
- * web's own proxy (next.config.mjs) answers while the API is down. The queue
- * keeps everything and tries again; the banner says "Can't reach the server".
+ * answer at all (a request past its deadline included), a timeout, a rate
+ * limit, or a 5xx — which is also what the web's own proxy (next.config.mjs)
+ * answers while the API is down. The queue keeps everything and tries again;
+ * the banner says "Can't reach the server".
  */
 export function outOfReach(status: number): boolean {
   return status === UNREACHABLE_STATUS || status === 408 || status === 429 || status >= 500

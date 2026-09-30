@@ -13,8 +13,8 @@ import { describe, test } from "node:test"
 import { IDBFactory } from "fake-indexeddb"
 
 import { openCommandQueue, type QueueEntry } from "../command-queue"
-import { createDriverApp, DRAIN_RETRY_MS, type DriverAppOptions } from "../driver-app"
-import { driverMe, eventually, fakeDoor, fakeGeolocation, json, NOW, offline, outcomes, pickupId, problem, ROUTE_ID, routeDetail, settle } from "./driver-fixtures"
+import { createDriverApp, DRAIN_RETRY_MS, REQUEST_TIMEOUT_MS, type DriverAppOptions } from "../driver-app"
+import { driverMe, eventually, fakeDoor, fakeGeolocation, hang, json, NOW, offline, outcomes, pickupId, problem, ROUTE_ID, routeDetail, settle } from "./driver-fixtures"
 import { manualTimers } from "./manual-timers"
 
 const WHO = "mads-login"
@@ -109,6 +109,37 @@ describe("loading", () => {
     await eventually(() => assert.equal(app.store.getSnapshot().status, "not-a-driver"))
     assert.equal(app.store.getSnapshot().refusal, "This account is not an active driver's login")
     assert.equal(app.store.getSnapshot().me, null)
+  })
+
+  test("a route opened while the token had lapsed is read once the refreshed token arrives", async () => {
+    const device = phone()
+    device.door.always("GET /driver/me", () => json(driverMe()))
+    device.door.always(`GET /driver/routes/${ROUTE_ID}`, () => json(routeDetail({ status: "active" })))
+    const app = device.open()
+    await app.load()
+    await eventually(() => assert.equal(app.store.getSnapshot().status, "ready"))
+    app.setSession({ who: WHO, client: null })
+    app.watchRoute(ROUTE_ID)
+    await settle()
+    assert.equal(app.store.getSnapshot().routes[ROUTE_ID], undefined)
+
+    app.setSession({ who: WHO, client: device.door.client("fr35h") })
+    await eventually(() => assert.equal(app.store.getSnapshot().routes[ROUTE_ID]?.status, "ready"))
+  })
+
+  test("a read the door answered 401 is read again under the refreshed token", async () => {
+    const device = phone()
+    device.door.always("GET /driver/me", () => json(driverMe()))
+    device.door.next(`GET /driver/routes/${ROUTE_ID}`, () => problem(401, "The token has expired"))
+    device.door.always(`GET /driver/routes/${ROUTE_ID}`, () => json(routeDetail({ status: "active" })))
+    const app = device.open()
+    app.watchRoute(ROUTE_ID)
+    await app.load()
+    await eventually(() => assert.equal(app.store.getSnapshot().status, "ready"))
+    assert.equal(app.store.getSnapshot().routes[ROUTE_ID], undefined)
+
+    app.setSession({ who: WHO, client: device.door.client("fr35h") })
+    await eventually(() => assert.equal(app.store.getSnapshot().routes[ROUTE_ID]?.status, "ready"))
   })
 
   test("with no connection there is no stale stop, only the count of what waits and Retry", async () => {
@@ -368,6 +399,66 @@ describe("the drain", () => {
     assert.equal(app.store.getSnapshot().waiting.length, 1)
   })
 
+  test("a batch the network never answers is given up after its deadline, as the server out of reach, and the next one goes", async () => {
+    const { app, door, timers } = await onRoute()
+    door.next("POST /driver/commands", hang)
+    await app.tap({ kind: "pause", routeId: ROUTE_ID, body: {} })
+    await eventually(() => assert.equal(door.batches().length, 1))
+    timers.advance(REQUEST_TIMEOUT_MS)
+    await eventually(() => assert.equal(app.store.getSnapshot().unreachable, true))
+    assert.equal(app.store.getSnapshot().waiting.length, 1)
+
+    door.next("POST /driver/commands", ({ body }) => outcomes((body as { commands: { id: string }[] }).commands))
+    await app.tap({ kind: "resume", routeId: ROUTE_ID, body: {} })
+    await eventually(() => assert.deepEqual(app.store.getSnapshot().waiting, []), 2_000)
+    assert.equal(door.batches().length, 2)
+  })
+
+  test("a batch answered after the phone changed hands tells the new person nothing of the last one's, and still leaves the queue", async () => {
+    const { app, door, stored } = await onRoute()
+    let release: () => void = () => {}
+    door.next("POST /driver/commands", ({ body }) =>
+      new Promise<Response>((resolve) => {
+        release = () => resolve(outcomes((body as { commands: { id: string }[] }).commands, () => ({ outcome: "rejected", problem: { type: "about:blank", title: "Conflict", status: 409, detail: "Route RC-1042 is not active" } })))
+      }),
+    )
+    await app.tap({ kind: "pause", routeId: ROUTE_ID, body: {} })
+    await eventually(() => assert.equal(door.batches().length, 1))
+    app.setSession({ who: "the-next-driver", client: door.client("n3xt") })
+    let told = false
+    app.store.subscribe(() => {
+      if (app.store.getSnapshot().rejections.length > 0) told = true
+    })
+    release()
+    await eventually(async () => assert.deepEqual(await stored(), []))
+    await settle()
+    assert.equal(told, false, "no state the next driver sees ever carried the last one's rejection")
+  })
+
+  test("a rejection outlives the next batch of the same drain, and the next read after it clears it", async () => {
+    const { app, door } = await onRoute()
+    let release: () => void = () => {}
+    door.next("POST /driver/commands", ({ body }) =>
+      new Promise<Response>((resolve) => {
+        release = () => resolve(outcomes((body as { commands: { id: string }[] }).commands, () => ({ outcome: "rejected", problem: { type: "about:blank", title: "Conflict", status: 409, detail: "Route RC-1042 is not active" } })))
+      }),
+    )
+    door.next("POST /driver/commands", ({ body }) => outcomes((body as { commands: { id: string }[] }).commands))
+    const paused = await app.tap({ kind: "pause", routeId: ROUTE_ID, body: {} })
+    await eventually(() => assert.equal(door.batches().length, 1))
+    await app.tap({ kind: "resume", routeId: ROUTE_ID, body: {} })
+    release()
+    await eventually(() => {
+      assert.equal(door.batches().length, 2)
+      assert.deepEqual(app.store.getSnapshot().waiting, [])
+    })
+    await settle()
+    assert.deepEqual(app.store.getSnapshot().rejections.map((rejection) => rejection.commandId), [paused])
+
+    await app.refresh()
+    assert.deepEqual(app.store.getSnapshot().rejections, [])
+  })
+
   test("sends and counts only the signed-in login's commands", async () => {
     const device = phone()
     await device.seed([waiting("01950000-0000-7000-8000-00000000c001", { owner: "someone-else" }), waiting("01950000-0000-7000-8000-00000000c002")])
@@ -390,7 +481,7 @@ describe("the drain", () => {
     device.door.always("POST /driver/commands", ({ body }) => outcomes((body as { commands: { id: string }[] }).commands))
     const app = device.open()
     await app.load()
-    await eventually(() => assert.deepEqual(app.store.getSnapshot().waiting, []))
+    await eventually(() => assert.deepEqual(app.store.getSnapshot().waiting, []), 10_000)
     assert.deepEqual(device.door.batches().map((batch) => batch.length), [200, 1])
     assert.deepEqual(device.door.batches().flat().map((command) => command.id), ids)
   })

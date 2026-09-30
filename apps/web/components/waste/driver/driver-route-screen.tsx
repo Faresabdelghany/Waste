@@ -115,7 +115,7 @@ function RouteDetailView({ detail, me }: { detail: DriverRouteDetail; me: Driver
       <ol className="flex flex-col gap-3" aria-label="Stops">
         {stopsInOrder(detail.pickups).map((stop, index) => (
           <li key={stop.id}>
-            <StopCard detail={detail} stop={stop} number={stop.sequence ?? index + 1} />
+            <StopCard detail={detail} stop={stop} number={index + 1} />
           </li>
         ))}
       </ol>

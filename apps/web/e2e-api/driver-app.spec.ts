@@ -49,7 +49,7 @@ test("a driver works a dispatched route on a phone, through an outage, and every
     await card.getByRole("link", { name: "Open route" }).click()
     await expect(page).toHaveURL(new RegExp(`/driver/routes/${route.id}$`))
 
-    const stop = (index: number) => page.getByRole("article", { name: `Stop ${stops[index].sequence ?? index + 1}` })
+    const stop = (index: number) => page.getByRole("article", { name: `Stop ${index + 1}`, exact: true })
     const dialog = page.getByRole("dialog")
 
     await stop(0).getByRole("button", { name: "Complete" }).click()

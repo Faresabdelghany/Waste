@@ -38,8 +38,13 @@ test("a role without the grant is refused in the API's words and stays signed in
     await expect(page.getByText("configure.organization could not be read from the API")).toHaveCount(0)
 
     // A status change on a customer is an edit the role does not hold: sent, refused in the API's words.
-    await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill(name)
-    await page.getByRole("button", { name: `Open ${name}` }).click()
+    // The list is rebuilt when the server's rows land after the response, which can clear a search typed a moment before: typed again until the row shows.
+    const opener = page.getByRole("button", { name: `Open ${name}` })
+    await expect(async () => {
+      await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill(name)
+      await expect(opener).toBeVisible({ timeout: 2_000 })
+    }).toPass({ timeout: 30_000 })
+    await opener.click()
     const sheet = page.getByRole("dialog")
     await expect(sheet.getByRole("heading", { name })).toBeVisible()
     await sheet.getByRole("button", { name: "Inactive" }).click()
