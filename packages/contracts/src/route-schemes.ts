@@ -86,9 +86,14 @@ export const CONTAINERS_MAX = 200
  */
 export const GROUPS_MAX = 50
 export const AT_MOST_GROUPS = `A scheme has at most ${GROUPS_MAX} collection groups`
+/** What a patch's list past the bound is told: the bound is the create's, and a scheme that has grown past it one group at a time is edited that way too. */
+export const AT_MOST_GROUPS_RESTATED = `An edit restates at most ${GROUPS_MAX} collection groups; a scheme with more is edited through its groups' own routes`
 
-/** An order among siblings: whole and positive, since the first is number one. */
-const Ordinal = PositiveInt
+/** The largest `integer` Postgres holds, which `collection_group.position` is: a larger position is refused at its field rather than failing the write (22003). */
+const POSITION_MAX = 2_147_483_647
+
+/** An order among siblings: whole and positive, since the first is number one, and no larger than the column holds. */
+const Ordinal = PositiveInt.max(POSITION_MAX)
 
 export const EACH_FRACTION_ONCE = eachOnceSentence("waste fraction", "a rule matches a fraction or it does not")
 export const EACH_CONTAINER_TYPE_ONCE = eachOnceSentence("container type", "a rule is restricted to a type or it is not")
@@ -188,7 +193,11 @@ export type CollectionGroupCreate = z.infer<typeof CollectionGroupCreate>
  * route holds against the stored one.
  */
 export const CollectionGroupEntry = z
-  .strictObject({ id: Id.optional().describe("The scheme's group this entry restates; absent for a group the edit adds."), ...collectionGroupBody })
+  .strictObject({
+    id: Id.optional().describe("The scheme's group this entry restates; absent for a group the edit adds."),
+    ...collectionGroupBody,
+    position: Ordinal.optional().describe("Where the group stands among the scheme's; when absent, a restated group keeps its own and an added one goes after the last."),
+  })
   .refine(oneWayToFindStopsGiven, oneWayToFindStops)
 export type CollectionGroupEntry = z.infer<typeof CollectionGroupEntry>
 
@@ -390,7 +399,7 @@ export const RouteSchemePatch = z
     /** Null reopens the period; a day ends it. */
     validTo: IsoDate.nullable().optional(),
     /** The scheme's groups as the edit leaves them (#205); absent, the groups stay as they are. */
-    collectionGroups: z.array(CollectionGroupEntry).min(1).max(GROUPS_MAX, AT_MOST_GROUPS).optional(),
+    collectionGroups: z.array(CollectionGroupEntry).min(1).max(GROUPS_MAX, AT_MOST_GROUPS_RESTATED).optional(),
   })
   .refine(changesSomething, somethingToChange)
   .refine(validityOrdered, endsAfterItStarts)

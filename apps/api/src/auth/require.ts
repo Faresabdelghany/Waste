@@ -21,12 +21,15 @@ export function allows(grants: readonly Grant[], moduleKey: ModuleKey, action: A
   return grants.some((grant) => grant.moduleKey === moduleKey && grant.actions.includes(action))
 }
 
+/** The 403 when the grant set does not list the action for the module; what the guard throws, and what a handler asks where the body decides a second action (#205: a scheme's patch that adds a group asks `create` too). */
+export function requireAllowed(grants: readonly Grant[], moduleKey: ModuleKey, action: Action): void {
+  if (!allows(grants, moduleKey, action)) throw problem(403, { detail: `This account's role does not allow ${action} on ${moduleKey}` })
+}
+
 /** The guard after `authenticate` or `identify`: passes when the caller's role grants the action on the module, else 403. */
 export function requireGrant(moduleKey: ModuleKey, action: Action): MiddlewareHandler<IdentifiedEnv> {
   return async (c, next) => {
-    if (!allows(c.get("principal").grants, moduleKey, action)) {
-      throw problem(403, { detail: `This account's role does not allow ${action} on ${moduleKey}` })
-    }
+    requireAllowed(c.get("principal").grants, moduleKey, action)
     await next()
   }
 }

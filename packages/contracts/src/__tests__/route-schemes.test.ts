@@ -5,6 +5,7 @@ import { OCCURRENCE_STATUSES } from "@waste/domain/planning/vocabulary"
 
 import {
   AT_MOST_GROUPS,
+  AT_MOST_GROUPS_RESTATED,
   CollectionGroup,
   CollectionGroupContainersSet,
   CollectionGroupCreate,
@@ -334,7 +335,14 @@ describe("RouteSchemePatch's collection groups (#205)", () => {
     assert.deepEqual(refusal(RouteSchemePatch.safeParse({ collectionGroups: [{ ...kept, id: "not-an-id" }] })).map((issue) => issue.path), ["collectionGroups.0.id"])
     assert.deepEqual(refusal(RouteSchemePatch.safeParse({ collectionGroups: [] })).map((issue) => issue.path), ["collectionGroups"])
     const many = manyIds(GROUPS_MAX + 1).map((id, n) => ({ ...kept, id, name: `Group ${n}` }))
-    assert.deepEqual(refusal(RouteSchemePatch.safeParse({ collectionGroups: many })), [{ path: "collectionGroups", message: AT_MOST_GROUPS }])
+    assert.deepEqual(refusal(RouteSchemePatch.safeParse({ collectionGroups: many })), [{ path: "collectionGroups", message: AT_MOST_GROUPS_RESTATED }])
+  })
+
+  test("holds a position to what the database's integer holds, so a larger one is refused at its field rather than failing the write", () => {
+    const LARGEST = 2_147_483_647
+    assert.equal(RouteSchemePatch.safeParse({ collectionGroups: [{ ...kept, position: LARGEST }] }).success, true)
+    assert.deepEqual(refusal(RouteSchemePatch.safeParse({ collectionGroups: [{ ...kept, position: LARGEST + 1 }] })).map((issue) => issue.path), ["collectionGroups.0.position"])
+    assert.deepEqual(refusal(CollectionGroupPatch.safeParse({ position: LARGEST + 1 })).map((issue) => issue.path), ["position"])
   })
 
   test("keeps every group's days within the service days where the patch carries both, and leaves a half to the route", () => {

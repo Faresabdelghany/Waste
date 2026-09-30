@@ -1,11 +1,13 @@
 // One request for a scheme edit that moves its collection groups (#205):
 // `PATCH /route-schemes/:id` with `collectionGroups`, the scheme's groups
 // whole, held once on the state the edit leaves behind and written in one
-// transaction. The edits here are the ones no order of single requests could
-// make — a service day added to a validated scheme under its one group, a
-// group split in two that share a vehicle, two manual groups trading
-// containers on a shared day — and the refusals that write nothing. The patch
-// without the member is route-schemes.test.ts's and scheme-fleet.test.ts's.
+// transaction. The edits here are the one no order of single requests can
+// make — a service day added to a validated scheme under its one group — and
+// two that single requests make only in a careful order — a group split in
+// two that share a vehicle, two manual groups trading containers on a shared
+// day — then the rules each entry is held to, and the refusals that write
+// nothing. The patch without the member is route-schemes.test.ts's and
+// scheme-fleet.test.ts's.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
@@ -39,6 +41,8 @@ describe("a scheme edit that moves its collection groups, in one request (#205)"
   let fleet: FleetFixtures
   let app: ReturnType<typeof createApp>
   let olivia: Call
+  /** The custom role, granted view and edit on the schemes but not create. */
+  let editor: Call
   let residual: WasteFraction
   let bin1: Container
   let bin2: Container
@@ -49,9 +53,11 @@ describe("a scheme edit that moves its collection groups, in one request (#205)"
     a = await seedTenant(pool)
     planning = await seedPlanning(pool, a)
     fleet = await seedFleet(pool, a, planning)
-    await grantRole(pool, a.companyId, a.roles.viewer.id, [{ moduleKey: MODULE, actions: ["view", "create", "edit"] }])
+    // The custom role may view and edit schemes and not create them: what an edit that adds a group asks of it.
+    await grantRole(pool, a.companyId, a.roles.viewer.id, [{ moduleKey: MODULE, actions: ["view", "edit"] }])
     app = createApp({ probe: pool, pool, verifier: keys.verifier })
     olivia = callingAs(app, keys, a.users.olivia, a.companyId)
+    editor = callingAs(app, keys, a.users.viewer, a.companyId)
     residual = await create("/waste-fractions", { key: "residual", name: "Residual waste" }, WasteFraction)
     const bin = await create("/container-types", { name: "240 L bin", volumeLitres: 240 }, ContainerType)
     bin1 = await create("/containers", { projectId: a.projects.copenhagen.id, label: "BIN-1", containerTypeId: bin.id }, Container)
@@ -185,6 +191,34 @@ describe("a scheme edit that moves its collection groups, in one request (#205)"
     assert.deepEqual(await oneScheme(byHand.id), edited)
   })
 
+  test("writes nothing of a group the list restates as it stands, so its updatedAt stays, and stamps the one it changes", async () => {
+    const two = await scheme("Restated", ["monday", "thursday"], [manualGroup("By hand", ["monday"], [bin1.id, bin2.id]), ruleGroup("By rule", ["thursday"])])
+    const [byHand, byRule] = two.collectionGroups
+
+    const edited = await patchedScheme(two.id, { collectionGroups: [entryOf(byHand), { ...entryOf(byRule), name: "By rule, renamed" }] })
+    assert.deepEqual(edited.collectionGroups[0], byHand, "restated as it stands, the group is as it was, its updatedAt included")
+    assert.notEqual(edited.collectionGroups[1].updatedAt, byRule.updatedAt)
+    const reordered = await patchedScheme(two.id, { collectionGroups: [{ ...entryOf(byHand), containerIds: [bin2.id, bin1.id] }, entryOf(edited.collectionGroups[1])] })
+    assert.deepEqual(reordered.collectionGroups[0].containerIds, [bin2.id, bin1.id], "a list in another stop order is a change")
+    assert.notEqual(reordered.collectionGroups[0].updatedAt, byHand.updatedAt)
+    assert.deepEqual(reordered.collectionGroups[1], edited.collectionGroups[1])
+  })
+
+  test("stands a group the edit adds with no position after the last the edit leaves, an added group's own position included", async () => {
+    const one = await scheme("Positions", ["monday"], [ruleGroup("First", ["monday"])])
+    const [first] = one.collectionGroups
+
+    const edited = await patchedScheme(one.id, { collectionGroups: [entryOf(first), ruleGroup("Tenth", ["monday"], { position: 10 }), ruleGroup("Unplaced", ["monday"])] })
+    assert.deepEqual(
+      edited.collectionGroups.map((group) => [group.name, group.position]),
+      [
+        ["First", 1],
+        ["Tenth", 10],
+        ["Unplaced", 11],
+      ],
+    )
+  })
+
   test("refuses an edit that leaves the validated scheme broken with every sentence, and writes none of it", async () => {
     const truck = fleet.vehicles.wh24
     const weekdays = await scheme("Broken", WEEKDAYS, [ruleGroup("Residual", WEEKDAYS)])
@@ -205,6 +239,15 @@ describe("a scheme edit that moves its collection groups, in one request (#205)"
       ["Service days without a collection group: wednesday, thursday, friday", `Vehicle ${truck.label} is on two collection groups that run on monday: Residual, Mondays too`].join(". "),
     )
     assert.deepEqual(await oneScheme(weekdays.id), weekdays, "nothing of the edit was written")
+  })
+
+  test("names the groups in a structural sentence in the order they stand, whatever order the list gives them in", async () => {
+    const truck = fleet.vehicles.wh24
+    const shared = await scheme("Shared truck", ["monday", "thursday"], [ruleGroup("A", ["monday"], { vehicleId: truck.id }), ruleGroup("B", ["thursday"], { vehicleId: truck.id })])
+    const [first, second] = shared.collectionGroups
+
+    const problem = await refused(await patchScheme(shared.id, { collectionGroups: [{ ...entryOf(second), days: ["monday", "thursday"] }, entryOf(first)] }), 409)
+    assert.equal(problem.detail, `Vehicle ${truck.label} is on two collection groups that run on monday: A, B`)
   })
 
   test("parks a group the list leaves out, since there is no delete: it keeps its name and runs on nothing", async () => {
@@ -288,19 +331,39 @@ describe("a scheme edit that moves its collection groups, in one request (#205)"
     assert.deepEqual(await oneScheme(crewed.id), crewed)
   })
 
+  test("judges on a later start the crew of a group the list leaves out too, which keeps it parked and runs with it again", async () => {
+    const crewed = await scheme("Crew left out", ["monday", "thursday"], [ruleGroup("Mondays", ["monday"], { vehicleId: fleet.vehicles.wh24.id, driverId: fleet.drivers.mads.id }), ruleGroup("Thursdays", ["thursday"])])
+    const [, thursdays] = crewed.collectionGroups
+
+    const later = await refused(await patchScheme(crewed.id, { validFrom: "2031-01-06", collectionGroups: [{ ...entryOf(thursdays), days: ["monday", "thursday"] }] }), 400)
+    assert.deepEqual(later.errors, [{ path: "validFrom", message: "Mads Jensen's licence expires on 2030-12-31, before the scheme starts" }], "as the patch without the list judges every stored group")
+    assert.deepEqual(await oneScheme(crewed.id), crewed)
+  })
+
   test("holds the names on the state the edit leaves: groups shift and trade names, and a name a parked group keeps is refused with nothing written", async () => {
-    const routes = await scheme("Numbered", ["monday", "thursday"], [ruleGroup("Route 1", ["monday"]), ruleGroup("Route 2", ["thursday"])])
-    const [one, two] = routes.collectionGroups
+    const numbered = await scheme("Numbered", ["monday", "thursday"], [ruleGroup("Round 1", ["monday"]), ruleGroup("Round 2", ["thursday"])])
+    const [one, two] = numbered.collectionGroups
     const names = (scheme: RouteScheme) => scheme.collectionGroups.map((group) => [group.id === one.id ? "one" : group.id === two.id ? "two" : "added", group.name])
 
-    const shifted = await patchedScheme(routes.id, { collectionGroups: [ruleGroup("Route 1", ["monday"]), { ...entryOf(one), name: "Route 2" }, { ...entryOf(two), name: "Route 3" }] })
-    assert.deepEqual(names(shifted), [["one", "Route 2"], ["two", "Route 3"], ["added", "Route 1"]])
+    const shifted = await patchedScheme(numbered.id, { collectionGroups: [ruleGroup("Round 1", ["monday"]), { ...entryOf(one), name: "Round 2" }, { ...entryOf(two), name: "Round 3" }] })
+    assert.deepEqual(names(shifted), [["one", "Round 2"], ["two", "Round 3"], ["added", "Round 1"]])
     const [, , added] = shifted.collectionGroups
-    const traded = await patchedScheme(routes.id, { collectionGroups: [{ ...entryOf(one), name: "Route 3" }, { ...entryOf(two), name: "Route 2" }, entryOf(added)] })
-    assert.deepEqual(names(traded), [["one", "Route 3"], ["two", "Route 2"], ["added", "Route 1"]])
+    const traded = await patchedScheme(numbered.id, { collectionGroups: [{ ...entryOf(one), name: "Round 3" }, { ...entryOf(two), name: "Round 2" }, entryOf(added)] })
+    assert.deepEqual(names(traded), [["one", "Round 3"], ["two", "Round 2"], ["added", "Round 1"]])
 
-    const taken = await refused(await patchScheme(routes.id, { name: "Numbered, again", collectionGroups: [entryOf(traded.collectionGroups[0]), { ...entryOf(added), days: ["monday", "thursday"] }, ruleGroup("Route 2", ["thursday"])] }), 409)
-    assert.equal(taken.detail, 'This scheme already has a collection group called "Route 2"', "the group the list leaves out is parked and keeps its name")
-    assert.deepEqual(await oneScheme(routes.id), traded, "the scheme's own rename was not written either")
+    const taken = await refused(await patchScheme(numbered.id, { name: "Numbered, again", collectionGroups: [entryOf(traded.collectionGroups[0]), { ...entryOf(added), days: ["monday", "thursday"] }, ruleGroup("Round 2", ["thursday"])] }), 409)
+    assert.equal(taken.detail, 'This scheme already has a collection group called "Round 2"', "the group the list leaves out is parked and keeps its name")
+    assert.deepEqual(await oneScheme(numbered.id), traded, "the scheme's own rename was not written either")
+  })
+
+  test("asks for create where an entry adds a group, as POST …/collection-groups does, and edit alone where the list only restates and parks", async () => {
+    const twoGroups = await scheme("Editor's", ["monday", "thursday"], [ruleGroup("Mondays", ["monday"]), ruleGroup("Thursdays", ["thursday"])])
+    const [mondays, thursdays] = twoGroups.collectionGroups
+
+    const adding = await refused(await editor(`/route-schemes/${twoGroups.id}`, { method: "PATCH", body: { collectionGroups: [entryOf(mondays), entryOf(thursdays), ruleGroup("Added", ["monday"])] } }), 403)
+    assert.equal(adding.detail, `This account's role does not allow create on ${MODULE}`)
+    assert.deepEqual(await oneScheme(twoGroups.id), twoGroups)
+    const restating = await editor(`/route-schemes/${twoGroups.id}`, { method: "PATCH", body: { collectionGroups: [{ ...entryOf(mondays), days: ["monday", "thursday"] }] } })
+    assert.equal(restating.status, 200, JSON.stringify(await restating.clone().json()))
   })
 })
