@@ -93,6 +93,8 @@ function SchemeEditPolicyQuestion({
         {CHOICES.map((value) => {
           const option = question.options[value]
           const id = `scheme-edit-apply-${value}`
+          // A choice the question shows and does not offer says why (the Pilot's one-off, #209).
+          const unavailable = option.unavailable !== undefined
           return (
             <Label
               key={value}
@@ -100,14 +102,16 @@ function SchemeEditPolicyQuestion({
               className={cn(
                 "flex cursor-pointer items-start gap-3 rounded-xl border border-border p-4 font-normal",
                 choice === value && "border-primary bg-primary/5",
+                unavailable && "cursor-not-allowed opacity-70",
               )}
             >
-              <RadioGroupItem value={value} id={id} className="mt-0.5" />
+              <RadioGroupItem value={value} id={id} className="mt-0.5" disabled={unavailable} />
               <span className="space-y-1">
                 <span className="block text-sm font-medium">{option.label}</span>
                 <span className="block text-xs leading-5 text-muted-foreground">
                   {option.description}
                 </span>
+                {unavailable && <span className="block text-xs leading-5 text-amber-700 dark:text-amber-300">{option.unavailable}</span>}
               </span>
             </Label>
           )

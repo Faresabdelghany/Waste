@@ -9,7 +9,8 @@ import { describe, test } from "node:test"
 import { validateGuidedScheme } from "@waste/domain/route-schemes/draft"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 
-import { licenceDayOf, PREVIEW_CANNOT_PLACE, projectToday, schemeEditStatusOnApi, validationOnApi } from "../route-schemes"
+import type { BusinessRecord } from "../business-modules"
+import { licenceDayOf, ONE_OFF_NOT_KEPT, PREVIEW_CANNOT_PLACE, projectToday, schemeEditQuestionOnApi, schemeEditStatusOnApi, validationOnApi } from "../route-schemes"
 
 describe("the status a scheme edit asks the API for", () => {
   test("a Validated scheme stays Validated, whatever the web's own validation says: the API's 409 speaks for the rules it holds", () => {
@@ -106,5 +107,72 @@ describe("the day a group's driver is judged on", () => {
     assert.deepEqual(licenceDayOf("2026-10-05", "Europe/Copenhagen", lateEvening), { day: "2026-10-05", meaning: "the scheme starts" })
     assert.deepEqual(licenceDayOf("2026-09-01", "Europe/Copenhagen", lateEvening), { day: "2026-10-01", meaning: "today" })
     assert.deepEqual(licenceDayOf("", "Europe/Copenhagen", lateEvening), { day: "2026-10-01", meaning: "the scheme starts" }, "a draft without a first day is judged on today")
+  })
+})
+
+// The Pilot's "How should this change apply?" (#179): asked, as in fixture
+// mode, of a running scheme under "Ask each time" for an edit that shapes a
+// collection, while the API holds routes of the scheme that can still follow
+// it — planned (a dispatched route is frozen), on a service date after
+// today. "This collection only" is offered disabled: the API keeps no
+// one-off yet, and the next generation run would undo one (#209).
+describe("the question a scheme edit asks on the Pilot", () => {
+  const TODAY = "2026-10-01"
+  const scheme = (over: Partial<BusinessRecord> = {}, values: BusinessRecord["submittedValues"] = {}): BusinessRecord => ({
+    id: "scheme-01a0d2a4-a280-7016-8000-000000000001",
+    name: "RS-Central · Week A",
+    context: "",
+    status: "Validated",
+    owner: "",
+    value: "",
+    updated: "",
+    description: "",
+    facts: {},
+    related: [],
+    source: "Waste API",
+    freshness: "",
+    recordKind: "Route Scheme",
+    ...over,
+    submittedValues: { editPolicy: "ask", lastGeneratedAt: "2026-09-30T02:00:00.000Z", plannedStartTime: "06:30", ...values },
+  })
+  const route = (id: string, serviceDate: string, status: string, schemeId = scheme().id): BusinessRecord => ({ ...scheme(), id, name: id, recordKind: "Route", submittedValues: { schemeId, serviceDate, status } })
+  const routes = [
+    route("route-a", "2026-10-02", "planned"),
+    route("route-b", "2026-10-05", "planned"),
+    route("route-today", TODAY, "planned"),
+    route("route-dispatched", "2026-10-02", "ready"),
+    route("route-cancelled", "2026-10-06", "cancelled"),
+    route("route-other", "2026-10-02", "planned", "scheme-01a0d2a4-a280-7016-8000-000000000002"),
+  ]
+  const shaped = (before: BusinessRecord) => ({ ...before, submittedValues: { ...before.submittedValues, plannedStartTime: "08:15" } })
+
+  test("asks of a running scheme's shaping edit, counting the planned routes after today the API holds for it", () => {
+    const before = scheme()
+    const question = schemeEditQuestionOnApi(before, shaped(before), routes, TODAY)
+    assert.ok(question)
+    assert.equal(question.futureRoutes, 2, "tomorrow's and Monday's; not today's, not a dispatched one, not a cancelled one, not another scheme's")
+    assert.equal(question.nextCollectionDate, "2026-10-02")
+    assert.equal(question.options.future.label, "Apply to future collections")
+    assert.equal(question.options.single.label, "This collection only")
+    assert.equal(question.options.single.unavailable, ONE_OFF_NOT_KEPT)
+    assert.equal(question.options.future.unavailable, undefined)
+  })
+
+  test("the stored policy decides: switching off Ask each time in the same save still asks", () => {
+    const before = scheme()
+    const after = { ...shaped(before), submittedValues: { ...shaped(before).submittedValues, editPolicy: "future" } }
+    assert.ok(schemeEditQuestionOnApi(before, after, routes, TODAY))
+    const stored = scheme({}, { editPolicy: "future" })
+    assert.equal(schemeEditQuestionOnApi(stored, shaped(stored), routes, TODAY), null)
+  })
+
+  test("never asks of a rename, a scheme never generated, a Draft, or when no planned route after today can follow", () => {
+    const before = scheme()
+    assert.equal(schemeEditQuestionOnApi(before, { ...before, name: "RS-Central · Week A (renamed)" }, routes, TODAY), null)
+    const never = scheme({}, { lastGeneratedAt: "" })
+    assert.equal(schemeEditQuestionOnApi(never, shaped(never), routes, TODAY), null)
+    const draft = scheme({ status: "Draft" })
+    assert.equal(schemeEditQuestionOnApi(draft, shaped(draft), routes, TODAY), null)
+    assert.equal(schemeEditQuestionOnApi(before, shaped(before), routes.filter((row) => row.id === "route-today" || row.id === "route-dispatched"), TODAY), null)
   })
 })

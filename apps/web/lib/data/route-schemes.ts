@@ -6,7 +6,9 @@
  * where the records live.
  */
 import { schemeLicenceDay, type JudgedDay } from "@waste/domain/planning/checks"
+import { editChangesGeneration, schemeEditPolicy, SCHEME_EDIT_APPLICATION_OPTIONS, type SchemeEditQuestion } from "@waste/domain/route-schemes/edit"
 import { collectionGroupsToValues, type CollectionGroup } from "@waste/domain/route-schemes/groups"
+import { schemeGenerationRecorded } from "@waste/domain/route-schemes/lifecycle"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { isIsoDate } from "@waste/domain/route-schemes/recurrence"
 import { isNoMatchIssue, type SchemeValidationResult } from "@waste/domain/route-schemes/validation"
@@ -117,4 +119,48 @@ export function validationOnApi(result: SchemeValidationResult, containersOnApi:
   if (!containersOnApi || !result.issues.some(isNoMatchIssue)) return { ...result, notice: null }
   const issues = result.issues.filter((issue) => !isNoMatchIssue(issue))
   return { ...result, status: issues.length === 0 ? "Validated" : "Draft", issues, notice: PREVIEW_CANNOT_PLACE }
+}
+
+/** Why the Pilot's question offers "This collection only" disabled, until the API keeps a one-off (#209). */
+export const ONE_OFF_NOT_KEPT = "The API keeps no one-off change yet: the next generation run would bring these routes back to the scheme."
+
+const typedValue = (record: BusinessRecord, key: string) => {
+  const value = record.submittedValues?.[key]
+  return typeof value === "string" ? value : ""
+}
+
+/**
+ * The question a scheme edit asks on the Pilot (#179), or null when it asks
+ * none — the fixture path's rule (@waste/domain/route-schemes/edit,
+ * `planSchemeEditReconciliation`) over the routes the API holds: under the
+ * stored policy "Ask each time" (the one before the edit decides, so a save
+ * that switches the policy off still asks), for a running scheme (a
+ * generation recorded, never a Draft), an edit that shapes a collection, and
+ * routes of the scheme that can still follow it — planned, since a
+ * dispatched route is frozen, on a service date after `today`, the
+ * project's day. The next collection is the earliest of them. "Apply to
+ * future collections" saves the scheme and the next generation run brings
+ * those routes to it; "This collection only" is shown and not offered
+ * (`ONE_OFF_NOT_KEPT`, #209).
+ */
+export function schemeEditQuestionOnApi(before: BusinessRecord, after: BusinessRecord, routes: readonly BusinessRecord[], today: string): SchemeEditQuestion | null {
+  if (schemeEditPolicy(before.submittedValues) !== "ask") return null
+  if (before.status === "Draft" || !schemeGenerationRecorded(before)) return null
+  if (!editChangesGeneration(before, after)) return null
+  const following = routes
+    .filter((route) => typedValue(route, "schemeId") === before.id && typedValue(route, "status") === "planned" && typedValue(route, "serviceDate") > today)
+    .map((route) => typedValue(route, "serviceDate"))
+    .sort()
+  if (following.length === 0) return null
+  return {
+    futureRoutes: following.length,
+    nextCollectionDate: following[0],
+    options: {
+      future: {
+        label: SCHEME_EDIT_APPLICATION_OPTIONS.future.label,
+        description: "The scheme is saved as edited, and the next generation run brings every future planned route to it. Routes that are ready, active or completed stay as they are.",
+      },
+      single: { ...SCHEME_EDIT_APPLICATION_OPTIONS.single, unavailable: ONE_OFF_NOT_KEPT },
+    },
+  }
 }
