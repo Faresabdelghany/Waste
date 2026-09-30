@@ -30,7 +30,7 @@ import { CONTACTS_MODULE, PROPERTIES_MODULE } from "@/lib/data/properties"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 import { useApiClient } from "../api-session-store"
-import { useModuleRecords, useServerModuleState } from "../business-record-store"
+import { useMeProjects, useModuleRecords, useServerModuleState } from "../business-record-store"
 
 const NO_RECORDS: readonly BusinessRecord[] = []
 const fixturesOf = (location: ModuleLocation) => getModuleDefinition(location)?.records ?? NO_RECORDS
@@ -73,6 +73,8 @@ export function useRelationPickers(): RelationPickers {
   const contacts = useModuleRecords(CONTACTS_MODULE.workspaceId, CONTACTS_MODULE.moduleId, fixturesOf(CONTACTS_MODULE))
   const properties = useModuleRecords(PROPERTIES_MODULE.workspaceId, PROPERTIES_MODULE.moduleId, fixturesOf(PROPERTIES_MODULE))
   const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId, fixturesOf(AGREEMENTS_MODULE))
+  // A role that does not view the organisation picks from `/me`'s projects (Issue #217).
+  const meProjects = useMeProjects()
   const byKey = new Map([
     [keyOf(ORGANISATION_MODULE), organisation],
     [keyOf(MASTER_DATA_MODULE), master],
@@ -107,7 +109,7 @@ export function useRelationPickers(): RelationPickers {
       case "subscriptionId":
         return subscriptionOptions(live(agreements.records), project)
       case "projectId":
-        return live(organisation.records).filter((record) => record.id.startsWith("project-")).map((record) => optionOf(record, false))
+        return (organisation.notGranted ? meProjects : live(organisation.records).filter((record) => record.id.startsWith("project-"))).map((record) => optionOf(record, false))
       case "warehouseId":
         return live(warehouses.records).map((record) => optionOf(record, true))
       case "vehicleId":
@@ -125,8 +127,10 @@ export function useRelationPickers(): RelationPickers {
   // module has no such row loaded: an existing reference is never refused.
   const options = (field: BusinessFormField, values: BusinessFormValues, projectId?: string, opened?: BusinessFormValues): readonly BusinessFormOption[] =>
     keptOptions(field, rowsFor(field, values, projectId), keptValue(field.id, values, opened))
+  // A module the role does not view is nothing to wait for: its picker offers what the person has, and the rest of the form stands (Issue #217).
+  const answered = (state: { ready: boolean; notGranted: boolean } | undefined) => state === undefined || state.ready || state.notGranted
   const readyFor = (schema: BusinessFormSchema) =>
-    schema.sections.every((section) => section.fields.every((field) => field.relation === undefined || (byKey.get(keyOf(field.relation))?.ready ?? true)))
+    schema.sections.every((section) => section.fields.every((field) => field.relation === undefined || answered(byKey.get(keyOf(field.relation)))))
   const timezoneOf = (projectId: string | undefined) => {
     const project = projectId === undefined ? undefined : organisation.records.find((record) => record.id === projectId)
     const timezone = project?.submittedValues?.timezone

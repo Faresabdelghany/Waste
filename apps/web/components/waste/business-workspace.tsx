@@ -270,9 +270,10 @@ import { SchemeGenerateRoutesDialog } from "@/components/waste/scheme-generate-r
 import { SchemeDetailsPage } from "@/components/waste/scheme-details-page"
 import { SchemePlanAheadRunner } from "@/components/waste/scheme-plan-ahead"
 import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
-import { useApiConfigured } from "@/components/waste/api-session-store"
+import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { commandSurfaceFor } from "@/components/waste/commands/command-surfaces"
 import { offersRowsOf } from "@/components/waste/pickable-records"
+import { projectScopeOfMe } from "@/lib/api/records/me-projects"
 import { isServerBacked, serverModuleOf } from "@/lib/api/records/modules"
 import { spellsStatus, type WriteOutcome } from "@/lib/api/records/server-records"
 import { useActiveRoutes } from "@/components/waste/active-routes-store"
@@ -1187,7 +1188,13 @@ export function BusinessWorkspace({
   const [viewOptions, setViewOptions] = useState<BusinessViewOptions>(
     defaultBusinessViewOptions,
   )
-  const projectScope = fixedProjectScope ?? DEFAULT_PROJECT_SCOPE
+  // On the Pilot the pinned scope derives from `/me`'s projects (Issue #217, the plan on #81).
+  const { me } = useApiSession()
+  const projectScope =
+    fixedProjectScope ??
+    (apiConfigured
+      ? projectScopeOfMe(me?.projects, getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? [], DEFAULT_PROJECT_SCOPE)
+      : DEFAULT_PROJECT_SCOPE)
   // The scope vocabulary: the organisation module's project records, fixture
   // and created alike (issue #44) — what a scope is compared against, what a
   // created record is stamped with, and where a scope's label is read.
