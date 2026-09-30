@@ -51,7 +51,7 @@ import { serviceAreasForSelection } from "@waste/domain/map-planning/coverage"
 import { UNCOVERED_COLOR, coverageGaps, coverageInSelection } from "@waste/domain/map-planning/coverage-gaps"
 import { COMPARE_COLORS, compareSchemes, schemeStopSets } from "@waste/domain/map-planning/scheme-compare"
 import { MAP_FILTER_READERS } from "@waste/domain/map-planning/filters"
-import { formatDateRange, formatDistance, formatDuration, formatShortDate } from "@/lib/map-planning/format"
+import { formatDateRange, formatShortDate } from "@/lib/map-planning/format"
 import { boundsFromPolygon, pointInPolygon, type LngLat } from "@waste/domain/map-planning/geo"
 import { containerPoints, type MapPoint } from "@waste/domain/map-planning/points"
 import { containerLocation } from "@waste/domain/map-planning/positions"
@@ -86,7 +86,9 @@ import { cn } from "@/lib/utils"
 
 import { LayersPanel } from "./layers-panel"
 import { PlaybackBar, type PlaybackSpeed } from "./playback-bar"
-import { useRoadGeometries } from "./use-road-geometries"
+import { usePlanLegs } from "./use-plan-legs"
+import { PlanReadingRow } from "./plan-reading"
+import { RoutingAttribution } from "@/components/waste/routing/routing-attribution"
 import { MapSearch } from "./map-search"
 import { MapToolbar } from "./map-toolbar"
 import { SavedSelectionsMenu } from "./saved-selections-menu"
@@ -301,14 +303,15 @@ export function MapPlanningView({
     if (playbackRoute) lines.set(playbackRoute.id, playbackRoute)
     return Array.from(lines.values())
   }, [areaRoutes.routes, playbackRoute, routesOnMap, windowRoutes, windowRoutesOnMap])
-  const roadGeometries = useRoadGeometries(routeLines)
-  const routeCardRoad = routeCard ? roadGeometries.get(routeCard.route.id) : undefined
+  // Each drawn route's road and routing reading, off its active Plan alone (#173).
+  const planLegs = usePlanLegs(routeLines, routes)
+  const roadGeometries = planLegs.roads
 
-  // Where the replayed vehicle stands: along the road when it is known, straight otherwise.
+  // Where the replayed vehicle stands: along the road when its legs are the stops', straight otherwise.
   const playbackFrameValue = useMemo(() => {
     if (!playback || !playbackRoute) return null
     const state = roadGeometries.get(playbackRoute.id)
-    const geometry = state?.status === "ready" ? state.geometry : null
+    const geometry = state?.status === "ready" && state.geometry.legs.length === playbackRoute.stops.length - 1 ? state.geometry : null
     const stops =
       geometry && geometry.snappedStops.length === playbackRoute.stops.length
         ? geometry.snappedStops
@@ -577,6 +580,7 @@ export function MapPlanningView({
           onClusterList={(cluster, anchor) => setClusterList({ cluster, anchor })}
           apiRef={mapApi}
         />
+        <RoutingAttribution sources={planLegs.sources} />
 
         {/* Draw tools */}
         <div
@@ -771,15 +775,7 @@ export function MapPlanningView({
                     ? ` · ${routeCard.route.stops.length} on the map`
                     : ""}
                 </dd>
-                {routeCardRoad?.status === "ready" && routeCardRoad.geometry.legs.length > 0 && (
-                  <>
-                    <dt className="text-muted-foreground">Drive</dt>
-                    <dd className="tabular-nums" data-testid="route-card-drive">
-                      {formatDistance(routeCardRoad.geometry.distanceMetres)} ·{" "}
-                      {formatDuration(routeCardRoad.geometry.durationSeconds)}
-                    </dd>
-                  </>
-                )}
+                <PlanReadingRow reading={planLegs.readings.get(routeCard.route.id)} onRetry={planLegs.retryFor(routeCard.route.id)} />
               </dl>
               <div className="mt-3 flex gap-2">
                 <Button

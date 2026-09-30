@@ -29,7 +29,12 @@ export const ACTIVE_ROUTES_STORAGE_KEY = "waste-active-routes-v1"
 /** The planning map's chosen base map. */
 export const BASE_MAP_STORAGE_KEY = "waste-map-planning-base-map-v1"
 
-/** The planning map's cached OSRM road geometry, oldest first, capped. */
+/**
+ * Retired by #173: the road geometry the maps kept from the public OSRM demo
+ * server. Nothing reads it any more — the roads are the API's — and the road
+ * hooks remove it, and its legacy name, on sight, so a road the demo server
+ * answered is never shown under another provider's attribution.
+ */
 export const ROAD_GEOMETRY_STORAGE_KEY = "waste-map-road-geometry-v1"
 
 /** The planning map's named saved selections. */

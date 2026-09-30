@@ -115,7 +115,20 @@ describe("parseEnv", () => {
     }
   })
 
-  test("names the routing provider and never carries its key: the API calls no provider (#171; S5's preview will), so the key lives only where calls are made", () => {
-    assert.deepEqual(parseEnv({ ...base, ROUTING_PROVIDER: "openrouteservice", OPENROUTESERVICE_API_KEY: "test-only-not-a-key" }), { ...expected, ROUTING_PROVIDER: "openrouteservice" })
+  test("names the routing provider and carries its key, since the guided setup's preview calls the provider from the API (#173)", () => {
+    assert.deepEqual(parseEnv({ ...base, ROUTING_PROVIDER: "openrouteservice", OPENROUTESERVICE_API_KEY: "test-only-not-a-key" }), {
+      ...expected,
+      ROUTING_PROVIDER: "openrouteservice",
+      OPENROUTESERVICE_API_KEY: "test-only-not-a-key",
+    })
+  })
+
+  test("reads ROUTING_PREVIEW_CALLS_PER_MINUTE, the preview's own pacing (#173), as a whole number of at least one, absent — the preview's 10 — unless set; the worker's ROUTING_CALLS_PER_MINUTE is not the API's", () => {
+    assert.deepEqual(parseEnv({ ...base, ROUTING_PREVIEW_CALLS_PER_MINUTE: "" }), expected, "empty: not set")
+    assert.equal(parseEnv({ ...base, ROUTING_PREVIEW_CALLS_PER_MINUTE: "5" }).ROUTING_PREVIEW_CALLS_PER_MINUTE, 5)
+    assert.deepEqual(parseEnv({ ...base, ROUTING_CALLS_PER_MINUTE: "30" }), expected, "the worker's knob is dropped here")
+    for (const value of ["0", "-1", "2.5", "ten"]) {
+      assert.throws(() => parseEnv({ ...base, ROUTING_PREVIEW_CALLS_PER_MINUTE: value }), (error: unknown) => error instanceof Error && /ROUTING_PREVIEW_CALLS_PER_MINUTE/.test(error.message), value)
+    }
   })
 })

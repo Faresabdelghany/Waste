@@ -18,7 +18,8 @@ import "maplibre-gl/dist/maplibre-gl.css"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { pointMapLibreWorkerAtRouteHandler } from "@/components/waste/map-planning/maplibre-worker"
-import type { RoadGeometryState } from "@/components/waste/map-planning/use-road-geometries"
+import type { RoadState } from "@/components/waste/map-planning/use-road-geometries"
+import { RoutingAttribution } from "@/components/waste/routing/routing-attribution"
 import { baseMapById, type BaseMapId } from "@/lib/map-planning/base-maps"
 import { roadOverlay, roadOverlayPath, roadPath, type ScreenPoint } from "@/lib/map-planning/road-geometry"
 import type { LngLat, LngLatBounds } from "@waste/domain/map-planning/geo"
@@ -40,7 +41,7 @@ const FIT_MAX_ZOOM = 15
 export type RouteMapProps = {
   routes: readonly WizardRoute[]
   /** The road through each route's preview stops, by `WizardRoute.routeId`. */
-  roads: ReadonlyMap<string, RoadGeometryState>
+  roads: ReadonlyMap<string, RoadState>
   selected: string | null
   day: ServiceDay
   baseMap: BaseMapId
@@ -191,6 +192,15 @@ export function RouteMap({ routes, roads, selected, day, baseMap, bounds }: Rout
     return paths
   }, [roads, routes])
   const overlay = roadOverlay(project)
+  // Whose roads are drawn, for the attribution the provider's geometry is owed.
+  const sources = useMemo(
+    () =>
+      [...roadPaths.keys()].flatMap((routeId) => {
+        const state = roads.get(routeId)
+        return state?.status === "ready" ? [state.geometry.source] : []
+      }),
+    [roadPaths, roads],
+  )
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-muted" data-testid="wizard-route-map">
@@ -228,7 +238,7 @@ export function RouteMap({ routes, roads, selected, day, baseMap, bounds }: Rout
               const dim = selected !== null && !picked
               const width = picked ? 4.5 : 3
               const color = route.summary.color
-              const geometry = roadData ? "road" : state?.status === "failed" ? "straight" : anchors.length < 2 ? "none" : "pending"
+              const geometry = roadData ? "road" : anchors.length < 2 ? "none" : state?.status === "pending" ? "pending" : "straight"
               return (
                 <g
                   key={route.routeId}
@@ -285,6 +295,7 @@ export function RouteMap({ routes, roads, selected, day, baseMap, bounds }: Rout
             })}
         </svg>
       )}
+      <RoutingAttribution sources={sources} />
     </div>
   )
 }

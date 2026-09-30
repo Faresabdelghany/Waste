@@ -3,8 +3,9 @@
 // when the family is exhausted or its key refused. The worker writes a
 // family's row after every job that learned something of it, and reads the
 // rows back before a job so a fresh process adopts them; `GET
-// /routing/quota` reads them for the office's banner, and S5's preview writes
-// them from the API. Fenced like every table: each company sees and writes
+// /routing/quota` reads them for the office's banner, and the guided setup's
+// preview reads them and writes the directions row from the API (#173).
+// Fenced like every table: each company sees and writes
 // its own rows (the key is one account the companies share; ADR-0009).
 import type { RoutingQuotaStanding } from "@waste/domain/routing/quota"
 import { ROUTING_QUOTA_FAMILIES, type RoutingQuotaFamily } from "@waste/domain/routing/vocabulary"

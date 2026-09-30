@@ -3,23 +3,16 @@ import { describe, test } from "node:test"
 
 import { worldPoint, type LngLat } from "@waste/domain/map-planning/geo"
 import {
-  ROAD_GEOMETRY_CACHE_MAX,
   ROAD_ORIGIN,
   ROAD_REF_ZOOM,
   chevronsAlong,
-  chunkStops,
-  fetchRoadGeometry,
   localPathData,
-  osrmRouteUrl,
-  parseOsrmRoute,
-  parseRoadGeometryCache,
-  rememberRoadGeometry,
   roadGeometryKey,
+  roadGeometryOfLegs,
   roadOverlay,
   roadOverlayPath,
   roadPath,
-  serializeRoadGeometryCache,
-  type RoadGeometry,
+  type WireLeg,
 } from "../road-geometry"
 
 const stops: LngLat[] = [
@@ -33,42 +26,16 @@ const stops: LngLat[] = [
 /** A vertex between two stops, bent 50 m or so off the straight line the way a real road is. */
 const midpoint = (a: LngLat, b: LngLat): LngLat => ({ lng: (a.lng + b.lng) / 2, lat: (a.lat + b.lat) / 2 + 0.0005 })
 
-/**
- * An OSRM "route" answer for these stops: the overview geometry visits every
- * stop with one bent vertex between neighbours, the waypoints are the stops
- * themselves, and each leg is 100 m / 60 s.
- */
-function osrmAnswer(chunk: readonly LngLat[]) {
-  const coordinates: [number, number][] = []
-  chunk.forEach((stop, index) => {
-    if (index > 0) {
-      const mid = midpoint(chunk[index - 1], stop)
-      coordinates.push([mid.lng, mid.lat])
+/** The legs the API answers for these stops: one per pair, each through a bent midpoint, 100 m and 60 s. */
+const legsThrough = (points: readonly LngLat[]): WireLeg[] =>
+  points.slice(1).map((stop, index) => {
+    const mid = midpoint(points[index], stop)
+    return {
+      path: { type: "LineString", coordinates: [[points[index].lng, points[index].lat], [mid.lng, mid.lat], [stop.lng, stop.lat]] },
+      metres: 100,
+      seconds: 60,
     }
-    coordinates.push([stop.lng, stop.lat])
   })
-  return {
-    code: "Ok",
-    routes: [
-      {
-        distance: 100 * (chunk.length - 1),
-        duration: 60 * (chunk.length - 1),
-        geometry: { type: "LineString", coordinates },
-        legs: chunk.slice(1).map(() => ({ distance: 100, duration: 60 })),
-      },
-    ],
-    waypoints: chunk.map((stop) => ({ location: [stop.lng, stop.lat] })),
-  }
-}
-
-/** Reads the stops back out of a request URL. */
-function stopsInUrl(url: string): LngLat[] {
-  const path = new URL(url).pathname.split("/driving/")[1]
-  return path.split(";").map((pair) => {
-    const [lng, lat] = pair.split(",").map(Number)
-    return { lng, lat }
-  })
-}
 
 describe("roadGeometryKey", () => {
   test("the same stops give the same key, with coordinates rounded to five decimals", () => {
@@ -81,126 +48,45 @@ describe("roadGeometryKey", () => {
   })
 })
 
-describe("chunkStops", () => {
-  test("chunks share their boundary stop so the legs join up", () => {
-    assert.deepEqual(chunkStops([0, 1, 2, 3, 4, 5, 6], 3), [
-      [0, 1, 2],
-      [2, 3, 4],
-      [4, 5, 6],
+describe("roadGeometryOfLegs: the API's legs, a preview's or a Plan's, as the maps draw them (#173)", () => {
+  const source = { provider: "openrouteservice", optimised: false }
+
+  test("one leg per pair of stops, the stops where the legs meet, the totals their sums, and the source kept", () => {
+    const road = roadGeometryOfLegs(legsThrough(stops), source)
+    assert.ok(road)
+    assert.equal(road.legs.length, stops.length - 1)
+    assert.deepEqual(road.snappedStops, stops)
+    assert.deepEqual(road.legs[0][1], midpoint(stops[0], stops[1]), "a bent vertex is a road's, and stays")
+    assert.equal(road.distanceMetres, 400)
+    assert.equal(road.durationSeconds, 240)
+    assert.deepEqual(road.source, source)
+  })
+
+  test("a vertex on the straight line between its neighbours is dropped; a zero leg over a repeated stop stays one point pair", () => {
+    const straight: WireLeg = { path: { type: "LineString", coordinates: [[12.5, 55.7], [12.505, 55.7], [12.51, 55.7]] }, metres: 630, seconds: 63 }
+    const repeated: WireLeg = { path: { type: "LineString", coordinates: [[12.51, 55.7], [12.51, 55.7]] }, metres: 0, seconds: 0 }
+    const road = roadGeometryOfLegs([straight, repeated], source)
+    assert.deepEqual(road?.legs, [
+      [
+        { lng: 12.5, lat: 55.7 },
+        { lng: 12.51, lat: 55.7 },
+      ],
+      [
+        { lng: 12.51, lat: 55.7 },
+        { lng: 12.51, lat: 55.7 },
+      ],
     ])
-    assert.deepEqual(chunkStops([0, 1, 2, 3], 3), [
-      [0, 1, 2],
-      [2, 3],
-    ])
+    assert.deepEqual(road?.snappedStops.length, 3)
   })
 
-  test("a list that fits is one chunk", () => {
-    assert.deepEqual(chunkStops([0, 1, 2], 3), [[0, 1, 2]])
-    assert.deepEqual(chunkStops([0], 3), [[0]])
-  })
-})
-
-describe("osrmRouteUrl", () => {
-  test("asks the driving profile for the full GeoJSON overview without turn steps", () => {
-    assert.equal(
-      osrmRouteUrl(stops.slice(0, 2), "https://osrm.example"),
-      "https://osrm.example/route/v1/driving/12.568300,55.686700;12.572300,55.690100?overview=full&geometries=geojson&steps=false",
-    )
-  })
-})
-
-describe("parseOsrmRoute", () => {
-  test("splits the overview geometry into one leg per pair of stops at the snapped waypoints", () => {
-    const geometry = parseOsrmRoute(osrmAnswer(stops.slice(0, 3)), 3)
-    assert.equal(geometry.legs.length, 2)
-    assert.deepEqual(geometry.legs[0], [stops[0], midpoint(stops[0], stops[1]), stops[1]])
-    assert.deepEqual(geometry.legs[1], [stops[1], midpoint(stops[1], stops[2]), stops[2]])
-    assert.deepEqual(geometry.snappedStops, stops.slice(0, 3))
-    assert.equal(geometry.distanceMetres, 200)
-    assert.equal(geometry.durationSeconds, 120)
+  test("no legs is no road to draw", () => {
+    assert.equal(roadGeometryOfLegs([], source), null)
   })
 
-  test("rejects an answer that is not Ok or does not match the stops", () => {
-    assert.throws(() => parseOsrmRoute({ code: "NoRoute", routes: [] }, 2), /NoRoute/)
-    assert.throws(() => parseOsrmRoute(osrmAnswer(stops.slice(0, 3)), 4), /waypoints/)
-  })
-})
-
-describe("fetchRoadGeometry", () => {
-  test("a single stop needs no road and no request", async () => {
-    let requests = 0
-    const geometry = await fetchRoadGeometry(stops.slice(0, 1), {
-      fetch: async () => {
-        requests += 1
-        return { ok: true, status: 200, json: async () => osrmAnswer([]) }
-      },
-    })
-    assert.equal(requests, 0)
-    assert.deepEqual(geometry, { legs: [], snappedStops: stops.slice(0, 1), distanceMetres: 0, durationSeconds: 0 })
-  })
-
-  test("long routes go out in overlapping chunks and come back as one geometry", async () => {
-    const urls: string[] = []
-    const geometry = await fetchRoadGeometry(stops, {
-      chunkSize: 3,
-      fetch: async (url) => {
-        urls.push(url)
-        return { ok: true, status: 200, json: async () => osrmAnswer(stopsInUrl(url)) }
-      },
-    })
-    assert.equal(urls.length, 2)
-    assert.deepEqual(stopsInUrl(urls[0]), stops.slice(0, 3))
-    assert.deepEqual(stopsInUrl(urls[1]), stops.slice(2, 5))
-    assert.equal(geometry.legs.length, 4)
-    assert.deepEqual(geometry.snappedStops, stops)
-    assert.equal(geometry.distanceMetres, 400)
-    assert.equal(geometry.durationSeconds, 240)
-    // The path runs through every stop once, midpoints between them.
-    assert.equal(roadPath(geometry).length, 9)
-    assert.deepEqual(roadPath(geometry)[4], stops[2])
-  })
-
-  test("a failed request rejects instead of inventing a road", async () => {
-    await assert.rejects(
-      fetchRoadGeometry(stops.slice(0, 2), {
-        fetch: async () => ({ ok: false, status: 429, json: async () => ({}) }),
-      }),
-      /429/,
-    )
-  })
-})
-
-describe("road geometry cache", () => {
-  const geometry: RoadGeometry = {
-    legs: [[stops[0], stops[1]]],
-    snappedStops: stops.slice(0, 2),
-    distanceMetres: 100,
-    durationSeconds: 60,
-  }
-
-  test("nothing stored, or garbage, is an empty cache", () => {
-    assert.equal(parseRoadGeometryCache(null).size, 0)
-    assert.equal(parseRoadGeometryCache("not json").size, 0)
-    assert.equal(parseRoadGeometryCache(JSON.stringify({ entries: "nope" })).size, 0)
-  })
-
-  test("a serialized cache round-trips in insertion order", () => {
-    const cache = new Map<string, RoadGeometry>()
-    rememberRoadGeometry(cache, "a", geometry)
-    rememberRoadGeometry(cache, "b", { ...geometry, distanceMetres: 200 })
-    const parsed = parseRoadGeometryCache(serializeRoadGeometryCache(cache))
-    assert.deepEqual([...parsed.keys()], ["a", "b"])
-    assert.deepEqual(parsed.get("b"), { ...geometry, distanceMetres: 200 })
-  })
-
-  test("remembering a key again moves it to the end, and the oldest key is evicted past the cap", () => {
-    const cache = new Map<string, RoadGeometry>()
-    rememberRoadGeometry(cache, "a", geometry, 2)
-    rememberRoadGeometry(cache, "b", geometry, 2)
-    rememberRoadGeometry(cache, "a", geometry, 2)
-    rememberRoadGeometry(cache, "c", geometry, 2)
-    assert.deepEqual([...cache.keys()], ["a", "c"])
-    assert.ok(ROAD_GEOMETRY_CACHE_MAX >= 100)
+  test("roadPath joins the legs, each joint vertex once", () => {
+    const road = roadGeometryOfLegs(legsThrough(stops.slice(0, 3)), source)
+    assert.ok(road)
+    assert.deepEqual(roadPath(road), [stops[0], midpoint(stops[0], stops[1]), stops[1], midpoint(stops[1], stops[2]), stops[2]])
   })
 })
 

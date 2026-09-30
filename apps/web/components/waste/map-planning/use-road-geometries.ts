@@ -1,63 +1,65 @@
 "use client"
 
-// Road geometry for the routes on the map (2026-09-16). Every drawn route
-// with two or more located stops asks lib/map-planning/road-geometry for the
-// road through them, a few requests at a time; answers are remembered for
-// the session and in the browser, a refusal is remembered for the session
-// so the demo server is not hammered, and a route whose road is pending or
-// refused is drawn straight and dashed by the map. Keyed by the stop
-// sequence, so two routes over the same stops share one request — and the
-// planning map's dated routes and the guided setup's drafted routes (Issue
-// #39) share one cache, since both are just stops in order. The cache itself
-// — one request per key however many consumers hold it, the abort when the
-// last one lets go, deferred a tick past React's development double-mount —
-// is lib/map-planning/road-geometry-cache.ts, tested there without React;
-// this hook holds the module's one instance for as long as it is mounted
-// with the routes it was given, and redraws when a road it asked for lands.
+// The road through each drafted route's stops, for the guided setup's step 4
+// (Issue #39; through the API since #173). Every route with two or more
+// located stops asks `POST /routing/preview` for the road through them, a
+// few requests at a time, and what the API answers — the road, or its
+// estimate and why — is the session's, kept by
+// lib/map-planning/road-geometry-cache.ts, whose one instance this hook
+// holds for as long as it is mounted with the routes it was given; keyed by
+// the stop sequence, so two routes over the same stops share one request.
+// Without the API — fixture mode, local development, the fixture e2e — no
+// road is asked for anywhere: every route reads `off`, drawn straight and
+// dashed beside the prototype's estimate. The provider's key stays on the
+// server, and no road request leaves the browser for anyone but the API.
+// A dated Route's road is its active Plan's (use-plan-legs.ts), never this.
 
 import { useEffect, useMemo, useState } from "react"
 
+import type { Position2D } from "@waste/contracts/geojson"
 import type { LngLat } from "@waste/domain/map-planning/geo"
-import {
-  fetchRoadGeometry,
-  parseRoadGeometryCache,
-  roadGeometryKey,
-  serializeRoadGeometryCache,
-  type RoadGeometry,
-} from "@/lib/map-planning/road-geometry"
-import { createRoadGeometryCache, type RoadGeometryState } from "@/lib/map-planning/road-geometry-cache"
-import { readPersisted, ROAD_GEOMETRY_STORAGE_KEY } from "@/lib/storage-keys"
+import { useApiClient } from "@/components/waste/api-session-store"
+import type { ApiClient } from "@/lib/api/client"
+import { previewRoad } from "@/lib/api/routing"
+import { roadGeometryKey, roadGeometryOfLegs, type RoadGeometry } from "@/lib/map-planning/road-geometry"
+import { createRoadGeometryCache, type RoadAnswer, type RoadGeometryState } from "@/lib/map-planning/road-geometry-cache"
+import { persistedKeys, ROAD_GEOMETRY_STORAGE_KEY } from "@/lib/storage-keys"
 
 export type { RoadGeometryState } from "@/lib/map-planning/road-geometry-cache"
 
-/** Anything the road is asked for: a dated route's located stops, or a drafted route's preview stops. */
+/** A route's road: what the session knows of it, or `off` where no API is there to ask. */
+export type RoadState = RoadGeometryState | { status: "off" }
+
+/** Anything the road is asked for: a drafted route's preview stops. */
 export type RoadRoute = { id: string; stops: readonly { lngLat: LngLat }[] }
 
-/** The session's roads: seeded from the browser's store on the first mount, written back as each road lands. */
-const memory = new Map<string, RoadGeometry>()
-let hydrated = false
+/** The client the next request goes out with: the hook sets it before each hold, since a token refresh replaces it. */
+let client: ApiClient | null = null
 
-const roads = createRoadGeometryCache({
-  fetchRoad: (stops, signal) => fetchRoadGeometry(stops, { signal }),
-  memory,
-  onRemembered: (remembered) => {
-    try {
-      globalThis.localStorage?.setItem(ROAD_GEOMETRY_STORAGE_KEY, serializeRoadGeometryCache(remembered))
-    } catch {
-      // Storage full or blocked — the session cache still works.
-    }
-  },
-})
+const position = ({ lng, lat }: LngLat): Position2D => [lng, lat]
 
-/** Reads the browser's store into the session once. In an effect, never in render: readPersisted may move a legacy key. */
-function hydrate(): void {
-  if (hydrated) return
-  hydrated = true
+/** One preview, as the cache takes it: the road, or the estimate and why. */
+async function askPreview(stops: readonly LngLat[], signal: AbortSignal): Promise<RoadAnswer> {
+  if (client === null) throw new Error("no API to ask for the road")
+  const answer = await previewRoad(client, stops.map(position), signal)
+  if (answer.basis === "estimate") return { kind: "estimate", resumesAt: answer.resumesAt, reason: answer.reason }
+  const geometry = roadGeometryOfLegs(answer.legs, { provider: answer.provider, optimised: false })
+  if (geometry === null) return { kind: "estimate", resumesAt: null, reason: "the routing provider answered no road" }
+  return { kind: "road", geometry }
+}
+
+const roads = createRoadGeometryCache({ fetchRoad: askPreview })
+
+let forgotten = false
+
+/** Removes the roads the maps kept in the browser from the OSRM demo server before #173, once a session. In an effect, never in render. */
+export function forgetStoredRoads(): void {
+  if (forgotten) return
+  forgotten = true
   try {
-    const cached = parseRoadGeometryCache(readPersisted(globalThis.localStorage, ROAD_GEOMETRY_STORAGE_KEY))
-    for (const [key, geometry] of cached) memory.set(key, geometry)
+    for (const key of persistedKeys(ROAD_GEOMETRY_STORAGE_KEY)) globalThis.localStorage?.removeItem(key)
   } catch {
-    // No storage — the session cache still works.
+    // No storage, or a blocked one: nothing is read from it either way.
   }
 }
 
@@ -67,10 +69,13 @@ const noRoad = (stops: readonly LngLat[]): RoadGeometry => ({
   snappedStops: [...stops],
   distanceMetres: 0,
   durationSeconds: 0,
+  source: { provider: "none", optimised: false },
 })
 
-export function useRoadGeometries(routes: readonly RoadRoute[]): ReadonlyMap<string, RoadGeometryState> {
+export function useRoadGeometries(routes: readonly RoadRoute[]): ReadonlyMap<string, RoadState> {
+  const current = useApiClient()
   const [version, setVersion] = useState(0)
+  const [recheck, setRecheck] = useState(0)
 
   const wanted = useMemo(() => {
     const byKey = new Map<string, readonly LngLat[]>()
@@ -84,24 +89,48 @@ export function useRoadGeometries(routes: readonly RoadRoute[]): ReadonlyMap<str
 
   // Hold the wanted roads while these routes are shown; the release on the
   // way out lets the cache abort a request nobody else holds. A road settled
-  // by the time the hold is taken — hydrated, or landed between render and
-  // effect — is redrawn once here, since the hold will not report it.
+  // by the time the hold is taken — landed between render and effect — is
+  // redrawn once here, since the hold will not report it. Held again when an
+  // answer that stood for now stops standing (`recheck`, below).
   useEffect(() => {
-    const bump = () => setVersion((current) => current + 1)
-    hydrate()
+    forgetStoredRoads()
+    void recheck
+    if (current === null) return
+    client = current
+    const bump = () => setVersion((count) => count + 1)
     const release = roads.hold(wanted, bump)
     if ([...wanted.keys()].some((key) => roads.stateOf(key).status !== "pending")) bump()
     return release
-  }, [wanted])
+  }, [current, recheck, wanted])
 
-  return useMemo(() => {
+  const states = useMemo(() => {
     void version
+    void recheck
     return new Map(
-      routes.map((route): [string, RoadGeometryState] => {
+      routes.map((route): [string, RoadState] => {
         const stops = route.stops.map((stop) => stop.lngLat)
         if (stops.length < 2) return [route.id, { status: "ready", geometry: noRoad(stops) }]
+        if (current === null) return [route.id, { status: "off" }]
         return [route.id, roads.stateOf(roadGeometryKey(stops))]
       }),
     )
-  }, [routes, version])
+  }, [current, recheck, routes, version])
+
+  // An estimate stands until the quota resumes and a failed request for a
+  // minute: hold again once the first of them stops standing, so its road is
+  // asked for then without the person changing day.
+  const recheckAt = useMemo(() => {
+    let earliest = Number.POSITIVE_INFINITY
+    for (const state of states.values()) {
+      if (state.status === "estimate" || state.status === "failed") earliest = Math.min(earliest, state.standsUntil)
+    }
+    return earliest
+  }, [states])
+  useEffect(() => {
+    if (!Number.isFinite(recheckAt)) return
+    const timer = setTimeout(() => setRecheck((count) => count + 1), Math.max(0, recheckAt - Date.now()) + 50)
+    return () => clearTimeout(timer)
+  }, [recheckAt])
+
+  return states
 }

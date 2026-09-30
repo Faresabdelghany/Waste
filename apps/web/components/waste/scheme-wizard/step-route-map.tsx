@@ -4,15 +4,17 @@
 // card per route with its verdict, and the map. Since Issue #39 the map is
 // the planning map's kind: each route's stops placed the way the planning map
 // places containers, the depot and the station where the registry puts them,
-// and the line between them the road a routing engine answered with, fetched
-// through the same hook and cache as the planning map's dated routes. Every
-// number says what it is: a route whose road is known shows the routed
-// distance and the drive time plus the catalogue's emptying times plus the
-// closeout generation allows past the last stop (Road); a route still
-// waiting for the road, or refused one, shows the prototype's heuristic
-// (Estimate). The stop order is generation's — the optimiser is
-// a later job (ADR-0002) — and the footer says so. Regenerate re-stamps the
-// numbers. There is no in-wizard route editing yet, so there is no "keep
+// and the line between them the road the routing provider answered through
+// the API's preview (#173, use-road-geometries.ts). Every number says what it
+// is: a route whose road is known shows the routed distance and the drive
+// time plus the catalogue's emptying times plus the closeout generation
+// allows past the last stop (Road); a route still waiting for the road, or
+// without one — the quota spent until a time, the road unavailable, no API
+// in this mode — shows the prototype's heuristic (Estimate) and says why.
+// The routing banner stands under the map while the provider's quota is
+// spent or its key refused. The stop order is generation's — the optimiser
+// is a later job (ADR-0002) — and the footer says so. Regenerate re-stamps
+// the numbers. There is no in-wizard route editing yet, so there is no "keep
 // edited routes" switch and no Edited lock — nothing to protect.
 
 import { useMemo, useState } from "react"
@@ -21,11 +23,14 @@ import { useTheme } from "next-themes"
 import { Factory, RefreshCw, Warehouse } from "lucide-react"
 
 import { useRoadGeometries } from "@/components/waste/map-planning/use-road-geometries"
+import { RoutingQuotaBanner } from "@/components/waste/routing/routing-quota-banner"
+import { useMinuteClock } from "@/components/waste/routing/use-routing-quota"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { defaultBaseMapForTheme } from "@/lib/map-planning/base-maps"
+import { previewBasisLabel } from "@/lib/routing/readings"
 import { previewsBounds } from "@waste/domain/map-planning/route-preview"
 import {
   ROUTE_ESTIMATE_STATUS_LABELS,
@@ -79,6 +84,7 @@ export function StepRouteMap({
   const day = dayState && days.includes(dayState) ? dayState : days[0]
   const [selected, setSelected] = useState<string | null>(null)
   const [regeneratedAt, setRegeneratedAt] = useState<Date | null>(null)
+  const now = useMinuteClock()
   const { resolvedTheme } = useTheme()
   const baseMap = defaultBaseMapForTheme(resolvedTheme === "dark" ? "dark" : "light")
 
@@ -189,14 +195,8 @@ export function StepRouteMap({
                       <span>
                         {route.loadT} t / {route.estimate.capacityT} t
                       </span>
-                      <span data-testid="route-basis">
-                        {route.estimate.basis === "road"
-                          ? routeEstimateAdapter.labels.road
-                          : roadState?.status === "failed"
-                            ? `${routeEstimateAdapter.labels.estimate} · road unavailable`
-                            : route.preview.stops.length < 2
-                              ? routeEstimateAdapter.labels.estimate
-                              : `${routeEstimateAdapter.labels.estimate} · road loading`}
+                      <span data-testid="route-basis" title={roadState?.status === "estimate" ? roadState.reason : undefined}>
+                        {previewBasisLabel(roadState, { roadBasis: route.estimate.basis === "road", stops: route.preview.stops.length, now })}
                       </span>
                     </div>
                   </button>
@@ -226,6 +226,7 @@ export function StepRouteMap({
           <div className="h-[400px]">
             <RouteMap routes={routes} roads={roadStates} selected={selected} day={day} baseMap={baseMap} bounds={bounds} />
           </div>
+          <RoutingQuotaBanner className="border-t border-border" />
           <div className="flex min-h-10 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-border px-4 py-2 text-xs text-muted-foreground">
             <span className="flex items-center gap-4">
               <span className="inline-flex items-center gap-1">
