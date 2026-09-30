@@ -3,6 +3,7 @@ import { Suspense } from "react"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { BusinessWorkspace } from "@/components/waste/business-workspace"
+import { RoutingQuotaBanner } from "@/components/waste/routing/routing-quota-banner"
 import type { WorkspaceId } from "@/lib/data/business-modules"
 
 const publicModuleIdsByWorkspace: Partial<
@@ -31,6 +32,8 @@ export function WorkspacePageShell({
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
+        {/* Route Studio's one routing banner, while the provider's quota is spent or its key refused (#173, #132 §5); it renders nothing otherwise. */}
+        {workspaceId === "route-studio" && <RoutingQuotaBanner className="border-b border-border" />}
         {/* Suspense above useSearchParams: under Cache Components the URL is request
             data, so the workspace streams in after the static shell. */}
         <Suspense fallback={null}>

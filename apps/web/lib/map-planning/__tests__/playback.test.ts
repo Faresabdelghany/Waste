@@ -27,6 +27,7 @@ const geometry: RoadGeometry = {
   snappedStops: stops,
   distanceMetres: 0,
   durationSeconds: 0,
+  source: { provider: "fake", optimised: false },
 }
 
 const rounded = (point: LngLat) => ({ lng: Number(point.lng.toFixed(5)), lat: Number(point.lat.toFixed(5)) })

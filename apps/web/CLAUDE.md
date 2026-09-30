@@ -37,7 +37,7 @@ The Next.js App Router prototype (TypeScript, Tailwind CSS v4, shadcn/ui). Recor
 
 - MapLibre's tile worker is served by `app/maplibre/[version]/[asset]/route.ts`, because Turbopack breaks its module-worker URL; keep `setWorkerUrl` pointed there. Camera moves jump instantly until a style has loaded.
 - Maps are north-up and flat: the road overlay's transform assumes it, so rotation and pitch stay disabled.
-- Roads come from the public OSRM demo server (no SLA, prototype only; the target is self-hosted Valhalla, ADR-0002) through `lib/map-planning/road-geometry-cache.ts`. E2E tests stub OSRM per test.
+- Roads come through the API alone; the provider's key never reaches the browser (#173). Step 4 of the guided setup asks `POST /routing/preview` (`use-road-geometries.ts` over `lib/map-planning/road-geometry-cache.ts`). A dated route's line is its active Plan's legs (`use-plan-legs.ts`, `GET /plans/:id` only for a route the map draws), and every per-route reading comes from the record's `activePlan` (`ROUTE_ACTIVE_PLAN_KEY`, `lib/map-planning/plan-readings.ts`). Without the API no road is asked for and every line is the dashed estimate. A map drawing provider geometry shows `RoutingAttribution`. Route Studio and step 4 show the routing banner from `GET /routing/quota`. The sentences live in `lib/routing/readings.ts`.
 - The planning questions — what a selection holds, coverage, routes, scheme comparison — are answered by `@waste/domain/map-planning/*`. They cannot see the records, so every call that places a record takes the gazetteer as an argument: `FIXTURE_GAZETTEER`, which `@waste/domain/fixtures/gazetteer` holds beside the seeded registry's generator and `lib/data/street-gazetteer.ts` re-exports.
 
 ## Next.js

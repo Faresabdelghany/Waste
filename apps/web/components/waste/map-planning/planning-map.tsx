@@ -836,7 +836,7 @@ function ShapesOverlay({
               key={route.id}
               data-route-line={route.id}
               data-route-status={route.bucket}
-              data-route-geometry={roadData ? "road" : state?.status === "failed" ? "straight" : "pending"}
+              data-route-geometry={roadData ? "road" : state?.status === "pending" ? "pending" : "straight"}
               data-highlighted={highlighted ? "true" : undefined}
               opacity={faded ? 0.3 : 1}
             >

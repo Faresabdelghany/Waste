@@ -2,20 +2,24 @@
 // sequence however many consumers hold it, a few on their way at once, the
 // abandon deferred a tick so a release-and-hold in one tick (React's
 // development double-mount) aborts nothing, and what each outcome leaves
-// behind — a road landed is remembered, a refusal is remembered, an abort is
-// remembered as nothing. The fetcher and the tick are the test's own.
+// behind — a road landed is remembered, an estimate until the quota resumes,
+// a refusal for the session, an abort as nothing (#173). The fetcher, the
+// tick and the clock are the test's own.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { LngLat } from "@waste/domain/map-planning/geo"
 
-import { createRoadGeometryCache, type Defer } from "../road-geometry-cache"
+import { createRoadGeometryCache, ESTIMATE_RECHECK_MS, ROAD_MEMORY_MAX, type Defer, type RoadAnswer } from "../road-geometry-cache"
 import type { RoadGeometry } from "../road-geometry"
 
 type Call = {
   stops: readonly LngLat[]
   signal: AbortSignal
+  /** Answers the road. */
   resolve: (geometry: RoadGeometry) => void
+  /** Answers the API's estimate: no road for now. */
+  estimate: (resumesAt: string | null, reason: string) => void
   reject: (reason?: unknown) => void
 }
 
@@ -23,8 +27,8 @@ type Call = {
 function fakeFetcher() {
   const calls: Call[] = []
   const fetchRoad = (stops: readonly LngLat[], signal: AbortSignal) =>
-    new Promise<RoadGeometry>((resolve, reject) => {
-      calls.push({ stops, signal, resolve, reject })
+    new Promise<RoadAnswer>((resolve, reject) => {
+      calls.push({ stops, signal, resolve: (geometry) => resolve({ kind: "road", geometry }), estimate: (resumesAt, reason) => resolve({ kind: "estimate", resumesAt, reason }), reject })
       signal.addEventListener("abort", () => reject(signal.reason ?? new Error("aborted")))
     })
   return { calls, fetchRoad }
@@ -52,6 +56,7 @@ const road = (metres: number): RoadGeometry => ({
   snappedStops: [{ lng: 12.5, lat: 55.6 }, { lng: 12.6, lat: 55.7 }],
   distanceMetres: metres,
   durationSeconds: metres / 10,
+  source: { provider: "fake", optimised: false },
 })
 
 const stopsOf = (n: number): LngLat[] => [{ lng: 12.5 + n, lat: 55.6 }, { lng: 12.6 + n, lat: 55.7 }]
@@ -124,12 +129,8 @@ describe("createRoadGeometryCache", () => {
 
   test("a road that lands is remembered and reported; a hold on it afterwards fetches nothing", async () => {
     const { calls, fetchRoad } = fakeFetcher()
-    const remembered: string[][] = []
-    const cache = createRoadGeometryCache({
-      fetchRoad,
-      defer: manualTick().defer,
-      onRemembered: (memory) => remembered.push([...memory.keys()]),
-    })
+    const memory = new Map<string, RoadGeometry>()
+    const cache = createRoadGeometryCache({ fetchRoad, memory, defer: manualTick().defer })
     let told = 0
     cache.hold(wanted("a"), () => {
       told += 1
@@ -137,7 +138,7 @@ describe("createRoadGeometryCache", () => {
     calls[0].resolve(road(500))
     await settled()
     assert.equal(told, 1)
-    assert.deepEqual(remembered, [["a"]])
+    assert.deepEqual([...memory.keys()], ["a"])
 
     cache.hold(wanted("a"), () => {})
     assert.equal(calls.length, 1, "known roads are not asked for again")
@@ -152,7 +153,7 @@ describe("createRoadGeometryCache", () => {
     cache.hold(wanted("a"), () => {
       told += 1
     })
-    calls[0].reject(new Error("OSRM answered NoRoute"))
+    calls[0].reject(new Error("The routing provider did not answer"))
     await settled()
     assert.deepEqual(cache.stateOf("a"), { status: "failed" })
     assert.equal(told, 1, "the consumer is told of the refusal")
@@ -237,6 +238,55 @@ describe("createRoadGeometryCache", () => {
     assert.deepEqual(cache.stateOf("a"), { status: "ready", geometry: road(7) })
     cache.hold(wanted("a"), () => {})
     assert.equal(calls.length, 0)
+  })
+
+  test("an estimate stands until the quota resumes, then the next hold asks again; the consumer is told of it", async () => {
+    const { calls, fetchRoad } = fakeFetcher()
+    const clock = { now: Date.parse("2026-10-01T12:00:00.000Z") }
+    const cache = createRoadGeometryCache({ fetchRoad, defer: manualTick().defer, now: () => clock.now })
+    let told = 0
+    cache.hold(wanted("a"), () => {
+      told += 1
+    })
+    calls[0].estimate("2026-10-01T14:32:00.000Z", "the routing provider's directions quota is spent")
+    await settled()
+    assert.equal(told, 1)
+    assert.deepEqual(cache.stateOf("a"), { status: "estimate", resumesAt: "2026-10-01T14:32:00.000Z", reason: "the routing provider's directions quota is spent" })
+    cache.hold(wanted("a"), () => {})
+    assert.equal(calls.length, 1, "no road until the quota resumes: nothing asked")
+    clock.now = Date.parse("2026-10-01T14:32:00.000Z")
+    assert.deepEqual(cache.stateOf("a"), { status: "pending" }, "the estimate no longer stands")
+    cache.hold(wanted("a"), () => {})
+    assert.equal(calls.length, 2, "and the next hold asks again")
+  })
+
+  test("an estimate that names no resumption stands a few minutes, then is asked again", async () => {
+    const { calls, fetchRoad } = fakeFetcher()
+    const clock = { now: 0 }
+    const cache = createRoadGeometryCache({ fetchRoad, defer: manualTick().defer, now: () => clock.now })
+    cache.hold(wanted("a"), () => {})
+    calls[0].estimate(null, "the routing provider refused the key")
+    await settled()
+    assert.equal(cache.stateOf("a").status, "estimate")
+    clock.now = ESTIMATE_RECHECK_MS - 1
+    cache.hold(wanted("a"), () => {})
+    assert.equal(calls.length, 1)
+    clock.now = ESTIMATE_RECHECK_MS
+    cache.hold(wanted("a"), () => {})
+    assert.equal(calls.length, 2)
+  })
+
+  test("the session's roads are capped, the oldest forgotten first", async () => {
+    const memory = new Map<string, RoadGeometry>()
+    for (let entry = 0; entry < ROAD_MEMORY_MAX; entry += 1) memory.set(`known-${entry}`, road(entry))
+    const { calls, fetchRoad } = fakeFetcher()
+    const cache = createRoadGeometryCache({ fetchRoad, memory, defer: manualTick().defer })
+    cache.hold(wanted("a"), () => {})
+    calls[0].resolve(road(1))
+    await settled()
+    assert.equal(memory.size, ROAD_MEMORY_MAX)
+    assert.equal(memory.has("known-0"), false)
+    assert.deepEqual([...memory.keys()].at(-1), "a")
   })
 
   test("a fetcher that throws counts as a refusal, not a crash", async () => {
