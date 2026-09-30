@@ -26,7 +26,10 @@
 // named by id where 0006 had a token), the manual alternative a list of
 // containers in stop order. Both are sets and are replaced whole through their
 // own routes; a group's patch moves its name, order, days and provider and
-// never its source, its rule or its list. The implicit group of a scheme
+// never its source, its rule or its list. A scheme's patch may carry its
+// groups whole instead (#205), each entry the create's group with the id it
+// restates, so the scheme and its groups move in one request that the route
+// holds once, on the state they leave behind. The implicit group of a scheme
 // without explicit groups is a row the server writes:
 // `RouteSchemeCreate.collectionGroups` has at least one entry, and the quick
 // form's one rule becomes that one group. Fractions are the group's and
@@ -159,23 +162,35 @@ export function oneWayToFindStopsGiven(body: StopsGiven): boolean {
   return body.stopSource === "rule" ? byRule && !byContainers : byContainers && !byRule
 }
 
+/** A group as a body spells it whole: what a create writes, and what an entry of a scheme's patch says the group now is. */
+const collectionGroupBody = {
+  name: Label,
+  position: Ordinal.optional().describe("Where the group stands among the scheme's; after the last when absent."),
+  days: ServiceDays,
+  stopSource: StopSource,
+  rule: StopMatchingRule.nullable().optional(),
+  containerIds: ContainerIds.nullable().optional(),
+  serviceProviderId: Id.nullable().optional(),
+  /** A powered vehicle of the scheme's project (Issue #101). */
+  vehicleId: Id.nullable().optional(),
+  /** A driver of the scheme's project who may take the vehicle, judged on the scheme's start or today, whichever is later (Issue #101). */
+  driverId: Id.nullable().optional(),
+}
+
 /** The scheme is the path's and the project the scheme's, so neither is here; the position is appended when absent. */
-export const CollectionGroupCreate = z
-  .strictObject({
-    name: Label,
-    position: Ordinal.optional().describe("Where the group stands among the scheme's; after the last when absent."),
-    days: ServiceDays,
-    stopSource: StopSource,
-    rule: StopMatchingRule.nullable().optional(),
-    containerIds: ContainerIds.nullable().optional(),
-    serviceProviderId: Id.nullable().optional(),
-    /** A powered vehicle of the scheme's project (Issue #101). */
-    vehicleId: Id.nullable().optional(),
-    /** A driver of the scheme's project who may take the vehicle, judged on the scheme's start or today, whichever is later (Issue #101). */
-    driverId: Id.nullable().optional(),
-  })
-  .refine(oneWayToFindStopsGiven, oneWayToFindStops)
+export const CollectionGroupCreate = z.strictObject(collectionGroupBody).refine(oneWayToFindStopsGiven, oneWayToFindStops)
 export type CollectionGroupCreate = z.infer<typeof CollectionGroupCreate>
+
+/**
+ * One entry of a scheme patch's `collectionGroups` (#205): the group whole, as
+ * the create spells it, with the id of the scheme's group it restates, or no
+ * id for a group the edit adds. A group keeps its source for life, which the
+ * route holds against the stored one.
+ */
+export const CollectionGroupEntry = z
+  .strictObject({ id: Id.optional().describe("The scheme's group this entry restates; absent for a group the edit adds."), ...collectionGroupBody })
+  .refine(oneWayToFindStopsGiven, oneWayToFindStops)
+export type CollectionGroupEntry = z.infer<typeof CollectionGroupEntry>
 
 /** The name, the order, the days, the provider, the vehicle and the driver; the source, the rule and the list never move through a patch. */
 export const CollectionGroupPatch = z
@@ -257,6 +272,29 @@ export const SchemeGeneration = z.object({
 })
 export type SchemeGeneration = z.infer<typeof SchemeGeneration>
 
+/** What a patch naming one of the scheme's groups in two entries is told, at the list. */
+export const EACH_GROUP_ONCE = eachOnceSentence("collection group", "an entry is the whole group")
+const eachGroupOnce = { message: EACH_GROUP_ONCE, path: ["collectionGroups"] }
+
+/** No two entries of a patch name one group; an entry without an id is a new group, and a half-seen list is not judged. */
+const groupIdsOnce = (body: { collectionGroups?: unknown }): boolean =>
+  !Array.isArray(body.collectionGroups) ||
+  eachOnce(
+    body.collectionGroups.filter((group: { id?: unknown }) => group?.id !== undefined),
+    (group: { id?: unknown }) => group.id,
+  )
+
+/** Every group's days lie within the service days, refused at that group's days; zod 4 runs a check on a body whose fields failed, and a patch carrying one half leaves the pair to the route, so a half-seen pair is not judged. */
+const groupsWithinServiceDays = (body: { serviceDays?: unknown; collectionGroups?: unknown }, ctx: z.RefinementCtx) => {
+  const { serviceDays, collectionGroups } = body
+  if (!Array.isArray(serviceDays) || !Array.isArray(collectionGroups)) return
+  collectionGroups.forEach((group: { days?: unknown }, n) => {
+    if (Array.isArray(group?.days) && !withinServiceDays(serviceDays, group.days)) {
+      ctx.addIssue({ code: "custom", message: OUTSIDE_SERVICE_DAYS, path: ["collectionGroups", n, "days"] })
+    }
+  })
+}
+
 const RouteSchemeFields = {
   ...stamped,
   projectId: Id,
@@ -318,22 +356,18 @@ export const RouteSchemeCreate = z
   .refine((body) => weekRotationShape({ ...body, weekRotation: body.weekRotation ?? null }), weekRotationWithFortnightly)
   .refine(dailyServesEveryDay, dailyServesEveryDayIssue)
   .refine(groupNamesOnce, eachGroupNameOnce)
-  .superRefine((body, ctx) => {
-    // zod 4 runs a check on a body whose fields failed, so a half-seen pair is not judged here either.
-    if (!Array.isArray(body.serviceDays) || !Array.isArray(body.collectionGroups)) return
-    body.collectionGroups.forEach((group, n) => {
-      if (Array.isArray(group?.days) && !withinServiceDays(body.serviceDays, group.days)) {
-        ctx.addIssue({ code: "custom", message: OUTSIDE_SERVICE_DAYS, path: ["collectionGroups", n, "days"] })
-      }
-    })
-  })
+  .superRefine(groupsWithinServiceDays)
 export type RouteSchemeCreate = z.infer<typeof RouteSchemeCreate>
 
 /**
- * Everything but the project, the groups and the stamps. The two recurrence
- * rules are held here where the patch carries both halves; the route holds
- * them against the stored row otherwise, and holds every group's days within
- * new service days.
+ * Everything but the project and the stamps. The two recurrence rules are
+ * held here where the patch carries both halves; the route holds them
+ * against the stored row otherwise, and holds every group's days within new
+ * service days. `collectionGroups` (#205) is the scheme's groups whole, so an
+ * edit that moves the scheme and its groups together is one request: an
+ * entry with an id restates that group, one without adds a group, and a
+ * group the list leaves out is parked, since there is no delete. Its bounds
+ * are the create's, each group once by name and by id.
  */
 export const RouteSchemePatch = z
   .strictObject({
@@ -355,11 +389,16 @@ export const RouteSchemePatch = z
     validFrom: IsoDate.optional(),
     /** Null reopens the period; a day ends it. */
     validTo: IsoDate.nullable().optional(),
+    /** The scheme's groups as the edit leaves them (#205); absent, the groups stay as they are. */
+    collectionGroups: z.array(CollectionGroupEntry).min(1).max(GROUPS_MAX, AT_MOST_GROUPS).optional(),
   })
   .refine(changesSomething, somethingToChange)
   .refine(validityOrdered, endsAfterItStarts)
   .refine(weekRotationShape, weekRotationWithFortnightly)
   .refine(dailyServesEveryDay, dailyServesEveryDayIssue)
+  .refine(groupNamesOnce, eachGroupNameOnce)
+  .refine(groupIdsOnce, eachGroupOnce)
+  .superRefine(groupsWithinServiceDays)
 export type RouteSchemePatch = z.infer<typeof RouteSchemePatch>
 
 /** A page of schemes: one project's, one planning area's, by status, by whether the nightly job plans them, in force on a day. */

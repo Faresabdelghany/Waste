@@ -487,13 +487,14 @@ describe("the route scheme endpoints", { skip: database.skip }, () => {
       assert.equal(shortened.validTo, APRIL, "shortening the period is free")
     })
 
-    test("refuses another company's scheme, an empty patch, the groups, and a role that may view but not edit", async () => {
+    test("refuses another company's scheme, an empty patch, an empty list of groups, and a role that may view but not edit", async () => {
       await refused(await olivia(`/route-schemes/${theirScheme.id}`, { method: "PATCH", body: { name: "Mine now" } }), 404)
       assert.equal((await one(other, theirScheme.id)).name, "Theirs")
       const created = await scheme("Untouched")
       assert.deepEqual((await refused(await olivia(`/route-schemes/${created.id}`, { method: "PATCH", body: {} }), 400)).errors?.map((error) => error.path), [""])
+      // The groups are patched whole since #205 (scheme-edit.test.ts), and a scheme keeps at least one.
       const groups = await refused(await olivia(`/route-schemes/${created.id}`, { method: "PATCH", body: { collectionGroups: [] } }), 400)
-      assert.ok(groups.errors?.some((error) => /collectionGroups/.test(error.message)), JSON.stringify(groups.errors))
+      assert.deepEqual(groups.errors?.map((error) => error.path), ["collectionGroups"], JSON.stringify(groups.errors))
       assert.match((await refused(await lars(`/route-schemes/${created.id}`, { method: "PATCH", body: { name: "Lars" } }), 403)).detail ?? "", /edit on route-studio\.schemes/)
     })
   })

@@ -14,6 +14,7 @@ import {
   EACH_CONTAINER_ONCE,
   EACH_FRACTION_ONCE,
   EACH_GROUP_NAME_ONCE,
+  EACH_GROUP_ONCE,
   GROUPS_MAX,
   Occurrence,
   OccurrenceQuery,
@@ -294,11 +295,11 @@ describe("RouteSchemeCreate", () => {
 })
 
 describe("RouteSchemePatch", () => {
-  test("changes everything but the project, the groups and the stamps", () => {
+  test("changes everything but the project and the stamps", () => {
     const patch = { name: "Residual, twice weekly", planningAreaId: null, serviceType: "kerbside-collection", plannedStartTime: "07:00", holidayPolicy: "collect", editPolicy: "future", planAhead: false, status: "validated", validFrom: "2026-02-01", validTo: null }
     assert.deepEqual(RouteSchemePatch.parse(patch), patch)
     refusesAnEmptyPatch(RouteSchemePatch)
-    for (const key of ["projectId", "collectionGroups", "id", "updatedAt"]) {
+    for (const key of ["projectId", "id", "createdAt", "updatedAt"]) {
       assert.match(refusal(RouteSchemePatch.safeParse({ name: "x", [key]: "y" }))[0].message, new RegExp(key))
     }
   })
@@ -312,6 +313,46 @@ describe("RouteSchemePatch", () => {
     assert.deepEqual(RouteSchemePatch.parse({ frequency: "daily" }), { frequency: "daily" })
     assert.deepEqual(refusal(RouteSchemePatch.safeParse({ validFrom: "2026-02-01", validTo: "2026-01-01" })), [{ path: "validTo", message: BACKWARDS }])
     assert.deepEqual(refusal(RouteSchemePatch.safeParse({ serviceDays: [] })).map((issue) => issue.path), ["serviceDays"])
+  })
+})
+
+describe("RouteSchemePatch's collection groups (#205)", () => {
+  /** A group the scheme has, named by its id. */
+  const kept = { id: ID, name: "Rear loaders", days: ["monday", "thursday"], stopSource: "rule", rule: { wasteFractionIds: [THIRD], containerTypeIds: [], vehicleTypeId: null }, vehicleId: FOURTH }
+  /** A group the edit adds: no id. */
+  const added = { name: "By hand", days: ["monday"], stopSource: "manual", containerIds: [THIRD] }
+
+  test("takes the scheme's groups whole, an entry with an id the group it names and one without a new group, and the list alone is a change", () => {
+    assert.deepEqual(RouteSchemePatch.parse({ collectionGroups: [kept, added] }), { collectionGroups: [kept, added] })
+    assert.deepEqual(RouteSchemePatch.parse({ serviceDays: ["monday", "thursday", "saturday"], collectionGroups: [{ ...kept, days: ["monday", "thursday", "saturday"] }] }).collectionGroups?.[0].days, ["monday", "thursday", "saturday"])
+  })
+
+  test("holds each entry to the create's rules at its own path, and the list to one to GROUPS_MAX groups, each once by name and by id", () => {
+    assert.deepEqual(refusal(RouteSchemePatch.safeParse({ collectionGroups: [kept, { ...added, rule: kept.rule }] })), [{ path: "collectionGroups.1.stopSource", message: ONE_WAY_TO_FIND_STOPS }])
+    assert.deepEqual(refusal(RouteSchemePatch.safeParse({ collectionGroups: [kept, { ...added, name: kept.name }] })), [{ path: "collectionGroups", message: EACH_GROUP_NAME_ONCE }])
+    assert.deepEqual(refusal(RouteSchemePatch.safeParse({ collectionGroups: [kept, { ...kept, name: "Rear loaders, again" }] })), [{ path: "collectionGroups", message: EACH_GROUP_ONCE }])
+    assert.deepEqual(refusal(RouteSchemePatch.safeParse({ collectionGroups: [{ ...kept, id: "not-an-id" }] })).map((issue) => issue.path), ["collectionGroups.0.id"])
+    assert.deepEqual(refusal(RouteSchemePatch.safeParse({ collectionGroups: [] })).map((issue) => issue.path), ["collectionGroups"])
+    const many = manyIds(GROUPS_MAX + 1).map((id, n) => ({ ...kept, id, name: `Group ${n}` }))
+    assert.deepEqual(refusal(RouteSchemePatch.safeParse({ collectionGroups: many })), [{ path: "collectionGroups", message: AT_MOST_GROUPS }])
+  })
+
+  test("keeps every group's days within the service days where the patch carries both, and leaves a half to the route", () => {
+    assert.deepEqual(refusal(RouteSchemePatch.safeParse({ serviceDays: ["monday"], collectionGroups: [kept] })), [{ path: "collectionGroups.0.days", message: OUTSIDE_SERVICE_DAYS }])
+    assert.deepEqual(RouteSchemePatch.parse({ collectionGroups: [kept] }), { collectionGroups: [kept] }, "the service days are the stored row's to judge")
+  })
+
+  test("refuses a member the server owns by name, on the scheme and on an entry, where an entry's id is the group it names", () => {
+    for (const key of ["projectId", "id", "createdAt", "updatedAt"]) {
+      const issues = refusal(RouteSchemePatch.safeParse({ collectionGroups: [kept], [key]: ID }))
+      assert.deepEqual(issues.map((issue) => issue.path), [""], key)
+      assert.match(issues[0].message, new RegExp(key))
+    }
+    for (const key of ["routeSchemeId", "createdAt", "updatedAt"]) {
+      const issues = refusal(RouteSchemePatch.safeParse({ collectionGroups: [{ ...kept, [key]: ID }] }))
+      assert.deepEqual(issues.map((issue) => issue.path), ["collectionGroups.0"], key)
+      assert.match(issues[0].message, new RegExp(key))
+    }
   })
 })
 

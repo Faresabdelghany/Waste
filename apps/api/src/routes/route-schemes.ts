@@ -1,7 +1,8 @@
 // What recurs (Issue #97, ADR-0002): the Route Scheme, with its Collection
 // Groups on it. `GET /route-schemes` lists them, `POST /route-schemes` writes
 // one with the groups it starts with, `GET`/`PATCH /route-schemes/:id` read
-// and amend one, and `GET /route-schemes/:id/occurrences` previews the dates
+// and amend one — with its groups, where an edit moves both — and
+// `GET /route-schemes/:id/occurrences` previews the dates
 // it would plan. The groups' own routes are routes/collection-groups.ts; what
 // the two modules share is routes/scheme-groups.ts. No delete: a scheme ends
 // by `validTo`, and a group by `days: []`.
@@ -40,6 +41,19 @@
 // groups, since they are not in the body and have to be moved first.
 // Shortening the period is free: the next generation run cancels the planned
 // routes it leaves outside.
+//
+// A patch may carry the groups too (#205), since some edits pass through a
+// state the rules refuse whatever order single requests take — a service day
+// added to a validated scheme under the group that runs on it, a group split
+// in two that share a vehicle, two manual groups trading containers. Then
+// `collectionGroups` is the scheme's groups as the edit leaves them: an entry
+// with an id restates that group whole, one without adds a group, and a group
+// the list leaves out is parked. What the group routes hold one write at a
+// time is held here once, over the merged scheme and the list together and
+// before anything is written, in the words those routes use at the entry's
+// own path; the groups' sets are then replaced whole, as the two PUTs replace
+// them. The name the database holds unique is checked row by row, so a group
+// that shifts or trades its name steps aside first.
 //
 // The occurrence read is pure and writes nothing: the scheme's recurrence,
 // its holiday policy, and the project's weekend and holidays — the holidays
@@ -92,6 +106,7 @@ import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { projectToday } from "./fleet-lookups"
 import { periodAfter, requireOrdered } from "./periods"
 import { requireDepot, requirePlanningArea, requireUnloadingStation, type Scope } from "./references"
+import { requireGroupEdit, writeGroupEdit } from "./scheme-edit"
 import {
   findScheme,
   fleetOf,
@@ -118,7 +133,7 @@ import {
   writeGroupSets,
   type ClockOptions,
 } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, timeOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stamp, timeOf } from "./shared"
 
 const RouteSchemePage = Page(RouteScheme)
 const Occurrences = z.array(Occurrence)
@@ -310,17 +325,19 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         operationId: "patchRouteScheme",
         summary: "Amend a route scheme",
         description:
-          "Amends one route scheme of a project the caller works in; every field is optional and at least one must be given. The project and the collection groups are not patchable: a record does not move between projects, and a group is `PATCH /collection-groups/{id}` or the routes under it. The patch takes the scheme's row lock and holds the row it leaves behind to the recurrence rules in the contracts' words: the end still comes after the start, the week rotation is given with `every-2-weeks` and with nothing else, and a daily scheme serves every weekday. New service days must still cover every collection group's days — a narrowing under a group that runs on a dropped day is refused (409) counting the groups, which have to be moved first. A later `validFrom` moves the day a group's driver is judged on — the day the scheme starts or today, whichever is later — so every group naming both a vehicle and a driver is judged again on the new start, and a driver who may not take the vehicle then is refused at `validFrom` with the licence sentence; an earlier start, or an end, moves nothing a licence is judged on. A planning area and a depot are one of the scheme's project's, an unloading station one of this company's; a null clears the depot or the station. The structural rules are re-run when the scheme is or becomes `validated` — no vehicle or driver on two groups a shared day among them — and every sentence that fails is listed (409); a scheme going back to `draft` is held to none of them. A period that overlaps another scheme of the same name is refused; shortening the period is free, since the next generation run cancels the planned routes it leaves outside.",
+          "Amends one route scheme of a project the caller works in; every field is optional and at least one must be given. The project is not patchable: a record does not move between projects. A group is `PATCH /collection-groups/{id}` or the routes under it, or, where an edit moves the scheme and its groups together, `collectionGroups` here: the scheme's groups as the edit leaves them, held with the scheme once and written in one transaction, so that an edit no order of single requests could make — a service day added to a validated scheme with the group that runs on it, a group split in two that share a vehicle, two manual groups trading containers on a shared day — is one request. An entry with an `id` restates that group of this scheme whole, as a create spells a group — a member it leaves unsaid is null, and a restated group given no position keeps its own — and keeps how the group finds its stops; an entry without one adds a group, after the last where it gives no position; a group the list leaves out is parked (`days: []`) and keeps its name, since there is no delete. Every entry's days lie within the service days the scheme is left with, every id an entry names is held to the scope its key allows as a create holds it, and no container is picked by two entries that run on a shared day, each refused at the entry that is wrong; a vehicle or driver an entry names afresh — a new group's, one a group changes to, and the stored fleet of a group the edit un-parks — is not retired, inactive or suspended (409), and an entry that moves its crew is judged on the licence at its `driverId`; the name a parked group keeps is not another entry's (409). The answer carries every group with its id, a new one's minted. The patch takes the scheme's row lock and holds the row it leaves behind to the recurrence rules in the contracts' words: the end still comes after the start, the week rotation is given with `every-2-weeks` and with nothing else, and a daily scheme serves every weekday. New service days must still cover every collection group's days — without `collectionGroups`, a narrowing under a group that runs on a dropped day is refused (409) counting the groups, which have to be moved first or moved in the same request. A later `validFrom` moves the day a group's driver is judged on — the day the scheme starts or today, whichever is later — so every group naming both a vehicle and a driver is judged again on the new start, and a driver who may not take the vehicle then is refused at `validFrom` with the licence sentence — at the entry's `driverId` where the edit moves that crew too; an earlier start, or an end, moves nothing a licence is judged on. A planning area and a depot are one of the scheme's project's, an unloading station one of this company's; a null clears the depot or the station. The structural rules are re-run when the scheme is or becomes `validated`, over the groups as the edit leaves them — no vehicle or driver on two groups a shared day among them — and every sentence that fails is listed (409), nothing written; a scheme going back to `draft` is held to none of them. A period that overlaps another scheme of the same name is refused; shortening the period is free, since the next generation run cancels the planned routes it leaves outside.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The route scheme as it now stands, with its collection groups.", RouteScheme),
           400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project and the groups included), ends on or before the day it starts, gives the week rotation with the wrong cadence, leaves a weekday out of a daily scheme, moves the start to a day a collection group's driver may not take its vehicle on, or names a planning area or a depot that is not this project's or an unloading station that is not this company's.",
+            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project included), ends on or before the day it starts, gives the week rotation with the wrong cadence, leaves a weekday out of a daily scheme, moves the start to a day a collection group's driver may not take its vehicle on, or names a planning area or a depot that is not this project's or an unloading station that is not this company's; or an entry of `collectionGroups` names a group that is not this scheme's, turns a group to find its stops the other way, runs on a day the scheme is left not serving, picks a container another entry runs on the same day, names a driver who may not take the entry's vehicle, or names a waste fraction, container type, vehicle type, container, service provider, vehicle or driver outside the scope its key allows — each at the entry that is wrong; or the list is empty, longer than " +
+              GROUPS_MAX +
+              ", or names a group or a name twice.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `route-studio.schemes`."),
           404: describeProblem("No route scheme with that id in the projects this account works in."),
-          409: describeProblem("Collection groups run on days the scheme would no longer serve, the scheme is or becomes `validated` and does not hold together (the detail lists every sentence), or another scheme of that name is already in force over part of the period."),
+          409: describeProblem("Collection groups run on days the scheme would no longer serve, a vehicle an entry names afresh is retired or a driver so named is inactive or suspended, the scheme is or becomes `validated` and does not hold together (the detail lists every sentence), an entry takes the name of a group the list leaves out, or another scheme of that name is already in force over part of the period."),
         },
       }),
       guard,
@@ -329,7 +346,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
       validate("json", RouteSchemePatch),
       async (c) => {
         const { id } = c.req.valid("param")
-        const patch = c.req.valid("json")
+        const { collectionGroups: entries, ...patch } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
 
@@ -350,27 +367,34 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         requireRecurrence(merged)
 
         const groups = (await groupsOf(tx, principal.companyId, [id])).get(id) ?? []
-        if (patch.validFrom !== undefined && patch.validFrom > current.validFrom) {
-          // A later start moves the day the groups' drivers are judged on (#101 §6.18). The groups are not in the body, so the refusal sits at the bound that moved; their vehicles and drivers are read once, in one statement each (`fleetOf`), and are not new references, so their statuses are not asked.
-          const today = projectToday(tx, scope, now)
-          const rows = await fleetOf(tx, scope, groups)
-          for (const group of groups) await requireGroupDriver(tx, scope, merged, group, { path: "validFrom", rows, today })
+        const startsLater = patch.validFrom !== undefined && patch.validFrom > current.validFrom
+        // With the groups in the body (#205), the scheme is held with them as the edit leaves them (routes/scheme-edit.ts).
+        const edit = entries === undefined ? undefined : await requireGroupEdit(tx, scope, { ...merged, startsLater }, groups, entries, projectToday(tx, scope, now))
+        if (edit === undefined) {
+          if (startsLater) {
+            // A later start moves the day the groups' drivers are judged on (#101 §6.18). The groups are not in the body, so the refusal sits at the bound that moved; their vehicles and drivers are read once, in one statement each (`fleetOf`), and are not new references, so their statuses are not asked.
+            const today = projectToday(tx, scope, now)
+            const rows = await fleetOf(tx, scope, groups)
+            for (const group of groups) await requireGroupDriver(tx, scope, merged, group, { path: "validFrom", rows, today })
+          }
+          if (patch.serviceDays !== undefined) {
+            const outside = groups.filter((group) => !withinServiceDays(merged.serviceDays, group.days)).length
+            if (outside > 0) throw problem(409, { detail: groupsLeftOutside(outside) })
+          }
+          await requireStructure(tx, scope, merged, groups)
         }
-        if (patch.serviceDays !== undefined) {
-          const outside = groups.filter((group) => !withinServiceDays(merged.serviceDays, group.days)).length
-          if (outside > 0) throw problem(409, { detail: groupsLeftOutside(outside) })
-        }
-        await requireStructure(tx, scope, merged, groups)
 
         const [row] = await refuseOverlap({ [SCHEME_NAME_IN_FORCE]: SCHEME_NAME_IN_FORCE_SENTENCE }, () =>
           tx
             .update(routeScheme)
-            .set(patch)
+            .set({ ...patch, ...stamp() })
             .where(and(schemeScope(principal), eq(routeScheme.id, id)))
             .returning(schemeColumns),
         )
         if (row === undefined) throw noSuchScheme(id)
-        return c.json(schemeOf(row, groups, (await generationsOf(tx, principal.companyId, new Map([[id, groups]]))).get(id) ?? NEVER_GENERATED))
+        if (edit === undefined) return c.json(schemeOf(row, groups, (await generationsOf(tx, principal.companyId, new Map([[id, groups]]))).get(id) ?? NEVER_GENERATED))
+        await writeGroupEdit(tx, scope, id, edit)
+        return c.json(await schemeWithGroups(tx, principal.companyId, row))
       },
     )
     .get(
