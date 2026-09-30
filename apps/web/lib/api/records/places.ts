@@ -36,7 +36,7 @@ import { splitList } from "@waste/domain/record-values"
 import { DEPOT_OWNERSHIPS, DEPOT_STATUSES, UNLOADING_STATION_OWNERSHIPS, UNLOADING_STATION_STATUSES, WAREHOUSE_STATUSES } from "@waste/domain/resources/vocabulary"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
-import { masterDataKindOf } from "@/lib/data/master-data-kinds"
+import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-data-kinds"
 
 import { create, get, listAll, patch, put } from "../client"
 import {
@@ -146,11 +146,22 @@ export const coordinatesFact = (point: FlatPoint) => `${point.coordinates[1]}, $
 
 const TIME = /\b(\d{1,2}):(\d{2})\b/g
 
-/** The two times an "Operating hours" text carries, whatever else it says; none for none, the contract's refusal for one. */
+/** What an "Operating hours" text that says something other than two times is told. */
+export const TWO_TIMES_OR_NOTHING = "Give the opening and the closing time as HH:MM, such as 05:00–22:00, or leave the hours out"
+
+/**
+ * The two times an "Operating hours" text carries, whatever else it says
+ * around them ("Mon–Fri 05:00–22:00"); none for a blank; the contract's
+ * refusal for one time; a refusal for a text that says something else — a
+ * third time, hours without minutes — since a text the adapter cannot read
+ * must not clear or cut what is on record.
+ */
 export function hoursOf(text: string | undefined): { opensAt: string | null; closesAt: string | null } | LocalRefusal {
-  const times = [...(text ?? "").matchAll(TIME)].map((match) => `${match[1].padStart(2, "0")}:${match[2]}`)
-  if (times.length === 0) return { opensAt: null, closesAt: null }
+  const trimmed = (text ?? "").trim()
+  if (trimmed === "") return { opensAt: null, closesAt: null }
+  const times = [...trimmed.matchAll(TIME)].map((match) => `${match[1].padStart(2, "0")}:${match[2]}`)
   if (times.length === 1) return refusal("operatingHours", BOTH_HOURS_OR_NEITHER)
+  if (times.length !== 2) return refusal("operatingHours", TWO_TIMES_OR_NOTHING)
   return { opensAt: times[0], closesAt: times[1] }
 }
 
@@ -372,7 +383,7 @@ export const unloadingStationAdapter: ResourceAdapter<UnloadingStation> = {
   list: (client) => listAll<UnloadingStation>(client, "/unloading-stations"),
   toRecord: (station, context) => {
     const provider = station.serviceProviderId === null ? undefined : referenced(context, "service-provider", station.serviceProviderId)
-    const fractions = station.wasteFractionIds.map((id) => referenced(context, "fraction", id))
+    const fractions = station.wasteFractionIds.map((id) => referenced(context, MASTER_DATA_KIND_DETAILS["waste-fraction"].prefix, id))
     const hours = hoursLabel(station.opensAt, station.closesAt)
     const facts: Record<string, string> = {
       Kind: "Unloading station",

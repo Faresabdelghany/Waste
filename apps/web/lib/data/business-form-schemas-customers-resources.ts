@@ -1,4 +1,5 @@
 import type { BusinessFormSchema } from "@/lib/data/business-form-types"
+import { WAREHOUSE_STATUS_OPTIONS } from "@/lib/data/resources-vocabulary"
 import { SERVICE_FREQUENCIES } from "@waste/domain/service-frequencies"
 
 const projectRelation = {
@@ -1549,11 +1550,8 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             type: "select",
             required: true,
             defaultValue: "draft",
-            options: [
-              { value: "draft", label: "Draft" },
-              { value: "active", label: "Active" },
-              { value: "restricted", label: "Restricted" },
-            ],
+            // The wire's four (#180), so a warehouse in any of them opens in the edit dialog.
+            options: WAREHOUSE_STATUS_OPTIONS,
           },
           {
             id: "address",

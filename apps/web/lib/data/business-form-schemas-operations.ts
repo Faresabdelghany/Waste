@@ -3,12 +3,12 @@ import {
   SCHEME_EDIT_POLICIES,
   SCHEME_EDIT_POLICY_LABELS,
 } from "@waste/domain/route-schemes/creation"
-import { FUEL_TYPES } from "@waste/domain/resources/vocabulary"
 import { LICENCE_CLASSES } from "@waste/domain/route-schemes/fleet-profiles"
 import { CONTAINER_TYPE_VOCABULARY } from "@waste/domain/route-schemes/matching"
 import { SCHEME_SERVICE_TYPES, allowedContainerTypes } from "@waste/domain/route-schemes/scope"
 
 import type { BusinessFormOption, BusinessFormSchema } from "@/lib/data/business-form-types"
+import { FUEL_TYPE_OPTIONS, VEHICLE_STATUS_OPTIONS } from "@/lib/data/resources-vocabulary"
 
 /**
  * The licence classes the fleet forms offer (issue #37): the driver form's
@@ -23,12 +23,6 @@ const LICENCE_CLASS_OPTIONS: readonly BusinessFormOption[] = LICENCE_CLASSES.map
 
 /** An option whose label is its value — the display vocabularies are stored as shown. */
 const labelOption = (value: string): BusinessFormOption => ({ value, label: value })
-
-/** The fuels the vehicle form offers (#180): the wire's own list, `hvo` spelled as the fixtures spell it and the rest as words. */
-const FUEL_TYPE_OPTIONS: readonly BusinessFormOption[] = FUEL_TYPES.map((fuel) => ({
-  value: fuel,
-  label: fuel === "hvo" ? "HVO" : fuel.charAt(0).toUpperCase() + fuel.slice(1),
-}))
 
 /** "Changes to a running scheme" (issue #38): the domain's three policies, in its order, each labelled as the wizard labels it. */
 const SCHEME_EDIT_POLICY_OPTIONS: readonly BusinessFormOption[] = SCHEME_EDIT_POLICIES.map((value) => ({
@@ -1599,11 +1593,8 @@ export const operationsBusinessFormSchemas = [
             type: "select",
             required: true,
             defaultValue: "active",
-            options: [
-              { value: "active", label: "Active" },
-              { value: "inactive", label: "Inactive" },
-              { value: "maintenance", label: "Maintenance" },
-            ],
+            // The wire's four (#180), so a vehicle in any of them opens in the edit dialog.
+            options: VEHICLE_STATUS_OPTIONS,
           },
         ],
       },

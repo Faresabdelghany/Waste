@@ -37,6 +37,7 @@ import {
   depotAdapter,
   placesModule,
   PROVIDER_WITH_PROVIDER_OWNERSHIP as LOCAL_PROVIDER_WITH_PROVIDER_OWNERSHIP,
+  TWO_TIMES_OR_NOTHING,
   unloadingStationAdapter,
   warehouseAdapter,
   warehousesModule,
@@ -243,6 +244,9 @@ describe("a depot", () => {
     assert.deepEqual(body({ latitude: "", longitude: "" }), { path: "latitude", message: "A depot has a location: give the latitude and longitude" })
     assert.deepEqual(body({ longitude: "" }), { path: "longitude", message: "A depot has a location: give the latitude and longitude" })
     assert.deepEqual(body({ operatingHours: "Opens 06:00" }), { path: "operatingHours", message: BOTH_HOURS_OR_NEITHER })
+    // A text the adapter cannot read as two times neither cuts nor clears what is on record.
+    assert.deepEqual(body({ operatingHours: "Mon–Fri 8–16" }), { path: "operatingHours", message: TWO_TIMES_OR_NOTHING })
+    assert.deepEqual(body({ operatingHours: "Mon–Fri 05:00–22:00, Sat 06:00–12:00" }), { path: "operatingHours", message: TWO_TIMES_OR_NOTHING })
     assert.deepEqual(body({ ownership: "external" }), { path: "ownership", message: 'The API has no ownership "external" for a depot; it knows company, service-provider' })
     assert.deepEqual(body({ ownership: "service-provider" }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP })
     assert.deepEqual(body({ serviceProviderId: FIXTURE_SERVICE_PROVIDER_IDS.nordren }), { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP })

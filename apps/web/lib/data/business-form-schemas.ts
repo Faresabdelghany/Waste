@@ -125,9 +125,9 @@ const conditionalFields: Record<
     condition: { fieldId: "ownership", equals: "service-provider" },
     required: true,
   },
+  // Asked of an unloading station and not required: the API registers a station before it accepts anything (#180).
   "resources.depots.acceptedFractionIds": {
     condition: { fieldId: "locationType", equals: "unloading" },
-    required: true,
   },
   "resources.depots.vehicleCapacity": {
     condition: { fieldId: "locationType", equals: "depot" },

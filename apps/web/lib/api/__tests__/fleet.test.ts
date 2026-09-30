@@ -72,6 +72,9 @@ const noResolve = (fixtures: readonly BusinessRecord[]): MappingContext => ({ fi
 const copenhagenRecord = projectAdapter.toRecord(copenhagen, noResolve(fixturesOf("configure", "organization")))
 const nordrenRecord = serviceProviderAdapter.toRecord(nordren, noResolve(fixturesOf("service-providers", "service-providers")))
 const madsAccount: BusinessRecord = { id: "user-mads", name: "Mads Jensen", context: "Company · Copenhagen Central", status: "Active", owner: "", value: "", updated: "", description: "", facts: {}, related: [], source: "Waste API", freshness: "", recordKind: "User" }
+// The access module lists the roles beside the users, and the account picker is over the whole module.
+const PLANNER_ROLE_ID = "01a0d2a4-a280-7004-8000-000000000002"
+const plannerRole: BusinessRecord = { ...madsAccount, id: "role-route-planner", name: "Route Planner", recordKind: "Role" }
 const fractions = [residual, glass, mixed]
 const types = [rearLoader, organicSealed, closedTrailer]
 const masterRecords = [
@@ -82,7 +85,7 @@ const masterIds = new Map(masterRecords.map((record, index) => [record.id, [...f
 const withoutDepots: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [copenhagenRecord], serverIds: new Map([[copenhagenRecord.id, copenhagen.id]]) }, 1)],
   ["service-providers.service-providers", loaded({ records: [nordrenRecord], serverIds: new Map([[nordrenRecord.id, nordren.id]]) }, 1)],
-  ["configure.access", loaded({ records: [madsAccount], serverIds: new Map([[madsAccount.id, MADS_ACCOUNT_ID]]) }, 1)],
+  ["configure.access", loaded({ records: [plannerRole, madsAccount], serverIds: new Map([[plannerRole.id, PLANNER_ROLE_ID], [madsAccount.id, MADS_ACCOUNT_ID]]) }, 1)],
   ["configure.master", loaded({ records: masterRecords, serverIds: masterIds }, 1)],
 ])
 const nordhavnRecord = depotAdapter.toRecord(nordhavn, { fixtures: fixturesOf("resources", "depots"), resolve: resolverOver(withoutDepots), now: NOW })
@@ -482,6 +485,7 @@ describe("a driver", () => {
     assert.deepEqual(refuse({ licenceClass: "D" }), { path: "licenceClass", message: "A licence class is B, C or CE" })
     assert.deepEqual(refuse({ linkedUserId: "" }), { path: "linkedUserId", message: "Pick the driver's user account" })
     assert.deepEqual(refuse({ linkedUserId: "user-nowhere" }), { path: "linkedUserId", message: "Pick a user account the API holds" })
+    assert.deepEqual(refuse({ linkedUserId: "role-route-planner" }), { path: "linkedUserId", message: "Pick a user account the API holds" }, "a role row of the access module is no login")
     assert.deepEqual(refuse({ status: "invited" }), { path: "status", message: 'The API has no status "invited" for a driver; it knows active, inactive, suspended' })
     assert.deepEqual(refuse({ driverName: "" }), { path: "driverName", message: "A driver needs a name" })
     assert.deepEqual(refuse({ homeDepotId: "depot-nowhere" }), { path: "homeDepotId", message: "Pick a depot the API holds" })

@@ -1,7 +1,8 @@
-import type { APIRequestContext, Page } from "@playwright/test"
+import type { Page } from "@playwright/test"
 
 import { expect, test } from "./fixtures"
 import { uniqueName } from "./env"
+import { projectNamed, TESTER_PROJECT } from "./tester"
 
 // Slice 5a of #81 (Issue #180): the fleet and the places read from and
 // written to the API through the generic workspace. No fixture spec covers
@@ -12,7 +13,6 @@ import { uniqueName } from "./env"
 // back under the browser's own token, and a code taken meanwhile is refused
 // in the API's sentence; an unloading station's accepted fractions are picked
 // from the master module by id and land on the wire as the set.
-type Project = { id: string; name: string }
 type Warehouse = { id: string; projectId: string; code: string; name: string; address: string; depotId: string | null; status: string }
 type UnloadingStation = { id: string; code: string; name: string; ownership: string; weighbridge: boolean; wasteFractionIds: string[] }
 type WasteFraction = { id: string; key: string; name: string }
@@ -21,11 +21,17 @@ type WasteFraction = { id: string; key: string; name: string }
 const answerOf = (page: Page, method: string, path: string) =>
   page.waitForResponse((response) => response.request().method() === method && new URL(response.url()).pathname.startsWith(`/waste-api${path}`))
 
-/** Opens a workspace page and waits for the switched module's rows to arrive from the API. */
+/**
+ * Opens a workspace page and waits for the switched module's rows to arrive
+ * from the API, then for the store's whole chain of modules to land: each
+ * later module re-renders the workspace, and a dialog opened before the last
+ * one is rebuilt under the person's hands.
+ */
 async function openLoaded(page: Page, url: string, listPath: string) {
   const loaded = answerOf(page, "GET", listPath)
   await page.goto(url)
   expect((await loaded).status()).toBe(200)
+  await page.waitForLoadState("networkidle")
 }
 
 /** The row's opener, after narrowing the list to the name through the module's own search. */
@@ -36,15 +42,6 @@ async function rowNamed(page: Page, name: string) {
 
 /** A code no other run has used: the tenant is shared and nothing is cleaned up. */
 const uniqueCode = (prefix: string) => `${prefix}-${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 1296).toString(36).toUpperCase()}`
-
-async function copenhagen(api: APIRequestContext): Promise<Project> {
-  const listed = await api.get("/projects?limit=200")
-  expect(listed.status()).toBe(200)
-  const { items } = (await listed.json()) as { items: Project[] }
-  const project = items.find((candidate) => candidate.name === "Copenhagen Central")
-  expect(project).toBeDefined()
-  return project as Project
-}
 
 test("Fleet: the seeded vehicles and drivers are the API's rows, spelled as the fixtures were, the expired licence kept literal", async ({ page }) => {
   await openLoaded(page, "/fleet?module=vehicles", "/vehicles")
@@ -86,7 +83,7 @@ async function createWarehouse(page: Page, values: { name: string; code: string;
 }
 
 test("Warehouses: created in the browser with Location, read back, and a code taken meanwhile refused by sentence", async ({ page, api }) => {
-  const project = await copenhagen(api)
+  const project = await projectNamed(api, TESTER_PROJECT)
   const name = uniqueName("E2E Warehouse")
   const code = uniqueCode("WH")
   await openLoaded(page, "/resources?module=warehouses", "/warehouses")

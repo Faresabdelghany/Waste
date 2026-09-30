@@ -45,9 +45,11 @@ import { isIsoDate } from "@waste/domain/route-schemes/recurrence"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-data-kinds"
+import { fuelLabel } from "@/lib/data/resources-vocabulary"
 
 import { create, get, listAll, patch, put } from "../client"
-import { inheritedPresentation, isLocalRefusal, ofKind, patchOf, stampFacts, statusLabel, typed, typedFlag, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { hasPrefix, inheritedPresentation, isLocalRefusal, ofKind, patchOf, stampFacts, statusLabel, typed, typedFlag, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { userAdapter } from "./organisation"
 import {
   createStatusOf,
   depotServerIdOf,
@@ -114,9 +116,6 @@ function licenceTokenOf(record: BusinessRecord, key: string): string | undefined
 /** `18 t` from 18 000 kg; a payload no fixture spelled is left as the number says. */
 const tonnes = (capacityKg: number) => `${Number((capacityKg / 1000).toFixed(2))} t`
 
-/** `HVO` as the fixtures spell it, the other fuels as words. */
-const fuelLabel = (fuel: string) => (fuel === "hvo" ? "HVO" : statusLabel(fuel))
-
 /** The rated payload the form typed, in whole kilograms; undefined for blank. */
 function payloadOf(record: BusinessRecord): number | undefined | LocalRefusal {
   const text = typed(record, "capacity")
@@ -180,7 +179,7 @@ type VehicleWrite = {
 export const vehicleAdapter: ResourceAdapter<Vehicle> = {
   prefix: "vehicle",
   // A fixture trailer's id carries `trailer-`; a server row is `vehicle-<uuid>` whatever its kind, its kind on the typed `resourceKind`.
-  owns: (record) => ofKind("vehicle", ["Vehicle or trailer"])(record) || record.id.startsWith("trailer-"),
+  owns: (record) => ofKind("vehicle", ["Vehicle or trailer"])(record) || hasPrefix("trailer")(record),
   statuses: VEHICLE_STATUSES,
   list: (client) => listAll<Vehicle>(client, "/vehicles"),
   toRecord: (vehicle, context) => {
@@ -370,14 +369,22 @@ function licenceFact(driver: Driver): string {
   return driver.licenceExpiry === null ? held : `${held} · valid to ${driver.licenceExpiry}`
 }
 
-/** The user account the form links — on with an account, off is none — as a server id, null or a refusal. */
+/**
+ * The user account the form links — on with an account, off is none — as a
+ * server id, null or a refusal. The picker is over `configure.access`,
+ * which lists roles beside users, so a row that is no user is refused here
+ * as a station is where a depot is asked for.
+ */
 function accountServerIdOf(record: BusinessRecord, context: MappingContext): string | null | undefined | LocalRefusal {
   const access = typedFlag(record, "driverAppAccess")
   if (access === undefined) return undefined
   if (!access) return null
   const webId = typed(record, "linkedUserId")
   if (webId === undefined) return refusal("linkedUserId", "Pick the driver's user account")
-  return context.resolve.serverIdOf(webId) ?? refusal("linkedUserId", "Pick a user account the API holds")
+  const serverId = context.resolve.serverIdOf(webId)
+  const named = serverId === undefined ? undefined : context.resolve.byServerId(serverId)
+  if (serverId === undefined || named === undefined || !userAdapter.owns(named)) return refusal("linkedUserId", "Pick a user account the API holds")
+  return serverId
 }
 
 /** The licence expiry the form typed as a day, null for blank, a refusal for anything else. */

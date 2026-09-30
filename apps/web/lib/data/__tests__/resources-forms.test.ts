@@ -10,7 +10,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { FUEL_TYPES } from "@waste/domain/resources/vocabulary"
+import { FUEL_TYPES, VEHICLE_STATUSES, WAREHOUSE_STATUSES } from "@waste/domain/resources/vocabulary"
 
 import { getBusinessFormSchema } from "../business-form-schemas"
 import { getModuleDefinition, type WorkspaceId } from "../business-modules"
@@ -50,18 +50,39 @@ describe("the vehicle form", () => {
     )
     assert.equal(field.options?.find((option) => option.value === "hvo")?.label, "HVO")
   })
+
+  test("status is a select over the wire's four statuses, so a retired or unavailable vehicle opens in the edit dialog", () => {
+    const field = fieldOf(fields, "status")
+    assert.deepEqual(
+      (field.options ?? []).map((option) => option.value),
+      [...VEHICLE_STATUSES],
+    )
+    assert.equal(field.defaultValue, "active")
+  })
+})
+
+describe("the warehouse form", () => {
+  test("status is a select over the wire's four statuses, closed included", () => {
+    const field = fieldOf(fieldsOf("resources", "warehouses"), "status")
+    assert.deepEqual(
+      (field.options ?? []).map((option) => option.value),
+      [...WAREHOUSE_STATUSES],
+    )
+    assert.equal(field.defaultValue, "draft")
+  })
 })
 
 describe("the location form", () => {
   const fields = fieldsOf("resources", "depots")
 
-  test("acceptedFractionIds is a multiselect over the master module, asked of an unloading station and not of a depot; the single static select is gone", () => {
+  test("acceptedFractionIds is a multiselect over the master module, asked of an unloading station and not of a depot, and not required, as the API registers a station before it accepts anything; the single static select is gone", () => {
     const field = fieldOf(fields, "acceptedFractionIds")
     assert.equal(field.type, "multiselect")
     assert.deepEqual(field.relation, MASTER)
     assert.equal(field.options, undefined)
     assert.deepEqual(field.visibleWhen, { fieldId: "locationType", equals: "unloading" })
-    assert.deepEqual(field.requiredWhen, { fieldId: "locationType", equals: "unloading" })
+    assert.equal(field.requiredWhen, undefined)
+    assert.notEqual(field.required, true)
     assert.equal(masterDataKindForField(field.id), "waste-fraction")
     assert.ok(!fields.some((candidate) => candidate.id === "acceptedFractionId"))
   })
