@@ -3,6 +3,7 @@ import {
   SCHEME_EDIT_POLICIES,
   SCHEME_EDIT_POLICY_LABELS,
 } from "@waste/domain/route-schemes/creation"
+import { FUEL_TYPES } from "@waste/domain/resources/vocabulary"
 import { LICENCE_CLASSES } from "@waste/domain/route-schemes/fleet-profiles"
 import { CONTAINER_TYPE_VOCABULARY } from "@waste/domain/route-schemes/matching"
 import { SCHEME_SERVICE_TYPES, allowedContainerTypes } from "@waste/domain/route-schemes/scope"
@@ -22,6 +23,12 @@ const LICENCE_CLASS_OPTIONS: readonly BusinessFormOption[] = LICENCE_CLASSES.map
 
 /** An option whose label is its value — the display vocabularies are stored as shown. */
 const labelOption = (value: string): BusinessFormOption => ({ value, label: value })
+
+/** The fuels the vehicle form offers (#180): the wire's own list, `hvo` spelled as the fixtures spell it and the rest as words. */
+const FUEL_TYPE_OPTIONS: readonly BusinessFormOption[] = FUEL_TYPES.map((fuel) => ({
+  value: fuel,
+  label: fuel === "hvo" ? "HVO" : fuel.charAt(0).toUpperCase() + fuel.slice(1),
+}))
 
 /** "Changes to a running scheme" (issue #38): the domain's three policies, in its order, each labelled as the wizard labels it. */
 const SCHEME_EDIT_POLICY_OPTIONS: readonly BusinessFormOption[] = SCHEME_EDIT_POLICIES.map((value) => ({
@@ -1549,7 +1556,7 @@ export const operationsBusinessFormSchemas = [
             id: "assetReference",
             label: "Asset reference",
             type: "text",
-            required: true,
+            description: "What the yard calls it, such as WH-24: the callsign on the API.",
           },
           {
             id: "resourceKind",
@@ -1608,7 +1615,6 @@ export const operationsBusinessFormSchemas = [
             id: "capacity",
             label: "Rated capacity",
             type: "number",
-            required: true,
             min: 0,
             unit: "kg",
           },
@@ -1629,10 +1635,13 @@ export const operationsBusinessFormSchemas = [
             unit: "m³",
           },
           {
-            id: "wasteFractions",
+            // The master module's waste fractions by id (#180): a vehicle's
+            // compartment carries them on the API, which holds a powered
+            // vehicle to at least one.
+            id: "wasteFractionIds",
             label: "Compatible waste fractions",
-            type: "textarea",
-            required: true,
+            type: "multiselect",
+            relation: { workspaceId: "configure", moduleId: "master" },
           },
           {
             id: "compartments",
@@ -1669,14 +1678,12 @@ export const operationsBusinessFormSchemas = [
             id: "homeDepotId",
             label: "Home depot",
             type: "select",
-            required: true,
             relation: { workspaceId: "resources", moduleId: "depots" },
           },
           {
             id: "effectiveFrom",
             label: "Effective from",
             type: "date",
-            required: true,
           },
           {
             id: "effectiveTo",
@@ -1688,7 +1695,6 @@ export const operationsBusinessFormSchemas = [
             id: "availability",
             label: "Availability rule",
             type: "textarea",
-            required: true,
           },
           {
             id: "gpsDeviceId",
@@ -1699,7 +1705,7 @@ export const operationsBusinessFormSchemas = [
             id: "fuelOrEnergyType",
             label: "Fuel or energy type",
             type: "select",
-            relation: { workspaceId: "configure", moduleId: "master" },
+            options: FUEL_TYPE_OPTIONS,
           },
           {
             id: "costRate",
@@ -1735,7 +1741,6 @@ export const operationsBusinessFormSchemas = [
             id: "workforceReference",
             label: "Workforce reference",
             type: "text",
-            required: true,
           },
           {
             id: "employmentType",
@@ -1765,7 +1770,6 @@ export const operationsBusinessFormSchemas = [
             id: "homeDepotId",
             label: "Home depot",
             type: "select",
-            required: true,
             relation: { workspaceId: "resources", moduleId: "depots" },
           },
         ],
@@ -1778,7 +1782,6 @@ export const operationsBusinessFormSchemas = [
             id: "licenceNumber",
             label: "Driving licence reference",
             type: "text",
-            required: true,
           },
           {
             id: "licenceClass",

@@ -1522,7 +1522,6 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             id: "effectiveFrom",
             label: "Effective from",
             type: "date",
-            required: true,
           },
         ],
       },
@@ -1655,7 +1654,6 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             id: "effectiveFrom",
             label: "Effective from",
             type: "date",
-            required: true,
           },
           {
             id: "effectiveTo",
@@ -1747,15 +1745,17 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             id: "operatingHours",
             label: "Operating hours",
             type: "text",
-            required: true,
             placeholder: "Mon–Fri 05:00–22:00",
+            description: "Two times, opening and closing, or none.",
           },
           {
-            id: "acceptedFractionId",
-            label: "Accepted waste fraction",
-            type: "select",
+            // The master module's waste fractions by id (#180): what the
+            // station accepts, replaced whole on the API.
+            id: "acceptedFractionIds",
+            label: "Accepted waste fractions",
+            type: "multiselect",
             description:
-              "Repeatable and required for an Unloading Station; route assignment validates compatibility.",
+              "Required for an Unloading Station; route assignment validates compatibility.",
             relation: {
               workspaceId: "configure",
               moduleId: "master",

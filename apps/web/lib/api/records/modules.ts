@@ -13,13 +13,35 @@
 import type { WorkspaceId } from "@/lib/data/business-modules"
 
 import { moduleKeyOf, type ServerModule } from "./adapter"
+import { fleetDriversModule, fleetVehiclesModule } from "./fleet"
 import { masterDataModule } from "./master-data"
 import { accessModule, organisationModule, serviceProvidersModule } from "./organisation"
+import { placesModule, warehousesModule } from "./places"
 import { collectionCalendarsModule, planningAreasModule } from "./planning"
 import { customersModule } from "./registry"
 
-/** The switched modules, in load order; the planning configuration and the master data after the organisation, since an area, a calendar and a service frequency name their project. */
-export const SERVER_MODULES: readonly ServerModule[] = [organisationModule, serviceProvidersModule, accessModule, customersModule, planningAreasModule, collectionCalendarsModule, masterDataModule]
+/**
+ * The switched modules, in load order: a module another module resolves
+ * against comes first. The planning configuration and the master data after
+ * the organisation, since an area, a calendar and a service frequency name
+ * their project; the places after the master data, since a station names
+ * its fractions, and the warehouses after the depots one may share a yard
+ * with; the fleet after the master data (a vehicle's type and fractions),
+ * the access module (a driver's login) and the depots (a home base) (#180).
+ */
+export const SERVER_MODULES: readonly ServerModule[] = [
+  organisationModule,
+  serviceProvidersModule,
+  accessModule,
+  customersModule,
+  planningAreasModule,
+  collectionCalendarsModule,
+  masterDataModule,
+  placesModule,
+  warehousesModule,
+  fleetVehiclesModule,
+  fleetDriversModule,
+]
 
 const byKey = new Map(SERVER_MODULES.map((module) => [moduleKeyOf(module.workspaceId, module.moduleId), module]))
 
