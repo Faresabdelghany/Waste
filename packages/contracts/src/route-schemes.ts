@@ -42,12 +42,21 @@
 // driver of the project who may take that vehicle, no vehicle or driver on
 // two groups a shared day (a validated scheme's structural rule), a depot of
 // the project, a station of the company. Not here: a scheme's own service
-// demand (a Subscription is the Registry's), and `lastGeneratedAt` and the
-// drift stamps (part B adds them to the resource).
+// demand (a Subscription is the Registry's).
+//
+// What the generation runs left is on the resource as a reading, `generation`
+// (Issue #177, carried from #97 part B): when the scheme's last run
+// succeeded, and each rule group's two latest match stamps — the set it
+// matched as of a run's first day and the rule it matched under — which is
+// what a client's drift reading compares (`containerDriftBetween`,
+// @waste/domain/route-schemes/container-drift). It is read from
+// `generation_run` and `generation_match` whenever the scheme is, never kept
+// on the scheme's row and never written by a body, so the one place it is
+// stored is the runs'.
 import { OCCURRENCE_STATUSES, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 import * as z from "zod"
 
-import { IsoDate, IsoTime } from "./dates"
+import { IsoDate, IsoDateTime, IsoTime } from "./dates"
 import { Id } from "./ids"
 import { eachOnce, HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, ServiceDays, ServiceType, StopSource, WeekRotation } from "./planning"
 import { ProjectScopedListQuery } from "./queries"
@@ -223,6 +232,31 @@ const eachGroupNameOnce = { message: EACH_GROUP_NAME_ONCE, path: ["collectionGro
 const groupNamesOnce = (body: { collectionGroups?: unknown }): boolean =>
   !Array.isArray(body.collectionGroups) || eachOnce(body.collectionGroups, (group: { name?: unknown }) => group?.name)
 
+/** What one rule group matched as of a run's first day: the rule it matched under, compared whole, and the containers, sorted. */
+export const GenerationMatchStamp = z.object({
+  ruleSignature: z.string(),
+  containerIds: z.array(Id),
+})
+export type GenerationMatchStamp = z.infer<typeof GenerationMatchStamp>
+
+/** A rule group's two latest distinct stamps; a group no run has stamped is not listed. */
+export const SchemeGroupGeneration = z.object({
+  groupId: Id,
+  latest: GenerationMatchStamp,
+  /** The stamp before the latest; null for a group stamped once. */
+  previous: GenerationMatchStamp.nullable(),
+})
+export type SchemeGroupGeneration = z.infer<typeof SchemeGroupGeneration>
+
+/** What the scheme's generation runs left, read from them on every read. */
+export const SchemeGeneration = z.object({
+  /** When the scheme's latest succeeded run finished; null for a scheme no run has generated. */
+  lastGeneratedAt: IsoDateTime.nullable(),
+  /** The rule groups' stamps, in group order. */
+  groups: z.array(SchemeGroupGeneration),
+})
+export type SchemeGeneration = z.infer<typeof SchemeGeneration>
+
 const RouteSchemeFields = {
   ...stamped,
   projectId: Id,
@@ -250,6 +284,8 @@ const RouteSchemeFields = {
   unloadingStationId: Id.nullable(),
   /** By position. */
   collectionGroups: z.array(CollectionGroup),
+  /** A reading of the runs, never written: see the header. */
+  generation: SchemeGeneration,
   ...Validity.shape,
 }
 

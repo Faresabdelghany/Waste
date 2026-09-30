@@ -14,6 +14,14 @@
 // rule sets read in the order they were written (their ids are minted in body
 // order, ADR-0004) and the picked containers in stop order (`position`).
 //
+// A scheme also carries what its generation runs left (`generation`, Issue
+// #177): when its latest succeeded run finished, and each rule group's two
+// latest match stamps, the worker's `generation_match` rows. Two statements
+// more per page — the runs grouped by scheme, the stamps ranked by group —
+// and nothing kept on the scheme's row, so the runs are the one place the
+// reading is stored. The latest stamp is the one with the highest id, the
+// order the worker reads its own latest by (apps/worker/src/jobs/generate-routes.ts).
+//
 // A body's references are held in one statement per set, the way
 // routes/members.ts holds a membership list — routes/sets.ts is the two
 // statements once, `eachPresent` for the check and `groupedBy` for the read,
@@ -70,13 +78,14 @@
 // answered as a 409 listing every sentence, and "no container on two groups
 // the same day", a 400 at the entry. Both are applied here to the shapes the
 // routes hand in, under the scheme's row lock the routes take first.
-import type { CollectionGroup, RouteScheme, StopMatchingRule } from "@waste/contracts/route-schemes"
+import type { CollectionGroup, GenerationMatchStamp, RouteScheme, SchemeGeneration, StopMatchingRule } from "@waste/contracts/route-schemes"
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { containerType, wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
+import { generationMatch, generationRun } from "@waste/db/schema/generation"
 import { project, serviceProvider } from "@waste/db/schema/organisation"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
 import {
@@ -90,7 +99,7 @@ import {
   type NamedResource,
 } from "@waste/domain/planning/checks"
 import type { HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, ServiceDay, ServiceType, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
-import { and, asc, eq, exists, inArray, sql, type SQL } from "drizzle-orm"
+import { and, asc, eq, exists, inArray, lte, max, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 
 import type { Principal } from "../auth/principal"
@@ -109,7 +118,7 @@ import {
   type Scope,
 } from "./references"
 import { eachPresent, groupedBy, rowsPresent, whereNamed, type Named } from "./sets"
-import { stamp, stampsOf, timeOf } from "./shared"
+import { instantOf, stamp, stampsOf, timeOf } from "./shared"
 import { refuseRetiredVehicle, refuseUnavailableDriver } from "./statuses"
 
 /** What a route module takes beside the guard: the app's clock, which "today" on a project's clock is rendered from; a test pins it. */
@@ -171,8 +180,11 @@ export const groupColumns = {
 
 export type GroupRow = Pick<typeof collectionGroup.$inferSelect, keyof typeof groupColumns>
 
-/** The row on the wire, with the groups read for it. The coded fields are text with a CHECK in the database and an enum here; the vocabulary holds the two in lockstep. */
-export function schemeOf(row: SchemeRow, groups: CollectionGroup[]): RouteScheme {
+/** What a scheme no run has generated reads: no instant and no stamps. */
+export const NEVER_GENERATED: SchemeGeneration = { lastGeneratedAt: null, groups: [] }
+
+/** The row on the wire, with the groups and the generation reading read for it. The coded fields are text with a CHECK in the database and an enum here; the vocabulary holds the two in lockstep. */
+export function schemeOf(row: SchemeRow, groups: CollectionGroup[], generation: SchemeGeneration): RouteScheme {
   return {
     id: row.id,
     projectId: row.projectId,
@@ -191,6 +203,7 @@ export function schemeOf(row: SchemeRow, groups: CollectionGroup[]): RouteScheme
     depotId: row.depotId,
     unloadingStationId: row.unloadingStationId,
     collectionGroups: groups,
+    generation,
     validFrom: row.validFrom,
     validTo: row.validTo,
     ...stampsOf(row),
@@ -263,9 +276,67 @@ export async function groupsOf(tx: Tx, companyId: string, schemeIds: readonly st
   return byScheme
 }
 
-/** One scheme on the wire, its groups read the way a page reads them. */
+/**
+ * What the runs of every scheme asked for left, by scheme (see the header):
+ * one statement for the latest succeeded run's end, one for the two latest
+ * stamps of every group the schemes hold, in the groups' order. A scheme no
+ * run has touched is absent, so a caller reads `?? NEVER_GENERATED`.
+ */
+export async function generationsOf(tx: Tx, companyId: string, groups: ReadonlyMap<string, readonly CollectionGroup[]>): Promise<Map<string, SchemeGeneration>> {
+  const byScheme = new Map<string, SchemeGeneration>()
+  const schemeIds = [...groups.keys()]
+  if (schemeIds.length === 0) return byScheme
+  const groupIds = [...groups.values()].flatMap((list) => list.map((group) => group.id))
+  const [finished, stamps] = await Promise.all([
+    tx
+      .select({ schemeId: generationRun.routeSchemeId, at: max(generationRun.finishedAt) })
+      .from(generationRun)
+      .where(and(eq(generationRun.companyId, companyId), inArray(generationRun.routeSchemeId, schemeIds), eq(generationRun.status, "succeeded")))
+      .groupBy(generationRun.routeSchemeId),
+    groupIds.length === 0 ? [] : latestStamps(tx, companyId, groupIds),
+  ])
+  const lastAt = new Map(finished.map((row) => [row.schemeId, row.at]))
+  const stampsByGroup = new Map<string, GenerationMatchStamp[]>()
+  for (const { groupId, ...stamp } of stamps) stampsByGroup.set(groupId, [...(stampsByGroup.get(groupId) ?? []), stamp])
+  for (const [schemeId, list] of groups) {
+    const at = lastAt.get(schemeId) ?? null
+    const stamped = list.flatMap((group) => {
+      const [latest, previous] = stampsByGroup.get(group.id) ?? []
+      return latest === undefined ? [] : [{ groupId: group.id, latest, previous: previous ?? null }]
+    })
+    if (at !== null || stamped.length > 0) byScheme.set(schemeId, { lastGeneratedAt: at === null ? null : instantOf(at), groups: stamped })
+  }
+  return byScheme
+}
+
+/** The two latest stamps of each group asked for, latest first within a group: one statement, ranked by id. */
+async function latestStamps(tx: Tx, companyId: string, groupIds: readonly string[]): Promise<Array<GenerationMatchStamp & { groupId: string }>> {
+  const ranked = tx
+    .select({
+      groupId: generationMatch.collectionGroupId,
+      ruleSignature: generationMatch.ruleSignature,
+      containerIds: generationMatch.containerIds,
+      rank: sql<number>`row_number() over (partition by ${generationMatch.collectionGroupId} order by ${generationMatch.id} desc)`.as("rank"),
+    })
+    .from(generationMatch)
+    .where(and(eq(generationMatch.companyId, companyId), inArray(generationMatch.collectionGroupId, [...groupIds])))
+    .as("ranked")
+  const rows = await tx.select().from(ranked).where(lte(ranked.rank, 2)).orderBy(asc(ranked.groupId), asc(ranked.rank))
+  return rows.map(({ groupId, ruleSignature, containerIds }) => ({ groupId, ruleSignature, containerIds }))
+}
+
+/** Schemes on the wire, their groups and their generation read the way a page reads them: the groups first, since the stamps are the groups'. */
+export async function schemesOf(tx: Tx, companyId: string, rows: readonly SchemeRow[]): Promise<RouteScheme[]> {
+  const found = await groupsOf(tx, companyId, rows.map((row) => row.id))
+  const groups = new Map(rows.map((row) => [row.id, found.get(row.id) ?? []]))
+  const generations = await generationsOf(tx, companyId, groups)
+  return rows.map((row) => schemeOf(row, groups.get(row.id) ?? [], generations.get(row.id) ?? NEVER_GENERATED))
+}
+
+/** One scheme on the wire, read the way a page reads it. */
 export async function schemeWithGroups(tx: Tx, companyId: string, row: SchemeRow): Promise<RouteScheme> {
-  return schemeOf(row, (await groupsOf(tx, companyId, [row.id])).get(row.id) ?? [])
+  const [scheme] = await schemesOf(tx, companyId, [row])
+  return scheme
 }
 
 /** The rows of this company, in the projects the caller works in: what every scheme statement is bounded by. */
