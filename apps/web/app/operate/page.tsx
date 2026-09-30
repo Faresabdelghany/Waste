@@ -19,7 +19,7 @@ export default async function OperatePage({ searchParams }: OperatePageProps) {
   const recordId = typeof params.record === "string" ? params.record : undefined
 
   if (params.module === "driver-app") {
-    redirect("/tickets")
+    redirect("/driver")
   }
   if (params.module === "live") {
     redirect(

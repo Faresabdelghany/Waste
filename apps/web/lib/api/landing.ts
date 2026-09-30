@@ -6,8 +6,7 @@
 //   the landing — `/me` decides it (`Me.driver`): a driver lands on the
 //                 driver's app, everyone else on operations; never a grant,
 //                 never a probe of the driver door. `/driver` is the Driver
-//                 App's route (#145), which until it lands redirects to the
-//                 prototype's /tickets;
+//                 App (#145, components/waste/driver/);
 //   the gate    — with the adapter on, every page but /login needs a session:
 //                 nothing renders until the browser's session is read, and a
 //                 visitor without one is sent to /login, carrying where they

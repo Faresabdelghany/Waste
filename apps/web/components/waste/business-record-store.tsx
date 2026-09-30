@@ -25,7 +25,7 @@ import {
 import { UNREACHABLE_STATUS, type ApiClient } from "@/lib/api/client"
 import { genericProblem, isAccountRefusal, problemSentence, type Problem } from "@/lib/api/problem"
 import { moduleKeyOf } from "@/lib/api/records/adapter"
-import { SERVER_MODULES, serverModuleOf } from "@/lib/api/records/modules"
+import { SERVER_MODULES, serverModuleOf, viewableModules } from "@/lib/api/records/modules"
 import {
   commandRecord,
   IDLE,
@@ -48,7 +48,7 @@ import {
   readPersisted,
 } from "@/lib/storage-keys"
 
-import { useApiClient, useApiConfigured, useApiSessionIdentity } from "./api-session-store"
+import { useApiClient, useApiConfigured, useApiSession, useApiSessionIdentity } from "./api-session-store"
 
 /**
  * Key renames specific to this store's records, on top of the shared map in
@@ -214,6 +214,7 @@ export function BusinessRecordStoreProvider({
   }))
   const client = useApiClient()
   const identity = useApiSessionIdentity()
+  const { loadMe } = useApiSession()
 
   // The current client, whatever token it carries, for a write or a load
   // that reads it when it runs.
@@ -272,7 +273,11 @@ export function BusinessRecordStoreProvider({
   // module that fails is reported once and left on its fixtures — unless the
   // API refused the account itself (Issue #150): the client has ended the
   // session by then, so the load stops there, reported nowhere but /login
-  // and never falling back on fixtures. A load the session outlives — the
+  // and never falling back on fixtures. Only the modules the person's `/me`
+  // role grants `view` on are read (`viewableModules`, Issue #145); the rest
+  // are never requested and stay idle, so nobody meets a refusal for a pane
+  // they cannot open. A `/me` that cannot be read leaves the grants unknown,
+  // and every module is tried as before. A load the session outlives — the
   // person signs out mid-way — is aborted, not left to finish into a store
   // that no longer wants it, and a write it outlives is dropped when it
   // answers (`generation`). Every change of person or API empties the
@@ -287,7 +292,14 @@ export function BusinessRecordStoreProvider({
     const initial = stores.client.getSnapshot()
     if (initial === null) return
     const run = async () => {
-      for (const module of SERVER_MODULES) {
+      let modules = SERVER_MODULES
+      try {
+        modules = viewableModules((await loadMe()).role.grants, SERVER_MODULES)
+      } catch (error) {
+        // The account's refusal has ended the session; anything else leaves the grants unknown.
+        if (controller.signal.aborted || isAccountRefusal(problemOfError(error))) return
+      }
+      for (const module of modules) {
         if (controller.signal.aborted) return
         // The token as it stands when this module's read is sent; the one the
         // effect began with if the session lapsed under it, so the read goes
@@ -312,7 +324,7 @@ export function BusinessRecordStoreProvider({
     return () => {
       controller.abort()
     }
-  }, [identity, stores])
+  }, [identity, stores, loadMe])
 
   return (
     <BusinessRecordStoreContext.Provider value={stores}>

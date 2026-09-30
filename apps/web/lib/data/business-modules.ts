@@ -1856,7 +1856,7 @@ const operate: WorkspaceDefinition = {
       contextLabel: "Assigned route · vehicle",
       valueLabel: "Sync and evidence",
       primaryAction: "Open driver session",
-      deepLink: "/tickets",
+      deepLink: "/driver",
       metrics: [
         { label: "Drivers active", value: "4", helper: "4 authenticated sessions", tone: "positive" },
         { label: "Stops queued offline", value: "3", helper: "2 devices awaiting sync", tone: "warning" },
