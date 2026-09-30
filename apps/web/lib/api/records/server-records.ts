@@ -6,10 +6,13 @@
 //
 //   A module is `idle` until the store is asked for it, `loading` while its
 //   first read is out, `ready` once the rows are records, `failed` with the
-//   problem when the API refused or did not answer. Until it is `ready` the
-//   store answers the module's fixtures — the same as the browser-only path
-//   shows before hydration — and never a mixture of the two, so a list is
-//   either the server's or the prototype's and nobody counts both.
+//   problem when the API refused or did not answer, and `not-granted` when
+//   the person's role does not view it, so it is never asked for at all
+//   (Issue #200): nothing failed, and its problem is the store's own
+//   sentence for a pane to show. Until it is `ready` the store answers the
+//   module's fixtures — the same as the browser-only path shows before
+//   hydration — and never a mixture of the two, so a list is either the
+//   server's or the prototype's and nobody counts both.
 //
 //   A record's web id is the adapter's (adapter.ts: a fixture's id when the
 //   seed derived the row from it, else `<prefix>-<uuid>`), and the server's
@@ -50,7 +53,7 @@ import { ApiProblem, genericProblem, type Problem } from "../problem"
 import { isLocalRefusal, moduleKeyOf, PartialWrite, statusToken, webIdOf, type CommandInput, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 import { isCompanyRecord } from "./organisation"
 
-export type ModuleStatus = "idle" | "loading" | "ready" | "failed"
+export type ModuleStatus = "idle" | "not-granted" | "loading" | "ready" | "failed"
 
 export type ModuleState = {
   status: ModuleStatus
@@ -58,7 +61,7 @@ export type ModuleState = {
   records: BusinessRecord[]
   /** The server id behind each web id. */
   serverIds: ReadonlyMap<string, string>
-  /** Why the last read or write failed; cleared by the next read. */
+  /** Why the last read or write failed, or why the module is not read at all; cleared by the next read. */
   problem: Problem | null
   /** The clock of the last successful read. */
   loadedAt: number | null
@@ -67,6 +70,27 @@ export type ModuleState = {
 export type ServerRecordsState = ReadonlyMap<string, ModuleState>
 
 export const IDLE: ModuleState = { status: "idle", records: [], serverIds: new Map(), problem: null, loadedAt: null }
+
+/**
+ * A module the person's `/me` role does not view (`viewableModules`): never
+ * requested, so no read failed and nobody is told; `getRecords` answers its
+ * fixtures as for `idle`, and its problem is the sentence a pane shows in
+ * place of rows — a 403 in the API's shape, which ends no session.
+ */
+export function notGranted(moduleKey: string): ModuleState {
+  return { ...IDLE, status: "not-granted", problem: genericProblem(403, `Your role does not allow view on ${moduleKey}`) }
+}
+
+/** The state with each of `modules` marked not granted and every other module as it stands; the same state when there are none. */
+export function withNotGranted(state: ServerRecordsState, modules: readonly ServerModule[]): ServerRecordsState {
+  if (modules.length === 0) return state
+  const next = new Map(state)
+  for (const module of modules) {
+    const key = moduleKeyOf(module.workspaceId, module.moduleId)
+    next.set(key, notGranted(key))
+  }
+  return next
+}
 
 /** The state of a module the store has been asked for; `IDLE` for one it has not. */
 export function moduleState(state: ServerRecordsState, workspaceId: WorkspaceId, moduleId: string): ModuleState {
@@ -79,6 +103,22 @@ export function moduleState(state: ServerRecordsState, workspaceId: WorkspaceId,
  */
 export function recordsOf(module: ModuleState, fixtures: readonly BusinessRecord[]): BusinessRecord[] {
   return module.status === "ready" ? module.records : [...fixtures]
+}
+
+/** `notGranted` tells a pane its problem is the role's, not a read that failed: nothing was read, so it says the rows are not shown to the role. */
+export type PaneAnswer = { records: BusinessRecord[]; ready: boolean; pending: boolean; notGranted: boolean; problem: Problem | null }
+
+/**
+ * What a pane reading its own switched module is told on the Pilot
+ * (`useModuleRecords`): the rows once the module is ready; before, none — a
+ * fixture shown there is a row that does not exist — `pending` while the
+ * read is still to come or out, and otherwise the problem the pane shows in
+ * their place: the API's for a read that failed, the store's own for a
+ * module the person's role does not view (`notGranted`).
+ */
+export function paneAnswerOf(module: ModuleState): PaneAnswer {
+  if (module.status === "ready") return { records: module.records, ready: true, pending: false, notGranted: false, problem: null }
+  return { records: [], ready: false, pending: module.status === "idle" || module.status === "loading", notGranted: module.status === "not-granted", problem: module.problem }
 }
 
 /** The problem an unknown failure is reported as; a thrown `ApiProblem` is reported as itself. */

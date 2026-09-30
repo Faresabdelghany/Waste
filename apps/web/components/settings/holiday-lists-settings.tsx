@@ -227,11 +227,17 @@ export function HolidayListsSettings() {
     })
   }
 
+  // The module whose problem the pane says, the projects first.
+  const blocked = organisation.problem !== null ? organisation : calendars
   const emptyMessage = organisation.pending || calendars.pending
     ? "Reading the projects and their calendars from the API…"
-    : (organisation.problem ?? calendars.problem)
-      ? `The holiday lists could not be read from the API: ${(organisation.problem ?? calendars.problem)?.detail ?? (organisation.problem ?? calendars.problem)?.title}`
-      : "No project matches this search."
+    : blocked.notGranted
+      ? "The holiday lists are not shown to your role."
+      : blocked.problem
+        ? `The holiday lists could not be read from the API: ${blocked.problem.detail ?? blocked.problem.title}`
+        : "No project matches this search."
+  // Nothing was read for a role that does not view the module: the store's sentence says why, beneath.
+  const emptyHint = blocked.notGranted ? blocked.problem?.detail : undefined
 
   return (
     <AssetPanelShell
@@ -254,6 +260,7 @@ export function HolidayListsSettings() {
         {!ready || shown.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border/60 p-8 text-center text-sm text-muted-foreground">
             {emptyMessage}
+            {emptyHint === undefined ? null : <span className="mt-1 block text-xs">{emptyHint}</span>}
           </p>
         ) : (
           shown.map((project) => (

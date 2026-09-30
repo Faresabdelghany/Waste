@@ -70,6 +70,34 @@ export async function signIn(page: Page, email: string, password: string): Promi
 }
 
 /**
+ * Records every toast a context's pages show, from the first paint on, so
+ * one raised and dismissed before an assertion still counts: sonner's
+ * `[data-sonner-toast]` items, as they are added. Read with `toastsOf`
+ * before the page navigates away, since a new document starts a new record.
+ */
+export async function recordToasts(context: BrowserContext): Promise<void> {
+  await context.addInitScript(() => {
+    const shown: string[] = []
+    Object.assign(window, { __e2eToasts: shown })
+    new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (!(node instanceof Element)) continue
+          for (const toast of [node, ...node.querySelectorAll("[data-sonner-toast]")]) {
+            if (toast.matches("[data-sonner-toast]")) shown.push(toast.textContent ?? "")
+          }
+        }
+      }
+    }).observe(document, { childList: true, subtree: true })
+  })
+}
+
+/** The toasts the page's document has shown so far; undefined where `recordToasts` was not set up, so no assertion passes on nothing. */
+export function toastsOf(page: Page): Promise<string[] | undefined> {
+  return page.evaluate(() => (window as unknown as { __e2eToasts?: string[] }).__e2eToasts)
+}
+
+/**
  * Waits for the record store's chain of switched modules to land after a
  * page load (business-record-store.tsx loads them one after another once a
  * person is signed in). A spec that then acts on the account — deactivates

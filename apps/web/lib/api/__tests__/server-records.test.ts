@@ -21,11 +21,14 @@ import {
   loaded,
   loading,
   moduleState,
+  notGranted,
+  paneAnswerOf,
   recordsOf,
   refusalProblem,
   resolverOver,
   spellsStatus,
   withCreated,
+  withNotGranted,
   withRecord,
   withoutRecord,
   writeRecord,
@@ -122,6 +125,31 @@ describe("a module's state", () => {
     assert.equal(stillReady.problem, problem)
   })
 
+  test("a module the person's role does not view is not granted: its fixtures, as an idle one answers, and the sentence a pane shows, with nothing read", () => {
+    const fixtures = [record("f-1", "Fixture")]
+    const withheld = notGranted("configure.master")
+    assert.equal(withheld.status, "not-granted")
+    assert.deepEqual(withheld.problem, { type: "about:blank", title: "Forbidden", status: 403, detail: "Your role does not allow view on configure.master" })
+    assert.deepEqual(recordsOf(withheld, fixtures), fixtures)
+    assert.deepEqual([withheld.records, withheld.serverIds.size, withheld.loadedAt], [[], 0, null])
+  })
+
+  test("withNotGranted marks exactly the modules it is handed, leaves every other module as it stands, and hands back the same state when there are none", () => {
+    const ready = loaded({ records: [record("t-1", "One")], serverIds: new Map([["t-1", "1"]]) }, 5)
+    const state: ServerRecordsState = new Map([["customers.contacts", ready]])
+    const withheld: ServerModule[] = [
+      { workspaceId: "configure", moduleId: "organization", resources: [] },
+      { workspaceId: "configure", moduleId: "master", resources: [] },
+    ]
+    const marked = withNotGranted(state, withheld)
+    assert.deepEqual([...marked.keys()], ["customers.contacts", "configure.organization", "configure.master"])
+    assert.equal(marked.get("customers.contacts"), ready)
+    assert.deepEqual(marked.get("configure.organization"), notGranted("configure.organization"))
+    assert.deepEqual(marked.get("configure.master"), notGranted("configure.master"))
+    assert.equal(state.size, 1, "the state it was handed is left alone")
+    assert.equal(withNotGranted(state, []), state, "nothing withheld is no change, so the store tells nobody")
+  })
+
   test("withRecord replaces in place or puts a new record first; withoutRecord drops it and its server id", () => {
     const ready = loaded({ records: [record("t-1", "One"), record("t-2", "Two")], serverIds: new Map([["t-1", "1"], ["t-2", "2"]]) }, 5)
     const replaced = withRecord(ready, record("t-2", "Two renamed"))
@@ -141,6 +169,31 @@ describe("a module's state", () => {
     assert.deepEqual(created.records[0].facts, { Stamped: "by the server" }, "the server's row, under the minted id")
     assert.equal(created.serverIds.get("mint-1"), "new-1")
     assert.equal(created.serverIds.has("t-new-1"), false)
+  })
+})
+
+describe("what a pane reading its own module is told on the Pilot", () => {
+  const rows = [record("t-1", "One")]
+
+  test("no rows and pending while the read is still to come or out; the rows once the module is ready", () => {
+    assert.deepEqual(paneAnswerOf(IDLE), { records: [], ready: false, pending: true, notGranted: false, problem: null })
+    assert.deepEqual(paneAnswerOf(loading(IDLE)), { records: [], ready: false, pending: true, notGranted: false, problem: null })
+    assert.deepEqual(paneAnswerOf(loaded({ records: rows, serverIds: new Map([["t-1", "1"]]) }, 5)), { records: rows, ready: true, pending: false, notGranted: false, problem: null })
+  })
+
+  test("a read that failed: no rows, nothing to wait for, and the API's problem, which is no refusal of the role", () => {
+    const problem = genericProblem(503)
+    assert.deepEqual(paneAnswerOf(loadFailed(loading(IDLE), problem)), { records: [], ready: false, pending: false, notGranted: false, problem })
+  })
+
+  test("a module the role does not view: no rows and nothing to wait for, told apart from a failed read, with the sentence the pane shows in their place", () => {
+    assert.deepEqual(paneAnswerOf(notGranted("configure.organization")), {
+      records: [],
+      ready: false,
+      pending: false,
+      notGranted: true,
+      problem: { type: "about:blank", title: "Forbidden", status: 403, detail: "Your role does not allow view on configure.organization" },
+    })
   })
 })
 

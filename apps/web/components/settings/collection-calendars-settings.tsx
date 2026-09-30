@@ -209,9 +209,13 @@ export function CollectionCalendarsSettings() {
 
   const emptyMessage = calendars.pending
     ? "Reading the collection calendars from the API…"
-    : calendars.problem
-      ? `The collection calendars could not be read from the API: ${calendars.problem.detail ?? calendars.problem.title}`
-      : "No collection calendars match this search."
+    : calendars.notGranted
+      ? "The collection calendars are not shown to your role."
+      : calendars.problem
+        ? `The collection calendars could not be read from the API: ${calendars.problem.detail ?? calendars.problem.title}`
+        : "No collection calendars match this search."
+  // Nothing was read for a role that does not view the module: the store's sentence says why, beneath.
+  const emptyHint = calendars.notGranted ? calendars.problem?.detail : undefined
 
   return (
     <AssetPanelShell
@@ -262,7 +266,7 @@ export function CollectionCalendarsSettings() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <EmptyRow colSpan={8} message={emptyMessage} />
+                <EmptyRow colSpan={8} message={emptyMessage} hint={emptyHint} />
               ) : (
                 pageRows.map((row) => (
                   <TableRow key={row.record.id}>

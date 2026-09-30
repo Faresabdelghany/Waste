@@ -223,11 +223,15 @@ export function MasterDataSettings() {
     ? "The master data is kept on the API: sign in on the Pilot to read and write it."
     : master.pending
       ? "Reading the master data from the API…"
-      : master.problem
-        ? `The master data could not be read from the API: ${master.problem.detail ?? master.problem.title}`
-        : ofKind.length === 0
-          ? `No ${details.plural.toLowerCase()} yet.`
-          : `No ${details.plural.toLowerCase()} match this search.`
+      : master.notGranted
+        ? "The master data is not shown to your role."
+        : master.problem
+          ? `The master data could not be read from the API: ${master.problem.detail ?? master.problem.title}`
+          : ofKind.length === 0
+            ? `No ${details.plural.toLowerCase()} yet.`
+            : `No ${details.plural.toLowerCase()} match this search.`
+  // Nothing was read for a role that does not view the module: the store's sentence says why, beneath.
+  const emptyHint = master.notGranted ? master.problem?.detail : undefined
 
   return (
     <AssetPanelShell
@@ -278,7 +282,7 @@ export function MasterDataSettings() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <EmptyRow colSpan={5} message={emptyMessage} />
+                <EmptyRow colSpan={5} message={emptyMessage} hint={emptyHint} />
               ) : (
                 pageRows.map(({ record, detail, scope }) => (
                   <TableRow key={record.id}>

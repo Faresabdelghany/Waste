@@ -364,15 +364,13 @@ export function RecordsSection({
   )
 }
 
-export function EmptyRow({ colSpan, message }: { colSpan: number; message: string }) {
+export function EmptyRow({ colSpan, message, hint = "Try a different search or status filter." }: { colSpan: number; message: string; hint?: string }) {
   return (
     <TableRow>
       <TableCell colSpan={colSpan} className="h-52 text-center">
         <MagnifyingGlass className="mx-auto h-6 w-6 text-muted-foreground" />
         <p className="mt-2 text-sm font-medium">{message}</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Try a different search or status filter.
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
       </TableCell>
     </TableRow>
   )

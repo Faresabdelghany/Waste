@@ -80,8 +80,9 @@ export const SERVER_MODULE_KEYS: readonly string[] = SERVER_MODULES.map((module)
  * whose key — the store's key is the API's module key — the `/me` role grants
  * `view` on (the API normalises `view` wherever anything is granted, so it is
  * the one action to look for). A module the grants do not cover is never
- * requested and stays idle, so nobody meets a refusal for a pane they cannot
- * open — a driver on the Driver App least of all (Issue #145).
+ * requested — the store marks it not granted and tells nobody (Issue #200)
+ * — so nobody meets a refusal for a pane they cannot open, a driver on the
+ * Driver App least of all (Issue #145).
  */
 export function viewableModules(grants: readonly { moduleKey: string; actions: readonly string[] }[], modules: readonly ServerModule[]): ServerModule[] {
   const viewed = new Set<string>(grants.filter((grant) => grant.actions.includes("view")).map((grant) => grant.moduleKey))
