@@ -42,6 +42,7 @@ import {
 } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
+import { ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
 import {
   clearedFactKeys,
   deriveFormRecord,
@@ -268,11 +269,12 @@ import { CollectionGroupsEditorDialog } from "@/components/waste/collection-grou
 import { SchemeGenerateRoutesDialog } from "@/components/waste/scheme-generate-routes"
 import { SchemeDetailsPage } from "@/components/waste/scheme-details-page"
 import { SchemePlanAheadRunner } from "@/components/waste/scheme-plan-ahead"
-import { useBusinessRecordStore } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
 import { useApiConfigured } from "@/components/waste/api-session-store"
 import { commandSurfaceFor } from "@/components/waste/commands/command-surfaces"
+import { offersRowsOf } from "@/components/waste/pickable-records"
 import { isServerBacked, serverModuleOf } from "@/lib/api/records/modules"
-import { spellsStatus } from "@/lib/api/records/server-records"
+import { spellsStatus, type WriteOutcome } from "@/lib/api/records/server-records"
 import { useActiveRoutes } from "@/components/waste/active-routes-store"
 import {
   useAssetManagementStore,
@@ -1207,8 +1209,12 @@ export function BusinessWorkspace({
   // The one edit-save of a route scheme (issue #33; the edit policy of issue
   // #38) — both edit doors save through it, and the "Ask each time" question
   // it may raise is answered by the commit of the render that answers.
+  // On the Pilot the API holds the schemes and generates their routes: a
+  // scheme's create and edit write the scheme alone, and the web's own
+  // generation — the Generate dialog, Plan Ahead on load — stays off until
+  // slice 4 brings the API's trigger (the nightly sweep plans meanwhile).
   const { commitSchemeEdit, pendingSchemeEdit, answerPendingSchemeEdit, dismissPendingSchemeEdit } =
-    useSchemeEditCommit({ moduleRecords, upsertRecord, setAuditEvents, setSelectedRecord, actorName })
+    useSchemeEditCommit({ moduleRecords, upsertRecord, setAuditEvents, setSelectedRecord, actorName, schemesOnApi: apiConfigured })
 
   const activeModule =
     workspace.modules.find((module) => module.id === activeModuleId) ?? workspace.modules[0]
@@ -1797,11 +1803,15 @@ export function BusinessWorkspace({
       canRunRecordActions &&
       schemeCanGenerateRoutes(record, todayIso())
         ? [
-            {
-              label: "Generate routes",
-              icon: <ArrowsClockwise className="h-4 w-4" />,
-              onSelect: (target: BusinessRecord) => setGenerateSchemeRecord(target),
-            },
+            ...(apiConfigured
+              ? []
+              : [
+                  {
+                    label: "Generate routes",
+                    icon: <ArrowsClockwise className="h-4 w-4" />,
+                    onSelect: (target: BusinessRecord) => setGenerateSchemeRecord(target),
+                  },
+                ]),
             {
               label: isPlanAheadEnabled(record)
                 ? "Turn off Plan Ahead"
@@ -1816,20 +1826,23 @@ export function BusinessWorkspace({
                   getRecords("route-studio", "schemes", activeModule.records).find(
                     (candidate) => candidate.id === target.id,
                   ) ?? target
-                upsertRecord("route-studio", "schemes", setPlanAhead(stored, enabled))
-                toast.success(
-                  enabled ? "Plan Ahead turned on" : "Plan Ahead turned off",
-                  {
-                    description: enabled
-                      ? `${target.name} generates its next 7 days automatically when Route Studio loads.`
-                      : `${target.name} stops auto-generating; already-generated routes remain.`,
-                  },
+                whenSaved(upsertRecord("route-studio", "schemes", setPlanAhead(stored, enabled)), () =>
+                  toast.success(
+                    enabled ? "Plan Ahead turned on" : "Plan Ahead turned off",
+                    {
+                      description: enabled
+                        ? apiConfigured
+                          ? `${target.name} keeps its next 7 days planned through the nightly plan-ahead run.`
+                          : `${target.name} generates its next 7 days automatically when Route Studio loads.`
+                        : `${target.name} stops auto-generating; already-generated routes remain.`,
+                    },
+                  ),
                 )
               },
             },
           ]
         : undefined,
-    [activeModule.records, canRunRecordActions, getRecords, isSchemesView, upsertRecord],
+    [activeModule.records, apiConfigured, canRunRecordActions, getRecords, isSchemesView, upsertRecord],
   )
   // The agreements module's sheet actions on the API (slice 9a of #81): the
   // edit a standard view offers no row action for — an agreement's period
@@ -2423,6 +2436,17 @@ export function BusinessWorkspace({
         field.relation.moduleId,
       )
       if (!resolved) return []
+      // On the Pilot the scheme form offers only rows the store reads from
+      // the API (pickable-records.ts): the fleet, the places and the
+      // containers are fixtures until slices 5a and 5b, so they offer
+      // nothing, and a value the scheme already names stays as its id chip.
+      if (
+        formSchema?.key === "route-studio.schemes" &&
+        !offersRowsOf(apiConfigured, resolved.workspaceId, resolved.module.id)
+      ) {
+        const current = values[field.id]
+        return typeof current === "string" && current !== "" ? [{ value: current, label: current }] : []
+      }
 
       const permittedIds = field.relation.allowedRecordIds
         ? new Set(field.relation.allowedRecordIds)
@@ -2611,7 +2635,7 @@ export function BusinessWorkspace({
         label: showsStatus && record.status !== "Active" ? `${record.name} · ${record.status}` : record.name,
       }))
     },
-    [customersOnApi, serviceProviderScopeId, formSchema?.key, formSchema?.recordKind, getRecords, projectScope],
+    [apiConfigured, customersOnApi, serviceProviderScopeId, formSchema?.key, formSchema?.recordKind, getRecords, projectScope],
   )
 
   const formInitialValues = useMemo<BusinessFormValues>(() => {
@@ -3377,14 +3401,19 @@ export function BusinessWorkspace({
           })
         }
       }
-      createSchemeFromDraft(quickSchemeDraftFromValues(values), {
-        method: "Quick create",
-        extraValues,
-        extraFacts,
-        extraRelations,
-      })
-      setIsCreateOpen(false)
-      setRelatedCreateTarget(null)
+      // On the Pilot the dialog closes once the API has taken the scheme, and stays open on its refusal.
+      whenSaved(
+        createSchemeFromDraft(quickSchemeDraftFromValues(values), {
+          method: "Quick create",
+          extraValues,
+          extraFacts,
+          extraRelations,
+        }),
+        () => {
+          setIsCreateOpen(false)
+          setRelatedCreateTarget(null)
+        },
+      )
       return
     }
 
@@ -4216,7 +4245,7 @@ export function BusinessWorkspace({
       extraFacts?: Record<string, string>
       extraRelations?: NonNullable<BusinessRecord["relationRefs"]>
     },
-  ) => {
+  ): Promise<WriteOutcome> | undefined => {
     const now = Date.now()
     const relationRefs: NonNullable<BusinessRecord["relationRefs"]> = []
     const linkRecord = (
@@ -4460,6 +4489,45 @@ export function BusinessWorkspace({
       submittedValues,
       relationRefs,
     }
+    // On the Pilot the API takes the scheme as it stands — Draft or
+    // Validated, the web's validation deciding which it asks for and the API
+    // holding a validated one to its structural rules — and its routes are
+    // the API's to generate: nothing past the scheme is written here, and
+    // the scheme opens and the toast shows once the API has answered.
+    if (apiConfigured) {
+      const saved = upsertRecord(ROUTE_SCHEMES_MODULE.workspaceId, ROUTE_SCHEMES_MODULE.moduleId, newRecord)
+      whenSaved(saved, () => {
+        setAuditEvents((current) => ({
+          ...current,
+          [newRecord.id]: [
+            {
+              id: `audit-scheme-create-${now}`,
+              action: `Create route scheme · ${origin.method}`,
+              actor: actorName,
+              at: "Now",
+              reason: origin.method,
+              before: "Absent",
+              after: newRecord.status,
+              evidence: `${relationRefs.length} linked records · ${projectScopeLabel(projectIds, projectRecords)} scope validated`,
+            },
+          ],
+        }))
+        if (origin.method !== "Guided Setup") {
+          setSelectedRecord(newRecord)
+          router.push(getWorkspaceNavigationHref(navigationBasePath, workspace.id, activeModule.id, newRecord.id), { scroll: false })
+        }
+        if (newRecord.status === "Draft") {
+          toast.warning(`Route scheme created as Draft — ${newRecord.name}`, {
+            description: `${validation.issues.length} open issue${validation.issues.length === 1 ? "" : "s"}: ${validation.issues.join(" · ")}`,
+          })
+        } else {
+          toast.success(`Route scheme created — ${newRecord.name}`, {
+            description: "The nightly plan-ahead run generates its routes.",
+          })
+        }
+      })
+      return saved
+    }
     // Self-contained creation (issue #28, D18/D24/D25): the orchestration
     // planner decides everything past "Create" — a Validated scheme generates
     // its initial window with Plan Ahead on and becomes Scheduled; this
@@ -4549,6 +4617,7 @@ export function BusinessWorkspace({
         }: ${validation.issues.join(" · ")}`,
       })
     }
+    return undefined
   }
 
   /**
@@ -4756,7 +4825,7 @@ export function BusinessWorkspace({
               : undefined
           }
           onGenerateRoutes={
-            canRunRecordActions
+            canRunRecordActions && !apiConfigured
               ? () => setGenerateSchemeRecord(schemeDetailRecord)
               : undefined
           }

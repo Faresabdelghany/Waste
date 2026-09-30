@@ -17,10 +17,21 @@
 // is read when the plan is made, not overwritten by a plan made before it.
 // A one-off that fails validation is refused whole and the dialog stays open
 // on the refusal.
+//
+// On the Pilot (`schemesOnApi`, slice 3 of #81) the API holds the scheme and
+// generates its routes, so none of that runs: the edit is the scheme's alone,
+// under the status the wire has — draft or validated, a person's decision,
+// the lifecycle's other labels being the web's readings — the API's 409
+// speaking for a validated scheme the edit breaks, and the next generation
+// run reconciling its routes. The dialog closes once the API has taken the
+// edit. The question over future routes returns with the routes on the API
+// (slice 6).
 
 import { useCallback, useState, type Dispatch, type SetStateAction } from "react"
 import { toast } from "sonner"
 
+import { whenSaved } from "@/components/waste/business-record-store"
+import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import {
@@ -67,11 +78,13 @@ export type PendingSchemeEdit = {
 export type SchemeEditCommitDeps = {
   /** The live records of any workspace module — what the planner reads its related records from, at plan time. */
   moduleRecords: (workspaceId: WorkspaceId, moduleId: string) => BusinessRecord[]
-  upsertRecord: (workspaceId: WorkspaceId, moduleId: string, record: BusinessRecord) => void
+  upsertRecord: (workspaceId: WorkspaceId, moduleId: string, record: BusinessRecord) => Promise<WriteOutcome> | undefined
   setAuditEvents: Dispatch<SetStateAction<Record<string, SchemeEditAuditEvent[]>>>
   /** The workspace's selected record: refreshed when it is the scheme just saved. */
   setSelectedRecord: Dispatch<SetStateAction<BusinessRecord | null>>
   actorName: string
+  /** The Pilot: the API holds the schemes, so an edit writes the scheme alone (the header). */
+  schemesOnApi: boolean
 }
 
 export function useSchemeEditCommit({
@@ -80,6 +93,7 @@ export function useSchemeEditCommit({
   setAuditEvents,
   setSelectedRecord,
   actorName,
+  schemesOnApi,
 }: SchemeEditCommitDeps) {
   const [pendingSchemeEdit, setPendingSchemeEdit] = useState<PendingSchemeEdit | null>(null)
 
@@ -91,6 +105,22 @@ export function useSchemeEditCommit({
       onSaved: (scheme: BusinessRecord) => void,
       apply?: SchemeEditApplication,
     ) => {
+      if (schemesOnApi) {
+        const scheme: BusinessRecord = { ...after, status: before.status }
+        whenSaved(upsertRecord("route-studio", "schemes", scheme), () => {
+          setAuditEvents((current) => ({
+            ...current,
+            [scheme.id]: [
+              { id: audit.id, action: audit.action, actor: actorName, at: "Now", reason: audit.reason, before: before.status, after: scheme.status, evidence: audit.evidence(scheme) },
+              ...(current[scheme.id] ?? []),
+            ],
+          }))
+          setSelectedRecord((current) => (current?.id === scheme.id ? scheme : current))
+          onSaved(scheme)
+          toast.success(`${scheme.name} updated`)
+        })
+        return
+      }
       const schemeEdit = planSchemeEditReconciliation(
         {
           before,
@@ -157,7 +187,7 @@ export function useSchemeEditCommit({
         toast.success(`${scheme.name} updated`, { description: schemeEdit.message })
       }
     },
-    [actorName, moduleRecords, setAuditEvents, setSelectedRecord, upsertRecord],
+    [actorName, moduleRecords, schemesOnApi, setAuditEvents, setSelectedRecord, upsertRecord],
   )
 
   /** The dialog's answer: the pending edit is planned again, with `apply`, by the commit of this render. */

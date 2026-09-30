@@ -25,7 +25,9 @@
 //   the stamps and every field the wire owns are the server's. A refusal
 //   puts the row back as it was and the caller is told in the API's words
 //   (the store's `onProblem`), since a 409 duplicate or a 400 naming a
-//   field is a person's to read, not a console's.
+//   field is a person's to read, not a console's. A write that is several
+//   requests and is refused after one of them landed (`PartialWrite`) puts
+//   the row as the server now holds it instead, read back by the adapter.
 //
 //   A record the workspace writes that no adapter owns — a companion row a
 //   controlled action made, a soft delete's marked copy — has no route. The
@@ -45,7 +47,7 @@ import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 
 import type { ApiClient } from "../client"
 import { ApiProblem, genericProblem, type Problem } from "../problem"
-import { isLocalRefusal, moduleKeyOf, statusToken, webIdOf, type CommandInput, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, moduleKeyOf, PartialWrite, statusToken, webIdOf, type CommandInput, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 import { isCompanyRecord } from "./organisation"
 
 export type ModuleStatus = "idle" | "loading" | "ready" | "failed"
@@ -111,6 +113,13 @@ export function resolverOver(state: ServerRecordsState, extra?: { records: reado
     serverIdOf: (webId) => {
       for (const source of sources) {
         const found = source.serverIds.get(webId)
+        if (found !== undefined) return found
+      }
+      return undefined
+    },
+    find: (predicate) => {
+      for (const source of sources) {
+        const found = source.records.find(predicate)
         if (found !== undefined) return found
       }
       return undefined
@@ -218,7 +227,8 @@ export type WriteOutcome =
   | { kind: "created"; record: BusinessRecord; serverId: string; optimisticId: string }
   | { kind: "updated"; record: BusinessRecord; serverId: string }
   | { kind: "unchanged"; record: BusinessRecord }
-  | { kind: "refused"; problem: Problem; recordId: string }
+  /** `record`, when part of a write landed before the refusal: the row as the server now holds it, which the store shows instead of the row as it was. */
+  | { kind: "refused"; problem: Problem; recordId: string; record?: BusinessRecord }
 
 /** The 400 a local refusal stands for, in the API's own shape, so a caller reads one. */
 export function refusalProblem(refusal: { path: string; message: string }): Problem {
@@ -285,6 +295,9 @@ export async function writeRecord(client: ApiClient, module: ServerModule, curre
     // stays one row here, as `withCreated` keeps a minted id.
     return { kind: "updated", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId: resource.id }
   } catch (error) {
+    if (error instanceof PartialWrite) {
+      return { kind: "refused", recordId: record.id, problem: problemOfError(error.refusal), record: { ...adapter.toRecord(error.resource, context), id: record.id } }
+    }
     return { kind: "refused", recordId: record.id, problem: problemOfError(error) }
   }
 }

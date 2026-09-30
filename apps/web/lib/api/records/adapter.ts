@@ -46,10 +46,17 @@ export type Resolver = {
   byServerId: (serverId: string) => BusinessRecord | undefined
   /** The server id a web id stands for, or undefined for a record the server does not hold. */
   serverIdOf: (webId: string) => string | undefined
+  /**
+   * The first loaded record the predicate holds for, or undefined: for a
+   * mapping whose form names a row by the wire's own stable key rather than
+   * by id — a route scheme's rule names its waste fractions by name, the
+   * word the domain matches containers by. A miss is the caller's refusal.
+   */
+  find: (predicate: (record: BusinessRecord) => boolean) => BusinessRecord | undefined
 }
 
 /** A resolver over nothing: every lookup misses. What a mapping gets when the store has nothing else to offer. */
-export const NOTHING_RESOLVED: Resolver = { byServerId: () => undefined, serverIdOf: () => undefined }
+export const NOTHING_RESOLVED: Resolver = { byServerId: () => undefined, serverIdOf: () => undefined, find: () => undefined }
 
 /** What a mapping may look at beside the resource itself. */
 export type MappingContext = {
@@ -68,6 +75,21 @@ export type LocalRefusal = { path: string; message: string }
 
 /** What a command's dialog hands the store: its values by field, opaque to the store and read only by the command's `toBody`. */
 export type CommandInput = Readonly<Record<string, unknown>>
+
+/**
+ * What an adapter's `update` throws when it is several requests and one is
+ * refused after another landed: the API's refusal, and the resource as the
+ * server now holds it, read back. The store shows that resource under the
+ * refusal rather than the row as it was, since part of the write stands.
+ */
+export class PartialWrite<R extends Resource = Resource> extends Error {
+  constructor(
+    readonly refusal: unknown,
+    readonly resource: R,
+  ) {
+    super("A write was refused after part of it landed")
+  }
+}
 
 /**
  * A command on one row (`POST /users/:id/deactivate`): the request, which

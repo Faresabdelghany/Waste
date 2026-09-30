@@ -1,6 +1,26 @@
 import { expect, test } from "../fixtures"
 import { fillScope, nextButton, optionTexts, startGuided, wizard } from "../helpers/route-schemes"
 
+// The wizard's own accessibility, moved here from dialog-and-quick.spec.ts
+// when quick create moved to the API suite (#177): it travels with the wizard
+// to slice 4's guided-setup spec.
+test("the wizard is a labelled dialog that traps focus and closes on Escape", async ({ page }) => {
+  await startGuided(page)
+  const root = wizard(page)
+  await expect(root).toHaveAttribute("role", "dialog")
+  await expect(root).toHaveAccessibleName("New route scheme")
+  const focusInside = await page.evaluate(() =>
+    Boolean(document.activeElement?.closest('[role="dialog"]')),
+  )
+  expect(focusInside).toBe(true)
+  await page.keyboard.press("Tab")
+  expect(
+    await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]'))),
+  ).toBe(true)
+  await page.keyboard.press("Escape")
+  await expect(root).toBeHidden()
+})
+
 test("step 1 asks for the real scope and has no Collection calendar", async ({ page }) => {
   await startGuided(page)
   const root = wizard(page)

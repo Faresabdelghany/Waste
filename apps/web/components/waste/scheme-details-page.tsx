@@ -117,7 +117,9 @@ import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { StatRow } from "@/components/projects/StatRow"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { BusinessFilterPopover } from "@/components/waste/business-filter-popover"
-import { useBusinessRecordStore } from "@/components/waste/business-record-store"
+import { useApiConfigured } from "@/components/waste/api-session-store"
+import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
+import { SchemeNextCollections } from "@/components/waste/scheme-next-collections"
 import {
   NoMatchingRecords,
   statusClasses,
@@ -208,6 +210,8 @@ export function SchemeDetailsPage({
   readOnly?: boolean
 }) {
   const { upsertRecord } = useBusinessRecordStore()
+  // On the Pilot the scheme's routes are the API's and not read here until slice 6: the Routes tab shows the dates the API plans instead.
+  const onApi = useApiConfigured()
   const schemes = useModuleRecords("route-studio", "schemes")
   const allRoutes = useModuleRecords("route-studio", "routes")
   const allPickups = useModuleRecords("route-studio", "pickups")
@@ -322,12 +326,15 @@ export function SchemeDetailsPage({
     // the status/context seams (issues #25/#30) are render-time and must
     // never be frozen into the store.
     const stored = schemes.find((candidate) => candidate.id === record.id) ?? record
-    upsertRecord("route-studio", "schemes", setPlanAhead(stored, enabled))
-    toast.success(enabled ? "Plan Ahead turned on" : "Plan Ahead turned off", {
-      description: enabled
-        ? `${record.name} generates its next 7 days automatically when Route Studio loads.`
-        : `${record.name} stops auto-generating; already-generated routes remain.`,
-    })
+    whenSaved(upsertRecord("route-studio", "schemes", setPlanAhead(stored, enabled)), () =>
+      toast.success(enabled ? "Plan Ahead turned on" : "Plan Ahead turned off", {
+        description: enabled
+          ? onApi
+            ? `${record.name} keeps its next 7 days planned through the nightly plan-ahead run.`
+            : `${record.name} generates its next 7 days automatically when Route Studio loads.`
+          : `${record.name} stops auto-generating; already-generated routes remain.`,
+      }),
+    )
   }
 
   return (
@@ -429,7 +436,7 @@ export function SchemeDetailsPage({
               {(
                 [
                   ["details", "Details", null],
-                  ["routes", "Routes", schemeRoutes.length],
+                  ["routes", "Routes", onApi ? null : schemeRoutes.length],
                   ["stops", "Stops", schemeStops.length],
                   ["holidays", "Holidays", null],
                 ] as const
@@ -474,6 +481,7 @@ export function SchemeDetailsPage({
             pickups={schemePickups}
             generationBlocked={!canGenerate}
             containerDrift={containerDrift}
+            nextCollectionsOf={onApi ? record.id : undefined}
           />
         </TabsContent>
         <TabsContent value="stops" className="mt-0 min-h-0 flex-1 overflow-y-auto">
@@ -547,10 +555,13 @@ function SchemeDetailsTab({
   const groupVehicleName = (group: (typeof groups)[number]) =>
     vehicles.find((vehicle) => vehicle.id === group.vehicleId)?.name ??
     group.vehicleName ??
+    // A vehicle of a module not read from the API yet shows as its id chip.
+    group.vehicleId ??
     "Not assigned"
   const groupDriverName = (group: (typeof groups)[number]) =>
     drivers.find((driver) => driver.id === group.driverId)?.name ??
     group.driverName ??
+    group.driverId ??
     "Not assigned"
   const groupProviderName = (group: (typeof groups)[number]) =>
     serviceProviders.find((provider) => provider.id === group.serviceProviderId)?.name ??
@@ -871,6 +882,7 @@ function SchemeRoutesTab({
   pickups,
   generationBlocked,
   containerDrift,
+  nextCollectionsOf,
 }: {
   routes: readonly BusinessRecord[]
   /** The scheme's generated Stops — a route's waste fractions derive from them. */
@@ -879,6 +891,8 @@ function SchemeRoutesTab({
   generationBlocked: boolean
   /** Rule groups whose matched containers shifted at their most recent change (issue #41) — derived, never persisted. */
   containerDrift: readonly CollectionGroupContainerDrift[]
+  /** On the Pilot, the scheme whose next collections the API plans stand in for its routes (slice 6 reads those). */
+  nextCollectionsOf?: string
 }) {
   const router = useRouter()
   const [query, setQuery] = useState("")
@@ -928,144 +942,150 @@ function SchemeRoutesTab({
         </section>
       )}
 
-      <SchemeTabToolbar
-        query={query}
-        onQueryChange={(next) => {
-          setQuery(next)
-          setPage(1)
-        }}
-        placeholder="Search routes"
-        records={rows}
-        filters={filters}
-        onFiltersChange={(next) => {
-          setFilters(next)
-          setPage(1)
-        }}
-        readers={SCHEME_ROUTE_FILTER_READERS}
-      />
+      {nextCollectionsOf !== undefined ? (
+        <SchemeNextCollections recordId={nextCollectionsOf} />
+      ) : (
+        <>
+          <SchemeTabToolbar
+            query={query}
+            onQueryChange={(next) => {
+              setQuery(next)
+              setPage(1)
+            }}
+            placeholder="Search routes"
+            records={rows}
+            filters={filters}
+            onFiltersChange={(next) => {
+              setFilters(next)
+              setPage(1)
+            }}
+            readers={SCHEME_ROUTE_FILTER_READERS}
+          />
 
-      <section className="overflow-hidden rounded-xl border border-border/60">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
-          <p className="text-xs text-muted-foreground">
-            {recordCountLabel(filtered.length, rows.length)}
-          </p>
-          {generatedStamp && (
-            <p className="text-xs text-muted-foreground">
-              Last generated {GENERATED_AT_FORMAT.format(new Date(generatedStamp))}
-            </p>
-          )}
-        </div>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <TableHead>Service date</TableHead>
-                <TableHead>Route ID</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Stops</TableHead>
-                <TableHead>Waste fraction</TableHead>
-                <TableHead>Vehicle</TableHead>
-                <TableHead>Driver</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.length === 0 && rows.length > 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7}>
-                    <NoMatchingRecords />
-                  </TableCell>
-                </TableRow>
-              ) : rows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-52 text-center">
-                    <ArrowsClockwise className="mx-auto h-6 w-6 text-muted-foreground" />
-                    {generationBlocked ? (
-                      <>
-                        <p className="mt-2 text-sm font-medium">
-                          Route generation is blocked by scheme validation
-                        </p>
-                        <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
-                          See the Details tab for what blocks this scheme —
-                          routes will generate once it validates.
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="mt-2 text-sm font-medium">
-                          No routes generated yet
-                        </p>
-                        <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
-                          Use Generate routes or turn on Plan Ahead to create
-                          this scheme&apos;s dated routes.
-                        </p>
-                      </>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                pageRows.map((route) => {
-                  const operatingDate = routeOperatingDate(route)
-                  // The shared deviation seam (issue #26) — never raw facts reads.
-                  const deviationNote = routeDeviationNote(route)
-                  return (
-                    <TableRow
-                      key={route.id}
-                      {...recordRowProps(route.name, () =>
-                        router.push(routeDetailsHref(route.id)),
-                      )}
-                    >
-                      <TableCell className="min-w-[180px]">
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-foreground">
-                            {operatingDate ? formatServiceDate(operatingDate) : "—"}
-                          </p>
-                          {deviationNote && (
-                            <p className="max-w-[340px] truncate text-xs text-amber-700 dark:text-amber-400">
-                              {deviationNote}
-                            </p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-foreground">
-                        {route.name}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                            statusClasses(route.status),
-                          )}
-                        >
-                          {route.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                        {route.facts.Stops ?? "0"}
-                      </TableCell>
-                      <TableCell className="min-w-[140px] text-sm text-muted-foreground">
-                        {routeWasteFractionsLabel(route) ?? "—"}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                        {route.facts.Vehicle ?? "Unassigned"}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                        {route.facts.Driver ?? "Unassigned"}
+          <section className="overflow-hidden rounded-xl border border-border/60">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
+              <p className="text-xs text-muted-foreground">
+                {recordCountLabel(filtered.length, rows.length)}
+              </p>
+              {generatedStamp && (
+                <p className="text-xs text-muted-foreground">
+                  Last generated {GENERATED_AT_FORMAT.format(new Date(generatedStamp))}
+                </p>
+              )}
+            </div>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableHead>Service date</TableHead>
+                    <TableHead>Route ID</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Stops</TableHead>
+                    <TableHead>Waste fraction</TableHead>
+                    <TableHead>Vehicle</TableHead>
+                    <TableHead>Driver</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.length === 0 && rows.length > 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7}>
+                        <NoMatchingRecords />
                       </TableCell>
                     </TableRow>
-                  )
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
-        <TablePagination
-          page={page}
-          pageCount={pageCount}
-          totalCount={totalCount}
-          onPageChange={setPage}
-        />
-      </section>
+                  ) : rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="h-52 text-center">
+                        <ArrowsClockwise className="mx-auto h-6 w-6 text-muted-foreground" />
+                        {generationBlocked ? (
+                          <>
+                            <p className="mt-2 text-sm font-medium">
+                              Route generation is blocked by scheme validation
+                            </p>
+                            <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
+                              See the Details tab for what blocks this scheme —
+                              routes will generate once it validates.
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="mt-2 text-sm font-medium">
+                              No routes generated yet
+                            </p>
+                            <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
+                              Use Generate routes or turn on Plan Ahead to create
+                              this scheme&apos;s dated routes.
+                            </p>
+                          </>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    pageRows.map((route) => {
+                      const operatingDate = routeOperatingDate(route)
+                      // The shared deviation seam (issue #26) — never raw facts reads.
+                      const deviationNote = routeDeviationNote(route)
+                      return (
+                        <TableRow
+                          key={route.id}
+                          {...recordRowProps(route.name, () =>
+                            router.push(routeDetailsHref(route.id)),
+                          )}
+                        >
+                          <TableCell className="min-w-[180px]">
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-foreground">
+                                {operatingDate ? formatServiceDate(operatingDate) : "—"}
+                              </p>
+                              {deviationNote && (
+                                <p className="max-w-[340px] truncate text-xs text-amber-700 dark:text-amber-400">
+                                  {deviationNote}
+                                </p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-sm text-foreground">
+                            {route.name}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                                statusClasses(route.status),
+                              )}
+                            >
+                              {route.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                            {route.facts.Stops ?? "0"}
+                          </TableCell>
+                          <TableCell className="min-w-[140px] text-sm text-muted-foreground">
+                            {routeWasteFractionsLabel(route) ?? "—"}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                            {route.facts.Vehicle ?? "Unassigned"}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                            {route.facts.Driver ?? "Unassigned"}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+            <TablePagination
+              page={page}
+              pageCount={pageCount}
+              totalCount={totalCount}
+              onPageChange={setPage}
+            />
+          </section>
+        </>
+      )}
     </div>
   )
 }
