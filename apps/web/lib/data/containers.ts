@@ -14,12 +14,14 @@
 // Relations name another module's row by web id: the project
 // (configure.organization), the container type, the fraction and the
 // frequency (master data, filtered by kind in the dialog), the warehouse
-// (resources.warehouses, slice 5a). The subscription is its id until the
-// subscriptions are on the API (#183): the placement's door takes it as
-// typed, and the API's 404 or 409 says when it is wrong.
+// (resources.warehouses, slice 5a), and the subscription (customers.
+// agreements, slice 9a), offered with the place it is delivered at (#184),
+// since that is where the container will serve; the API's 409 says when the
+// place is not served (#79).
 import { STOCK_PLACES, ADJUSTMENT_TARGETS } from "@waste/domain/resources/vocabulary"
 import { CONTAINER_OWNERSHIPS } from "@waste/domain/registry/vocabulary"
 
+import { AGREEMENTS_MODULE } from "./agreements"
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "./business-modules"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import { MASTER_DATA_MODULE } from "./master-data"
@@ -159,7 +161,7 @@ const commandForm = (title: string, description: string, submitLabel: string, fi
 export const CONTAINER_COMMAND_FORMS: Readonly<Record<OfferedContainerCommand, BusinessFormSchema>> = {
   receive: commandForm("Receive", "The container arrives from a supplier into a warehouse: its first stock record.", "Receive", [warehouse(), occurredAt, reference]),
   issue: commandForm("Issue into service", "The container enters service at a subscription's place from the stock it stands in: the placement and the issue movement together.", "Issue into service", [
-    { id: "subscriptionId", label: "Subscription", type: "text", required: true, description: "The subscription's id; it becomes a picker once the subscriptions are on the API." },
+    { id: "subscriptionId", label: "Subscription", type: "select", required: true, relation: AGREEMENTS_MODULE, description: "The subscription it serves, at the place the subscription is delivered at." },
     { id: "wasteFractionId", label: "Waste fraction", type: "select", required: true, relation: MASTER_DATA_MODULE },
     { id: "serviceFrequencyId", label: "Service frequency", type: "select", relation: MASTER_DATA_MODULE, description: "Blank serves at the product's cadence." },
     { id: "validFrom", label: "First day in service", type: "date", required: true },

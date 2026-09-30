@@ -13,9 +13,8 @@ import { uniqueName } from "./env"
 // confirmed and released, its history read back. Records are uniquely named and never cleaned up; the
 // released allocation frees its window, and each run picks another.
 //
-// The map's Containers list test stays in e2e/tests/map-planning.spec.ts: a
-// server container has no location until a placement's property gives it
-// one, which is #184's port (the plan on #81; #181's review).
+// The map's Containers list test is map-planning.spec.ts's since #184, which
+// gave a server container its place.
 type Container = { id: string; label: string; assetState: { status: string } | null }
 type Allocation = { id: string; status: string; vehicleId: string }
 

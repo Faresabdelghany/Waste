@@ -379,46 +379,6 @@ test("the Routes layer draws a dated route coloured by status and a click on its
   await expect(card).toHaveCount(0)
 })
 
-test("the Containers list mirrors the selection and hover highlights run both ways between rows and markers", async ({ page }) => {
-  await selectRectangle(page)
-  const panel = page.getByRole("region", { name: "Selected area" })
-  const rows = panel.getByTestId("selected-containers").locator("[data-container-row]")
-  const containerCount = Number(await panel.locator("dd").first().locator("xpath=../..").locator("dd").nth(2).innerText())
-  await expect(rows).toHaveCount(containerCount)
-  await expect(page.locator("[data-marker][data-highlighted]")).toHaveCount(0)
-
-  // Row → marker.
-  const firstRow = rows.first()
-  await firstRow.hover()
-  await expect(page.locator('[data-marker][data-highlighted="true"]').first()).toBeVisible()
-  await panel.getByRole("heading", { name: "Selected area" }).hover()
-  await expect(page.locator("[data-marker][data-highlighted]")).toHaveCount(0)
-
-  // Fraction row → markers.
-  await panel.locator("[data-fraction-row]").first().hover()
-  await expect(page.locator('[data-marker][data-highlighted="true"]').first()).toBeVisible()
-
-  // Marker → row: a selected marker clear of the panel, which covers the map's left edge.
-  const marker = await page.evaluate(() => {
-    const panelRight = document.querySelector('[data-testid="selected-area"]')!.getBoundingClientRect().right
-    for (const node of document.querySelectorAll('[data-marker][data-selected="true"]')) {
-      const box = node.getBoundingClientRect()
-      if (box.left > panelRight + 8) return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
-    }
-    return null
-  })
-  if (!marker) throw new Error("no selected marker clear of the panel")
-  await page.mouse.move(marker.x, marker.y)
-  await expect(rows.locator('xpath=self::*[@data-highlighted="true"]').first()).toBeVisible()
-  await page.locator(CANVAS).hover({ position: { x: 5, y: 5 } })
-  await expect(rows.locator('xpath=self::*[@data-highlighted="true"]')).toHaveCount(0)
-
-  // A row opens the container's details.
-  const label = await firstRow.locator("span.font-medium").innerText()
-  await firstRow.click()
-  await expect(page.getByRole("dialog")).toContainText(label)
-})
-
 test("Play route replays a completed route stop by stop with planned and actual times", async ({ page }) => {
   const clock = (minutes: number) => `${String(6 + Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`
   await seedDrawableRoute(page, undefined, {

@@ -62,7 +62,8 @@ export function CreateSurface({
         <span className="hidden sm:inline">{label}</span>
         <span className="sm:hidden">Action</span>
       </Button>
-      <BusinessRecordFormDialog schema={schema} open={open} onOpenChange={setOpen} onSubmit={submit} relationOptions={pickers.options} />
+      {/* A create opens with nothing to keep: a pick no longer offered — made before the project changed — is flagged, not kept. */}
+      <BusinessRecordFormDialog schema={schema} open={open} onOpenChange={setOpen} onSubmit={submit} relationOptions={(field, values) => pickers.options(field, values, undefined, {})} />
     </>
   )
 }

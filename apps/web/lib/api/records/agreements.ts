@@ -288,6 +288,8 @@ export const subscriptionAdapter: ResourceAdapter<Subscription> = {
       submittedValues: {
         agreementId: agreementWebId,
         productId: product.id,
+        // Which of the form's two place pickers holds the place (lib/data/agreements.ts): the edit shows that one.
+        placeKind: point === undefined ? "property" : "shared-point",
         ...(property === undefined ? {} : { propertyId: property.id }),
         ...(point === undefined ? {} : { sharedPointId: point.id }),
         quantity: String(subscription.quantity),

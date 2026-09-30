@@ -1556,19 +1556,16 @@ export function BusinessWorkspace({
   const mapPlanningRecords = useMemo(() => {
     if (!isMapPlanningView) return null
     return {
-      // A server container carries no location until a placement's property
-      // gives it one (#184, slice 9b), so on the Pilot the map places the
-      // containers' fixtures, which carry the addresses it reads, until then.
-      containers: apiConfigured
-        ? [...(getModuleDefinition({ workspaceId: "resources", moduleId: "containers" })?.records ?? [])]
-        : moduleRecords("resources", "containers"),
+      // On the Pilot a server container stands where its placement in force
+      // today is delivered at, which its record carries (#184, lib/api/records/container-places.ts).
+      containers: moduleRecords("resources", "containers"),
       planningAreas: moduleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId),
       serviceAreas: moduleRecords("service-providers", "service-areas"),
       routes: moduleRecords("route-studio", "routes"),
       pickups: moduleRecords("route-studio", "pickups"),
       schemes: moduleRecords("route-studio", "schemes"),
     }
-  }, [apiConfigured, isMapPlanningView, moduleRecords])
+  }, [isMapPlanningView, moduleRecords])
   const containersModuleDefinition = getModuleDefinition({
     workspaceId: "resources",
     moduleId: "containers",
