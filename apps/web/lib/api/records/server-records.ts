@@ -420,11 +420,16 @@ export async function writeRecord(client: ApiClient, module: ServerModule, curre
   }
 }
 
+/**
+ * `touches` are the other modules the command may have changed rows of
+ * (`RecordCommand.touches`), which the store reads again: those it names
+ * once the API has had it — refused or not, since a request of the command
+ * may land before another fails — and none for a command never sent.
+ */
 export type CommandOutcome =
-  /** `touches` are the other modules the command changed rows of (`RecordCommand.touches`), which the store reads again. */
   | { kind: "done"; record: BusinessRecord; serverId: string; touches: readonly string[] }
   /** `what` is the heading the person is told the refusal under; the problem is the API's, or the store's own for a command that was never sent. */
-  | { kind: "refused"; what: string; problem: Problem; recordId: string }
+  | { kind: "refused"; what: string; problem: Problem; recordId: string; touches: readonly string[] }
 
 /**
  * Sends one of a row's commands (adapter.ts, `commands`) and maps the answer
@@ -440,19 +445,23 @@ export async function commandRecord(client: ApiClient, module: ServerModule, cur
   const adapter = adapterFor(module, record)
   const command = adapter?.commands?.[name]
   const what = command?.refused(record) ?? `${record.name} was not changed`
-  const refused = (problem: Problem): CommandOutcome => ({ kind: "refused", what, problem, recordId: record.id })
+  const refused = (problem: Problem, touches: readonly string[] = []): CommandOutcome => ({ kind: "refused", what, problem, recordId: record.id, touches })
   if (adapter === undefined) return refused(genericProblem(400, `${moduleKeyOf(module.workspaceId, module.moduleId)} has no server resource for ${record.id}`))
   if (command === undefined) return refused(genericProblem(400, `The API has no "${name}" for a ${adapter.prefix}`))
   const serverId = current.serverIds.get(record.id)
   if (serverId === undefined) return refused(genericProblem(400, `${record.name} is not on the API yet: wait for it to be saved, then try again`))
   const context: MappingContext = { fixtures: options.fixtures, resolve: resolverOver(options.state), companyRecordId: companyRecordIdOf(options.state), now: options.now }
+  const touches = command.touches ?? []
+  let sent = false
   try {
     // Inside the try: a mapper that throws on a stray input is a refusal under the command's heading, as a failing request is.
     const body = command.toBody?.(input ?? {}, record, context)
     if (isLocalRefusal(body)) return refused(refusalProblem(body))
+    sent = true
     const resource = await command.run(client, serverId, body)
-    return { kind: "done", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId: resource.id, touches: command.touches ?? [] }
+    return { kind: "done", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId: resource.id, touches }
   } catch (error) {
-    return refused(problemOfError(error))
+    // A command of several requests (a movement, then the row read back) may have changed what it touches before one failed.
+    return refused(problemOfError(error), sent ? touches : [])
   }
 }

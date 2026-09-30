@@ -108,8 +108,10 @@ export type RecordCommand<R extends Resource> = {
   /**
    * The other switched modules, by key, whose rows the command changes
    * beside its own row's — a container's movement appended to the ledger,
-   * `resources.inventory`. Once the command is done the store reads each of
-   * them again (Issue #198).
+   * `resources.inventory`. Once the API has had the command the store reads
+   * each of them again (Issue #198). A read again replaces a module's rows
+   * whole, so the modules named here are ones no write of the person's
+   * holds rows in flight in, such as a ledger.
    */
   touches?: readonly string[]
 }

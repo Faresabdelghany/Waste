@@ -48,13 +48,10 @@ async function runCommand(page: Page, button: string, path: RegExp, fill: () => 
 
 test("Containers: registered, received, refused a second receipt by sentence, moved to maintenance and decommissioned, the ledger read back", async ({ page, api }) => {
   const label = uniqueName("E2E-BIN").replace(/\s+/g, "-")
-  // The ledger's reads: its first page each time, whatever the ledger's length on a long-lived stack.
-  let ledgerReads = 0
-  page.on("request", (request) => {
-    const url = new URL(request.url())
-    if (request.method() === "GET" && url.pathname === "/waste-api/stock-movements" && !url.searchParams.has("cursor")) ledgerReads += 1
-  })
+  // The ledger as the sign-in's load reads it, before the container exists: what Inventory shows of it below can only have been read again.
+  const ledgerRead = answerOf(page, "GET", /^\/stock-movements$/)
   await openLoaded(page, "/resources?module=containers", /^\/containers$/)
+  expect((await ledgerRead).status()).toBe(200)
 
   await page.getByRole("button", { name: "Add container" }).click()
   const dialog = page.getByRole("dialog")
@@ -103,13 +100,12 @@ test("Containers: registered, received, refused a second receipt by sentence, mo
   const read = await api.get(`/containers/${container.id}`)
   expect(((await read.json()) as Container).assetState?.status).toBe("retired")
 
-  // The ledger across containers holds the three movements in this session, its tab reached with no reload: the sign-in's read, and one again after each command the API took.
+  // The ledger across containers holds the three movements in this session, its tab reached with no reload: read again after the commands.
   await page.keyboard.press("Escape")
   await expect(details).toBeHidden()
   await page.getByRole("tab", { name: "Inventory" }).click()
   await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill(label)
   await expect(page.getByRole("button", { name: new RegExp(`^Open .+ · ${label}$`) })).toHaveCount(3)
-  expect(ledgerReads).toBe(4)
 })
 
 test("Vehicle Planning: allocated over a window of its own, confirmed and released, the history read back", async ({ page, api }) => {

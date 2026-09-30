@@ -216,22 +216,34 @@ function enqueue<T>(pending: Map<string, Promise<unknown>>, key: string, turn: (
   return next
 }
 
+/** A module's read the API refused or did not answer, told as the load tells it; the account's own refusal is /login's to say. */
+function reportRead(key: string, problem: Problem) {
+  if (!isAccountRefusal(problem)) reportProblem(`${key} could not be read from the API`, problem)
+}
+
 /**
  * Reads a module again after a command changed its rows (Issue #198), under
  * the load's rules: after any read of it already out, only while the store
  * holds it ready and the command's session is the current one, under the
- * session's signal, and a failure reported as the load reports one. The
- * module keeps its rows while the read is out.
+ * session's signal — with the token as it stands, or the command's own if
+ * the session lapsed under it, so the read goes out and a refusal is told —
+ * and a failure reported as the load reports one. The module keeps its rows
+ * while the read is out.
  */
-function rereadModule(stores: BusinessRecordStores, module: ServerModule, outlived: () => boolean): Promise<void> {
+function rereadModule(stores: BusinessRecordStores, module: ServerModule, outlived: () => boolean, commandClient: ApiClient): Promise<void> {
   const key = moduleKey(module.workspaceId, module.moduleId)
   return enqueue(stores.pendingReads, key, async () => {
     const signal = stores.sessionSignal.getSnapshot()
-    const client = stores.client.getSnapshot()
-    if (signal === null || client === null || outlived() || stores.server.getSnapshot().get(key)?.status !== "ready") return
+    if (signal === null || outlived() || stores.server.getSnapshot().get(key)?.status !== "ready") return
     const alive = () => !outlived() && !signal.aborted
-    const problem = await readModuleInto(stores.server, { ...client, signal }, module, { fixtures: fixturesOf(module.workspaceId, module.moduleId), alive })
-    if (problem !== null && alive() && !isAccountRefusal(problem)) reportProblem(`${key} could not be read from the API`, problem)
+    try {
+      const client: ApiClient = { ...(stores.client.getSnapshot() ?? commandClient), signal }
+      const problem = await readModuleInto(stores.server, client, module, { fixtures: fixturesOf(module.workspaceId, module.moduleId), alive })
+      if (problem !== null && alive()) reportRead(key, problem)
+    } catch (error) {
+      // Nothing thrown here goes unheard: the read's own failures come back above, anything else is told the same way.
+      if (alive()) reportRead(key, problemOfError(error))
+    }
   })
 }
 
@@ -358,7 +370,7 @@ export function BusinessRecordStoreProvider({
         if (controller.signal.aborted) return
         if (problem === null) continue
         if (isAccountRefusal(problem)) return
-        reportProblem(`${key} could not be read from the API`, problem)
+        reportRead(key, problem)
       }
     }
     void run()
@@ -530,14 +542,14 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
         // A module on the browser's own path has no commands, and the pane
         // offers none there; a caller that asked all the same is told, as
         // for any refusal.
-        const refused: CommandOutcome = { kind: "refused", what: "Nothing was changed", recordId, problem: genericProblem(400, `${key} is not read from the API, or holds no record ${recordId}`) }
+        const refused: CommandOutcome = { kind: "refused", what: "Nothing was changed", recordId, problem: genericProblem(400, `${key} is not read from the API, or holds no record ${recordId}`), touches: [] }
         reportProblem(refused.what, refused.problem)
         return Promise.resolve(refused)
       }
       // The session this command belongs to, as for a write above.
       const generation = stores.generation.getSnapshot()
       const outlived = () => stores.generation.getSnapshot() !== generation
-      const ended = (): CommandOutcome => ({ kind: "refused", what: `${record.name} was not changed`, recordId, problem: genericProblem(UNREACHABLE_STATUS, "The session ended before the command was sent") })
+      const ended = (): CommandOutcome => ({ kind: "refused", what: `${record.name} was not changed`, recordId, problem: genericProblem(UNREACHABLE_STATUS, "The session ended before the command was sent"), touches: [] })
       const run = async (): Promise<CommandOutcome> => {
         if (outlived()) return ended()
         // The row and the client as they stand when the command's turn
@@ -551,11 +563,11 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
         if (outlived()) return outcome
         if (outcome.kind === "done") {
           serverStore.set((state) => new Map(state).set(key, withRecord(state.get(key) ?? latest, outcome.record, outcome.serverId)))
-          // The other modules the command changed rows of are read again, the command's answer not waiting on them.
-          for (const touched of rereadsOf(serverStore.getSnapshot(), outcome.touches, SERVER_MODULES)) void rereadModule(stores, touched, outlived)
         } else if (!isAccountRefusal(outcome.problem)) {
           reportProblem(outcome.what, outcome.problem)
         }
+        // The other modules the command may have changed rows of are read again, the command's answer not waiting on them.
+        for (const touched of rereadsOf(serverStore.getSnapshot(), outcome.touches, SERVER_MODULES)) void rereadModule(stores, touched, outlived, client)
         return outcome
       }
       return enqueue(stores.pendingWrites, recordId, run)

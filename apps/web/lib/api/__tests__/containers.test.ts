@@ -407,6 +407,26 @@ describe("the container's commands", () => {
     if (outcome.kind !== "refused") return
     assert.equal(problemSentence(outcome.problem), detail)
     assert.equal(outcome.what, "BIN-99017 was not received")
+    assert.deepEqual(outcome.touches, ["resources.inventory"], "the API had the command, so the ledger is read again: one read, the price of never missing a movement")
+  })
+
+  test("a movement that landed before the row's read back failed is still the ledger's: the refusal names the ledger to read again (#198)", async () => {
+    const { fetch, calls } = scripted([() => json(movement, 201), () => problem(503, "The API is restarting"), () => pageOf([])])
+    const outcome = await commandRecord(clientOver(fetch), containersModule, current, record, "receive", { warehouseId: nordhavn.webId }, options)
+    assert.deepEqual(calls.map((call) => call.init.method), ["POST", "GET", "GET"], "the POST, then the read back, which failed")
+    assert.equal(outcome.kind, "refused")
+    if (outcome.kind !== "refused") return
+    assert.equal(problemSentence(outcome.problem), "The API is restarting")
+    assert.deepEqual(outcome.touches, ["resources.inventory"])
+  })
+
+  test("a command refused before it is sent touches nothing: nothing reached the API", async () => {
+    const { fetch, calls } = scripted([])
+    const outcome = await commandRecord(clientOver(fetch), containersModule, current, record, "receive", {}, options)
+    assert.equal(outcome.kind, "refused")
+    if (outcome.kind !== "refused") return
+    assert.equal(calls.length, 0)
+    assert.deepEqual(outcome.touches, [])
   })
 
   test("a container's own ledger is its movements read, oldest first", async () => {
