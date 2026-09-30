@@ -7,13 +7,16 @@
 // in components/waste/scheme-wizard (2026-09-16 redesign): scheme &
 // scope, recurrence, collection groups, route map, review & create. Guided
 // completion hands the collected draft to onGuidedCreate, which owns record
-// creation and the Validated/Draft decision.
+// creation and the Validated/Draft decision; on the Pilot the wizard closes
+// once the API has taken the scheme, and stays open on its refusal.
 
 import { useState } from "react"
 import { Plus } from "@phosphor-icons/react/dist/ssr"
 
 import { Button } from "@/components/ui/button"
 import { StepMode } from "@/components/project-wizard/steps/StepMode"
+import { whenSaved } from "@/components/waste/business-record-store"
+import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { ProjectMode } from "@/components/project-wizard/types"
 import { SchemeWizard } from "@/components/waste/scheme-wizard/scheme-wizard"
 import {
@@ -33,7 +36,8 @@ export { resolvedDraftGroups, resolvedDraftPlans, validateGuidedScheme }
 interface SchemeCreateEntryProps {
   submitLabel: string
   onQuickCreate: () => void
-  onGuidedCreate: (data: GuidedSchemeData) => void
+  /** The create's outcome on the Pilot, awaited before the wizard closes; undefined on the browser's path. */
+  onGuidedCreate: (data: GuidedSchemeData) => Promise<WriteOutcome> | undefined
 }
 
 export function SchemeCreateEntry({
@@ -71,10 +75,7 @@ export function SchemeCreateEntry({
           onOpenChange={(open) => {
             if (!open) setIsGuidedOpen(false)
           }}
-          onCreate={(data) => {
-            setIsGuidedOpen(false)
-            onGuidedCreate(data)
-          }}
+          onCreate={(data) => whenSaved(onGuidedCreate(data), () => setIsGuidedOpen(false))}
         />
       )}
     </>

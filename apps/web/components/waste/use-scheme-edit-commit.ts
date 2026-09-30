@@ -20,10 +20,11 @@
 //
 // On the Pilot (`schemesOnApi`, slice 3 of #81) the API holds the scheme and
 // generates its routes, so none of that runs: the edit is the scheme's alone,
-// under the status the wire has — draft or validated, a person's decision,
-// the lifecycle's other labels being the web's readings — the API's 409
-// speaking for a validated scheme the edit breaks, and the next generation
-// run reconciling its routes. The dialog closes once the API has taken the
+// under the status the wire has — the web's validation never lowers a
+// validated scheme, the API's 409 speaking for one the edit breaks, and a
+// Draft the edit leaves without a blocking issue asks to be validated, the
+// browser path's rule (`schemeEditStatusOnApi`) — and the next generation
+// run reconciles its routes. The dialog closes once the API has taken the
 // edit. The question over future routes returns with the routes on the API
 // (slice 6).
 
@@ -34,11 +35,13 @@ import { whenSaved } from "@/components/waste/business-record-store"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
+import { schemeEditStatusOnApi } from "@/lib/data/route-schemes"
 import {
   planSchemeEditReconciliation,
   type SchemeEditApplication,
   type SchemeEditQuestion,
 } from "@waste/domain/route-schemes/edit"
+import { schemeLiveValidation } from "@waste/domain/route-schemes/lifecycle"
 import { todayIso } from "@waste/domain/route-schemes/recurrence"
 
 /** What the save writes to the scheme's audit trail besides what the planner decides: the event's id, action and reason, and the evidence line read off the saved scheme. */
@@ -106,7 +109,13 @@ export function useSchemeEditCommit({
       apply?: SchemeEditApplication,
     ) => {
       if (schemesOnApi) {
-        const scheme: BusinessRecord = { ...after, status: before.status }
+        const validation = schemeLiveValidation(after, {
+          schemes: moduleRecords("route-studio", "schemes"),
+          allocations: moduleRecords("fleet", "vehicle-planning"),
+          containers: moduleRecords("resources", "containers"),
+          vehicles: moduleRecords("fleet", "vehicles"),
+        })
+        const scheme: BusinessRecord = { ...after, status: schemeEditStatusOnApi(before.status, validation?.issues ?? null) }
         whenSaved(upsertRecord("route-studio", "schemes", scheme), () => {
           setAuditEvents((current) => ({
             ...current,

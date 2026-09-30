@@ -65,6 +65,7 @@ import { ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
 import { create, get, listAll, patch, put, withQuery } from "../client"
 import {
   inheritedPresentation,
+  isLocalRefusal,
   ofKind,
   PartialWrite,
   stampFacts,
@@ -82,6 +83,17 @@ import {
 /** Where a scheme keeps its groups' server ids: JSON, the web's group id to the server's. */
 export const SERVER_GROUP_IDS_KEY = "serverGroupIds"
 
+/**
+ * Where a scheme keeps the master data ids its rules were read with, by the
+ * names it spells them by: JSON, kind to name to server id. A row renamed in
+ * Settings › Master data after the schemes loaded is still found by the name
+ * the rule reads.
+ */
+export const RULE_MASTER_IDS_KEY = "ruleMasterIds"
+
+/** The master data ids a record's rules were read with. */
+type RuleMasterIds = Partial<Record<MasterDataKind, Record<string, string>>>
+
 /** What a group whose stop source a write would change is told: the wire sets it once. */
 export const STOP_SOURCE_KEPT = "A collection group keeps how it finds its stops: add a group that picks containers and remove this one"
 
@@ -91,7 +103,7 @@ const GROUP_PREFIX = "group"
 const CHIP = { project: "project", area: "area", provider: "service-provider", vehicle: "vehicle", driver: "driver", depot: "depot", station: "station", container: "asset" } as const
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
-const isRefusal = (value: unknown): value is LocalRefusal => typeof value === "object" && value !== null && "path" in value && "message" in value
+const isRefusal = isLocalRefusal
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -115,11 +127,26 @@ function masterName(context: MappingContext, kind: MasterDataKind, serverId: str
 
 const MASTER_WORDS: Record<MasterDataKind, string> = { "waste-fraction": "waste fraction", "container-type": "container type", "service-frequency": "service frequency", "vehicle-type": "vehicle type" }
 
-/** The server id of the master data row a rule names by name — or, read back unloaded, by chip — or a refusal at the form's field. */
-function masterId(context: MappingContext, kind: MasterDataKind, name: string, path: string): string | LocalRefusal {
+/**
+ * The server id of the master data row a rule names by name — the row of
+ * that name now, else the one the record was read with (`known`), else a
+ * chip read back unloaded — or a refusal at the form's field.
+ */
+function masterId(context: MappingContext, kind: MasterDataKind, name: string, path: string, known: RuleMasterIds): string | LocalRefusal {
   const row = context.resolve.find((record) => masterDataKindOf(record) === kind && record.name === name)
-  const id = row === undefined ? serverIdFor(context, MASTER_DATA_KIND_DETAILS[kind].prefix, name) : context.resolve.serverIdOf(row.id)
+  const id = row === undefined ? (known[kind]?.[name] ?? serverIdFor(context, MASTER_DATA_KIND_DETAILS[kind].prefix, name)) : context.resolve.serverIdOf(row.id)
   return id ?? refusal(path, `The API holds no ${MASTER_WORDS[kind]} named ${JSON.stringify(name)}`)
+}
+
+function ruleMasterIdsOf(record: BusinessRecord): RuleMasterIds {
+  const raw = record.submittedValues?.[RULE_MASTER_IDS_KEY]
+  if (typeof raw !== "string" || raw === "") return {}
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as RuleMasterIds) : {}
+  } catch {
+    return {}
+  }
 }
 
 /** Every item mapped, or the first refusal. */
@@ -229,13 +256,13 @@ const statusOf = (record: BusinessRecord): string => statusToken(record.status)
 // ---------------------------------------------------------------------------
 
 /** A group's rule by id, from the names the record spells it by. */
-function ruleOf(group: SchemeGroup, context: MappingContext): StopMatchingRule | LocalRefusal {
+function ruleOf(group: SchemeGroup, context: MappingContext, known: RuleMasterIds = {}): StopMatchingRule | LocalRefusal {
   if (group.fractions.length === 0) return refusal("wasteFraction", "A group that matches by rule names a waste fraction")
-  const wasteFractionIds = allOf(group.fractions, (name) => masterId(context, "waste-fraction", name, "wasteFraction"))
+  const wasteFractionIds = allOf(group.fractions, (name) => masterId(context, "waste-fraction", name, "wasteFraction", known))
   if (isRefusal(wasteFractionIds)) return wasteFractionIds
-  const containerTypeIds = allOf(group.containerTypes ?? [], (name) => masterId(context, "container-type", name, "matchContainerTypes"))
+  const containerTypeIds = allOf(group.containerTypes ?? [], (name) => masterId(context, "container-type", name, "matchContainerTypes", known))
   if (isRefusal(containerTypeIds)) return containerTypeIds
-  const vehicleTypeId = group.ruleVehicleType === undefined ? null : masterId(context, "vehicle-type", group.ruleVehicleType, "matchVehicleType")
+  const vehicleTypeId = group.ruleVehicleType === undefined ? null : masterId(context, "vehicle-type", group.ruleVehicleType, "matchVehicleType", known)
   if (isRefusal(vehicleTypeId)) return vehicleTypeId
   return { wasteFractionIds, containerTypeIds, vehicleTypeId }
 }
@@ -261,11 +288,11 @@ function fleetOf(group: SchemeGroup, context: MappingContext): Required<GroupFle
 }
 
 /** A group to create, whole: its rule or its list, never both. */
-function groupCreateOf(group: SchemeGroup, context: MappingContext): CollectionGroupCreate | LocalRefusal {
+function groupCreateOf(group: SchemeGroup, context: MappingContext, known: RuleMasterIds = {}): CollectionGroupCreate | LocalRefusal {
   const fleet = fleetOf(group, context)
   if (isRefusal(fleet)) return fleet
   if (group.stopSource === "rule") {
-    const rule = ruleOf(group, context)
+    const rule = ruleOf(group, context, known)
     if (isRefusal(rule)) return rule
     return { name: group.name, days: group.days, stopSource: "rule", rule, containerIds: null, ...fleet }
   }
@@ -274,15 +301,28 @@ function groupCreateOf(group: SchemeGroup, context: MappingContext): CollectionG
   return { name: group.name, days: group.days, stopSource: "manual", rule: null, containerIds, ...fleet }
 }
 
-/** One group request of an edit, in the order `update` sends them. */
-type GroupWrite =
+/**
+ * One group request of an edit. `phase` is its place in the order `update`
+ * sends them: the API holds each request to "no container on two groups a
+ * shared day" (and a validated scheme to the rest), so what gives something
+ * up goes before what takes it — parks first, then the writes that only
+ * shrink (fewer days, a shorter list) or change nothing picked (a rule, a
+ * name, the fleet), then the ones that grow, then the new groups.
+ */
+type GroupWrite = { phase: 0 | 1 | 2 | 3 } & (
   | { kind: "park"; id: string }
   | { kind: "patch"; id: string; body: CollectionGroupPatch }
   | { kind: "rule"; id: string; body: StopMatchingRule }
   | { kind: "containers"; id: string; body: { containerIds: string[] } }
   | { kind: "create"; body: CollectionGroupCreate }
+)
 
-const GROUP_ORDER: Record<GroupWrite["kind"], number> = { park: 0, patch: 1, rule: 2, containers: 3, create: 4 }
+/** Whether `after` holds something `before` did not: a day, a container. */
+const grows = (before: readonly string[], after: readonly string[]) => after.some((item) => !before.includes(item))
+
+/** Whether two groups' rules name the same fractions, container types and vehicle type, in the names the record spells them by. */
+const sameRule = (a: SchemeGroup, b: SchemeGroup) =>
+  JSON.stringify([a.fractions, a.containerTypes ?? [], a.ruleVehicleType ?? null]) === JSON.stringify([b.fractions, b.containerTypes ?? [], b.ruleVehicleType ?? null])
 
 /** The web group id to server id map a record carries. */
 function serverGroupIdsOf(record: BusinessRecord): Record<string, string> {
@@ -308,51 +348,56 @@ const groupsOf = (record: BusinessRecord): ResolvedCollectionGroup[] => collecti
  */
 function groupWritesOf(before: BusinessRecord, after: BusinessRecord, context: MappingContext): GroupWrite[] | LocalRefusal {
   const ids = serverGroupIdsOf(before)
+  const known = ruleMasterIdsOf(before)
   const was = groupsOf(before)
   const is = groupsOf(after)
-  const wasByServerId = new Map(was.flatMap((group, index) => (ids[group.id] === undefined ? [] : [[ids[group.id], { group, index }] as const])))
+  const wasByServerId = new Map(was.flatMap((group) => (ids[group.id] === undefined ? [] : [[ids[group.id], group] as const])))
   const firstServerId = was.map((group) => ids[group.id]).find((id) => id !== undefined)
   const serverIdOf = (group: ResolvedCollectionGroup) => ids[group.id] ?? (group.id === IMPLICIT_GROUP_ID && is.length === 1 ? firstServerId : undefined)
   const writes: GroupWrite[] = []
   const kept = new Set<string>()
-  for (const [index, group] of is.entries()) {
+  for (const group of is) {
     const serverId = serverIdOf(group)
     const prior = serverId === undefined ? undefined : wasByServerId.get(serverId)
     if (serverId === undefined || prior === undefined) {
-      const body = groupCreateOf(group, context)
+      // Appended after the scheme's groups, as the editor adds one: no group is renumbered.
+      const body = groupCreateOf(group, context, known)
       if (isRefusal(body)) return body
-      writes.push({ kind: "create", body })
+      writes.push({ phase: 3, kind: "create", body })
       continue
     }
     kept.add(serverId)
-    if (prior.group.stopSource !== group.stopSource) return refusal("stopSelection", STOP_SOURCE_KEPT)
-    const fleetBefore = fleetOf(prior.group, context)
+    if (prior.stopSource !== group.stopSource) return refusal("stopSelection", STOP_SOURCE_KEPT)
+    const fleetBefore = fleetOf(prior, context)
     const fleetAfter = fleetOf(group, context)
     if (isRefusal(fleetAfter)) return fleetAfter
     const body: CollectionGroupPatch = {
       // The legacy shape's one group carries the scheme's name, not its own, so it renames nothing.
-      ...(group.implicit || group.name === prior.group.name ? {} : { name: group.name }),
-      ...(sameDays(group.days, prior.group.days) ? {} : { days: group.days }),
-      ...(group.implicit || index === prior.index ? {} : { position: index + 1 }),
+      ...(group.implicit || group.name === prior.name ? {} : { name: group.name }),
+      ...(sameDays(group.days, prior.days) ? {} : { days: group.days }),
       ...Object.fromEntries(Object.entries(fleetAfter).filter(([key, value]) => isRefusal(fleetBefore) || fleetBefore[key as keyof GroupFleet] !== value)),
     }
-    if (Object.keys(body).length > 0) writes.push({ kind: "patch", id: serverId, body })
+    if (Object.keys(body).length > 0) writes.push({ phase: grows(prior.days, group.days) ? 2 : 1, kind: "patch", id: serverId, body })
     if (group.stopSource === "rule") {
-      const rule = ruleOf(group, context)
+      // A rule the edit leaves alone is not resolved again, so a master data row renamed since the load blocks nothing.
+      if (sameRule(prior, group)) continue
+      const rule = ruleOf(group, context, known)
       if (isRefusal(rule)) return rule
-      const ruleBefore = ruleOf(prior.group, context)
-      if (isRefusal(ruleBefore) || JSON.stringify(ruleBefore) !== JSON.stringify(rule)) writes.push({ kind: "rule", id: serverId, body: rule })
+      writes.push({ phase: 1, kind: "rule", id: serverId, body: rule })
     } else {
       const containerIds = containerIdsOf(group, context)
       if (isRefusal(containerIds)) return containerIds
       if (containerIds.length === 0) return refusal("containerIds", "A group that picks containers picks one at least")
-      if (JSON.stringify(containerIds) !== JSON.stringify(containerIdsOf(prior.group, context))) writes.push({ kind: "containers", id: serverId, body: { containerIds } })
+      const priorIds = containerIdsOf(prior, context)
+      if (isRefusal(priorIds) || JSON.stringify(containerIds) !== JSON.stringify(priorIds)) {
+        writes.push({ phase: isRefusal(priorIds) || grows(priorIds, containerIds) ? 2 : 1, kind: "containers", id: serverId, body: { containerIds } })
+      }
     }
   }
-  for (const [serverId, { group }] of wasByServerId) {
-    if (!kept.has(serverId) && group.days.length > 0) writes.push({ kind: "park", id: serverId })
+  for (const [serverId, group] of wasByServerId) {
+    if (!kept.has(serverId) && group.days.length > 0) writes.push({ phase: 0, kind: "park", id: serverId })
   }
-  return writes.sort((a, b) => GROUP_ORDER[a.kind] - GROUP_ORDER[b.kind])
+  return writes.sort((a, b) => a.phase - b.phase)
 }
 
 /**
@@ -419,6 +464,17 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
       if (entry.previous !== null) previous[webId] = { rule: entry.previous.ruleSignature, containerIds: entry.previous.containerIds.map((id) => webIdFor(context, CHIP.container, id)) }
     }
     const fractions = new Set(groups.flatMap((group) => group.fractions))
+    // The ids each rule was read with, by the names the record spells them by (RULE_MASTER_IDS_KEY).
+    const ruleIds: RuleMasterIds = {}
+    const note = (kind: MasterDataKind, id: string) => {
+      ruleIds[kind] = { ...ruleIds[kind], [masterName(context, kind, id)]: id }
+    }
+    for (const { rule } of running) {
+      if (rule === null) continue
+      for (const id of rule.wasteFractionIds) note("waste-fraction", id)
+      for (const id of rule.containerTypeIds) note("container-type", id)
+      if (rule.vehicleTypeId !== null) note("vehicle-type", rule.vehicleTypeId)
+    }
     const provider = sharedServiceProvider(groups)
     const lastDay = scheme.validTo === null ? "" : lastDayIn(scheme.validTo)
     return {
@@ -463,6 +519,7 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
         unloadingStationId: scheme.unloadingStationId === null ? "" : webIdFor(context, CHIP.station, scheme.unloadingStationId),
         ...groupValues,
         [SERVER_GROUP_IDS_KEY]: JSON.stringify(Object.fromEntries(running.map((group) => [webGroupIdOf.get(group.id), group.id]))),
+        [RULE_MASTER_IDS_KEY]: JSON.stringify(ruleIds),
         ...(scheme.generation.lastGeneratedAt === null ? {} : { lastGeneratedAt: scheme.generation.lastGeneratedAt }),
         [LAST_GENERATION_MATCHES_KEY]: serializeGenerationMatches(last),
         [PREVIOUS_GENERATION_MATCHES_KEY]: serializeGenerationMatches(previous),

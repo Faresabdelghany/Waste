@@ -18,6 +18,7 @@ import { TablePagination, useTablePagination } from "@/components/ui/table-pagin
 import { problemSentence } from "@/lib/api/problem"
 import { schemeOccurrences } from "@/lib/api/records/route-schemes"
 import { problemOfError } from "@/lib/api/records/server-records"
+import type { BusinessRecord } from "@/lib/data/business-modules"
 import { ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
 
 import { useApiClient } from "./api-session-store"
@@ -37,12 +38,17 @@ type Loaded = { key: string; rows: Occurrence[] } | { key: string; problem: stri
 
 const NO_ROWS: Occurrence[] = []
 
-export function SchemeNextCollections({ recordId }: { recordId: string }) {
+/** What an occurrence depends on in a scheme's values: a change of any reads the dates again. */
+const OCCURRENCE_KEYS = ["frequency", "weekRotation", "serviceDays", "effectiveFrom", "effectiveTo", "holidayPolicy", "projectId"] as const
+
+export function SchemeNextCollections({ record }: { record: BusinessRecord }) {
+  const recordId = record.id
   const client = useApiClient()
   const serverId = useServerModuleState(ROUTE_SCHEMES_MODULE.workspaceId, ROUTE_SCHEMES_MODULE.moduleId)?.serverIds.get(recordId)
   const from = todayIso()
   const to = addDays(from, WINDOW_DAYS - 1)
-  const key = `${serverId ?? ""}:${from}`
+  const values = record.submittedValues ?? {}
+  const key = JSON.stringify([serverId ?? "", from, ...OCCURRENCE_KEYS.map((name) => values[name] ?? "")])
   const [loaded, setLoaded] = useState<Loaded | null>(null)
 
   useEffect(() => {

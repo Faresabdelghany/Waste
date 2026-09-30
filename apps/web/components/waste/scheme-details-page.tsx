@@ -481,7 +481,7 @@ export function SchemeDetailsPage({
             pickups={schemePickups}
             generationBlocked={!canGenerate}
             containerDrift={containerDrift}
-            nextCollectionsOf={onApi ? record.id : undefined}
+            nextCollectionsOf={onApi ? record : undefined}
           />
         </TabsContent>
         <TabsContent value="stops" className="mt-0 min-h-0 flex-1 overflow-y-auto">
@@ -892,7 +892,7 @@ function SchemeRoutesTab({
   /** Rule groups whose matched containers shifted at their most recent change (issue #41) — derived, never persisted. */
   containerDrift: readonly CollectionGroupContainerDrift[]
   /** On the Pilot, the scheme whose next collections the API plans stand in for its routes (slice 6 reads those). */
-  nextCollectionsOf?: string
+  nextCollectionsOf?: BusinessRecord
 }) {
   const router = useRouter()
   const [query, setQuery] = useState("")
@@ -943,7 +943,7 @@ function SchemeRoutesTab({
       )}
 
       {nextCollectionsOf !== undefined ? (
-        <SchemeNextCollections recordId={nextCollectionsOf} />
+        <SchemeNextCollections record={nextCollectionsOf} />
       ) : (
         <>
           <SchemeTabToolbar

@@ -96,17 +96,33 @@ export function adapterFor(module: ServerModule, record: BusinessRecord): Resour
  * A resolver over every loaded module's rows, and over the rows a load has
  * mapped so far (`extra`), so an adapter listed after another in one module
  * sees that one's records. Server ids are unique across tables (UUIDv7), so
- * one map serves every kind.
+ * one map serves every kind. The loaded modules are indexed by server id the
+ * first time one is asked for, since a mapping may ask for hundreds — a
+ * scheme's matched containers — and most of them are rows of a module not
+ * read from the API, which only a full scan would otherwise rule out; the
+ * rows a load is still mapping are read as they grow.
  */
 export function resolverOver(state: ServerRecordsState, extra?: { records: readonly BusinessRecord[]; serverIds: ReadonlyMap<string, string> }): Resolver {
   const modules = [...state.values()].filter((module) => module.status === "ready")
   const sources = extra === undefined ? modules : [...modules, { records: extra.records, serverIds: extra.serverIds }]
+  let loadedByServerId: Map<string, BusinessRecord | undefined> | undefined
+  const indexOfLoaded = () => {
+    if (loadedByServerId === undefined) {
+      loadedByServerId = new Map()
+      for (const module of modules) {
+        const byWebId = new Map(module.records.map((record) => [record.id, record]))
+        for (const [webId, id] of module.serverIds) if (!loadedByServerId.has(id)) loadedByServerId.set(id, byWebId.get(webId))
+      }
+    }
+    return loadedByServerId
+  }
   return {
     byServerId: (serverId) => {
-      for (const source of sources) {
-        for (const [webId, id] of source.serverIds) {
-          if (id === serverId) return source.records.find((record) => record.id === webId)
-        }
+      const loaded = indexOfLoaded()
+      if (loaded.has(serverId)) return loaded.get(serverId)
+      if (extra === undefined) return undefined
+      for (const [webId, id] of extra.serverIds) {
+        if (id === serverId) return extra.records.find((record) => record.id === webId)
       }
       return undefined
     },
