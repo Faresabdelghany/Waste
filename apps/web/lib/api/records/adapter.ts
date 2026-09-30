@@ -116,6 +116,20 @@ export type RecordCommand<R extends Resource> = {
   touches?: readonly string[]
 }
 
+/**
+ * An action on one row that answers another resource (Issue #178): a
+ * scheme's generate answers the run it started, never the scheme. Its body
+ * is mapped from the caller's input by `toBody`, as a command's is, and a
+ * refusal is told under `refused`'s heading; the store leaves the row as it
+ * is and hands the answer to the caller (`actOnRecord`, server-records.ts).
+ * A page asks for one through its adapter's typed wrapper, never by name.
+ */
+export type RecordAction<Answer> = {
+  toBody?: (input: CommandInput, record: BusinessRecord, context: MappingContext) => unknown | LocalRefusal
+  run: (client: Client, serverId: string, body: unknown) => Promise<Answer>
+  refused: (record: Pick<BusinessRecord, "name">) => string
+}
+
 export type ResourceAdapter<R extends Resource> = {
   /** The id prefix a record of this kind carries: `project`, `customer`, … */
   prefix: string
@@ -141,8 +155,12 @@ export type ResourceAdapter<R extends Resource> = {
   create?: (client: Client, body: unknown) => Promise<R>
   /** The row's own patch route. */
   update: (client: Client, serverId: string, body: unknown) => Promise<R>
+  /** The row's own read, for a row the server changed on its own account and the store reads back (`rereadRecord`); absent for a kind nothing reads back. */
+  read?: (client: Client, serverId: string) => Promise<R>
   /** The row's commands, by name; absent for a kind the API commands nothing of. */
   commands?: Readonly<Record<string, RecordCommand<R>>>
+  /** The row's actions, by name: requests about the row that answer another resource; absent for a kind with none. */
+  actions?: Readonly<Record<string, RecordAction<unknown>>>
 }
 
 /** One switched `workspace.module`: the resources it lists, in list order. */

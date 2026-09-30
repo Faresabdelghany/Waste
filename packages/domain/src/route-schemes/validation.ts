@@ -322,6 +322,19 @@ function allocationWindowTouchesScheme(
   return false
 }
 
+/** What a rule group that matches no container is told: the one group of a scheme, and the named ones of several. */
+const NO_CONTAINERS_MATCH = "No containers currently match the stop rule"
+const NO_CONTAINERS_MATCH_FOR = "No containers match the stop rule for "
+
+/**
+ * Whether an issue is the zero-match one: the matcher's evidence, which a
+ * caller that cannot place the containers it reads — the Pilot's, until the
+ * API's containers carry their places (apps/web, #178) — does not have.
+ */
+export function isNoMatchIssue(issue: string): boolean {
+  return issue === NO_CONTAINERS_MATCH || issue.startsWith(NO_CONTAINERS_MATCH_FOR)
+}
+
 const namesOf = (groups: ReadonlyArray<{ name: string }>): string =>
   groups.map((group) => group.name).join(", ")
 
@@ -505,11 +518,7 @@ export function validateScheme(
         group.dayStops.some((stop) => stop.count === 0 && stop.claimedByOthers === 0),
       )
       if (unmatched.length > 0) {
-        issues.push(
-          single
-            ? "No containers currently match the stop rule"
-            : `No containers match the stop rule for ${namesOf(unmatched)}`,
-        )
+        issues.push(single ? NO_CONTAINERS_MATCH : `${NO_CONTAINERS_MATCH_FOR}${namesOf(unmatched)}`)
       }
       // A rule group whose every match another group already collects is a
       // rule-vs-rule overlap taken to its end — a warning like any overlap

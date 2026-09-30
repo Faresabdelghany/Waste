@@ -465,3 +465,65 @@ export async function commandRecord(client: ApiClient, module: ServerModule, cur
     return refused(problemOfError(error), sent ? touches : [])
   }
 }
+
+export type ActionOutcome<Answer = unknown> =
+  | { kind: "done"; answer: Answer }
+  /** As a command's: the heading, and the API's problem or the store's own for an action that was never sent. */
+  | { kind: "refused"; what: string; problem: Problem; recordId: string }
+
+/** The store's `sendAction`, as a page holds it and an adapter's typed wrapper takes it; `report: false` leaves a refusal to the caller, as `upsertRecord`'s does. */
+export type SendAction = (workspaceId: WorkspaceId, moduleId: string, recordId: string, name: string, input?: CommandInput, options?: { report?: boolean }) => Promise<ActionOutcome>
+
+/**
+ * Sends one of a row's actions (adapter.ts, `actions`) and hands back what
+ * it answered: another resource, never the row, which stays as it is. The
+ * refusals are a command's — nothing is sent for a record no adapter owns,
+ * an action the adapter does not have, a row the server does not hold yet
+ * or an input the action's `toBody` refuses — and a refusal the API answers
+ * comes back as its problem.
+ */
+export async function actOnRecord<Answer = unknown>(client: ApiClient, module: ServerModule, current: ModuleState, record: BusinessRecord, name: string, input: CommandInput | undefined, options: LoadOptions): Promise<ActionOutcome<Answer>> {
+  const adapter = adapterFor(module, record)
+  const action = adapter?.actions?.[name]
+  const what = action?.refused(record) ?? `Nothing was done to ${record.name}`
+  const refused = (problem: Problem): ActionOutcome<Answer> => ({ kind: "refused", what, problem, recordId: record.id })
+  if (adapter === undefined) return refused(genericProblem(400, `${moduleKeyOf(module.workspaceId, module.moduleId)} has no server resource for ${record.id}`))
+  if (action === undefined) return refused(genericProblem(400, `The API has no "${name}" for a ${adapter.prefix}`))
+  const serverId = current.serverIds.get(record.id)
+  if (serverId === undefined) return refused(genericProblem(400, `${record.name} is not on the API yet: wait for it to be saved, then try again`))
+  const context: MappingContext = { fixtures: options.fixtures, resolve: resolverOver(options.state), companyRecordId: companyRecordIdOf(options.state), now: options.now }
+  try {
+    const body = action.toBody?.(input ?? {}, record, context)
+    if (isLocalRefusal(body)) return refused(refusalProblem(body))
+    return { kind: "done", answer: (await action.run(client, serverId, body)) as Answer }
+  } catch (error) {
+    return refused(problemOfError(error))
+  }
+}
+
+export type RereadOutcome =
+  | { kind: "done"; record: BusinessRecord; serverId: string }
+  | { kind: "refused"; problem: Problem; recordId: string }
+
+/**
+ * Reads one row back through its adapter's own read and maps it as a load
+ * does, under the row's own web id: for a row the server changed on its own
+ * account, as a scheme's generation reading moves when its run finishes.
+ * Nothing is read for a record no adapter owns, a kind whose adapter reads
+ * no single row, or a row the server does not hold yet.
+ */
+export async function rereadRecord(client: ApiClient, module: ServerModule, current: ModuleState, record: BusinessRecord, options: LoadOptions): Promise<RereadOutcome> {
+  const adapter = adapterFor(module, record)
+  const refused = (problem: Problem): RereadOutcome => ({ kind: "refused", problem, recordId: record.id })
+  if (adapter === undefined) return refused(genericProblem(400, `${moduleKeyOf(module.workspaceId, module.moduleId)} has no server resource for ${record.id}`))
+  if (adapter.read === undefined) return refused(genericProblem(400, `A ${adapter.prefix} is not read back on its own`))
+  const serverId = current.serverIds.get(record.id)
+  if (serverId === undefined) return refused(genericProblem(400, `${record.name} is not on the API yet`))
+  const context: MappingContext = { fixtures: options.fixtures, resolve: resolverOver(options.state), companyRecordId: companyRecordIdOf(options.state), now: options.now }
+  try {
+    const resource = await adapter.read(client, serverId)
+    return { kind: "done", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId: resource.id }
+  } catch (error) {
+    return refused(problemOfError(error))
+  }
+}

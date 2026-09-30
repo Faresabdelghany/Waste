@@ -156,6 +156,16 @@ export async function put<Body>(client: ApiClient, path: string, body: unknown):
   return (await readBody(response)) as Body
 }
 
+/**
+ * `POST path` with a JSON body; answers the body and the status, for a route
+ * whose status says which of two things happened: a scheme's generate is 202
+ * when it started a run and 200 when it answers the run already queued.
+ */
+export async function post<Body>(client: ApiClient, path: string, body: unknown): Promise<{ status: number; body: Body }> {
+  const response = await request(client, "POST", path, body)
+  return { status: response.status, body: (await readBody(response)) as Body }
+}
+
 /** `POST path` with no body: the API's commands (`/users/:id/deactivate`), which answer 200 and no `Location`. */
 export async function command<Body>(client: ApiClient, path: string, body?: unknown): Promise<Body> {
   const response = await request(client, "POST", path, body)

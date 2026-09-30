@@ -52,6 +52,16 @@
 // suspended it, reads the scheme back and throws `PartialWrite`, so the row
 // shows what the server holds — a draft, if the verdict was a refusal —
 // under the API's sentence.
+//
+// Generation (#178). The scheme's one action is `generate`: a run over the
+// window the office asks for, `POST /route-schemes/:id/generate`, answering
+// the run (202 when this request started it, 200 when it is the scheme's
+// run already queued or running) and never the scheme, so it is an action
+// and not a command (adapter.ts); a page asks for it through
+// `generateScheme`. The run finishes on the worker; the scheme page watches
+// it (./generation.ts) and then reads the scheme back through `read`, since
+// its `generation` reading is the runs'.
+import type { GenerationRequest, GenerationRun } from "@waste/contracts/generation"
 import type { CollectionGroup as WireGroup, CollectionGroupCreate, CollectionGroupPatch, Occurrence, OccurrenceQuery, RouteScheme, RouteSchemeCreate, RouteSchemePatch, StopMatchingRule } from "@waste/contracts/route-schemes"
 import { LAST_GENERATION_MATCHES_KEY, PREVIOUS_GENERATION_MATCHES_KEY, serializeGenerationMatches, type GenerationMatches } from "@waste/domain/route-schemes/container-drift"
 import { collectionGroupsOfRecord, collectionGroupsToValues, hasExplicitCollectionGroups, IMPLICIT_GROUP_ID, sharedServiceProvider, type CollectionGroup as SchemeGroup, type ResolvedCollectionGroup } from "@waste/domain/route-schemes/groups"
@@ -62,7 +72,7 @@ import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-mod
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf, type MasterDataKind } from "@/lib/data/master-data-kinds"
 import { ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
 
-import { create, get, listAll, patch, put, withQuery } from "../client"
+import { create, get, listAll, patch, post, put, withQuery } from "../client"
 import {
   inheritedPresentation,
   isLocalRefusal,
@@ -76,9 +86,11 @@ import {
   type Client,
   type LocalRefusal,
   type MappingContext,
+  type RecordAction,
   type ResourceAdapter,
   type ServerModule,
 } from "./adapter"
+import type { ActionOutcome, SendAction } from "./server-records"
 
 /** Where a scheme keeps its groups' server ids: JSON, the web's group id to the server's. */
 export const SERVER_GROUP_IDS_KEY = "serverGroupIds"
@@ -439,6 +451,33 @@ async function sendGroupWrite(client: Client, schemeId: string, write: GroupWrit
   }
 }
 
+/** A scheme's generate, by the name the adapter's `actions` holds it under. */
+export const GENERATE_ROUTES = "generate"
+
+/** What a generate answers: the run, and whether this request started it (202) or it is the scheme's run already queued or running (200) — two clicks are one run. */
+export type GenerationAnswer = { run: GenerationRun; started: boolean }
+
+/** The days a generate plans, both inclusive, as the generate dialog says them. */
+export type GenerationWindow = { from: string; to: string }
+
+const dayOf = (value: unknown): string | undefined => (typeof value === "string" && value.trim() !== "" ? value.trim() : undefined)
+
+const generateRoutes: RecordAction<GenerationAnswer> = {
+  // The window alone: the trigger, the status and the scheme are the server's. Its rules — ordered, at most 366 days — are the API's to say.
+  toBody: (input) => {
+    const from = dayOf(input.from)
+    if (from === undefined) return refusal("from", "Pick the first day to generate")
+    const to = dayOf(input.to)
+    if (to === undefined) return refusal("to", "Pick the last day to generate")
+    return { from, to } satisfies GenerationRequest
+  },
+  run: async (client, serverId, body) => {
+    const { status, body: run } = await post<GenerationRun>(client, `/route-schemes/${serverId}/generate`, body)
+    return { run, started: status === 202 }
+  },
+  refused: (record) => `Generation of ${record.name} was not started`,
+}
+
 export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
   prefix: SCHEME_PREFIX,
   owns: ofKind(SCHEME_PREFIX, ["Route Scheme"]),
@@ -634,6 +673,13 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
       throw new PartialWrite(error, standing)
     }
   },
+  read: (client, serverId) => get<RouteScheme>(client, `/route-schemes/${serverId}`),
+  actions: { [GENERATE_ROUTES]: generateRoutes },
+}
+
+/** A scheme's generate through the store's `sendAction`, its answer typed: the one way a page asks for a run. */
+export function generateScheme(sendAction: SendAction, recordId: string, window: GenerationWindow, options?: { report?: boolean }): Promise<ActionOutcome<GenerationAnswer>> {
+  return sendAction(ROUTE_SCHEMES_MODULE.workspaceId, ROUTE_SCHEMES_MODULE.moduleId, recordId, GENERATE_ROUTES, window, options) as Promise<ActionOutcome<GenerationAnswer>>
 }
 
 /** The dates the API would plan a scheme on in a window, both days inclusive: the scheme page's next collections. */

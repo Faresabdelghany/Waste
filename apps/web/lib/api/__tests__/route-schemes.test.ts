@@ -27,11 +27,13 @@ import {
 } from "@waste/contracts/route-schemes"
 import type { VehicleType } from "@waste/contracts/vehicle-types"
 import { containerDriftBetween, generationMatchHistoryOf } from "@waste/domain/route-schemes/container-drift"
+import { draftGroups } from "@waste/domain/route-schemes/draft"
+import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { collectionGroupsOfRecord, collectionGroupsToValues, type CollectionGroup as SchemeGroup } from "@waste/domain/route-schemes/groups"
 import { effectiveSchemeStatus } from "@waste/domain/route-schemes/lifecycle"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
-import { ROUTE_SCHEMES_MODULE } from "../../data/route-schemes"
+import { ROUTE_SCHEMES_MODULE, schemeValuesOfDraft } from "../../data/route-schemes"
 import { problemSentence } from "../problem"
 import { type MappingContext } from "../records/adapter"
 import { containerTypeAdapter, vehicleTypeAdapter, wasteFractionAdapter } from "../records/master-data"
@@ -421,6 +423,74 @@ describe("a scheme the quick form makes", () => {
     const outcome = await writeRecord(clientOver(fetch), routeSchemesModule, loaded({ records: [], serverIds: new Map() }, 1), quickRecord({ group: { fractions: ["Residual", "Garden waste"] } }), { fixtures: schemeFixtures, state, now: NOW })
     assert.equal(calls.length, 0)
     assert.equal(outcome.kind === "refused" ? problemSentence(outcome.problem) : outcome.kind, 'The request body is invalid — wasteFraction: The API holds no waste fraction named "Garden waste"')
+  })
+})
+
+describe("a scheme the guided setup makes (#178)", () => {
+  // The wizard's draft as step 5 hands it over: two rule groups inheriting step 1's fraction, the fleet and the depot by the web ids their modules lend.
+  const draft: GuidedSchemeData = {
+    schemeName: "Guided · Residual North and South",
+    projectId: "project-copenhagen",
+    planningAreaId: "area-indreby",
+    wasteFraction: "Residual",
+    serviceType: "Kerbside collection",
+    frequency: "weekly",
+    weekRotation: "odd",
+    serviceDays: ["monday", "thursday"],
+    effectiveFrom: "2026-10-05",
+    effectiveTo: "",
+    plannedStartTime: "06:15",
+    holidayPolicy: "shift-next",
+    createAs: "validated",
+    editPolicy: "future",
+    depotId: `depot-${NORDHAVN_DEPOT}`,
+    unloadingStationId: "",
+    groups: [
+      { id: "group-mo1", name: "North", days: ["monday"], fractions: [], stopSource: "rule", containerTypes: ["Two-wheel bin · 240 L"], containerIds: [], vehicleId: `vehicle-${WH24}`, driverId: `driver-${MADS}` },
+      { id: "group-th1", name: "South", days: ["thursday"], fractions: [], stopSource: "rule", containerTypes: ["Two-wheel bin · 240 L"], containerIds: [], vehicleId: `vehicle-${NR08}` },
+    ],
+  }
+  const wizardRecord = (): BusinessRecord => ({
+    ...quickRecord(),
+    name: draft.schemeName,
+    source: "Office workspace",
+    submittedValues: schemeValuesOfDraft(draft, draftGroups(draft)),
+  })
+
+  test("becomes the create body the contract accepts: the scheme's own fields, each group with its rule by the master data's ids and its fleet by the API's", () => {
+    const body = routeSchemeAdapter.toCreateBody?.(wizardRecord(), context())
+    assert.ok(RouteSchemeCreate.safeParse(body).success, JSON.stringify(RouteSchemeCreate.safeParse(body).error?.issues))
+    assert.deepEqual(body, {
+      projectId: copenhagen.id,
+      name: "Guided · Residual North and South",
+      planningAreaId: indreBy.id,
+      serviceType: "kerbside-collection",
+      frequency: "weekly",
+      serviceDays: ["monday", "thursday"],
+      weekRotation: null,
+      plannedStartTime: "06:15",
+      holidayPolicy: "shift-next",
+      editPolicy: "future",
+      status: "validated",
+      depotId: NORDHAVN_DEPOT,
+      unloadingStationId: null,
+      collectionGroups: [
+        { name: "North", days: ["monday"], stopSource: "rule", rule: { wasteFractionIds: [residual.id], containerTypeIds: [bin240.id], vehicleTypeId: null }, containerIds: null, serviceProviderId: null, vehicleId: WH24, driverId: MADS },
+        { name: "South", days: ["thursday"], stopSource: "rule", rule: { wasteFractionIds: [residual.id], containerTypeIds: [bin240.id], vehicleTypeId: null }, containerIds: null, serviceProviderId: null, vehicleId: NR08, driverId: null },
+      ],
+      validFrom: "2026-10-05",
+    })
+  })
+
+  test("one group running every service day is the legacy shape, and goes out as the scheme's one group", () => {
+    const one: GuidedSchemeData = { ...draft, groups: [{ ...draft.groups[0], name: "Everyone", days: ["monday", "thursday"] }] }
+    const record = { ...wizardRecord(), submittedValues: schemeValuesOfDraft(one, draftGroups(one)) }
+    const body = routeSchemeAdapter.toCreateBody?.(record, context()) as { collectionGroups: Array<{ name: string; days: string[] }> }
+    assert.ok(RouteSchemeCreate.safeParse(body).success, JSON.stringify(RouteSchemeCreate.safeParse(body).error?.issues))
+    assert.deepEqual(
+      body.collectionGroups.map((group) => [group.name, group.days]),
+      [["Guided · Residual North and South", ["monday", "thursday"]]],
+    )
   })
 })
 

@@ -20,6 +20,7 @@
 // class onto its token, and asks `coversClass`. The tokens and the display
 // tuple are held together by resources/__tests__/vocabulary.test.ts.
 
+import { groupDriverIssue, type JudgedDay } from "../planning/checks"
 import type { BusinessRecord } from "../prototype-record"
 import { typedString } from "../record-values"
 import { coversClass } from "../resources/licence"
@@ -141,31 +142,64 @@ export type DriverEligibility = {
 /**
  * Why a driver may or may not take a vehicle of the class. The vehicle's
  * reason comes first: a vehicle without a class can judge nobody, so every
- * driver says so and the person corrects the vehicle record once.
+ * driver says so and the person corrects the vehicle record once. With
+ * `on` — the day a collection group's driver is judged on and the vehicle's
+ * label (#178) — a licence that has run out by that day does not hold
+ * either, refused in the sentence the API answers for the group
+ * (planning/checks.ts's `groupDriverIssue`), so a picker and the API turn one
+ * driver down in the same words. Without it only the class is judged.
  */
 export function driverEligibility(
   driver: DriverProfile,
   licenceClass: LicenceClass | null,
+  on?: { judged: JudgedDay; vehicleLabel: string },
 ): DriverEligibility {
   if (licenceClass === null) return { driver, eligible: false, reason: NO_VEHICLE_LICENCE_CLASS }
   if (driver.licenceClass === null) return { driver, eligible: false, reason: NO_LICENCE_ON_RECORD }
   if (!driverHoldsLicence(driver, licenceClass)) {
     return { driver, eligible: false, reason: `Needs ${licenceClass} licence` }
   }
+  if (on !== undefined) {
+    const issue = groupDriverIssueOf(driver, { callsign: on.vehicleLabel, licenceClass }, on.judged)
+    if (issue !== undefined) return { driver, eligible: false, reason: issue }
+  }
   return { driver, eligible: true }
+}
+
+/**
+ * Why a collection group's driver may not take its vehicle on the judged
+ * day, in the sentence the API answers the group with at `driverId`
+ * (planning/checks.ts's `groupDriverIssue`), from the profiles a picker
+ * reads; undefined when they may, or when the vehicle names no class — a
+ * vehicle that judges nobody is the picker's to say, in its own words.
+ */
+export function groupDriverIssueOf(driver: DriverProfile, vehicle: Pick<VehicleProfile, "callsign" | "licenceClass">, judged: JudgedDay): string | undefined {
+  if (vehicle.licenceClass === null) return undefined
+  return groupDriverIssue(
+    {
+      vehicle: { label: vehicle.callsign, requiredLicenceClass: tokenOf(vehicle.licenceClass) },
+      driver: { name: driver.name, licenceClass: driver.licenceClass === null ? null : tokenOf(driver.licenceClass), licenceExpiry: driver.licenceExpiry },
+    },
+    judged,
+  )
 }
 
 /**
  * Every driver for the driver select, each with its eligibility for the
  * vehicle — ineligible drivers stay listed, disabled, with the reason.
  * Without a vehicle nothing can be judged, so everyone is listed enabled.
+ * `judged`, when given, is the day the group's driver is held to their
+ * licence on (`schemeLicenceDay`), and a licence run out by then is judged
+ * as the API judges it.
  */
 export function driverOptions(
   drivers: readonly DriverProfile[],
   vehicle: VehicleProfile | null | undefined,
+  judged?: JudgedDay,
 ): DriverEligibility[] {
   if (!vehicle) return drivers.map((driver) => ({ driver, eligible: true }))
-  return drivers.map((driver) => driverEligibility(driver, vehicle.licenceClass))
+  const on = judged === undefined ? undefined : { judged, vehicleLabel: vehicle.callsign }
+  return drivers.map((driver) => driverEligibility(driver, vehicle.licenceClass, on))
 }
 
 export function eligibleDrivers(

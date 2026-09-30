@@ -102,6 +102,12 @@ export function StepGroups({
         {addButton("default")}
       </div>
 
+      {model.notice !== null && (
+        <Alert className="rounded-2xl">
+          <AlertDescription>{model.notice}</AlertDescription>
+        </Alert>
+      )}
+
       {issues.length > 0 && (
         <Alert className="rounded-2xl border-amber-200 bg-amber-50 text-amber-800">
           <AlertDescription className="text-amber-800">

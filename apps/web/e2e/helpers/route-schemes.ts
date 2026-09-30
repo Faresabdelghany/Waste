@@ -1,5 +1,7 @@
-// Shared Playwright helpers for the Route Scheme guided-setup E2E suite
-// (2026-09-16 redesign). Locators follow the real DOM:
+// Playwright helpers for the guided setup in fixture mode (2026-09-16
+// redesign), which since slice 4 (#178) only wizard-preview-geometry.spec.ts
+// drives; the wizard's own scenarios are e2e-api/guided-setup.spec.ts's.
+// Locators follow the real DOM:
 //
 // - The wizard is a shadcn Dialog titled "New route scheme"; the step
 //   heading is the pane's <h2>. Every field is a <Label htmlFor> bound to its
@@ -61,10 +63,6 @@ export async function nextStep(page: Page): Promise<void> {
   await nextButton(page).click()
 }
 
-export function createButton(page: Page): Locator {
-  return wizard(page).getByRole("button", { name: "Create route scheme" })
-}
-
 /** Opens the Select bound to `label` inside `within` and picks `option` (exact). */
 export async function pickOption(
   page: Page,
@@ -76,17 +74,6 @@ export async function pickOption(
   await trigger.click()
   await page.getByRole("option", { name: option, exact: true }).click()
   await expect(trigger).toContainText(option)
-}
-
-/** Opens the Select bound to `label` and returns the visible option texts (closes it after). */
-export async function optionTexts(page: Page, within: Locator, label: string): Promise<string[]> {
-  await within.getByLabel(label, { exact: true }).click()
-  const listbox = page.getByRole("listbox")
-  await expect(listbox).toBeVisible()
-  const texts = await page.getByRole("option").allInnerTexts()
-  await page.keyboard.press("Escape")
-  await expect(listbox).toBeHidden()
-  return texts.map((text) => text.trim())
 }
 
 /** A pill (ToggleGroup item) named by its aria-label. */
@@ -147,16 +134,6 @@ export async function fillRecurrence(page: Page, input: RecurrenceInput): Promis
   if (input.holidayPolicy) await pickOption(page, root, "On a public holiday", input.holidayPolicy)
 }
 
-/** The read-only "Holiday list · working week" field beside the holiday policy select. */
-export function projectCalendarField(page: Page): Locator {
-  return wizard(page).getByTestId("project-calendar")
-}
-
-/** The next-dates table rows (the preview). */
-export function nextDatesRows(page: Page): Locator {
-  return wizard(page).getByRole("row").filter({ has: page.locator("td") })
-}
-
 /* ---------------------------------- groups -------------------------------- */
 
 export function groupEditor(page: Page): Locator {
@@ -192,17 +169,6 @@ export async function saveGroup(page: Page): Promise<void> {
   const editor = groupEditor(page)
   await editor.getByRole("button", { name: /^(Add|Save) group$/ }).click()
   await expect(editor).toBeHidden()
-}
-
-/* ----------------------------------- list ---------------------------------- */
-
-export function toasts(page: Page): Locator {
-  return page.getByRole("region", { name: "Notifications alt+T" })
-}
-
-/** The schemes list row naming the scheme (the row is exposed as an "Open …" button). */
-export function schemeRow(page: Page, name: string): Locator {
-  return page.locator("tr").filter({ hasText: name })
 }
 
 /* ------------------------------- baseline data ------------------------------ */

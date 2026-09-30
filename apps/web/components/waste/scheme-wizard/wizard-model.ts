@@ -8,6 +8,7 @@
 // step fetched for it (Issue #39) — the estimate's basis says which it got.
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
+import { licenceDayOf, timezoneOfProject, validationOnApi } from "@/lib/data/route-schemes"
 import { FIXTURE_GAZETTEER } from "@/lib/data/street-gazetteer"
 import { routePreview, type RoutePreview } from "@waste/domain/map-planning/route-preview"
 import {
@@ -28,7 +29,7 @@ import {
   type RouteEstimate,
   type RouteMeasure,
 } from "@waste/domain/route-schemes/estimates"
-import type { DriverProfile, VehicleProfile } from "@waste/domain/route-schemes/fleet-profiles"
+import { groupDriverIssueOf, type DriverProfile, type VehicleProfile } from "@waste/domain/route-schemes/fleet-profiles"
 import {
   checkCollectionGroups,
   withoutDuplicatedEngineIssues,
@@ -117,6 +118,8 @@ export type WizardModel = {
   routesOn: (day: ServiceDay, roads?: RouteRoads) => WizardRoute[]
   issues: WizardIssue[]
   validation: SchemeValidationResult
+  /** What stands in for an issue that is no evidence where the containers are the API's (lib/data/route-schemes.ts `validationOnApi`); null otherwise. */
+  notice: string | null
   totalContainers: number
   routesPerWeek: number
   serviceDays: ServiceDay[]
@@ -265,12 +268,11 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
         ]
       })
 
-  const validation = validateGuidedScheme(
-    data,
-    records.schemes,
-    records.allocations,
-    records.containers,
-    records.vehicles,
+  const licenceDay = records.onApi ? licenceDayOf(data.effectiveFrom, timezoneOfProject(records.projects, data.projectId)) : null
+  // With the API's containers the zero-match sentence is no evidence and does not block (#178; retires with #207).
+  const { notice, ...validation } = validationOnApi(
+    validateGuidedScheme(data, records.schemes, records.allocations, records.containers, records.vehicles),
+    records.containersOnApi,
   )
   const engineIssues = withoutDuplicatedEngineIssues(validation.issues)
   const attributed = issuesByGroup(data.groups, engineIssues)
@@ -292,6 +294,16 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
       text,
       groupIds: [...attributed.entries()].filter(([, texts]) => texts.includes(text)).map(([id]) => id),
     })),
+    // On the Pilot a group's driver is held to their licence on the day the API holds it to (the picker's day, group-editor.tsx),
+    // so a first day moved on step 2 after the crew was picked blocks here, in the API's sentence, rather than at the create.
+    ...(licenceDay === null
+      ? []
+      : data.groups.flatMap((group) => {
+          const vehicle = vehicleById(group.vehicleId)
+          const driver = driverById(group.driverId)
+          const text = vehicle && driver ? groupDriverIssueOf(driver, vehicle, licenceDay) : undefined
+          return text === undefined ? [] : [{ kind: "driver" as const, text, groupIds: [group.id] }]
+        })),
   ]
 
   const totalContainers = groups.reduce((sum, summary) => sum + summary.stops, 0)
@@ -340,6 +352,7 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
     routesOn,
     issues,
     validation,
+    notice,
     totalContainers,
     routesPerWeek,
     serviceDays,
