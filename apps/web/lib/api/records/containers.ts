@@ -29,10 +29,14 @@
 //
 // Relations by web id through the store's resolver: the project and the
 // container type (master data, slice 2) by name; the warehouse (slice 5a) and
-// the subscription (slice 9a) as id chips until their modules load, and the
-// property or point a subscription is at is 9b's. No fixture lends its id: a
-// server container is `asset-<uuid>` from the start, the API's id the handle
-// the schemes' groups name it by (the plan on #81, fixture ids (b)).
+// the subscription (slice 9a) as id chips until their modules load. Where the
+// container stands is the place its placement in force today is delivered
+// at, through its subscription (container-places.ts, #184): the point as
+// typed coordinates, the name and address as facts, and the planning area
+// containing the point, which the map and the rule preview read. No fixture
+// lends its id: a server container is `asset-<uuid>` from the start, the
+// API's id the handle the schemes' groups name it by (the plan on #81,
+// fixture ids (b)).
 import type { Container, ContainerOwnership, ContainerServicePlacement } from "@waste/contracts/containers"
 import type { StockMovement } from "@waste/contracts/stock"
 import { CONTAINER_OWNERSHIPS } from "@waste/domain/registry/vocabulary"
@@ -47,6 +51,7 @@ import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 import { command, create, get, listAll, patch } from "../client"
 import { inheritedPresentation, isLocalRefusal, moduleKeyOf, ofKind, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, projectTimezoneOf, shownOn } from "./clock"
+import { containerPlace } from "./container-places"
 import { projectMoved, projectServerIdOf, refusal, warehouseAdapter } from "./places"
 import { nameVia, referencedServerId, typedReference, webIdVia, type ReferenceRule } from "./references"
 
@@ -347,6 +352,8 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
       if (placement.effectiveServiceFrequencyId !== null) facts["Service frequency"] = nameVia(context, "frequency", placement.effectiveServiceFrequencyId)
     }
     if (resource.notes !== null) facts.Notes = resource.notes
+    const place = containerPlace(resource.placements, projectWebId, project === undefined ? undefined : typed(project, "timezone"), context)
+    Object.assign(facts, place.facts)
     return {
       id: webIdOf(CONTAINER_PREFIX, resource.id),
       name: resource.label,
@@ -376,6 +383,7 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
         serviceFrequencyId: placement?.serviceFrequencyId ? webIdVia(context, "frequency", placement.serviceFrequencyId) : "",
         placementFrom: placement?.validFrom ?? "",
         placementTo: placement?.validTo ? lastDayIn(placement.validTo) : "",
+        ...place.values,
       },
     }
   },

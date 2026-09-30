@@ -104,6 +104,14 @@ describe("the container's command dialogs", () => {
     }
   })
 
+  test("the door into service picks its subscription from the switched subscriptions, by web id (#184)", () => {
+    const field = CONTAINER_COMMAND_FORMS.issue.sections.flatMap((section) => section.fields).find((candidate) => candidate.id === "subscriptionId")
+    assert.equal(field?.type, "select")
+    assert.deepEqual(field?.relation, { workspaceId: "customers", moduleId: "agreements" })
+    const body = containerAdapter.commands?.issue?.toBody?.({ ...filled.issue, subscriptionId: `subscription-${subscriptionId}` }, record, context) as { subscriptionId?: string }
+    assert.equal(body?.subscriptionId, subscriptionId)
+  })
+
   test("a required field left blank is refused under that field's own id", () => {
     for (const name of CONTAINER_COMMANDS_OFFERED) {
       for (const fieldId of requiredOf(CONTAINER_COMMAND_FORMS[name])) {

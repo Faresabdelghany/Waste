@@ -16,12 +16,12 @@
 // The agreement's form is the registry's own (business-form-schemas-customers-
 // resources.ts). The subscription's is here, the module's second form: an
 // agreement fixed to the row the person chose "Add subscription" on, a
-// product and a place, a quantity and a period. The product's module
-// (`commercial.products`, slice 10) and the place's (`customers.properties`,
-// `customers.shared`, slice 9b) are not switched yet, so a subscription
-// names them as id chips — `product-<uuid>`, `property-<uuid>`, or the bare
-// id — the way #126 has an unswitched link read; the fields become pickers
-// as those slices land, and `referencedId` is the one reading of a chip.
+// product and a place, a quantity and a period. The place is picked from its
+// switched module (`customers.properties`, `customers.shared`, slice 9b); the
+// product's module (`commercial.products`, slice 10) is not switched yet, so
+// a subscription names it as an id chip — `product-<uuid>`, or the bare id —
+// the way #126 has an unswitched link read, until that slice lands, and
+// `referencedId` is the one reading of a chip.
 import { ofKind } from "@/lib/api/records/adapter"
 
 import type { BusinessFormSchema, BusinessFormValues } from "./business-form-types"
@@ -126,8 +126,9 @@ export const subscriptionFormSchema: BusinessFormSchema = {
       fields: [
         { id: "agreementId", label: "Agreement", type: "select", required: true, readOnly: true, relation: AGREEMENTS_MODULE },
         { id: "productId", label: "Product", type: "text", required: true, placeholder: "The product's id on the API", description: "Only an active product can be subscribed to. Until the products are on the API here, give the product's id." },
-        { id: "propertyId", label: "Property", type: "text", placeholder: "The property's id on the API", description: "The place is a property or a shared collection point, one of the two." },
-        { id: "sharedPointId", label: "Shared collection point", type: "text", placeholder: "The point's id on the API" },
+        // The places' modules by location: lib/data/properties.ts spells them, and imports this module.
+        { id: "propertyId", label: "Property", type: "select", relation: { workspaceId: "customers", moduleId: "properties" }, description: "The place is a property or a shared collection point, one of the two." },
+        { id: "sharedPointId", label: "Shared collection point", type: "select", relation: { workspaceId: "customers", moduleId: "shared" } },
         { id: "quantity", label: "Quantity", type: "number", min: 1, defaultValue: "1" },
         { id: "validFrom", label: "Valid from", type: "date", required: true },
         { id: "validTo", label: "Valid to", type: "date", description: "The last day in force; blank while it runs. Inside the agreement's period." },

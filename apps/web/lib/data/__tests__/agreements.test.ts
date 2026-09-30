@@ -51,7 +51,7 @@ describe("the agreements module", () => {
     assert.equal(referencedId("", "product"), undefined)
   })
 
-  test("the subscription form is the module's own: its agreement fixed, its product and place id chips until their modules are switched, its period and quantity", () => {
+  test("the subscription form is the module's own: its agreement fixed, its product an id chip until its module is switched, its place picked from the places' modules, its period and quantity", () => {
     const schema = subscriptionFormSchema
     assert.equal(schema.key, "customers.agreements")
     assert.equal(schema.recordKind, SUBSCRIPTION_RECORD_KIND)
@@ -69,8 +69,10 @@ describe("the agreements module", () => {
     assert.equal(byId.get("agreementId")?.required, true)
     assert.equal(byId.get("productId")?.type, "text")
     assert.equal(byId.get("productId")?.required, true)
-    assert.equal(byId.get("propertyId")?.type, "text")
-    assert.equal(byId.get("sharedPointId")?.type, "text")
+    assert.equal(byId.get("propertyId")?.type, "select")
+    assert.deepEqual(byId.get("propertyId")?.relation, { workspaceId: "customers", moduleId: "properties" }, "a picker over the switched properties (#184)")
+    assert.equal(byId.get("sharedPointId")?.type, "select")
+    assert.deepEqual(byId.get("sharedPointId")?.relation, { workspaceId: "customers", moduleId: "shared" })
     assert.equal(byId.get("quantity")?.type, "number")
     assert.equal(byId.get("quantity")?.min, 1)
     assert.equal(byId.get("quantity")?.defaultValue, "1")

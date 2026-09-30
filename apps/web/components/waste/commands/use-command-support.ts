@@ -1,6 +1,7 @@
 "use client"
 // What the command surfaces share (Issue #181): the pickers their dialogs
-// name other modules' rows by, whether a surface's own module and its forms'
+// name other modules' rows by — since #184 the customers, the properties and
+// the subscriptions too, their words in lib/data/place-pickers.ts — whether a surface's own module and its forms'
 // modules have answered, a read of one row's appended history (a container's
 // ledger, an allocation's events) from the API, and opening a row made.
 //
@@ -17,12 +18,15 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import type { ApiClient } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"
+import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import { DEPOTS_MODULE, DRIVERS_MODULE, VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import { getModuleDefinition, type BusinessRecord, type ModuleLocation, type WorkspaceId } from "@/lib/data/business-modules"
 import { ORGANISATION_MODULE, WAREHOUSES_MODULE } from "@/lib/data/containers"
 import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
 import type { MasterDataKind } from "@/lib/data/master-data-kinds"
+import { keptOptions, rowOptions, subscriptionOptions } from "@/lib/data/place-pickers"
+import { CONTACTS_MODULE, PROPERTIES_MODULE } from "@/lib/data/properties"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 import { useApiClient } from "../api-session-store"
@@ -53,7 +57,7 @@ export type RelationPickers = {
   timezoneOf: (projectId: string | undefined) => string | undefined
 }
 
-/** The pickers the containers' and the allocations' dialogs read. */
+/** The pickers the containers', the allocations' and the places' dialogs read. */
 export function useRelationPickers(): RelationPickers {
   const organisation = useModuleRecords(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId, fixturesOf(ORGANISATION_MODULE))
   const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId, fixturesOf(MASTER_DATA_MODULE))
@@ -61,6 +65,9 @@ export function useRelationPickers(): RelationPickers {
   const vehicles = useModuleRecords(VEHICLES_MODULE.workspaceId, VEHICLES_MODULE.moduleId, fixturesOf(VEHICLES_MODULE))
   const drivers = useModuleRecords(DRIVERS_MODULE.workspaceId, DRIVERS_MODULE.moduleId, fixturesOf(DRIVERS_MODULE))
   const depots = useModuleRecords(DEPOTS_MODULE.workspaceId, DEPOTS_MODULE.moduleId, fixturesOf(DEPOTS_MODULE))
+  const contacts = useModuleRecords(CONTACTS_MODULE.workspaceId, CONTACTS_MODULE.moduleId, fixturesOf(CONTACTS_MODULE))
+  const properties = useModuleRecords(PROPERTIES_MODULE.workspaceId, PROPERTIES_MODULE.moduleId, fixturesOf(PROPERTIES_MODULE))
+  const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId, fixturesOf(AGREEMENTS_MODULE))
   const byKey = new Map([
     [keyOf(ORGANISATION_MODULE), organisation],
     [keyOf(MASTER_DATA_MODULE), master],
@@ -68,6 +75,9 @@ export function useRelationPickers(): RelationPickers {
     [keyOf(VEHICLES_MODULE), vehicles],
     [keyOf(DRIVERS_MODULE), drivers],
     [keyOf(DEPOTS_MODULE), depots],
+    [keyOf(CONTACTS_MODULE), contacts],
+    [keyOf(PROPERTIES_MODULE), properties],
+    [keyOf(AGREEMENTS_MODULE), agreements],
   ])
   const live = (records: readonly BusinessRecord[]) => records.filter((record) => !isSoftDeleted(record))
   const rowsFor = (field: BusinessFormField, values: BusinessFormValues, projectId?: string): readonly BusinessFormOption[] => {
@@ -79,7 +89,16 @@ export function useRelationPickers(): RelationPickers {
         .filter((record) => kind !== "service-frequency" || project === undefined || record.projectIds?.includes(project))
         .map((record) => optionOf(record, false))
     }
+    const project = projectId ?? (typeof values.projectId === "string" && values.projectId !== "" ? values.projectId : undefined)
+    // A party, a responsible customer: any Customer of the company, a person or an organisation alike.
+    if (field.relation !== undefined && keyOf(field.relation) === keyOf(CONTACTS_MODULE)) return rowOptions(live(contacts.records))
+    // A member property: the form's project's, since a set holds its own project's properties alone.
+    if (field.relation !== undefined && keyOf(field.relation) === keyOf(PROPERTIES_MODULE)) {
+      return rowOptions(live(properties.records).filter((record) => project === undefined || !record.projectIds?.length || record.projectIds.includes(project)))
+    }
     switch (field.id) {
+      case "subscriptionId":
+        return subscriptionOptions(live(agreements.records), project)
       case "projectId":
         return live(organisation.records).filter((record) => record.id.startsWith("project-")).map((record) => optionOf(record, false))
       case "warehouseId":
@@ -97,11 +116,7 @@ export function useRelationPickers(): RelationPickers {
   }
   // The value a form opens with stays offered, as its id chip where the
   // module has no such row loaded: an existing reference is never refused.
-  const options = (field: BusinessFormField, values: BusinessFormValues, projectId?: string): readonly BusinessFormOption[] => {
-    const offered = rowsFor(field, values, projectId)
-    const current = values[field.id]
-    return typeof current === "string" && current !== "" && !offered.some((option) => option.value === current) ? [...offered, { value: current, label: current }] : offered
-  }
+  const options = (field: BusinessFormField, values: BusinessFormValues, projectId?: string): readonly BusinessFormOption[] => keptOptions(field, rowsFor(field, values, projectId), values[field.id])
   const readyFor = (schema: BusinessFormSchema) =>
     schema.sections.every((section) => section.fields.every((field) => field.relation === undefined || (byKey.get(keyOf(field.relation))?.ready ?? true)))
   const timezoneOf = (projectId: string | undefined) => {

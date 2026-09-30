@@ -22,6 +22,7 @@ import { masterDataModule } from "./master-data"
 import { accessModule, organisationModule, serviceProvidersModule } from "./organisation"
 import { placesModule, warehousesModule } from "./places"
 import { collectionCalendarsModule, planningAreasModule } from "./planning"
+import { propertiesModule, propertyGroupsModule, sharedPointsModule } from "./properties"
 import { customersModule } from "./registry"
 import { routeSchemesModule } from "./route-schemes"
 
@@ -33,8 +34,11 @@ import { routeSchemesModule } from "./route-schemes"
  * its fractions, and the warehouses after the depots one may share a yard
  * with; the fleet after the master data (a vehicle's type and fractions),
  * the access module (a driver's login) and the depots (a home base) (#180);
- * the agreements after the customers they name, and before the placements
- * that name their subscriptions (#183); the containers after the master data
+ * the properties after the customers their parties name, and the groups and
+ * the shared points after the properties they gather (#184); the agreements
+ * after the customers they name and the places their subscriptions are
+ * delivered at, and before the placements that name their subscriptions
+ * (#183); the containers after the master data
  * and the warehouses they name, the ledger after the containers its movements
  * name, and the allocations after the fleet and the places they reserve (#181);
  * the route schemes last, after everything a scheme and its groups name —
@@ -53,6 +57,9 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   warehousesModule,
   fleetVehiclesModule,
   fleetDriversModule,
+  propertiesModule,
+  propertyGroupsModule,
+  sharedPointsModule,
   agreementsModule,
   containersModule,
   inventoryModule,

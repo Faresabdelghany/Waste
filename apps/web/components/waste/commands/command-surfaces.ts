@@ -20,6 +20,7 @@ import { isServerBacked } from "@/lib/api/records/modules"
 
 import { AllocateSurface, AllocationCommandsSurface } from "./allocation-surfaces"
 import { AddContainerSurface, ContainerCommandsSurface } from "./container-surfaces"
+import { AddPropertyGroupSurface, AddPropertySurface, AddSharedPointSurface, PropertyCommandsSurface, PropertyGroupCommandsSurface, SharedPointCommandsSurface } from "./place-surfaces"
 
 /** What a primary surface is handed: the label the module's primary action carries. */
 export type PrimarySurfaceProps = { label: string }
@@ -48,6 +49,10 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   // The ledger is read-only on the wire: a movement is a container's command.
   "resources.inventory": { primary: null },
   "fleet.vehicle-planning": { primary: AllocateSurface, rowActions: AllocationCommandsSurface },
+  // Slice 9b (#184): each place by its own form, its set replaced whole by its Edit; the status by the lifecycle's actions.
+  "customers.properties": { primary: AddPropertySurface, rowActions: PropertyCommandsSurface },
+  "customers.groups": { primary: AddPropertyGroupSurface, rowActions: PropertyGroupCommandsSurface },
+  "customers.shared": { primary: AddSharedPointSurface, rowActions: SharedPointCommandsSurface },
 }
 
 /** The module's surface while the adapter is configured and the module switched; undefined otherwise, and always in fixture mode. */
