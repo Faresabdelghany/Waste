@@ -456,8 +456,8 @@ const SEEDED_UPDATED_LABELS = [
 const SEEDED_SENSOR_NETWORKS = ["LoRaWAN", "NB-IoT", "Sigfox"] as const
 
 /** A seeded property with its project's name, as its records spell it. */
-type SeededPropertyProfile = Omit<SeededProperty, "project"> & {
-  project: string
+type SeededPropertyProfile = SeededProperty & {
+  projectName: string
   inCopenhagen: boolean
 }
 
@@ -466,7 +466,7 @@ function seededPropertyProfile(index: number): SeededPropertyProfile {
   const inCopenhagen = property.project === "copenhagen"
   return {
     ...property,
-    project: inCopenhagen ? "Copenhagen Central" : "Harbor Commercial",
+    projectName: inCopenhagen ? "Copenhagen Central" : "Harbor Commercial",
     inCopenhagen,
   }
 }
@@ -484,7 +484,7 @@ function buildSeededPropertyRecords(): BusinessRecord[] {
       "Customer Service",
       status === "Prospect" ? "Agreement draft" : `${subscriptions} subscriptions`,
       SEEDED_UPDATED_LABELS[index % SEEDED_UPDATED_LABELS.length],
-      `${profile.propertyType} property in ${profile.project} with ${subscriptions} active service subscriptions.`,
+      `${profile.propertyType} property in ${profile.projectName} with ${subscriptions} active service subscriptions.`,
       {
         PropertyID: `P-${92001 + index}`,
         ServiceAddress: profile.address,
@@ -492,7 +492,7 @@ function buildSeededPropertyRecords(): BusinessRecord[] {
         Payer: profile.payer,
         "Property number": profile.propertyNumber,
         "Property type": profile.propertyType,
-        Project: profile.project,
+        Project: profile.projectName,
       },
       [
         `${subscriptions} containers`,
@@ -522,7 +522,7 @@ function buildSeededContainerRecords(): BusinessRecord[] {
     const seeded = record(
       container.recordId,
       name,
-      inService ? `${property.name} · ${property.project}` : "Warehouse West · seeded stock",
+      inService ? `${property.name} · ${property.projectName}` : "Warehouse West · seeded stock",
       status,
       inService ? "Asset Team" : "Warehouse Team",
       hasSensor ? `${fillLevel}%` : "No sensor",
@@ -538,7 +538,7 @@ function buildSeededContainerRecords(): BusinessRecord[] {
         "Container type": containerType,
         "Waste fractions": fraction,
         Ownership: container.ownership,
-        Project: property.project,
+        Project: property.projectName,
         "Planning area": planningArea?.name ?? "—",
         Address: inService ? property.address : "Warehouse West · aisle C2",
         "Curb location": inService ? (index % 2 === 0 ? "Curbside" : "Courtyard") : "—",
