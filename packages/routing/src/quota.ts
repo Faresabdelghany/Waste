@@ -210,12 +210,12 @@ export class QuotaEngine {
   async measure(points: readonly Position2D[], { class: jobClass, profile = DEFAULT_PROFILE }: { class: RoutingJobClass; profile?: string }): Promise<Outcome<MeasureResult>> {
     if (points.length < 2) return { kind: "answered", result: { legs: [], provenance: { engineVersion: null, graphDate: null } } }
     const chunks = chunkPoints(points, this.provider.maxWaypoints)
-    const refusal = this.admit("directions", jobClass, chunks.length)
+    const { refusal, taken } = this.admit("directions", jobClass, chunks.length)
     if (refusal !== null) return refusal
     const legs: MeasureResult["legs"] = []
     let provenance: MeasureResult["provenance"] | null = null
-    for (const chunk of chunks) {
-      const outcome = await this.call("directions", () => this.provider.measure({ profile, points: chunk }))
+    for (const [index, chunk] of chunks.entries()) {
+      const outcome = await this.call("directions", () => this.provider.measure({ profile, points: chunk }), index < taken)
       // A refusal midway ends the job whole: legs measured before it are not an answer.
       if (outcome.kind !== "answered") return outcome
       legs.push(...outcome.result.legs)
@@ -226,22 +226,39 @@ export class QuotaEngine {
 
   /** Orders and measures a stop set in one optimisation request. */
   async optimise(request: OptimiseRequest, { class: jobClass }: { class: RoutingJobClass }): Promise<Outcome<OptimiseResult>> {
-    const refusal = this.admit("optimisation", jobClass, 1)
+    const { refusal, taken } = this.admit("optimisation", jobClass, 1)
     if (refusal !== null) return refusal
-    return this.call("optimisation", () => this.provider.optimise(request))
+    return this.call("optimisation", () => this.provider.optimise(request), taken > 0)
   }
 
-  /** Whether a job of this class may make `calls` calls of the family now; the refusal it gets instead, when not. */
-  private admit(family: QuotaFamily, jobClass: RoutingJobClass, calls: number): Outcome<never> | null {
-    return this.admitDay(family, jobClass, calls) ?? this.admitMinute(family, calls)
+  /**
+   * Whether a job of this class may make `calls` calls of the family now:
+   * the refusal it gets instead, when not, and how many of its calls the
+   * minute's allowance already counts for it (`taken`, an engine that does
+   * not wait: its first `taken` calls are not paced again).
+   */
+  private admit(family: QuotaFamily, jobClass: RoutingJobClass, calls: number): { refusal: Outcome<never> | null; taken: number } {
+    const day = this.admitDay(family, jobClass, calls)
+    return day !== null ? { refusal: day, taken: 0 } : this.admitMinute(family, calls)
   }
 
-  /** For an engine that does not wait: whether the minute's allowance holds every call the request needs — as many as a minute holds — or when it will. */
-  private admitMinute(family: QuotaFamily, calls: number): Outcome<never> | null {
-    if (this.waits) return null
+  /**
+   * For an engine that does not wait: whether the minute's allowance holds
+   * every call the request needs — as many as a minute holds — or when it
+   * will. The calls are counted when the request is let in, not as each is
+   * made, so two requests at once cannot both be let in and the second cut
+   * short midway with calls already paid for; a call not made after all
+   * leaves the window with the minute, as a made one does.
+   */
+  private admitMinute(family: QuotaFamily, calls: number): { refusal: Outcome<never> | null; taken: number } {
+    if (this.waits) return { refusal: null, taken: 0 }
     const window = this.window(family)
-    const excess = window.length + Math.min(calls, this.callsPerMinute) - this.callsPerMinute
-    return excess <= 0 ? null : { kind: "deferred", family, cause: "minute", until: this.after(window[excess - 1] + MINUTE_MS) }
+    const wanted = Math.min(calls, this.callsPerMinute)
+    const excess = window.length + wanted - this.callsPerMinute
+    if (excess > 0) return { refusal: { kind: "deferred", family, cause: "minute", until: this.after(window[excess - 1] + MINUTE_MS) }, taken: 0 }
+    const at = this.now().getTime()
+    for (let slot = 0; slot < wanted; slot += 1) window.push(at)
+    return { refusal: null, taken: wanted }
   }
 
   /** The family's calls within the last minute, oldest first, the older ones let go. */
@@ -272,11 +289,11 @@ export class QuotaEngine {
     return { kind: "deferred", family, cause, until: this.after(this.nextReset(state.resetAt, now)) }
   }
 
-  /** One request, paced, its answer read; a 429 waited out and tried once more — or, for an engine that does not wait, either one a `minute` deferral. */
-  private async call<Result>(family: QuotaFamily, ask: () => Promise<ProviderAnswer<Result>>): Promise<Outcome<Result>> {
+  /** One request, paced — unless its admission already counted it (`counted`) — its answer read; a 429 waited out and tried once more, or, for an engine that does not wait, either one a `minute` deferral. */
+  private async call<Result>(family: QuotaFamily, ask: () => Promise<ProviderAnswer<Result>>, counted = false): Promise<Outcome<Result>> {
     const record = this.families[family]
     for (let attempt = 1; ; attempt += 1) {
-      const freesAt = await this.pace(family)
+      const freesAt = counted && attempt === 1 ? null : await this.pace(family)
       if (freesAt !== null) return { kind: "deferred", family, cause: "minute", until: this.after(freesAt) }
       const answer = await ask()
       const now = this.now()

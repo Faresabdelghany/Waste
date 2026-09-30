@@ -57,14 +57,17 @@ export type RoutePlan = Pick<Plan, "id" | "solver" | "status" | "distanceMetres"
 /**
  * The Plan a drawn route reads: the one a Retry answered, while the map
  * holds it, else the route's active Plan — its status, totals, deferral and
- * failure as the map last fetched them where it fetched this very Plan, and
- * `stale` off the route's own reading (a Retry's Plan is over the stops as
- * they stand).
+ * failure as the map last fetched them where it fetched this very Plan,
+ * unless that fetch still said calculating of a Plan read finished since,
+ * and `stale` off the route's own reading (a Retry's Plan is over the stops
+ * as they stand).
  */
 export function routePlanOf(active: ActivePlan | null, retried: Plan | null, fetched: PlanDetail | undefined): RoutePlan | null {
   const base = retried ?? active
   if (base === null) return null
-  const fresh = fetched !== undefined && fetched.id === base.id ? fetched : retried
+  // A result is written once and never undone (#124): a finished status, whichever read it came from, is later than a calculating one.
+  const current = fetched !== undefined && fetched.id === base.id && !(fetched.status === "calculating" && base.status !== "calculating") ? fetched : undefined
+  const fresh = current ?? retried
   return {
     id: base.id,
     solver: fresh?.solver ?? base.solver,

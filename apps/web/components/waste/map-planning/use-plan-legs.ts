@@ -46,6 +46,9 @@ export type PlanLegs = {
 
 type Fetched = { detail: PlanDetail; at: number }
 
+/** Plans asked for at once, so a window of hundreds of routes does not land on the API's small pool in one go. */
+export const MAX_PLANS_IN_FLIGHT = 4
+
 export function usePlanLegs(routes: readonly AreaRoute[], records: readonly BusinessRecord[]): PlanLegs {
   const client = useApiClient()
   const routesModule = useServerModuleState("route-studio", "routes")
@@ -55,6 +58,8 @@ export function usePlanLegs(routes: readonly AreaRoute[], records: readonly Busi
   const [retried, setRetried] = useState<ReadonlyMap<string, Plan>>(() => new Map())
   const [wake, setWake] = useState(0)
   const inFlight = useRef(new Map<string, AbortController>())
+  /** The Plans the map draws now: what a landing fetch keeps beside itself, so the details held stay the drawn routes'. */
+  const drawn = useRef(new Set<string>())
 
   const recordById = useMemo(() => new Map(records.map((record) => [record.id, record])), [records])
 
@@ -78,6 +83,7 @@ export function usePlanLegs(routes: readonly AreaRoute[], records: readonly Busi
     if (client === null) return
     const at = Date.now()
     const wanted = new Map([...plans.values()].map((plan) => [plan.id, plan]))
+    drawn.current = new Set(wanted.keys())
     for (const [id, controller] of inFlight.current) {
       if (wanted.has(id)) continue
       controller.abort()
@@ -85,6 +91,8 @@ export function usePlanLegs(routes: readonly AreaRoute[], records: readonly Busi
     }
     let next = Number.POSITIVE_INFINITY
     for (const plan of wanted.values()) {
+      // The rest wait for a request on its way to land, which runs this again.
+      if (inFlight.current.size >= MAX_PLANS_IN_FLIGHT) break
       if (inFlight.current.has(plan.id)) continue
       const failedAt = missed.get(plan.id)
       if (failedAt !== undefined && at - failedAt < PLAN_POLL_MS) {
@@ -100,7 +108,8 @@ export function usePlanLegs(routes: readonly AreaRoute[], records: readonly Busi
       planDetail(client, plan.id, controller.signal).then(
         (detail) => {
           inFlight.current.delete(plan.id)
-          setFetched((current) => new Map(current).set(plan.id, { detail, at: Date.now() }))
+          // Only the drawn routes' details are kept: a Plan's legs are the heavy part of the map.
+          setFetched((current) => new Map([...current].filter(([id]) => drawn.current.has(id))).set(plan.id, { detail, at: Date.now() }))
         },
         () => {
           if (controller.signal.aborted) return
@@ -141,7 +150,8 @@ export function usePlanLegs(routes: readonly AreaRoute[], records: readonly Busi
       } else if (plan?.status === "ready") {
         roadStates.set(route.id, { status: "pending" })
       } else {
-        roadStates.set(route.id, { status: "estimate", resumesAt: plan?.deferredUntil ?? null, reason: reading.sentence })
+        // No road to draw: the Plan's own reading says why; it stands until the Plan moves, which the fetches above follow.
+        roadStates.set(route.id, { status: "estimate", resumesAt: plan?.deferredUntil ?? null, reason: reading.sentence, standsUntil: Number.POSITIVE_INFINITY })
       }
     }
     return { roads: roadStates, readings: routeReadings, sources: drawn }

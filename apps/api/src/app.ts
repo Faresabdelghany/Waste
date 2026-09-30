@@ -71,7 +71,7 @@ import { roleRoutes } from "./routes/roles"
 import { routeSchemeRoutes } from "./routes/route-schemes"
 import { planRoutes } from "./routes/plans"
 import { routeRoutes } from "./routes/routes"
-import { routingPreviewRoutes } from "./routes/routing-preview"
+import { PREVIEW_CALLS_PER_MINUTE, routingPreviewRoutes } from "./routes/routing-preview"
 import { routingQuotaRoutes } from "./routes/routing-quota"
 import { serviceAreaRoutes } from "./routes/service-areas"
 import { serviceProviderPriceRoutes } from "./routes/service-provider-prices"
@@ -136,7 +136,7 @@ export function createApp({
   build = null,
   jobs = createJobSender(probe),
   routing = { name: providerNameFromEnv() },
-  routingEngine = new QuotaEngine(new FakeProvider(), { ...STANDARD_PLAN, waits: false }),
+  routingEngine = new QuotaEngine(new FakeProvider(), { ...STANDARD_PLAN, callsPerMinute: PREVIEW_CALLS_PER_MINUTE, waits: false }),
 }: AppOptions) {
   const app = new Hono()
   app.onError(errorHandler(log))

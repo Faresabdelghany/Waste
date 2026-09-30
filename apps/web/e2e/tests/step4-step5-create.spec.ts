@@ -11,9 +11,9 @@ import {
   wizard,
 } from "../helpers/route-schemes"
 
-// Step 4's two map tests left with #173: without the API the preview asks
-// for no road, and the road and the quota's estimate are e2e-api's
-// wizard-preview.spec.ts, over the fake routing provider.
+// Step 4's map is e2e/wizard-preview-geometry.spec.ts's (#173): in fixture
+// mode no road is asked for, and the preview's road and the quota's
+// estimate are the API's readings, in e2e-api.
 
 test("step 5 offers the running-scheme edit policy, asking by default, and creates the scheme onto the list", async ({
   page,

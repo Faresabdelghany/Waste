@@ -366,6 +366,14 @@ describe("an engine that does not wait: a request a person is looking at (#173, 
     assert.deepEqual(slept, [])
   })
 
+  test("the minute's calls are taken when a request is admitted: two chunked requests at once cannot both be let in and cut short midway", async () => {
+    const { engine, fake } = harness({}, { callsPerMinute: 4, waits: false })
+    const [first, second] = await Promise.all([engine.measure(line(101), { class: "interactive" }), engine.measure(line(101), { class: "interactive" })])
+    assert.equal(first.kind, "answered")
+    assert.deepEqual(second, { kind: "deferred", family: "directions", cause: "minute", until: new Date(T0.getTime() + 60_000 + 30_000) })
+    assert.equal(fake.calls.directions, 3, "the first request's three calls, and none of the second's")
+  })
+
   test("a chunked measurement the minute cannot hold whole defers before its first call", async () => {
     const { engine, fake } = harness({}, { callsPerMinute: 3, waits: false })
     await engine.measure([depot, stops[0]], { class: "interactive" })

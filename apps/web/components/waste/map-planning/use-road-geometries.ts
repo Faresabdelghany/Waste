@@ -75,6 +75,7 @@ const noRoad = (stops: readonly LngLat[]): RoadGeometry => ({
 export function useRoadGeometries(routes: readonly RoadRoute[]): ReadonlyMap<string, RoadState> {
   const current = useApiClient()
   const [version, setVersion] = useState(0)
+  const [recheck, setRecheck] = useState(0)
 
   const wanted = useMemo(() => {
     const byKey = new Map<string, readonly LngLat[]>()
@@ -89,19 +90,22 @@ export function useRoadGeometries(routes: readonly RoadRoute[]): ReadonlyMap<str
   // Hold the wanted roads while these routes are shown; the release on the
   // way out lets the cache abort a request nobody else holds. A road settled
   // by the time the hold is taken — landed between render and effect — is
-  // redrawn once here, since the hold will not report it.
+  // redrawn once here, since the hold will not report it. Held again when an
+  // answer that stood for now stops standing (`recheck`, below).
   useEffect(() => {
     forgetStoredRoads()
+    void recheck
     if (current === null) return
     client = current
     const bump = () => setVersion((count) => count + 1)
     const release = roads.hold(wanted, bump)
     if ([...wanted.keys()].some((key) => roads.stateOf(key).status !== "pending")) bump()
     return release
-  }, [current, wanted])
+  }, [current, recheck, wanted])
 
-  return useMemo(() => {
+  const states = useMemo(() => {
     void version
+    void recheck
     return new Map(
       routes.map((route): [string, RoadState] => {
         const stops = route.stops.map((stop) => stop.lngLat)
@@ -110,5 +114,23 @@ export function useRoadGeometries(routes: readonly RoadRoute[]): ReadonlyMap<str
         return [route.id, roads.stateOf(roadGeometryKey(stops))]
       }),
     )
-  }, [current, routes, version])
+  }, [current, recheck, routes, version])
+
+  // An estimate stands until the quota resumes and a failed request for a
+  // minute: hold again once the first of them stops standing, so its road is
+  // asked for then without the person changing day.
+  const recheckAt = useMemo(() => {
+    let earliest = Number.POSITIVE_INFINITY
+    for (const state of states.values()) {
+      if (state.status === "estimate" || state.status === "failed") earliest = Math.min(earliest, state.standsUntil)
+    }
+    return earliest
+  }, [states])
+  useEffect(() => {
+    if (!Number.isFinite(recheckAt)) return
+    const timer = setTimeout(() => setRecheck((count) => count + 1), Math.max(0, recheckAt - Date.now()) + 50)
+    return () => clearTimeout(timer)
+  }, [recheckAt])
+
+  return states
 }

@@ -40,6 +40,7 @@ Only the account holder can do these (tracking issue #191 lists them). The value
    | `PILOT_MEMORY_LOG_SECONDS` | `600` while the first week's readings are taken; unset after |
    | `ROUTING_PROVIDER` | `openrouteservice`, set together with the key once the OpenRouteService account exists (#171); unset until then, which is the fake |
    | `OPENROUTESERVICE_API_KEY` | the account's key, from the password manager; the worker's jobs and the API's guided-setup preview (#173) call the provider with it, and with the provider named and no key each refuses to start |
+   | `ROUTING_PREVIEW_CALLS_PER_MINUTE` | unset, the API's 10; with the worker's `ROUTING_CALLS_PER_MINUTE` (unset, 30) the Standard plan's 40 a minute, so a change to one is a change to the other (#173) |
 
    `HOST`, `WORKER_HOST`, `WORKER_PORT` and `NODE_EXTRA_CA_CERTS` are the image's own. The three secrets are the `pilot` environment's `PILOT_DATABASE_URL`, `PILOT_WORKER_DATABASE_URL` and the project's origin, and go nowhere else (`supabase/README.md`).
 4. **The repository variable** `PILOT_API_URL`: the service's `https://<name>.suga.run`, which the release's proof reads.
@@ -59,4 +60,7 @@ Each is read once in the app's `env.ts` and applied in one place; absent means t
 | `WORKER_BOSS_IDLE_TIMEOUT_SECONDS` | the worker | pg-pool's 10 | how long pg-boss's pool keeps an idle connection; 0 for never |
 | `PILOT_MEMORY_LOG_SECONDS` | the supervisor | off | the memory line's period |
 | `ROUTING_DIRECTIONS_RESERVE`, `ROUTING_OPTIMISATION_RESERVE` | the worker | the Standard plan's 500 and 100 | where batch routing work stops, per family, leaving the rest of the day's quota to the office's own calls (`@waste/routing/quota`, #132 §1) |
-| `ROUTING_CALLS_PER_MINUTE` | the worker and the API | the Standard plan's 30 | each routing family's calls a minute from each process, under the plan's 40; the API's preview never waits for the minute and answers the estimate instead (#173) |
+| `ROUTING_CALLS_PER_MINUTE` | the worker | 30 | each routing family's calls a minute from the worker's jobs |
+| `ROUTING_PREVIEW_CALLS_PER_MINUTE` | the API | 10 | each routing family's calls a minute from the guided setup's preview (#173), which never waits for the minute and answers the estimate instead |
+
+The two defaults sum to the Standard plan's 40 calls a minute on the one key both processes call with, so raising one means lowering the other.

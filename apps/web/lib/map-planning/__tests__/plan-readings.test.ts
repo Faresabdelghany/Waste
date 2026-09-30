@@ -82,6 +82,13 @@ describe("routePlanOf: the Plan a drawn route reads, at its freshest", () => {
     assert.deepEqual(routePlanOf(active({ stale: true }), retried, detail()), { id: RETRY, solver: "optimiser", status: "calculating", distanceMetres: null, durationSeconds: null, deferredUntil: later(60), failureReason: null, stale: false })
   })
 
+  test("a finished result wins over a calculating one, whichever read it came from: the list read since says ready, the fetch was earlier", () => {
+    const fetched = detail({ status: "calculating", distanceMetres: null, durationSeconds: null, deferredUntil: later(900) })
+    const plan = routePlanOf(active(), null, fetched)
+    assert.deepEqual(plan, routePlan())
+    assert.deepEqual(plan && nextPlanFetch(plan, fetched, NOW.getTime() - 1, NOW.getTime()), { kind: "now" }, "and its legs are asked for now")
+  })
+
   test("no active Plan and no Retry: none", () => {
     assert.equal(routePlanOf(null, null, undefined), null)
   })

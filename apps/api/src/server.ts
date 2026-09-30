@@ -21,6 +21,7 @@ import { providerFromEnv } from "@waste/routing/select"
 import { createRemoteJWKSet } from "jose"
 
 import { createApp } from "./app"
+import { PREVIEW_CALLS_PER_MINUTE } from "./routes/routing-preview"
 import { createVerifier, supabaseAuth } from "./auth/verify"
 import { readBuildInfo } from "./build-info"
 import { parseEnv } from "./env"
@@ -36,7 +37,7 @@ const auth = supabaseAuth(env.SUPABASE_URL)
 const verifier = createVerifier({ keySet: createRemoteJWKSet(auth.jwks), issuer: auth.issuer })
 // The provider the preview calls (#173), with the key where it is OpenRouteService's; its name keys every Plan fingerprint too.
 const routingEngine = new QuotaEngine(providerFromEnv({ ROUTING_PROVIDER: env.ROUTING_PROVIDER, OPENROUTESERVICE_API_KEY: env.OPENROUTESERVICE_API_KEY }), {
-  ...quotaKnobs({ callsPerMinute: env.ROUTING_CALLS_PER_MINUTE }),
+  ...quotaKnobs({ callsPerMinute: env.ROUTING_PREVIEW_CALLS_PER_MINUTE ?? PREVIEW_CALLS_PER_MINUTE }),
   waits: false,
 })
 const listening = await listen(createApp({ probe, pool, verifier, databaseTimeoutMs: DATABASE_CHECK_TIMEOUT_MS, build, routing: { name: routingEngine.name }, routingEngine }), {

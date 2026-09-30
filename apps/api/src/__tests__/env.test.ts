@@ -123,11 +123,12 @@ describe("parseEnv", () => {
     })
   })
 
-  test("reads ROUTING_CALLS_PER_MINUTE, the preview's pacing (#132 §1), as a whole number of at least one, absent — the Standard plan's 30 — unless set", () => {
-    assert.deepEqual(parseEnv({ ...base, ROUTING_CALLS_PER_MINUTE: "" }), expected, "empty: not set")
-    assert.equal(parseEnv({ ...base, ROUTING_CALLS_PER_MINUTE: "20" }).ROUTING_CALLS_PER_MINUTE, 20)
-    for (const value of ["0", "-1", "2.5", "thirty"]) {
-      assert.throws(() => parseEnv({ ...base, ROUTING_CALLS_PER_MINUTE: value }), (error: unknown) => error instanceof Error && /ROUTING_CALLS_PER_MINUTE/.test(error.message), value)
+  test("reads ROUTING_PREVIEW_CALLS_PER_MINUTE, the preview's own pacing (#173), as a whole number of at least one, absent — the preview's 10 — unless set; the worker's ROUTING_CALLS_PER_MINUTE is not the API's", () => {
+    assert.deepEqual(parseEnv({ ...base, ROUTING_PREVIEW_CALLS_PER_MINUTE: "" }), expected, "empty: not set")
+    assert.equal(parseEnv({ ...base, ROUTING_PREVIEW_CALLS_PER_MINUTE: "5" }).ROUTING_PREVIEW_CALLS_PER_MINUTE, 5)
+    assert.deepEqual(parseEnv({ ...base, ROUTING_CALLS_PER_MINUTE: "30" }), expected, "the worker's knob is dropped here")
+    for (const value of ["0", "-1", "2.5", "ten"]) {
+      assert.throws(() => parseEnv({ ...base, ROUTING_PREVIEW_CALLS_PER_MINUTE: value }), (error: unknown) => error instanceof Error && /ROUTING_PREVIEW_CALLS_PER_MINUTE/.test(error.message), value)
     }
   })
 })

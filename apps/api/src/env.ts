@@ -94,8 +94,8 @@ export const Env = z.object({
   ROUTING_PROVIDER: z.string().optional(),
   /** OpenRouteService's key (#171), when ROUTING_PROVIDER names it: the guided setup's preview calls the provider from the API (#173); one person's, server-side only, never logged; `providerFromEnv` refuses the provider without it. */
   OPENROUTESERVICE_API_KEY: z.string().optional(),
-  /** How many preview calls a minute the API makes per family (#132 §1): the Standard plan's 30 unless set. The preview is interactive, so the reserves are the worker's alone. */
-  ROUTING_CALLS_PER_MINUTE: z
+  /** How many preview calls a minute the API makes per family (#173): PREVIEW_CALLS_PER_MINUTE, 10, unless set — the rest of the plan's 40 beside the worker's ROUTING_CALLS_PER_MINUTE, on the one key. The preview is interactive, so the reserves are the worker's alone. */
+  ROUTING_PREVIEW_CALLS_PER_MINUTE: z
     .string()
     .regex(/^\d+$/, { error: "must be a whole number of calls a minute, at least 1" })
     .transform(Number)

@@ -10,7 +10,7 @@ import { describe, test } from "node:test"
 
 import type { LngLat } from "@waste/domain/map-planning/geo"
 
-import { createRoadGeometryCache, ESTIMATE_RECHECK_MS, ROAD_MEMORY_MAX, type Defer, type RoadAnswer } from "../road-geometry-cache"
+import { createRoadGeometryCache, ESTIMATE_RECHECK_MS, FAILURE_RECHECK_MS, ROAD_MEMORY_MAX, type Defer, type RoadAnswer } from "../road-geometry-cache"
 import type { RoadGeometry } from "../road-geometry"
 
 type Call = {
@@ -145,20 +145,26 @@ describe("createRoadGeometryCache", () => {
     assert.deepEqual(cache.inFlight(), [])
   })
 
-  test("a refusal is remembered for the session; an abort is not, so the next hold asks again", async () => {
+  test("a failed request stands a minute, then the next hold asks again — the API's 502 says to; an abort is remembered as nothing", async () => {
     const { calls, fetchRoad } = fakeFetcher()
     const tick = manualTick()
-    const cache = createRoadGeometryCache({ fetchRoad, defer: tick.defer })
+    const clock = { now: 0 }
+    const cache = createRoadGeometryCache({ fetchRoad, defer: tick.defer, now: () => clock.now })
     let told = 0
     cache.hold(wanted("a"), () => {
       told += 1
     })
     calls[0].reject(new Error("The routing provider did not answer"))
     await settled()
-    assert.deepEqual(cache.stateOf("a"), { status: "failed" })
-    assert.equal(told, 1, "the consumer is told of the refusal")
+    assert.deepEqual(cache.stateOf("a"), { status: "failed", standsUntil: FAILURE_RECHECK_MS })
+    assert.equal(told, 1, "the consumer is told of the failure")
     cache.hold(wanted("a"), () => {})
-    assert.equal(calls.length, 1, "a refused road is not asked for again")
+    assert.equal(calls.length, 1, "within the minute the failure stands: nothing asked")
+    clock.now = FAILURE_RECHECK_MS
+    cache.hold(wanted("a"), () => {})
+    assert.equal(calls.length, 2, "a minute on, the next hold asks again")
+    calls[1].resolve(road(10))
+    await settled()
 
     const release = cache.hold(wanted("b"), () => {
       told += 1
@@ -166,11 +172,11 @@ describe("createRoadGeometryCache", () => {
     release()
     tick.flush()
     await settled()
-    assert.equal(calls[1].signal.aborted, true)
+    assert.equal(calls[2].signal.aborted, true)
     assert.equal(told, 1, "nobody is told of an abort — nobody held it")
     assert.deepEqual(cache.stateOf("b"), { status: "pending" })
     cache.hold(wanted("b"), () => {})
-    assert.equal(calls.length, 3, "the next hold asks again")
+    assert.equal(calls.length, 4, "the next hold asks again")
   })
 
   test("a hold that arrives after the abort but before its rejection gets a fresh request", async () => {
@@ -251,7 +257,12 @@ describe("createRoadGeometryCache", () => {
     calls[0].estimate("2026-10-01T14:32:00.000Z", "the routing provider's directions quota is spent")
     await settled()
     assert.equal(told, 1)
-    assert.deepEqual(cache.stateOf("a"), { status: "estimate", resumesAt: "2026-10-01T14:32:00.000Z", reason: "the routing provider's directions quota is spent" })
+    assert.deepEqual(cache.stateOf("a"), {
+      status: "estimate",
+      resumesAt: "2026-10-01T14:32:00.000Z",
+      reason: "the routing provider's directions quota is spent",
+      standsUntil: Date.parse("2026-10-01T14:32:00.000Z"),
+    })
     cache.hold(wanted("a"), () => {})
     assert.equal(calls.length, 1, "no road until the quota resumes: nothing asked")
     clock.now = Date.parse("2026-10-01T14:32:00.000Z")
@@ -289,15 +300,16 @@ describe("createRoadGeometryCache", () => {
     assert.deepEqual([...memory.keys()].at(-1), "a")
   })
 
-  test("a fetcher that throws counts as a refusal, not a crash", async () => {
+  test("a fetcher that throws counts as a failed request, not a crash", async () => {
     const cache = createRoadGeometryCache({
       fetchRoad: () => {
         throw new Error("no network")
       },
       defer: manualTick().defer,
+      now: () => 1_000,
     })
     cache.hold(wanted("a"), () => {})
     await settled()
-    assert.deepEqual(cache.stateOf("a"), { status: "failed" })
+    assert.deepEqual(cache.stateOf("a"), { status: "failed", standsUntil: 1_000 + FAILURE_RECHECK_MS })
   })
 })

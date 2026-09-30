@@ -50,6 +50,14 @@ import { describeJson } from "./shared"
 
 const MODULE = "route-studio.schemes"
 
+/**
+ * The preview's calls a minute per family unless ROUTING_PREVIEW_CALLS_PER_MINUTE
+ * says otherwise: with the worker's 30 (ROUTING_CALLS_PER_MINUTE), the
+ * Standard plan's 40 on the one key both processes call with — raising one
+ * means lowering the other.
+ */
+export const PREVIEW_CALLS_PER_MINUTE = 10
+
 /** How many answers the cache holds. */
 export const PREVIEW_CACHE_ENTRIES = 50
 /** How long an answer stands: a day. */
@@ -63,6 +71,14 @@ export const MINUTE_SPENT = "the routing provider's limit for the minute is reac
 export const PROVIDER_SILENT = "The routing provider did not answer; ask for the preview again"
 
 type Held = { answer: RoutingPreview; answeredAt: number }
+
+/** The provider did not answer — the network, its own 5xx, an answer this side could not read: the one failure the preview answers 502 for. */
+class ProviderSilent extends Error {
+  constructor(cause: unknown) {
+    super("routing preview: the provider did not answer", { cause })
+    this.name = "ProviderSilent"
+  }
+}
 
 /**
  * The answers asked for, by fingerprint: each stands for a day after it was
@@ -158,7 +174,14 @@ export function routingPreviewRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { 
     const before = engine.state("directions").observedAt?.getTime() ?? null
     const distinct = distinctConsecutive(points)
     // Every point at one place spans no road, and asks nothing.
-    const outcome: Outcome<{ legs: RoutedLeg[] }> = distinct.length < 2 ? { kind: "answered", result: { legs: [] } } : await engine.measure(distinct, { class: "interactive", profile: DEFAULT_PROFILE })
+    let outcome: Outcome<{ legs: RoutedLeg[] }> = { kind: "answered", result: { legs: [] } }
+    if (distinct.length >= 2) {
+      try {
+        outcome = await engine.measure(distinct, { class: "interactive", profile: DEFAULT_PROFILE })
+      } catch (error) {
+        throw new ProviderSilent(error)
+      }
+    }
     const learned = engine.state("directions")
     if ((learned.observedAt?.getTime() ?? null) !== before) {
       try {
@@ -168,7 +191,13 @@ export function routingPreviewRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { 
         log(loggable(error))
       }
     }
-    const answer = answerOf(engine.name, points, outcome)
+    let answer: RoutingPreview
+    try {
+      answer = answerOf(engine.name, points, outcome)
+    } catch (error) {
+      // Legs that do not fit the points are an answer this side cannot read: the provider's, like its silence.
+      throw new ProviderSilent(error)
+    }
     if (standsFor(outcome)) cache.set(key, answer, now().getTime())
     return answer
   }
@@ -205,7 +234,9 @@ export function routingPreviewRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { 
       try {
         return c.json(await pending)
       } catch (error) {
-        log(loggable(error))
+        // Anything else — the database's readings of the quota — is the API's own failure, answered by the error handler.
+        if (!(error instanceof ProviderSilent)) throw error
+        log(loggable(error.cause))
         throw problem(502, { detail: PROVIDER_SILENT })
       }
     },
