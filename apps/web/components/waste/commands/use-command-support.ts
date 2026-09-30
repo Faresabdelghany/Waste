@@ -17,9 +17,10 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import type { ApiClient } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
-import { problemOfError } from "@/lib/api/records/server-records"
+import { depotAdapter, unloadingStationAdapter } from "@/lib/api/records/places"
+import { problemOfError, type CommandOutcome, type WriteOutcome } from "@/lib/api/records/server-records"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
-import { DEPOTS_MODULE, DRIVERS_MODULE, VEHICLES_MODULE } from "@/lib/data/allocations"
+import { DEPOTS_MODULE, DRIVERS_MODULE, isTrailerRecord, VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import { getModuleDefinition, type BusinessRecord, type ModuleLocation, type WorkspaceId } from "@/lib/data/business-modules"
 import { ORGANISATION_MODULE, WAREHOUSES_MODULE } from "@/lib/data/containers"
@@ -30,7 +31,53 @@ import { CONTACTS_MODULE, PROPERTIES_MODULE } from "@/lib/data/properties"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 import { useApiClient } from "../api-session-store"
-import { useModuleRecords, useServerModuleState } from "../business-record-store"
+import { useBusinessRecordStore, useMeProjects, useModuleRecords, useServerModuleState, whenSaved } from "../business-record-store"
+import type { CommandInput } from "@/lib/api/records/adapter"
+
+/** What a command the API took answers: the row as the API now holds it. */
+export type CommandDone = Extract<CommandOutcome, { kind: "done" }>
+
+/**
+ * A row's commands and writes sent one at a time from its surface: `busy`
+ * while one is out, `version` bumped after each the API took, so the row's
+ * own reads (`useRowHistory`: a ledger, a history, a route's stops) are read
+ * again. `run` sends a command and tells `done` what the API answered; `save`
+ * waits on a write the surface made and tells `done` it landed. A refusal is
+ * the store's toast, in the API's words, and the surface stands as it was.
+ */
+export function useCommandRunner(module: ModuleLocation, recordId: string): {
+  busy: boolean
+  version: number
+  run: (name: string, input: CommandInput | undefined, done: (outcome: CommandDone) => void) => void
+  save: (outcome: Promise<WriteOutcome> | undefined, done: () => void) => void
+} {
+  const { sendCommand } = useBusinessRecordStore()
+  const [busy, setBusy] = useState(false)
+  const [version, setVersion] = useState(0)
+  const bump = () => setVersion((current) => current + 1)
+  const run = (name: string, input: CommandInput | undefined, done: (outcome: CommandDone) => void) => {
+    if (busy) return
+    setBusy(true)
+    void sendCommand(module.workspaceId, module.moduleId, recordId, name, input).then((outcome) => {
+      setBusy(false)
+      if (outcome.kind !== "done") return
+      bump()
+      done(outcome)
+    })
+  }
+  const save = (outcome: Promise<WriteOutcome> | undefined, done: () => void) => {
+    setBusy(true)
+    whenSaved(
+      outcome,
+      () => {
+        done()
+        bump()
+      },
+      () => setBusy(false),
+    )
+  }
+  return { busy, version, run, save }
+}
 
 const NO_RECORDS: readonly BusinessRecord[] = []
 const fixturesOf = (location: ModuleLocation) => getModuleDefinition(location)?.records ?? NO_RECORDS
@@ -62,7 +109,7 @@ export type RelationPickers = {
   timezoneOf: (projectId: string | undefined) => string | undefined
 }
 
-/** The pickers the containers', the allocations' and the places' dialogs read. */
+/** The pickers the containers', the allocations', the places' and the routes' dialogs read. */
 export function useRelationPickers(): RelationPickers {
   const organisation = useModuleRecords(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId, fixturesOf(ORGANISATION_MODULE))
   const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId, fixturesOf(MASTER_DATA_MODULE))
@@ -73,6 +120,8 @@ export function useRelationPickers(): RelationPickers {
   const contacts = useModuleRecords(CONTACTS_MODULE.workspaceId, CONTACTS_MODULE.moduleId, fixturesOf(CONTACTS_MODULE))
   const properties = useModuleRecords(PROPERTIES_MODULE.workspaceId, PROPERTIES_MODULE.moduleId, fixturesOf(PROPERTIES_MODULE))
   const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId, fixturesOf(AGREEMENTS_MODULE))
+  // A role that does not view the organisation picks from `/me`'s projects (Issue #217).
+  const meProjects = useMeProjects()
   const byKey = new Map([
     [keyOf(ORGANISATION_MODULE), organisation],
     [keyOf(MASTER_DATA_MODULE), master],
@@ -107,16 +156,23 @@ export function useRelationPickers(): RelationPickers {
       case "subscriptionId":
         return subscriptionOptions(live(agreements.records), project)
       case "projectId":
-        return live(organisation.records).filter((record) => record.id.startsWith("project-")).map((record) => optionOf(record, false))
+        return (organisation.notGranted ? meProjects : live(organisation.records).filter((record) => record.id.startsWith("project-"))).map((record) => optionOf(record, false))
       case "warehouseId":
         return live(warehouses.records).map((record) => optionOf(record, true))
+      // The fleet module holds the powered vehicles and the trailers: each field offers its own kind (#179).
       case "vehicleId":
+        return live(vehicles.records)
+          .filter((record) => !isTrailerRecord(record))
+          .map((record) => optionOf(record, true))
       case "trailerId":
-        return live(vehicles.records).map((record) => optionOf(record, true))
+        return live(vehicles.records).filter(isTrailerRecord).map((record) => optionOf(record, true))
       case "driverId":
         return live(drivers.records).map((record) => optionOf(record, true))
+      // The places module holds the depots and the unloading stations: each field offers its own kind (#179).
       case "depotId":
-        return live(depots.records).map((record) => optionOf(record, true))
+        return live(depots.records).filter(depotAdapter.owns).map((record) => optionOf(record, true))
+      case "unloadingStationId":
+        return live(depots.records).filter(unloadingStationAdapter.owns).map((record) => optionOf(record, true))
       default:
         return field.options ?? []
     }
@@ -125,8 +181,10 @@ export function useRelationPickers(): RelationPickers {
   // module has no such row loaded: an existing reference is never refused.
   const options = (field: BusinessFormField, values: BusinessFormValues, projectId?: string, opened?: BusinessFormValues): readonly BusinessFormOption[] =>
     keptOptions(field, rowsFor(field, values, projectId), keptValue(field.id, values, opened))
+  // A module the role does not view is nothing to wait for: its picker offers what the person has, and the rest of the form stands (Issue #217).
+  const answered = (state: { ready: boolean; notGranted: boolean } | undefined) => state === undefined || state.ready || state.notGranted
   const readyFor = (schema: BusinessFormSchema) =>
-    schema.sections.every((section) => section.fields.every((field) => field.relation === undefined || (byKey.get(keyOf(field.relation))?.ready ?? true)))
+    schema.sections.every((section) => section.fields.every((field) => field.relation === undefined || answered(byKey.get(keyOf(field.relation)))))
   const timezoneOf = (projectId: string | undefined) => {
     const project = projectId === undefined ? undefined : organisation.records.find((record) => record.id === projectId)
     const timezone = project?.submittedValues?.timezone

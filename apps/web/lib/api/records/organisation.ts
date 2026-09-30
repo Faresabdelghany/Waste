@@ -51,6 +51,7 @@ import {
   type ResourceAdapter,
   type ServerModule,
 } from "./adapter"
+import { projectWebIdOf } from "./me-projects"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
@@ -132,7 +133,7 @@ export const projectAdapter: ResourceAdapter<Project> = {
   list: (client) => listAll<Project>(client, "/projects"),
   toRecord: (project, context) => {
     const fixture = fixtureNamed(context.fixtures, "project", [project.name])
-    const id = fixture?.id ?? webIdOf("project", project.id)
+    const id = projectWebIdOf(project, context.fixtures)
     const facts: Record<string, string> = {
       ...fixture?.facts,
       Language: languageName(project.language),

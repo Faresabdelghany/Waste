@@ -13,10 +13,11 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
 import { CreateSurface } from "@/components/waste/commands/create-surface"
-import { useModuleReady, useRelationPickers, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
+import { ReadRows } from "@/components/waste/commands/read-rows"
+import { useCommandRunner, useModuleReady, useRelationPickers, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
 import { shownOn } from "@/lib/api/records/clock"
 import { CONTAINERS_MODULE, containerMovements } from "@/lib/api/records/containers"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
@@ -60,15 +61,14 @@ type Open = { kind: "edit"; schema: BusinessFormSchema; values: BusinessFormValu
 
 /** A container's commands and its ledger, in its details. */
 export function ContainerCommandsSurface({ record }: RowSurfaceProps) {
-  const { upsertRecord, sendCommand } = useBusinessRecordStore()
+  const { upsertRecord } = useBusinessRecordStore()
   const pickers = useRelationPickers()
   const moduleReady = useModuleReady(CONTAINERS_MODULE)
-  // Bumped after each write and command the surface sends: a movement need not change what the row shows.
-  const [version, setVersion] = useState(0)
+  // The version is bumped after each write and command the API took: a movement need not change what the row shows.
+  const { busy, version, save, run: send } = useCommandRunner(CONTAINERS_MODULE, record.id)
   const ledger = useRowHistory(workspaceId, moduleId, record, version, containerMovements)
   const warehouseName = useServerNames(WAREHOUSES_MODULE, "warehouse")
   const [open, setOpen] = useState<Open | null>(null)
-  const [busy, setBusy] = useState(false)
   const projectId = typeof record.submittedValues?.projectId === "string" ? record.submittedValues.projectId : undefined
   const timezone = pickers.timezoneOf(projectId)
   const options = (field: BusinessFormField, values: BusinessFormValues) => pickers.options(field, values, projectId)
@@ -80,32 +80,18 @@ export function ContainerCommandsSurface({ record }: RowSurfaceProps) {
     if (busy) return
     const edited = updateContainerRecord(record, values)
     const outcome = upsertRecord(workspaceId, moduleId, edited)
-    setBusy(true)
-    whenSaved(
-      outcome,
-      () => {
-        setOpen(null)
-        setVersion((current) => current + 1)
-      },
-      () => setBusy(false),
-    )
+    save(outcome, () => setOpen(null))
     void outcome?.then((result) => {
       if (result.kind === "updated") toast.success("Container updated", { description: `${edited.name} was updated.` })
       else if (result.kind === "unchanged") toast.info("Nothing to change", { description: `${edited.name} is as the API holds it.` })
     })
   }
 
-  const run = (name: OfferedContainerCommand, values: BusinessFormValues) => {
-    if (busy) return
-    setBusy(true)
-    void sendCommand(workspaceId, moduleId, record.id, name, values).then((outcome) => {
-      setBusy(false)
-      if (outcome.kind !== "done") return
+  const run = (name: OfferedContainerCommand, values: BusinessFormValues) =>
+    send(name, values, (outcome) => {
       setOpen(null)
-      setVersion((current) => current + 1)
       toast.success(CONTAINER_COMMAND_FORMS[name].execution?.completionMessage ?? "Recorded", { description: `${outcome.record.name} is now ${outcome.record.status.toLowerCase()}.` })
     })
-  }
 
   const editForm = containerEditForm(record)
 
@@ -125,21 +111,7 @@ export function ContainerCommandsSurface({ record }: RowSurfaceProps) {
       </div>
       <div className="space-y-2">
         <h4 className="text-xs font-medium text-muted-foreground">Stock movements</h4>
-        {ledger.problem !== null ? (
-          <p className="text-sm text-destructive">{ledger.problem}</p>
-        ) : ledger.rows === null ? (
-          <p className="text-sm text-muted-foreground">Reading the ledger…</p>
-        ) : ledger.rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No stock movement yet.</p>
-        ) : (
-          <ol className="divide-y divide-border/60 border-y border-border/60 text-sm" data-testid="container-ledger">
-            {ledger.rows.map((movement) => (
-              <li key={movement.id} className="py-2">
-                {movementLine(movement, warehouseName, timezone)}
-              </li>
-            ))}
-          </ol>
-        )}
+        <ReadRows read={ledger} label="Reading the ledger…" empty="No stock movement yet." testId="container-ledger" line={(movement) => movementLine(movement, warehouseName, timezone)} />
       </div>
       {open?.kind === "edit" && (
         <BusinessRecordFormDialog schema={open.schema} open onOpenChange={(isOpen) => !isOpen && setOpen(null)} onSubmit={saveEdit} relationOptions={options} initialValueOverrides={open.values} />

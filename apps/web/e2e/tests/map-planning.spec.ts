@@ -1,6 +1,8 @@
 // Map Planning (2026-09-16): the Plan entry's page. Tile requests are
 // aborted so the suite needs no network: the base map reports itself
-// unavailable and the markers, drawn from the registry, still stand.
+// unavailable and the markers, drawn from the registry, still stand. The
+// Routes layer, the route card and Play route are the API suite's, over the
+// routes generation writes (e2e-api/map-routes.spec.ts, #179).
 import { expect, test, type Page } from "@playwright/test"
 
 const MARKERS = '[data-testid="planning-map-markers"]'
@@ -32,94 +34,6 @@ async function selectRectangle(page: Page): Promise<void> {
   await page.mouse.move(box.x + box.width * 0.65, box.y + box.height * 0.9, { steps: 6 })
   await page.mouse.up()
   await expect(overlay).toHaveCount(0)
-}
-
-/** The app's own local-date "today" (@waste/domain/route-schemes/recurrence todayIso). */
-const localToday = () => {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
-}
-
-const SEEDED_ROUTE_ID = "route-e2e-9001"
-/**
- * Fixture route days name pickups outside the registry, so nothing is
- * drawable until a Route Scheme generates routes. Seed one dated route with
- * three located stops the way generation writes them (typed routeId and
- * containerId on the pickups) and reload — the store merges browser records
- * with the fixtures.
- */
-async function seedDrawableRoute(
-  page: Page,
-  stops: readonly string[] = ["asset-82014", "asset-66420", "asset-44831"],
-  options: { status?: string; pickupStatus?: string; pickupFacts?: (index: number) => Record<string, string> } = {},
-): Promise<void> {
-  const blank = { context: "", owner: "", updated: "", description: "", related: [], source: "", freshness: "" }
-  const seeded = {
-    "route-studio.routes": [
-      {
-        ...blank,
-        id: SEEDED_ROUTE_ID,
-        name: "RC-9001",
-        status: options.status ?? "Planned",
-        value: `${stops.length} stops`,
-        facts: { Vehicle: "WH-24", Driver: "Mads Jensen", "Time window": "06:00–14:00" },
-        submittedValues: { serviceDate: localToday() },
-      },
-    ],
-    "route-studio.pickups": stops.map((containerId, index) => ({
-      ...blank,
-      id: `pickup-e2e-${index + 1}`,
-      name: `Pickup ${index + 1}`,
-      status: options.pickupStatus ?? "Planned",
-      value: "",
-      facts: { Stop: String(index + 1), ...(options.pickupFacts?.(index) ?? {}) },
-      submittedValues: { routeId: SEEDED_ROUTE_ID, containerId },
-    })),
-  }
-  await page.addInitScript((payload) => {
-    window.localStorage.setItem("waste-business-records-v1", JSON.stringify(payload))
-  }, seeded)
-  await page.reload()
-  await expect(page.locator(MARKERS)).toBeVisible()
-  await expect(page.locator('[data-marker="cluster"]').first()).toBeVisible()
-}
-
-/**
- * A point on a drawn route where its hit stroke is the topmost element: a
- * marker stands on every stop and clusters may sit on the segment, so walk
- * the first segment until the point under the pointer is the route itself.
- */
-async function pointOnRouteLine(page: Page, routeId: string): Promise<{ x: number; y: number }> {
-  const point = await page.evaluate((id) => {
-    const circles = Array.from(document.querySelectorAll(`[data-route-line="${id}"] circle`)).slice(0, 2)
-    if (circles.length < 2) return null
-    const [a, b] = circles.map((node) => {
-      const box = node.getBoundingClientRect()
-      return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
-    })
-    for (let step = 1; step < 40; step += 1) {
-      const t = step / 40
-      const x = a.x + (b.x - a.x) * t
-      const y = a.y + (b.y - a.y) * t
-      const hit = document.elementFromPoint(x, y)
-      if (hit?.getAttribute("data-route-hit") === id) return { x, y }
-    }
-    return null
-  }, routeId)
-  if (!point) throw new Error(`no clear point on route ${routeId}`)
-  return point
-}
-
-/**
- * Opens a route's card by clicking its line. The click is dispatched on the
- * route's own hit stroke, at a point on the line, so another route crossing
- * it (fixture route days draw alongside the seeded one) cannot take the click.
- */
-async function clickRouteLine(page: Page, routeId: string): Promise<void> {
-  const point = await pointOnRouteLine(page, routeId)
-  await page
-    .locator(`[data-route-hit="${routeId}"]`)
-    .dispatchEvent("click", { clientX: point.x, clientY: point.y, bubbles: true })
 }
 
 const mapZoom = (page: Page) =>
@@ -322,118 +236,6 @@ test("a legacy Plan calendars link lands on the Settings pane", async ({ page })
   await expect(page.getByRole("cell", { name: "Copenhagen Central 2026" }).first()).toBeVisible()
 })
 
-test("the Routes layer counts the fixture route days by status and draws nothing until switched on", async ({ page }) => {
-  // Fixture pickups name their stops by address; the ones on gazetteer streets make their route days drawable.
-  await page.getByRole("button", { name: /^Layers/ }).click()
-  const layers = page.getByRole("dialog", { name: "Layers" })
-  const routesLayer = layers.getByTestId("routes-layer")
-  await expect(routesLayer).toContainText("Routes")
-  await expect(routesLayer).toContainText("Any date")
-  await expect(routesLayer.getByRole("checkbox", { name: /Routes in the collection window/ })).toBeEnabled()
-  await expect(routesLayer).toContainText("2 in progress")
-  await expect(routesLayer).toContainText("1 completed")
-  await expect(routesLayer).not.toContainText("awaiting")
-  await expect(page.locator("[data-route-line]")).toHaveCount(0)
-})
-
-test("the Routes layer draws a dated route coloured by status and a click on its line opens the route card", async ({ page }) => {
-  await seedDrawableRoute(page)
-  await page.getByRole("button", { name: /^Layers/ }).click()
-  const layers = page.getByRole("dialog", { name: "Layers" })
-  const toggle = layers.getByTestId("routes-layer").getByRole("checkbox", { name: /Routes in the collection window/ })
-  await expect(toggle).toBeEnabled()
-  await expect(layers.getByTestId("routes-layer")).toContainText("1 awaiting")
-  await toggle.click()
-  const line = page.locator(`[data-route-line="${SEEDED_ROUTE_ID}"]`)
-  await expect(line).toBeVisible()
-  await expect(line).toHaveAttribute("data-route-status", "awaiting")
-  // Without the API no road is asked for (#173): the generated order, not measured, joins the stops straight and dashed in the status colour.
-  await expect(line).toHaveAttribute("data-route-geometry", "straight")
-  await expect(line.locator("polyline").first()).toHaveAttribute("stroke-dasharray", "6 6")
-  await expect(line.locator("polyline").first()).toHaveAttribute("stroke", "#f59e0b")
-  await expect(line.locator("[data-route-road]")).toHaveCount(0)
-  await page.keyboard.press("Escape")
-  await expect(layers).toHaveCount(0)
-
-  // The window still holds the route: it runs today.
-  await page.getByLabel("Collection window").click()
-  await page.getByRole("option", { name: "Today" }).click()
-  await expect(line).toBeVisible()
-
-  await clickRouteLine(page, SEEDED_ROUTE_ID)
-  const card = page.getByTestId("route-card")
-  await expect(card).toBeVisible()
-  await expect(card).toContainText("RC-9001")
-  await expect(card).toContainText("Planned")
-  await expect(card).toContainText("WH-24")
-  await expect(card).toContainText("Mads Jensen")
-  await expect(card).toContainText("06:00–14:00")
-  await expect(card).toContainText("3")
-  // The routing reading is the route's active Plan's; a fixture route has none.
-  await expect(card.getByTestId("route-card-routing")).toHaveText("Not measured")
-  await expect(card.getByRole("link", { name: "Open route" })).toHaveAttribute(
-    "href",
-    `/route-studio?module=routes&record=${SEEDED_ROUTE_ID}`,
-  )
-  await page.keyboard.press("Escape")
-  await expect(card).toHaveCount(0)
-})
-
-test("Play route replays a completed route stop by stop with planned and actual times", async ({ page }) => {
-  const clock = (minutes: number) => `${String(6 + Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`
-  await seedDrawableRoute(page, undefined, {
-    status: "Completed",
-    pickupStatus: "Completed",
-    // Planned every ten minutes from 06:10; each stop completed five minutes late.
-    pickupFacts: (index) => ({ Scheduled: clock(10 + index * 10), "Completed at": clock(15 + index * 10) }),
-  })
-  await page.getByRole("button", { name: /^Layers/ }).click()
-  await page.getByRole("dialog", { name: "Layers" }).getByTestId("routes-layer").getByRole("checkbox").click()
-  await page.keyboard.press("Escape")
-  await expect(page.locator(`[data-route-line="${SEEDED_ROUTE_ID}"]`)).toHaveAttribute("data-route-geometry", "straight")
-
-  await clickRouteLine(page, SEEDED_ROUTE_ID)
-  await page.getByTestId("route-card").getByRole("button", { name: "Play route" }).click()
-  const bar = page.getByTestId("playback-bar")
-  await expect(bar).toBeVisible()
-  await expect(page.getByTestId("route-card")).toHaveCount(0)
-  await expect(bar).toContainText("RC-9001")
-  await expect(page.getByTestId("playback-vehicle")).toBeVisible()
-  await expect(page.locator(`[data-route-travelled="${SEEDED_ROUTE_ID}"]`)).toHaveCount(1)
-
-  // Freeze the replay, then walk it with the scrubber.
-  await bar.getByRole("button", { name: "Pause", exact: true }).click()
-  const slider = bar.getByRole("slider", { name: "Route progress" })
-  await slider.focus()
-  await page.keyboard.press("Home")
-  await expect(bar.getByTestId("playback-position")).toHaveText("Stop 1 of 3")
-  await expect(bar.getByTestId("playback-times")).toHaveText("planned 06:10 · actual 06:15 · +5 min")
-  await page.keyboard.press("End")
-  await expect(bar.getByTestId("playback-position")).toHaveText("Stop 3 of 3")
-  await expect(bar.getByTestId("playback-caption")).toContainText("3.")
-  await expect(bar.getByTestId("playback-times")).toHaveText("planned 06:30 · actual 06:35 · +5 min")
-  // At the last stop, Play starts over.
-  await bar.getByRole("button", { name: "Play", exact: true }).click()
-  await expect(bar.getByRole("button", { name: "Pause", exact: true })).toBeVisible()
-
-  await bar.getByRole("button", { name: "Close playback" }).click()
-  await expect(bar).toHaveCount(0)
-  await expect(page.getByTestId("playback-vehicle")).toHaveCount(0)
-})
-
-test("a route row in the Selected area panel can be played without the Routes layer", async ({ page }) => {
-  await seedDrawableRoute(page, ["asset-seed-91005", "asset-seed-91007", "asset-seed-91010"])
-  await selectRectangle(page)
-  const panel = page.getByRole("region", { name: "Selected area" })
-  await panel.locator(`[data-route-row="${SEEDED_ROUTE_ID}"]`).getByRole("button", { name: "Play route RC-9001" }).click()
-  const bar = page.getByTestId("playback-bar")
-  await expect(bar).toBeVisible()
-  // Playing draws the route even though nothing switched the Routes layer on.
-  await expect(page.locator(`[data-route-line="${SEEDED_ROUTE_ID}"]`)).toBeVisible()
-  await expect(page.getByTestId("playback-vehicle")).toBeVisible()
-  await expect(bar.getByTestId("playback-times")).toHaveText("No times recorded")
-})
-
 test("the Coverage gaps layer rings containers no Route Scheme lists and the panel counts them", async ({ page }) => {
   await page.getByRole("button", { name: /^Layers/ }).click()
   const layers = page.getByRole("dialog", { name: "Layers" })
@@ -487,29 +289,6 @@ test("ticking two Route Schemes compares their stops on the map with A only, B o
   await strip.getByRole("button", { name: "Stop comparing" }).click()
   await expect(strip).toHaveCount(0)
   await expect(page.locator("[data-marker][data-compare]")).toHaveCount(0)
-})
-
-test("hovering a route row highlights its line and hovering the line highlights the row", async ({ page }) => {
-  // Three stops on Vesterbro and Frederiksberg streets, inside the rectangle.
-  await seedDrawableRoute(page, ["asset-seed-91005", "asset-seed-91007", "asset-seed-91010"])
-  await selectRectangle(page)
-  const panel = page.getByRole("region", { name: "Selected area" })
-  const row = panel.locator(`[data-route-row="${SEEDED_ROUTE_ID}"]`)
-  await expect(row).toBeVisible()
-  await expect(row).toContainText("RC-9001")
-  await panel.getByRole("button", { name: "See on map" }).click()
-  const line = page.locator(`[data-route-line="${SEEDED_ROUTE_ID}"]`)
-  await expect(line).toBeVisible()
-  await expect(line).not.toHaveAttribute("data-highlighted", "true")
-
-  await row.hover()
-  await expect(line).toHaveAttribute("data-highlighted", "true")
-  await panel.getByRole("heading", { name: "Selected area" }).hover()
-  await expect(line).not.toHaveAttribute("data-highlighted", "true")
-
-  const point = await pointOnRouteLine(page, SEEDED_ROUTE_ID)
-  await page.mouse.move(point.x, point.y)
-  await expect(row).toHaveAttribute("data-highlighted", "true")
 })
 
 test("a selection saves with its window, survives a reload, loads back, and can be renamed and deleted", async ({ page }) => {

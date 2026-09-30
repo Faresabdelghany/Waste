@@ -25,18 +25,23 @@
 // Draft the edit leaves without a blocking issue asks to be validated, the
 // browser path's rule (`schemeEditStatusOnApi`) — and the next generation
 // run reconciles its routes. The dialog closes once the API has taken the
-// edit. The question over future routes returns with the routes on the API
-// (slice 6).
+// edit. The question returns there with the routes on the API (#179): the
+// same rule over the routes the API holds (`schemeEditOnApi`), with "This
+// collection only" shown and not offered, since the API keeps no one-off yet
+// (#209), and a stored one-off refused; "Apply to future collections" saves
+// the scheme, and its planned routes follow it when its routes are next
+// generated. Until the routes module has read the API's routes, an edit that
+// would ask is refused, since how it applies cannot be asked.
 
 import { useCallback, useState, type Dispatch, type SetStateAction } from "react"
 import { toast } from "sonner"
 
-import { whenSaved } from "@/components/waste/business-record-store"
+import { useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { isServerBacked } from "@/lib/api/records/modules"
-import { schemeEditStatusOnApi, validationOnApi } from "@/lib/data/route-schemes"
+import { projectToday, schemeEditOnApi, schemeEditStatusOnApi, timezoneOfProject, validationOnApi } from "@/lib/data/route-schemes"
 import {
   planSchemeEditReconciliation,
   type SchemeEditApplication,
@@ -44,6 +49,7 @@ import {
 } from "@waste/domain/route-schemes/edit"
 import { schemeLiveValidation } from "@waste/domain/route-schemes/lifecycle"
 import { todayIso } from "@waste/domain/route-schemes/recurrence"
+import { count } from "@waste/domain/text"
 
 /** What the save writes to the scheme's audit trail besides what the planner decides: the event's id, action and reason, and the evidence line read off the saved scheme. */
 export type SchemeEditAudit = {
@@ -100,6 +106,9 @@ export function useSchemeEditCommit({
   schemesOnApi,
 }: SchemeEditCommitDeps) {
   const [pendingSchemeEdit, setPendingSchemeEdit] = useState<PendingSchemeEdit | null>(null)
+  // The API's routes, once the routes module has read them; null before, or when the read failed.
+  const routesState = useServerModuleState("route-studio", "routes")
+  const apiRoutes = routesState?.status === "ready" ? routesState.records : null
 
   const commitSchemeEdit = useCallback(
     (
@@ -110,6 +119,17 @@ export function useSchemeEditCommit({
       apply?: SchemeEditApplication,
     ) => {
       if (schemesOnApi) {
+        const projectId = typeof before.submittedValues?.projectId === "string" ? before.submittedValues.projectId : undefined
+        const today = projectToday(timezoneOfProject(moduleRecords("configure", "organization"), projectId))
+        const decided = schemeEditOnApi(before, after, apiRoutes, today, apply)
+        if (decided.kind === "ask") {
+          setPendingSchemeEdit({ before, after, audit, onSaved, question: decided.question })
+          return
+        }
+        if (decided.kind === "refuse") {
+          toast.error(`${after.name} not saved`, { description: decided.message })
+          return
+        }
         const own = schemeLiveValidation(after, {
           schemes: moduleRecords("route-studio", "schemes"),
           allocations: moduleRecords("fleet", "vehicle-planning"),
@@ -129,7 +149,7 @@ export function useSchemeEditCommit({
           }))
           setSelectedRecord((current) => (current?.id === scheme.id ? scheme : current))
           onSaved(scheme)
-          toast.success(`${scheme.name} updated`)
+          toast.success(`${scheme.name} updated`, decided.following === 0 ? undefined : { description: `The next generation of its routes brings ${count(decided.following, "planned route")} to it.` })
         })
         return
       }
@@ -199,7 +219,7 @@ export function useSchemeEditCommit({
         toast.success(`${scheme.name} updated`, { description: schemeEdit.message })
       }
     },
-    [actorName, moduleRecords, schemesOnApi, setAuditEvents, setSelectedRecord, upsertRecord],
+    [actorName, apiRoutes, moduleRecords, schemesOnApi, setAuditEvents, setSelectedRecord, upsertRecord],
   )
 
   /** The dialog's answer: the pending edit is planned again, with `apply`, by the commit of this render. */

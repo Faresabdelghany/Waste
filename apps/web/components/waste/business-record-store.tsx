@@ -25,7 +25,9 @@ import {
 import { UNREACHABLE_STATUS, type ApiClient } from "@/lib/api/client"
 import { genericProblem, isAccountRefusal, problemSentence, type Problem } from "@/lib/api/problem"
 import { moduleKeyOf, type CommandInput, type ServerModule } from "@/lib/api/records/adapter"
+import { ME_PROJECTS, withMeProjects } from "@/lib/api/records/me-projects"
 import { SERVER_MODULES, serverModuleOf, viewableModules } from "@/lib/api/records/modules"
+import { organisationModule } from "@/lib/api/records/organisation"
 import {
   actOnRecord,
   commandRecord,
@@ -129,6 +131,14 @@ type BusinessRecordStoreValue = {
     moduleId: string,
     recordId: string,
   ) => Promise<RereadOutcome>
+  /**
+   * Reads a switched module again whole, as the store does after a command
+   * that touches it (#213's re-read, the one read path), for a module whose
+   * rows the server moves on its own account while a person watches it — the
+   * Live board every 30 s. Only while the module is ready, and a failed read
+   * leaves its rows as they were; nothing to do on any other module.
+   */
+  refreshModule: (workspaceId: WorkspaceId, moduleId: string) => Promise<void>
 }
 
 type BusinessRecordStores = {
@@ -197,6 +207,7 @@ const BusinessRecordStoreContext = createContext<BusinessRecordStores | null>(
 // The server (and every hydrating component) sees fixtures only.
 const EMPTY_STORED_RECORDS: StoredRecords = {}
 const NO_SERVER_MODULES: ServerRecordsState = new Map()
+const NO_RECORDS: readonly BusinessRecord[] = []
 
 function moduleKey(workspaceId: WorkspaceId, moduleId: string) {
   return moduleKeyOf(workspaceId, moduleId)
@@ -371,14 +382,21 @@ export function BusinessRecordStoreProvider({
     stores.sessionSignal.set(controller.signal)
     const run = async () => {
       let modules = SERVER_MODULES
+      let projects: readonly { id: string; name: string }[] | undefined
       try {
-        modules = viewableModules((await loadMe()).role.grants, SERVER_MODULES)
+        const me = await loadMe()
+        modules = viewableModules(me.role.grants, SERVER_MODULES)
+        projects = me.projects
       } catch (error) {
         // The account's refusal has ended the session; anything else leaves the grants unknown.
         if (controller.signal.aborted || isAccountRefusal(problemOfError(error))) return
       }
       if (controller.signal.aborted) return
-      server.set((state) => withNotGranted(state, SERVER_MODULES.filter((module) => !modules.includes(module))))
+      server.set((state) => {
+        const marked = withNotGranted(state, SERVER_MODULES.filter((module) => !modules.includes(module)))
+        // Where the role does not view the organisation, a row's project resolves through `/me`'s projects (Issue #217).
+        return projects !== undefined && !modules.includes(organisationModule) ? withMeProjects(marked, projects, fixturesOf("configure", "organization")) : marked
+      })
       for (const module of modules) {
         if (controller.signal.aborted) return
         const key = moduleKey(module.workspaceId, module.moduleId)
@@ -667,10 +685,36 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
     [stores],
   )
 
-  return useMemo(
-    () => ({ getRecords, upsertRecord, sendCommand, sendAction, refreshRecord }),
-    [getRecords, upsertRecord, sendCommand, sendAction, refreshRecord],
+  const refreshModule = useCallback(
+    (workspaceId: WorkspaceId, moduleId: string): Promise<void> => {
+      const module = serverModuleOf(workspaceId, moduleId)
+      const client = stores.client.getSnapshot()
+      if (module === undefined || client === null) return Promise.resolve()
+      // The session this read belongs to, as for a command's re-read: one the session outlives is abandoned.
+      const generation = stores.generation.getSnapshot()
+      return rereadModule(stores, module, () => stores.generation.getSnapshot() !== generation, client)
+    },
+    [stores],
   )
+
+  return useMemo(
+    () => ({ getRecords, upsertRecord, sendCommand, sendAction, refreshRecord, refreshModule }),
+    [getRecords, upsertRecord, sendCommand, sendAction, refreshRecord, refreshModule],
+  )
+}
+
+/** The person's projects from `/me` where the role does not view the organisation (Issue #217), as the resolver reads them; none otherwise. */
+export function useMeProjects(): readonly BusinessRecord[] {
+  const stores = useContext(BusinessRecordStoreContext)
+  if (!stores) {
+    throw new Error("useMeProjects must be used within BusinessRecordStoreProvider")
+  }
+  const serverModules = useSyncExternalStore(
+    stores.server.subscribe,
+    stores.server.getSnapshot,
+    stores.server.getServerSnapshot,
+  )
+  return serverModules.get(ME_PROJECTS)?.records ?? NO_RECORDS
 }
 
 /**

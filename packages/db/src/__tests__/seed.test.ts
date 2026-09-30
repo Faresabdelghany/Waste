@@ -664,7 +664,7 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     const driverGrants = await owner.db.select().from(roleGrant).where(eq(roleGrant.roleId, DEMO_IDS.roles.driver))
     assert.deepEqual(
       driverGrants.map((row) => `${row.moduleKey}:${row.action}`).sort(),
-      ["operate.driver-app:edit", "operate.driver-app:view", "route-studio.pickups:edit", "route-studio.pickups:view", "route-studio.routes:view"],
+      ["operate.driver-app:edit", "operate.driver-app:view"],
     )
     const [lars] = await owner.db.select().from(userAccount).where(eq(userAccount.id, DEMO_IDS.users.lars))
     assert.equal(lars.serviceProviderId, DEMO_IDS.serviceProviders.nordren)

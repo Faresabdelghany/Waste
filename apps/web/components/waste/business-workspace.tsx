@@ -269,10 +269,11 @@ import { CollectionGroupsEditorDialog } from "@/components/waste/collection-grou
 import { SchemeGenerateRoutesDialog } from "@/components/waste/scheme-generate-routes"
 import { SchemeDetailsPage } from "@/components/waste/scheme-details-page"
 import { SchemePlanAheadRunner } from "@/components/waste/scheme-plan-ahead"
-import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
-import { useApiConfigured } from "@/components/waste/api-session-store"
+import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
+import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { commandSurfaceFor } from "@/components/waste/commands/command-surfaces"
 import { offersRowsOf } from "@/components/waste/pickable-records"
+import { projectScopeOfMe } from "@/lib/api/records/me-projects"
 import { isServerBacked, serverModuleOf } from "@/lib/api/records/modules"
 import { spellsStatus, type WriteOutcome } from "@/lib/api/records/server-records"
 import { useActiveRoutes } from "@/components/waste/active-routes-store"
@@ -727,9 +728,11 @@ function offeredTransitions(
   workspaceId: WorkspaceId,
   module: ModuleDefinition,
   record: BusinessRecord,
+  onApi: boolean,
 ): string[] {
   const transitions = record.allowedTransitions ?? module.lifecycle.slice(1, 3)
-  const server = serverModuleOf(workspaceId, module.id)
+  // Only where the module reads the API: in fixture mode every transition stands (#179).
+  const server = onApi ? serverModuleOf(workspaceId, module.id) : undefined
   if (server === undefined) return transitions
   return transitions.filter((action) => {
     const outcome = actionOutcome(module, action, record.status)
@@ -1094,6 +1097,9 @@ export function BusinessWorkspace({
 }: BusinessWorkspaceProps) {
   const sourceWorkspace = getWorkspaceDefinition(workspaceId)
   const { getRecords, upsertRecord } = useBusinessRecordStore()
+  // The API's routes and stops reach the map once they are read, and nothing before (#179): a fixture route drawn over the Pilot's containers is a route that does not exist.
+  const routesOnApi = useServerModuleState("route-studio", "routes")
+  const pickupsOnApi = useServerModuleState("route-studio", "pickups")
   // Whether the adapter is on (Issue #81): what the switched modules' own surfaces show, and fixture mode does not.
   const apiConfigured = useApiConfigured()
   // On the API a customer field names a Customer in the glossary's sense — a
@@ -1187,7 +1193,13 @@ export function BusinessWorkspace({
   const [viewOptions, setViewOptions] = useState<BusinessViewOptions>(
     defaultBusinessViewOptions,
   )
-  const projectScope = fixedProjectScope ?? DEFAULT_PROJECT_SCOPE
+  // On the Pilot the pinned scope derives from `/me`'s projects (Issue #217, the plan on #81).
+  const { me } = useApiSession()
+  const projectScope =
+    fixedProjectScope ??
+    (apiConfigured
+      ? projectScopeOfMe(me?.projects, getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? [], DEFAULT_PROJECT_SCOPE)
+      : DEFAULT_PROJECT_SCOPE)
   // The scope vocabulary: the organisation module's project records, fixture
   // and created alike (issue #44) — what a scope is compared against, what a
   // created record is stamped with, and where a scope's label is read.
@@ -1247,6 +1259,7 @@ export function BusinessWorkspace({
   const formIsPrimary = commandSurface === undefined || commandSurface.primary === "form"
   const PrimarySurface = commandSurface && commandSurface.primary !== "form" ? commandSurface.primary : null
   const RowSurface = commandSurface?.rowActions
+  const WhileShown = commandSurface?.whileShown
   // A command replaces its row in the store: details with a row surface read
   // the live row, so what the API answered shows at once.
   const detailsRecord =
@@ -1410,10 +1423,14 @@ export function BusinessWorkspace({
         : activeRecords,
     [activeRecords, getRecords, relatedCreateModule],
   )
+  // On the Pilot a route opens the generic details with its command surface
+  // (#179, as #181's containers skip their sheet): the route page is fixture
+  // mode's.
   const isRouteDetails =
     workspace.id === "route-studio" &&
     activeModule.id === "routes" &&
-    Boolean(selectedRecord)
+    Boolean(selectedRecord) &&
+    RowSurface === undefined
   // Scheme detail is a dedicated full page (issue #29, D8) — same routing
   // contract as the record sheet (?module=schemes&record=), rendered instead
   // of it. Re-resolved from activeRecords so the page always shows the live
@@ -1561,11 +1578,11 @@ export function BusinessWorkspace({
       containers: moduleRecords("resources", "containers"),
       planningAreas: moduleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId),
       serviceAreas: moduleRecords("service-providers", "service-areas"),
-      routes: moduleRecords("route-studio", "routes"),
-      pickups: moduleRecords("route-studio", "pickups"),
+      routes: apiConfigured && routesOnApi !== null ? (routesOnApi.status === "ready" ? routesOnApi.records : []) : moduleRecords("route-studio", "routes"),
+      pickups: apiConfigured && pickupsOnApi !== null ? (pickupsOnApi.status === "ready" ? pickupsOnApi.records : []) : moduleRecords("route-studio", "pickups"),
       schemes: moduleRecords("route-studio", "schemes"),
     }
-  }, [isMapPlanningView, moduleRecords])
+  }, [apiConfigured, isMapPlanningView, moduleRecords, pickupsOnApi, routesOnApi])
   const containersModuleDefinition = getModuleDefinition({
     workspaceId: "resources",
     moduleId: "containers",
@@ -1736,17 +1753,20 @@ export function BusinessWorkspace({
   // Generic row Edit/Delete: a rich module that exposes them (tickets do not —
   // they are worked through lifecycle transitions and the details view), the
   // viewer's grants, and for edits a form execution policy.
+  // A module with a row surface on the Pilot is changed through it (#179: a
+  // route or a stop moves by its commands), so the generic Edit is not offered.
   const offersRowActions = moduleOffersRowActions(activeModule.id)
   const canEditRecords =
     offersRowActions &&
     Boolean(activeModuleFormSchema?.execution) &&
-    hasGrant("edit")
+    hasGrant("edit") &&
+    RowSurface === undefined
   // The API has no delete (Issue #81): a switched module's record is
   // deactivated or moved to another status, never soft-deleted, so the
   // action is not offered there — and the store refuses one that arrives
-  // another way.
+  // another way. In fixture mode the module deletes as it always did.
   const canDeleteRecords =
-    offersRowActions && hasGrant("delete") && !isServerBacked(workspace.id, activeModule.id)
+    offersRowActions && hasGrant("delete") && !(apiConfigured && isServerBacked(workspace.id, activeModule.id))
   const canRunRecordActions = hasGrant("edit")
   // Generate routes (spec FR-6, ticket #7) and the Plan Ahead toggle (FR-11,
   // ticket #8) on a scheme: row menu + detail view, only for schemes whose
@@ -4845,6 +4865,8 @@ export function BusinessWorkspace({
         />
       ) : (
         <>
+      {/* What a switched module does on its own while it is shown (the registry's `whileShown`): mounted with the module's view, whatever the toolbar offers. */}
+      {WhileShown ? <WhileShown /> : null}
       <header className="flex flex-col border-b border-border/40">
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
           <div className="flex items-center gap-3 min-w-0">
@@ -5697,7 +5719,7 @@ export function BusinessWorkspace({
           onClose={closeRecord}
           onAction={requestRecordAction}
           transitions={
-            detailsRecord ? offeredTransitions(workspace.id, activeModule, detailsRecord) : []
+            detailsRecord ? offeredTransitions(workspace.id, activeModule, detailsRecord, apiConfigured) : []
           }
           showDeepLinks={showDeepLinks}
           onEdit={canEditRecords ? openEditRecord : undefined}

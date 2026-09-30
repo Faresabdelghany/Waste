@@ -147,9 +147,11 @@ export function adapterFor(module: ServerModule, record: BusinessRecord): Resour
  * first time one is asked for, since a mapping may ask for hundreds — a
  * scheme's matched containers — and most of them are rows of a module not
  * read from the API, which only a full scan would otherwise rule out; the
- * rows a load is still mapping are read as they grow.
+ * rows a load is still mapping come indexed by the load (`byServerId`), which
+ * files each as it is mapped — a route's stops ask for their route and its
+ * container by the hundred, and most of those miss.
  */
-export function resolverOver(state: ServerRecordsState, extra?: { records: readonly BusinessRecord[]; serverIds: ReadonlyMap<string, string> }): Resolver {
+export function resolverOver(state: ServerRecordsState, extra?: { records: readonly BusinessRecord[]; serverIds: ReadonlyMap<string, string>; byServerId: ReadonlyMap<string, BusinessRecord> }): Resolver {
   const modules = [...state.values()].filter((module) => module.status === "ready")
   const sources = extra === undefined ? modules : [...modules, { records: extra.records, serverIds: extra.serverIds }]
   let loadedByServerId: Map<string, BusinessRecord | undefined> | undefined
@@ -167,11 +169,7 @@ export function resolverOver(state: ServerRecordsState, extra?: { records: reado
     byServerId: (serverId) => {
       const loaded = indexOfLoaded()
       if (loaded.has(serverId)) return loaded.get(serverId)
-      if (extra === undefined) return undefined
-      for (const [webId, id] of extra.serverIds) {
-        if (id === serverId) return extra.records.find((record) => record.id === webId)
-      }
-      return undefined
+      return extra?.byServerId.get(serverId)
     },
     serverIdOf: (webId) => {
       for (const source of sources) {
@@ -220,13 +218,14 @@ export type LoadOptions = {
 export async function loadModule(client: ApiClient, module: ServerModule, { fixtures, state, now }: LoadOptions): Promise<LoadResult> {
   const records: BusinessRecord[] = []
   const serverIds = new Map<string, string>()
+  const byServerId = new Map<string, BusinessRecord>()
   // The lists go out together; only the mapping runs in the module's order,
   // so an adapter listed after another still sees that one's rows.
   const lists = await Promise.all(module.resources.map((adapter) => (adapter.list === null ? null : adapter.list(client))))
   for (const [index, adapter] of module.resources.entries()) {
     const resources = lists[index]
     if (resources === null) continue
-    const context: MappingContext = { fixtures, resolve: resolverOver(state, { records, serverIds }), companyRecordId: companyRecordIdOf(state), now }
+    const context: MappingContext = { fixtures, resolve: resolverOver(state, { records, serverIds, byServerId }), companyRecordId: companyRecordIdOf(state), now }
     for (const resource of resources) {
       const mapped = adapter.toRecord(resource, context)
       // A fixture lends its id to one row. A second row the mapping matches
@@ -236,6 +235,7 @@ export async function loadModule(client: ApiClient, module: ServerModule, { fixt
       const record = serverIds.has(mapped.id) ? { ...mapped, id: webIdOf(adapter.prefix, resource.id) } : mapped
       records.push(record)
       serverIds.set(record.id, resource.id)
+      byServerId.set(resource.id, record)
     }
   }
   return { records, serverIds }

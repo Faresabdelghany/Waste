@@ -358,8 +358,8 @@ export type SchemeEditQuestion = {
   futureRoutes: number
   /** The next collection's recurrence date — as stored or as edited, whichever comes first — or null when neither plans one. */
   nextCollectionDate: string | null
-  /** The two choices, spelled for the dialog. */
-  options: Record<SchemeEditApplication, { label: string; description: string }>
+  /** The two choices, spelled for the dialog; `unavailable` says why one is shown but not offered (the Pilot's one-off, #209). */
+  options: Record<SchemeEditApplication, { label: string; description: string; unavailable?: string }>
 }
 
 export type SchemeEditReconciliationPlan = {

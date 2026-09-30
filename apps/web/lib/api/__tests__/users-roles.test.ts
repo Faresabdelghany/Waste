@@ -71,7 +71,8 @@ const earlier: ServerRecordsState = new Map([
   ["service-providers.service-providers", loaded({ records: [nordrenRecord], serverIds: new Map([[nordrenRecord.id, nordren.id]]) }, 1)],
 ])
 const roleIds = new Map([[administratorRecord.id, administrator.id], [dispatcherRecord.id, dispatcher.id], [nightShiftRecord.id, nightShift.id]])
-const resolve = resolverOver(earlier, { records: [administratorRecord, dispatcherRecord, nightShiftRecord], serverIds: roleIds })
+const byServerId = new Map([[administrator.id, administratorRecord], [dispatcher.id, dispatcherRecord], [nightShift.id, nightShiftRecord]])
+const resolve = resolverOver(earlier, { records: [administratorRecord, dispatcherRecord, nightShiftRecord], serverIds: roleIds, byServerId })
 const oliviaRecord = userAdapter.toRecord(olivia, context(accessFixtures, resolve))
 const larsRecord = userAdapter.toRecord(lars, context(accessFixtures, resolve))
 const madsRecord = userAdapter.toRecord(mads, context(accessFixtures, resolve))

@@ -120,7 +120,7 @@ import { BusinessFilterPopover } from "@/components/waste/business-filter-popove
 import { useApiConfigured } from "@/components/waste/api-session-store"
 import { isServerBacked } from "@/lib/api/records/modules"
 import { validationOnApi } from "@/lib/data/route-schemes"
-import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { SchemeNextCollections } from "@/components/waste/scheme-next-collections"
 import {
   SchemeGenerateDialog,
@@ -218,8 +218,9 @@ export function SchemeDetailsPage({
   readOnly?: boolean
 }) {
   const { upsertRecord } = useBusinessRecordStore()
-  // On the Pilot the scheme's routes are the API's and not read here until slice 6: the Routes tab shows the dates the API plans instead.
   const onApi = useApiConfigured()
+  // On the Pilot the scheme's routes are the API's (#179): the Routes tab lists them once the routes module has read them, and nothing before, under the dates the API plans.
+  const routesRead = useServerModuleState("route-studio", "routes")?.status === "ready" || !onApi
   // On the Pilot, Generate asks the API for a run and the Routes tab lists and watches the scheme's runs (#178).
   const generation = useSchemeGenerationRuns(record)
   const [generateOpen, setGenerateOpen] = useState(false)
@@ -454,7 +455,7 @@ export function SchemeDetailsPage({
               {(
                 [
                   ["details", "Details", null],
-                  ["routes", "Routes", onApi ? null : schemeRoutes.length],
+                  ["routes", "Routes", routesRead ? schemeRoutes.length : null],
                   ["stops", "Stops", schemeStops.length],
                   ["holidays", "Holidays", null],
                 ] as const
@@ -501,6 +502,7 @@ export function SchemeDetailsPage({
             containerDrift={containerDrift}
             nextCollectionsOf={onApi ? record : undefined}
             generation={onApi ? generation : undefined}
+            routesRead={routesRead}
           />
         </TabsContent>
         <TabsContent value="stops" className="mt-0 min-h-0 flex-1 overflow-y-auto">
@@ -906,6 +908,7 @@ function SchemeRoutesTab({
   containerDrift,
   nextCollectionsOf,
   generation,
+  routesRead = true,
 }: {
   routes: readonly BusinessRecord[]
   /** The scheme's generated Stops — a route's waste fractions derive from them. */
@@ -914,10 +917,12 @@ function SchemeRoutesTab({
   generationBlocked: boolean
   /** Rule groups whose matched containers shifted at their most recent change (issue #41) — derived, never persisted. */
   containerDrift: readonly CollectionGroupContainerDrift[]
-  /** On the Pilot, the scheme whose next collections the API plans stand in for its routes (slice 6 reads those). */
+  /** On the Pilot, the scheme whose next collections the API plans, above its routes. */
   nextCollectionsOf?: BusinessRecord
   /** On the Pilot, the scheme's generation runs, read and watched by the page. */
   generation?: SchemeGenerationRuns
+  /** Whether the routes are read: on the Pilot, once the routes module holds the API's rows (#179); the table shows nothing before. A row opens the workspace's route, the generic details there. */
+  routesRead?: boolean
 }) {
   const router = useRouter()
   const [query, setQuery] = useState("")
@@ -969,9 +974,9 @@ function SchemeRoutesTab({
 
       {generation !== undefined && <SchemeGenerationRunsSection generation={generation} />}
 
-      {nextCollectionsOf !== undefined ? (
-        <SchemeNextCollections record={nextCollectionsOf} />
-      ) : (
+      {nextCollectionsOf !== undefined && <SchemeNextCollections record={nextCollectionsOf} />}
+
+      {routesRead && (
         <>
           <SchemeTabToolbar
             query={query}

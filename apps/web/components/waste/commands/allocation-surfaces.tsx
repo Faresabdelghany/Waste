@@ -11,10 +11,11 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
 import { CreateSurface } from "@/components/waste/commands/create-surface"
-import { useModuleReady, useRelationPickers, useRowHistory } from "@/components/waste/commands/use-command-support"
+import { ReadRows } from "@/components/waste/commands/read-rows"
+import { useCommandRunner, useModuleReady, useRelationPickers, useRowHistory } from "@/components/waste/commands/use-command-support"
 import { allocationEvents, CONFIRM_ALLOCATION, RELEASE_ALLOCATION, VEHICLE_PLANNING_MODULE } from "@/lib/api/records/allocations"
 import { shownOn } from "@/lib/api/records/clock"
 import { ALLOCATE_FORM, allocationChangeForm, allocationFormValues, changedAllocationRecord, createAllocationRecord, RELEASE_FORM } from "@/lib/data/allocations"
@@ -40,14 +41,13 @@ type Open = { kind: "change"; schema: BusinessFormSchema; values: BusinessFormVa
 
 /** An allocation's change, confirm and release, and its history, in its details. */
 export function AllocationCommandsSurface({ record }: RowSurfaceProps) {
-  const { upsertRecord, sendCommand } = useBusinessRecordStore()
+  const { upsertRecord } = useBusinessRecordStore()
   const pickers = useRelationPickers()
   const moduleReady = useModuleReady(VEHICLE_PLANNING_MODULE)
-  // Bumped after each write and command the surface sends: the history is appended to, whatever the row shows.
-  const [version, setVersion] = useState(0)
+  // The version is bumped after each write and command the API took: the history is appended to, whatever the row shows.
+  const { busy, version, save, run: send } = useCommandRunner(VEHICLE_PLANNING_MODULE, record.id)
   const history = useRowHistory(workspaceId, moduleId, record, version, allocationEvents)
   const [open, setOpen] = useState<Open | null>(null)
-  const [busy, setBusy] = useState(false)
   const projectId = typeof record.submittedValues?.projectId === "string" ? record.submittedValues.projectId : undefined
   const timezone = pickers.timezoneOf(projectId)
   const changeForm = allocationChangeForm(record)
@@ -55,15 +55,7 @@ export function AllocationCommandsSurface({ record }: RowSurfaceProps) {
   const change = (values: BusinessFormValues) => {
     if (busy) return
     const outcome = upsertRecord(workspaceId, moduleId, changedAllocationRecord(record, values))
-    setBusy(true)
-    whenSaved(
-      outcome,
-      () => {
-        setOpen(null)
-        setVersion((current) => current + 1)
-      },
-      () => setBusy(false),
-    )
+    save(outcome, () => setOpen(null))
     void outcome?.then((result) => {
       if (result.kind === "updated") toast.success("Allocation changed", { description: `${record.name}: the change and its reason are on its history.` })
       // Nothing but the reason moved: no change was sent, and nothing went on the history.
@@ -71,17 +63,11 @@ export function AllocationCommandsSurface({ record }: RowSurfaceProps) {
     })
   }
 
-  const command = (name: string, input?: BusinessFormValues) => {
-    if (busy) return
-    setBusy(true)
-    void sendCommand(workspaceId, moduleId, record.id, name, input).then((outcome) => {
-      setBusy(false)
-      if (outcome.kind !== "done") return
+  const command = (name: string, input?: BusinessFormValues) =>
+    send(name, input, (outcome) => {
       setOpen(null)
-      setVersion((current) => current + 1)
       toast.success(`Allocation ${outcome.record.status.toLowerCase()}`, { description: outcome.record.name })
     })
-  }
 
   return (
     <section className="space-y-4" data-testid="allocation-commands">
@@ -100,19 +86,7 @@ export function AllocationCommandsSurface({ record }: RowSurfaceProps) {
       </div>
       <div className="space-y-2">
         <h4 className="text-xs font-medium text-muted-foreground">History</h4>
-        {history.problem !== null ? (
-          <p className="text-sm text-destructive">{history.problem}</p>
-        ) : history.rows === null ? (
-          <p className="text-sm text-muted-foreground">Reading the history…</p>
-        ) : (
-          <ol className="divide-y divide-border/60 border-y border-border/60 text-sm" data-testid="allocation-history">
-            {history.rows.map((event) => (
-              <li key={event.id} className="py-2">
-                {`${shownOn(event.recordedAt, timezone)} · ${event.action} → ${event.status}${event.reason ? ` · ${event.reason}` : ""}`}
-              </li>
-            ))}
-          </ol>
-        )}
+        <ReadRows read={history} label="Reading the history…" empty="Nothing on the history yet." testId="allocation-history" line={(event) => `${shownOn(event.recordedAt, timezone)} · ${event.action} → ${event.status}${event.reason ? ` · ${event.reason}` : ""}`} />
       </div>
       {open?.kind === "change" && (
         <BusinessRecordFormDialog schema={open.schema} open onOpenChange={(isOpen) => !isOpen && setOpen(null)} onSubmit={change} relationOptions={pickers.options} initialValueOverrides={open.values} />

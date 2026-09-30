@@ -19,6 +19,17 @@ export const VEHICLES_MODULE: ModuleLocation = { workspaceId: "fleet", moduleId:
 export const DRIVERS_MODULE: ModuleLocation = { workspaceId: "fleet", moduleId: "drivers" }
 export const DEPOTS_MODULE: ModuleLocation = { workspaceId: "resources", moduleId: "depots" }
 
+/**
+ * Whether a fleet row is a trailer: its typed kind, which the server's rows
+ * and the fixture form carry (`resourceKind`), else the fixture id's
+ * `trailer-` prefix. The Vehicle pickers offer the rest, the Trailer pickers
+ * these alone (#179).
+ */
+export function isTrailerRecord(record: BusinessRecord): boolean {
+  const kind = record.submittedValues?.resourceKind
+  return typeof kind === "string" && kind !== "" ? kind === "trailer" : record.id.startsWith("trailer-")
+}
+
 const RESERVATION_FIELDS: readonly BusinessFormField[] = [
   { id: "projectId", label: "Project", type: "select", required: true, relation: ORGANISATION_MODULE },
   { id: "vehicleId", label: "Vehicle", type: "select", required: true, relation: VEHICLES_MODULE },

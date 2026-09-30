@@ -350,7 +350,7 @@ describe("the resolver", () => {
       ["a", loaded({ records: [record("x-1", "X")], serverIds: new Map([["x-1", "1"]]) }, 1)],
       ["b", loadFailed(IDLE, genericProblem(500))],
     ])
-    const extra = { records: [record("y-2", "Y")], serverIds: new Map([["y-2", "2"]]) }
+    const extra = { records: [record("y-2", "Y")], serverIds: new Map([["y-2", "2"]]), byServerId: new Map([["2", record("y-2", "Y")]]) }
     const resolve = resolverOver(state, extra)
     assert.equal(resolve.byServerId("1")?.name, "X")
     assert.equal(resolve.byServerId("2")?.name, "Y")
@@ -358,6 +358,18 @@ describe("the resolver", () => {
     assert.equal(resolve.byServerId("3"), undefined)
     assert.equal(resolve.serverIdOf("nowhere"), undefined)
     assert.equal(NOTHING_RESOLVED.byServerId("1"), undefined)
+  })
+
+  test("answers a miss on the rows a load is mapping by their index, never by walking them: a load of thousands asks once per row (#179)", () => {
+    const walked = new Map([["y-2", "2"]])
+    walked.entries = () => {
+      throw new Error("the resolver walked the load's rows")
+    }
+    walked[Symbol.iterator] = walked.entries
+    const extra = { records: [record("y-2", "Y")], serverIds: walked, byServerId: new Map([["2", record("y-2", "Y")]]) }
+    const resolve = resolverOver(new Map(), extra)
+    assert.equal(resolve.byServerId("2")?.name, "Y")
+    assert.equal(resolve.byServerId("missing"), undefined)
   })
 
   test("the company record's id is read off the organisation module once it is ready, by kind and not by the prefix a customer organisation shares", () => {

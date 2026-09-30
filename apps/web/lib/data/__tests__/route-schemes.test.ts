@@ -9,7 +9,9 @@ import { describe, test } from "node:test"
 import { validateGuidedScheme } from "@waste/domain/route-schemes/draft"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 
-import { licenceDayOf, PREVIEW_CANNOT_PLACE, projectToday, schemeEditStatusOnApi, validationOnApi } from "../route-schemes"
+import { statusLabel } from "../../api/records/adapter"
+import type { BusinessRecord } from "../business-modules"
+import { licenceDayOf, ONE_OFF_NOT_KEPT, PREVIEW_CANNOT_PLACE, projectToday, ROUTES_NOT_READ, schemeEditOnApi, schemeEditStatusOnApi, STORED_ONE_OFF, validationOnApi } from "../route-schemes"
 
 describe("the status a scheme edit asks the API for", () => {
   test("a Validated scheme stays Validated, whatever the web's own validation says: the API's 409 speaks for the rules it holds", () => {
@@ -106,5 +108,112 @@ describe("the day a group's driver is judged on", () => {
     assert.deepEqual(licenceDayOf("2026-10-05", "Europe/Copenhagen", lateEvening), { day: "2026-10-05", meaning: "the scheme starts" })
     assert.deepEqual(licenceDayOf("2026-09-01", "Europe/Copenhagen", lateEvening), { day: "2026-10-01", meaning: "today" })
     assert.deepEqual(licenceDayOf("", "Europe/Copenhagen", lateEvening), { day: "2026-10-01", meaning: "the scheme starts" }, "a draft without a first day is judged on today")
+  })
+})
+
+// A scheme edit on the Pilot (#179): what the fixture path's reconciliation
+// decides, over the routes the API holds — a running scheme's edit that
+// shapes a collection asks "How should this change apply?" under "Ask each
+// time" while planned routes after today can still follow it, and saves when
+// none can. The API keeps no one-off yet (#209), so "This collection only" is
+// shown disabled, and a scheme whose stored policy is that one-off refuses a
+// shaping edit rather than applying it scheme-wide. Without the API's routes
+// read (loading, failed) the question cannot be asked, so a shaping edit
+// that would ask is refused until they are.
+describe("a scheme edit on the Pilot", () => {
+  const TODAY = "2026-10-01"
+  const scheme = (over: Partial<BusinessRecord> = {}, values: BusinessRecord["submittedValues"] = {}): BusinessRecord => ({
+    id: "scheme-01a0d2a4-a280-7016-8000-000000000001",
+    name: "RS-Central · Week A",
+    context: "",
+    status: "Validated",
+    owner: "",
+    value: "",
+    updated: "",
+    description: "",
+    facts: {},
+    related: [],
+    source: "Waste API",
+    freshness: "",
+    recordKind: "Route Scheme",
+    ...over,
+    submittedValues: { editPolicy: "ask", lastGeneratedAt: "2026-09-30T02:00:00.000Z", plannedStartTime: "06:30", ...values },
+  })
+  // A route as the routes adapter files it: its status token shown as its label, which the domain's rule reads.
+  const route = (id: string, serviceDate: string, status: string, schemeId = scheme().id): BusinessRecord => ({ ...scheme(), id, name: id, status: statusLabel(status), recordKind: "Route", submittedValues: { schemeId, serviceDate, status } })
+  const routes = [
+    route("route-a", "2026-10-02", "planned"),
+    route("route-b", "2026-10-05", "planned"),
+    route("route-today", TODAY, "planned"),
+    route("route-dispatched", "2026-10-02", "ready"),
+    route("route-cancelled", "2026-10-06", "cancelled"),
+    route("route-other", "2026-10-02", "planned", "scheme-01a0d2a4-a280-7016-8000-000000000002"),
+  ]
+  const shaped = (before: BusinessRecord) => ({ ...before, submittedValues: { ...before.submittedValues, plannedStartTime: "08:15" } })
+  const renamed = (before: BusinessRecord) => ({ ...before, name: `${before.name} (renamed)` })
+
+  test("asks of a running scheme's shaping edit, counting the planned routes after today the API holds for it", () => {
+    const before = scheme()
+    const decided = schemeEditOnApi(before, shaped(before), routes, TODAY)
+    assert.equal(decided.kind, "ask")
+    if (decided.kind !== "ask") return
+    const { question } = decided
+    assert.equal(question.futureRoutes, 2, "tomorrow's and Monday's; not today's, not a dispatched one, not a cancelled one, not another scheme's")
+    assert.equal(question.nextCollectionDate, "2026-10-02")
+    assert.equal(question.options.future.label, "Apply to future collections")
+    assert.equal(question.options.single.label, "This collection only")
+    assert.equal(question.options.single.unavailable, ONE_OFF_NOT_KEPT)
+    assert.equal(question.options.future.unavailable, undefined)
+  })
+
+  test("the answer future saves, counting the routes that follow; the one-off, shown disabled, is refused", () => {
+    const before = scheme()
+    assert.deepEqual(schemeEditOnApi(before, shaped(before), routes, TODAY, "future"), { kind: "save", following: 2 })
+    assert.deepEqual(schemeEditOnApi(before, shaped(before), routes, TODAY, "single"), { kind: "refuse", message: ONE_OFF_NOT_KEPT })
+  })
+
+  test("the stored policy decides: switching off Ask each time in the same save still asks, and a stored future saves without asking", () => {
+    const before = scheme()
+    const after = { ...shaped(before), submittedValues: { ...shaped(before).submittedValues, editPolicy: "future" } }
+    assert.equal(schemeEditOnApi(before, after, routes, TODAY).kind, "ask")
+    const stored = scheme({}, { editPolicy: "future" })
+    assert.deepEqual(schemeEditOnApi(stored, shaped(stored), routes, TODAY), { kind: "save", following: 2 })
+    assert.deepEqual(schemeEditOnApi(stored, shaped(stored), null, TODAY), { kind: "save", following: 0 }, "future needs no routes to decide")
+  })
+
+  test("a stored one-off policy refuses a shaping edit rather than applying it to every future collection", () => {
+    const stored = scheme({}, { editPolicy: "single" })
+    assert.deepEqual(schemeEditOnApi(stored, shaped(stored), routes, TODAY), { kind: "refuse", message: STORED_ONE_OFF })
+    assert.deepEqual(schemeEditOnApi(stored, renamed(stored), routes, TODAY), { kind: "save", following: 0 }, "a rename shapes no collection")
+  })
+
+  test("without the API's routes read a shaping edit that would ask is refused until they are", () => {
+    const before = scheme()
+    assert.deepEqual(schemeEditOnApi(before, shaped(before), null, TODAY), { kind: "refuse", message: ROUTES_NOT_READ })
+    assert.deepEqual(schemeEditOnApi(before, renamed(before), null, TODAY), { kind: "save", following: 0 })
+  })
+
+  test("saves without a question a rename, a scheme never generated, a Draft, or a shaping edit no planned route after today can follow", () => {
+    const before = scheme()
+    const save = { kind: "save", following: 0 }
+    assert.deepEqual(schemeEditOnApi(before, renamed(before), routes, TODAY), save)
+    // The edit form writes its display facts by field label ("Departure depot"), which the API's record never carried: the API generates from the values, so a rename still asks nothing.
+    assert.deepEqual(schemeEditOnApi(before, { ...renamed(before), facts: { "Departure depot": "Nordhavn Depot", "Operational planning area": "Indre By Operations" } }, routes, TODAY), save)
+    const never = scheme({}, { lastGeneratedAt: "" })
+    assert.deepEqual(schemeEditOnApi(never, shaped(never), routes, TODAY), save)
+    const draft = scheme({ status: "Draft" })
+    assert.deepEqual(schemeEditOnApi(draft, shaped(draft), routes, TODAY), save)
+    assert.deepEqual(schemeEditOnApi(before, shaped(before), routes.filter((row) => row.id === "route-today" || row.id === "route-dispatched"), TODAY), save)
+  })
+
+  test("a rename re-serialising the groups in another key order shapes nothing", () => {
+    const groups = [{ id: "group-north", name: "North", days: ["monday"], stopSource: "rule", vehicleId: "vehicle-wh24", containerIds: [] }]
+    const before = scheme({}, { collectionGroups: JSON.stringify(groups) })
+    const reordered = groups.map(({ vehicleId, stopSource, ...rest }) => ({ ...rest, vehicleId, stopSource }))
+    const after = { ...renamed(before), submittedValues: { ...before.submittedValues, collectionGroups: JSON.stringify(reordered) } }
+    assert.notEqual(after.submittedValues.collectionGroups, before.submittedValues?.collectionGroups)
+    assert.deepEqual(schemeEditOnApi(before, after, routes, TODAY), { kind: "save", following: 0 })
+    const moved = { ...before, submittedValues: { ...before.submittedValues, collectionGroups: JSON.stringify([{ ...groups[0], vehicleId: "vehicle-wh31" }]) } }
+    assert.equal(schemeEditOnApi(before, moved, routes, TODAY).kind, "ask", "a group's vehicle moved shapes its collections")
   })
 })

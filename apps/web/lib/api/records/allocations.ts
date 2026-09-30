@@ -63,11 +63,16 @@ function projectOf(record: BusinessRecord, context: MappingContext): { webId: st
 
 // Each reference field: the prefix its id chip carries, the sentence a miss is refused in, and the kind a loaded row is held to.
 const isFraction = (record: BusinessRecord) => masterDataKindOf(record) === "waste-fraction"
-const PICK = {
+/** The fleet's and the depot's id chips a dialog may name — the prefix, the refusal a miss is told in, the kind a loaded row is held to — shared with the routes' assign (routes.ts, #179). */
+export const FLEET_AND_DEPOT_PICKS = {
   vehicleId: ["vehicle", "Pick a vehicle the API holds", { owns: vehicleAdapter.owns }],
   driverId: ["driver", "Pick a driver the API holds", { owns: driverAdapter.owns }],
   trailerId: ["vehicle", "Pick a trailer the API holds", { owns: vehicleAdapter.owns }],
   depotId: ["depot", "Pick a depot the API holds", { owns: depotAdapter.owns }],
+} as const satisfies Record<string, readonly [string, string, ReferenceRule]>
+
+const PICK = {
+  ...FLEET_AND_DEPOT_PICKS,
   plannedFraction: ["fraction", "Pick a waste fraction the API holds", { owns: isFraction }],
 } as const satisfies Record<string, readonly [string, string, ReferenceRule]>
 type ReferenceField = keyof typeof PICK
