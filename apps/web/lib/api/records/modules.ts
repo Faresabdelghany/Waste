@@ -14,6 +14,8 @@
 import type { WorkspaceId } from "@/lib/data/business-modules"
 
 import { moduleKeyOf, type ServerModule } from "./adapter"
+import { vehiclePlanningModule } from "./allocations"
+import { containersModule, inventoryModule } from "./containers"
 import { fleetDriversModule, fleetVehiclesModule } from "./fleet"
 import { masterDataModule } from "./master-data"
 import { accessModule, organisationModule, serviceProvidersModule } from "./organisation"
@@ -28,7 +30,10 @@ import { customersModule } from "./registry"
  * their project; the places after the master data, since a station names
  * its fractions, and the warehouses after the depots one may share a yard
  * with; the fleet after the master data (a vehicle's type and fractions),
- * the access module (a driver's login) and the depots (a home base) (#180).
+ * the access module (a driver's login) and the depots (a home base) (#180);
+ * the containers after the master data and the warehouses they name, the
+ * ledger after the containers its movements name, and the allocations after
+ * the fleet and the places they reserve (#181).
  */
 export const SERVER_MODULES: readonly ServerModule[] = [
   organisationModule,
@@ -42,6 +47,9 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   warehousesModule,
   fleetVehiclesModule,
   fleetDriversModule,
+  containersModule,
+  inventoryModule,
+  vehiclePlanningModule,
 ]
 
 const byKey = new Map(SERVER_MODULES.map((module) => [moduleKeyOf(module.workspaceId, module.moduleId), module]))
