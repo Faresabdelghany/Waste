@@ -29,6 +29,9 @@ export type CommandSurface = {
    * What stands in for the module's primary action on the Pilot: its own
    * create form (`"form"`, the create going through the adapter as ever), a
    * dialog of the module's own, or nothing, for a module the wire only reads.
+   * It is offered where the module's fixture form offered its primary action
+   * (the workspace's own guard: a create grant and a form schema), so a
+   * module with no fixture form offers no primary surface either.
    */
   primary: "form" | ComponentType<PrimarySurfaceProps> | null
   /** The row's commands, and what they read (a ledger, a history), in its details. */

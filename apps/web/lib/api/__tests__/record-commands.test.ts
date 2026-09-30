@@ -182,6 +182,8 @@ describe("a command that says something", () => {
     commands: {
       [TAG]: {
         toBody: (input, _record, context): unknown | LocalRefusal => {
+          // A mapper that trusts its input: a stray object throws here.
+          if (typeof input.tag === "object" && input.tag !== null) (input.tag as unknown as string).trim()
           const tag = typeof input.tag === "string" ? input.tag.trim() : ""
           if (tag === "") return { path: "tag", message: "A tag says something" }
           const forUserId = typeof input.forUserId === "string" ? context.resolve.serverIdOf(input.forUserId) : undefined
@@ -226,6 +228,15 @@ describe("a command that says something", () => {
       assert.deepEqual(outcome.problem.errors, [{ path, message }])
       assert.equal(outcome.what, "Thing one was not tagged")
     }
+  })
+
+  test("a toBody that throws is a refusal under the command's heading, and nothing is sent", async () => {
+    const { fetch, calls } = scripted([])
+    const outcome = await commandRecord(clientOver(fetch), thingModule, held, thingRecord, TAG, { tag: { not: "a string" }, forUserId: 7 } as unknown as Record<string, unknown>, withUsers)
+    assert.deepEqual(calls, [])
+    assert.equal(outcome.kind, "refused")
+    if (outcome.kind !== "refused") return
+    assert.equal(outcome.what, "Thing one was not tagged")
   })
 
   test("a command with no toBody runs with no body, whatever the caller handed in", async () => {

@@ -314,9 +314,10 @@ export async function commandRecord(client: ApiClient, module: ServerModule, cur
   const serverId = current.serverIds.get(record.id)
   if (serverId === undefined) return refused(genericProblem(400, `${record.name} is not on the API yet: wait for it to be saved, then try again`))
   const context: MappingContext = { fixtures: options.fixtures, resolve: resolverOver(options.state), companyRecordId: companyRecordIdOf(options.state), now: options.now }
-  const body = command.toBody?.(input ?? {}, record, context)
-  if (isLocalRefusal(body)) return refused(refusalProblem(body))
   try {
+    // Inside the try: a mapper that throws on a stray input is a refusal under the command's heading, as a failing request is.
+    const body = command.toBody?.(input ?? {}, record, context)
+    if (isLocalRefusal(body)) return refused(refusalProblem(body))
     const resource = await command.run(client, serverId, body)
     return { kind: "done", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId: resource.id }
   } catch (error) {
