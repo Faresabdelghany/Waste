@@ -635,6 +635,14 @@ async function clearSet(tx: Tx, table: MembershipTable, group: { companyId: stri
   await tx.delete(table).where(and(eq(table.companyId, group.companyId), eq(table.collectionGroupId, group.id)))
 }
 
+/** Every set of these groups, gone — the first half of a scheme's patch restating its groups whole (#205) — in one statement per membership table however many groups. */
+export async function clearGroupSets(tx: Tx, companyId: string, ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return
+  for (const table of [collectionGroupFraction, collectionGroupContainerType, collectionGroupContainer]) {
+    await tx.delete(table).where(and(eq(table.companyId, companyId), inArray(table.collectionGroupId, [...ids])))
+  }
+}
+
 /** What a group's set replacement carries: the whole rule, or the whole picked list in stop order. */
 export type GroupSet = { rule: StopMatchingRule } | { containerIds: readonly string[] }
 
