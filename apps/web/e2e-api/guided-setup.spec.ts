@@ -1,4 +1,4 @@
-import type { APIRequestContext } from "@playwright/test"
+import type { APIRequestContext, Page } from "@playwright/test"
 
 import { expect, test } from "./fixtures"
 import { uniqueName } from "./env"
@@ -15,9 +15,10 @@ import { listAll, projectNamed } from "./tester"
 // 2026-09-05); step 5 creates the scheme in one POST. The fifth is the
 // generation scenario as far as the run: Generate on the scheme's page asks
 // the API for a run, and the page watches it until the worker has finished
-// it — the routes it wrote are read with slice 6 (#179). Step 4's road
-// geometry stays in the fixture suite (e2e/wizard-preview-geometry.spec.ts,
-// #173's). Schemes the tests make are uniquely named and never cleaned up.
+// it — the routes it wrote are read with slice 6 (#179). The last two are
+// step 4's preview through the API (#173's pair, added here since #173 merged
+// first); its fixture-mode reading is e2e/wizard-preview-geometry.spec.ts.
+// Schemes the tests make are uniquely named and never cleaned up.
 type Named = { id: string; name: string }
 type Scheme = { id: string; name: string; status: string; collectionGroups: { name: string; rule: { wasteFractionIds: string[]; containerTypeIds: string[] } | null; vehicleId: string | null; driverId: string | null }[] }
 type GenerationRun = { id: string; status: string; routeSchemeId: string; trigger: string; windowFrom: string; windowTo: string; routesCreated: number }
@@ -175,4 +176,59 @@ test("Generate on the scheme's page asks the API for a run, and the page watches
 
   const finished = (await (await api.get(`/generation-runs/${run.id}`)).json()) as GenerationRun
   expect({ status: finished.status, trigger: finished.trigger, routeSchemeId: finished.routeSchemeId }).toEqual({ status: "succeeded", trigger: "on-demand", routeSchemeId: scheme.id })
+})
+
+// Step 4's browser pair (#173, from its pull request, for whichever of #173 and #178 merged second): the preview's road
+// through the API over the fake provider, and the estimate the spent quota leaves with the routing banner.
+
+/** Steps 1–3 with the seeded depot and station, a group of the run's own; resolves on step 4. The crew is made before the page loads, which reads the fleet once. */
+async function toRouteMap(page: Page, api: APIRequestContext, name: string) {
+  const fleet = await fleetOfItsOwn(api)
+  await openSchemes(page)
+  await startGuided(page)
+  await fillScope(page, name)
+  await pick(page, wizard(page), "Departure depot", "Nordhavn Depot")
+  await pick(page, wizard(page), "Unloading station", "ARC Amager")
+  await nextButton(page).click()
+  await expect(stepHeading(page)).toHaveText("When does this scheme collect?")
+  await wizard(page).getByLabel("Effective from").fill(dayFromToday(7))
+  await wizard(page).getByRole("button", { name: "Monday", exact: true }).click()
+  await nextButton(page).click()
+  await addGroup(page, fleet)
+  await nextButton(page).click()
+  await expect(stepHeading(page)).toHaveText("How do the generated routes look?")
+}
+
+test("step 4 draws the drafted route along the preview's road over the fake and labels the numbers as the road's (#173)", async ({ api, page }) => {
+  const preview = page.waitForResponse((response) => response.url().endsWith("/waste-api/routing/preview") && response.request().method() === "POST")
+  await toRouteMap(page, api, uniqueName("Preview road"))
+  expect((await preview).status()).toBe(200)
+  const root = wizard(page)
+  const line = root.locator("[data-wizard-route]").first()
+  await expect(line).toHaveAttribute("data-route-geometry", "road")
+  await expect(line.locator("[data-wizard-road]")).toHaveCount(1)
+  const card = root.locator("[data-route-basis]").first()
+  await expect(card).toHaveAttribute("data-route-basis", "road")
+  await expect(card.getByTestId("route-basis")).toHaveText("Road")
+  await expect(root.getByTestId("route-map-basis")).toContainText("Road · Stops in generation order, not optimised")
+  // The fake's straight legs are nobody's data: no attribution is owed.
+  await expect(root.getByTestId("routing-attribution")).toHaveCount(0)
+})
+
+test("step 4 with the directions quota spent draws the stops straight and dashed, says when the road resumes and shows the routing banner (#173)", async ({ api, page }) => {
+  const resumesAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+  await page.route("**/waste-api/routing/preview", (route) => route.fulfill({ json: { basis: "estimate", provider: "openrouteservice", resumesAt, reason: "the routing provider's directions quota is spent" } }))
+  await page.route("**/waste-api/routing/quota", (route) =>
+    route.fulfill({ json: { provider: "openrouteservice", families: [{ family: "directions", remaining: 0, limit: 2000, resetAt: resumesAt, exhaustedAt: new Date().toISOString(), keyRefusedAt: null, updatedAt: new Date().toISOString() }] } }),
+  )
+  await toRouteMap(page, api, uniqueName("Preview estimate"))
+  const root = wizard(page)
+  const line = root.locator("[data-wizard-route]").first()
+  await expect(line).toHaveAttribute("data-route-geometry", "straight")
+  await expect(line.locator("polyline").first()).toHaveAttribute("stroke-dasharray", "6 6")
+  await expect(line.locator("[data-wizard-road]")).toHaveCount(0)
+  const card = root.locator("[data-route-basis]").first()
+  await expect(card).toHaveAttribute("data-route-basis", "estimate")
+  await expect(card.getByTestId("route-basis")).toHaveText(/^Estimate · resumes (at|tomorrow at) \d{2}:\d{2}$/)
+  await expect(root.getByTestId("routing-quota-banner")).toHaveText(/^Waiting for routing quota: road measurements resume (at|tomorrow at) \d{2}:\d{2}$/)
 })
