@@ -147,7 +147,10 @@ export async function writeGroupEdit(tx: Tx, scope: Scope, schemeId: string, { e
   const ofScheme = (...where: SQL[]) => and(eq(collectionGroup.companyId, scope.companyId), eq(collectionGroup.routeSchemeId, schemeId), ...where)
   const restated = entries.flatMap(({ entry, group }) => (group === undefined ? [] : [{ entry, group }]))
 
-  // A name no group can hold, being longer than a label may be.
+  // The step-aside. `collection_group_route_scheme_id_name_key` is not deferrable, so Postgres checks it row by row and a
+  // chain or a swap of names ("Route 1" → "Route 2" while "Route 2" → "Route 3") would collide half-way through the
+  // updates below. The groups being renamed first take, all at once, their id followed by LABEL_MAX dots: longer than
+  // any label, so no group's name can equal it. Then each takes the name it is left with.
   const renaming = restated.filter(({ entry, group }) => entry.name !== group.name).map(({ group }) => group.id)
   if (renaming.length > 0) await tx.update(collectionGroup).set({ name: sql`${collectionGroup.id}::text || repeat('.', ${LABEL_MAX})` }).where(ofScheme(inArray(collectionGroup.id, renaming)))
   for (const { entry, group } of restated) {
