@@ -75,13 +75,13 @@ async function fillScope(page: Page, name: string) {
   await pick(page, root, "Service type", "Kerbside collection")
 }
 
-/** Steps 1 and 2: the scope, then Mondays from the day given. */
-async function toGroups(page: Page, name: string, effectiveFrom = dayFromToday(7)) {
+/** Steps 1 and 2: the scope, then Mondays from a week today. */
+async function toGroups(page: Page, name: string) {
   await startGuided(page)
   await fillScope(page, name)
   await nextButton(page).click()
   await expect(stepHeading(page)).toHaveText("When does this scheme collect?")
-  await wizard(page).getByLabel("Effective from").fill(effectiveFrom)
+  await wizard(page).getByLabel("Effective from").fill(dayFromToday(7))
   await wizard(page).getByRole("button", { name: "Monday", exact: true }).click()
   await nextButton(page).click()
   await expect(stepHeading(page)).toHaveText("Who collects what on which service days?")
@@ -95,13 +95,39 @@ async function openGroupEditor(page: Page): Promise<Locator> {
   return editor
 }
 
-/** A group on Mondays with WH-31 and Freja Nielsen, who hold what the other schemes do not, emptying 240 L bins. */
-async function addGroup(page: Page) {
+type Fleet = { vehicle: { id: string; callsign: string }; driver: { id: string; name: string } }
+
+/**
+ * A rear loader and a CE driver of the run's own, made through the API: the
+ * web's validation refuses a vehicle or a driver already the default on
+ * another scheme a shared day, and a developer's stack keeps every earlier
+ * run's schemes — the seeded crews are RS-Central's, and a licence the seed
+ * dates runs out in time.
+ */
+async function fleetOfItsOwn(api: APIRequestContext): Promise<Fleet> {
+  const tag = Date.now().toString(36).toUpperCase()
+  const project = await projectNamed(api, "Copenhagen Central")
+  const [rearLoader, residual] = await Promise.all([
+    listAll<{ id: string; key: string }>(api, "/vehicle-types").then((rows) => rows.find((row) => row.key === "rear-loader")),
+    listAll<Named>(api, "/waste-fractions").then((rows) => rows.find((row) => row.name === "Residual")),
+  ])
+  expect(rearLoader && residual, "the seed holds the rear loader and Residual").toBeTruthy()
+  const vehicle = await api.post("/vehicles", {
+    data: { projectId: project.id, registration: `E2E ${tag}`, callsign: `E2E-${tag}`, kind: "powered-vehicle", vehicleTypeId: rearLoader?.id, capacityKg: 18_000, requiredLicenceClass: "c", compartments: [{ wasteFractionIds: [residual?.id] }] },
+  })
+  expect(vehicle.status(), await vehicle.text()).toBe(201)
+  const driver = await api.post("/drivers", { data: { projectId: project.id, name: `E2E Driver ${tag}`, employment: "employee", licenceClass: "ce" } })
+  expect(driver.status(), await driver.text()).toBe(201)
+  return { vehicle: (await vehicle.json()) as Fleet["vehicle"], driver: (await driver.json()) as Fleet["driver"] }
+}
+
+/** A group on Mondays with the fleet given, emptying 240 L bins. */
+async function addGroup(page: Page, fleet: Fleet) {
   const editor = await openGroupEditor(page)
   await editor.getByLabel("Group name").fill("Residual · bins")
   await editor.getByRole("button", { name: "Monday", exact: true }).click()
-  await pick(page, editor, "Vehicle", /^WH-31/)
-  await pick(page, editor, "Default driver", /^Freja Nielsen/)
+  await pick(page, editor, "Vehicle", new RegExp(`^${fleet.vehicle.callsign}`))
+  await pick(page, editor, "Default driver", new RegExp(`^${fleet.driver.name}`))
   await editor.getByRole("button", { name: "Two-wheel bin · 240 L", exact: true }).click()
   await editor.getByRole("button", { name: /^(Add|Save) group$/ }).click()
   await expect(editor).toBeHidden()
@@ -179,29 +205,32 @@ test("step 2 reads the project's holiday list from the API, and the next dates a
   await expect(rows.filter({ hasText: "Skipped · Christmas Day" })).toContainText("25 Dec 2026")
 })
 
-test("step 3's group names the API's fleet, and a driver whose licence ran out before the scheme starts is listed but cannot be picked", async ({ page }) => {
+test("step 3's group names the API's fleet, and a driver whose licence ran out before the scheme starts is listed but cannot be picked", async ({ api, page }) => {
+  const fleet = await fleetOfItsOwn(api)
   await openSchemes(page)
   await toGroups(page, uniqueName("E2E Licence"))
   const editor = await openGroupEditor(page)
   await expect(editor.getByLabel("Default driver", { exact: true })).toBeDisabled()
-  await pick(page, editor, "Vehicle", /^WH-31/)
+  await pick(page, editor, "Vehicle", new RegExp(`^${fleet.vehicle.callsign}`))
   await editor.getByLabel("Default driver", { exact: true }).click()
-  // The API's own sentence (the rule it refuses a group's driver by), judged on the scheme's first day.
+  // The seeded Lars Møller, in the API's own sentence (the rule it refuses a group's driver by), judged on the scheme's first day.
   const lars = page.getByRole("option", { name: /^Lars Møller/ })
   await expect(lars).toContainText("Lars Møller's licence expires on 2026-09-05, before the scheme starts")
   await expect(lars).toHaveAttribute("aria-disabled", "true")
+  await expect(page.getByRole("option", { name: /^Jonas Lind/ })).toContainText("No licence on record")
   await expect(page.getByRole("option", { name: /^Jonas Lind/ })).toHaveAttribute("aria-disabled", "true")
-  const freja = page.getByRole("option", { name: /^Freja Nielsen/ })
-  await expect(freja).not.toHaveAttribute("aria-disabled", "true")
-  await freja.click()
-  await expect(editor.getByLabel("Default driver", { exact: true })).toContainText("Freja Nielsen")
+  const own = page.getByRole("option", { name: new RegExp(`^${fleet.driver.name}`) })
+  await expect(own).not.toHaveAttribute("aria-disabled", "true")
+  await own.click()
+  await expect(editor.getByLabel("Default driver", { exact: true })).toContainText(fleet.driver.name)
 })
 
 test("the scheme is created at step 5 in one POST the API takes, a validated scheme of the API's rows", async ({ api, page }) => {
   const name = uniqueName("E2E Guided")
+  const fleet = await fleetOfItsOwn(api)
   await openSchemes(page)
   await toGroups(page, name)
-  await addGroup(page)
+  await addGroup(page, fleet)
   // The preview's matcher cannot place the API's containers yet: said, and not an issue that blocks.
   await expect(wizard(page).getByText("The API matches containers when it generates routes; this preview cannot place them yet.")).toBeVisible()
   await nextButton(page).click()
@@ -216,15 +245,13 @@ test("the scheme is created at step 5 in one POST the API takes, a validated sch
 
   const body = (await created.json()) as Scheme
   const stored = (await (await api.get(`/route-schemes/${body.id}`)).json()) as Scheme
-  const [residual, bin240, vehicle, driver] = await Promise.all([
+  const [residual, bin240] = await Promise.all([
     listAll<Named>(api, "/waste-fractions").then((rows) => rows.find((row) => row.name === "Residual")),
     listAll<Named>(api, "/container-types").then((rows) => rows.find((row) => row.name === "Two-wheel bin · 240 L")),
-    listAll<{ id: string; callsign: string }>(api, "/vehicles").then((rows) => rows.find((row) => row.callsign === "WH-31")),
-    listAll<{ id: string; name: string }>(api, "/drivers").then((rows) => rows.find((row) => row.name === "Freja Nielsen")),
   ])
   expect(stored.status).toBe("validated")
   expect(stored.collectionGroups.map((group) => ({ name: group.name, rule: group.rule, vehicleId: group.vehicleId, driverId: group.driverId }))).toEqual([
-    { name, rule: { wasteFractionIds: [residual?.id], containerTypeIds: [bin240?.id], vehicleTypeId: null }, vehicleId: vehicle?.id, driverId: driver?.id },
+    { name, rule: { wasteFractionIds: [residual?.id], containerTypeIds: [bin240?.id], vehicleTypeId: null }, vehicleId: fleet.vehicle.id, driverId: fleet.driver.id },
   ])
 })
 
