@@ -25,7 +25,7 @@ import { getModuleDefinition, type BusinessRecord, type ModuleLocation, type Wor
 import { ORGANISATION_MODULE, WAREHOUSES_MODULE } from "@/lib/data/containers"
 import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
 import type { MasterDataKind } from "@/lib/data/master-data-kinds"
-import { keptOptions, rowOptions, subscriptionOptions } from "@/lib/data/place-pickers"
+import { keptOptions, keptValue, optionalRowOptions, rowOptions, subscriptionOptions } from "@/lib/data/place-pickers"
 import { CONTACTS_MODULE, PROPERTIES_MODULE } from "@/lib/data/properties"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
@@ -51,8 +51,13 @@ const optionOf = (record: BusinessRecord, withStatus: boolean): BusinessFormOpti
 export type RelationPickers = {
   /** Whether every module a form's relation fields read has answered: one module that failed holds back only the forms that pick from it. */
   readyFor: (schema: BusinessFormSchema) => boolean
-  /** The options a relation field offers, by its id; a frequency only of the project the form names (or `projectId`). */
-  options: (field: BusinessFormField, values: BusinessFormValues, projectId?: string) => readonly BusinessFormOption[]
+  /**
+   * The options a relation field offers, by its id; a frequency or a member
+   * property only of the project the form names (or `projectId`). `opened` is
+   * what the dialog opened with, the one value kept offered though no row
+   * holds it (`keptValue`): `{}` for a create.
+   */
+  options: (field: BusinessFormField, values: BusinessFormValues, projectId?: string, opened?: BusinessFormValues) => readonly BusinessFormOption[]
   /** The timezone of a project, by its web id, as the organisation module holds it. */
   timezoneOf: (projectId: string | undefined) => string | undefined
 }
@@ -90,8 +95,10 @@ export function useRelationPickers(): RelationPickers {
         .map((record) => optionOf(record, false))
     }
     const project = projectId ?? (typeof values.projectId === "string" && values.projectId !== "" ? values.projectId : undefined)
-    // A party, a responsible customer: any Customer of the company, a person or an organisation alike.
-    if (field.relation !== undefined && keyOf(field.relation) === keyOf(CONTACTS_MODULE)) return rowOptions(live(contacts.records))
+    // A party, a responsible customer: any Customer of the company, a person or an organisation alike; None first where one pick is optional.
+    if (field.relation !== undefined && keyOf(field.relation) === keyOf(CONTACTS_MODULE)) {
+      return field.type === "select" && !field.required ? optionalRowOptions(live(contacts.records)) : rowOptions(live(contacts.records))
+    }
     // A member property: the form's project's, since a set holds its own project's properties alone.
     if (field.relation !== undefined && keyOf(field.relation) === keyOf(PROPERTIES_MODULE)) {
       return rowOptions(live(properties.records).filter((record) => project === undefined || !record.projectIds?.length || record.projectIds.includes(project)))
@@ -116,7 +123,8 @@ export function useRelationPickers(): RelationPickers {
   }
   // The value a form opens with stays offered, as its id chip where the
   // module has no such row loaded: an existing reference is never refused.
-  const options = (field: BusinessFormField, values: BusinessFormValues, projectId?: string): readonly BusinessFormOption[] => keptOptions(field, rowsFor(field, values, projectId), values[field.id])
+  const options = (field: BusinessFormField, values: BusinessFormValues, projectId?: string, opened?: BusinessFormValues): readonly BusinessFormOption[] =>
+    keptOptions(field, rowsFor(field, values, projectId), keptValue(field.id, values, opened))
   const readyFor = (schema: BusinessFormSchema) =>
     schema.sections.every((section) => section.fields.every((field) => field.relation === undefined || (byKey.get(keyOf(field.relation))?.ready ?? true)))
   const timezoneOf = (projectId: string | undefined) => {

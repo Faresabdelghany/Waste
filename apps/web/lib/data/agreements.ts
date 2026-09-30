@@ -24,7 +24,7 @@
 // `referencedId` is the one reading of a chip.
 import { ofKind } from "@/lib/api/records/adapter"
 
-import type { BusinessFormSchema, BusinessFormValues } from "./business-form-types"
+import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
 
 /** Where the agreements live — the one seam callers resolve the module through. */
@@ -106,10 +106,16 @@ export function agreementFormSchemaOnApi(schema: BusinessFormSchema): BusinessFo
 // The subscription form
 // ---------------------------------------------------------------------------
 
+/** The two kinds of place a subscription is delivered at, as the form's `placeKind` spells them. */
+const PLACE_KINDS = [
+  { value: "property", label: "A property" },
+  { value: "shared-point", label: "A shared collection point" },
+] as const
+
 /**
  * The create form, opened from an agreement's "Add subscription": the
- * agreement read-only, since it is the row the person chose, the product
- * and the place as the API's ids until their modules are switched.
+ * agreement read-only, since it is the row the person chose, the product as
+ * the API's id until its module is switched, and the place picked.
  */
 export const subscriptionFormSchema: BusinessFormSchema = {
   key: `${AGREEMENTS_MODULE.workspaceId}.${AGREEMENTS_MODULE.moduleId}`,
@@ -126,9 +132,11 @@ export const subscriptionFormSchema: BusinessFormSchema = {
       fields: [
         { id: "agreementId", label: "Agreement", type: "select", required: true, readOnly: true, relation: AGREEMENTS_MODULE },
         { id: "productId", label: "Product", type: "text", required: true, placeholder: "The product's id on the API", description: "Only an active product can be subscribed to. Until the products are on the API here, give the product's id." },
+        // One place, its kind chosen first: the other kind's picker is hidden, and a hidden field is not submitted, so a pick is taken back by choosing the other kind.
+        { id: "placeKind", label: "Delivered at", type: "select", required: true, defaultValue: "property", options: PLACE_KINDS, description: "A subscription is delivered at one place: a property or a shared collection point." },
         // The places' modules by location: lib/data/properties.ts spells them, and imports this module.
-        { id: "propertyId", label: "Property", type: "select", relation: { workspaceId: "customers", moduleId: "properties" }, description: "The place is a property or a shared collection point, one of the two." },
-        { id: "sharedPointId", label: "Shared collection point", type: "select", relation: { workspaceId: "customers", moduleId: "shared" } },
+        { id: "propertyId", label: "Property", type: "select", relation: { workspaceId: "customers", moduleId: "properties" }, visibleWhen: { fieldId: "placeKind", equals: "property" }, requiredWhen: { fieldId: "placeKind", equals: "property" } },
+        { id: "sharedPointId", label: "Shared collection point", type: "select", relation: { workspaceId: "customers", moduleId: "shared" }, visibleWhen: { fieldId: "placeKind", equals: "shared-point" }, requiredWhen: { fieldId: "placeKind", equals: "shared-point" } },
         { id: "quantity", label: "Quantity", type: "number", min: 1, defaultValue: "1" },
         { id: "validFrom", label: "Valid from", type: "date", required: true },
         { id: "validTo", label: "Valid to", type: "date", description: "The last day in force; blank while it runs. Inside the agreement's period." },
@@ -136,6 +144,13 @@ export const subscriptionFormSchema: BusinessFormSchema = {
     },
   ],
   execution: { kind: "create-record", initialStatus: "Active", completionMessage: "Subscription added." },
+}
+
+/** The place's field on the edit form: shown, not picked — a read-only picker would still be held to the rows its module offers, and an edit refused while that module is not ready. */
+function shownPlace(field: BusinessFormField): BusinessFormField {
+  const shown: BusinessFormField = { ...field, type: "text", readOnly: true }
+  delete shown.relation
+  return shown
 }
 
 /** The edit form: the create form with what the wire never patches held read-only — a subscription that moves is one that ended and another that began. */
@@ -146,7 +161,10 @@ export const subscriptionEditSchema: BusinessFormSchema = {
   submitLabel: "Save changes",
   sections: subscriptionFormSchema.sections.map((section) => ({
     ...section,
-    fields: section.fields.map((field) => (["agreementId", "productId", "propertyId", "sharedPointId"].includes(field.id) ? { ...field, readOnly: true } : field)),
+    fields: section.fields.map((field) => {
+      if (field.id === "propertyId" || field.id === "sharedPointId") return shownPlace(field)
+      return ["agreementId", "productId", "placeKind"].includes(field.id) ? { ...field, readOnly: true } : field
+    }),
   })),
 }
 

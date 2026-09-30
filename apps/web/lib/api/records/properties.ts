@@ -61,6 +61,7 @@ import {
   MEMBER_ROLE_KEY,
   MEMBER_ROLES_KEY,
   MEMBERS_KEY,
+  NO_ONE,
   OPERATING_MODEL_LABELS,
   PARTY_FIELDS,
   PARTY_ROLE_LABELS,
@@ -78,7 +79,7 @@ import {
 } from "@/lib/data/properties"
 
 import { create, get, listAll, patch, put } from "../client"
-import { inheritedPresentation, isLocalRefusal, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { inheritedPresentation, isLocalRefusal, PartialWrite, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 import { isCompanyRecord } from "./organisation"
 import { coordinatesFact, coordinatesOf, countOf, createStatusOf, patchStatusOf, pointOf, projectMoved, projectServerIdOf, referenced, refusal, requiredText, sameSet, tokenOf, withStatus } from "./places"
 import { referencedServerId } from "./references"
@@ -98,6 +99,31 @@ const POINT_LOCATED = "A shared collection point has a location: give the latitu
 const POINT_KEEPS_LOCATION = "A shared collection point keeps a location: give the latitude and longitude"
 const DISTANCE_IS_A_COUNT = "An eligibility distance is a whole number of metres, 1 or more"
 
+/** The most a set body names (`SET_MAX` in @waste/contracts/customers, not exported), spelled again since the web imports no zod at runtime; the test holds the two equal. */
+export const SET_MAX = 200
+const SET_TOO_LONG = `A form names at most ${SET_MAX} of a set; a longer one arrives through an import`
+
+/**
+ * The record's patch, then its set's whole replacement: the answer is the row
+ * as the last request left it. A set the API refuses after the patch landed
+ * is a `PartialWrite` carrying the row the patch left — the set as it was,
+ * since the refused request changed nothing — which the store shows under
+ * the refusal rather than the row as it stood before the edit.
+ */
+async function patchThenReplace<R extends Resource>(client: Client, path: string, fields: object | undefined, setPath: string, set: object | undefined): Promise<R> {
+  let row: R | undefined
+  if (fields !== undefined) row = await patch<R>(client, path, fields)
+  if (set !== undefined) {
+    try {
+      row = await put<R>(client, setPath, set)
+    } catch (error) {
+      if (row !== undefined) throw new PartialWrite(error, row)
+      throw error
+    }
+  }
+  return row ?? (await get<R>(client, path))
+}
+
 /** The other states the wire lets a row move to, as the lifecycle's labels: every one but the row's own. */
 const transitionsFrom = (statuses: readonly string[], status: string) => statuses.filter((candidate) => candidate !== status).map(statusLabel)
 
@@ -107,10 +133,10 @@ const distinct = (names: readonly string[]) => [...new Set(names)]
 /** `2 properties`, `1 member property`, `No members`: a set's size as its column reads. */
 const countLabel = (count: number, one: string, many: string) => (count === 0 ? "No members" : `${count} ${count === 1 ? one : many}`)
 
-/** The customer a record names under `key`, as a server id: null for none, a refusal for one the store does not hold as a customer. */
+/** The customer a record names under `key`, as a server id: null for none — blank, or None picked (`NO_ONE`) — a refusal for one the store does not hold as a customer. */
 function customerServerIdOf(record: BusinessRecord, key: string, context: MappingContext): string | null | LocalRefusal {
   const webId = typed(record, key)
-  if (webId === undefined) return null
+  if (webId === undefined || webId === NO_ONE) return null
   return referencedServerId(webId, CUSTOMER_CHIP, context, { owns: isCustomer }) ?? refusal(key, PICK_CUSTOMER)
 }
 
@@ -152,6 +178,7 @@ function partiesOf(record: BusinessRecord, context: MappingContext): PropertyPar
       if (named.has(pairKey(customerId, role))) continue
       named.add(pairKey(customerId, role))
       parties.push({ customerId, role })
+      if (parties.length > SET_MAX) return refusal(key, SET_TOO_LONG)
     }
   }
   return parties
@@ -266,15 +293,10 @@ export const propertyAdapter: ResourceAdapter<Property> = {
     return write
   },
   create: (client, body) => create<Property>(client, "/properties", body).then((created) => created.body),
-  // The property first, then the whole set through its own route; the answer
-  // is the property as the last request left it. Two requests are two, as the
-  // stations' fractions are.
-  update: async (client, serverId, body) => {
+  // The property first, then the whole set through its own route.
+  update: (client, serverId, body) => {
     const write = body as PropertyWrite
-    let property: Property | undefined
-    if (write.property !== undefined) property = await patch<Property>(client, `/properties/${serverId}`, write.property)
-    if (write.parties !== undefined) property = await put<Property>(client, `/properties/${serverId}/parties`, { parties: write.parties })
-    return property ?? (await get<Property>(client, `/properties/${serverId}`))
+    return patchThenReplace<Property>(client, `/properties/${serverId}`, write.property, `/properties/${serverId}/parties`, write.parties === undefined ? undefined : { parties: write.parties })
   },
 }
 
@@ -314,6 +336,7 @@ function membersOf<Role extends string>(record: BusinessRecord, held: BusinessRe
     if (members.some((member) => member.propertyId === propertyId)) continue
     const kept = holding[webId]
     members.push({ propertyId, role: kept !== undefined && (roles as readonly string[]).includes(kept) ? (kept as Role) : (newRole as Role) })
+    if (members.length > SET_MAX) return refusal(MEMBERS_KEY, SET_TOO_LONG)
   }
   return members
 }
@@ -367,7 +390,8 @@ export const propertyGroupAdapter: ResourceAdapter<PropertyGroup> = {
         ...(project.name === undefined ? {} : { Project: project.name }),
         ...roleFacts(members, PROPERTY_GROUP_MEMBER_ROLES, GROUP_MEMBER_FACTS),
       },
-      related: distinct(members.map((member) => member.name ?? member.webId)),
+      // No related chips: a chip links through the fixtures' index to a fixture id no server property carries (rule (b)); the facts name the members.
+      related: [],
       allowedTransitions: transitionsFrom(PROPERTY_GROUP_STATUSES, group.status),
       companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
@@ -433,12 +457,9 @@ export const propertyGroupAdapter: ResourceAdapter<PropertyGroup> = {
   },
   create: (client, body) => create<PropertyGroup>(client, "/property-groups", body).then((created) => created.body),
   // The group first, then the whole membership through its own route.
-  update: async (client, serverId, body) => {
+  update: (client, serverId, body) => {
     const write = body as GroupWrite
-    let group: PropertyGroup | undefined
-    if (write.group !== undefined) group = await patch<PropertyGroup>(client, `/property-groups/${serverId}`, write.group)
-    if (write.members !== undefined) group = await put<PropertyGroup>(client, `/property-groups/${serverId}/members`, { members: write.members })
-    return group ?? (await get<PropertyGroup>(client, `/property-groups/${serverId}`))
+    return patchThenReplace<PropertyGroup>(client, `/property-groups/${serverId}`, write.group, `/property-groups/${serverId}/members`, write.members === undefined ? undefined : { members: write.members })
   },
 }
 
@@ -487,7 +508,8 @@ export const sharedPointAdapter: ResourceAdapter<SharedCollectionPoint> = {
         ...(project.name === undefined ? {} : { Project: project.name }),
         ...roleFacts(members, SHARED_COLLECTION_POINT_MEMBER_ROLES, POINT_MEMBER_FACTS),
       },
-      related: distinct(members.map((member) => member.name ?? member.webId)),
+      // As a group's: the facts name the members, since a chip would link to a fixture id.
+      related: [],
       allowedTransitions: transitionsFrom(SHARED_COLLECTION_POINT_STATUSES, point.status),
       companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
@@ -606,12 +628,9 @@ export const sharedPointAdapter: ResourceAdapter<SharedCollectionPoint> = {
   },
   create: (client, body) => create<SharedCollectionPoint>(client, "/shared-collection-points", body).then((created) => created.body),
   // The point first, then the whole membership through its own route.
-  update: async (client, serverId, body) => {
+  update: (client, serverId, body) => {
     const write = body as PointWrite
-    let point: SharedCollectionPoint | undefined
-    if (write.point !== undefined) point = await patch<SharedCollectionPoint>(client, `/shared-collection-points/${serverId}`, write.point)
-    if (write.members !== undefined) point = await put<SharedCollectionPoint>(client, `/shared-collection-points/${serverId}/members`, { members: write.members })
-    return point ?? (await get<SharedCollectionPoint>(client, `/shared-collection-points/${serverId}`))
+    return patchThenReplace<SharedCollectionPoint>(client, `/shared-collection-points/${serverId}`, write.point, `/shared-collection-points/${serverId}/members`, write.members === undefined ? undefined : { members: write.members })
   },
 }
 

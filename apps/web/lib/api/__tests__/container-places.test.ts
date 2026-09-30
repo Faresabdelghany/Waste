@@ -65,6 +65,10 @@ const subscriptionAt = (id: string, place: { propertyId: string } | { sharedColl
 const atParkvej = subscriptionAt("01a0d2a4-a280-7013-8000-000000000001", { propertyId: parkvej.id })
 const atKongens = subscriptionAt("01a0d2a4-a280-7013-8000-000000000002", { sharedCollectionPointId: kongens.id })
 const atDock = subscriptionAt("01a0d2a4-a280-7013-8000-000000000003", { propertyId: dock4.id })
+// A subscription that ended while its container's placement stays open (the API lets an open placement outlive it until the container is returned), and one under an agreement that ended.
+const endedSubscription: Subscription = { ...atParkvej, id: "01a0d2a4-a280-7013-8000-000000000004", validFrom: "2025-01-01", validTo: "2026-01-01" }
+const agrEnded: Agreement = { ...agr2408, id: "01a0d2a4-a280-7012-8000-000000000002", number: "AGR-2188", validFrom: "2025-01-01", validTo: "2026-01-01" }
+const underEnded: Subscription = { ...atParkvej, id: "01a0d2a4-a280-7013-8000-000000000005", agreementId: agrEnded.id, validFrom: "2025-01-01", validTo: null }
 
 // The store as it stands when the containers load: every module a placement's place is read through, loaded before them in SERVER_MODULES' order.
 const bare: MappingContext = { fixtures: [], resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
@@ -84,7 +88,7 @@ state = new Map([...state, ["configure.master", loaded({ records: masterRecords,
 load("customers.contacts", customerAdapter, [osterbro])
 load("customers.properties", propertyAdapter, [parkvej, dock4])
 load("customers.shared", sharedPointAdapter, [kongens])
-load("customers.agreements", agreementAdapter, [agr2408])
+load("customers.agreements", agreementAdapter, [agr2408, agrEnded])
 state = new Map([
   ...state,
   [
@@ -93,7 +97,7 @@ state = new Map([
       const agreements = state.get("customers.agreements")
       if (agreements === undefined) throw new Error("no agreements")
       const context: MappingContext = { ...bare, resolve: resolverOver(state) }
-      const subscriptions = [atParkvej, atKongens, atDock]
+      const subscriptions = [atParkvej, atKongens, atDock, endedSubscription, underEnded]
       const records = subscriptions.map((subscription) => subscriptionAdapter.toRecord(subscription, context))
       return loaded({ records: [...agreements.records, ...records], serverIds: new Map([...agreements.serverIds, ...records.map((record, index): [string, string] => [record.id, subscriptions[index].id])]) }, 1)
     })(),
@@ -104,8 +108,9 @@ const context: MappingContext = { ...bare, resolve: resolverOver(state) }
 const containerOf = (id: string, label: string): Container => ({ id, ...STAMPS, projectId: copenhagen.id, label, containerTypeId: bin240.id, barcode: null, rfid: null, serialNumber: null, ownership: "company", notes: null, assetState: null })
 const placementOf = (id: string, container: Container, subscription: Subscription, validFrom: string, validTo: string | null): ContainerServicePlacement => ({ id, ...STAMPS, projectId: copenhagen.id, containerId: container.id, subscriptionId: subscription.id, wasteFractionId: residual.id, serviceFrequencyId: null, effectiveServiceFrequencyId: null, validFrom, validTo })
 function placed(label: string, index: number, subscription: Subscription, validFrom: string, validTo: string | null = null): BusinessRecord {
-  const container = containerOf(`01a0d2a4-a280-7014-8000-00000000000${index}`, label)
-  const resource: ContainerResource = { ...container, placements: [placementOf(`01a0d2a4-a280-7015-8000-00000000000${index}`, container, subscription, validFrom, validTo)] }
+  const ordinal = String(index).padStart(12, "0")
+  const container = containerOf(`01a0d2a4-a280-7014-8000-${ordinal}`, label)
+  const resource: ContainerResource = { ...container, placements: [placementOf(`01a0d2a4-a280-7015-8000-${ordinal}`, container, subscription, validFrom, validTo)] }
   return containerAdapter.toRecord(resource, context)
 }
 
@@ -123,6 +128,15 @@ describe("a container placed today", () => {
     assert.deepEqual(containerLocation(record, FIXTURE_GAZETTEER), { lng: 12.5709, lat: 55.7012 }, "the map places it at the property's point")
     const preview = resolveStopMatches({ rule: { fractions: ["Residual"] }, areaId, projectIds: [FIXTURE_PROJECT_IDS.copenhagen], containers: [record] })
     assert.equal(preview.scopeTotal, 1, "the rule preview counts it in the area's scope")
+  })
+
+  test("carries what the map's statistics and filters read of a place: the property's type and the agreement it serves under", () => {
+    const record = placed("BIN-91006", 6, atParkvej, "2026-01-01")
+    assert.equal(record.facts["Property type"], "Residential")
+    assert.equal(record.facts.Agreement, "AGR-2408 · active", "the Selected area's active agreements read it")
+    const atPoint = placed("BIN-91007", 7, atKongens, "2026-06-01")
+    assert.equal(atPoint.facts["Property type"], undefined, "a point has no property type")
+    assert.equal(atPoint.facts.Agreement, "AGR-2408 · active")
   })
 
   test("at a shared collection point carries the point's place, and no area where no boundary contains it", () => {
@@ -157,6 +171,27 @@ describe("a container serving nowhere today", () => {
 
   test("nor one with no placement at all", () => {
     const record = containerAdapter.toRecord({ ...containerOf("01a0d2a4-a280-7014-8000-000000000009", "BIN-91009"), placements: [] }, context)
+    assert.equal(containerLocation(record, FIXTURE_GAZETTEER), null)
+  })
+
+  test("nor one whose open placement outlived its subscription, or whose subscription's agreement has ended: the period three times over, as the worker reads eligibility", () => {
+    for (const record of [placed("BIN-91010", 10, endedSubscription, "2025-06-01"), placed("BIN-91011", 11, underEnded, "2025-06-01")]) {
+      assert.equal(record.facts.Property, undefined, record.name)
+      assert.equal(record.submittedValues?.planningAreaId, undefined, record.name)
+      assert.equal(containerLocation(record, FIXTURE_GAZETTEER), null, record.name)
+    }
+  })
+
+  test("nor one the ledger has in service at another placement than the one in force today: its record shows that one, so its place is not today's", () => {
+    // Returned with a last day ahead, and issued under the point from the day after: the ledger serves the point's placement, which is not in force yet.
+    const container = containerOf("01a0d2a4-a280-7014-8000-000000000012", "BIN-91012")
+    const today = placementOf("01a0d2a4-a280-7015-8000-000000000012", container, atParkvej, "2026-01-01", "2026-10-05")
+    const next = placementOf("01a0d2a4-a280-7015-8000-000000000013", container, atKongens, "2026-10-05", null)
+    const assetState = { status: "in-service" as const, warehouseId: null, placementId: next.id, since: "2026-09-29T08:00:00.000Z", movementId: "01a0d2a4-a280-7030-8000-000000000001" }
+    const record = containerAdapter.toRecord({ ...container, assetState, placements: [today, next] }, context)
+    assert.equal(record.facts.Placement, "From 2026-10-05, open", "the record shows the placement the ledger serves")
+    assert.equal(record.facts.Property, undefined)
+    assert.equal(record.facts["Shared collection point"], undefined)
     assert.equal(containerLocation(record, FIXTURE_GAZETTEER), null)
   })
 })

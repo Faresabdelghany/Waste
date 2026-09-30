@@ -30,13 +30,13 @@ import {
 import type { Project } from "@waste/contracts/organisation"
 
 import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
-import { createPropertyGroupRecord, createPropertyRecord, createSharedPointRecord, PROPERTIES_MODULE, PROPERTY_GROUPS_MODULE, SHARED_POINTS_MODULE } from "../../data/properties"
+import { createPropertyGroupRecord, createPropertyRecord, createSharedPointRecord, NO_ONE, PROPERTIES_MODULE, PROPERTY_GROUPS_MODULE, SHARED_POINTS_MODULE } from "../../data/properties"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { subscriptionAdapter } from "../records/agreements"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
-import { propertiesModule, propertyAdapter, propertyGroupAdapter, propertyGroupsModule, sharedPointAdapter, sharedPointsModule } from "../records/properties"
+import { propertiesModule, propertyAdapter, propertyGroupAdapter, propertyGroupsModule, SET_MAX, sharedPointAdapter, sharedPointsModule } from "../records/properties"
 import { customerAdapter } from "../records/registry"
 import { loaded, loadModule, resolverOver, spellsStatus, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
@@ -352,6 +352,34 @@ describe("a property", () => {
     assert.deepEqual(setOnly.calls.map((call) => `${call.init.method} ${call.url}`), [`PUT http://api.test/properties/${parkvej.id}/parties`])
   })
 
+  test("a set the API refuses after the patch landed comes back as the row the patch left, under the refusal", async () => {
+    const renamed: Property = { ...parkvej, name: "Parkvej 18A" }
+    const { fetch, calls } = scripted([() => json(renamed), () => problem(400, "The request body is invalid", [{ path: "parties.2.customerId", message: "Not a customer of this company" }])])
+    const record = propertyAdapter.toRecord(parkvej, context())
+    const edited: BusinessRecord = { ...record, name: "Parkvej 18A", submittedValues: { ...record.submittedValues, displayName: "Parkvej 18A", tenantIds: `company-${kab.id}` } }
+    const current = loaded({ records: [record], serverIds: new Map([[record.id, parkvej.id]]) }, 1)
+    const outcome = await writeRecord(clientOver(fetch), propertiesModule, current, edited, { fixtures: propertyFixtures, state, now: NOW })
+    assert.deepEqual(calls.map((call) => call.init.method), ["PATCH", "PUT"])
+    assert.equal(outcome.kind, "refused")
+    if (outcome.kind !== "refused") return
+    assert.equal(outcome.problem.status, 400)
+    assert.equal(outcome.record?.name, "Parkvej 18A", "the row as the server now holds it: renamed, its parties as they were")
+    assert.equal(outcome.record?.id, record.id)
+    assert.equal(outcome.record?.facts.Tenants, undefined)
+  })
+
+  test("a set longer than a form's list is refused before the API, which bounds a set body at two hundred", () => {
+    const partiesOfLength = (count: number) => Array.from({ length: count }, (_, index) => ({ customerId: `01a0d2a4-a280-700b-8000-${String(index).padStart(12, "0")}`, role: "owner" as const }))
+    assert.ok(PropertyPartiesSet.safeParse({ parties: partiesOfLength(SET_MAX) }).success, "the contract takes the bound")
+    assert.ok(!PropertyPartiesSet.safeParse({ parties: partiesOfLength(SET_MAX + 1) }).success, "and refuses one past it")
+    const record = propertyAdapter.toRecord(parkvej, context())
+    const many = Array.from({ length: 201 }, (_, index) => `customer-01a0d2a4-a280-700b-8000-${String(1000 + index).padStart(12, "0")}`).join(",")
+    assert.deepEqual(propertyAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, tenantIds: many } }, context()), { path: "tenantIds", message: "A form names at most 200 of a set; a longer one arrives through an import" })
+    const group = propertyGroupAdapter.toRecord(osterbroEast, contextAll())
+    const members = Array.from({ length: 201 }, (_, index) => `property-01a0d2a4-a280-700c-8000-${String(1000 + index).padStart(12, "0")}`).join(",")
+    assert.deepEqual(propertyGroupAdapter.toPatchBody(group, { ...group, submittedValues: { ...group.submittedValues, memberPropertyIds: members } }, contextAll()), { path: "memberPropertyIds", message: "A form names at most 200 of a set; a longer one arrives through an import" })
+  })
+
   test("through the store's write, a create posts with its parties and the API's 409 for a name taken comes back as its sentence", async () => {
     const made = createPropertyRecord(PROPERTY_VALUES, { now: MINTED })
     const created: Property = { ...parkvej, id: "019995e0-0000-7000-8000-0000000000c1", name: "Nørrebrogade 144", address: "Nørrebrogade 144, 2200 København N" }
@@ -394,7 +422,8 @@ describe("a property group", () => {
       Members: "Parkvej 18",
       Administrators: "Ryesgade 3",
     })
-    assert.deepEqual(record.related, ["Parkvej 18", "Ryesgade 3"])
+    // A related chip is linked through the fixtures' index (business-links.ts), to a fixture id no server property carries: the facts name the members instead.
+    assert.deepEqual(record.related, [])
     assert.deepEqual(record.allowedTransitions, ["Draft", "Inactive"])
     assert.deepEqual(record.submittedValues, {
       projectId: FIXTURE_PROJECT_IDS.copenhagen,
@@ -455,6 +484,7 @@ describe("a property group", () => {
     const renamed = propertyGroupAdapter.toPatchBody(record, edit({ name: "Østerbro East", responsibleCustomerId: "" }), contextAll())
     assert.deepEqual(renamed, { group: { name: "Østerbro East", responsibleCustomerId: null } })
     assert.ok(PropertyGroupPatch.safeParse((renamed as { group: unknown }).group).success)
+    assert.deepEqual(propertyGroupAdapter.toPatchBody(record, edit({ responsibleCustomerId: NO_ONE }), contextAll()), { group: { responsibleCustomerId: null } }, "None, picked, is no customer")
     assert.deepEqual(propertyGroupAdapter.toPatchBody(record, edit({}, "Inactive"), contextAll()), { group: { status: "inactive" } })
     const regathered = propertyGroupAdapter.toPatchBody(record, edit({ memberPropertyIds: `property-${ryesgade.id},property-${jagtvej.id}`, memberRole: "payer" }), contextAll())
     assert.deepEqual(regathered, { members: [{ propertyId: ryesgade.id, role: "administrator" }, { propertyId: jagtvej.id, role: "payer" }] })
@@ -565,7 +595,7 @@ describe("a shared collection point", () => {
       members: [{ propertyId: parkvej.id, role: "service-member" }],
     })
     assert.ok(SharedCollectionPointCreate.safeParse(body).success)
-    const far = sharedPointAdapter.toCreateBody?.(createSharedPointRecord({ ...values, eligibilityDistance: "350", accessConditions: "", availability: "", responsibleCustomerId: "", memberPropertyIds: "" }, { now: MINTED }), contextAll()) as Record<string, unknown>
+    const far = sharedPointAdapter.toCreateBody?.(createSharedPointRecord({ ...values, eligibilityDistance: "350", accessConditions: "", availability: "", responsibleCustomerId: NO_ONE, memberPropertyIds: "" }, { now: MINTED }), contextAll()) as Record<string, unknown>
     assert.equal(far.eligibilityDistanceM, 350)
     assert.equal(far.accessConditions, undefined)
     assert.equal(far.availability, undefined)

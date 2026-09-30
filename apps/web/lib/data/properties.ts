@@ -80,6 +80,9 @@ export const PARTY_FIELDS: Readonly<Record<PropertyPartyRole, string>> = {
   "service-contact": "serviceContactIds",
 }
 
+/** What a single optional customer field says for nobody: a select holds no empty value, so None is this token, which the adapters read as no customer. */
+export const NO_ONE = "none"
+
 /** A group's or a point's member properties, the role a new member joins as, and the roles the members already hold (JSON: web id → role). */
 export const MEMBERS_KEY = "memberPropertyIds"
 export const MEMBER_ROLE_KEY = "memberRole"

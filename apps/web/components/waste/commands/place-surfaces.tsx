@@ -90,7 +90,7 @@ function EditSurface({ record, module, schema, noun }: RowSurfaceProps & { modul
   const [opened, setOpened] = useState<BusinessFormValues | null>(null)
   const [busy, setBusy] = useState(false)
   const projectId = typeof record.submittedValues?.projectId === "string" ? record.submittedValues.projectId : undefined
-  const options = (field: BusinessFormField, values: BusinessFormValues) => pickers.options(field, values, projectId)
+  const options = (field: BusinessFormField, values: BusinessFormValues) => pickers.options(field, values, projectId, opened ?? {})
 
   const save = (values: BusinessFormValues) => {
     if (busy) return

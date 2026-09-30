@@ -354,6 +354,7 @@ describe("a subscription", () => {
     assert.deepEqual(record.submittedValues, {
       agreementId: "agreement-2408",
       productId: `product-${PRODUCT}`,
+      placeKind: "property",
       propertyId: `property-${PROPERTY}`,
       quantity: "1",
       validFrom: "2026-01-01",
@@ -374,6 +375,7 @@ describe("a subscription", () => {
     assert.equal(pending.facts.Quantity, "2")
     assert.equal(pending.submittedValues?.propertyId, undefined)
     assert.equal(pending.submittedValues?.sharedPointId, `shared-point-${POINT}`)
+    assert.equal(pending.submittedValues?.placeKind, "shared-point", "the edit form shows the point's field")
     assert.equal(pending.submittedValues?.validTo, undefined)
     assert.equal(subscriptionAdapter.toRecord(subEnded, context(resolveLoaded)).status, "Expired")
   })

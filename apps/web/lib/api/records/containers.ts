@@ -352,7 +352,7 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
       if (placement.effectiveServiceFrequencyId !== null) facts["Service frequency"] = nameVia(context, "frequency", placement.effectiveServiceFrequencyId)
     }
     if (resource.notes !== null) facts.Notes = resource.notes
-    const place = containerPlace(resource.placements, projectWebId, project === undefined ? undefined : typed(project, "timezone"), context)
+    const place = containerPlace(placement, projectWebId, project === undefined ? undefined : typed(project, "timezone"), context)
     Object.assign(facts, place.facts)
     return {
       id: webIdOf(CONTAINER_PREFIX, resource.id),

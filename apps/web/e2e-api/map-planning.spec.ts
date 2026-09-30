@@ -64,21 +64,20 @@ test("the Containers list mirrors the selection of the server's placed container
   await panel.getByRole("heading", { name: "Selected area" }).hover()
   await expect(page.locator("[data-marker][data-highlighted]")).toHaveCount(0)
 
-  // Fraction row → markers.
+  // Fraction row → markers; then back to the heading, so the markers have re-rendered unhighlighted before the pointer enters one.
   await panel.locator("[data-fraction-row]").first().hover()
   await expect(page.locator('[data-marker][data-highlighted="true"]').first()).toBeVisible()
+  await panel.getByRole("heading", { name: "Selected area" }).hover()
+  await expect(page.locator("[data-marker][data-highlighted]")).toHaveCount(0)
 
-  // Marker → row: a selected marker clear of the panel, which covers the map's left edge.
-  const marker = await page.evaluate(() => {
+  // Marker → row: a selected marker clear of the panel, which covers the map's left edge, hovered as an element so the pointer lands once it stands still.
+  const selectedMarkers = page.locator('[data-marker][data-selected="true"]')
+  const clear = await selectedMarkers.evaluateAll((nodes) => {
     const panelRight = document.querySelector('[data-testid="selected-area"]')!.getBoundingClientRect().right
-    for (const node of document.querySelectorAll('[data-marker][data-selected="true"]')) {
-      const box = node.getBoundingClientRect()
-      if (box.left > panelRight + 8) return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
-    }
-    return null
+    return nodes.findIndex((node) => node.getBoundingClientRect().left > panelRight + 8)
   })
-  if (!marker) throw new Error("no selected marker clear of the panel")
-  await page.mouse.move(marker.x, marker.y)
+  if (clear < 0) throw new Error("no selected marker clear of the panel")
+  await selectedMarkers.nth(clear).hover()
   await expect(rows.locator('xpath=self::*[@data-highlighted="true"]').first()).toBeVisible()
   await page.locator(CANVAS).hover({ position: { x: 5, y: 5 } })
   await expect(rows.locator('xpath=self::*[@data-highlighted="true"]')).toHaveCount(0)

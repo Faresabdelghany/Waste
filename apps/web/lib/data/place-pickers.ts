@@ -8,14 +8,28 @@
 import { splitList } from "@waste/domain/record-values"
 
 import { isSubscriptionRecord } from "./agreements"
-import type { BusinessFormField, BusinessFormOption } from "./business-form-types"
+import type { BusinessFormField, BusinessFormOption, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord } from "./business-modules"
+import { NO_ONE } from "./properties"
 
 /** A row as a picker offers it: its name, and its status beside it where it is not Active. */
 const optionOf = (record: BusinessRecord, label = record.name): BusinessFormOption => ({ value: record.id, label: record.status === "Active" ? label : `${label} · ${record.status}` })
 
 /** Every row, named, its status beside it where it is not Active. */
 export const rowOptions = (records: readonly BusinessRecord[]): BusinessFormOption[] => records.map((record) => optionOf(record))
+
+/** The rows of a single optional pick, None first: a select cannot be emptied, so taking a pick back is picking None (`NO_ONE`). */
+export const optionalRowOptions = (records: readonly BusinessRecord[]): BusinessFormOption[] => [{ value: NO_ONE, label: "None" }, ...rowOptions(records)]
+
+/**
+ * The value a picker keeps offered although no row holds it: the one the
+ * dialog opened with — a create opens with nothing (`{}`), an edit with the
+ * row's values — so a pick made since and no longer offered, a member ticked
+ * before the project changed, is flagged by the dialog and never kept. A
+ * dialog that says nothing of its opening keeps what it holds, as before.
+ */
+export const keptValue = (fieldId: string, values: BusinessFormValues, opened: BusinessFormValues | undefined): BusinessFormValues[string] | undefined =>
+  opened === undefined ? values[fieldId] : opened[fieldId]
 
 /** The agreements module's subscriptions of the project (every one where the form names none), each named with its place. */
 export function subscriptionOptions(records: readonly BusinessRecord[], projectId: string | undefined): BusinessFormOption[] {

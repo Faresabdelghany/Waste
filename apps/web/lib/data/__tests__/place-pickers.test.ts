@@ -9,7 +9,8 @@ import { describe, test } from "node:test"
 
 import type { BusinessFormField } from "../business-form-types"
 import type { BusinessRecord } from "../business-modules"
-import { keptOptions, rowOptions, subscriptionOptions } from "../place-pickers"
+import { keptOptions, keptValue, optionalRowOptions, rowOptions, subscriptionOptions } from "../place-pickers"
+import { NO_ONE } from "../properties"
 
 const row = (id: string, name: string, status: string, over: Partial<BusinessRecord> = {}): BusinessRecord => ({
   id,
@@ -67,5 +68,23 @@ describe("the value a form opens with", () => {
 
   test("keeps each pick of a multiselect on its own", () => {
     assert.deepEqual(keptOptions(multiselect, offered, "contact-mikkel, customer-01a0d2a4-a280-700b-8000-000000000009"), [...offered, { value: "customer-01a0d2a4-a280-700b-8000-000000000009", label: "customer-01a0d2a4-a280-700b-8000-000000000009" }])
+  })
+
+  test("is the value the dialog opened with, not a pick made since: a member ticked before the project changed is flagged, not kept", () => {
+    const opened = { memberPropertyIds: "property-a" }
+    const now = { memberPropertyIds: "property-a, property-b" }
+    assert.equal(keptValue(multiselect.id, now, opened), undefined, "no such field opened")
+    assert.equal(keptValue("memberPropertyIds", now, opened), "property-a")
+    assert.equal(keptValue("memberPropertyIds", now, {}), undefined, "a create opens with nothing to keep")
+    assert.equal(keptValue("memberPropertyIds", now, undefined), "property-a, property-b", "a dialog that says nothing of its opening keeps what it holds, as before")
+  })
+})
+
+describe("an optional single pick", () => {
+  test("offers None first, so a responsible customer picked can be taken back", () => {
+    assert.deepEqual(optionalRowOptions([row("contact-mikkel", "Mikkel Sørensen", "Active")]), [
+      { value: NO_ONE, label: "None" },
+      { value: "contact-mikkel", label: "Mikkel Sørensen" },
+    ])
   })
 })
