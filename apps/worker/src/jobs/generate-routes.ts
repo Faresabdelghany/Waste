@@ -48,6 +48,17 @@
 // skip's instant (which the table's checks demand beside the status), and
 // nothing else, so identical inputs give identical rows (ADR-0002).
 //
+// Once the run's transaction has committed, and outside it (#124 §4), the
+// routes it created or reshaped — a stop inserted, moved, brought back or
+// skipped, the depot or the station changed — are handed to the horizon
+// (routing-horizon.ts, #172), which asks a Plan for each operating inside
+// tomorrow…today + 7, one transaction per route. Generation never calls the
+// provider and never waits on it; a route whose ask fails is a line in the
+// log, never the run's failure, and waits for the night's sweep. A route
+// whose Plan was active stays on it meanwhile, read stale (#124 §2). A
+// replay asks nothing: the run it finds `succeeded` asked already, and the
+// sweep covers a crash between the commit and the asks.
+//
 // The payload carries the company beside the run, so the handler opens the
 // fenced transaction without a cross-tenant read first; the sender knows both.
 // The queue's name and the payload are @waste/db/commands/generation's, since
@@ -88,6 +99,7 @@ import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm"
 
 import { defineJob, type JobContext } from "./definition"
 import { loggable } from "./loggable"
+import { planReshaped, type HorizonAsks, type ReshapedRoute } from "./routing-horizon"
 import { daysWithBoundary, stopCandidatesByDay } from "./stop-matching"
 
 /** What one run did, as the run row records it. */
@@ -104,8 +116,11 @@ export type GenerationCounts = {
 /** A draft plans nothing: said on the run rather than thrown, since it is the scheme's state and not a failure. */
 export const DRAFT_GENERATES_NOTHING = "The scheme is a draft; a draft generates nothing"
 
-/** The outcome of a run's transaction: the counts, or that the run was already done. */
-type Outcome = { kind: "succeeded"; counts: GenerationCounts } | { kind: "already-done"; status: string }
+/** What a run's transaction came to: the counts and the routes it created or reshaped, or that the run was already done. */
+type Generated = { kind: "succeeded"; counts: GenerationCounts; projectId: string; reshaped: ReshapedRoute[] } | { kind: "already-done"; status: string }
+
+/** What a run came to: the counts and the Plans the horizon asked for its routes (routing-horizon.ts), or that the run was already done. */
+type Outcome = { kind: "succeeded"; counts: GenerationCounts; horizon: HorizonAsks } | { kind: "already-done"; status: string }
 
 /** The block of numbers the creates take: one `update … returning` under the company's row lock; the first number of the block. */
 async function takeNumbers(tx: Tx, companyId: string, count: number): Promise<number> {
@@ -129,7 +144,7 @@ const pickupColumnsOf = (stop: PlannedStop) => ({
 })
 
 /** The generation over one run, inside the fenced transaction. */
-async function generate(tx: Tx, runId: string, companyId: string, at: Date): Promise<Outcome> {
+async function generate(tx: Tx, runId: string, companyId: string, at: Date): Promise<Generated> {
   const [run] = await tx.select().from(generationRun).where(and(eq(generationRun.companyId, companyId), eq(generationRun.id, runId))).for("update")
   if (run === undefined) throw new Error(`no generation run ${runId} in company ${companyId}`)
   if (run.status === "succeeded") return { kind: "already-done", status: run.status }
@@ -140,9 +155,11 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
   if (scheme === undefined) throw new Error(`no route scheme ${run.routeSchemeId} for generation run ${run.id}`)
 
   const counts: GenerationCounts = { routesCreated: 0, routesRefreshed: 0, routesCancelled: 0, pickupsWritten: 0, holidaysSkipped: 0, unlocated: 0, warnings: [] }
+  // The routes whose stops or ends this run wrote: the horizon's to ask a Plan for, once the transaction has committed.
+  const reshaped: ReshapedRoute[] = []
   if (scheme.status !== "validated") {
     counts.warnings.push(DRAFT_GENERATES_NOTHING)
-    return { kind: "succeeded", counts }
+    return { kind: "succeeded", counts, projectId: run.projectId, reshaped }
   }
 
   // The scheme's groups by position, ties by id, with their rule sets and picked containers.
@@ -311,6 +328,7 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
       if (stops.length > 0) {
         await tx.insert(pickup).values(stops.map((stop) => ({ ...scope, routeId: created.id, ...pickupColumnsOf(stop) })))
       }
+      reshaped.push({ id: created.id, operatingDate: decision.operatingDate })
       counts.routesCreated += 1
       counts.pickupsWritten += stops.length
       continue
@@ -319,18 +337,20 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
     // A refresh: what differs is written, and only that.
     const current = existingRouteOf.get(decision.routeId)!
     const changes = pickupChanges(pickupsOf(decision.routeId), stops)
+    const endsMoved = current.depotId !== assignment.depotId || current.unloadingStationId !== assignment.unloadingStationId
     const routeMoved =
       decision.resurrect ||
+      endsMoved ||
       current.operatingDate !== decision.operatingDate ||
       current.note !== decision.note ||
       current.plannedStartTime !== assignment.plannedStartTime ||
       current.plannedVehicleId !== assignment.plannedVehicleId ||
       current.plannedDriverId !== assignment.plannedDriverId ||
-      current.plannedServiceProviderId !== assignment.plannedServiceProviderId ||
-      current.depotId !== assignment.depotId ||
-      current.unloadingStationId !== assignment.unloadingStationId
+      current.plannedServiceProviderId !== assignment.plannedServiceProviderId
     const pickupsMoved = changes.insert.length + changes.update.length + changes.skip.length > 0
     if (!routeMoved && !pickupsMoved) continue
+    // Reshaped: a stop inserted, moved, brought back or skipped — a route brought back brings its stops back — or an end changed: what a Plan is over (#124 §2). A new note, day or crew is not.
+    if (pickupsMoved || endsMoved) reshaped.push({ id: decision.routeId, operatingDate: decision.operatingDate })
 
     await tx
       .update(route)
@@ -373,14 +393,21 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
     await tx.insert(generationMatch).values({ ...scope, collectionGroupId: group.id, generationRunId: run.id, ruleSignature: next.ruleSignature, containerIds: [...next.containerIds] })
   }
 
-  return { kind: "succeeded", counts }
+  return { kind: "succeeded", counts, projectId: run.projectId, reshaped }
 }
 
-/** Runs one generation run to its end: succeeded with its counts, or failed with the error on the row and rethrown for pg-boss to retry. */
-export async function runGeneration(data: GenerateRoutesData, jobId: string | null, { api, now, log }: Pick<JobContext, "api" | "now" | "log">): Promise<Outcome> {
+/**
+ * Runs one generation run to its end: succeeded with its counts, or failed
+ * with the error on the row and rethrown for pg-boss to retry. Once the run
+ * has committed, the horizon asks its created and reshaped routes their Plans
+ * (routing-horizon.ts), which never fails the run.
+ */
+export async function runGeneration(data: GenerateRoutesData, jobId: string | null, context: JobContext): Promise<Outcome> {
+  const { api, now, log } = context
   const startedAt = now()
+  let generated: Generated
   try {
-    return await withCompany(api.db, data.companyId, async (tx) => {
+    generated = await withCompany(api.db, data.companyId, async (tx) => {
       const outcome = await generate(tx, data.generationRunId, data.companyId, startedAt)
       if (outcome.kind === "succeeded") {
         await tx
@@ -401,6 +428,9 @@ export async function runGeneration(data: GenerateRoutesData, jobId: string | nu
     )
     throw error
   }
+  if (generated.kind === "already-done") return generated
+  const horizon = await planReshaped(context, { companyId: data.companyId, projectId: generated.projectId }, generated.reshaped)
+  return { kind: "succeeded", counts: generated.counts, horizon }
 }
 
 export const generateRoutes = defineJob<GenerateRoutesData>({
@@ -412,7 +442,9 @@ export const generateRoutes = defineJob<GenerateRoutesData>({
     const outcomes: Array<{ runId: string; outcome: string }> = []
     for (const job of jobs) {
       const outcome = await runGeneration(job.data, job.id, context)
-      context.log(`${GENERATE_ROUTES_QUEUE}: run ${job.data.generationRunId} ${outcome.kind === "succeeded" ? `succeeded (${outcome.counts.routesCreated} created, ${outcome.counts.routesRefreshed} refreshed, ${outcome.counts.routesCancelled} cancelled, ${outcome.counts.pickupsWritten} pickups)` : `already ${outcome.status}`} (job ${job.id})`)
+      context.log(
+        `${GENERATE_ROUTES_QUEUE}: run ${job.data.generationRunId} ${outcome.kind === "succeeded" ? `succeeded (${outcome.counts.routesCreated} created, ${outcome.counts.routesRefreshed} refreshed, ${outcome.counts.routesCancelled} cancelled, ${outcome.counts.pickupsWritten} pickups; ${outcome.horizon.asked.length} asked a Plan${outcome.horizon.failed.length === 0 ? "" : `, ${outcome.horizon.failed.length} left to the sweep`})` : `already ${outcome.status}`} (job ${job.id})`,
+      )
       outcomes.push({ runId: job.data.generationRunId, outcome: outcome.kind })
     }
     return { runs: outcomes }

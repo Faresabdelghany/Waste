@@ -3,10 +3,11 @@
 // every sender makes. A Plan is asked for from the office twice over —
 // `POST /routes/:id/optimise` and the reorder that becomes a `manual` Plan
 // (apps/api) — and, from #172 on, by generation and the horizon sweep
-// (apps/worker); each sender writes the `plan` row (a known sequence's stops
-// with it, #124 §1) and sends the job in one transaction, so the names, the
-// payload and the writes are spelled here, once, rather than in two apps that
-// cannot import each other.
+// (apps/worker); each sender asks through `ensurePlan`, which writes the
+// `plan` row (a known sequence's stops with it, #124 §1) and sends the job in
+// the sender's transaction, so the names, the payload, the fingerprint and
+// the writes are spelled here, once, rather than in two apps that cannot
+// import each other — the office's Plans and the horizon's meet in one cache.
 //
 // Both queues are `exclusive` and every send carries the Plan's id as
 // `singletonKey` (the worker's registry creates the queues so): one Plan never
@@ -20,13 +21,18 @@
 // `interactive`, the horizon's `batch` — and its priority follows from the
 // class and the route's operating date (`routingSendOptions`), the first send
 // and a deferral's re-send alike, so a deferred job keeps its place.
+import type { Point } from "@waste/contracts/geojson"
+import { planFingerprint, type FingerprintPosition } from "@waste/domain/routing/fingerprint"
 import { routingJobPriority } from "@waste/domain/routing/jobs"
-import { SUPERSEDED, type RoutingJobClass } from "@waste/domain/routing/vocabulary"
-import { asc, eq, and, desc, lt, ne, sql } from "drizzle-orm"
+import { activeOnCreation, tripOf } from "@waste/domain/routing/plans"
+import { SUPERSEDED, type PlanSolver, type PlanTrip, type RoutingJobClass } from "@waste/domain/routing/vocabulary"
+import { asc, eq, and, desc, inArray, lt, ne, sql } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import { jobHeld, sendInTransaction, type Send, type SendInTransactionOptions } from "../jobs"
-import { route } from "../schema/execution"
+import { property, sharedCollectionPoint } from "../schema/customers"
+import { pickup, route } from "../schema/execution"
+import { depot, unloadingStation } from "../schema/places"
 import { plan, planStop } from "../schema/routing"
 
 /** The queue a `baseline` or `manual` Plan's measurement is sent to and worked on. */
@@ -34,6 +40,9 @@ export const ROUTING_MEASURE_QUEUE = "routing.measure"
 
 /** The queue an `optimiser` Plan is sent to; its worker arrives with #171 (S3), and a job waits until it does. */
 export const ROUTING_OPTIMISE_QUEUE = "routing.optimise"
+
+/** The queue a Plan of this solver is worked on: the optimiser's own, or the measurement's for a known sequence. */
+export const routingQueueOf = (solver: PlanSolver): string => (solver === "optimiser" ? ROUTING_OPTIMISE_QUEUE : ROUTING_MEASURE_QUEUE)
 
 /** What a routing job carries, on either queue. */
 export type RoutingJobData = {
@@ -183,4 +192,132 @@ export async function planStopIds(tx: Tx, keys: { companyId: string; planId: str
     .where(and(eq(planStop.companyId, keys.companyId), eq(planStop.planId, keys.planId)))
     .orderBy(asc(planStop.position))
   return rows.map((row) => row.pickupId)
+}
+
+const positionOf = (location: Point | null): FingerprintPosition | null => (location === null ? null : [location.coordinates[0], location.coordinates[1]])
+
+/** What a Plan's fingerprint reads of the route (#124 §4, corrected by #132 §6): the ends the result depends on and each stop's coordinates, an unlocated one keying as none. */
+async function fingerprintParts(tx: Tx, companyId: string, routeRow: { id: string; depotId: string | null; unloadingStationId: string | null }, solver: PlanSolver, orderedPickupIds: readonly string[]) {
+  const trip = tripOf({ hasDepot: routeRow.depotId !== null, hasStation: routeRow.unloadingStationId !== null })
+  const located =
+    orderedPickupIds.length === 0
+      ? []
+      : await tx
+          .select({ id: pickup.id, property: property.location, point: sharedCollectionPoint.location })
+          .from(pickup)
+          .leftJoin(property, and(eq(property.companyId, pickup.companyId), eq(pickup.propertyId, property.id)))
+          .leftJoin(sharedCollectionPoint, and(eq(sharedCollectionPoint.companyId, pickup.companyId), eq(pickup.sharedCollectionPointId, sharedCollectionPoint.id)))
+          .where(and(eq(pickup.companyId, companyId), inArray(pickup.id, [...orderedPickupIds])))
+  // An unlocated stop keys by its pickup id (#170): the request still fingerprints, and two orders over unlocated stops stay two.
+  const at = new Map(located.map((row) => [row.id, positionOf(row.property) ?? positionOf(row.point)] as const))
+  // A full trip measures both ends; the optimiser orders from the depot on any trip (#171).
+  const depotId = trip === "full" || solver === "optimiser" ? routeRow.depotId : null
+  const stationId = trip === "full" ? routeRow.unloadingStationId : null
+  const [[home], [station]] = await Promise.all([
+    depotId === null
+      ? []
+      : tx
+          .select({ location: depot.location })
+          .from(depot)
+          .where(and(eq(depot.companyId, companyId), eq(depot.id, depotId)))
+          .limit(1),
+    stationId === null
+      ? []
+      : tx
+          .select({ location: unloadingStation.location })
+          .from(unloadingStation)
+          .where(and(eq(unloadingStation.companyId, companyId), eq(unloadingStation.id, stationId)))
+          .limit(1),
+  ])
+  const ends = { depot: positionOf(home?.location ?? null), station: positionOf(station?.location ?? null) }
+  return { trip, ...ends, stops: orderedPickupIds.map((id) => at.get(id) ?? id) }
+}
+
+/**
+ * What a request over the route keys on: its trip, and its fingerprint over
+ * the ends the result depends on and each stop's place (#124 §4, corrected by
+ * #132 §6). The one spelling the cache lookup below and the horizon's
+ * question — does the active Plan still answer the route? — share.
+ */
+export async function planKey(
+  tx: Tx,
+  companyId: string,
+  routeRow: { id: string; depotId: string | null; unloadingStationId: string | null },
+  request: { solver: PlanSolver; orderedPickupIds: readonly string[] },
+  routing: { name: string; profile: string },
+): Promise<{ trip: PlanTrip; fingerprint: string }> {
+  const parts = await fingerprintParts(tx, companyId, routeRow, request.solver, request.orderedPickupIds)
+  const fingerprint = planFingerprint({
+    provider: routing.name,
+    profile: routing.profile,
+    solver: request.solver,
+    depot: parts.depot,
+    station: parts.station,
+    stops: parts.stops,
+  })
+  return { trip: parts.trip, fingerprint }
+}
+
+export type EnsuredPlan = { planId: string; created: boolean }
+
+/**
+ * The one door a Plan is asked for through: fingerprint, cache, create,
+ * activate, enqueue — all in the caller's transaction, the provider never
+ * called (#124 §4: the call is the job's, outside any transaction). A `ready`
+ * match is re-activated and consumes no call; a `calculating` one is answered
+ * as it stands (its job held, or re-sent, under the Plan-id singleton); a `failed` one is
+ * retried with a new Plan. The office asks through it `interactive` (apps/api,
+ * routes/plan-shapes.ts), the horizon `batch` (apps/worker, #172). A queue no
+ * worker has made throws `QueueMissing` from the send, for the caller to answer.
+ */
+export async function ensurePlan(
+  tx: Tx,
+  companyId: string,
+  routeRow: { id: string; projectId: string; operatingDate: string; depotId: string | null; unloadingStationId: string | null },
+  request: { solver: PlanSolver; orderedPickupIds: readonly string[]; class: RoutingJobClass },
+  { routing, send: sendJob }: { routing: { name: string; profile: string }; send: Send },
+): Promise<EnsuredPlan> {
+  const { trip, fingerprint } = await planKey(tx, companyId, routeRow, request, routing)
+  // A match is reusable only when its stops are the request's very pickups: the
+  // fingerprint keys coordinates, and regeneration re-mints ids at the same
+  // places — replaying such a Plan would answer the baseline while claiming the
+  // order. An optimiser Plan still calculating has no stops to compare and its
+  // solver reads the route's stops when it runs, so it is reused as it stands.
+  const sameStops = async (matchId: string): Promise<boolean> => {
+    const named = await planStopIds(tx, { companyId, planId: matchId })
+    return named.length === request.orderedPickupIds.length && new Set(named).size === new Set([...named, ...request.orderedPickupIds]).size
+  }
+  const queue = routingQueueOf(request.solver)
+  const send = async (planId: string) => {
+    // The Plan's id keys the singleton: one live job per Plan, and Plans of one (route, fingerprint) are already
+    // deduplicated above — a queue-wide fingerprint key would let another route's identical trip swallow this send.
+    await sendRoutingJob(sendJob, tx, queue, { planId, companyId, class: request.class }, routeRow)
+  }
+  const matches = await plansMatching(tx, { companyId, routeId: routeRow.id, fingerprint })
+  const ready = matches.find((match) => match.status === "ready")
+  if (ready !== undefined && (await sameStops(ready.id))) {
+    await activatePlan(tx, { companyId, routeId: routeRow.id, planId: ready.id })
+    return { planId: ready.id, created: false }
+  }
+  const calculating = matches.find((match) => match.status === "calculating")
+  if (calculating !== undefined && (request.solver === "optimiser" || (await sameStops(calculating.id)))) {
+    // The order is applied, not merely acknowledged: a manual or baseline match becomes the active Plan again.
+    if (activeOnCreation(request.solver)) await activatePlan(tx, { companyId, routeId: routeRow.id, planId: calculating.id })
+    // And its job may be gone (retries exhausted, the row archived): re-send under the same key, #187's hardening.
+    if (!(await routingJobHeld(tx, queue, calculating.id))) await send(calculating.id)
+    return { planId: calculating.id, created: false }
+  }
+  const planId = await createPlan(tx, {
+    companyId,
+    projectId: routeRow.projectId,
+    routeId: routeRow.id,
+    solver: request.solver,
+    trip,
+    provider: routing.name,
+    fingerprint,
+    stops: request.solver === "optimiser" ? [] : request.orderedPickupIds,
+  })
+  if (activeOnCreation(request.solver)) await activatePlan(tx, { companyId, routeId: routeRow.id, planId })
+  await send(planId)
+  return { planId, created: true }
 }

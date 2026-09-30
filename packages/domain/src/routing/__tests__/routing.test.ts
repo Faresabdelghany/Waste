@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { activeOnCreation, executionOrder, isSuperseded, OPTIMISER_MAX_STOPS, optimiseSolver, planIsStale, tripOf } from "../plans"
+import { activeOnCreation, executionOrder, horizonRequest, isSuperseded, OPTIMISER_MAX_STOPS, optimiseSolver, planIsStale, tripOf } from "../plans"
 import { FINGERPRINT_DECIMALS, planFingerprint, roundCoordinate } from "../fingerprint"
 import { routingJobPriority } from "../jobs"
 import { OPTIMISE_FALLBACKS, PLAN_SOLVERS, PLAN_STATUSES, PLAN_TRIPS, ROUTING_JOB_CLASSES, ROUTING_QUOTA_FAMILIES, ROUTING_VOCABULARIES, SUPERSEDED } from "../vocabulary"
@@ -117,6 +117,47 @@ describe("staleness: a reading, never a status (#124 §2)", () => {
   test("a stop decided by the driver is progress, not staleness", () => {
     // "b" completed: no longer open, not removed by regeneration — the Plan stands.
     assert.equal(planIsStale({ named: ["a", "b"], open: ["a"], removed: [] }), false)
+  })
+})
+
+describe("what the horizon asks of a route (#172: generation and the sweep, over #124 §2 and §4)", () => {
+  const none = { optimisationWaiting: false }
+
+  test("without an active Plan, the Optimise request's size rule over the open stops in baseline order: the optimiser from a depot, a baseline without one", () => {
+    assert.deepEqual(horizonRequest({ open: ["a", "b"], hasDepot: true, active: null, ...none }), { solver: "optimiser", orderedPickupIds: ["a", "b"] })
+    assert.deepEqual(horizonRequest({ open: ["a", "b"], hasDepot: false, active: null, ...none }), { solver: "baseline", orderedPickupIds: ["a", "b"] })
+  })
+
+  test("more than fifty open stops are measured as a baseline, depot or not; fifty still go to the optimiser", () => {
+    const open = Array.from({ length: 51 }, (_, index) => `stop-${index + 1}`)
+    const asked = horizonRequest({ open, hasDepot: true, active: null, ...none })
+    assert.equal(asked?.solver, "baseline")
+    assert.deepEqual(asked?.orderedPickupIds.slice(0, 2), ["stop-1", "stop-2"])
+    assert.equal(asked?.orderedPickupIds.length, 51)
+    assert.equal(horizonRequest({ open: open.slice(0, 50), hasDepot: true, active: null, ...none })?.solver, "optimiser")
+  })
+
+  test("under a machine's order — an optimiser's or a baseline — the size rule again: a stale machine order is simply asked anew", () => {
+    assert.deepEqual(horizonRequest({ open: ["a", "b", "c"], hasDepot: true, active: { solver: "optimiser", named: ["b", "a"] }, ...none }), { solver: "optimiser", orderedPickupIds: ["a", "b", "c"] })
+    assert.deepEqual(horizonRequest({ open: ["a", "b", "c"], hasDepot: false, active: { solver: "baseline", named: ["a", "b"] }, ...none }), { solver: "baseline", orderedPickupIds: ["a", "b", "c"] })
+  })
+
+  test("under a dispatcher's manual order, a new manual Plan over the order the driver already reads: the named stops in the dispatcher's sequence, a new one appended in baseline order", () => {
+    assert.deepEqual(horizonRequest({ open: ["a", "b", "c", "d"], hasDepot: true, active: { solver: "manual", named: ["c", "a", "b"] }, ...none }), { solver: "manual", orderedPickupIds: ["c", "a", "b", "d"] })
+  })
+
+  test("a stop regeneration removed leaves the dispatcher's sequence of the rest, never the optimiser, whatever the route's size or depot", () => {
+    assert.deepEqual(horizonRequest({ open: ["a", "c"], hasDepot: true, active: { solver: "manual", named: ["c", "b", "a"] }, ...none }), { solver: "manual", orderedPickupIds: ["c", "a"] })
+    const open = Array.from({ length: 60 }, (_, index) => `stop-${index + 1}`)
+    const asked = horizonRequest({ open, hasDepot: false, active: { solver: "manual", named: ["stop-60", "stop-1"] }, ...none })
+    assert.equal(asked?.solver, "manual")
+    assert.deepEqual(asked?.orderedPickupIds.slice(0, 3), ["stop-60", "stop-1", "stop-2"])
+  })
+
+  test("an optimisation the dispatcher asked after their reorder, still waiting, is left to answer: nothing is asked over it, since a manual Plan made active would fail it", () => {
+    assert.equal(horizonRequest({ open: ["a", "b", "c"], hasDepot: true, active: { solver: "manual", named: ["b", "a"] }, optimisationWaiting: true }), null)
+    // Under a machine's order the size rule's request makes nothing active over the waiting one, so it is asked as ever.
+    assert.deepEqual(horizonRequest({ open: ["a", "b", "c"], hasDepot: true, active: { solver: "optimiser", named: ["b", "a"] }, optimisationWaiting: true }), { solver: "optimiser", orderedPickupIds: ["a", "b", "c"] })
   })
 })
 

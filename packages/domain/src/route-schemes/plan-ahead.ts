@@ -23,7 +23,8 @@ import {
 import { effectiveSchemeStatus, recordGenerationRun } from "./lifecycle"
 import { addDays, recurrenceFromValues } from "./recurrence"
 
-const PLAN_AHEAD_DAYS = 7
+/** How far ahead an auto-run covers, from tomorrow: the worker's SQL renders "today" per project and reads the window's end off this. */
+export const PLAN_AHEAD_DAYS = 7
 
 /** Tomorrow through the next 7 days — today's routes are already operating. */
 export function planAheadWindow(today: string): GenerationWindow {
