@@ -176,13 +176,14 @@ const withGroups = (groups: (current: SchemeGroup[]) => SchemeGroup[], serviceDa
 const request = (call: Call) => `${call.init.method ?? "GET"} ${call.url.replace("http://api.test", "")}`
 
 describe("the route schemes module", () => {
-  test("is switched, and loads last: after every module a scheme and its groups name a row of", () => {
+  test("is switched, after every module a scheme and its groups name a row of, and before the routes, which name their scheme", () => {
     assert.ok(isServerBacked("route-studio", "schemes"))
     const at = SERVER_MODULE_KEYS.indexOf("route-studio.schemes")
     for (const before of ["configure.organization", "service-providers.service-providers", "configure.areas", "configure.master", "resources.depots", "fleet.vehicles", "fleet.drivers"]) {
       assert.ok(SERVER_MODULE_KEYS.indexOf(before) < at, before)
     }
-    assert.equal(at, SERVER_MODULE_KEYS.length - 1, "a module switched later goes in ahead of the schemes (the order on #191)")
+    // Only the routes' modules follow it (#179): a module switched later goes in ahead of the schemes (the order on #191).
+    assert.deepEqual(SERVER_MODULE_KEYS.slice(at + 1), ["route-studio.routes", "route-studio.pickups", "route-studio.live"])
   })
 
   test("loads one list, and lends no fixture its id: a scheme is `scheme-<uuid>` from the start", async () => {

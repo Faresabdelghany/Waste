@@ -18,13 +18,16 @@ import { agreementsModule } from "./agreements"
 import { vehiclePlanningModule } from "./allocations"
 import { containersModule, inventoryModule } from "./containers"
 import { fleetDriversModule, fleetVehiclesModule } from "./fleet"
+import { liveModule } from "./live"
 import { masterDataModule } from "./master-data"
 import { accessModule, organisationModule, serviceProvidersModule } from "./organisation"
+import { pickupsModule } from "./pickups"
 import { placesModule, warehousesModule } from "./places"
 import { collectionCalendarsModule, planningAreasModule } from "./planning"
 import { propertiesModule, propertyGroupsModule, sharedPointsModule } from "./properties"
 import { customersModule } from "./registry"
 import { routeSchemesModule } from "./route-schemes"
+import { routesModule } from "./routes"
 
 /**
  * The switched modules, in load order: a module another module resolves
@@ -41,9 +44,12 @@ import { routeSchemesModule } from "./route-schemes"
  * (#183); the containers after the master data
  * and the warehouses they name, the ledger after the containers its movements
  * name, and the allocations after the fleet and the places they reserve (#181);
- * the route schemes last, after everything a scheme and its groups name —
- * the areas, the master data, the providers, the fleet and the places —
- * so none of it is left an id chip on a scheme (#177).
+ * the route schemes after everything a scheme and its groups name — the
+ * areas, the master data, the providers, the fleet and the places — so none
+ * of it is left an id chip on a scheme (#177); then the routes, which name
+ * their scheme and the fleet and the places of their Planned Assignment, the
+ * pickups after the routes and the containers they name, and the Live board
+ * after the routes whose rows it reads (#179).
  */
 export const SERVER_MODULES: readonly ServerModule[] = [
   organisationModule,
@@ -65,6 +71,9 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   inventoryModule,
   vehiclePlanningModule,
   routeSchemesModule,
+  routesModule,
+  pickupsModule,
+  liveModule,
 ]
 
 const byKey = new Map(SERVER_MODULES.map((module) => [moduleKeyOf(module.workspaceId, module.moduleId), module]))
