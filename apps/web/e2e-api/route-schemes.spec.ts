@@ -96,8 +96,10 @@ test("the seeded schemes are the API's: listed under their derived status, opene
   await openScheme(page, "RS-Østerbro · Organic B")
   // No fixture lends a scheme its id: the page is the server's row.
   await expect(page).toHaveURL(new RegExp(`record=scheme-${osterbro?.id}`))
-  // Seeded without a driver (Lars Møller's licence ran out); the fleet is named by id until it is read from the API.
+  // Seeded without a driver (Lars Møller's licence ran out); its vehicle is named as the fleet module has it (slice 5a), not an id chip.
   await expect(page.getByText("Not assigned", { exact: true }).first()).toBeVisible()
+  await expect(page.getByText(/^NR-08/).first()).toBeVisible()
+  await expect(page.getByText(/^vehicle-[0-9a-f]{8}-/)).toHaveCount(0)
 
   await page.getByRole("tab", { name: "Routes" }).click()
   expect((await occurrences).status()).toBe(200)
@@ -123,9 +125,9 @@ test("quick create lands as a server row: a POST the API answers with its Locati
   await page.getByRole("option", { name: "Monday", exact: true }).click()
   await page.keyboard.press("Escape")
   await pick(dialog, page, "Vehicle type", "Rear loader")
-  // The fleet is not read from the API yet (slice 5a): the pickers offer nothing rather than a fixture the API does not hold.
+  // The fleet is read from the API (slice 5a): the driver picker offers the API's drivers, and none is picked here.
   await dialog.getByRole("combobox", { name: /^Planned driver/ }).click()
-  await expect(page.getByRole("option")).toHaveCount(0)
+  await expect(page.getByRole("option", { name: /Mads Jensen/ })).toBeVisible()
   await page.keyboard.press("Escape")
 
   const [created] = await Promise.all([answerOf(page, "POST", "/route-schemes"), dialog.getByRole("button", { name: "Create route scheme" }).click()])
@@ -133,7 +135,7 @@ test("quick create lands as a server row: a POST the API answers with its Locati
   const body = (await created.json()) as Scheme
   expect(created.headers()["location"]).toBe(`/route-schemes/${body.id}`)
   await expect(dialog).toBeHidden()
-  // No vehicle or driver can be named yet, so the web's validation asks for a draft.
+  // No vehicle or driver was picked, so the web's validation asks for a draft.
   await expect(toasts(page)).toContainText(`Route scheme created as Draft — ${name}`)
 
   const read = await api.get(`/route-schemes/${body.id}`)
