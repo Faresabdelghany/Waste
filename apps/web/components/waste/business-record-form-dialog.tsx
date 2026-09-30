@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowLeft,
   CheckCircle,
@@ -19,6 +19,7 @@ import type {
   BusinessFormValue,
   BusinessFormValues,
 } from "@/lib/data/business-form-types"
+import { formReseeds, type FormSeedEdge } from "@/lib/data/business-form-seed"
 import { splitList } from "@waste/domain/record-values"
 import {
   formatServiceDate,
@@ -431,13 +432,24 @@ export function BusinessRecordFormDialog({
   const [reviewConfirmed, setReviewConfirmed] = useState(false)
   const showInstructions = schema.mode !== "create"
 
+  // Filled as it opens and when it becomes a form of another kind, never on
+  // a new seed of the same form (lib/data/business-form-seed.ts): the schema
+  // and the overrides are read at that edge, through a ref, and not watched.
+  const seed = useRef({ schema, overrides: initialValueOverrides })
   useEffect(() => {
-    if (!open) return
-    setValues(initialValues(schema, initialValueOverrides))
+    seed.current = { schema, overrides: initialValueOverrides }
+  })
+  const lastEdge = useRef<FormSeedEdge | undefined>(undefined)
+  useEffect(() => {
+    const edge = { open, schemaKey: schema.key }
+    const reseeds = formReseeds(lastEdge.current, edge)
+    lastEdge.current = edge
+    if (!reseeds) return
+    setValues(initialValues(seed.current.schema, seed.current.overrides))
     setAttempted(false)
     setStep("form")
     setReviewConfirmed(false)
-  }, [initialValueOverrides, open, schema])
+  }, [open, schema.key])
 
   const fields = useMemo(
     () => schema.sections.flatMap((section) => section.fields),
