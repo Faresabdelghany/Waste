@@ -1,8 +1,8 @@
-import type { APIRequestContext, Page } from "@playwright/test"
+import type { APIRequestContext, Locator, Page } from "@playwright/test"
 
 import { expect, test } from "./fixtures"
 import { uniqueName } from "./env"
-import { projectNamed, TESTER_PROJECT } from "./tester"
+import { listAll, projectNamed, TESTER_PROJECT } from "./tester"
 
 // Scenario 4, the switched Registry modules whose product surfaces write to
 // the API — Service Providers, Contacts & Companies and, since slice 9a of
@@ -19,12 +19,23 @@ import { projectNamed, TESTER_PROJECT } from "./tester"
 // the page's load and the form's submit. The API is the one that knows. The
 // agreements' refusal is #79's gate: a picker hides no customer by status,
 // and the API's 409 says why the inactive one cannot take a new agreement.
+//
+// Since slice 9b (Issue #184), Properties, Property Groups and Shared Points
+// too, through their own forms (components/waste/commands/place-surfaces.tsx):
+// each set — a property's parties, a group's or a point's members — is
+// replaced whole by its one PUT, and #79's gates on a place are shown as they
+// come: a subscription at an inactive property, a placement at a closed point.
 type ServiceProvider = { id: string; legalName: string; registrationNumber: string; country: string; contactName: string; contactEmail: string }
 type Customer = { id: string; kind: "person" | "organisation"; name: string; registrationNumber: string | null; email: string | null; status: string }
 type Agreement = { id: string; projectId: string; number: string; customerId: string; payerCustomerId: string; status: string; billingCadence: string; currency: string; notes: string | null; validFrom: string; validTo: string | null }
 type Subscription = { id: string; agreementId: string; productId: string; propertyId: string | null; sharedCollectionPointId: string | null; quantity: number; validFrom: string; validTo: string | null }
 type Product = { id: string; name: string; status: string }
-type Property = { id: string; name: string }
+type Party = { customerId: string; role: string }
+type Member = { propertyId: string; role: string }
+type Property = { id: string; projectId: string; name: string; address: string; kind: string; status: string; location: { type: "Point"; coordinates: [number, number] } | null; parties: Party[] }
+type PropertyGroup = { id: string; projectId: string; name: string; purpose: string; status: string; members: Member[] }
+type SharedCollectionPoint = { id: string; projectId: string; name: string; kind: string; status: string; location: { type: "Point"; coordinates: [number, number] }; members: Member[] }
+type Container = { id: string; label: string }
 
 /**
  * Eight digits for a registration number, which is unique within the
@@ -206,7 +217,7 @@ async function productThroughApi(api: APIRequestContext, projectId: string, stat
   return (await response.json()) as Product
 }
 
-/** A property of the project a subscription is delivered at; the Properties module is not switched yet (slice 9b), so the form takes its id. */
+/** A property of the project, made before the page loads so the switched properties module lists it for the pickers. */
 async function propertyThroughApi(api: APIRequestContext, projectId: string) {
   const response = await api.post("/properties", { data: { projectId, name: uniqueName("E2E Property"), address: "Parkvej 18, 2100 København Ø", kind: "residential" } })
   expect(response.status(), "POST /properties").toBe(201)
@@ -245,16 +256,17 @@ async function createAgreement(page: Page, values: { number: string; customer: s
   return response
 }
 
-/** Add subscription from the open agreement's sheet: the product and the place as the API's ids, the period prefilled from the agreement's own. */
-async function addSubscription(page: Page, agreementId: string, values: { productId: string; propertyId: string; quantity: string }) {
+/** Add subscription from the open agreement's sheet: the product as the API's id until its module is switched, the property picked by name, the period prefilled from the agreement's own. */
+async function addSubscription(page: Page, agreementId: string, values: { productId: string; property: string; quantity: string }, period = { validFrom: "2026-10-01", validTo: "2026-12-31" }) {
   await page.getByRole("dialog").getByRole("button", { name: "Add subscription" }).click()
   const dialog = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Add subscription" }) })
   await expect(dialog).toBeVisible()
   await dialog.getByLabel("Product").fill(values.productId)
-  await dialog.getByLabel("Property", { exact: true }).fill(values.propertyId)
+  await dialog.getByRole("combobox", { name: /^Property/ }).click()
+  await page.getByRole("option", { name: values.property, exact: true }).click()
   await dialog.getByLabel("Quantity").fill(values.quantity)
-  await expect(dialog.getByLabel("Valid from")).toHaveValue("2026-10-01")
-  await expect(dialog.getByLabel("Valid to")).toHaveValue("2026-12-31")
+  await expect(dialog.getByLabel("Valid from")).toHaveValue(period.validFrom)
+  await expect(dialog.getByLabel("Valid to")).toHaveValue(period.validTo)
   const [response] = await Promise.all([answerOf(page, "POST", `/agreements/${agreementId}/subscriptions`), dialog.getByRole("button", { name: "Add subscription" }).click()])
   return response
 }
@@ -290,8 +302,8 @@ test("Agreements: created in the browser with Location, signed, its subscription
   expect(signed.status()).toBe(200)
   expect(await signed.json()).toMatchObject({ id: agreement.id, status: "active" })
 
-  // A subscription under it: the product and the property by the API's ids, since their modules are not switched yet; two of the product for the agreement's period.
-  const subscribed = await addSubscription(page, agreement.id, { productId: product.id, propertyId: property.id, quantity: "2" })
+  // A subscription under it: the product by the API's id, since its module is not switched yet, the property picked by name (#184); two of the product for the agreement's period.
+  const subscribed = await addSubscription(page, agreement.id, { productId: product.id, property: property.name, quantity: "2" })
   expect(subscribed.status()).toBe(201)
   const subscription = (await subscribed.json()) as Subscription
   expect(subscribed.headers()["location"]).toBe(`/subscriptions/${subscription.id}`)
@@ -312,7 +324,7 @@ test("Agreements: created in the browser with Location, signed, its subscription
   // #79 on a subscription: a draft product cannot be subscribed to, and the API's sentence is shown.
   await openAgreementsLoaded(page)
   await (await rowNamed(page, `${number} · ${customer.name}`)).click()
-  const refusedProduct = await addSubscription(page, agreement.id, { productId: draftProduct.id, propertyId: property.id, quantity: "1" })
+  const refusedProduct = await addSubscription(page, agreement.id, { productId: draftProduct.id, property: property.name, quantity: "1" })
   expect(refusedProduct.status()).toBe(409)
   await expect(page.getByText("The product is draft; only an active product can be subscribed to")).toBeVisible()
 
@@ -337,4 +349,219 @@ test("Agreements: created in the browser with Location, signed, its subscription
   await openAgreementsLoaded(page)
   await expect(await rowNamed(page, `${number} · ${customer.name}`)).toBeVisible()
   await expect(await rowNamed(page, otherNumber)).toHaveCount(0)
+})
+
+// ---------------------------------------------------------------------------
+// Properties, property groups and shared collection points (slice 9b, #184)
+// ---------------------------------------------------------------------------
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+const byProperty = (a: Member, b: Member) => a.propertyId.localeCompare(b.propertyId)
+const byParty = (a: Party, b: Party) => `${a.customerId} ${a.role}`.localeCompare(`${b.customerId} ${b.role}`)
+
+/** Picks one option of a select in `dialog`, by the start of its label. */
+async function pickOne(page: Page, dialog: Locator, field: string, option: RegExp) {
+  await dialog.getByRole("combobox", { name: new RegExp(`^${field}`) }).click()
+  await page.getByRole("option", { name: option }).first().click()
+}
+
+/** Ticks (or unticks) rows of a multiselect in `dialog`, each found through the picker's own search, then closes the picker. */
+async function pickMany(page: Page, dialog: Locator, field: string, names: readonly string[]) {
+  await dialog.getByRole("combobox", { name: new RegExp(`^${field}`) }).click()
+  for (const name of names) {
+    await page.getByPlaceholder(`Search ${field.toLowerCase()}`).fill(name)
+    await page.getByRole("option", { name, exact: true }).click()
+  }
+  await page.keyboard.press("Escape")
+}
+
+/** The browser's `PUT` of a set, by its path. */
+const setReplaced = (page: Page, path: string) => page.waitForResponse((response) => response.request().method() === "PUT" && new URL(response.url()).pathname === `/waste-api${path}`)
+
+/** A running agreement of the project a subscription can be added under, from 2026-10-01 to the year's end. */
+async function agreementThroughApi(api: APIRequestContext, projectId: string, customerId: string) {
+  const number = uniqueName("E2E-AGR").replace(/\s+/g, "-").toUpperCase()
+  const response = await api.post("/agreements", { data: { projectId, number, customerId, payerCustomerId: customerId, status: "active", billingCadence: "monthly", currency: "DKK", validFrom: "2026-10-01", validTo: "2027-01-01" } })
+  expect(response.status(), "POST /agreements").toBe(201)
+  return (await response.json()) as Agreement
+}
+
+/** A container of the project received into one of its warehouses: in stock, so the door into service is open to it. */
+async function receivedContainerThroughApi(api: APIRequestContext, projectId: string) {
+  const [types, warehouses] = await Promise.all([listAll<{ id: string }>(api, "/container-types"), listAll<{ id: string; projectId: string; status: string }>(api, "/warehouses")])
+  const warehouse = warehouses.find((candidate) => candidate.projectId === projectId && candidate.status === "active")
+  if (warehouse === undefined || types.length === 0) throw new Error("the seeded tenant has no container type or no active warehouse in the project")
+  const created = await api.post("/containers", { data: { projectId, label: uniqueName("E2E-BIN").replace(/\s+/g, "-"), containerTypeId: types[0].id } })
+  expect(created.status(), "POST /containers").toBe(201)
+  const container = (await created.json()) as Container
+  const received = await api.post(`/containers/${container.id}/receive`, { data: { warehouseId: warehouse.id } })
+  expect(received.status(), "POST /containers/:id/receive").toBe(201)
+  return container
+}
+
+test("Properties: created in the browser with its owner and its point, read back, its parties replaced whole beside a rename, set Inactive, and a subscription there refused in #79's sentence", async ({ page, api }) => {
+  const project = await projectNamed(api, TESTER_PROJECT)
+  const owner = await customerThroughApi(api, uniqueName("E2E Owner"))
+  const tenant = await customerThroughApi(api, uniqueName("E2E Tenant"))
+  const product = await productThroughApi(api, project.id, "active")
+  const agreement = await agreementThroughApi(api, project.id, owner.id)
+  const name = uniqueName("E2E Property")
+  await openLoaded(page, "/customers?module=properties", "/properties")
+
+  // The header's action is the module's own create form: the address, its point, and the owner picked from the switched customers.
+  await page.getByRole("main").getByRole("button", { name: "New property" }).click()
+  const dialog = page.getByRole("dialog")
+  await expect(dialog.getByRole("heading", { name: "Create property" })).toBeVisible()
+  await pickOne(page, dialog, "Operating project", /^Copenhagen Central/)
+  await dialog.getByLabel("Property name").fill(name)
+  await dialog.getByLabel("Service address").fill("Blegdamsvej 40, 2100 København Ø")
+  await pickOne(page, dialog, "Property type", /^Residential/)
+  await dialog.getByLabel("Latitude").fill("55.6975")
+  await dialog.getByLabel("Longitude").fill("12.5731")
+  await pickMany(page, dialog, "Owners", [owner.name])
+  const [created] = await Promise.all([answerOf(page, "POST", "/properties"), dialog.getByRole("button", { name: "Create property" }).click()])
+  expect(created.status()).toBe(201)
+  const property = (await created.json()) as Property
+  expect(created.headers()["location"]).toBe(`/properties/${property.id}`)
+  expect(property).toMatchObject({ projectId: project.id, name, address: "Blegdamsvej 40, 2100 København Ø", kind: "residential", status: "active", location: { type: "Point", coordinates: [12.5731, 55.6975] }, parties: [{ customerId: owner.id, role: "owner" }] })
+  expect(await (await api.get(`/properties/${property.id}`)).json()).toEqual(property)
+
+  // Its details opened on the new row; the edit renames it and replaces the parties whole, a tenant beside the owner: the patch, then the set's own PUT.
+  const sheet = page.getByRole("dialog").filter({ has: page.getByTestId("place-commands") })
+  await expect(sheet.getByRole("heading", { name })).toBeVisible()
+  await sheet.getByRole("button", { name: "Edit property" }).click()
+  const edit = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Edit property" }) })
+  await expect(edit).toBeVisible()
+  await edit.getByLabel("Property name").fill(`${name} B`)
+  await pickMany(page, edit, "Tenants", [tenant.name])
+  const renamed = answerOf(page, "PATCH", `/properties/${property.id}`)
+  const replaced = setReplaced(page, `/properties/${property.id}/parties`)
+  await edit.getByRole("button", { name: "Save changes" }).click()
+  expect((await renamed).status()).toBe(200)
+  const put = await replaced
+  expect(put.status()).toBe(200)
+  expect(JSON.parse(put.request().postData() ?? "{}")).toEqual({ parties: [{ customerId: owner.id, role: "owner" }, { customerId: tenant.id, role: "tenant" }] })
+  const read = (await (await api.get(`/properties/${property.id}`)).json()) as Property
+  expect(read.name).toBe(`${name} B`)
+  expect([...read.parties].sort(byParty)).toEqual([{ customerId: owner.id, role: "owner" }, { customerId: tenant.id, role: "tenant" }].sort(byParty))
+
+  // Inactive is the lifecycle's move the wire spells, behind the governed dialog.
+  await sheet.getByRole("button", { name: "Inactive", exact: true }).click()
+  const governed = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Inactive" }) })
+  await governed.getByLabel("Decision or action reason").fill("E2E: the property is no longer served")
+  const [deactivated] = await Promise.all([answerOf(page, "PATCH", `/properties/${property.id}`), governed.getByRole("button", { name: "Confirm inactive" }).click()])
+  expect(deactivated.status()).toBe(200)
+  expect(await deactivated.json()).toMatchObject({ id: property.id, status: "inactive" })
+
+  // #79 on a subscription: the property picker offers the inactive property, and the API refuses the new reference in its own sentence.
+  await openAgreementsLoaded(page)
+  await (await rowNamed(page, `${agreement.number} · ${owner.name}`)).click()
+  const refused = await addSubscription(page, agreement.id, { productId: product.id, property: `${name} B`, quantity: "1" })
+  expect(refused.status()).toBe(409)
+  await expect(page.getByText("The property is inactive; a subscription needs an active property")).toBeVisible()
+})
+
+test("Property groups: gathered in the browser with a member, read back, and a member added in another role while the first keeps its own", async ({ page, api }) => {
+  const project = await projectNamed(api, TESTER_PROJECT)
+  const first = await propertyThroughApi(api, project.id)
+  const second = await propertyThroughApi(api, project.id)
+  const name = uniqueName("E2E Group")
+  await openLoaded(page, "/customers?module=groups", "/property-groups")
+
+  await page.getByRole("main").getByRole("button", { name: "New group" }).click()
+  const dialog = page.getByRole("dialog")
+  await expect(dialog.getByRole("heading", { name: "Create property group" })).toBeVisible()
+  await pickOne(page, dialog, "Operating project", /^Copenhagen Central/)
+  await dialog.getByLabel("Group name").fill(name)
+  await pickOne(page, dialog, "Group purpose", /^Reporting only/)
+  await pickMany(page, dialog, "Member properties", [first.name])
+  const [created] = await Promise.all([answerOf(page, "POST", "/property-groups"), dialog.getByRole("button", { name: "Create property group" }).click()])
+  expect(created.status()).toBe(201)
+  const group = (await created.json()) as PropertyGroup
+  expect(created.headers()["location"]).toBe(`/property-groups/${group.id}`)
+  expect(group).toMatchObject({ projectId: project.id, name, purpose: "reporting", status: "draft", members: [{ propertyId: first.id, role: "member" }] })
+  expect(await (await api.get(`/property-groups/${group.id}`)).json()).toEqual(group)
+
+  // The edit adds a property in the role new members join as; the member already there keeps its own, and the set goes out whole.
+  const sheet = page.getByRole("dialog").filter({ has: page.getByTestId("place-commands") })
+  await expect(sheet.getByRole("heading", { name })).toBeVisible()
+  await sheet.getByRole("button", { name: "Edit property group" }).click()
+  const edit = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Edit property group" }) })
+  await expect(edit).toBeVisible()
+  await pickMany(page, edit, "Member properties", [second.name])
+  await pickOne(page, edit, "Role for new members", /^Payer$/)
+  const [replaced] = await Promise.all([setReplaced(page, `/property-groups/${group.id}/members`), edit.getByRole("button", { name: "Save changes" }).click()])
+  expect(replaced.status()).toBe(200)
+  expect(JSON.parse(replaced.request().postData() ?? "{}")).toEqual({ members: [{ propertyId: first.id, role: "member" }, { propertyId: second.id, role: "payer" }] })
+  const read = (await (await api.get(`/property-groups/${group.id}`)).json()) as PropertyGroup
+  expect([...read.members].sort(byProperty)).toEqual([{ propertyId: first.id, role: "member" }, { propertyId: second.id, role: "payer" }].sort(byProperty))
+})
+
+test("Shared points: planned in the browser open with its members, read back, its members replaced whole, closed, and a placement there refused in #79's sentence", async ({ page, api }) => {
+  const project = await projectNamed(api, TESTER_PROJECT)
+  const first = await propertyThroughApi(api, project.id)
+  const second = await propertyThroughApi(api, project.id)
+  const customer = await customerThroughApi(api, uniqueName("E2E Point customer"))
+  const product = await productThroughApi(api, project.id, "active")
+  const agreement = await agreementThroughApi(api, project.id, customer.id)
+  const container = await receivedContainerThroughApi(api, project.id)
+  const name = uniqueName("E2E Point")
+  await openLoaded(page, "/customers?module=shared", "/shared-collection-points")
+
+  await page.getByRole("main").getByRole("button", { name: "New shared point" }).click()
+  const dialog = page.getByRole("dialog")
+  await expect(dialog.getByRole("heading", { name: "Create shared collection point" })).toBeVisible()
+  await pickOne(page, dialog, "Operating project", /^Copenhagen Central/)
+  await dialog.getByLabel("Shared-point name").fill(name)
+  await pickOne(page, dialog, "Collection-point type", /^Underground system/)
+  await pickOne(page, dialog, "Initial state", /^Open$/)
+  await dialog.getByLabel("Location address").fill("Kongens Nytorv, 1050 København K")
+  await dialog.getByLabel("Latitude").fill("55.6806")
+  await dialog.getByLabel("Longitude").fill("12.5857")
+  await pickOne(page, dialog, "Operating model", /^Municipal shared service/)
+  await pickOne(page, dialog, "Access mode", /^Open access/)
+  await pickOne(page, dialog, "Billing responsibility", /^Project or municipality/)
+  await pickMany(page, dialog, "Participating properties", [first.name, second.name])
+  const [created] = await Promise.all([answerOf(page, "POST", "/shared-collection-points"), dialog.getByRole("button", { name: "Create shared point" }).click()])
+  expect(created.status()).toBe(201)
+  const point = (await created.json()) as SharedCollectionPoint
+  expect(created.headers()["location"]).toBe(`/shared-collection-points/${point.id}`)
+  expect(point).toMatchObject({ projectId: project.id, name, kind: "underground", status: "open", location: { type: "Point", coordinates: [12.5857, 55.6806] } })
+  expect([...point.members].sort(byProperty)).toEqual([{ propertyId: first.id, role: "service-member" }, { propertyId: second.id, role: "service-member" }].sort(byProperty))
+  expect(await (await api.get(`/shared-collection-points/${point.id}`)).json()).toEqual(point)
+
+  // The edit replaces the members whole: the second property unticked, one member left.
+  const sheet = page.getByRole("dialog").filter({ has: page.getByTestId("place-commands") })
+  await expect(sheet.getByRole("heading", { name })).toBeVisible()
+  await sheet.getByRole("button", { name: "Edit shared point" }).click()
+  const edit = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Edit shared collection point" }) })
+  await expect(edit).toBeVisible()
+  await pickMany(page, edit, "Participating properties", [second.name])
+  const [replaced] = await Promise.all([setReplaced(page, `/shared-collection-points/${point.id}/members`), edit.getByRole("button", { name: "Save changes" }).click()])
+  expect(replaced.status()).toBe(200)
+  expect(JSON.parse(replaced.request().postData() ?? "{}")).toEqual({ members: [{ propertyId: first.id, role: "service-member" }] })
+
+  // A subscription at the point, made through the API while it is open, which #79 lets it take; then Closed, the lifecycle's move.
+  const subscribed = await api.post(`/agreements/${agreement.id}/subscriptions`, { data: { productId: product.id, sharedCollectionPointId: point.id, validFrom: "2026-10-01", validTo: "2027-01-01" } })
+  expect(subscribed.status(), "POST /agreements/:id/subscriptions").toBe(201)
+  await sheet.getByRole("button", { name: "Closed", exact: true }).click()
+  const governed = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Closed" }) })
+  await governed.getByLabel("Decision or action reason").fill("E2E: the point is taken away")
+  const [closed] = await Promise.all([answerOf(page, "PATCH", `/shared-collection-points/${point.id}`), governed.getByRole("button", { name: "Confirm closed" }).click()])
+  expect(closed.status()).toBe(200)
+  expect(await closed.json()).toMatchObject({ id: point.id, status: "closed" })
+
+  // #79 on a placement: the container is issued under the subscription, picked by the place it is delivered at, and the API refuses a placement at a closed point in its own sentence.
+  await openLoaded(page, "/resources?module=containers", "/containers")
+  await (await rowNamed(page, container.label)).click()
+  await page.getByTestId("container-commands").getByRole("button", { name: "Issue into service", exact: true }).click()
+  const issue = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Issue into service" }) })
+  await expect(issue).toBeVisible()
+  await pickOne(page, issue, "Subscription", new RegExp(escapeRegExp(name)))
+  await pickOne(page, issue, "Waste fraction", /^Residual/)
+  await issue.getByLabel("First day in service").fill("2026-10-01")
+  const [refused] = await Promise.all([answerOf(page, "POST", `/containers/${container.id}/placements`), issue.getByRole("button", { name: "Issue into service", exact: true }).click()])
+  expect(refused.status()).toBe(409)
+  await expect(page.getByText(`${container.label} was not issued into service`)).toBeVisible()
+  await expect(page.getByText("The subscription's shared collection point is closed; a placement needs an open or restricted point")).toBeVisible()
 })
