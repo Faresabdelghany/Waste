@@ -77,6 +77,22 @@ export function executionOrder(baseline: readonly string[], planOrder: readonly 
 }
 
 /**
+ * What the horizon asks of a route it plans (#172): generation for a route
+ * it creates or reshapes, the sweep for one with no active Plan or a stale
+ * one. The open stops in baseline order under the Optimise request's size
+ * rule — the optimiser for fifty or fewer from a depot, a `baseline`
+ * measurement otherwise (#124 §4) — unless the active Plan is a dispatcher's
+ * `manual` one, which the next run never undoes (#124's clobber): then a new
+ * `manual` Plan over the order the driver already reads (`executionOrder`),
+ * the dispatcher's sequence of the stops it names and the rest appended in
+ * baseline order, measured and active from creation.
+ */
+export function horizonRequest({ open, hasDepot, active }: { open: readonly string[]; hasDepot: boolean; active: { solver: PlanSolver; named: readonly string[] } | null }): { solver: PlanSolver; orderedPickupIds: string[] } {
+  if (active?.solver === "manual") return { solver: "manual", orderedPickupIds: executionOrder(open, active.named) }
+  return { solver: optimiseSolver({ openStops: open.length, hasDepot }).solver, orderedPickupIds: [...open] }
+}
+
+/**
  * Staleness, a reading and never a status (#124 §2): the route's stops moved
  * under the active Plan — a stop was inserted that the Plan does not name, or
  * one it names was removed by regeneration. A stop the driver decided is

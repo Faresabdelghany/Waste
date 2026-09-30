@@ -22,6 +22,7 @@ import { OPEN_TICKETS_QUEUE_OPTIONS, openTickets, RESOLUTION_KINDS } from "../jo
 import { planAheadJob } from "../jobs/plan-ahead"
 import { FINANCE_EVENT_KINDS, RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, recordBillableEvents } from "../jobs/record-billable-events"
 import { BATCH_SIZE, RELAY_INTERVAL_SECONDS, relayOutbox } from "../jobs/relay-outbox"
+import { sweepHorizonJob } from "../jobs/routing-horizon"
 import { runScheduledBilling } from "../jobs/run-billing"
 import { CONSUMED_OUTBOX_QUEUE_OPTIONS, CONSUMED_RETENTION_SECONDS, DEAD_LETTER_QUEUE_OPTIONS, defineOutboxConsumer, OUTBOX_DEAD, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUES, outboxQueue, RelayedEvent, UNCONSUMED_RETENTION_SECONDS } from "../outbox/subscribe"
 
@@ -110,11 +111,21 @@ describe("the job registry", () => {
       "planning.plan-ahead",
       "routing.measure",
       "routing.optimise",
+      "routing.sweep-horizon",
       "execution.relay-outbox",
       ...RESOLUTION_KINDS.map(outboxQueue),
       ...FINANCE_EVENT_KINDS.map(outboxQueue),
       "finance.run-billing",
     ])
+  })
+
+  test("holds routing's horizon sweep (#172, #132 §2): nightly at 03:30 UTC, half an hour after Plan Ahead, once for every night missed, sent as the schedule's, one retry", () => {
+    assert.ok(JOBS.includes(sweepHorizonJob))
+    assert.equal(sweepHorizonJob.queue, "routing.sweep-horizon")
+    assert.equal(sweepHorizonJob.schedule, "30 3 * * *")
+    assert.deepEqual(sweepHorizonJob.scheduleData, { source: "schedule" })
+    assert.deepEqual(sweepHorizonJob.scheduleOptions, { tz: "UTC", missed: "once" })
+    assert.deepEqual(sweepHorizonJob.queueOptions, { retryLimit: 1, retryDelay: 60, deleteAfterSeconds: 604_800 })
   })
 
   test("holds the relay: every minute as the backstop of its five-second successor, UTC, one tick queued at a time, no retry, publishing the dead-letter queue and then one queue per outbox kind, each kept ninety days for a consumer to come", () => {

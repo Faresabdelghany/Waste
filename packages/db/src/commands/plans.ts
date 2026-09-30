@@ -41,6 +41,9 @@ export const ROUTING_MEASURE_QUEUE = "routing.measure"
 /** The queue an `optimiser` Plan is sent to; its worker arrives with #171 (S3), and a job waits until it does. */
 export const ROUTING_OPTIMISE_QUEUE = "routing.optimise"
 
+/** The queue a Plan of this solver is worked on: the optimiser's own, or the measurement's for a known sequence. */
+export const routingQueueOf = (solver: PlanSolver): string => (solver === "optimiser" ? ROUTING_OPTIMISE_QUEUE : ROUTING_MEASURE_QUEUE)
+
 /** What a routing job carries, on either queue. */
 export type RoutingJobData = {
   /** The `calculating` Plan the sender wrote. */
@@ -267,7 +270,7 @@ export async function ensurePlan(
     const named = await planStopIds(tx, { companyId, planId: matchId })
     return named.length === request.orderedPickupIds.length && new Set(named).size === new Set([...named, ...request.orderedPickupIds]).size
   }
-  const queue = request.solver === "optimiser" ? ROUTING_OPTIMISE_QUEUE : ROUTING_MEASURE_QUEUE
+  const queue = routingQueueOf(request.solver)
   const send = async (planId: string) => {
     // The Plan's id keys the singleton: one live job per Plan, and Plans of one (route, fingerprint) are already
     // deduplicated above — a queue-wide fingerprint key would let another route's identical trip swallow this send.
