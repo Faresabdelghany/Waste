@@ -2,9 +2,11 @@ import type { APIRequestContext, Page } from "@playwright/test"
 
 import { expect, test } from "./fixtures"
 import { uniqueName } from "./env"
+import { projectNamed, TESTER_PROJECT } from "./tester"
 
-// Scenario 4, the two switched modules whose product surfaces write to the
-// API — Service Providers and Contacts & Companies, through the generic
+// Scenario 4, the switched Registry modules whose product surfaces write to
+// the API — Service Providers, Contacts & Companies and, since slice 9a of
+// #81 (Issue #183), Agreements and Subscriptions — through the generic
 // workspace and its form dialog: the create is made in the browser and its
 // `Location` read off the API's answer, the row is read back there under the
 // browser's own token, it is changed, and a create the API refuses is shown
@@ -14,9 +16,15 @@ import { uniqueName } from "./env"
 // The refusal is a stale list's: the form checks a registration number
 // against the rows the browser holds, so the duplicate it cannot see is one
 // another person made after the page loaded — here, through the API, between
-// the page's load and the form's submit. The API is the one that knows.
+// the page's load and the form's submit. The API is the one that knows. The
+// agreements' refusal is #79's gate: a picker hides no customer by status,
+// and the API's 409 says why the inactive one cannot take a new agreement.
 type ServiceProvider = { id: string; legalName: string; registrationNumber: string; country: string; contactName: string; contactEmail: string }
 type Customer = { id: string; kind: "person" | "organisation"; name: string; registrationNumber: string | null; email: string | null; status: string }
+type Agreement = { id: string; projectId: string; number: string; customerId: string; payerCustomerId: string; status: string; billingCadence: string; currency: string; notes: string | null; validFrom: string; validTo: string | null }
+type Subscription = { id: string; agreementId: string; productId: string; propertyId: string | null; sharedCollectionPointId: string | null; quantity: number; validFrom: string; validTo: string | null }
+type Product = { id: string; name: string; status: string }
+type Property = { id: string; name: string }
 
 /**
  * Eight digits for a registration number, which is unique within the
@@ -182,4 +190,151 @@ test("Contacts & Companies: created in the browser with Location, read back, mov
   await expect(await rowNamed(page, name)).toBeVisible()
   await expect(await rowNamed(page, elsewhere.name)).toBeVisible()
   await expect(await rowNamed(page, otherName)).toHaveCount(0)
+})
+
+/** A customer the agreement form will offer: made before the page loads, so the switched contacts module lists it; `inactive` for the one #79 refuses. */
+async function customerThroughApi(api: APIRequestContext, name: string, status: "active" | "inactive" = "active") {
+  const response = await api.post("/customers", { data: { kind: "organisation", name, registrationNumber: registrationNumber(), status } })
+  expect(response.status(), `POST /customers ${name}`).toBe(201)
+  return (await response.json()) as Customer
+}
+
+/** A product of the project a subscription can name — active, or draft for the product the API refuses. */
+async function productThroughApi(api: APIRequestContext, projectId: string, status: "active" | "draft") {
+  const response = await api.post("/products", { data: { projectId, name: uniqueName(`E2E ${status} product`), kind: "container-collection", unit: "pickup", status } })
+  expect(response.status(), "POST /products").toBe(201)
+  return (await response.json()) as Product
+}
+
+/** A property of the project a subscription is delivered at; the Properties module is not switched yet (slice 9b), so the form takes its id. */
+async function propertyThroughApi(api: APIRequestContext, projectId: string) {
+  const response = await api.post("/properties", { data: { projectId, name: uniqueName("E2E Property"), address: "Parkvej 18, 2100 København Ø", kind: "residential" } })
+  expect(response.status(), "POST /properties").toBe(201)
+  return (await response.json()) as Property
+}
+
+/**
+ * Opens the Agreements module and waits until the switched module is the
+ * server's: a seeded agreement no fixture carries (AGR-2188 is the seed's
+ * alone) is listed only once every agreement and its subscriptions are here,
+ * and a write made before that would go to the browser's bucket instead of
+ * the API.
+ */
+async function openAgreementsLoaded(page: Page) {
+  await openLoaded(page, "/customers?module=agreements", "/agreements")
+  await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill("AGR-2188")
+  // The agreement's row and its subscription's are both named after the number; either says the module is here.
+  await expect(page.getByRole("button", { name: /^Open AGR-2188 · / }).first()).toBeVisible({ timeout: 15_000 })
+}
+
+async function createAgreement(page: Page, values: { number: string; customer: string; payer: string }) {
+  // The header's create button carries the form's submit label, as every module's does.
+  await page.getByRole("main").getByRole("button", { name: "Create draft agreement" }).click()
+  const dialog = page.getByRole("dialog")
+  await expect(dialog.getByRole("heading", { name: "Create agreement" })).toBeVisible()
+  await dialog.getByLabel("Agreement number").fill(values.number)
+  await dialog.getByRole("combobox", { name: /^Customer/ }).click()
+  await page.getByRole("option", { name: values.customer, exact: true }).click()
+  await dialog.getByRole("combobox", { name: /^Payer/ }).click()
+  await page.getByRole("option", { name: values.payer, exact: true }).click()
+  await dialog.getByLabel("Effective from").fill("2026-10-01")
+  await dialog.getByLabel("Effective to").fill("2026-12-31")
+  await dialog.getByRole("combobox", { name: /^Billing cadence/ }).click()
+  await page.getByRole("option", { name: "Monthly" }).click()
+  const [response] = await Promise.all([answerOf(page, "POST", "/agreements"), dialog.getByRole("button", { name: "Create draft agreement" }).click()])
+  return response
+}
+
+/** Add subscription from the open agreement's sheet: the product and the place as the API's ids, the period prefilled from the agreement's own. */
+async function addSubscription(page: Page, agreementId: string, values: { productId: string; propertyId: string; quantity: string }) {
+  await page.getByRole("dialog").getByRole("button", { name: "Add subscription" }).click()
+  const dialog = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Add subscription" }) })
+  await expect(dialog).toBeVisible()
+  await dialog.getByLabel("Product").fill(values.productId)
+  await dialog.getByLabel("Property", { exact: true }).fill(values.propertyId)
+  await dialog.getByLabel("Quantity").fill(values.quantity)
+  await expect(dialog.getByLabel("Valid from")).toHaveValue("2026-10-01")
+  await expect(dialog.getByLabel("Valid to")).toHaveValue("2026-12-31")
+  const [response] = await Promise.all([answerOf(page, "POST", `/agreements/${agreementId}/subscriptions`), dialog.getByRole("button", { name: "Add subscription" }).click()])
+  return response
+}
+
+test("Agreements: created in the browser with Location, signed, its subscription added and changed, and the customer and the product the API refuses told in its sentence", async ({ page, api }) => {
+  const project = await projectNamed(api, TESTER_PROJECT)
+  const customer = await customerThroughApi(api, uniqueName("E2E Housing"))
+  const inactive = await customerThroughApi(api, uniqueName("E2E Former customer"), "inactive")
+  const product = await productThroughApi(api, project.id, "active")
+  const draftProduct = await productThroughApi(api, project.id, "draft")
+  const property = await propertyThroughApi(api, project.id)
+  const number = uniqueName("E2E-AGR").replace(/\s+/g, "-").toUpperCase()
+  await openAgreementsLoaded(page)
+
+  // The agreement, a draft in the pinned project, its customer and payer picked by name from the switched contacts module.
+  const created = await createAgreement(page, { number, customer: customer.name, payer: customer.name })
+  expect(created.status()).toBe(201)
+  const agreement = (await created.json()) as Agreement
+  const location = created.headers()["location"]
+  expect(location).toBe(`/agreements/${agreement.id}`)
+  expect(agreement).toMatchObject({ projectId: project.id, number, customerId: customer.id, payerCustomerId: customer.id, status: "draft", billingCadence: "monthly", currency: "DKK", validFrom: "2026-10-01", validTo: "2027-01-01" })
+  const read = await api.get(location)
+  expect(read.status()).toBe(200)
+  expect(await read.json()).toEqual(agreement)
+
+  // Its sheet opened on the new row; Active is the lifecycle move the wire spells from a draft, behind the governed dialog.
+  const sheet = page.getByRole("dialog")
+  await expect(sheet.getByRole("heading", { name: new RegExp(`^${number}`) })).toBeVisible()
+  await sheet.getByRole("button", { name: "Active", exact: true }).click()
+  const governed = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Active" }) })
+  await governed.getByLabel("Decision or action reason").fill("E2E: the agreement is signed")
+  const [signed] = await Promise.all([answerOf(page, "PATCH", location), governed.getByRole("button", { name: "Confirm active" }).click()])
+  expect(signed.status()).toBe(200)
+  expect(await signed.json()).toMatchObject({ id: agreement.id, status: "active" })
+
+  // A subscription under it: the product and the property by the API's ids, since their modules are not switched yet; two of the product for the agreement's period.
+  const subscribed = await addSubscription(page, agreement.id, { productId: product.id, propertyId: property.id, quantity: "2" })
+  expect(subscribed.status()).toBe(201)
+  const subscription = (await subscribed.json()) as Subscription
+  expect(subscribed.headers()["location"]).toBe(`/subscriptions/${subscription.id}`)
+  expect(subscription).toMatchObject({ agreementId: agreement.id, productId: product.id, propertyId: property.id, sharedCollectionPointId: null, quantity: 2, validFrom: "2026-10-01", validTo: "2027-01-01" })
+
+  // The sheet moved to the subscription; its edit changes the quantity alone, the product and the place held read-only.
+  await expect(page.getByRole("dialog").getByRole("heading", { name: new RegExp(`^${number} · `) })).toBeVisible()
+  await page.getByRole("dialog").getByRole("button", { name: "Edit subscription" }).click()
+  const edit = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Edit subscription" }) })
+  await expect(edit.getByLabel("Product")).toHaveJSProperty("readOnly", true)
+  await expect(edit.getByLabel("Product")).toHaveValue(`product-${product.id}`)
+  await edit.getByLabel("Quantity").fill("3")
+  const [changed] = await Promise.all([answerOf(page, "PATCH", `/subscriptions/${subscription.id}`), edit.getByRole("button", { name: "Save changes" }).click()])
+  expect(changed.status()).toBe(200)
+  expect(await changed.json()).toMatchObject({ id: subscription.id, quantity: 3, productId: product.id })
+  expect((await (await api.get(`/subscriptions/${subscription.id}`)).json()) as Subscription).toMatchObject({ quantity: 3 })
+
+  // #79 on a subscription: a draft product cannot be subscribed to, and the API's sentence is shown.
+  await openAgreementsLoaded(page)
+  await (await rowNamed(page, `${number} · ${customer.name}`)).click()
+  const refusedProduct = await addSubscription(page, agreement.id, { productId: draftProduct.id, propertyId: property.id, quantity: "1" })
+  expect(refusedProduct.status()).toBe(409)
+  await expect(page.getByText("The product is draft; only an active product can be subscribed to")).toBeVisible()
+
+  // Cancelled is the wire's third status, offered from a running agreement and patched like the first move; the subscription under it stands (#79: a status gates a new reference, never an existing one).
+  await openAgreementsLoaded(page)
+  await (await rowNamed(page, `${number} · ${customer.name}`)).click()
+  await page.getByRole("dialog").getByRole("button", { name: "Cancelled", exact: true }).click()
+  const cancelling = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Cancelled" }) })
+  await cancelling.getByLabel("Decision or action reason").fill("E2E: the customer withdrew")
+  const [cancelled] = await Promise.all([answerOf(page, "PATCH", location), cancelling.getByRole("button", { name: "Confirm cancelled" }).click()])
+  expect(cancelled.status()).toBe(200)
+  expect(await cancelled.json()).toMatchObject({ id: agreement.id, status: "cancelled" })
+  expect((await (await api.get(`/subscriptions/${subscription.id}`)).json()) as Subscription).toMatchObject({ id: subscription.id, quantity: 3 })
+
+  // #79 on an agreement: the picker offers the inactive customer, its status beside its name, and the API refuses the new reference in its own sentence; the row is gone.
+  await openAgreementsLoaded(page)
+  const otherNumber = uniqueName("E2E-AGR").replace(/\s+/g, "-").toUpperCase()
+  const refused = await createAgreement(page, { number: otherNumber, customer: `${inactive.name} · Inactive`, payer: customer.name })
+  expect(refused.status()).toBe(409)
+  await expect(page.getByText(`${otherNumber} was not saved`)).toBeVisible()
+  await expect(page.getByText("The customer is inactive; an agreement needs an active customer")).toBeVisible()
+  await openAgreementsLoaded(page)
+  await expect(await rowNamed(page, `${number} · ${customer.name}`)).toBeVisible()
+  await expect(await rowNamed(page, otherNumber)).toHaveCount(0)
 })

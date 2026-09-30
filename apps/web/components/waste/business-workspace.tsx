@@ -22,6 +22,7 @@ import {
   Gear,
   Info,
   MagnifyingGlass,
+  PencilSimple,
   Plus,
   PushPin,
   ShieldCheck,
@@ -150,6 +151,15 @@ import {
   getBusinessModuleHref,
   resolveBusinessRelation,
 } from "@/lib/data/business-links"
+import {
+  agreementFormSchemaOnApi,
+  AGREEMENTS_MODULE,
+  isAgreementRecord,
+  isSubscriptionRecord,
+  subscriptionEditSchema,
+  subscriptionFormSchema,
+  subscriptionInitialValues,
+} from "@/lib/data/agreements"
 import type { TimelineTask } from "@/lib/data/project-details"
 import { cn, slugify } from "@/lib/utils"
 import { createModuleSync } from "@/lib/url/module-sync"
@@ -1082,7 +1092,15 @@ export function BusinessWorkspace({
 }: BusinessWorkspaceProps) {
   const sourceWorkspace = getWorkspaceDefinition(workspaceId)
   const { getRecords, upsertRecord } = useBusinessRecordStore()
+  // Whether the adapter is on (Issue #81): what the switched modules' own surfaces show, and fixture mode does not.
   const apiConfigured = useApiConfigured()
+  // On the API a customer field names a Customer in the glossary's sense — a
+  // person or an organisation alike (the seed's private owners hold
+  // agreements and own properties) — so the pickers offer both there and say
+  // a row's status beside its name (#79: a picker hides nothing, the API's
+  // 409 speaks). Fixture mode keeps the prototype's rule: a company where a
+  // field says company.
+  const customersOnApi = apiConfigured && isServerBacked("customers", "contacts")
   // The live records of any workspace module (fixtures merged with stored
   // records) — what the scheme lifecycle planners read their related
   // records from.
@@ -1194,6 +1212,15 @@ export function BusinessWorkspace({
 
   const activeModule =
     workspace.modules.find((module) => module.id === activeModuleId) ?? workspace.modules[0]
+  // Agreements and subscriptions on the API (slice 9a of #81): the module
+  // holds two kinds, its form is the registry's trimmed to what the wire
+  // takes, and a standard view offers no row Edit, so the sheet's actions
+  // carry the edit and the subscription's own create — with the adapter
+  // configured only, since fixture mode never had any of it.
+  const isAgreementsView =
+    apiConfigured &&
+    workspace.id === AGREEMENTS_MODULE.workspaceId &&
+    activeModule.id === AGREEMENTS_MODULE.moduleId
   const activeModuleGrants = roleAccess
     ? roleAccess[`${workspace.id}.${activeModule.id}`] ?? []
     : null
@@ -1235,27 +1262,30 @@ export function BusinessWorkspace({
   const activeSecondaryModule = secondaryModules.find(
     (module) => module.id === activeModule.id,
   )
-  const activeModuleFormSchema = useMemo(
-    () =>
-      serviceProviderScopedFormSchema(
-        configuredCommercialFormSchema(
-          configuredAssetFormSchema(
-            getBusinessFormSchema(workspace.id, activeModule.id),
-            containerTypes,
-            wasteFractions,
-            measurementSettings,
-            projectScope,
-          ),
-          zones,
-          serviceLevels,
-          customerTypes,
-          priceLists,
+  const activeModuleFormSchema = useMemo(() => {
+    const registered = getBusinessFormSchema(workspace.id, activeModule.id)
+    return serviceProviderScopedFormSchema(
+      configuredCommercialFormSchema(
+        configuredAssetFormSchema(
+          // The agreement form as the API takes it: the fields the wire has no home for gone (lib/data/agreements.ts).
+          isAgreementsView && registered ? agreementFormSchemaOnApi(registered) : registered,
+          containerTypes,
+          wasteFractions,
+          measurementSettings,
+          projectScope,
         ),
-        serviceProviderScopeId,
+        zones,
+        serviceLevels,
+        customerTypes,
+        priceLists,
       ),
+      serviceProviderScopeId,
+    )
+  },
     [
       activeModule.id,
       containerTypes,
+      isAgreementsView,
       serviceProviderScopeId,
       customerTypes,
       measurementSettings,
@@ -1801,6 +1831,45 @@ export function BusinessWorkspace({
         : undefined,
     [activeModule.records, canRunRecordActions, getRecords, isSchemesView, upsertRecord],
   )
+  // The agreements module's sheet actions on the API (slice 9a of #81): the
+  // edit a standard view offers no row action for — an agreement's period
+  // and notes, a subscription's quantity and period — and Add subscription
+  // on an agreement, which opens the subscription form under it for the
+  // agreement's own period. Nothing in fixture mode, which never had either.
+  const canEditAgreements = isAgreementsView && hasGrant("edit")
+  const canAddSubscriptions = isAgreementsView && hasGrant("create")
+  const agreementExtraActions = useCallback(
+    (record: BusinessRecord): RecordExtraAction[] | undefined => {
+      const actions: RecordExtraAction[] = []
+      if (canEditAgreements) {
+        actions.push({
+          label: isSubscriptionRecord(record) ? "Edit subscription" : "Edit agreement",
+          icon: <PencilSimple className="h-4 w-4" />,
+          onSelect: (target: BusinessRecord) => setEditingRecord(target),
+        })
+      }
+      if (canAddSubscriptions && isAgreementRecord(record)) {
+        actions.push({
+          label: "Add subscription",
+          icon: <Plus className="h-4 w-4" />,
+          onSelect: (target: BusinessRecord) =>
+            setRelatedCreateTarget({
+              workspaceId: AGREEMENTS_MODULE.workspaceId,
+              moduleId: AGREEMENTS_MODULE.moduleId,
+              initialValues: subscriptionInitialValues(target),
+              schemaOverride: subscriptionFormSchema,
+            }),
+        })
+      }
+      return actions.length === 0 ? undefined : actions
+    },
+    [canAddSubscriptions, canEditAgreements],
+  )
+  /** The module-specific actions a row and its sheet offer: the schemes' or the agreements', never both. */
+  const recordExtraActions = useCallback(
+    (record: BusinessRecord): RecordExtraAction[] | undefined => schemeExtraActions(record) ?? agreementExtraActions(record),
+    [agreementExtraActions, schemeExtraActions],
+  )
   const factColumnOptions = useMemo(
     () => collectFactColumnOptions(activeModule.id, visibleScopedRecords),
     [activeModule.id, visibleScopedRecords],
@@ -2341,6 +2410,8 @@ export function BusinessWorkspace({
     setPendingAction(null)
   }
 
+  /** The agreement form on the API (slice 9a of #81): the API holds the number's rule, so the workspace's uniqueness check stands aside. */
+  const agreementsOnApi = apiConfigured && formSchema?.key === `${AGREEMENTS_MODULE.workspaceId}.${AGREEMENTS_MODULE.moduleId}`
   const getFormRelationOptions = useCallback(
     (
       field: BusinessFormField,
@@ -2438,6 +2509,16 @@ export function BusinessWorkspace({
             const kind = masterDataKindOf(record)
             if (kind !== null && kind !== masterDataKindForField(field.id)) return false
           }
+          // A picker at the agreements module offers the agreements alone
+          // (slice 9a of #81): on the API the module holds the subscriptions
+          // too, and a field that names an agreement names no subscription.
+          if (
+            resolved.workspaceId === AGREEMENTS_MODULE.workspaceId &&
+            resolved.module.id === AGREEMENTS_MODULE.moduleId &&
+            !isAgreementRecord(record)
+          ) {
+            return false
+          }
           if (field.id === "projectId") {
             if (!isProjectRecordId(record.id)) return false
             const pinned = pinnedProjectId(projectScope)
@@ -2458,6 +2539,8 @@ export function BusinessWorkspace({
             const isPerson =
               record.id.startsWith("contact-") || createdPartyType === "person"
 
+            // A customer field offers the companies alone in fixture mode and
+            // every Customer on the API (`customersOnApi`, above).
             if (
               [
                 "customerId",
@@ -2465,7 +2548,8 @@ export function BusinessWorkspace({
                 "ownerCustomerId",
                 "payerCustomerId",
                 "connectedCompanyId",
-              ].includes(field.id)
+              ].includes(field.id) &&
+              !customersOnApi
             ) {
               if (!isCompany) return false
             }
@@ -2517,12 +2601,17 @@ export function BusinessWorkspace({
             : [],
         )
       }
+      // A picker hides no row by status (#79: a status gates a new reference,
+      // never an existing one, and the API's 409 says so); a customer picker
+      // on the API shows a row's status beside its name, so a person sees the
+      // refusal coming.
+      const showsStatus = customersOnApi && resolved.module.id === "contacts"
       return permittedRecords.map((record) => ({
         value: record.id,
-        label: record.name,
+        label: showsStatus && record.status !== "Active" ? `${record.name} · ${record.status}` : record.name,
       }))
     },
-    [serviceProviderScopeId, formSchema?.key, formSchema?.recordKind, getRecords, projectScope],
+    [customersOnApi, serviceProviderScopeId, formSchema?.key, formSchema?.recordKind, getRecords, projectScope],
   )
 
   const formInitialValues = useMemo<BusinessFormValues>(() => {
@@ -2754,6 +2843,9 @@ export function BusinessWorkspace({
 
   const editFormSchema = useMemo<BusinessFormSchema | undefined>(() => {
     if (!editingRecord || !activeModuleFormSchema?.execution) return undefined
+    // A subscription is the agreements module's second kind (slice 9a of
+    // #81): its own form, not the agreement's, edits it.
+    if (isAgreementsView && isSubscriptionRecord(editingRecord)) return subscriptionEditSchema
     const entity = activeModule.entityLabel
     // A multi-group scheme's groups own its assignment and stop selection
     // (D36): the schema dialog edits scheme-level fields only — the groups
@@ -2782,19 +2874,24 @@ export function BusinessWorkspace({
         completionMessage: `The ${entity.toLowerCase()} was updated and its audit history extended.`,
       },
     }
-  }, [activeModule.entityLabel, activeModuleFormSchema, editingRecord])
+  }, [activeModule.entityLabel, activeModuleFormSchema, editingRecord, isAgreementsView])
 
   const validateFormValues = useCallback(
     (values: BusinessFormValues) => {
       if (!formSchema) return {}
       const errors: Record<string, string> = {}
       const fields = formSchema.sections.flatMap((section) => section.fields)
-      const uniqueFields = fields.filter(
-        (field) =>
-          field.id === formSchema.nameField ||
-          field.id === "barcode" ||
-          /(code|reference|registrationNumber|externalId)$/i.test(field.id),
-      )
+      const uniqueFields = fields
+        .filter(
+          (field) =>
+            field.id === formSchema.nameField ||
+            field.id === "barcode" ||
+            /(code|reference|registrationNumber|externalId)$/i.test(field.id),
+        )
+        // An agreement's number is not unique on the API: one agreement of a
+        // number is valid at a time, and the next may follow it (ADR-0005),
+        // which the API refuses in its own sentence when the periods overlap.
+        .filter((field) => !(agreementsOnApi && field.id === formSchema.nameField))
 
       for (const field of uniqueFields) {
         const value = values[field.id]
@@ -2974,6 +3071,7 @@ export function BusinessWorkspace({
       return errors
     },
     [
+      agreementsOnApi,
       containerTypes,
       editingRecord?.id,
       formSchema,
@@ -5510,7 +5608,7 @@ export function BusinessWorkspace({
                                       entityLabel={activeModule.entityLabel}
                                       onEdit={canEditRecords ? openEditRecord : undefined}
                                       onDelete={canDeleteRecords ? requestRecordDelete : undefined}
-                                      extraActions={schemeExtraActions(record)}
+                                      extraActions={recordExtraActions(record)}
                                     />
                                   </TableCell>
                                 )}
@@ -5561,7 +5659,7 @@ export function BusinessWorkspace({
           onEdit={canEditRecords ? openEditRecord : undefined}
           onDelete={canDeleteRecords ? requestRecordDelete : undefined}
           showActions={canRunRecordActions}
-          extraActions={selectedRecord ? schemeExtraActions(selectedRecord) : undefined}
+          extraActions={selectedRecord ? recordExtraActions(selectedRecord) : undefined}
           commands={RowSurface && detailsRecord ? <RowSurface record={detailsRecord} /> : undefined}
           attention={
             isSchemesView && selectedRecord

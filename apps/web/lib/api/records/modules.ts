@@ -14,6 +14,7 @@
 import type { WorkspaceId } from "@/lib/data/business-modules"
 
 import { moduleKeyOf, type ServerModule } from "./adapter"
+import { agreementsModule } from "./agreements"
 import { vehiclePlanningModule } from "./allocations"
 import { containersModule, inventoryModule } from "./containers"
 import { fleetDriversModule, fleetVehiclesModule } from "./fleet"
@@ -31,9 +32,10 @@ import { customersModule } from "./registry"
  * its fractions, and the warehouses after the depots one may share a yard
  * with; the fleet after the master data (a vehicle's type and fractions),
  * the access module (a driver's login) and the depots (a home base) (#180);
- * the containers after the master data and the warehouses they name, the
- * ledger after the containers its movements name, and the allocations after
- * the fleet and the places they reserve (#181).
+ * the agreements after the customers they name, and before the placements
+ * that name their subscriptions (#183); the containers after the master data
+ * and the warehouses they name, the ledger after the containers its movements
+ * name, and the allocations after the fleet and the places they reserve (#181).
  */
 export const SERVER_MODULES: readonly ServerModule[] = [
   organisationModule,
@@ -47,6 +49,7 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   warehousesModule,
   fleetVehiclesModule,
   fleetDriversModule,
+  agreementsModule,
   containersModule,
   inventoryModule,
   vehiclePlanningModule,

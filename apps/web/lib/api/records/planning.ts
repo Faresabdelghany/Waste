@@ -103,12 +103,13 @@ function localDay(now: Date): string {
 /**
  * The day `now` falls on in a project's timezone, `YYYY-MM-DD` (`en-CA`
  * spells it so), the day a version is read as in force on; the browser's own
- * day for a project without one, or one Intl does not know.
+ * day for a project without one, or one Intl does not know. The agreements
+ * adapter reads a subscription's period against the same day.
  */
-function dayIn(now: Date, timezone: string | undefined): string {
+export function dayIn(now: Date, timezone: string | undefined): string {
   if (timezone) {
     try {
-      return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now)
+      return dayFormatter(timezone).format(now)
     } catch {
       // A timezone Intl does not know: the browser's day below.
     }
@@ -116,9 +117,20 @@ function dayIn(now: Date, timezone: string | undefined): string {
   return localDay(now)
 }
 
-/** The form's last day in force from the wire's first day out (half-open), and back. */
-const lastDayIn = (firstDayOut: string) => addDays(firstDayOut, -1)
-const firstDayOut = (lastDayIn: string) => addDays(lastDayIn, 1)
+/** One formatter per timezone: a load reads hundreds of rows against a handful of projects, and building one is the costly part. */
+const dayFormatters = new Map<string, Intl.DateTimeFormat>()
+function dayFormatter(timezone: string): Intl.DateTimeFormat {
+  let formatter = dayFormatters.get(timezone)
+  if (formatter === undefined) {
+    formatter = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" })
+    dayFormatters.set(timezone, formatter)
+  }
+  return formatter
+}
+
+/** The form's last day in force from the wire's first day out (half-open), and back; every effective-dated adapter spells the two ends this way. */
+export const lastDayIn = (firstDayOut: string) => addDays(firstDayOut, -1)
+export const firstDayOut = (lastDayIn: string) => addDays(lastDayIn, 1)
 
 // ---------------------------------------------------------------------------
 // The polygon a form's geometry text spells
