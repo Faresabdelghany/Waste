@@ -1,6 +1,6 @@
 import type { Request } from "@playwright/test"
 
-import { accessTokenOf, apiAs, chainLanded, expect, freshContext, signIn, test } from "./fixtures"
+import { accessTokenOf, apiAs, chainLanded, expect, freshContext, recordToasts, signIn, test, toastsOf } from "./fixtures"
 import { E2E, uniqueName } from "./env"
 import { ensureTester } from "./tester"
 
@@ -23,6 +23,7 @@ test("a role without the grant is refused in the API's words and stays signed in
   expect(created.status(), await created.text()).toBe(201)
 
   const context = await freshContext(browser)
+  await recordToasts(context)
   try {
     const page = await context.newPage()
     const asked: string[] = []
@@ -54,6 +55,10 @@ test("a role without the grant is refused in the API's words and stays signed in
     ])
     expect(patched.status()).toBe(403)
     await expect(page.getByText("This account's role does not allow edit on customers.contacts").first()).toBeVisible()
+    // Told as a toast, which the record catches; the organisation, not granted, was told to nobody.
+    const toasts = await toastsOf(page)
+    expect(toasts).toContainEqual(expect.stringContaining("This account's role does not allow edit on customers.contacts"))
+    expect(toasts?.filter((toast) => toast.includes("configure.organization"))).toEqual([])
 
     // Still here, still signed in: the page was not sent to /login, and the token the browser holds is still taken.
     await expect(page).toHaveURL(/\/customers/)
@@ -83,6 +88,7 @@ test("a role without the grant is refused in the API's words and stays signed in
 test("a pane backed by a module the role does not view says so in place of rows, with nothing asked and nobody toasted", async ({ api, browser }) => {
   await ensureTester(api, E2E.testerEmail)
   const context = await freshContext(browser)
+  await recordToasts(context)
   try {
     const page = await context.newPage()
     const asked: string[] = []
@@ -92,18 +98,19 @@ test("a pane backed by a module the role does not view says so in place of rows,
     })
     await signIn(page, E2E.testerEmail, E2E.loginPassword)
 
+    // Each page's whole load runs, the modules the role views included, and nothing is told on either.
     await page.goto("/settings?pane=master-data")
     await expect(page.getByText("The master data could not be read from the API: Your role does not allow view on configure.master")).toBeVisible()
     await expect(page.getByText("Reading the master data from the API…")).toHaveCount(0)
+    await chainLanded(page)
+    expect(await toastsOf(page)).toEqual([])
 
     await page.goto("/settings?pane=access")
     await expect(page.getByText("The users are not shown to your role.")).toBeVisible()
     await expect(page.getByText("Your role does not allow view on configure.access").first()).toBeVisible()
     await expect(page.getByText("Reading the company's users from the API…")).toHaveCount(0)
-
-    // The whole load has run by now, the modules the role views included, and nothing was told.
     await chainLanded(page)
-    await expect(page.locator("[data-sonner-toast]")).toHaveCount(0)
+    expect(await toastsOf(page)).toEqual([])
     expect(asked.filter((call) => /\/waste-api\/(waste-fractions|container-types|service-frequencies|vehicle-types|users|roles|company|projects)\b/.test(call))).toEqual([])
   } finally {
     await context.close()
