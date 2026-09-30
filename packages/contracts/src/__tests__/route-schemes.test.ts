@@ -62,6 +62,7 @@ const scheme = {
   depotId: FOURTH,
   unloadingStationId: null,
   collectionGroups: [ruleGroup, manualGroup],
+  generation: { lastGeneratedAt: null, groups: [] },
   validFrom: "2026-01-01",
   validTo: null,
   ...STAMPS,
@@ -176,9 +177,24 @@ describe("RouteScheme", () => {
     assert.deepEqual(RouteScheme.parse(fortnightly), fortnightly)
   })
 
-  test("carries none of the readings: no scheduled, effective or expired status, no lastGeneratedAt until part B", () => {
+  test("carries no status reading: scheduled, effective and expired are the client's, read off the period and the generation", () => {
     for (const reading of ["scheduled", "effective", "expired"]) assert.equal(RouteScheme.safeParse({ ...scheme, status: reading }).success, false, reading)
-    assert.equal(Object.keys(RouteScheme.shape).includes("lastGeneratedAt"), false)
+    assert.equal(Object.keys(RouteScheme.shape).includes("lastGeneratedAt"), false, "the generation's readings sit under `generation`, not loose on the scheme")
+  })
+
+  test("carries what its generation runs left, read from the runs and the match stamps (#177): when the last run succeeded, and each rule group's two latest stamps", () => {
+    const stamp = { ruleSignature: `${FOURTH}|${THIRD}|${ID}|`, containerIds: [ID, OTHER] }
+    const generated = { ...scheme, generation: { lastGeneratedAt: "2026-09-29T03:00:07.000Z", groups: [{ groupId: ID, latest: stamp, previous: { ...stamp, containerIds: [ID] } }] } }
+    assert.deepEqual(RouteScheme.parse(generated), generated)
+    const once = { ...scheme, generation: { lastGeneratedAt: "2026-09-29T03:00:07.000Z", groups: [{ groupId: ID, latest: stamp, previous: null }] } }
+    assert.deepEqual(RouteScheme.parse(once), once, "a group stamped once has no previous stamp")
+    assert.equal(RouteScheme.safeParse({ ...scheme, generation: undefined }).success, false, "never run is said, not left out")
+    assert.equal(RouteScheme.safeParse({ ...scheme, generation: { lastGeneratedAt: "2026-09-29", groups: [] } }).success, false, "an instant, not a day")
+    assert.equal(RouteScheme.safeParse({ ...scheme, generation: { lastGeneratedAt: null, groups: [{ groupId: ID, latest: null, previous: null }] } }).success, false, "a group listed has a latest stamp")
+    for (const key of ["generation", "lastGeneratedAt"]) {
+      assert.equal(Object.keys(RouteSchemeCreate.shape).includes(key), false, `a reading is not written: ${key}`)
+      assert.equal(Object.keys(RouteSchemePatch.shape).includes(key), false, `a reading is not written: ${key}`)
+    }
   })
 
   test("carries its depot and its unloading station on the resource and on both write bodies, each nullable so a form may clear it (#101, slice 6)", () => {

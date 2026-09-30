@@ -30,6 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { usePickableRecords } from "@/components/waste/pickable-records"
 import { useModuleRecords } from "@/components/waste/scheme-route-map"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
@@ -86,6 +87,12 @@ export function RecordSelect({
               {record.name}
             </SelectItem>
           ))}
+          {/* A value no offered row holds — a row of a module not read from the API yet — shows as its id. */}
+          {value && !records.some((record) => record.id === value) && (
+            <SelectItem value={value} className="font-mono text-xs">
+              {value}
+            </SelectItem>
+          )}
         </SelectContent>
       </Select>
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
@@ -531,8 +538,10 @@ export function CollectionGroupsEditor({
   issues?: readonly string[]
 }) {
   const containers = useModuleRecords("resources", "containers")
-  const vehicles = useModuleRecords("fleet", "vehicles")
-  const drivers = useModuleRecords("fleet", "drivers")
+  // The pickers offer only rows the store reads from the API on the Pilot (pickable-records.ts); the rule preview still reads every container.
+  const pickableContainers = usePickableRecords("resources", "containers", containers)
+  const vehicles = usePickableRecords("fleet", "vehicles", useModuleRecords("fleet", "vehicles"))
+  const drivers = usePickableRecords("fleet", "drivers", useModuleRecords("fleet", "drivers"))
   const serviceProviders = useModuleRecords("service-providers", "service-providers")
   const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId)
   const projects = useModuleRecords("configure", "organization")
@@ -710,6 +719,7 @@ export function CollectionGroupsEditor({
           group={selected}
           days={days}
           containers={containers}
+          pickableContainers={pickableContainers}
           vehicles={vehicles}
           drivers={drivers}
           serviceProviders={serviceProviders}
@@ -730,6 +740,7 @@ function CollectionGroupSpoke({
   group,
   days,
   containers,
+  pickableContainers,
   vehicles,
   drivers,
   serviceProviders,
@@ -742,6 +753,8 @@ function CollectionGroupSpoke({
   group: CollectionGroup
   days: readonly ServiceDay[]
   containers: BusinessRecord[]
+  /** The containers the manual picker may offer. */
+  pickableContainers: BusinessRecord[]
   vehicles: BusinessRecord[]
   drivers: BusinessRecord[]
   serviceProviders: BusinessRecord[]
@@ -882,7 +895,7 @@ function CollectionGroupSpoke({
         />
       ) : (
         <SchemeContainerPicker
-          containers={containers}
+          containers={pickableContainers}
           defaultProject={projectName}
           pickedIds={group.containerIds}
           onPick={(containerIds) => onChange({ containerIds })}

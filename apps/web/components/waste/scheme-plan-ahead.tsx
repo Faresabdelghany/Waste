@@ -4,11 +4,14 @@
 // next 7 days of routes are generated or refreshed for every scheme whose
 // Plan Ahead toggle is on — same engine and idempotency rules as the manual
 // Generate routes dialog, so repeated visits never duplicate. Renders
-// nothing; mounted by BusinessWorkspace for the route-studio workspace.
+// nothing; mounted by BusinessWorkspace for the route-studio workspace. On
+// the Pilot it never runs: the API holds the schemes and the routes, and its
+// nightly sweep is the plan-ahead run (slice 3 of #81).
 
 import { useEffect, useRef } from "react"
 import { toast } from "sonner"
 
+import { useApiConfigured } from "@/components/waste/api-session-store"
 import {
   useBusinessRecordStore,
   useBusinessRecordsHydrated,
@@ -20,6 +23,7 @@ import { todayIso } from "@waste/domain/route-schemes/recurrence"
 
 export function SchemePlanAheadRunner({ actorName }: { actorName: string }) {
   const hydrated = useBusinessRecordsHydrated()
+  const onApi = useApiConfigured()
   const schemes = useModuleRecords("route-studio", "schemes")
   const existingRoutes = useModuleRecords("route-studio", "routes")
   const existingPickups = useModuleRecords("route-studio", "pickups")
@@ -37,7 +41,7 @@ export function SchemePlanAheadRunner({ actorName }: { actorName: string }) {
   const hasRun = useRef(false)
 
   useEffect(() => {
-    if (!hydrated || hasRun.current) return
+    if (onApi || !hydrated || hasRun.current) return
     hasRun.current = true
     const {
       routes,
@@ -95,6 +99,7 @@ export function SchemePlanAheadRunner({ actorName }: { actorName: string }) {
     existingPickups,
     existingRoutes,
     hydrated,
+    onApi,
     schemes,
     upsertRecord,
   ])

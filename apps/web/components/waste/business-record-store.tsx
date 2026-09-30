@@ -446,10 +446,13 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
               case "unchanged":
                 return state
               case "refused": {
+                // Part of a write that is several requests may stand: the row is then as the server holds it.
                 const restored =
-                  before === undefined
-                    ? { ...settled, records: settled.records.filter((candidate) => candidate.id !== outcome.recordId) }
-                    : withRecord(settled, before)
+                  outcome.record !== undefined
+                    ? withRecord(settled, outcome.record)
+                    : before === undefined
+                      ? { ...settled, records: settled.records.filter((candidate) => candidate.id !== outcome.recordId) }
+                      : withRecord(settled, before)
                 return new Map(state).set(key, { ...restored, problem: outcome.problem })
               }
             }

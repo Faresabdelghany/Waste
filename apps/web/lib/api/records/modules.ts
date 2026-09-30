@@ -23,6 +23,7 @@ import { accessModule, organisationModule, serviceProvidersModule } from "./orga
 import { placesModule, warehousesModule } from "./places"
 import { collectionCalendarsModule, planningAreasModule } from "./planning"
 import { customersModule } from "./registry"
+import { routeSchemesModule } from "./route-schemes"
 
 /**
  * The switched modules, in load order: a module another module resolves
@@ -35,7 +36,10 @@ import { customersModule } from "./registry"
  * the agreements after the customers they name, and before the placements
  * that name their subscriptions (#183); the containers after the master data
  * and the warehouses they name, the ledger after the containers its movements
- * name, and the allocations after the fleet and the places they reserve (#181).
+ * name, and the allocations after the fleet and the places they reserve (#181);
+ * the route schemes last, after everything a scheme and its groups name —
+ * the areas, the master data, the providers, the fleet and the places —
+ * so none of it is left an id chip on a scheme (#177).
  */
 export const SERVER_MODULES: readonly ServerModule[] = [
   organisationModule,
@@ -53,6 +57,7 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   containersModule,
   inventoryModule,
   vehiclePlanningModule,
+  routeSchemesModule,
 ]
 
 const byKey = new Map(SERVER_MODULES.map((module) => [moduleKeyOf(module.workspaceId, module.moduleId), module]))

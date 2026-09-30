@@ -95,9 +95,11 @@ import { requireDepot, requirePlanningArea, requireUnloadingStation, type Scope 
 import {
   findScheme,
   fleetOf,
+  generationsOf,
   groupsOf,
   MODULE,
   mergeReferences,
+  NEVER_GENERATED,
   noSuchScheme,
   pickOf,
   referencesOf,
@@ -111,6 +113,7 @@ import {
   schemeColumns,
   schemeOf,
   schemeScope,
+  schemesOf,
   schemeWithGroups,
   writeGroupSets,
   type ClockOptions,
@@ -146,7 +149,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         operationId: "listRouteSchemes",
         summary: "The route schemes the caller's projects hold",
         description:
-          "One page of route schemes, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page — each with its collection groups by position, their stop matching rule or their picked containers in stop order. `projectId` narrows it to one of those projects; naming another is refused. `planningAreaId` answers the schemes matching inside one area, `status` the drafts or the validated ones, `planAhead` the ones the nightly job keeps planned or the ones it leaves alone. `validOn` asks for the schemes in force on that day, `validFrom` inclusive and `validTo` exclusive, which is how \"effective\" and \"expired\" are asked for; scheduled and Attention are readings of the generation runs, which part B adds. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of route schemes, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page — each with its collection groups by position, their stop matching rule or their picked containers in stop order. `projectId` narrows it to one of those projects; naming another is refused. `planningAreaId` answers the schemes matching inside one area, `status` the drafts or the validated ones, `planAhead` the ones the nightly job keeps planned or the ones it leaves alone. `validOn` asks for the schemes in force on that day, `validFrom` inclusive and `validTo` exclusive, which is how \"effective\" and \"expired\" are asked for; scheduled and Attention are the client's readings of each scheme's `generation`: when its latest succeeded run finished, and each rule group's two latest match stamps. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of route schemes, each with its collection groups.", RouteSchemePage),
@@ -182,8 +185,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
           .limit(fetchLimit(limit))
         // Paged first, so the row that only proves there is a next page is not one whose groups are loaded.
         const { items, nextCursor } = pageOf(rows, limit)
-        const groups = await groupsOf(tx, principal.companyId, items.map((row) => row.id))
-        return c.json({ items: items.map((row) => schemeOf(row, groups.get(row.id) ?? [])), nextCursor })
+        return c.json({ items: await schemesOf(tx, principal.companyId, items), nextCursor })
       },
     )
     .post(
@@ -368,7 +370,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
             .returning(schemeColumns),
         )
         if (row === undefined) throw noSuchScheme(id)
-        return c.json(schemeOf(row, groups))
+        return c.json(schemeOf(row, groups, (await generationsOf(tx, principal.companyId, new Map([[id, groups]]))).get(id) ?? NEVER_GENERATED))
       },
     )
     .get(

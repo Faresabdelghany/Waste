@@ -42,16 +42,6 @@ export async function startGuided(page: Page): Promise<void> {
   await expect(stepHeading(page)).toHaveText("Which scope does this scheme plan for?")
 }
 
-/** Chooser → Quick create → Continue; resolves on the quick dialog. */
-export async function startQuick(page: Page): Promise<Locator> {
-  await openChooser(page)
-  await page.getByText("Quick create", { exact: true }).click()
-  await page.getByRole("button", { name: "Continue" }).click()
-  const dialog = page.getByRole("dialog", { name: "Create route scheme" })
-  await expect(dialog).toBeVisible()
-  return dialog
-}
-
 /* ---------------------------------- wizard -------------------------------- */
 
 export function wizard(page: Page): Locator {
@@ -69,10 +59,6 @@ export function nextButton(page: Page): Locator {
 
 export async function nextStep(page: Page): Promise<void> {
   await nextButton(page).click()
-}
-
-export async function backStep(page: Page): Promise<void> {
-  await wizard(page).getByRole("button", { name: "Back", exact: true }).click()
 }
 
 export function createButton(page: Page): Locator {

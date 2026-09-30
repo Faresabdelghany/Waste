@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { whenSaved } from "@/components/waste/business-record-store"
 import { ContainerDetailsSheet } from "@/components/waste/containers-assets-register"
 import { SchemeWizard } from "@/components/waste/scheme-wizard/scheme-wizard"
 import {
@@ -32,6 +33,7 @@ import {
   emptyBusinessFilters,
   type BusinessFilters,
 } from "@waste/domain/business-filters"
+import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { BusinessRecord, ModuleDefinition } from "@/lib/data/business-modules"
 import { getBusinessModuleHref } from "@/lib/data/business-links"
 import { FIXTURE_GAZETTEER } from "@/lib/data/street-gazetteer"
@@ -112,7 +114,8 @@ export type MapPlanningViewProps = {
   /** The Containers module — the details sheet reads its copy and lifecycle. */
   containersModule: ModuleDefinition
   canCreateScheme: boolean
-  onCreateScheme: (data: GuidedSchemeData) => void
+  /** The create's outcome on the Pilot, awaited before the wizard closes; undefined on the browser's path. */
+  onCreateScheme: (data: GuidedSchemeData) => Promise<WriteOutcome> | undefined
   canCreateServiceArea: boolean
   /** Opens the Service Area create dialog seeded from the selection. */
   onCreateServiceArea: (seed: ServiceAreaSeed) => void
@@ -882,12 +885,13 @@ export function MapPlanningView({
               setWizardSeedOverride(null)
             }
           }}
-          onCreate={(data) => {
-            setWizardOpen(false)
-            setWizardSeedOverride(null)
-            onCreateScheme(data)
-            clearSelection()
-          }}
+          onCreate={(data) =>
+            whenSaved(onCreateScheme(data), () => {
+              setWizardOpen(false)
+              setWizardSeedOverride(null)
+              clearSelection()
+            })
+          }
         />
       )}
     </div>
