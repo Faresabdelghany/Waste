@@ -18,6 +18,7 @@ import {
   driverOptions,
   driverProfile,
   eligibleDrivers,
+  groupDriverIssueOf,
   isLicenceClass,
   parseTonnes,
   vehicleOptionLabel,
@@ -270,6 +271,14 @@ describe("drivers", () => {
     test("the expiry is the last day the licence holds", () => {
       const onItsLastDay = schemeLicenceDay("2026-09-05", "2026-09-01")
       assert.equal(driverOptions([lars], truck, onItsLastDay)[0].eligible, true)
+    })
+
+    test("a group's driver and vehicle read as the API's own sentence, or nothing when the driver may take it", () => {
+      assert.equal(groupDriverIssueOf(lars, truck, startsNextMonth), "Lars Møller's licence expires on 2026-09-05, before the scheme starts")
+      assert.equal(groupDriverIssueOf(emil, truck, startsNextMonth), "Emil Kristensen needs a C licence for WH-24")
+      assert.equal(groupDriverIssueOf(unknown, truck, startsNextMonth), "New Driver holds no licence class on record")
+      assert.equal(groupDriverIssueOf(mads, truck, startsNextMonth), undefined)
+      assert.equal(groupDriverIssueOf(mads, vehicleProfile(unclassed), startsNextMonth), undefined, "a vehicle without a class on record judges nobody; the picker says so")
     })
 
     test("the class is judged first, and nothing about a day is judged without one", () => {

@@ -16,8 +16,16 @@ export const answerOf = (page: Page, method: string, path: string) =>
 
 export const toasts = (page: Page) => page.getByRole("region", { name: "Notifications alt+T" })
 
-/** A day `days` from today, as the date inputs take it. */
-export const dayFromToday = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10)
+/**
+ * A day `days` from today on the local clock, as the date inputs take it:
+ * the wizard's and the Generate dialog's own day (`todayIso`), which the
+ * browser reads in the runner's timezone — not the UTC day, which differs
+ * past midnight east of Greenwich.
+ */
+export function dayFromToday(days: number): string {
+  const day = new Date(Date.now() + days * 86_400_000)
+  return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`
+}
 
 /** Opens Route Studio's schemes once every switched module the wizard reads has landed: its pickers offer nothing before. */
 export async function openSchemes(page: Page) {

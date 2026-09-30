@@ -341,25 +341,29 @@ describe("watching a run", () => {
     assert.equal(pending.length, 0)
   })
 
-  test("a read the API did not answer is told and tried again; a read it refused ends the watch", async () => {
-    const problems: number[] = []
+  test("a read the API did not answer is told and tried again; a read it refused ends the watch, and says it has", async () => {
+    const problems: Array<[number, boolean]> = []
     const seen: string[] = []
     const { fetch } = scripted([() => problem(503, "The database is not answering"), () => json(runOf({ status: "running" })), () => problem(404, `No generation run ${RUN_ID} in the projects this account works in`)])
     const { timer, pending, tick } = handTimer()
     watchGenerationRun(runOf(), {
       read: (runId) => generationRunOf(clientOver(fetch), runId),
       onRun: (run) => seen.push(run.status),
-      onProblem: (told) => problems.push(told.status),
+      onProblem: (told, ended) => problems.push([told.status, ended]),
       timer,
       now: aMinuteOn,
     })
     await tick()
-    assert.deepEqual(problems, [503])
+    assert.deepEqual(problems, [[503, false]])
     assert.equal(pending.length, 1, "a 503 is the database's moment, not the run's end")
     await tick()
     assert.deepEqual(seen, ["running"])
     await tick()
-    assert.deepEqual(problems, [503, 404])
+    // The page forgets a watch that ended, so asking for the run again (a Generate answering it) watches it afresh.
+    assert.deepEqual(problems, [
+      [503, false],
+      [404, true],
+    ])
     assert.equal(pending.length, 0, "a run the API refuses to show is not asked for again")
   })
 })

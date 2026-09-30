@@ -101,7 +101,11 @@ export function useSchemeGenerationRuns(record: BusinessRecord): SchemeGeneratio
           if (next.status === "succeeded") toast.success(`Routes generated — ${nameRef.current}`, { description: runCounts(next) })
           else toast.error(`Generation failed — ${nameRef.current}`, { description: next.error ?? "The worker gave no reason" })
         },
-        onProblem: (problem) => setReadProblem(problemSentence(problem)),
+        onProblem: (problem, ended) => {
+          setReadProblem(problemSentence(problem))
+          // A refusal ended the watch: forgotten, so a Generate that answers this run again watches it afresh.
+          if (ended) watches.current.delete(run.id)
+        },
         onUnreported: (open) => {
           watches.current.delete(open.id)
           setUnreported((current) => new Set(current).add(open.id))

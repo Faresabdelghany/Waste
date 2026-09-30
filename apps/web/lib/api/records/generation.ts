@@ -84,8 +84,8 @@ export type RunWatch = {
   read: (runId: string, signal: AbortSignal) => Promise<GenerationRun>
   /** Every answer, the run as it now stands. */
   onRun: (run: GenerationRun) => void
-  /** A read that failed; one the API refused (4xx) ends the watch, one it did not answer is tried again. */
-  onProblem?: (problem: Problem) => void
+  /** A read that failed, and whether it ended the watch: one the API refused (4xx) does, one it did not answer is tried again. */
+  onProblem?: (problem: Problem, ended: boolean) => void
   /** The run is open and past fifteen minutes since its last update: no longer read. */
   onUnreported?: (run: GenerationRun) => void
   timer?: RunTimer
@@ -127,9 +127,9 @@ export function watchGenerationRun(run: GenerationRun, { read, onRun, onProblem,
       (error: unknown) => {
         if (stopped) return
         const problem = problemOfError(error)
-        onProblem?.(problem)
-        if (problem.status >= 400 && problem.status < 500) return
-        next()
+        const refused = problem.status >= 400 && problem.status < 500
+        onProblem?.(problem, refused)
+        if (!refused) next()
       },
     )
   }

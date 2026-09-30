@@ -5,12 +5,14 @@
  * Studio only (business-modules.ts), so this is the one place that spells
  * where the records live.
  */
+import { schemeLicenceDay, type JudgedDay } from "@waste/domain/planning/checks"
 import { collectionGroupsToValues, type CollectionGroup } from "@waste/domain/route-schemes/groups"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
+import { isIsoDate } from "@waste/domain/route-schemes/recurrence"
 import { isNoMatchIssue, type SchemeValidationResult } from "@waste/domain/route-schemes/validation"
 
 import type { BusinessFormValues } from "./business-form-types"
-import type { ModuleLocation } from "./business-modules"
+import type { BusinessRecord, ModuleLocation } from "./business-modules"
 
 export const ROUTE_SCHEMES_MODULE = { workspaceId: "route-studio", moduleId: "schemes" } as const satisfies ModuleLocation
 
@@ -66,6 +68,35 @@ export function schemeValuesOfDraft(data: GuidedSchemeData, groups: readonly Col
     // (D36) — never both, the group list is the single source of truth.
     ...collectionGroupsToValues(groups, data.serviceDays),
   }
+}
+
+/** The timezone the project record of that id names, for its clock's day; undefined when it names none or is not among `projects`. */
+export function timezoneOfProject(projects: readonly BusinessRecord[], projectId: string | undefined): string | undefined {
+  const timezone = projects.find((record) => record.id === projectId)?.submittedValues?.timezone
+  return typeof timezone === "string" && timezone !== "" ? timezone : undefined
+}
+
+/** Today on a project's clock, `YYYY-MM-DD`, as the API reads it; the browser's own day for a project that names no timezone the runtime knows. */
+export function projectToday(timezone: string | undefined, now: Date = new Date()): string {
+  if (timezone) {
+    try {
+      return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now)
+    } catch {
+      // An unknown zone reads as the browser's day, below.
+    }
+  }
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
+}
+
+/**
+ * The day a collection group's driver is held to their licence on where the
+ * API holds it (#178): the scheme's first day or the project's today,
+ * whichever is later (`schemeLicenceDay`, @waste/domain/planning/checks) —
+ * a draft with no first day yet is judged on today.
+ */
+export function licenceDayOf(effectiveFrom: string, timezone: string | undefined, now: Date = new Date()): JudgedDay {
+  const today = projectToday(timezone, now)
+  return schemeLicenceDay(isIsoDate(effectiveFrom) ? effectiveFrom : today, today)
 }
 
 /** What the wizard says where the preview's matcher cannot place the API's containers. */

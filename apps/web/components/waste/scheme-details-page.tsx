@@ -118,6 +118,8 @@ import { StatRow } from "@/components/projects/StatRow"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { BusinessFilterPopover } from "@/components/waste/business-filter-popover"
 import { useApiConfigured } from "@/components/waste/api-session-store"
+import { isServerBacked } from "@/lib/api/records/modules"
+import { validationOnApi } from "@/lib/data/route-schemes"
 import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
 import { SchemeNextCollections } from "@/components/waste/scheme-next-collections"
 import {
@@ -252,7 +254,8 @@ export function SchemeDetailsPage({
     }
     return schemeLiveAssessment(record, related)
   }, [allocations, containers, record, schemes, vehicles])
-  const validation = assessment?.validation ?? null
+  // With the API's containers the preview's zero-match sentence is no evidence and blocks nothing (#178; retires with #207).
+  const validation = assessment === null ? null : validationOnApi(assessment.validation, onApi && isServerBacked("resources", "containers"))
   const containerDrift = assessment?.containerDrift ?? []
   // Blocking issues gate on LIVE validation (D26), not only the persisted
   // Draft status: a validated scheme whose environment drifted into blocking

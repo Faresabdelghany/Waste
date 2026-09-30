@@ -41,6 +41,8 @@ import {
 } from "@waste/domain/route-schemes/fleet-profiles"
 
 export type WizardRecords = {
+  /** Whether the records are the API's (the Pilot): a group's driver is then judged on the day the API judges it (lib/data/route-schemes.ts `licenceDayOf`). */
+  onApi: boolean
   projects: BusinessRecord[]
   areas: BusinessRecord[]
   calendars: BusinessRecord[]
@@ -99,6 +101,18 @@ export function useWizardRecords(): WizardRecords {
   const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId)
   const assets = useAssetManagementStore()
   const containerTypes = onApi ? NO_CATALOGUE : assets.containerTypes
+  // The master data's names on the Pilot, derived once per read of the module rather than on every render.
+  const containerTypeNames = useMemo(
+    () => (onApi ? master.filter((record) => masterDataKindOf(record) === "container-type").map((record) => record.name) : null),
+    [master, onApi],
+  )
+  const wasteFractionNames = useMemo(
+    () =>
+      onApi
+        ? master.filter((record) => masterDataKindOf(record) === "waste-fraction").map((record) => record.name)
+        : assets.wasteFractions.filter((fraction) => fraction.status === "Active").map((fraction) => fraction.name),
+    [assets.wasteFractions, master, onApi],
+  )
 
   const byName = useMemo(
     () => new Map(containerTypes.map((type) => [type.name.toLowerCase(), type])),
@@ -137,6 +151,7 @@ export function useWizardRecords(): WizardRecords {
   const projectRecords = projects.filter((record) => /^project/i.test(record.context))
 
   return {
+    onApi,
     projects: projectRecords.length > 0 ? projectRecords : projects,
     areas,
     calendars,
@@ -146,12 +161,10 @@ export function useWizardRecords(): WizardRecords {
     drivers,
     containers,
     containersOnApi: onApi && isServerBacked("resources", "containers"),
-    containerTypeNames: onApi ? master.filter((record) => masterDataKindOf(record) === "container-type").map((record) => record.name) : null,
+    containerTypeNames,
     schemes,
     allocations,
-    wasteFractions: onApi
-      ? master.filter((record) => masterDataKindOf(record) === "waste-fraction").map((record) => record.name)
-      : assets.wasteFractions.filter((fraction) => fraction.status === "Active").map((fraction) => fraction.name),
+    wasteFractions: wasteFractionNames,
     vehicleProfiles: vehicles.map(vehicleProfile),
     driverProfiles: drivers.map(driverProfile),
     weightKg,

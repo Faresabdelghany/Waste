@@ -38,7 +38,6 @@ import {
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { routeEstimateAdapter } from "@waste/domain/route-schemes/estimates"
-import { schemeLicenceDay } from "@waste/domain/planning/checks"
 import {
   driverEligibility,
   driverOptionLabel,
@@ -60,12 +59,10 @@ import { allowedContainerTypes } from "@waste/domain/route-schemes/scope"
 import {
   SERVICE_DAY_LABELS,
   SERVICE_DAY_SHORT_LABELS,
-  isIsoDate,
   sortServiceDays,
-  todayIso,
   type ServiceDay,
 } from "@waste/domain/route-schemes/recurrence"
-import { useApiConfigured } from "@/components/waste/api-session-store"
+import { licenceDayOf, timezoneOfProject } from "@/lib/data/route-schemes"
 import { cn } from "@/lib/utils"
 
 import type { WizardRecords } from "./use-wizard-records"
@@ -143,12 +140,11 @@ export function GroupEditor({
   // Every driver is listed; one without a readable licence, or without the
   // vehicle's class, is disabled with the reason beside the name. On the
   // Pilot a licence is also judged on the day the API judges a group's
-  // driver on — the scheme's first day or today, whichever is later — and a
-  // driver whose licence has run out by then is disabled in the API's own
-  // sentence (#178); fixture mode judges the class alone, as before.
-  const onApi = useApiConfigured()
-  const today = todayIso()
-  const judged = onApi ? schemeLicenceDay(isIsoDate(data.effectiveFrom) ? data.effectiveFrom : today, today) : undefined
+  // driver on — the scheme's first day or the project's today, whichever is
+  // later — and a driver whose licence has run out by then is disabled in
+  // the API's own sentence (#178); fixture mode judges the class alone, as
+  // before. Step 3's gate holds the same day (wizard-model.ts).
+  const judged = records.onApi ? licenceDayOf(data.effectiveFrom, timezoneOfProject(records.projects, data.projectId)) : undefined
   const drivers = driverOptions(records.driverProfiles, vehicle, judged)
   const holds = (candidate: DriverProfile, truck: VehicleProfile) =>
     driverEligibility(candidate, truck.licenceClass, judged === undefined ? undefined : { judged, vehicleLabel: truck.callsign }).eligible

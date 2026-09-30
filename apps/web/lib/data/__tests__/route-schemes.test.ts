@@ -9,7 +9,7 @@ import { describe, test } from "node:test"
 import { validateGuidedScheme } from "@waste/domain/route-schemes/draft"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 
-import { PREVIEW_CANNOT_PLACE, schemeEditStatusOnApi, validationOnApi } from "../route-schemes"
+import { licenceDayOf, PREVIEW_CANNOT_PLACE, projectToday, schemeEditStatusOnApi, validationOnApi } from "../route-schemes"
 
 describe("the status a scheme edit asks the API for", () => {
   test("a Validated scheme stays Validated, whatever the web's own validation says: the API's 409 speaks for the rules it holds", () => {
@@ -86,5 +86,25 @@ describe("the wizard's validation where the containers are the API's", () => {
     assert.equal(withoutArea.status, "Draft")
     assert.ok(withoutArea.issues.length > 0, "a rule without a planning area to match inside blocks on the Pilot too")
     assert.equal(withoutArea.notice, null, "with no area the matcher never ran, so there is nothing to stand in for")
+  })
+})
+
+// The day a group's driver is judged on, as the API judges it (#178): the
+// scheme's first day or today, whichever is later, today on the project's
+// clock — not the browser's, which may sit in another timezone or past
+// midnight.
+describe("the day a group's driver is judged on", () => {
+  const lateEvening = new Date("2026-09-30T22:30:00Z") // 00:30 on 1 October in Copenhagen
+
+  test("today is the project's day, in the project's timezone", () => {
+    assert.equal(projectToday("Europe/Copenhagen", lateEvening), "2026-10-01")
+    assert.equal(projectToday("Europe/Copenhagen", new Date("2026-09-30T21:30:00Z")), "2026-09-30")
+    assert.equal(projectToday("America/New_York", lateEvening), "2026-09-30")
+  })
+
+  test("the scheme's first day when it is later than today, else today", () => {
+    assert.deepEqual(licenceDayOf("2026-10-05", "Europe/Copenhagen", lateEvening), { day: "2026-10-05", meaning: "the scheme starts" })
+    assert.deepEqual(licenceDayOf("2026-09-01", "Europe/Copenhagen", lateEvening), { day: "2026-10-01", meaning: "today" })
+    assert.deepEqual(licenceDayOf("", "Europe/Copenhagen", lateEvening), { day: "2026-10-01", meaning: "the scheme starts" }, "a draft without a first day is judged on today")
   })
 })

@@ -35,7 +35,8 @@ import { whenSaved } from "@/components/waste/business-record-store"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
-import { schemeEditStatusOnApi } from "@/lib/data/route-schemes"
+import { isServerBacked } from "@/lib/api/records/modules"
+import { schemeEditStatusOnApi, validationOnApi } from "@/lib/data/route-schemes"
 import {
   planSchemeEditReconciliation,
   type SchemeEditApplication,
@@ -109,12 +110,14 @@ export function useSchemeEditCommit({
       apply?: SchemeEditApplication,
     ) => {
       if (schemesOnApi) {
-        const validation = schemeLiveValidation(after, {
+        const own = schemeLiveValidation(after, {
           schemes: moduleRecords("route-studio", "schemes"),
           allocations: moduleRecords("fleet", "vehicle-planning"),
           containers: moduleRecords("resources", "containers"),
           vehicles: moduleRecords("fleet", "vehicles"),
         })
+        // The zero-match sentence is no evidence against the API's containers, so it keeps no Draft a Draft (#178; retires with #207).
+        const validation = own === null ? null : validationOnApi(own, isServerBacked("resources", "containers"))
         const scheme: BusinessRecord = { ...after, status: schemeEditStatusOnApi(before.status, validation?.issues ?? null) }
         whenSaved(upsertRecord("route-studio", "schemes", scheme), () => {
           setAuditEvents((current) => ({

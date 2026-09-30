@@ -160,16 +160,28 @@ export function driverEligibility(
     return { driver, eligible: false, reason: `Needs ${licenceClass} licence` }
   }
   if (on !== undefined) {
-    const issue = groupDriverIssue(
-      {
-        vehicle: { label: on.vehicleLabel, requiredLicenceClass: tokenOf(licenceClass) },
-        driver: { name: driver.name, licenceClass: tokenOf(driver.licenceClass), licenceExpiry: driver.licenceExpiry },
-      },
-      on.judged,
-    )
+    const issue = groupDriverIssueOf(driver, { callsign: on.vehicleLabel, licenceClass }, on.judged)
     if (issue !== undefined) return { driver, eligible: false, reason: issue }
   }
   return { driver, eligible: true }
+}
+
+/**
+ * Why a collection group's driver may not take its vehicle on the judged
+ * day, in the sentence the API answers the group with at `driverId`
+ * (planning/checks.ts's `groupDriverIssue`), from the profiles a picker
+ * reads; undefined when they may, or when the vehicle names no class — a
+ * vehicle that judges nobody is the picker's to say, in its own words.
+ */
+export function groupDriverIssueOf(driver: DriverProfile, vehicle: Pick<VehicleProfile, "callsign" | "licenceClass">, judged: JudgedDay): string | undefined {
+  if (vehicle.licenceClass === null) return undefined
+  return groupDriverIssue(
+    {
+      vehicle: { label: vehicle.callsign, requiredLicenceClass: tokenOf(vehicle.licenceClass) },
+      driver: { name: driver.name, licenceClass: driver.licenceClass === null ? null : tokenOf(driver.licenceClass), licenceExpiry: driver.licenceExpiry },
+    },
+    judged,
+  )
 }
 
 /**
