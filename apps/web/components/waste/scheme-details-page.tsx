@@ -121,6 +121,12 @@ import { useApiConfigured } from "@/components/waste/api-session-store"
 import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
 import { SchemeNextCollections } from "@/components/waste/scheme-next-collections"
 import {
+  SchemeGenerateDialog,
+  SchemeGenerationRunsSection,
+  useSchemeGenerationRuns,
+  type SchemeGenerationRuns,
+} from "@/components/waste/scheme-generation"
+import {
   NoMatchingRecords,
   statusClasses,
 } from "@/components/waste/business-record-views"
@@ -212,6 +218,9 @@ export function SchemeDetailsPage({
   const { upsertRecord } = useBusinessRecordStore()
   // On the Pilot the scheme's routes are the API's and not read here until slice 6: the Routes tab shows the dates the API plans instead.
   const onApi = useApiConfigured()
+  // On the Pilot, Generate asks the API for a run and the Routes tab lists and watches the scheme's runs (#178).
+  const generation = useSchemeGenerationRuns(record)
+  const [generateOpen, setGenerateOpen] = useState(false)
   const schemes = useModuleRecords("route-studio", "schemes")
   const allRoutes = useModuleRecords("route-studio", "routes")
   const allPickups = useModuleRecords("route-studio", "pickups")
@@ -385,6 +394,12 @@ export function SchemeDetailsPage({
                 Generate routes
               </Button>
             )}
+            {onApi && !readOnly && (
+              <Button size="sm" onClick={() => setGenerateOpen(true)}>
+                <ArrowsClockwise className="h-4 w-4" />
+                Generate routes
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm">
@@ -482,6 +497,7 @@ export function SchemeDetailsPage({
             generationBlocked={!canGenerate}
             containerDrift={containerDrift}
             nextCollectionsOf={onApi ? record : undefined}
+            generation={onApi ? generation : undefined}
           />
         </TabsContent>
         <TabsContent value="stops" className="mt-0 min-h-0 flex-1 overflow-y-auto">
@@ -496,6 +512,9 @@ export function SchemeDetailsPage({
           />
         </TabsContent>
       </Tabs>
+      {generateOpen && (
+        <SchemeGenerateDialog record={record} open onOpenChange={setGenerateOpen} onAnswered={generation.follow} />
+      )}
     </div>
   )
 }
@@ -883,6 +902,7 @@ function SchemeRoutesTab({
   generationBlocked,
   containerDrift,
   nextCollectionsOf,
+  generation,
 }: {
   routes: readonly BusinessRecord[]
   /** The scheme's generated Stops — a route's waste fractions derive from them. */
@@ -893,6 +913,8 @@ function SchemeRoutesTab({
   containerDrift: readonly CollectionGroupContainerDrift[]
   /** On the Pilot, the scheme whose next collections the API plans stand in for its routes (slice 6 reads those). */
   nextCollectionsOf?: BusinessRecord
+  /** On the Pilot, the scheme's generation runs, read and watched by the page. */
+  generation?: SchemeGenerationRuns
 }) {
   const router = useRouter()
   const [query, setQuery] = useState("")
@@ -941,6 +963,8 @@ function SchemeRoutesTab({
           </div>
         </section>
       )}
+
+      {generation !== undefined && <SchemeGenerationRunsSection generation={generation} />}
 
       {nextCollectionsOf !== undefined ? (
         <SchemeNextCollections record={nextCollectionsOf} />

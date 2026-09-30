@@ -38,6 +38,31 @@ export function generationRunOf(client: ApiClient, runId: string): Promise<Gener
   return get<GenerationRun>(client, `/generation-runs/${runId}`)
 }
 
+/** The runs with one the page has just learned of: in its own place when the list holds it, first when it is new (the newest run is the latest id). */
+export function withRun(runs: readonly GenerationRun[], run: GenerationRun): GenerationRun[] {
+  return runs.some((candidate) => candidate.id === run.id) ? runs.map((candidate) => (candidate.id === run.id ? run : candidate)) : [run, ...runs]
+}
+
+const counted = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
+
+/** What a run did, as counts, leaving out what it did none of: "5 routes created, 1 cancelled · 39 pickups written". */
+export function runCounts(run: GenerationRun): string {
+  const routes = (
+    [
+      [run.routesCreated, "created"],
+      [run.routesRefreshed, "refreshed"],
+      [run.routesCancelled, "cancelled"],
+    ] as const
+  ).filter(([count]) => count > 0)
+  const parts = [
+    routes.map(([count, word], index) => (index === 0 ? `${counted(count, "route", "routes")} ${word}` : `${count} ${word}`)).join(", "),
+    run.pickupsWritten > 0 ? `${counted(run.pickupsWritten, "pickup", "pickups")} written` : "",
+    run.holidaysSkipped > 0 ? `${counted(run.holidaysSkipped, "holiday", "holidays")} skipped` : "",
+    run.unlocated > 0 ? `${counted(run.unlocated, "container", "containers")} not placed` : "",
+  ].filter((part) => part !== "")
+  return parts.length === 0 ? "Nothing was planned in the window" : parts.join(" · ")
+}
+
 /**
  * How the page reads a run it shows: `watched` while it is open and was
  * last updated under fifteen minutes ago, `unreported` once it is open and

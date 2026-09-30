@@ -20,7 +20,7 @@ import type { RouteScheme } from "@waste/contracts/route-schemes"
 
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED } from "../records/adapter"
-import { generationRunOf, runReading, schemeGenerationRuns, watchGenerationRun, type RunTimer } from "../records/generation"
+import { generationRunOf, runCounts, runReading, schemeGenerationRuns, watchGenerationRun, withRun, type RunTimer } from "../records/generation"
 import { GENERATE_ROUTES, routeSchemeAdapter, routeSchemesModule, type GenerationAnswer } from "../records/route-schemes"
 import { actOnRecord, loaded, rereadRecord, type ModuleState } from "../records/server-records"
 import { organisationModule, projectAdapter } from "../records/organisation"
@@ -163,6 +163,28 @@ describe("a scheme's runs", () => {
       runs.map((run) => run.status),
       ["succeeded", "failed"],
     )
+  })
+
+  test("a run the page learns of goes first when it is new, and takes its own place when the list holds it", () => {
+    const older = runOf({ id: "01a0d2a4-a280-7030-8000-0000000000aa", status: "succeeded" })
+    const open = runOf()
+    assert.deepEqual(
+      withRun([older], open).map((run) => run.id),
+      [RUN_ID, older.id],
+    )
+    const listed = [open, older]
+    const answered = withRun(listed, runOf({ status: "running" }))
+    assert.deepEqual(
+      answered.map((run) => `${run.id}:${run.status}`),
+      [`${RUN_ID}:running`, `${older.id}:succeeded`],
+    )
+    assert.equal(listed[0].status, "queued", "the list it was handed is left as it was")
+  })
+
+  test("what a run did reads as its counts, leaving out the ones it did not do", () => {
+    assert.equal(runCounts(runOf({ status: "succeeded", routesCreated: 5, pickupsWritten: 39 })), "5 routes created · 39 pickups written")
+    assert.equal(runCounts(runOf({ status: "succeeded", routesRefreshed: 1, routesCancelled: 2, holidaysSkipped: 2, unlocated: 1 })), "1 route refreshed, 2 cancelled · 2 holidays skipped · 1 container not placed")
+    assert.equal(runCounts(runOf({ status: "succeeded" })), "Nothing was planned in the window")
   })
 
   test("a run is read by its own id", async () => {
