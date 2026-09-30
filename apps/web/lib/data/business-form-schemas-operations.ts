@@ -8,6 +8,7 @@ import { CONTAINER_TYPE_VOCABULARY } from "@waste/domain/route-schemes/matching"
 import { SCHEME_SERVICE_TYPES, allowedContainerTypes } from "@waste/domain/route-schemes/scope"
 
 import type { BusinessFormOption, BusinessFormSchema } from "@/lib/data/business-form-types"
+import { FUEL_TYPE_OPTIONS, VEHICLE_STATUS_OPTIONS } from "@/lib/data/resources-vocabulary"
 
 /**
  * The licence classes the fleet forms offer (issue #37): the driver form's
@@ -1549,7 +1550,7 @@ export const operationsBusinessFormSchemas = [
             id: "assetReference",
             label: "Asset reference",
             type: "text",
-            required: true,
+            description: "What the yard calls it, such as WH-24: the callsign on the API.",
           },
           {
             id: "resourceKind",
@@ -1592,11 +1593,8 @@ export const operationsBusinessFormSchemas = [
             type: "select",
             required: true,
             defaultValue: "active",
-            options: [
-              { value: "active", label: "Active" },
-              { value: "inactive", label: "Inactive" },
-              { value: "maintenance", label: "Maintenance" },
-            ],
+            // The wire's four (#180), so a vehicle in any of them opens in the edit dialog.
+            options: VEHICLE_STATUS_OPTIONS,
           },
         ],
       },
@@ -1608,7 +1606,6 @@ export const operationsBusinessFormSchemas = [
             id: "capacity",
             label: "Rated capacity",
             type: "number",
-            required: true,
             min: 0,
             unit: "kg",
           },
@@ -1629,10 +1626,13 @@ export const operationsBusinessFormSchemas = [
             unit: "m³",
           },
           {
-            id: "wasteFractions",
+            // The master module's waste fractions by id (#180): a vehicle's
+            // compartment carries them on the API, which holds a powered
+            // vehicle to at least one.
+            id: "wasteFractionIds",
             label: "Compatible waste fractions",
-            type: "textarea",
-            required: true,
+            type: "multiselect",
+            relation: { workspaceId: "configure", moduleId: "master" },
           },
           {
             id: "compartments",
@@ -1669,14 +1669,12 @@ export const operationsBusinessFormSchemas = [
             id: "homeDepotId",
             label: "Home depot",
             type: "select",
-            required: true,
             relation: { workspaceId: "resources", moduleId: "depots" },
           },
           {
             id: "effectiveFrom",
             label: "Effective from",
             type: "date",
-            required: true,
           },
           {
             id: "effectiveTo",
@@ -1688,7 +1686,6 @@ export const operationsBusinessFormSchemas = [
             id: "availability",
             label: "Availability rule",
             type: "textarea",
-            required: true,
           },
           {
             id: "gpsDeviceId",
@@ -1699,7 +1696,7 @@ export const operationsBusinessFormSchemas = [
             id: "fuelOrEnergyType",
             label: "Fuel or energy type",
             type: "select",
-            relation: { workspaceId: "configure", moduleId: "master" },
+            options: FUEL_TYPE_OPTIONS,
           },
           {
             id: "costRate",
@@ -1735,7 +1732,6 @@ export const operationsBusinessFormSchemas = [
             id: "workforceReference",
             label: "Workforce reference",
             type: "text",
-            required: true,
           },
           {
             id: "employmentType",
@@ -1765,7 +1761,6 @@ export const operationsBusinessFormSchemas = [
             id: "homeDepotId",
             label: "Home depot",
             type: "select",
-            required: true,
             relation: { workspaceId: "resources", moduleId: "depots" },
           },
         ],
@@ -1778,7 +1773,6 @@ export const operationsBusinessFormSchemas = [
             id: "licenceNumber",
             label: "Driving licence reference",
             type: "text",
-            required: true,
           },
           {
             id: "licenceClass",

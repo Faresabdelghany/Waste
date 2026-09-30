@@ -1,7 +1,7 @@
 import type { APIRequestContext, BrowserContext, Page } from "@playwright/test"
 
 import { API_SESSION_STORAGE_KEY } from "../lib/storage-keys"
-import { accessTokenOf, apiAs, expect, freshContext, signIn, test as base } from "./fixtures"
+import { accessTokenOf, apiAs, chainLanded, expect, freshContext, signIn, test as base } from "./fixtures"
 import { E2E } from "./env"
 import { ensureTester, TESTER_PROJECT, TESTER_ROLE, type User } from "./tester"
 
@@ -44,6 +44,10 @@ const test = base.extend<{ deactivated: Deactivated }>({
       const page = await context.newPage()
       await signIn(page, E2E.testerEmail, E2E.loginPassword)
       await expect(page).toHaveURL(/\/operate/)
+      // The store's module reads must have landed before the account goes:
+      // a read still in flight would meet the refusal first and end the
+      // session before the test asks for it (#180 lengthened the chain).
+      await chainLanded(page)
       const deactivated = await api.post(`/users/${user.id}/deactivate`)
       expect(deactivated.status(), await deactivated.text()).toBe(200)
       deactivatedAt = Date.now()

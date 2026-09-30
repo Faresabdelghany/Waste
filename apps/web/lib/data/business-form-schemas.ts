@@ -125,9 +125,9 @@ const conditionalFields: Record<
     condition: { fieldId: "ownership", equals: "service-provider" },
     required: true,
   },
-  "resources.depots.acceptedFractionId": {
+  // Asked of an unloading station and not required: the API registers a station before it accepts anything (#180).
+  "resources.depots.acceptedFractionIds": {
     condition: { fieldId: "locationType", equals: "unloading" },
-    required: true,
   },
   "resources.depots.vehicleCapacity": {
     condition: { fieldId: "locationType", equals: "depot" },
@@ -401,9 +401,14 @@ function enhanceField(
     }
   }
 
+  // A single select at the master module for a fraction stands in with
+  // static keys, since fixture mode has no master rows of that kind; a
+  // multiselect (a vehicle's compartments, a station's accepted set, #180)
+  // keeps the module, so on the Pilot it offers the API's fractions by id.
   if (
     enhanced.relation?.moduleId === "master" &&
-    /fraction/i.test(field.id)
+    /fraction/i.test(field.id) &&
+    field.type !== "multiselect"
   ) {
     enhanced = {
       ...enhanced,

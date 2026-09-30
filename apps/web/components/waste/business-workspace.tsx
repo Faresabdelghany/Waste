@@ -151,6 +151,7 @@ import {
 } from "@/lib/data/business-links"
 import type { TimelineTask } from "@/lib/data/project-details"
 import { cn, slugify } from "@/lib/utils"
+import { createModuleSync } from "@/lib/url/module-sync"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { Badge } from "@/components/ui/badge"
@@ -1944,7 +1945,13 @@ export function BusinessWorkspace({
     setBusinessFilters((current) => removeBusinessFilterValue(current, key, value))
   }
 
+  // The address bar's module is applied once per change, not on every
+  // record-store change that makes WorkspaceQuerySync ask again
+  // (lib/url/module-sync.ts); a tab click is a module applied.
+  const [moduleSync] = useState(createModuleSync)
+
   const handleModuleChange = (moduleId: string) => {
+    moduleSync.record(moduleId)
     setActiveModuleId(moduleId)
     setQuery("")
     setBusinessFilters(emptyBusinessFilters)
@@ -1958,12 +1965,13 @@ export function BusinessWorkspace({
   }
 
   const syncModuleFromQuery = useCallback((moduleId: string) => {
+    if (!moduleSync.apply(moduleId)) return
     setActiveModuleId(moduleId)
     setQuery("")
     setBusinessFilters(emptyBusinessFilters)
     setPendingAction(null)
     setIsCreateOpen(false)
-  }, [])
+  }, [moduleSync])
 
   const resolveWorkspaceRecord = useCallback(
     (moduleId: string, recordId: string) => {
