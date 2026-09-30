@@ -99,6 +99,8 @@ test("Containers: registered, received, refused a second receipt by sentence, mo
 
 test("Vehicle Planning: allocated over a window of its own, confirmed and released, the history read back", async ({ page, api }) => {
   // A day far enough ahead, and apart per run, that no live allocation of an earlier run holds the vehicle then.
+  // A run that died between allocate and release leaves its day reserved; the next run drawing that day
+  // (about 1 in 3,000) meets the API's overlap 409 at "Allocate" — a leftover of the stack, not a defect.
   const day = new Date(Date.UTC(2031 + Math.floor(Math.random() * 8), Math.floor(Math.random() * 12), 1 + Math.floor(Math.random() * 28)))
   const date = day.toISOString().slice(0, 10)
   const note = uniqueName("E2E allocation")

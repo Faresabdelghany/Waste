@@ -73,6 +73,8 @@ export function allocationChangeForm(record: BusinessRecord): BusinessFormSchema
     title: "Change allocation",
     description: `Change what ${record.name} reserves. The reason goes on its history.`,
     submitLabel: "Change",
+    // The change command appends an event to the allocation's history, as the release does.
+    execution: { kind: "append-event", completionMessage: "The allocation was changed." },
     sections: [
       {
         id: "reservation",

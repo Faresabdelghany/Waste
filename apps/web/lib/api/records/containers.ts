@@ -314,7 +314,7 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
   toRecord: (resource, context) => {
     const project = context.resolve.byServerId(resource.projectId)
     const projectWebId = project?.id ?? webIdOf("project", resource.projectId)
-    const typeName = nameVia(context, "container-type", resource.containerTypeId)
+    const typeName = nameVia(context, CONTAINER_TYPE_PREFIX, resource.containerTypeId)
     const state = resource.assetState
     const status = state === null ? NO_STOCK_RECORD : statusLabel(state.status)
     const placement = placementShown(resource)
@@ -357,7 +357,7 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
         barcode: resource.barcode ?? "",
         rfid: resource.rfid ?? "",
         serialNumber: resource.serialNumber ?? "",
-        containerType: webIdVia(context, "container-type", resource.containerTypeId),
+        containerType: webIdVia(context, CONTAINER_TYPE_PREFIX, resource.containerTypeId),
         ownership: resource.ownership,
         description: resource.notes ?? "",
         assetStatus: state?.status ?? "",
