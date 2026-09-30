@@ -1,6 +1,6 @@
-// The streets the map-planning tests place things on. The shipping gazetteer
-// is the web app's (apps/web/lib/data/street-gazetteer.ts, built beside the
-// fixture registry it mirrors); the domain only knows the shape.
+// The streets the map-planning tests place things on, kept apart from the
+// fixture gazetteer (../../fixtures/gazetteer, which mirrors the demo
+// registry) so these tests do not move when a fixture street does.
 import type { Gazetteer } from "../positions"
 
 export const TEST_GAZETTEER: Gazetteer = {

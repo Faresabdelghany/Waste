@@ -1,9 +1,11 @@
-// The gazetteer is fixture data the domain cannot see: @waste/domain places
-// an address only on a street the caller's table lists, and the purity gate
-// keeps the registry out of the package. This test is the bridge (issue
-// #58): every street the fixtures rely on has an anchor, so a renamed or
-// added fixture street fails here instead of silently hashing a container
-// to a random spot or dropping a route day from the Routes layer.
+// @waste/domain places an address only on a street the caller's table
+// lists, and the purity gate keeps the registry out of the package, so the
+// domain can hold the gazetteer and the seeded generator together
+// (fixtures/__tests__) but never the explicit fixture records. This test is
+// the bridge (issue #58): every street the fixtures rely on has an anchor,
+// so a renamed or added fixture street fails here instead of silently
+// hashing a container to a random spot or dropping a route day from the
+// Routes layer.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
