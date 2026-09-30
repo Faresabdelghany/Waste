@@ -81,10 +81,11 @@ test("a role without the grant is refused in the API's words and stays signed in
   }
 })
 
-// Issue #200: a pane backed by a module the role does not view says so, in
-// the store's sentence, rather than reading forever — the Route Planner holds
-// no grant on the master data nor on the accounts — and the store neither
-// asks the API for those modules nor tells anyone of them.
+// Issue #200: a pane backed by a module the role does not view says so —
+// the rows are not shown to the role, the store's sentence beneath — rather
+// than reading forever or calling it a failed read: the Route Planner holds
+// no grant on the master data, the organisation's projects nor the accounts.
+// The store neither asks the API for those modules nor tells anyone of them.
 test("a pane backed by a module the role does not view says so in place of rows, with nothing asked and nobody toasted", async ({ api, browser }) => {
   await ensureTester(api, E2E.testerEmail)
   const context = await freshContext(browser)
@@ -98,10 +99,20 @@ test("a pane backed by a module the role does not view says so in place of rows,
     })
     await signIn(page, E2E.testerEmail, E2E.loginPassword)
 
-    // Each page's whole load runs, the modules the role views included, and nothing is told on either.
+    // Each page's whole load runs, the modules the role views included, and nothing is told on any of them.
     await page.goto("/settings?pane=master-data")
-    await expect(page.getByText("The master data could not be read from the API: Your role does not allow view on configure.master")).toBeVisible()
+    // Nothing was read, so nothing failed: the pane says the rows are not the role's, with the store's sentence beneath.
+    await expect(page.getByText("The master data is not shown to your role.")).toBeVisible()
+    await expect(page.getByText("Your role does not allow view on configure.master")).toBeVisible()
+    await expect(page.getByText(/could not be read from the API/)).toHaveCount(0)
     await expect(page.getByText("Reading the master data from the API…")).toHaveCount(0)
+    await chainLanded(page)
+    expect(await toastsOf(page)).toEqual([])
+
+    // A pane over two modules says the one that holds it back: the projects, which the role does not view.
+    await page.goto("/settings?pane=holiday-lists")
+    await expect(page.getByText("The holiday lists are not shown to your role.")).toBeVisible()
+    await expect(page.getByText("Your role does not allow view on configure.organization")).toBeVisible()
     await chainLanded(page)
     expect(await toastsOf(page)).toEqual([])
 

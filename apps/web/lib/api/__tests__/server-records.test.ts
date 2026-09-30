@@ -176,21 +176,22 @@ describe("what a pane reading its own module is told on the Pilot", () => {
   const rows = [record("t-1", "One")]
 
   test("no rows and pending while the read is still to come or out; the rows once the module is ready", () => {
-    assert.deepEqual(paneAnswerOf(IDLE), { records: [], ready: false, pending: true, problem: null })
-    assert.deepEqual(paneAnswerOf(loading(IDLE)), { records: [], ready: false, pending: true, problem: null })
-    assert.deepEqual(paneAnswerOf(loaded({ records: rows, serverIds: new Map([["t-1", "1"]]) }, 5)), { records: rows, ready: true, pending: false, problem: null })
+    assert.deepEqual(paneAnswerOf(IDLE), { records: [], ready: false, pending: true, notGranted: false, problem: null })
+    assert.deepEqual(paneAnswerOf(loading(IDLE)), { records: [], ready: false, pending: true, notGranted: false, problem: null })
+    assert.deepEqual(paneAnswerOf(loaded({ records: rows, serverIds: new Map([["t-1", "1"]]) }, 5)), { records: rows, ready: true, pending: false, notGranted: false, problem: null })
   })
 
-  test("a read that failed: no rows, nothing to wait for, and the API's problem", () => {
+  test("a read that failed: no rows, nothing to wait for, and the API's problem, which is no refusal of the role", () => {
     const problem = genericProblem(503)
-    assert.deepEqual(paneAnswerOf(loadFailed(loading(IDLE), problem)), { records: [], ready: false, pending: false, problem })
+    assert.deepEqual(paneAnswerOf(loadFailed(loading(IDLE), problem)), { records: [], ready: false, pending: false, notGranted: false, problem })
   })
 
-  test("a module the role does not view: no rows and nothing to wait for, with the sentence the pane shows in their place", () => {
+  test("a module the role does not view: no rows and nothing to wait for, told apart from a failed read, with the sentence the pane shows in their place", () => {
     assert.deepEqual(paneAnswerOf(notGranted("configure.organization")), {
       records: [],
       ready: false,
       pending: false,
+      notGranted: true,
       problem: { type: "about:blank", title: "Forbidden", status: 403, detail: "Your role does not allow view on configure.organization" },
     })
   })

@@ -217,9 +217,13 @@ export function PlanningAreasSettings() {
 
   const emptyMessage = areas.pending
     ? "Reading the planning areas from the API…"
-    : areas.problem
-      ? `The planning areas could not be read from the API: ${areas.problem.detail ?? areas.problem.title}`
-      : "No planning areas match this search."
+    : areas.notGranted
+      ? "The planning areas are not shown to your role."
+      : areas.problem
+        ? `The planning areas could not be read from the API: ${areas.problem.detail ?? areas.problem.title}`
+        : "No planning areas match this search."
+  // Nothing was read for a role that does not view the module: the store's sentence says why, beneath.
+  const emptyHint = areas.notGranted ? areas.problem?.detail : undefined
 
   return (
     <AssetPanelShell
@@ -270,7 +274,7 @@ export function PlanningAreasSettings() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <EmptyRow colSpan={8} message={emptyMessage} />
+                <EmptyRow colSpan={8} message={emptyMessage} hint={emptyHint} />
               ) : (
                 pageRows.map(({ record, row }) => (
                   <TableRow key={record.id}>

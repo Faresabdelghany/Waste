@@ -573,7 +573,7 @@ export function useModuleRecords(
   const state = useServerModuleState(workspaceId, moduleId)
   const { getRecords } = useBusinessRecordStore()
   if (configured && state !== null) return paneAnswerOf(state)
-  return { records: getRecords(workspaceId, moduleId, fixtures), ready: true, pending: false, problem: null }
+  return { records: getRecords(workspaceId, moduleId, fixtures), ready: true, pending: false, notGranted: false, problem: null }
 }
 
 /**

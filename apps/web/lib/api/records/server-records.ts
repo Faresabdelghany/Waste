@@ -103,7 +103,8 @@ export function recordsOf(module: ModuleState, fixtures: readonly BusinessRecord
   return module.status === "ready" ? module.records : [...fixtures]
 }
 
-export type PaneAnswer = { records: BusinessRecord[]; ready: boolean; pending: boolean; problem: Problem | null }
+/** `notGranted` tells a pane its problem is the role's, not a read that failed: nothing was read, so it says the rows are not shown to the role. */
+export type PaneAnswer = { records: BusinessRecord[]; ready: boolean; pending: boolean; notGranted: boolean; problem: Problem | null }
 
 /**
  * What a pane reading its own switched module is told on the Pilot
@@ -111,11 +112,11 @@ export type PaneAnswer = { records: BusinessRecord[]; ready: boolean; pending: b
  * fixture shown there is a row that does not exist — `pending` while the
  * read is still to come or out, and otherwise the problem the pane shows in
  * their place: the API's for a read that failed, the store's own for a
- * module the person's role does not view.
+ * module the person's role does not view (`notGranted`).
  */
 export function paneAnswerOf(module: ModuleState): PaneAnswer {
-  if (module.status === "ready") return { records: module.records, ready: true, pending: false, problem: null }
-  return { records: [], ready: false, pending: module.status === "idle" || module.status === "loading", problem: module.problem }
+  if (module.status === "ready") return { records: module.records, ready: true, pending: false, notGranted: false, problem: null }
+  return { records: [], ready: false, pending: module.status === "idle" || module.status === "loading", notGranted: module.status === "not-granted", problem: module.problem }
 }
 
 /** The problem an unknown failure is reported as; a thrown `ApiProblem` is reported as itself. */
