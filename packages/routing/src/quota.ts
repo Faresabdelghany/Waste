@@ -42,6 +42,16 @@
 // where it lies within a day, else an hour: it never waits for a window
 // already gone, nor for years on a reset misread.
 //
+// A job waits the minute out: the pacer's full window and a 429's
+// Retry-After, since it has its ten minutes. A request a person is looking
+// at does not (#173, the API's preview, `waits: false`): the minute's
+// allowance spent, or a 429, is a deferral like the day's — `minute`, until
+// the window frees — with no sleep and no second call, and a chunked
+// measurement the minute cannot hold whole defers before its first call.
+// The API asks the provider rarely, so its own last reading would stand
+// against the worker's since; `refresh` takes a stored row newer than what
+// the process learned, where the worker's `adopt` lets its own readings rule.
+//
 // The knobs are the Pilot's environment (#128's principle), defaulting to
 // the Standard plan's own figures (STANDARD_PLAN); the clock, the sleep, the
 // jitter and the log lines are injected, so the tests run it against the
@@ -72,6 +82,8 @@ export function quotaKnobs({ directionsReserve, optimisationReserve, callsPerMin
 }
 
 export type EngineOptions = QuotaKnobs & {
+  /** Whether a call waits the minute out — the pacer's full window, a 429's Retry-After — as a job does; false answers `minute` deferrals instead, for a request a person is looking at (#173). True unless set. */
+  waits?: boolean
   now?: () => Date
   sleep?: (ms: number) => Promise<void>
   /** In [0, 1): the share of the minute of jitter a deferral adds after the reset. */
@@ -89,8 +101,8 @@ export type QuotaState = RoutingQuotaStanding & {
 /** What a job's request came to. */
 export type Outcome<Result> =
   | { kind: "answered"; result: Result }
-  /** Not now: the family is exhausted, a batch job would cross the reserve, or the job needs more calls than the day has left. No call was made after the refusal, and none is to be made before `until`. */
-  | { kind: "deferred"; family: QuotaFamily; cause: "exhausted" | "reserve" | "insufficient"; until: Date }
+  /** Not now: the family is exhausted, a batch job would cross the reserve, the job needs more calls than the day has left, or — for an engine that does not wait — the minute's allowance is spent. No call was made after the refusal, and none is to be made before `until`. */
+  | { kind: "deferred"; family: QuotaFamily; cause: "exhausted" | "reserve" | "insufficient" | "minute"; until: Date }
   /** Final: the provider cannot answer this request. */
   | { kind: "refused"; sentence: string }
   /** Final: the provider refuses the key. */
@@ -139,6 +151,7 @@ export class QuotaEngine {
   private readonly provider: RoutingProvider
   private readonly reserves: Record<QuotaFamily, number>
   private readonly callsPerMinute: number
+  private readonly waits: boolean
   private readonly now: () => Date
   private readonly sleep: (ms: number) => Promise<void>
   private readonly random: () => number
@@ -151,6 +164,7 @@ export class QuotaEngine {
     this.provider = provider
     this.reserves = options.reserves
     this.callsPerMinute = options.callsPerMinute
+    this.waits = options.waits ?? true
     this.now = options.now ?? (() => new Date())
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
     this.random = options.random ?? Math.random
@@ -174,6 +188,21 @@ export class QuotaEngine {
    */
   adopt(family: QuotaFamily, stored: QuotaState): void {
     if (this.families[family].state.observedAt !== null || stored.observedAt === null) return
+    this.families[family].state = { ...stored }
+  }
+
+  /**
+   * Takes a stored row newer than what the process learned of the family —
+   * for a process that asks the provider rarely, the API's preview (#173),
+   * whose own last reading would otherwise stand against the worker's since
+   * and cost a quota 403 to learn an exhaustion the row already says. The
+   * stamps are two clocks, the database's and this process's, so a skew of
+   * seconds takes or leaves a reading seconds old at worst. A refusal of the
+   * key it carries is reported, never obeyed, as with `adopt`.
+   */
+  refresh(family: QuotaFamily, stored: QuotaState): void {
+    const learned = this.families[family].state.observedAt
+    if (stored.observedAt === null || (learned !== null && learned.getTime() >= stored.observedAt.getTime())) return
     this.families[family].state = { ...stored }
   }
 
@@ -204,6 +233,27 @@ export class QuotaEngine {
 
   /** Whether a job of this class may make `calls` calls of the family now; the refusal it gets instead, when not. */
   private admit(family: QuotaFamily, jobClass: RoutingJobClass, calls: number): Outcome<never> | null {
+    return this.admitDay(family, jobClass, calls) ?? this.admitMinute(family, calls)
+  }
+
+  /** For an engine that does not wait: whether the minute's allowance holds every call the request needs — as many as a minute holds — or when it will. */
+  private admitMinute(family: QuotaFamily, calls: number): Outcome<never> | null {
+    if (this.waits) return null
+    const window = this.window(family)
+    const excess = window.length + Math.min(calls, this.callsPerMinute) - this.callsPerMinute
+    return excess <= 0 ? null : { kind: "deferred", family, cause: "minute", until: this.after(window[excess - 1] + MINUTE_MS) }
+  }
+
+  /** The family's calls within the last minute, oldest first, the older ones let go. */
+  private window(family: QuotaFamily): number[] {
+    const calls = this.families[family].calls
+    const now = this.now().getTime()
+    while (calls.length > 0 && calls[0] <= now - MINUTE_MS) calls.shift()
+    return calls
+  }
+
+  /** The day's rules: the key, the family's exhaustion, the reserve. */
+  private admitDay(family: QuotaFamily, jobClass: RoutingJobClass, calls: number): Outcome<never> | null {
     const { state, keyRefusedHere } = this.families[family]
     const now = this.now().getTime()
     if (keyRefusedHere !== null && now < keyRefusedHere + KEY_PROBE_MS) return { kind: "key-refused", sentence: KEY_REFUSED }
@@ -222,11 +272,12 @@ export class QuotaEngine {
     return { kind: "deferred", family, cause, until: this.after(this.nextReset(state.resetAt, now)) }
   }
 
-  /** One request, paced, its answer read; a 429 waited out and tried once more. */
+  /** One request, paced, its answer read; a 429 waited out and tried once more — or, for an engine that does not wait, either one a `minute` deferral. */
   private async call<Result>(family: QuotaFamily, ask: () => Promise<ProviderAnswer<Result>>): Promise<Outcome<Result>> {
     const record = this.families[family]
     for (let attempt = 1; ; attempt += 1) {
-      await this.pace(family)
+      const freesAt = await this.pace(family)
+      if (freesAt !== null) return { kind: "deferred", family, cause: "minute", until: this.after(freesAt) }
       const answer = await ask()
       const now = this.now()
       switch (answer.kind) {
@@ -236,8 +287,12 @@ export class QuotaEngine {
           return { kind: "answered", result: answer.result }
         case "rate-limited": {
           if (answer.quota !== null) record.state = { ...record.state, ...readingOf(answer.quota), observedAt: now }
-          if (attempt > 1) throw new RoutingRetryable(`routing: ${this.name} answered ${family} with 429 twice running; pg-boss retries the job`)
           const waitMs = Math.min(answer.retryAfterSeconds ?? 60, 60) * 1000
+          if (!this.waits) {
+            this.warn(`routing: ${this.name} answered ${family} with 429, the minute's limit; deferred ${waitMs / 1000} s rather than held`)
+            return { kind: "deferred", family, cause: "minute", until: this.after(now.getTime() + waitMs) }
+          }
+          if (attempt > 1) throw new RoutingRetryable(`routing: ${this.name} answered ${family} with 429 twice running; pg-boss retries the job`)
           this.warn(`routing: ${this.name} answered ${family} with 429, the minute's limit; waiting ${waitMs / 1000} s to try once more`)
           await this.sleep(waitMs)
           continue
@@ -261,16 +316,16 @@ export class QuotaEngine {
     }
   }
 
-  /** Waits until the family has made fewer than `callsPerMinute` calls in the last minute, then counts this one. */
-  private async pace(family: QuotaFamily): Promise<void> {
-    const calls = this.families[family].calls
+  /** Waits until the family has made fewer than `callsPerMinute` calls in the last minute, then counts this one; an engine that does not wait answers the instant it would have waited for instead, counting nothing. */
+  private async pace(family: QuotaFamily): Promise<number | null> {
     for (;;) {
+      const calls = this.window(family)
       const now = this.now().getTime()
-      while (calls.length > 0 && calls[0] <= now - MINUTE_MS) calls.shift()
       if (calls.length < this.callsPerMinute) {
         calls.push(now)
-        return
+        return null
       }
+      if (!this.waits) return calls[0] + MINUTE_MS
       await this.sleep(calls[0] + MINUTE_MS - now)
     }
   }

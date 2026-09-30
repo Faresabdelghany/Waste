@@ -45,7 +45,7 @@
 // and `edit` to command; every statement carries the tenant and `inProjects`.
 import { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import { Page, PageRequest } from "@waste/contracts/pagination"
-import { PickupOrderSet, Route, RouteAssign, RouteCancel, RouteDetail, RouteListQuery, RouteReschedule } from "@waste/contracts/routes"
+import { PickupOrderSet, RouteAssign, RouteCancel, RouteDetail, RouteListItem, RouteListQuery, RouteReschedule } from "@waste/contracts/routes"
 import type { Tx } from "@waste/db/client"
 import { driverCommand, pickup, route, session } from "@waste/db/schema/execution"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
@@ -68,7 +68,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { detailOf, findRoute, labelOf, noSuchRoute, pickupColumns, pickupOf, pickupsOfRoute, receiptColumns, receiptOf, routeColumns, routeScope, routesOf, type RouteRow } from "./execution-shapes"
 import { findDriver, findVehicle, vehicleLabel, type DriverRow, type VehicleRow } from "./fleet-lookups"
-import { ensurePlan } from "./plan-shapes"
+import { activePlansByRoute, ensurePlan } from "./plan-shapes"
 import type { JobSender } from "@waste/db/jobs"
 import { NOT_AN_UNLOADING_STATION, requireDepot, type Scope } from "./references"
 import type { ClockOptions } from "./scheme-groups"
@@ -77,7 +77,7 @@ import { refuseUnavailableDriver } from "./statuses"
 
 const MODULE = "route-studio.routes"
 
-const RoutePage = Page(Route)
+const RoutePage = Page(RouteListItem)
 const ReceiptPage = Page(DriverCommandReceipt)
 
 /** What a dispatch of a route nobody is assigned to is told: the driver door's scope is the assignment, so a route without one reaches no device. */
@@ -240,7 +240,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "listRoutes",
         summary: "The dated routes of the caller's projects",
         description:
-          "One page of routes, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page until step 7 bounds the list by the planned service provider. `projectId` narrows it to one of those projects; naming another is refused. `routeSchemeId` and `collectionGroupId` answer what a scheme or a group generated, `from` and `to` the routes operating over a window of days (both inclusive, `to` on or after `from`), `serviceDate` the routes of one recurrence day, `status` one of the five, and `plannedDriverId` and `plannedVehicleId` a driver's or a vehicle's day. Every row carries its `progress`, counted from its pickups and never stored. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of routes, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page until step 7 bounds the list by the planned service provider. `projectId` narrows it to one of those projects; naming another is refused. `routeSchemeId` and `collectionGroupId` answer what a scheme or a group generated, `from` and `to` the routes operating over a window of days (both inclusive, `to` on or after `from`), `serviceDate` the routes of one recurrence day, `status` one of the five, and `plannedDriverId` and `plannedVehicleId` a driver's or a vehicle's day. Every row carries its `progress`, counted from its pickups and never stored, and its active Plan's reading (`activePlan`, null while the generated order stands unmeasured), the one a map drawn over the page reads each route's measurement from (#173). Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of routes.", RoutePage),
@@ -280,7 +280,9 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
           .limit(fetchLimit(limit))
         // Paged first, so the row that only proves there is a next page is not one whose progress is counted.
         const { items, nextCursor } = pageOf(rows, limit)
-        return c.json({ items: await routesOf(tx, principal.companyId, items), nextCursor })
+        const [listed, plans] = await Promise.all([routesOf(tx, principal.companyId, items), activePlansByRoute(tx, principal.companyId, items)])
+        const page: RouteListItem[] = listed.map((item) => ({ ...item, activePlan: plans.get(item.id) ?? null }))
+        return c.json({ items: page, nextCursor })
       },
     )
     .get(

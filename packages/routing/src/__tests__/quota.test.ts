@@ -21,7 +21,7 @@ const PROFILE = "driving-hgv"
 const line = (count: number): Position2D[] => Array.from({ length: count }, (_, index): Position2D => [12.5 + index / 1000, 55.7])
 
 /** An engine over a scripted fake, on a clock the test moves: a sleep advances it and is recorded. The jitter is half a minute. */
-function harness(script: FakeScript = {}, knobs: Partial<QuotaKnobs> = {}) {
+function harness(script: FakeScript = {}, knobs: Partial<QuotaKnobs> & { waits?: boolean } = {}) {
   const clock = { now: T0.getTime() }
   const slept: number[] = []
   const lines: { level: "warn" | "error"; line: string }[] = []
@@ -298,5 +298,83 @@ describe("the readings the worker stores (#132 §5)", () => {
 
   test("carries the provider's name, the one the fingerprint and the rows are kept under", () => {
     assert.equal(harness().engine.name, "fake")
+  })
+})
+
+describe("refresh: a stored row newer than what the process learned (#173, the API's preview)", () => {
+  test("takes a newer row after the process learned the family itself, so the worker's exhaustion defers the next call without a 403 spent to learn it", async () => {
+    const { engine, fake, advance } = harness({ quota: { directions: { remaining: 10, limit: 2000, resetAt: RESET } } })
+    await engine.measure([depot, stops[0]], { class: "interactive" })
+    advance(60_000)
+    const exhausted = new Date(T0.getTime() + 30_000)
+    engine.refresh("directions", stored({ remaining: 0, limit: 2000, resetAt: new Date(RESET), exhaustedAt: exhausted, observedAt: exhausted }))
+    assert.deepEqual(await engine.measure([depot, stops[0]], { class: "interactive" }), { kind: "deferred", family: "directions", cause: "exhausted", until: new Date("2026-10-01T03:00:30.000Z") })
+    assert.equal(fake.calls.directions, 1)
+  })
+
+  test("leaves a row no newer than what the process learned: its own reading stands", async () => {
+    const { engine } = harness({ quota: { directions: { remaining: 10, limit: 2000, resetAt: RESET } } })
+    await engine.measure([depot, stops[0]], { class: "interactive" })
+    engine.refresh("directions", stored({ remaining: 3, limit: 2000, resetAt: new Date(RESET), observedAt: T0 }))
+    engine.refresh("directions", stored({ remaining: 3, limit: 2000, resetAt: new Date(RESET), observedAt: new Date(T0.getTime() - 1) }))
+    assert.equal(engine.state("directions").remaining, 9)
+  })
+
+  test("seeds a family the process never heard of, as adopt does, and a newer row that clears the exhaustion reopens it", async () => {
+    const { engine, fake } = harness()
+    engine.refresh("directions", stored({ remaining: 0, limit: 2000, resetAt: new Date(RESET), exhaustedAt: T0 }))
+    assert.equal((await engine.measure([depot, stops[0]], { class: "interactive" })).kind, "deferred")
+    engine.refresh("directions", stored({ remaining: 2000, limit: 2000, resetAt: new Date(NEXT_RESET), observedAt: new Date(T0.getTime() + 1_000) }))
+    assert.equal((await engine.measure([depot, stops[0]], { class: "interactive" })).kind, "answered")
+    assert.equal(fake.calls.directions, 1)
+  })
+
+  test("a newer row's key refusal is reported, never obeyed: the process's own key is asked", async () => {
+    const { engine, fake } = harness()
+    engine.refresh("directions", stored({ keyRefusedAt: T0 }))
+    assert.equal((await engine.measure([depot, stops[0]], { class: "interactive" })).kind, "answered")
+    assert.equal(fake.calls.directions, 1)
+  })
+
+  test("a row that says nothing learned is no reading: it is left", () => {
+    const { engine } = harness()
+    engine.refresh("directions", stored({ remaining: 5, observedAt: null }))
+    assert.equal(engine.state("directions").remaining, null)
+  })
+})
+
+describe("an engine that does not wait: a request a person is looking at (#173, `waits: false`)", () => {
+  test("a 429 answers deferred to the minute's window, sleeping nothing and asking no second time", async () => {
+    const { engine, fake, slept } = harness({ responses: { directions: [{ status: 429, retryAfterSeconds: 7 }] } }, { waits: false })
+    assert.deepEqual(await engine.measure([depot, stops[0]], { class: "interactive" }), { kind: "deferred", family: "directions", cause: "minute", until: new Date(T0.getTime() + 7_000 + 30_000) })
+    assert.deepEqual(slept, [])
+    assert.equal(fake.calls.directions, 1)
+  })
+
+  test("a 429 without a Retry-After, or with a longer one, is the minute: deferred a minute on at most", async () => {
+    const bare = harness({ responses: { directions: [{ status: 429 }] } }, { waits: false })
+    assert.deepEqual(await bare.engine.measure([depot, stops[0]], { class: "interactive" }), { kind: "deferred", family: "directions", cause: "minute", until: new Date(T0.getTime() + 60_000 + 30_000) })
+    const long = harness({ responses: { directions: [{ status: 429, retryAfterSeconds: 600 }] } }, { waits: false })
+    assert.deepEqual(await long.engine.measure([depot, stops[0]], { class: "interactive" }), { kind: "deferred", family: "directions", cause: "minute", until: new Date(T0.getTime() + 60_000 + 30_000) })
+  })
+
+  test("the minute's allowance spent defers the next request to when its oldest call leaves the window, without a call or a sleep", async () => {
+    const { engine, fake, slept } = harness({}, { callsPerMinute: 3, waits: false })
+    for (let call = 0; call < 3; call += 1) await engine.measure([depot, stops[0]], { class: "interactive" })
+    assert.deepEqual(await engine.measure([depot, stops[0]], { class: "interactive" }), { kind: "deferred", family: "directions", cause: "minute", until: new Date(T0.getTime() + 60_000 + 30_000) })
+    assert.equal(fake.calls.directions, 3)
+    assert.deepEqual(slept, [])
+  })
+
+  test("a chunked measurement the minute cannot hold whole defers before its first call", async () => {
+    const { engine, fake } = harness({}, { callsPerMinute: 3, waits: false })
+    await engine.measure([depot, stops[0]], { class: "interactive" })
+    assert.equal((await engine.measure(line(101), { class: "interactive" })).kind, "deferred")
+    assert.equal(fake.calls.directions, 1)
+  })
+
+  test("the day's rules are the same: the reserve, the quota 403 and the key hold as for a job", async () => {
+    const { engine } = harness({ quota: { directions: { remaining: 3, limit: 2000, resetAt: RESET } }, responses: { directions: [{ status: 403, quota: true }] } }, { waits: false })
+    assert.deepEqual(await engine.measure([depot, stops[0]], { class: "interactive" }), { kind: "deferred", family: "directions", cause: "exhausted", until: new Date("2026-10-01T03:00:30.000Z") })
   })
 })

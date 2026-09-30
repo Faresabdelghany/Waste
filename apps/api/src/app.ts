@@ -33,7 +33,7 @@ import { Hono } from "hono"
 import { describeRoute, openAPIRouteHandler, resolver } from "hono-openapi"
 
 import manifest from "../package.json" with { type: "json" }
-import { authenticate, BEARER_AUTH, BEARER_SECURITY_SCHEME } from "./auth/principal"
+import { authenticate, BEARER_AUTH, BEARER_SECURITY_SCHEME, identify } from "./auth/principal"
 import type { Verifier } from "./auth/verify"
 import { errorHandler, notFound } from "./problem"
 import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS } from "./readiness"
@@ -53,8 +53,10 @@ import { driverRoutes } from "./routes/drivers"
 import { generationRoutes } from "./routes/generation"
 import { invoiceRoutes } from "./routes/invoices"
 import { lifecycleRoutes } from "./routes/lifecycle"
-import { providerNameFromEnv } from "@waste/routing/select"
+import { FakeProvider } from "@waste/routing/fake"
 import type { RoutingIdentity } from "@waste/routing/provider"
+import { QuotaEngine, STANDARD_PLAN } from "@waste/routing/quota"
+import { providerNameFromEnv } from "@waste/routing/select"
 
 import { liveRoutes } from "./routes/live"
 import { meRoutes } from "./routes/me"
@@ -69,6 +71,7 @@ import { roleRoutes } from "./routes/roles"
 import { routeSchemeRoutes } from "./routes/route-schemes"
 import { planRoutes } from "./routes/plans"
 import { routeRoutes } from "./routes/routes"
+import { routingPreviewRoutes } from "./routes/routing-preview"
 import { routingQuotaRoutes } from "./routes/routing-quota"
 import { serviceAreaRoutes } from "./routes/service-areas"
 import { serviceProviderPriceRoutes } from "./routes/service-provider-prices"
@@ -111,11 +114,30 @@ export type AppOptions = {
    * none of them can free.
    */
   jobs?: JobSender
-  /** The routing provider (#170, #131): its name keys every Plan fingerprint, and no request ever calls it (#124 §4). The fake unless ROUTING_PROVIDER says otherwise; a test injects its own. */
+  /** The routing provider (#170, #131): its name keys every Plan fingerprint, and no Plan route ever calls it (#124 §4). The fake unless ROUTING_PROVIDER says otherwise; a test injects its own. */
   routing?: RoutingIdentity
+  /**
+   * The provider behind the quota engine the guided setup's preview asks
+   * through (#173), the one route that calls it, interactive class and never
+   * waiting inside a request (`waits: false`). server.ts builds it from the
+   * environment, with the key; absent, the fake with the Standard plan's
+   * knobs; a test injects one over a scripted fake.
+   */
+  routingEngine?: QuotaEngine
 }
 
-export function createApp({ probe, pool, verifier, now = () => new Date(), databaseTimeoutMs = DATABASE_CHECK_TIMEOUT_MS, log, build = null, jobs = createJobSender(probe), routing = { name: providerNameFromEnv() } }: AppOptions) {
+export function createApp({
+  probe,
+  pool,
+  verifier,
+  now = () => new Date(),
+  databaseTimeoutMs = DATABASE_CHECK_TIMEOUT_MS,
+  log,
+  build = null,
+  jobs = createJobSender(probe),
+  routing = { name: providerNameFromEnv() },
+  routingEngine = new QuotaEngine(new FakeProvider(), { ...STANDARD_PLAN, waits: false }),
+}: AppOptions) {
   const app = new Hono()
   app.onError(errorHandler(log))
   app.notFound(notFound)
@@ -209,6 +231,8 @@ export function createApp({ probe, pool, verifier, now = () => new Date(), datab
   // The Plan endpoints (#170) share the routes module and its grant; the provider's name keys the fingerprints.
   app.route("/", planRoutes(guard, { routing, jobs }))
   app.route("/", routingQuotaRoutes(guard, { routing }))
+  // The preview calls the provider, so its guard ends the principal's transaction before the handler, which opens its own short ones around the call (#124 §4, #173).
+  app.route("/", routingPreviewRoutes(identify({ pool, verifier }), { pool, engine: routingEngine, now, log: log ?? console.error }))
   app.route("/", pickupRoutes(guard, { now }))
   app.route("/", unloadRoutes(guard, { now }))
   // The driver door (Issue #104, slice 4) goes on after the office: its commands are judged against the request's clock, so it takes `now` like the ledger routes.

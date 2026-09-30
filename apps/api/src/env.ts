@@ -1,8 +1,10 @@
 // The process environment, read once at startup and never again. Four
 // variables the process needs: where to listen, the database, and the
-// Supabase project whose Auth signs the tokens; and one knob, the request
-// pool's size, absent unless set (#149: the Pilot's is its host's
-// environment, never a default here). Every value arrives as a string, so
+// Supabase project whose Auth signs the tokens; the routing provider and its
+// key, which the guided setup's preview calls (#173); and two knobs, the
+// request pool's size and the preview's calls a minute, absent unless set
+// (#149: the Pilot's are its host's environment, never a default here).
+// Every value arrives as a string, so
 // the schemas do the reading. An empty variable counts as not set, applied
 // once in parseEnv for every variable, so a new field is a plain schema with
 // a default, or without one when the process cannot run without it. Anything
@@ -90,6 +92,15 @@ export const Env = z.object({
   SUPABASE_URL: SupabaseUrl,
   /** The routing provider's name (#170, #131): unset means the fake; the one validator of the value is providerFromEnv (@waste/routing/select), so the refusal has one spelling. */
   ROUTING_PROVIDER: z.string().optional(),
+  /** OpenRouteService's key (#171), when ROUTING_PROVIDER names it: the guided setup's preview calls the provider from the API (#173); one person's, server-side only, never logged; `providerFromEnv` refuses the provider without it. */
+  OPENROUTESERVICE_API_KEY: z.string().optional(),
+  /** How many preview calls a minute the API makes per family (#132 §1): the Standard plan's 30 unless set. The preview is interactive, so the reserves are the worker's alone. */
+  ROUTING_CALLS_PER_MINUTE: z
+    .string()
+    .regex(/^\d+$/, { error: "must be a whole number of calls a minute, at least 1" })
+    .transform(Number)
+    .pipe(z.int().min(1))
+    .optional(),
   DATABASE_POOL_MAX: PoolMax,
 })
 export type Env = z.infer<typeof Env>

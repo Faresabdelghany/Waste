@@ -98,6 +98,31 @@ describe("GET /me with a good token that names no company", () => {
   })
 })
 
+describe("the guard that ends its transaction before the handler (identify, #173) refuses exactly as the guard every other route puts first", () => {
+  // `GET /me` stands behind `authenticate`, `POST /routing/preview` behind
+  // `identify`: one function makes both guards' checks, and each refusal a
+  // token can earn before the database is asked anything reads the same from
+  // both. The account's own refusal needs a database and is held the same
+  // way in routing-preview.test.ts.
+  const preview = (headers: Record<string, string> = {}) =>
+    app.request("/routing/preview", { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify({ points: [[12.5683, 55.6761], [12.61, 55.71]] }) })
+
+  test("no token, a malformed header, a refused token and a token that names no company: the same status, challenge and sentence", async () => {
+    const cases: Record<string, Record<string, string>> = {
+      "no header": {},
+      malformed: { authorization: "Bearer one two" },
+      "bad signature": { authorization: `Bearer ${await signToken(keys, { privateKey: (await signingKeys()).privateKey })}` },
+      "no company": { authorization: `Bearer ${await signToken(keys)}` },
+    }
+    for (const [name, headers] of Object.entries(cases)) {
+      const [viaTransaction, viaIdentity] = await Promise.all([me(headers), preview(headers)])
+      assert.equal(viaIdentity.status, viaTransaction.status, name)
+      assert.equal(viaIdentity.headers.get("www-authenticate"), viaTransaction.headers.get("www-authenticate"), name)
+      assert.deepEqual(await viaIdentity.json(), await viaTransaction.json(), name)
+    }
+  })
+})
+
 describe("the probes and the document", () => {
   test("need no token", async () => {
     assert.equal((await app.request("/healthz")).status, 200)

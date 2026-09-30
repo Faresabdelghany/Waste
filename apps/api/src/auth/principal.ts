@@ -30,7 +30,11 @@
 //
 // The handler runs inside that same transaction and receives it as `tx`:
 // no handler opens a transaction of its own, so a request's reads and writes
-// are one atomic, fenced unit. Hono answers a thrown error at the handler
+// are one atomic, fenced unit. One route is the exception, the guided
+// setup's preview (#173), which calls the routing provider: no transaction
+// may be held across that call (#124 §4), so its guard, `identify`, makes
+// the same checks through the same function and ends the transaction before
+// the handler runs. Hono answers a thrown error at the handler
 // (its compose catches the throw and calls the app's error handler there), so
 // the throw never reaches this middleware; what does is `c.error`, set on the
 // context when that happened. The transaction is therefore rolled back when
@@ -71,6 +75,9 @@ export type Principal = {
 
 /** The context variables an authenticated route reads: `c.get("principal")` and `c.get("tx")`, on a `Hono<AuthEnv>`. */
 export type AuthEnv = { Variables: { principal: Principal; tx: Tx } }
+
+/** What a route behind `identify` reads: the principal alone, since its transaction ended before the handler (#173). */
+export type IdentifiedEnv = { Variables: { principal: Principal } }
 
 /** The name of the security scheme in the OpenAPI document, and the requirement every authenticated route declares. */
 export const BEARER_AUTH = "bearerAuth"
@@ -197,38 +204,49 @@ const CHALLENGE_INVALID_REQUEST = 'Bearer error="invalid_request"'
 const CHALLENGE_INVALID_TOKEN = 'Bearer error="invalid_token"'
 
 /**
- * The guard an authenticated route puts before its handler: 401 without a
- * usable token, 403 without an active account in the claimed company, and
- * otherwise the handler runs inside the request's fenced transaction with
- * `principal` and `tx` set on the context.
+ * The checks both guards make, spelled once so the two cannot drift: 401
+ * without a usable token, 403 without a company claim, and — inside the
+ * transaction `withCompany` opens for the claim's company — 403 without an
+ * active account there; then `within` runs in that transaction with the
+ * Principal, and whatever it throws rolls it back.
  */
-export function authenticate({ pool, verifier }: AuthenticateOptions): MiddlewareHandler<AuthEnv> {
-  return async (c, next) => {
-    const header = bearerToken(c.req.header("authorization"))
-    if (header.kind === "absent") {
-      throw problem(401, {
-        detail: "This route needs a signed-in user: send `Authorization: Bearer <access token>`",
-        headers: { "www-authenticate": CHALLENGE },
-      })
+async function guard(authorization: string | undefined, { pool, verifier }: AuthenticateOptions, within: (principal: Principal, tx: Tx) => Promise<void>): Promise<void> {
+  const header = bearerToken(authorization)
+  if (header.kind === "absent") {
+    throw problem(401, {
+      detail: "This route needs a signed-in user: send `Authorization: Bearer <access token>`",
+      headers: { "www-authenticate": CHALLENGE },
+    })
+  }
+  if (header.kind === "malformed") {
+    throw problem(401, { detail: header.detail, headers: { "www-authenticate": CHALLENGE_INVALID_REQUEST } })
+  }
+  const verified = await verifier(header.token)
+  if (!verified.ok) {
+    throw problem(401, { detail: verified.refusal.detail, headers: { "www-authenticate": CHALLENGE_INVALID_TOKEN } })
+  }
+  const companyId = companyIdOf(verified.claims)
+  if (companyId === undefined) {
+    throw problem(403, { kind: NO_ACTIVE_ACCOUNT, detail: "The token names no company: this login has no account here" })
+  }
+  await withCompany(pool.db, companyId, async (tx) => {
+    const principal = await resolvePrincipal(tx, { userId: verified.claims.sub, companyId })
+    if (principal === null) {
+      throw problem(403, { kind: NO_ACTIVE_ACCOUNT, detail: "No active account in this company is bound to this login" })
     }
-    if (header.kind === "malformed") {
-      throw problem(401, { detail: header.detail, headers: { "www-authenticate": CHALLENGE_INVALID_REQUEST } })
-    }
-    const verified = await verifier(header.token)
-    if (!verified.ok) {
-      throw problem(401, { detail: verified.refusal.detail, headers: { "www-authenticate": CHALLENGE_INVALID_TOKEN } })
-    }
-    const companyId = companyIdOf(verified.claims)
-    if (companyId === undefined) {
-      throw problem(403, { kind: NO_ACTIVE_ACCOUNT, detail: "The token names no company: this login has no account here" })
-    }
+    await within(principal, tx)
+  })
+}
 
+/**
+ * The guard an authenticated route puts before its handler: the checks
+ * above, and then the handler runs inside the request's fenced transaction
+ * with `principal` and `tx` set on the context.
+ */
+export function authenticate(options: AuthenticateOptions): MiddlewareHandler<AuthEnv> {
+  return async (c, next) => {
     try {
-      await withCompany(pool.db, companyId, async (tx) => {
-        const principal = await resolvePrincipal(tx, { userId: verified.claims.sub, companyId })
-        if (principal === null) {
-          throw problem(403, { kind: NO_ACTIVE_ACCOUNT, detail: "No active account in this company is bound to this login" })
-        }
+      await guard(c.req.header("authorization"), options, async (principal, tx) => {
         c.set("principal", principal)
         c.set("tx", tx)
         await next()
@@ -237,5 +255,25 @@ export function authenticate({ pool, verifier }: AuthenticateOptions): Middlewar
     } catch (error) {
       if (!(error instanceof Discard)) throw error
     }
+  }
+}
+
+/**
+ * The guard of the one route that calls the routing provider, the guided
+ * setup's preview (#173): the same checks, the Principal resolved in a
+ * transaction that ends before the handler runs, so no transaction is held
+ * open across the provider's call (#124 §4) and no pooled connection sits
+ * idle through it. The handler reads `principal` and no `tx`, and opens the
+ * short transactions it needs itself, none of them across the call.
+ */
+export function identify(options: AuthenticateOptions): MiddlewareHandler<IdentifiedEnv> {
+  return async (c, next) => {
+    let resolved: Principal | undefined
+    await guard(c.req.header("authorization"), options, async (principal) => {
+      resolved = principal
+    })
+    if (resolved === undefined) throw new Error("identify: the guard answered without a principal")
+    c.set("principal", resolved)
+    await next()
   }
 }

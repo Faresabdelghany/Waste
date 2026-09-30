@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { DAY_WINDOW_ORDERED, dayWindowOrdered } from "../queries"
-import { EACH_PICKUP_ONCE, LABEL_IS_THE_NUMBER, labelMatches, LiveRoute, LiveRouteQuery, PICKUP_ORDER_MAX, PickupOrderSet, Route, RouteAssign, RouteCancel, RouteDetail, RouteListQuery, RouteProgress, RouteReschedule } from "../routes"
+import { EACH_PICKUP_ONCE, LABEL_IS_THE_NUMBER, labelMatches, LiveRoute, LiveRouteQuery, PICKUP_ORDER_MAX, PickupOrderSet, Route, RouteAssign, RouteCancel, RouteDetail, RouteListItem, RouteListQuery, RouteProgress, RouteReschedule } from "../routes"
 import { refusal, refusesAnEmptyPatch } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -98,6 +98,14 @@ describe("Route", () => {
     assert.deepEqual(LiveRoute.parse(due), due)
     assert.equal(LiveRoute.safeParse({ ...live, lastLocation: { type: "Point", coordinates: [12.5951, 55.7089, 10] } }).success, false, "a flat point")
     assert.deepEqual(LiveRouteQuery.parse({ projectId: OTHER }), { projectId: OTHER, limit: 50 })
+  })
+
+  test("a listed route carries its active Plan's reading, or null, and holds the label to the number like the rest (#173)", () => {
+    const activePlan = { id: OTHER, solver: "manual", status: "calculating", trip: "full", distanceMetres: null, durationSeconds: null, stale: false, deferredUntil: "2026-10-05T09:00:30.000Z" }
+    assert.deepEqual(RouteListItem.parse({ ...route, activePlan }), { ...route, activePlan })
+    assert.deepEqual(RouteListItem.parse({ ...route, activePlan: null }), { ...route, activePlan: null })
+    assert.equal(RouteListItem.safeParse(route).success, false, "the reading is there, null or not")
+    assert.deepEqual(refusal(RouteListItem.safeParse({ ...route, label: "RC-1043", activePlan: null })), [{ path: "label", message: LABEL_IS_THE_NUMBER }])
   })
 })
 

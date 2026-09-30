@@ -16,7 +16,8 @@
 // names is the image's own file, read once here (build-info.ts): an image
 // whose file says nothing usable stops before it binds.
 import { createDb, DEFAULT_POOL_MAX } from "@waste/db/client"
-import { providerNameFromEnv } from "@waste/routing/select"
+import { QuotaEngine, quotaKnobs } from "@waste/routing/quota"
+import { providerFromEnv } from "@waste/routing/select"
 import { createRemoteJWKSet } from "jose"
 
 import { createApp } from "./app"
@@ -33,7 +34,12 @@ const probe = createDb(env.DATABASE_URL, probePoolOptions(DATABASE_CHECK_TIMEOUT
 const pool = createDb(env.DATABASE_URL, { max: env.DATABASE_POOL_MAX })
 const auth = supabaseAuth(env.SUPABASE_URL)
 const verifier = createVerifier({ keySet: createRemoteJWKSet(auth.jwks), issuer: auth.issuer })
-const listening = await listen(createApp({ probe, pool, verifier, databaseTimeoutMs: DATABASE_CHECK_TIMEOUT_MS, build, routing: { name: providerNameFromEnv({ ROUTING_PROVIDER: env.ROUTING_PROVIDER }) } }), {
+// The provider the preview calls (#173), with the key where it is OpenRouteService's; its name keys every Plan fingerprint too.
+const routingEngine = new QuotaEngine(providerFromEnv({ ROUTING_PROVIDER: env.ROUTING_PROVIDER, OPENROUTESERVICE_API_KEY: env.OPENROUTESERVICE_API_KEY }), {
+  ...quotaKnobs({ callsPerMinute: env.ROUTING_CALLS_PER_MINUTE }),
+  waits: false,
+})
+const listening = await listen(createApp({ probe, pool, verifier, databaseTimeoutMs: DATABASE_CHECK_TIMEOUT_MS, build, routing: { name: routingEngine.name }, routingEngine }), {
   host: env.HOST,
   port: env.PORT,
 })

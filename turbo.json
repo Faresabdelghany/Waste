@@ -28,6 +28,8 @@
         "DATABASE_URL",
         "SUPABASE_URL",
         "ROUTING_PROVIDER",
+        "OPENROUTESERVICE_API_KEY",
+        "ROUTING_CALLS_PER_MINUTE",
         "DATABASE_POOL_MAX"
       ]
     },

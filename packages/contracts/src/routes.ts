@@ -100,6 +100,22 @@ export const routeFields = {
 export const Route = z.object(routeFields).refine(labelMatches, labelIsTheNumber)
 export type Route = z.infer<typeof Route>
 
+/**
+ * A route as `GET /routes` lists it: with its active Plan's reading, the way
+ * the live list carries it (#173), so a map or a list drawn over the page
+ * reads every per-route sentence of #132 §5 — Not measured, Measuring…,
+ * Waiting…, the totals, failed, Stale — without a second request or a join
+ * to the quota. `Route` itself stays what a command and the outbox carry.
+ */
+export const RouteListItem = z
+  .object({
+    ...routeFields,
+    /** The active Plan's reading, or null while the generated baseline stands unmeasured, drawn dashed (#124). */
+    activePlan: ActivePlan.nullable(),
+  })
+  .refine(labelMatches, labelIsTheNumber)
+export type RouteListItem = z.infer<typeof RouteListItem>
+
 /** A route with what hangs off it: the pickups by position, the open session, every session, the unloads. */
 export const RouteDetail = z
   .object({
