@@ -105,6 +105,15 @@ export type RecordCommand<R extends Resource> = {
   toBody?: (input: CommandInput, record: BusinessRecord, context: MappingContext) => unknown | LocalRefusal
   run: (client: Client, serverId: string, body: unknown) => Promise<R>
   refused: (record: Pick<BusinessRecord, "name">) => string
+  /**
+   * The other switched modules, by key, whose rows the command changes
+   * beside its own row's — a container's movement appended to the ledger,
+   * `resources.inventory`. Once the API has had the command the store reads
+   * each of them again (Issue #198). A read again replaces a module's rows
+   * whole, so the modules named here are ones no write of the person's
+   * holds rows in flight in, such as a ledger.
+   */
+  touches?: readonly string[]
 }
 
 export type ResourceAdapter<R extends Resource> = {

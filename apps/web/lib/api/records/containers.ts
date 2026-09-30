@@ -45,13 +45,16 @@ import { masterDataKindOf } from "@/lib/data/master-data"
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 
 import { command, create, get, listAll, patch } from "../client"
-import { inheritedPresentation, isLocalRefusal, ofKind, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { inheritedPresentation, isLocalRefusal, moduleKeyOf, ofKind, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, projectTimezoneOf, shownOn } from "./clock"
 import { projectMoved, projectServerIdOf, refusal, warehouseAdapter } from "./places"
 import { nameVia, referencedServerId, typedReference, webIdVia, type ReferenceRule } from "./references"
 
 /** The workspace module the containers are the rows of. */
 export const CONTAINERS_MODULE: ModuleLocation = { workspaceId: "resources", moduleId: "containers" }
+
+/** The workspace module the ledger is the rows of: the movements the containers' commands append. */
+export const INVENTORY_MODULE: ModuleLocation = { workspaceId: "resources", moduleId: "inventory" }
 
 /** A container as the adapter reads it: the resource, and every placement it has had. */
 export type ContainerResource = Container & { placements: ContainerServicePlacement[] }
@@ -160,7 +163,11 @@ function placementPatchOf(before: BusinessRecord, after: BusinessRecord, context
 // What the container's state allows is the API's to say: every command is
 // offered and its 409 speaks (the rules on #81). A command answers the
 // movement (or the placement) it wrote, so the row is read back after it,
-// with its placements, and replaces the one the store holds.
+// with its placements, and replaces the one the store holds; the movement
+// is the ledger's too, which each command names (`touches`) so the store
+// reads it again once the command is done (#198). The `issue` door answers
+// the placement, not the issue movement it writes with it, so the ledger
+// is read, not filed from the answer.
 
 /** The sentence the contract refuses a warehouse named with scrap, or none named with a place in stock, in (`WAREHOUSE_WITH_A_STOCK_PLACE`, @waste/contracts/stock), quoted since the web imports no zod at runtime; the test holds the two equal. */
 export const WAREHOUSE_WITH_A_STOCK_PLACE = "Name the warehouse with warehouse or maintenance and not with scrap"
@@ -227,7 +234,7 @@ async function readBack(client: Client, serverId: string): Promise<ContainerReso
   return { ...container, placements }
 }
 
-/** A command posted to its path on the container, then the row read back. */
+/** A command posted to its path on the container, then the row read back; the ledger it appended to is read again. */
 const lifecycle = (path: string, verb: string, toBody: NonNullable<RecordCommand<ContainerResource>["toBody"]>): RecordCommand<ContainerResource> => ({
   toBody,
   run: async (client, serverId, body) => {
@@ -235,6 +242,7 @@ const lifecycle = (path: string, verb: string, toBody: NonNullable<RecordCommand
     return readBack(client, serverId)
   },
   refused: (record) => `${record.name} was not ${verb}`,
+  touches: [moduleKeyOf(INVENTORY_MODULE.workspaceId, INVENTORY_MODULE.moduleId)],
 })
 
 /** A reason a command must carry. */
@@ -450,12 +458,8 @@ export const containersModule: ServerModule = {
 // read-only — a row per movement, its container named by label from the
 // containers loaded before it — and every write is refused: the ledger is
 // append-only, and a wrong movement is corrected by adjusting its container.
-// Residual (#198): the ledger is read once per sign-in, and a container's
-// command replaces only the container's row, so a movement it appends shows
-// here after the next load; the container's own ledger shows it at once.
-
-/** The workspace module the ledger is the rows of. */
-export const INVENTORY_MODULE: ModuleLocation = { workspaceId: "resources", moduleId: "inventory" }
+// A container's command appends to it, and the store reads the ledger again
+// once the command is done (the commands' `touches`, #198).
 
 const APPEND_ONLY = "The ledger is append-only: a wrong movement is corrected by adjusting its container"
 

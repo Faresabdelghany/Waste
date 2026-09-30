@@ -3,7 +3,8 @@
 // `resources.containers`; the records the workspace writes become the bodies
 // the API's contracts accept, held here against the contracts' own zod
 // schemas; and the writes go out through the store's seam over a scripted
-// `fetch`, the API's refusals coming back as its sentences.
+// `fetch`, the API's refusals coming back as its sentences. A command's
+// movement is the ledger's too, so the ledger is read again after it (#198).
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
@@ -13,13 +14,14 @@ import type { Project } from "@waste/contracts/organisation"
 import { Adjust, Decommission, Receive, Return, Transfer, WAREHOUSE_WITH_A_STOCK_PLACE, type StockMovement } from "@waste/contracts/stock"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import { createExternalStore } from "../../external-store"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
+import { moduleKeyOf, NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { CONTAINERS_MODULE, containerAdapter, containerMovements, containersModule, INVENTORY_MODULE, inventoryModule, ledgerRow, stockMovementAdapter, WAREHOUSE_WITH_A_STOCK_PLACE as LOCAL_WAREHOUSE_WITH_A_STOCK_PLACE } from "../records/containers"
 import { containerTypeAdapter, wasteFractionAdapter } from "../records/master-data"
-import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { isServerBacked, SERVER_MODULE_KEYS, SERVER_MODULES } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
-import { commandRecord, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
+import { commandRecord, loaded, loadModule, readModuleInto, rereadsOf, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
@@ -336,6 +338,18 @@ describe("the container's commands", () => {
     assert.equal(outcome.record.status, "In warehouse")
   })
 
+  test("every command names the ledger it appends to, and a done command hands it to the store to read again (#198)", async () => {
+    const ledger = moduleKeyOf(INVENTORY_MODULE.workspaceId, INVENTORY_MODULE.moduleId)
+    for (const [name, command] of Object.entries(containerAdapter.commands ?? {})) assert.deepEqual(command.touches, [ledger], name)
+    const { fetch } = scripted([() => json(movement, 201), () => json(received), () => pageOf([])])
+    const outcome = await commandRecord(clientOver(fetch), containersModule, current, record, "receive", { warehouseId: nordhavn.webId }, options)
+    assert.equal(outcome.kind, "done")
+    if (outcome.kind !== "done") return
+    assert.deepEqual(outcome.touches, [ledger])
+    const withLedger: ServerRecordsState = new Map([...state, ["resources.containers", current], [ledger, loaded({ records: [], serverIds: new Map() }, 1)]])
+    assert.deepEqual(rereadsOf(withLedger, outcome.touches, SERVER_MODULES), [inventoryModule], "the switched ledger, which the store holds ready")
+  })
+
   test("every command's body is the one its contract accepts", () => {
     const cases: Array<[string, Record<string, unknown>, { safeParse: (value: unknown) => { success: boolean } }, unknown]> = [
       ["receive", { warehouseId: nordhavn.webId, occurredAt: "2026-09-30T09:00:00.000Z" }, Receive, { warehouseId, occurredAt: "2026-09-30T09:00:00.000Z" }],
@@ -393,6 +407,26 @@ describe("the container's commands", () => {
     if (outcome.kind !== "refused") return
     assert.equal(problemSentence(outcome.problem), detail)
     assert.equal(outcome.what, "BIN-99017 was not received")
+    assert.deepEqual(outcome.touches, ["resources.inventory"], "the API had the command, so the ledger is read again: one read, the price of never missing a movement")
+  })
+
+  test("a movement that landed before the row's read back failed is still the ledger's: the refusal names the ledger to read again (#198)", async () => {
+    const { fetch, calls } = scripted([() => json(movement, 201), () => problem(503, "The API is restarting"), () => pageOf([])])
+    const outcome = await commandRecord(clientOver(fetch), containersModule, current, record, "receive", { warehouseId: nordhavn.webId }, options)
+    assert.deepEqual(calls.map((call) => call.init.method), ["POST", "GET", "GET"], "the POST, then the read back, which failed")
+    assert.equal(outcome.kind, "refused")
+    if (outcome.kind !== "refused") return
+    assert.equal(problemSentence(outcome.problem), "The API is restarting")
+    assert.deepEqual(outcome.touches, ["resources.inventory"])
+  })
+
+  test("a command refused before it is sent touches nothing: nothing reached the API", async () => {
+    const { fetch, calls } = scripted([])
+    const outcome = await commandRecord(clientOver(fetch), containersModule, current, record, "receive", {}, options)
+    assert.equal(outcome.kind, "refused")
+    if (outcome.kind !== "refused") return
+    assert.equal(calls.length, 0)
+    assert.deepEqual(outcome.touches, [])
   })
 
   test("a container's own ledger is its movements read, oldest first", async () => {
@@ -446,6 +480,27 @@ describe("the inventory module", () => {
     assert.equal(first.submittedValues?.containerId, containerRecord.id, "the container by its web id")
     assert.deepEqual(first.projectIds, [copenhagenWebId])
     assert.equal(first.recordKind, "Stock movement")
+  })
+
+  test("read again after a container's command, it stays ready with its rows while the read is out, then holds the movement the command appended (#198)", async () => {
+    const before = await loadModule(clientOver(scripted([() => pageOf([receipt])]).fetch), inventoryModule, { fixtures: inventoryFixtures, state: withContainers, now: NOW })
+    const store = createExternalStore<ServerRecordsState>(new Map([...withContainers, ["resources.inventory", loaded(before, 1)]]))
+    let whileOut: string[] | undefined
+    const { fetch, calls } = scripted([
+      () => {
+        const held = store.getSnapshot().get("resources.inventory")
+        whileOut = held?.status === "ready" ? held.records.map((candidate) => candidate.name) : []
+        return pageOf([receipt, toMaintenance])
+      },
+    ])
+    const problem = await readModuleInto(store, clientOver(fetch), inventoryModule, { fixtures: inventoryFixtures, alive: () => true, now: () => 9 })
+    assert.equal(problem, null)
+    assert.deepEqual(calls.map((call) => call.url), ["http://api.test/stock-movements?limit=200"])
+    assert.deepEqual(whileOut, ["Receipt · BIN-99017"])
+    const ledger = store.getSnapshot().get("resources.inventory")
+    assert.deepEqual(ledger?.records.map((candidate) => candidate.name), ["Receipt · BIN-99017", "Transfer · BIN-99017"])
+    assert.equal(ledger?.loadedAt, 9)
+    assert.equal(store.getSnapshot().get("resources.containers"), withContainers.get("resources.containers"), "the containers are left as they stand")
   })
 
   test("is append-only: nothing is created or edited here, and a correction is the container's adjustment", async () => {

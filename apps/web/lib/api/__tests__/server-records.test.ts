@@ -1,16 +1,18 @@
 // The server-backed half of the record store (Issue #81), without React or a
 // browser: a module's states, what `getRecords` answers in each, a load
 // through scripted adapters with the resolver seeing what loaded before, an
-// optimistic write reconciled or rolled back, and the resolver over several
-// modules.
+// optimistic write reconciled or rolled back, the resolver over several
+// modules, and a module read into the store — the load's read, and the read
+// again after a command that changed its rows (Issue #198).
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { softDeletedRecord } from "@waste/domain/record-visibility"
 
 import type { BusinessRecord } from "../../data/business-modules"
+import { createExternalStore } from "../../external-store"
 import type { ApiClient } from "../client"
-import { genericProblem } from "../problem"
+import { ApiProblem, genericProblem, NO_ACTIVE_ACCOUNT_PROBLEM_TYPE } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "../records/adapter"
 import {
   adapterFor,
@@ -23,8 +25,10 @@ import {
   moduleState,
   notGranted,
   paneAnswerOf,
+  readModuleInto,
   recordsOf,
   refusalProblem,
+  rereadsOf,
   resolverOver,
   spellsStatus,
   withCreated,
@@ -235,6 +239,108 @@ describe("loading a module", () => {
     const broken: ResourceAdapter<Thing> = { ...thingAdapter("b", []), list: async () => { throw new Error("boom") } }
     const module: ServerModule = { workspaceId: "configure", moduleId: "access", resources: [broken] }
     await assert.rejects(() => loadModule(client, module, options()), /boom/)
+  })
+})
+
+describe("reading a module into the store", () => {
+  const things: Thing[] = [{ id: "1", createdAt: "", updatedAt: "", name: "One" }, { id: "2", createdAt: "", updatedAt: "", name: "Two" }]
+  const oldRows = loaded({ records: [record("t-1", "One")], serverIds: new Map([["t-1", "1"]]) }, 1)
+  const fixtures = [record("f-1", "Fixture")]
+
+  /** A module whose one list answers when the test lets it, so the store can be looked at while the read is out. */
+  function heldModule(answer: () => Promise<Thing[]>): ServerModule {
+    return { workspaceId: "resources", moduleId: "inventory", resources: [{ ...thingAdapter("t", []), list: answer }] }
+  }
+
+  test("a module read for the first time is loading while the read is out, then ready with the rows at the clock given", async () => {
+    const store = createExternalStore<ServerRecordsState>(new Map())
+    let whileOut: string | undefined
+    const module = heldModule(async () => {
+      whileOut = store.getSnapshot().get("resources.inventory")?.status
+      return things
+    })
+    const problem = await readModuleInto(store, client, module, { fixtures, alive: () => true, now: () => 7 })
+    assert.equal(problem, null)
+    assert.equal(whileOut, "loading")
+    const read = store.getSnapshot().get("resources.inventory")
+    assert.deepEqual([read?.status, read?.records.map((candidate) => candidate.id), read?.loadedAt], ["ready", ["t-1", "t-2"], 7])
+  })
+
+  test("a ready module read again keeps its rows while the read is out, then holds the API's", async () => {
+    const store = createExternalStore<ServerRecordsState>(new Map([["resources.inventory", oldRows]]))
+    let whileOut: string[] | undefined
+    const module = heldModule(async () => {
+      const held = store.getSnapshot().get("resources.inventory")
+      whileOut = held?.status === "ready" ? held.records.map((candidate) => candidate.id) : []
+      return things
+    })
+    await readModuleInto(store, client, module, { fixtures, alive: () => true, now: () => 8 })
+    assert.deepEqual(whileOut, ["t-1"], "ready with its old rows while the read is out")
+    assert.deepEqual(store.getSnapshot().get("resources.inventory")?.records.map((candidate) => candidate.id), ["t-1", "t-2"])
+  })
+
+  test("a read that fails leaves a ready module its rows beside the problem, fails one that was not, and hands the problem back", async () => {
+    const problem = genericProblem(503, "The API is down")
+    const failing = heldModule(async () => {
+      throw new ApiProblem(problem)
+    })
+    const ready = createExternalStore<ServerRecordsState>(new Map([["resources.inventory", oldRows]]))
+    assert.deepEqual(await readModuleInto(ready, client, failing, { fixtures, alive: () => true }), problem)
+    const kept = ready.getSnapshot().get("resources.inventory")
+    assert.deepEqual([kept?.status, kept?.records, kept?.problem], ["ready", oldRows.records, problem])
+    const first = createExternalStore<ServerRecordsState>(new Map())
+    await readModuleInto(first, client, failing, { fixtures, alive: () => true })
+    assert.equal(first.getSnapshot().get("resources.inventory")?.status, "failed")
+  })
+
+  test("the account's own refusal comes back and is written nowhere: the session has ended, and /login says why", async () => {
+    const refusal = { type: NO_ACTIVE_ACCOUNT_PROBLEM_TYPE, title: "Forbidden", status: 403, detail: "No active account in this company is bound to this login" }
+    const refused = heldModule(async () => {
+      throw new ApiProblem(refusal)
+    })
+    const store = createExternalStore<ServerRecordsState>(new Map([["resources.inventory", oldRows]]))
+    assert.deepEqual(await readModuleInto(store, client, refused, { fixtures, alive: () => true }), refusal)
+    const kept = store.getSnapshot().get("resources.inventory")
+    assert.deepEqual([kept?.status, kept?.records, kept?.problem], ["ready", oldRows.records, null])
+  })
+
+  test("an answer the session outlived lands nothing, and a session already over is neither asked nor written to", async () => {
+    let alive = true
+    const outlived = heldModule(async () => {
+      alive = false
+      return things
+    })
+    const store = createExternalStore<ServerRecordsState>(new Map([["resources.inventory", oldRows]]))
+    await readModuleInto(store, client, outlived, { fixtures, alive: () => alive })
+    assert.deepEqual(store.getSnapshot().get("resources.inventory")?.records.map((candidate) => candidate.id), ["t-1"], "the old rows, not the answer")
+
+    let asked = false
+    const unasked = heldModule(async () => {
+      asked = true
+      return things
+    })
+    const before = store.getSnapshot()
+    assert.equal(await readModuleInto(store, client, unasked, { fixtures, alive: () => false }), null)
+    assert.equal(asked, false)
+    assert.equal(store.getSnapshot(), before, "not even a loading mark: it would land in the next session's store")
+  })
+})
+
+describe("the modules a command touched", () => {
+  const module = (moduleId: string): ServerModule => ({ workspaceId: "resources", moduleId, resources: [] })
+  const modules = [module("containers"), module("inventory"), module("allocations"), module("stock"), module("depots"), module("yards")]
+
+  test("are read again when the store holds them ready or on their first read, in the modules' own order; not one it never asked for, the role does not view, failed to read or does not switch", () => {
+    const state: ServerRecordsState = new Map([
+      ["resources.containers", loaded({ records: [], serverIds: new Map() }, 1)],
+      ["resources.inventory", loaded({ records: [], serverIds: new Map() }, 1)],
+      ["resources.allocations", loading(IDLE)],
+      ["resources.stock", loadFailed(loading(IDLE), genericProblem(503))],
+      ["resources.yards", notGranted("resources.yards")],
+    ])
+    const touches = ["resources.yards", "resources.depots", "resources.stock", "resources.allocations", "resources.inventory", "resources.unswitched"]
+    assert.deepEqual(rereadsOf(state, touches, modules).map((candidate) => candidate.moduleId), ["inventory", "allocations"])
+    assert.deepEqual(rereadsOf(state, [], modules), [])
   })
 })
 
