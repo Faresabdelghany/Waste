@@ -169,6 +169,9 @@ describe("the question a scheme edit asks on the Pilot", () => {
   test("never asks of a rename, a scheme never generated, a Draft, or when no planned route after today can follow", () => {
     const before = scheme()
     assert.equal(schemeEditQuestionOnApi(before, { ...before, name: "RS-Central · Week A (renamed)" }, routes, TODAY), null)
+    // The edit form writes its display facts by field label ("Departure depot"), which the API's record never carried: the API generates from the values, so a rename still asks nothing.
+    const renamed = { ...before, name: "RS-Central · Week A (renamed)", facts: { ...before.facts, "Departure depot": "Nordhavn Depot", "Operational planning area": "Indre By Operations" } }
+    assert.equal(schemeEditQuestionOnApi(before, renamed, routes, TODAY), null)
     const never = scheme({}, { lastGeneratedAt: "" })
     assert.equal(schemeEditQuestionOnApi(never, shaped(never), routes, TODAY), null)
     const draft = scheme({ status: "Draft" })

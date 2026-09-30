@@ -146,7 +146,9 @@ const typedValue = (record: BusinessRecord, key: string) => {
 export function schemeEditQuestionOnApi(before: BusinessRecord, after: BusinessRecord, routes: readonly BusinessRecord[], today: string): SchemeEditQuestion | null {
   if (schemeEditPolicy(before.submittedValues) !== "ask") return null
   if (before.status === "Draft" || !schemeGenerationRecorded(before)) return null
-  if (!editChangesGeneration(before, after)) return null
+  // The values alone: the API generates from them, and the facts are the edit
+  // form's display copies by field label, which the API's record never carried.
+  if (!editChangesGeneration(before, { ...after, facts: before.facts })) return null
   const following = routes
     .filter((route) => typedValue(route, "schemeId") === before.id && typedValue(route, "status") === "planned" && typedValue(route, "serviceDate") > today)
     .map((route) => typedValue(route, "serviceDate"))
