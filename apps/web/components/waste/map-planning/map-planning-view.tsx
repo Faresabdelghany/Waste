@@ -25,6 +25,8 @@ import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { whenSaved } from "@/components/waste/business-record-store"
+import { useModuleReady } from "@/components/waste/commands/use-command-support"
+import { SERVICE_AREAS_MODULE } from "@/lib/data/service-areas"
 import { ContainerDetailsSheet } from "@/components/waste/containers-assets-register"
 import { SchemeWizard } from "@/components/waste/scheme-wizard/scheme-wizard"
 import {
@@ -239,8 +241,12 @@ export function MapPlanningView({
   )
   // A service area created during this visit switches itself on, so the
   // boundary just drawn is seen right away; areas from earlier stay as left.
+  // On the Pilot the awards arrive after the first render (#186): the visit's
+  // known areas are counted from the module's load, which creates nothing.
+  const serviceAreasLoaded = useModuleReady(SERVICE_AREAS_MODULE)
   const knownServiceAreaIds = useRef<ReadonlySet<string> | null>(null)
   useEffect(() => {
+    if (!serviceAreasLoaded) return
     const ids = new Set(drawnServiceAreas.map((area) => area.id))
     const known = knownServiceAreaIds.current
     knownServiceAreaIds.current = ids
@@ -248,7 +254,7 @@ export function MapPlanningView({
     const fresh = Array.from(ids).filter((id) => !known.has(id))
     if (fresh.length === 0) return
     setEnabledServiceAreaIds((current) => new Set([...current, ...fresh]))
-  }, [drawnServiceAreas])
+  }, [drawnServiceAreas, serviceAreasLoaded])
   const selectedContainers = useMemo(
     () => filteredContainers.filter((record) => selectedContainerIds.has(record.id)),
     [filteredContainers, selectedContainerIds],

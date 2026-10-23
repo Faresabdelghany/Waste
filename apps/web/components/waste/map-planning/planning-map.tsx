@@ -437,7 +437,8 @@ export function PlanningMap({
                         }}
                       />
                     </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-xs text-xs">
+                    {/* The tooltip never takes the pointer: a highlighted marker grows under its arrow, which would end the hover and the highlight with it, over and over. */}
+                    <TooltipContent side="top" className="pointer-events-none max-w-xs text-xs">
                       <p className="font-medium">{point.label}</p>
                       {point.fractions.length > 0 && <p>{point.fractions.join(" · ")}</p>}
                       <p className="text-muted-foreground">{point.sublabel}</p>
@@ -528,7 +529,7 @@ export function PlanningMap({
                       )}
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-xs text-xs">
+                  <TooltipContent side="top" className="pointer-events-none max-w-xs text-xs">
                     <p className="font-medium">
                       {cluster.count} container{cluster.count === 1 ? "" : "s"}
                       {selectedCount > 0 ? ` · ${selectedCount} selected` : ""}
