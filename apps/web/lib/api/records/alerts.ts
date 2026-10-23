@@ -24,7 +24,7 @@ import { NO_ONE } from "@/lib/data/properties"
 
 import { command, create, get, listAll } from "../client"
 import { inheritedPresentation, isLocalRefusal, ofKind, said, stampFacts, statusLabel, statusToken, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
-import { instantOn, shownOn, wallClockIn } from "./clock"
+import { instantOn, projectTimezoneOf, shownOn, wallClockIn } from "./clock"
 import { containerAdapter } from "./containers"
 import { driverAdapter, vehicleAdapter } from "./fleet"
 import { projectServerIdOf, referenced, refusal } from "./places"
@@ -111,13 +111,6 @@ export function toAlertRecord(alert: Alert, context: MappingContext): BusinessRe
   }
 }
 
-/** The project's clock, from the organisation the store loaded. */
-function timezoneOf(record: BusinessRecord, context: MappingContext): string | undefined {
-  const webId = typed(record, "projectId") ?? record.projectIds?.[0]
-  const serverId = webId === undefined ? undefined : context.resolve.serverIdOf(webId)
-  const project = serverId === undefined ? undefined : context.resolve.byServerId(serverId)
-  return project === undefined ? undefined : typed(project, "timezone")
-}
 
 /** A closed-list token a form typed under `key`, or a refusal naming the list. */
 function required(record: BusinessRecord, key: string, tokens: readonly string[], noun: string): string | LocalRefusal {
@@ -147,7 +140,7 @@ export function toAlertCreateBody(record: BusinessRecord, context: MappingContex
   const severity = required(record, "severity", ALERT_SEVERITIES, "severity")
   if (isLocalRefusal(severity)) return severity
   const seen = typed(record, "detectedAt")
-  const detectedAt = seen === undefined ? undefined : instantOn(seen, timezoneOf(record, context))
+  const detectedAt = seen === undefined ? undefined : instantOn(seen, projectTimezoneOf(record, context))
   if (seen !== undefined && detectedAt === undefined) return refusal("detectedAt", "Give the time as a date and a time")
   const subjects: Record<string, string> = {}
   for (const [key, prefix, fact, owns] of ALERT_SUBJECTS) {

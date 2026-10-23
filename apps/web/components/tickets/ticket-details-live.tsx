@@ -4,9 +4,9 @@
 // order, the alerts naming it — re-read after every command, patch and
 // comment, and the row itself the store's live one, so the list and the
 // dialog agree. Each inline row is one door of the API's: priority, kind and
-// due are the case's patch; the status moves by the command buttons, each
-// offered where the domain's machine would move the ticket or find it there
-// already (`offersTicketCommand`); the assignee by `assign`; the source, the
+// due are the case's patch while the ticket is open; the status moves by the
+// command buttons, each offered where the domain's machine would move the
+// ticket (`offersTicketCommand`); the assignee by `assign`; the source, the
 // project and the links are read-only. A link is the linked row's name with
 // its way there where its module has loaded the row, its id chip otherwise.
 // The composer writes a comment, an internal note unless said to be the
@@ -26,13 +26,13 @@ import { BusinessRecordFormDialog } from "@/components/waste/business-record-for
 import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { useCommandRunner, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
 import type { ApiClient } from "@/lib/api/client"
-import { statusLabel } from "@/lib/api/records/adapter"
-import { ALERTS_MODULE } from "@/lib/api/records/alerts"
+import { statusLabel, webIdOf } from "@/lib/api/records/adapter"
+import { ALERT_PREFIX, ALERTS_MODULE } from "@/lib/api/records/alerts"
 import { shownOn } from "@/lib/api/records/clock"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
-import { ASSIGN_TICKET, commentOnTicket, offersTicketCommand, ticketDetail, TICKET_LINKS, TICKET_MACHINE_COMMANDS, TICKETS_MODULE, ticketWord, type TicketCommandName } from "@/lib/api/records/tickets"
+import { ASSIGN_TICKET, commentOnTicket, isOpenTicketStatus, offersTicketCommand, ticketDetail, TICKET_LINKS, TICKET_MACHINE_COMMANDS, TICKETS_MODULE, type TicketCommandName } from "@/lib/api/records/tickets"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import { DRIVERS_MODULE } from "@/lib/data/allocations"
 import { getBusinessModuleHref } from "@/lib/data/business-links"
@@ -118,7 +118,8 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   const [changes, setChanges] = useState(0)
   const reads = useRowHistory(workspaceId, moduleId, live, version + changes, readTicket)
   const userName = useServerNames(ACCESS_MODULE, "user")
-  const alertName = useServerNames(ALERTS_MODULE, "alert")
+  const alertsState = useServerModuleState(ALERTS_MODULE.workspaceId, ALERTS_MODULE.moduleId)
+  const alertWebId = (serverId: string) => [...(alertsState?.serverIds ?? [])].find(([, id]) => id === serverId)?.[0] ?? webIdOf(ALERT_PREFIX, serverId)
   const [open, setOpen] = useState<Open | null>(null)
   const [message, setMessage] = useState("")
   const [visibility, setVisibility] = useState<Visibility>("internal")
@@ -132,6 +133,8 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   const label = live.facts.Ticket ?? live.name
   const detail = reads.rows?.[0]
   const offered = ready && !busy && !saving
+  // A closed ticket's own fields are refused by the API until it is reopened: its edits are offered while it is open.
+  const editable = offered && isOpenTicketStatus(status)
 
   const run = (name: TicketCommandName, input?: BusinessFormValues) =>
     send(name, input, (outcome) => {
@@ -209,7 +212,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                   </DialogDescription>
                 </div>
               </div>
-              <Button type="button" variant="outline" size="sm" disabled={!offered} onClick={() => setOpen({ kind: "edit" })}>
+              <Button type="button" variant="outline" size="sm" disabled={!editable} onClick={() => setOpen({ kind: "edit" })}>
                 <PencilSimple className="h-4 w-4" />
                 <span className="hidden sm:inline">Edit case</span>
               </Button>
@@ -309,9 +312,9 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ticket</h3>
                 <div className="mt-3 divide-y divide-border/60 border-y border-border/60">
                   <Row label="Number" value={label} />
-                  <PickRow label="Priority" value={value("priority")} tokens={TICKET_PRIORITIES} disabled={!offered} onPick={(token) => save({ priority: token }, "Priority changed")} />
-                  <PickRow label="Kind" value={value("kind")} tokens={TICKET_KINDS} disabled={!offered} onPick={(token) => save({ kind: token }, "Kind changed")} />
-                  <DueRow value={value("dueAt")} shown={live.facts.Due ?? "None"} disabled={!offered} onSave={(dueAt) => save({ dueAt }, dueAt === "" ? "Due cleared" : "Due changed")} />
+                  <PickRow label="Priority" value={value("priority")} tokens={TICKET_PRIORITIES} disabled={!editable} onPick={(token) => save({ priority: token }, "Priority changed")} />
+                  <PickRow label="Kind" value={value("kind")} tokens={TICKET_KINDS} disabled={!editable} onPick={(token) => save({ kind: token }, "Kind changed")} />
+                  <DueRow value={value("dueAt")} shown={live.facts.Due ?? "None"} disabled={!editable} onSave={(dueAt) => save({ dueAt }, dueAt === "" ? "Due cleared" : "Due changed")} />
                   <Row label="Occurred" value={live.facts.Occurred ?? ""} />
                   {live.facts.Resolution !== undefined && <Row label="Resolution" value={live.facts.Resolution} />}
                   {live.facts["Re-collection route"] !== undefined && <Row label="Re-collection route" value={live.facts["Re-collection route"]} />}
@@ -365,8 +368,8 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                   <ul className="mt-3 divide-y divide-border/60 border-y border-border/60 text-sm" data-testid="ticket-alerts">
                     {detail.alerts.map((alert) => (
                       <li key={alert.id} className="flex items-center justify-between gap-2 py-2">
-                        <Link href={getBusinessModuleHref(ALERTS_MODULE.workspaceId, ALERTS_MODULE.moduleId, `alert-${alert.id}`)} className="truncate underline-offset-4 hover:underline">
-                          {alert.title || alertName(alert.id)}
+                        <Link href={getBusinessModuleHref(ALERTS_MODULE.workspaceId, ALERTS_MODULE.moduleId, alertWebId(alert.id))} className="truncate underline-offset-4 hover:underline">
+                          {alert.title}
                         </Link>
                         <Badge variant="outline" className="shrink-0 rounded-full text-[11px]">
                           {statusLabel(alert.severity)} · {statusLabel(alert.status)}
@@ -414,7 +417,7 @@ function HistoryRow({ event, who, assignee, at }: { event: TicketEvent; who: str
           ? "Unassigned"
           : `Assigned to ${assignee}`
         : event.kind === "status-changed"
-          ? `${statusLabel(event.status)}${event.resolution === null ? "" : ` · ${ticketWord(event.resolution)}`}`
+          ? `${statusLabel(event.status)}${event.resolution === null ? "" : ` · ${statusLabel(event.resolution)}`}`
           : event.visibility === "customer"
             ? "Customer-visible comment"
             : "Internal note"
@@ -468,7 +471,7 @@ function PickRow({ label, value, tokens, disabled, onPick }: { label: string; va
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button type="button" disabled={disabled} aria-label={`Change ${label}`} className="min-h-8 rounded-md px-2 py-1.5 text-right font-medium hover:bg-accent disabled:opacity-60">
-            {ticketWord(value)}
+            {statusLabel(value)}
           </button>
         </PopoverTrigger>
         <PopoverContent align="end" className="!z-[100] w-56 p-1">
@@ -485,7 +488,7 @@ function PickRow({ label, value, tokens, disabled, onPick }: { label: string; va
                   if (token !== value) onPick(token)
                 }}
               >
-                {ticketWord(token)}
+                {statusLabel(token)}
               </button>
             ))}
           </div>

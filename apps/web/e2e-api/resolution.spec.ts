@@ -62,7 +62,9 @@ test("the office opens a ticket about a route, assigns it to themselves, starts 
   expect(assigned.request().postDataJSON()).toEqual({ assigneeUserAccountId: me.user.id })
   await expect(history).toContainText(`Assigned to ${me.user.fullName}`)
 
+  // A command is offered where it moves the ticket: an open ticket offers no Reopen.
   const commands = details.getByTestId("ticket-commands")
+  await expect(commands.getByRole("button")).toHaveText(["Start", "Waiting for customer", "Put on hold", "Complete", "Reject"])
   const [started] = await Promise.all([answerOf(page, "POST", `/tickets/${ticket.id}/start`), commands.getByRole("button", { name: "Start" }).click()])
   expect(started.status()).toBe(200)
   expect(started.request().postDataJSON()).toEqual({})
@@ -85,6 +87,10 @@ test("the office opens a ticket about a route, assigns it to themselves, starts 
   expect(completed.request().postDataJSON()).toEqual({ resolution: "recollected", note: `On ${recollection.label}`, recollectionRouteId: recollection.id })
   await expect(details).toContainText("Recollected")
   await expect(history).toContainText("Completed · Recollected")
+  // Closed, it takes Reopen alone, and its own fields wait for it to be reopened.
+  await expect(commands.getByRole("button")).toHaveText(["Reopen"])
+  await expect(details.getByRole("button", { name: "Change Priority" })).toBeDisabled()
+  await expect(details.getByRole("button", { name: "Edit case" })).toBeDisabled()
 
   // The history as the API holds it, in recording order.
   const read = await api.get(`/tickets/${ticket.id}`)

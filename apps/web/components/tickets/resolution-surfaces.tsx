@@ -16,14 +16,13 @@ import { Button } from "@/components/ui/button"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
 import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
-import { useCommandRunner, useModuleReady, useOpenRecord } from "@/components/waste/commands/use-command-support"
+import { useCommandRunner, useModuleReady, useOpenRecord, type RelationPickers } from "@/components/waste/commands/use-command-support"
 import { ACKNOWLEDGE_ALERT, ALERTS_MODULE, LINK_ALERT_TICKET, RESOLVE_ALERT } from "@/lib/api/records/alerts"
 import { TICKETS_MODULE } from "@/lib/api/records/tickets"
 import { ALERT_COMMAND_FORMS, ALERT_FORM, createAlertRecord, ticketValuesOfAlert, type AlertCommandWithForm } from "@/lib/data/alerts"
 import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { createTicketRecord, TICKET_FORM } from "@/lib/data/tickets"
-import { alertTransition, type AlertCommand } from "@waste/domain/resolution/transitions"
 import type { AlertStatus } from "@waste/domain/resolution/vocabulary"
 
 import { useResolutionPickers } from "./resolution-pickers"
@@ -44,6 +43,7 @@ function ResolutionCreateDialog({
   onOpenChange,
   initial,
   onSaved,
+  pickers,
 }: {
   module: ModuleLocation
   schema: BusinessFormSchema
@@ -53,9 +53,10 @@ function ResolutionCreateDialog({
   onOpenChange: (open: boolean) => void
   initial?: BusinessFormValues
   onSaved?: () => void
+  /** The pickers its opener built, so one surface subscribes to the modules once. */
+  pickers: RelationPickers
 }) {
   const { upsertRecord } = useBusinessRecordStore()
-  const pickers = useResolutionPickers()
   const openRecord = useOpenRecord(module.moduleId)
   const [saving, setSaving] = useState(false)
   const submit = (values: BusinessFormValues) => {
@@ -79,7 +80,7 @@ function ResolutionCreateDialog({
 }
 
 /** A primary action of Resolution's: the button, offered once the module reads the API's rows and every module its form picks from has answered. */
-function CreateButton({ label, module, schema, children }: { label: string; module: ModuleLocation; schema: BusinessFormSchema; children: (open: boolean, setOpen: (open: boolean) => void) => ReactNode }) {
+function CreateButton({ label, module, schema, children }: { label: string; module: ModuleLocation; schema: BusinessFormSchema; children: (open: boolean, setOpen: (open: boolean) => void, pickers: RelationPickers) => ReactNode }) {
   const pickers = useResolutionPickers()
   const moduleReady = useModuleReady(module)
   const [open, setOpen] = useState(false)
@@ -90,7 +91,7 @@ function CreateButton({ label, module, schema, children }: { label: string; modu
         <span className="hidden sm:inline">{label}</span>
         <span className="sm:hidden">Action</span>
       </Button>
-      {children(open, setOpen)}
+      {children(open, setOpen, pickers)}
     </>
   )
 }
@@ -101,7 +102,7 @@ const ticketCreated = (record: BusinessRecord) => ({ title: "Ticket opened", des
 export function NewTicketSurface({ label }: PrimarySurfaceProps) {
   return (
     <CreateButton label={label} module={TICKETS_MODULE} schema={TICKET_FORM}>
-      {(open, setOpen) => <ResolutionCreateDialog module={TICKETS_MODULE} schema={TICKET_FORM} open={open} onOpenChange={setOpen} make={(values, now) => createTicketRecord(values, { now })} created={ticketCreated} />}
+      {(open, setOpen, pickers) => <ResolutionCreateDialog module={TICKETS_MODULE} schema={TICKET_FORM} pickers={pickers} open={open} onOpenChange={setOpen} make={(values, now) => createTicketRecord(values, { now })} created={ticketCreated} />}
     </CreateButton>
   )
 }
@@ -110,10 +111,11 @@ export function NewTicketSurface({ label }: PrimarySurfaceProps) {
 export function RaiseAlertSurface({ label }: PrimarySurfaceProps) {
   return (
     <CreateButton label={label} module={ALERTS_MODULE} schema={ALERT_FORM}>
-      {(open, setOpen) => (
+      {(open, setOpen, pickers) => (
         <ResolutionCreateDialog
           module={ALERTS_MODULE}
           schema={ALERT_FORM}
+          pickers={pickers}
           open={open}
           onOpenChange={setOpen}
           make={(values, now) => createAlertRecord(values, { now })}
@@ -145,7 +147,6 @@ export function AlertCommandsSurface({ record }: RowSurfaceProps) {
   const projectId = typeof record.submittedValues?.projectId === "string" ? record.submittedValues.projectId : undefined
   const status = String(record.submittedValues?.status ?? "new") as AlertStatus
   const ticketId = typeof record.submittedValues?.ticketId === "string" && record.submittedValues.ticketId !== "" ? record.submittedValues.ticketId : undefined
-  const takes = (command: AlertCommand) => alertTransition(status, command).kind !== "refuse"
   // An alert links to one ticket, and a resolved one changes no more.
   const handsOver = ticketId === undefined && status !== "resolved"
   const offered = moduleReady && !busy
@@ -161,12 +162,12 @@ export function AlertCommandsSurface({ record }: RowSurfaceProps) {
       <h3 className="text-sm font-semibold">Alert commands</h3>
       {!moduleReady && <p className="text-sm text-muted-foreground">The alerts are being read from the API; their commands follow.</p>}
       <div className="flex flex-wrap gap-2">
-        {takes("acknowledge") && status === "new" && (
+        {status === "new" && (
           <Button variant="outline" size="sm" disabled={!offered} onClick={() => run(ACKNOWLEDGE_ALERT)}>
             Acknowledge
           </Button>
         )}
-        {takes("resolve") && status !== "resolved" && (
+        {status !== "resolved" && (
           <Button variant="outline" size="sm" disabled={!offered} onClick={() => setOpen({ kind: "command", name: "resolve" })}>
             Resolve
           </Button>
@@ -201,6 +202,7 @@ export function AlertCommandsSurface({ record }: RowSurfaceProps) {
         <ResolutionCreateDialog
           module={TICKETS_MODULE}
           schema={TICKET_FORM}
+          pickers={pickers}
           open
           onOpenChange={(isOpen) => !isOpen && setOpen(null)}
           initial={ticketValuesOfAlert(record)}

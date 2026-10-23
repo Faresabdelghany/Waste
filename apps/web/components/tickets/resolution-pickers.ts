@@ -14,6 +14,7 @@
 // first, since a select cannot be emptied.
 import { useModuleRecords } from "@/components/waste/business-record-store"
 import { useRelationPickers, type RelationPickers } from "@/components/waste/commands/use-command-support"
+import { moduleKeyOf } from "@/lib/api/records/adapter"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import { TICKETS_MODULE } from "@/lib/api/records/tickets"
@@ -27,7 +28,7 @@ import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 const NO_RECORDS: readonly BusinessRecord[] = []
 const fixturesOf = (location: ModuleLocation) => getModuleDefinition(location)?.records ?? NO_RECORDS
-const keyOf = (location: ModuleLocation) => `${location.workspaceId}.${location.moduleId}`
+const keyOf = (location: ModuleLocation) => moduleKeyOf(location.workspaceId, location.moduleId)
 
 /** A route has ended once it is completed or cancelled: no re-collection rides on it. */
 const ENDED = new Set(["Completed", "Cancelled"])

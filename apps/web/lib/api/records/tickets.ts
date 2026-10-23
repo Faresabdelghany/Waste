@@ -35,7 +35,7 @@ import { isPropertyRecord, isSharedPointRecord, NO_ONE } from "@/lib/data/proper
 
 import { command, create, get, listAll, patch } from "../client"
 import { inheritedPresentation, isLocalRefusal, ofKind, patchOf, said, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
-import { instantOn, shownOn, wallClockIn } from "./clock"
+import { instantOn, projectTimezoneOf, shownOn, wallClockIn } from "./clock"
 import { containerAdapter } from "./containers"
 import { driverAdapter } from "./fleet"
 import { isCompanyRecord, userAdapter } from "./organisation"
@@ -86,9 +86,6 @@ export const TICKET_LINKS: ReadonlyArray<readonly [keyof TicketLinks, string, st
 /** The links an office's form names, each by a picker: the pickup comes with its route from the consumer alone, and the parent is set by nobody here. */
 export const OFFICE_TICKET_LINKS = TICKET_LINKS.filter(([key]) => key !== "pickupId" && key !== "parentTicketId")
 
-/** `missed-collection` → `Missed collection`: a kind, a priority, a source, a resolution as a person reads it. */
-export const ticketWord = (token: string) => statusLabel(token)
-
 /** Whether a status is one of the four open ones: what the list opens on and the sidebar counts. */
 export const isOpenTicketStatus = (status: string): boolean => (OPEN_TICKET_STATUSES as readonly string[]).includes(status)
 
@@ -108,17 +105,17 @@ export function toTicketRecord(ticket: Ticket, context: MappingContext): Busines
   })
   const facts: Record<string, string> = {
     Ticket: ticket.label,
-    Kind: ticketWord(ticket.kind),
-    Priority: ticketWord(ticket.priority),
+    Kind: statusLabel(ticket.kind),
+    Priority: statusLabel(ticket.priority),
     Assignee: assignee ?? "Unassigned",
     // The wire's source under a fact of its own: the fixtures' "Source" is another vocabulary.
-    "Opened via": ticketWord(ticket.source),
+    "Opened via": statusLabel(ticket.source),
     Occurred: shownOn(ticket.occurredAt, project.timezone),
     Due: ticket.dueAt === null ? "None" : shownOn(ticket.dueAt, project.timezone),
     Project: project.name ?? project.webId,
   }
   for (const link of links) facts[link.fact] = link.name
-  if (ticket.resolution !== null) facts.Resolution = ticketWord(ticket.resolution)
+  if (ticket.resolution !== null) facts.Resolution = statusLabel(ticket.resolution)
   if (ticket.recollectionRouteId !== null) facts["Re-collection route"] = nameVia(context, "route", ticket.recollectionRouteId)
   if (ticket.closedAt !== null) facts.Closed = shownOn(ticket.closedAt, project.timezone)
   const linked = Object.fromEntries(TICKET_LINKS.map(([key, prefix]) => [key, ticket.links[key] === null ? "" : webIdVia(context, prefix, ticket.links[key] as string)]))
@@ -176,13 +173,6 @@ function instantIn(record: BusinessRecord, key: string, timezone: string | undef
   return instantOn(text, timezone) ?? refusal(key, sentence)
 }
 
-/** The project's clock, from the organisation the store loaded. */
-function timezoneOf(record: BusinessRecord, context: MappingContext): string | undefined {
-  const webId = typed(record, "projectId") ?? record.projectIds?.[0]
-  const serverId = webId === undefined ? undefined : context.resolve.serverIdOf(webId)
-  const project = serverId === undefined ? undefined : context.resolve.byServerId(serverId)
-  return project === undefined ? undefined : typed(project, "timezone")
-}
 
 /** The link a form names under `key`, as a server id held to its module's kind; undefined for blank or the picker's None; a refusal for a row the API does not hold. */
 function linkOf(record: BusinessRecord, key: string, prefix: string, fact: string, owns: (record: BusinessRecord) => boolean, context: MappingContext): string | undefined | LocalRefusal {
@@ -226,7 +216,7 @@ export function toTicketCreateBody(record: BusinessRecord, context: MappingConte
   if (isLocalRefusal(priority)) return priority
   const source = tokenIn(record, "source", OFFICE_TICKET_SOURCES, SOURCE_SENTENCE)
   if (isLocalRefusal(source)) return source
-  const timezone = timezoneOf(record, context)
+  const timezone = projectTimezoneOf(record, context)
   const occurredAt = instantIn(record, "occurredAt", timezone, A_TIME)
   if (isLocalRefusal(occurredAt)) return occurredAt
   const dueAt = instantIn(record, "dueAt", timezone, A_TIME)
@@ -267,7 +257,7 @@ export function toTicketPatchBody(before: BusinessRecord, after: BusinessRecord,
   }
   if (typed(after, "subject") === undefined) return refusal("subject", "A ticket needs a subject")
   if (typed(after, "description") === undefined) return refusal("description", "Say what the case is about")
-  const timezone = timezoneOf(after, context)
+  const timezone = projectTimezoneOf(after, context)
   const due = instantIn(after, "dueAt", timezone, A_TIME)
   if (isLocalRefusal(due)) return due
   return patchOf(before, after, (record) => ({
@@ -336,13 +326,16 @@ export const TICKET_COMMANDS_BY_NAME = {
 
 /**
  * Whether the dialog offers a machine command on a ticket in this status:
- * where the domain's machine moves it or finds it already done there, never
- * where it refuses (a closed ticket takes `reopen` alone). `assign` moves no
- * status and is offered while the ticket is open, as the API takes it.
+ * where the domain's machine moves it, and nowhere else — not where it
+ * refuses (a closed ticket takes `reopen` alone), nor where it stays: a
+ * `stay` is the API's idempotent answer to a retry, which writes nothing and
+ * would drop the note a person was asked for (coordinator's decision on
+ * #182). `assign` moves no status and is offered while the ticket is open,
+ * as the API takes it.
  */
 export function offersTicketCommand(status: TicketStatus, name: TicketCommandName, label: string): boolean {
   if (name === ASSIGN_TICKET) return isOpenTicketStatus(status)
-  return ticketTransition(status, name, label).kind !== "refuse"
+  return ticketTransition(status, name, label).kind === "move"
 }
 
 /** The machine's six, in the order the dialog offers them. */

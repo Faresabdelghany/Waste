@@ -13,27 +13,29 @@
 import { singleFilterValue, type FilterValueReaders } from "@waste/domain/business-filters"
 import { TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS } from "@waste/domain/resolution/vocabulary"
 
-import { ASSIGNEE_ACCOUNT_KEY, isOpenTicketStatus, OFFICE_TICKET_SOURCES, ticketWord } from "../api/records/tickets"
-import { ROUTES_MODULE } from "../api/records/routes"
+import { statusLabel, statusToken } from "../api/records/adapter"
 import { CONTAINERS_MODULE } from "../api/records/containers"
+import { accessModule } from "../api/records/organisation"
+import { ROUTES_MODULE } from "../api/records/routes"
+import { ASSIGNEE_ACCOUNT_KEY, isOpenTicketStatus, OFFICE_TICKET_SOURCES } from "../api/records/tickets"
 import { AGREEMENTS_MODULE } from "./agreements"
 import { DRIVERS_MODULE } from "./allocations"
-import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
+import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
 import { mintedRecord, ORGANISATION_MODULE } from "./containers"
 import { CONTACTS_MODULE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "./properties"
 
-/** Configure › Users & roles: the accounts a ticket is assigned to. */
-export const ACCESS_MODULE: ModuleLocation = { workspaceId: "configure", moduleId: "access" }
+/** Configure › Users & roles: the accounts a ticket is assigned to, where the access module is switched. */
+export const ACCESS_MODULE: ModuleLocation = { workspaceId: accessModule.workspaceId, moduleId: accessModule.moduleId }
 
-/** Closed lists as a select offers them: the wire's token, the words a person reads. */
-const optionsOf = (tokens: readonly string[]) => tokens.map((value) => ({ value, label: ticketWord(value) }))
+/** A closed list as a select offers it: the wire's token, the words a person reads. The alerts' forms read it too. */
+export const tokenOptions = (tokens: readonly string[]): BusinessFormOption[] => tokens.map((value) => ({ value, label: statusLabel(value) }))
 
 const project: BusinessFormField = { id: "projectId", label: "Project", type: "select", required: true, relation: ORGANISATION_MODULE }
 const subject: BusinessFormField = { id: "subject", label: "Subject", type: "text", required: true }
 const description: BusinessFormField = { id: "description", label: "Description", type: "textarea", required: true, description: "What happened, or what is asked." }
-const kind: BusinessFormField = { id: "kind", label: "Kind", type: "select", required: true, options: optionsOf(TICKET_KINDS) }
-const priority: BusinessFormField = { id: "priority", label: "Priority", type: "select", defaultValue: "none", options: optionsOf(TICKET_PRIORITIES) }
+const kind: BusinessFormField = { id: "kind", label: "Kind", type: "select", required: true, options: tokenOptions(TICKET_KINDS) }
+const priority: BusinessFormField = { id: "priority", label: "Priority", type: "select", defaultValue: "none", options: tokenOptions(TICKET_PRIORITIES) }
 const due: BusinessFormField = { id: "dueAt", label: "Due", type: "datetime", description: "The response target, on the project's clock." }
 const assignee = (description?: string): BusinessFormField => ({ id: "assigneeUserAccountId", label: "Assignee", type: "select", relation: ACCESS_MODULE, description })
 
@@ -64,7 +66,7 @@ export const TICKET_FORM: BusinessFormSchema = {
       id: "when",
       title: "Source and timing",
       fields: [
-        { id: "source", label: "Opened via", type: "select", defaultValue: "office", options: optionsOf(OFFICE_TICKET_SOURCES), description: "Where the case reached the office; the Driver App's are the consumer's." },
+        { id: "source", label: "Opened via", type: "select", defaultValue: "office", options: tokenOptions(OFFICE_TICKET_SOURCES), description: "Where the case reached the office; the Driver App's are the consumer's." },
         { id: "occurredAt", label: "Occurred", type: "datetime", description: "When it happened, on the project's clock; now when blank." },
         due,
         assignee("Who works it; nobody when blank."),
@@ -109,7 +111,7 @@ export const TICKET_COMMAND_FORMS: Readonly<Record<TicketCommandWithForm, Busine
   wait: commandForm("Waiting for the customer", "The case waits on the customer; say for what.", "Set waiting", [note("Waiting for", true)]),
   hold: commandForm("Put on hold", "The case waits on the office; say for what.", "Put on hold", [note("Held for", true)]),
   complete: commandForm("Complete", "What the case ended in. A re-collection rides on a route of the project that has not ended, picked from Route Studio; it is never made here.", "Complete", [
-    { id: "resolution", label: "Resolution", type: "select", required: true, options: optionsOf(TICKET_RESOLUTIONS) },
+    { id: "resolution", label: "Resolution", type: "select", required: true, options: tokenOptions(TICKET_RESOLUTIONS) },
     { id: "recollectionRouteId", label: "Re-collection route", type: "select", relation: ROUTES_MODULE, visibleWhen: RECOLLECTED, requiredWhen: RECOLLECTED, description: "The routes that have not ended." },
     note("How it was resolved", true),
   ]),
@@ -129,8 +131,16 @@ export function updateTicketRecord(record: BusinessRecord, values: BusinessFormV
   return { ...record, name, submittedValues: { ...record.submittedValues, ...values } }
 }
 
-/** "Open" or "Closed": a ticket's status read as the switch the list opens on. */
-export const opennessOf = (record: Pick<BusinessRecord, "submittedValues">): "Open" | "Closed" => (isOpenTicketStatus(String(record.submittedValues?.status ?? "")) ? "Open" : "Closed")
+/**
+ * "Open" or "Closed": a ticket's status read as the switch the list opens on —
+ * the row's own status, so a row the API has not answered yet (one made this
+ * session, the fixtures a failed load falls back on) reads as it shows; the
+ * fixtures' Created folds into open, as it did on the wire.
+ */
+export const opennessOf = (record: Pick<BusinessRecord, "status">): "Open" | "Closed" => {
+  const token = statusToken(record.status)
+  return token === "created" || isOpenTicketStatus(token) ? "Open" : "Closed"
+}
 
 /** The value the Assignee category offers for the viewer's own tickets. */
 export const MINE = "Mine"

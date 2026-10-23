@@ -18,7 +18,7 @@ import { ASSIGNEE_ACCOUNT_KEY, ticketAdapter } from "../../api/records/tickets"
 import { ALERT_COMMAND_FORMS, ALERT_FORM, ALERT_LIST_INITIAL, alertListReaders, createAlertRecord, ticketValuesOfAlert } from "../alerts"
 import type { BusinessFormSchema, BusinessFormValues } from "../business-form-types"
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../business-modules"
-import { createTicketRecord, MINE, TICKET_COMMAND_FORMS, TICKET_EDIT_FORM, TICKET_FORM, TICKET_LIST_INITIAL, ticketListReaders, updateTicketRecord } from "../tickets"
+import { createTicketRecord, MINE, opennessOf, TICKET_COMMAND_FORMS, TICKET_EDIT_FORM, TICKET_FORM, TICKET_LIST_INITIAL, ticketListReaders, updateTicketRecord } from "../tickets"
 
 const NOW = new Date("2026-10-01T10:00:00Z")
 const STAMPS = { createdAt: "2026-10-01T08:00:00.000Z", updatedAt: "2026-10-01T08:00:00.000Z" }
@@ -170,6 +170,13 @@ describe("the lists' categories", () => {
     assert.deepEqual(readers.priorities?.(open), ["High"])
     assert.deepEqual(readers.sources?.(open), ["Driver app"])
     assert.deepEqual(readers.assignees?.(open), ["Olivia Larsen"], "no Mine for nobody signed in")
+  })
+
+  test("openness reads the row's own status: a row the API has not answered yet reads as it shows, and the fixtures' Created is open", () => {
+    const shown = (status: string): BusinessRecord => ({ ...row("ticket-8831", "Ticket"), status, submittedValues: undefined })
+    assert.deepEqual(["In progress", "Pending", "Created", "Open"].map((status) => opennessOf(shown(status))), ["Open", "Open", "Open", "Open"])
+    assert.deepEqual(["Completed", "Rejected"].map((status) => opennessOf(shown(status))), ["Closed", "Closed"])
+    assert.equal(opennessOf(createTicketRecord({ subject: "Just opened" }, { now: 1 })), "Open", "a ticket made this session, before the API's answer")
   })
 
   test("Mine is the viewer's own tickets, and only theirs", () => {

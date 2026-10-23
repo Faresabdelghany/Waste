@@ -9,7 +9,6 @@
 import { singleFilterValue, type FilterValueReaders } from "@waste/domain/business-filters"
 import { ALERT_KINDS, ALERT_SEVERITIES, type TicketPriority } from "@waste/domain/resolution/vocabulary"
 
-import { statusLabel } from "../api/records/adapter"
 import { CONTAINERS_MODULE } from "../api/records/containers"
 import { ROUTES_MODULE } from "../api/records/routes"
 import { TICKETS_MODULE } from "../api/records/tickets"
@@ -17,8 +16,8 @@ import { DRIVERS_MODULE, VEHICLES_MODULE } from "./allocations"
 import type { BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord } from "./business-modules"
 import { mintedRecord, ORGANISATION_MODULE } from "./containers"
+import { tokenOptions } from "./tickets"
 
-const optionsOf = (tokens: readonly string[]) => tokens.map((value) => ({ value, label: statusLabel(value) }))
 
 /** Raise alert on the Pilot: `AlertCreate` — what was seen, how severe, and what it is about, one of the four at least. */
 export const ALERT_FORM: BusinessFormSchema = {
@@ -38,8 +37,8 @@ export const ALERT_FORM: BusinessFormSchema = {
         { id: "projectId", label: "Project", type: "select", required: true, relation: ORGANISATION_MODULE },
         { id: "title", label: "Title", type: "text", required: true },
         { id: "details", label: "Details", type: "textarea", required: true, description: "What was seen." },
-        { id: "kind", label: "Kind", type: "select", required: true, options: optionsOf(ALERT_KINDS) },
-        { id: "severity", label: "Severity", type: "select", required: true, options: optionsOf(ALERT_SEVERITIES) },
+        { id: "kind", label: "Kind", type: "select", required: true, options: tokenOptions(ALERT_KINDS) },
+        { id: "severity", label: "Severity", type: "select", required: true, options: tokenOptions(ALERT_SEVERITIES) },
         { id: "detectedAt", label: "Detected", type: "datetime", description: "When it was seen, on the project's clock; now when blank." },
       ],
     },

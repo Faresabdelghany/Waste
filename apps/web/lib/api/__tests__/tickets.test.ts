@@ -393,9 +393,12 @@ describe("the ticket's commands", () => {
     if (outcome.kind === "refused") assert.equal(problemSentence(outcome.problem), detail)
   })
 
-  test("are offered only where the machine moves the ticket or finds it there already; assign while it is open", () => {
+  test("are offered only where the machine moves the ticket — never where it stays, which writes nothing; assign while it is open", () => {
     const offered = (status: Ticket["status"]) => [ASSIGN_TICKET, "start", "wait", "hold", "complete", "reject", "reopen"].filter((name) => offersTicketCommand(status, name as never, "T-1001"))
-    assert.deepEqual(offered("open"), [ASSIGN_TICKET, "start", "wait", "hold", "complete", "reject", "reopen"])
+    assert.deepEqual(offered("open"), [ASSIGN_TICKET, "start", "wait", "hold", "complete", "reject"], "no reopen on an open ticket")
+    assert.deepEqual(offered("in-progress"), [ASSIGN_TICKET, "wait", "hold", "complete", "reject"], "no start on a ticket in progress")
+    assert.deepEqual(offered("pending"), [ASSIGN_TICKET, "start", "hold", "complete", "reject"])
+    assert.deepEqual(offered("on-hold"), [ASSIGN_TICKET, "start", "wait", "complete", "reject"])
     assert.deepEqual(offered("completed"), ["reopen"], "a closed ticket takes reopen alone")
     assert.deepEqual(offered("rejected"), ["reopen"])
   })
