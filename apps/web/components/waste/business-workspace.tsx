@@ -222,7 +222,7 @@ import {
 } from "@/components/waste/business-filter-popover"
 import {
   businessFilterChips,
-  emptyBusinessFilters,
+  matchesBusinessFilters,
   matchesBusinessQuery,
   removeBusinessFilterValue,
   type BusinessFilterKey,
@@ -271,7 +271,7 @@ import { SchemeDetailsPage } from "@/components/waste/scheme-details-page"
 import { SchemePlanAheadRunner } from "@/components/waste/scheme-plan-ahead"
 import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
-import { commandSurfaceFor } from "@/components/waste/commands/command-surfaces"
+import { commandSurfaceFor, initialFiltersOf } from "@/components/waste/commands/command-surfaces"
 import { offersRowsOf } from "@/components/waste/pickable-records"
 import { projectScopeOfMe } from "@/lib/api/records/me-projects"
 import { isServerBacked, serverModuleOf } from "@/lib/api/records/modules"
@@ -1188,8 +1188,10 @@ export function BusinessWorkspace({
       : workspace.modules[0].id,
   )
   const [query, setQuery] = useState("")
-  const [businessFilters, setBusinessFilters] =
-    useState<BusinessFilters>(emptyBusinessFilters)
+  // A module opens on its list's filters on the Pilot (the registry's `list`), applied when it becomes active and only then.
+  const [businessFilters, setBusinessFilters] = useState<BusinessFilters>(() =>
+    initialFiltersOf(commandSurfaceFor(workspace.id, activeModuleId, apiConfigured)),
+  )
   const [viewOptions, setViewOptions] = useState<BusinessViewOptions>(
     defaultBusinessViewOptions,
   )
@@ -1260,6 +1262,9 @@ export function BusinessWorkspace({
   const PrimarySurface = commandSurface && commandSurface.primary !== "form" ? commandSurface.primary : null
   const RowSurface = commandSurface?.rowActions
   const WhileShown = commandSurface?.whileShown
+  // Its list's categories, read for the person looking ("Mine" is `/me`'s account): the popover offers them and the rows match through them.
+  const viewerAccountId = me?.user.id ?? null
+  const listReaders = useMemo(() => commandSurface?.list?.readers({ accountId: viewerAccountId }), [commandSurface, viewerAccountId])
   // A command replaces its row in the store: details with a row surface read
   // the live row, so what the API answered shows at once.
   const detailsRecord =
@@ -1590,6 +1595,8 @@ export function BusinessWorkspace({
 
   const filteredRecords = useMemo(() => {
     const matchingRecords = visibleScopedRecords.filter((record) => {
+      // A module with a list on the Pilot is matched through its readers alone.
+      if (listReaders) return matchesBusinessFilters(record, businessFilters, listReaders) && matchesBusinessQuery(record, query)
       const matchesStatus =
         businessFilters.statuses.length === 0 ||
         businessFilters.statuses.includes(record.status)
@@ -1717,7 +1724,7 @@ export function BusinessWorkspace({
       )
     }
     return matchingRecords
-  }, [businessFilters, query, viewOptions.ordering, visibleScopedRecords])
+  }, [businessFilters, listReaders, query, viewOptions.ordering, visibleScopedRecords])
   const activeFilterChips = useMemo(
     () => businessFilterChips(businessFilters),
     [businessFilters],
@@ -2081,7 +2088,7 @@ export function BusinessWorkspace({
     moduleSync.record(moduleId)
     setActiveModuleId(moduleId)
     setQuery("")
-    setBusinessFilters(emptyBusinessFilters)
+    setBusinessFilters(initialFiltersOf(commandSurfaceFor(workspace.id, moduleId, apiConfigured)))
     setSelectedRecord(null)
     setPendingAction(null)
     setIsCreateOpen(false)
@@ -2095,10 +2102,10 @@ export function BusinessWorkspace({
     if (!moduleSync.apply(moduleId)) return
     setActiveModuleId(moduleId)
     setQuery("")
-    setBusinessFilters(emptyBusinessFilters)
+    setBusinessFilters(initialFiltersOf(commandSurfaceFor(workspace.id, moduleId, apiConfigured)))
     setPendingAction(null)
     setIsCreateOpen(false)
-  }, [moduleSync])
+  }, [apiConfigured, moduleSync, workspace.id])
 
   const resolveWorkspaceRecord = useCallback(
     (moduleId: string, recordId: string) => {
@@ -5034,6 +5041,7 @@ export function BusinessWorkspace({
                             ? "tickets"
                             : "default"
                   }
+                  readers={listReaders}
                 />
                 <BusinessViewOptionsPopover
                   value={viewOptions}

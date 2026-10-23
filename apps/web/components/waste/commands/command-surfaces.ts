@@ -6,20 +6,24 @@
 // create is a command of its own, or which the wire only reads, says so in
 // place of the primary action its fixture form had.
 //
-// The workspace consults this registry in three places — the primary action,
-// the details' actions, and `whileShown`, mounted beside the module's table
+// The workspace consults this registry in four places — the primary action,
+// the details' actions, `whileShown`, mounted beside the module's table
 // while the module is shown on the Pilot, for what a module does on its own
-// while a person watches it (the Live board's re-read) — and only while the
-// adapter is configured and the module is switched (`commandSurfaceFor`):
-// fixture mode never reaches it, and the fixture forms stand exactly as
-// before. A later slice adds its module here rather than another branch in
-// business-workspace.tsx; every key is a `SERVER_MODULES` key
+// while a person watches it (the Live board's re-read), and `list`, how the
+// module's rows are filtered: the toolbar's categories read off a row for
+// the person looking, and the filters the module opens with (#147: tickets
+// open on the open ones) — and only while the adapter is configured and the
+// module is switched (`commandSurfaceFor`): fixture mode never reaches it,
+// and the fixture forms and filters stand exactly as before. A later slice
+// adds its module here rather than another branch in business-workspace.tsx;
+// every key is a `SERVER_MODULES` key
 // (lib/api/__tests__/command-surfaces.test.ts).
 import type { ComponentType } from "react"
 
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 import { moduleKeyOf } from "@/lib/api/records/adapter"
 import { isServerBacked } from "@/lib/api/records/modules"
+import { emptyBusinessFilters, type BusinessFilters, type FilterValueReaders } from "@waste/domain/business-filters"
 
 import { AllocateSurface, AllocationCommandsSurface } from "./allocation-surfaces"
 import { AddContainerSurface, ContainerCommandsSurface } from "./container-surfaces"
@@ -46,6 +50,29 @@ export type CommandSurface = {
   rowActions?: ComponentType<RowSurfaceProps>
   /** Mounted beside the module's table while the module is shown, rendering nothing itself: the Live board's re-read. */
   whileShown?: ComponentType
+  /** How the module's rows are filtered on the Pilot, in place of the workspace's own per-module matching. */
+  list?: ModuleList
+}
+
+/** Who is looking at a list: the account `/me` answered, null until it has — what a reader that says "Mine" compares with. */
+export type ListViewer = { accountId: string | null }
+
+/**
+ * A module's list on the Pilot. `readers` are its toolbar's categories, in
+ * the order offered, each reading a row's values for the person looking —
+ * the popover offers them and the rows are matched through them, so the two
+ * never disagree. `initial` is what the module opens with, applied when it
+ * becomes the active module and never again while it stays so: a filter the
+ * person changed is theirs, whatever loads after.
+ */
+export type ModuleList = {
+  readers: (viewer: ListViewer) => FilterValueReaders
+  initial: Partial<BusinessFilters>
+}
+
+/** The filters a module opens with: its list's `initial` over no filter, or no filter for a module without one (every module in fixture mode). */
+export function initialFiltersOf(surface: CommandSurface | undefined): BusinessFilters {
+  return { ...emptyBusinessFilters, ...surface?.list?.initial }
 }
 
 /** The surfaces, by `workspace.module`. */
