@@ -49,10 +49,13 @@ export type ServiceProviderPriceModel = {
 
 export type HistoryEntry = { at: string; who: string; what: string }
 
-// The zones, customer types, container types, service levels and price
-// lists a row may name are managed entities in the commercial-registries
-// store (Settings → Commercial); the row's "Price list" fact stores the
-// list's name as its tag. Nothing here spells them a second time.
+// Fixture mode's model. The price lists a row may name are Settings ›
+// Commercial › Price lists' records (`FIXTURE_PRICE_LISTS`, lib/data/
+// commercial.ts); the row's "Price list" fact stores the list's name as its
+// tag. Its zones, customer types and container types are the fixtures' own
+// words, the browser registries that once listed them retired with #185. On
+// the Pilot a row is the API's (lib/api/records/pricing.ts) and this model
+// reads nothing of it.
 export const SERVICE_PROVIDER_PERFORMANCE = {
   formula: "coefficient = 1 + a × (b − complaint share)",
   a: 0.5,
@@ -62,7 +65,8 @@ export const SERVICE_PROVIDER_PERFORMANCE = {
 }
 // The one spelling of how a price is resolved (spec §4.4). The two pricing
 // modules state it in their rules and the Add price form in its description;
-// resolvePrice in ./price-resolution is the sentence run as code.
+// the API's resolver (@waste/domain/finance/pricing, whose RESOLUTION_RULE is
+// the same sentence) is it run as code, and Explain price shows its verdicts.
 export const RESOLUTION_RULE =
   "The row matching the most conditions wins. A negotiated row for the specific customer always wins. Remaining ties go to the row with the newest effective-from date."
 
@@ -84,7 +88,6 @@ export const PRODUCT_FACTS = {
   invoiceCode: "Invoice code", container: "Container", containerType: "Container type",
   wasteFraction: "Waste fraction", customer: "Customer", variations: "Variations",
   priceList: "Price list", materials: "Materials", services: "Included services",
-  serviceLevels: "Service levels",
 } as const
 export const RATE_FACTS = {
   serviceProvider: "Service provider", product: "Product", serviceArea: "Service area",

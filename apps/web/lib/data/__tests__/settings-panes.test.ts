@@ -8,7 +8,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { MASTER_DATA_SETTINGS_PANE_ID } from "../business-links"
-import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened } from "../settings-panes"
+import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened } from "../settings-panes"
 
 describe("the Settings panes offered", () => {
   test("Master data on the Pilot only, Asset management in fixture mode only, every other pane in both", () => {
@@ -18,6 +18,16 @@ describe("the Settings panes offered", () => {
     assert.equal(settingsPaneOffered(ASSET_MANAGEMENT_SETTINGS_PANE_ID, false), true)
     assert.equal(settingsPaneOffered("company", true), true)
     assert.equal(settingsPaneOffered("company", false), true)
+  })
+
+  test("Finance & invoicing in fixture mode only: configure.finance is hidden on the Pilot (#148)", () => {
+    assert.equal(settingsPaneOffered(FINANCE_SETTINGS_PANE_ID, true), false)
+    assert.equal(settingsPaneOffered(FINANCE_SETTINGS_PANE_ID, false), true)
+    assert.equal(settingsPaneOffered("commercial-price-lists", true), true, "Settings › Commercial keeps its price lists in both modes")
+    assert.equal(settingsPaneOffered("commercial-products", true), true)
+    // A link to it — Configure's Finance module, `/settings?pane=finance` — opens Settings › Commercial on the Pilot, never the browser-only pane.
+    assert.equal(settingsPaneOpened(FINANCE_SETTINGS_PANE_ID, true), "commercial-products")
+    assert.equal(settingsPaneOpened(FINANCE_SETTINGS_PANE_ID, false), FINANCE_SETTINGS_PANE_ID)
   })
 
   test("a link to Asset management opens Master data on the Pilot, and itself in fixture mode", () => {

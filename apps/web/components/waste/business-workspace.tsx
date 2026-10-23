@@ -271,7 +271,7 @@ import { SchemeDetailsPage } from "@/components/waste/scheme-details-page"
 import { SchemePlanAheadRunner } from "@/components/waste/scheme-plan-ahead"
 import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
-import { commandSurfaceFor, initialFiltersOf } from "@/components/waste/commands/command-surfaces"
+import { commandSurfaceFor, initialFiltersOf, listShows } from "@/components/waste/commands/command-surfaces"
 import { offersRowsOf } from "@/components/waste/pickable-records"
 import { projectScopeOfMe } from "@/lib/api/records/me-projects"
 import { isServerBacked, serverModuleOf } from "@/lib/api/records/modules"
@@ -283,13 +283,7 @@ import {
   type ContainerType,
   type WasteFraction,
 } from "@/components/settings/asset-management-store"
-import {
-  useCommercialRegistriesStore,
-  type CustomerTypeEntry,
-  type PriceListEntry,
-  type PricingZone,
-  type ServiceLevel,
-} from "@/components/settings/commercial-registries-store"
+import { FIXTURE_PRICE_LISTS, FIXTURE_PRICE_LISTS_BUCKET, isPriceListRecord } from "@/lib/data/commercial"
 import { ServiceProviderDetailsPage } from "@/components/waste/service-provider-details-page"
 import { ContainerDetailsSheet } from "@/components/waste/containers-assets-register"
 import { MapPlanningView } from "@/components/waste/map-planning/map-planning-view"
@@ -434,42 +428,22 @@ function configuredAssetFormSchema(
   }
 }
 
-// Same idea for the Commercial forms: the Add price conditions (zone,
-// customer type), its price-list tag, and the product form's service levels
-// offer whatever the Settings → Commercial registries currently hold, not
-// the fixture options baked into the schema. Registry NAMES are the stored
-// values — price-row conditions/tags and product facts reference them as
-// plain strings.
+// Same idea for fixture mode's Add price: its price-list tag offers the lists
+// Settings › Commercial › Price lists holds in the browser's bucket, not the
+// fixture options baked into the schema. A list's NAME is the stored value —
+// a price row's tag references it as a plain string. Its zone and customer
+// type stay the schema's own options: the browser registries they came from
+// retired with #185 (a zone is a planning area, a customer type a customer's
+// kind on the Pilot).
 function configuredCommercialFormSchema(
   schema: BusinessFormSchema | undefined,
-  zones: readonly PricingZone[],
-  serviceLevels: readonly ServiceLevel[],
-  customerTypes: readonly CustomerTypeEntry[],
-  priceLists: readonly PriceListEntry[],
+  priceLists: readonly BusinessRecord[],
 ) {
-  if (
-    schema?.key !== "commercial.price-rows" &&
-    schema?.key !== "commercial.products"
-  ) {
-    return schema
+  if (schema?.key !== "commercial.price-rows") return schema
+  const optionsByField: Record<string, readonly BusinessFormOption[]> = {
+    // Scheduled lists are offered too — rows for next year's tariff are added before it starts applying.
+    tag: priceLists.filter((list) => list.status !== "Expired").map((list) => ({ value: list.name, label: list.name })),
   }
-  const toOptions = (names: readonly string[]): BusinessFormOption[] =>
-    names.map((name) => ({ value: name, label: name }))
-  const activeNames = <T extends { name: string; status: string }>(
-    items: readonly T[],
-  ) => items.filter((item) => item.status === "Active").map((item) => item.name)
-  const optionsByField: Record<string, readonly BusinessFormOption[]> =
-    schema.key === "commercial.price-rows"
-      ? {
-          zone: toOptions(activeNames(zones)),
-          customerType: toOptions(activeNames(customerTypes)),
-          // Active includes scheduled lists (future effective-from) — rows
-          // for next year's tariff are added before it starts applying.
-          tag: toOptions(activeNames(priceLists)),
-        }
-      : {
-          serviceLevels: toOptions(activeNames(serviceLevels)),
-        }
   return {
     ...schema,
     sections: schema.sections.map((section) => ({
@@ -790,7 +764,7 @@ const primaryModuleIdsByWorkspace: Partial<Record<WorkspaceId, readonly string[]
   resources: ["containers", "inventory", "warehouses", "depots"],
   fleet: ["vehicles", "drivers", "vehicle-planning"],
   "service-providers": ["service-providers", "service-areas", "activities"],
-  commercial: ["products", "price-rows", "service-provider-prices", "settlements", "events"],
+  commercial: ["products", "price-rows", "events", "billing", "invoices"],
   improve: ["intelligence", "analytics", "autopilot", "performance"],
   configure: ["organization", "access", "master", "finance"],
 }
@@ -1129,8 +1103,6 @@ export function BusinessWorkspace({
   )
   const { containerTypes, wasteFractions, measurementSettings } =
     useAssetManagementStore()
-  const { zones, serviceLevels, customerTypes, priceLists } =
-    useCommercialRegistriesStore()
   const { roles: organizationRoles } = useOrganizationStore()
   const router = useRouter()
   // The live grants for the restricting role — Settings edits apply on the
@@ -1290,6 +1262,11 @@ export function BusinessWorkspace({
   const activeSecondaryModule = secondaryModules.find(
     (module) => module.id === activeModule.id,
   )
+  // Fixture mode's price lists, the Add price form's tag options (#185).
+  const priceLists = useMemo(
+    () => getRecords(FIXTURE_PRICE_LISTS_BUCKET.workspaceId, FIXTURE_PRICE_LISTS_BUCKET.moduleId, FIXTURE_PRICE_LISTS).filter(isPriceListRecord),
+    [getRecords],
+  )
   const activeModuleFormSchema = useMemo(() => {
     const registered = getBusinessFormSchema(workspace.id, activeModule.id)
     return serviceProviderScopedFormSchema(
@@ -1302,9 +1279,6 @@ export function BusinessWorkspace({
           measurementSettings,
           projectScope,
         ),
-        zones,
-        serviceLevels,
-        customerTypes,
         priceLists,
       ),
       serviceProviderScopeId,
@@ -1315,14 +1289,11 @@ export function BusinessWorkspace({
       containerTypes,
       isAgreementsView,
       serviceProviderScopeId,
-      customerTypes,
       measurementSettings,
       priceLists,
       projectScope,
-      serviceLevels,
       wasteFractions,
       workspace.id,
-      zones,
     ],
   )
   const relatedCreateModule = relatedCreateTarget
@@ -1351,24 +1322,18 @@ export function BusinessWorkspace({
               measurementSettings,
               projectScope,
             ),
-            zones,
-            serviceLevels,
-            customerTypes,
             priceLists,
           )
         : activeModuleFormSchema),
     [
       activeModuleFormSchema,
       containerTypes,
-      customerTypes,
       measurementSettings,
       priceLists,
       projectScope,
       relatedCreateModule,
       relatedCreateTarget?.schemaOverride,
-      serviceLevels,
       wasteFractions,
-      zones,
     ],
   )
   const canOpenBusinessForm =
@@ -1565,12 +1530,13 @@ export function BusinessWorkspace({
     () => activeRecords.filter((record) => isInProjectScope(record, projectScope)),
     [activeRecords, projectScope],
   )
+  // A module holding two shapes lists one on the Pilot (the list's `shows`): the count, the filter values and the columns are that one's.
   const visibleScopedRecords = useMemo(
     () =>
       scopedRecords.filter(
-        (record) => record.facts["Registry visibility"] !== "Soft deleted",
+        (record) => record.facts["Registry visibility"] !== "Soft deleted" && listShows(commandSurface?.list, record),
       ),
-    [scopedRecords],
+    [commandSurface?.list, scopedRecords],
   )
   // Map Planning reads other modules' records: every container in the
   // registry (the map is geographic — each planning area shows the
@@ -3589,18 +3555,6 @@ export function BusinessWorkspace({
         typeof values.status === "string" && values.status ? values.status : undefined
       const nextFacts = { ...record.facts }
       if (submittedUnit) nextFacts[PRODUCT_FACTS.unit] = submittedUnit
-      // The generic path stores the multiselect fact as its display join
-      // ("A · B"), but splitList consumers of the Service levels fact parse a
-      // comma-separated list — rewrite it from the raw submitted value, and
-      // treat an emptied selection as clearing the fact.
-      if (typeof values.serviceLevels === "string") {
-        const levels = values.serviceLevels
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean)
-        if (levels.length > 0) nextFacts[PRODUCT_FACTS.serviceLevels] = levels.join(", ")
-        else delete nextFacts[PRODUCT_FACTS.serviceLevels]
-      }
       delete nextFacts["VAT rate"]
       delete nextFacts["Status"]
       // Field labels that are not product facts: the name duplicates the

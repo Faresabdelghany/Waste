@@ -40,6 +40,14 @@ export type BusinessFilters = {
   severities: string[]
   /** Who works a case, "Mine" among the values for the viewer's own. */
   assignees: string[]
+  /** The Finance lists' relations (#185): a price row's list, an event's product, payer and agreement, an invoice's run. */
+  priceLists: string[]
+  products: string[]
+  customers: string[]
+  agreements: string[]
+  /** Why a billable event cannot be invoiced. */
+  blockReasons: string[]
+  billingRuns: string[]
 }
 
 export type BusinessFilterKey = keyof BusinessFilters
@@ -77,6 +85,12 @@ export const BUSINESS_FILTER_CHIP_LABELS: Readonly<Record<BusinessFilterKey, str
   kinds: "Kind",
   severities: "Severity",
   assignees: "Assignee",
+  priceLists: "Price list",
+  products: "Product",
+  customers: "Customer",
+  agreements: "Agreement",
+  blockReasons: "Block reason",
+  billingRuns: "Billing run",
 }
 
 export const BUSINESS_FILTER_KEYS = Object.keys(

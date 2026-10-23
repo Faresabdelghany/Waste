@@ -17,6 +17,7 @@ import { moduleKeyOf, type ServerModule } from "./adapter"
 import { agreementsModule } from "./agreements"
 import { alertsModule } from "./alerts"
 import { vehiclePlanningModule } from "./allocations"
+import { billingModule, eventsModule, invoicesModule } from "./billing"
 import { containersModule, inventoryModule } from "./containers"
 import { fleetDriversModule, fleetVehiclesModule } from "./fleet"
 import { liveModule } from "./live"
@@ -25,6 +26,7 @@ import { accessModule, organisationModule, serviceProvidersModule } from "./orga
 import { pickupsModule } from "./pickups"
 import { placesModule, warehousesModule } from "./places"
 import { collectionCalendarsModule, planningAreasModule } from "./planning"
+import { priceRowsModule, productsModule } from "./pricing"
 import { propertiesModule, propertyGroupsModule, sharedPointsModule } from "./properties"
 import { customersModule } from "./registry"
 import { routeSchemesModule } from "./route-schemes"
@@ -46,6 +48,9 @@ import { ticketsModule } from "./tickets"
  * (#183); the containers after the master data
  * and the warehouses they name, the ledger after the containers its movements
  * name, and the allocations after the fleet and the places they reserve (#181);
+ * the Price Engine's catalogue, which names no route: the products after the
+ * master data, and the price lists and their rows after the products, the
+ * customers and the planning areas their conditions name (#185);
  * the route schemes after everything a scheme and its groups name — the
  * areas, the master data, the providers, the fleet and the places — so none
  * of it is left an id chip on a scheme (#177); then the Live board, today's
@@ -54,7 +59,10 @@ import { ticketsModule } from "./tickets"
  * and the pickups after the routes and the containers they name (#179); then
  * the tickets, after every module a ticket's links and its assignee name —
  * its parent among the tickets themselves — and the alerts after the
- * tickets they are linked to (#182).
+ * tickets they are linked to (#182); then the money the routes' work
+ * makes: the billable events after the agreements, the products, the
+ * routes and the tickets they name, the billing runs after the events they
+ * invoice, and the invoices after the runs that issue them (#185).
  */
 export const SERVER_MODULES: readonly ServerModule[] = [
   organisationModule,
@@ -75,12 +83,17 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   containersModule,
   inventoryModule,
   vehiclePlanningModule,
+  productsModule,
+  priceRowsModule,
   routeSchemesModule,
   liveModule,
   routesModule,
   pickupsModule,
   ticketsModule,
   alertsModule,
+  eventsModule,
+  billingModule,
+  invoicesModule,
 ]
 
 const byKey = new Map(SERVER_MODULES.map((module) => [moduleKeyOf(module.workspaceId, module.moduleId), module]))

@@ -13,7 +13,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
-import { useModuleReady, useOpenRecord, useRelationPickers } from "@/components/waste/commands/use-command-support"
+import { useModuleReady, useOpenRecord, useRelationPickers, type RelationPickers } from "@/components/waste/commands/use-command-support"
 import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 
@@ -23,6 +23,8 @@ export function CreateSurface({
   schema,
   make,
   created,
+  pickers: given,
+  onCreated,
 }: {
   label: string
   module: ModuleLocation
@@ -31,9 +33,14 @@ export function CreateSurface({
   make: (values: BusinessFormValues, now: number) => BusinessRecord
   /** What the person is told once the API has taken it. */
   created: (record: BusinessRecord) => { title: string; description: string }
+  /** What else follows once the API has taken it: a module whose rows the new one changes, read again (the Products table's default price, #185). */
+  onCreated?: (record: BusinessRecord) => void
+  /** The pickers its relation fields read, where a form names rows the command surfaces' own pickers do not offer (the Price Engine's, #185). */
+  pickers?: RelationPickers
 }) {
   const { upsertRecord } = useBusinessRecordStore()
-  const pickers = useRelationPickers()
+  const relationPickers = useRelationPickers()
+  const pickers = given ?? relationPickers
   const moduleReady = useModuleReady(module)
   const openRecord = useOpenRecord(module.moduleId)
   const [open, setOpen] = useState(false)
@@ -50,6 +57,7 @@ export function CreateSurface({
         openRecord(record.id)
         const said = created(record)
         toast.success(said.title, { description: said.description })
+        onCreated?.(record)
       },
       () => setSaving(false),
     )

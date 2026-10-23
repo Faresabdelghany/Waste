@@ -49,9 +49,6 @@ export const ORGANIZATION_STORAGE_KEY = "waste.organization.v1"
 /** The asset-management settings store. */
 export const ASSET_MANAGEMENT_STORAGE_KEY = "waste.asset-management.v1"
 
-/** The commercial registries settings store. */
-export const COMMERCIAL_REGISTRIES_STORAGE_KEY = "waste.commercial-registries.v1"
-
 /** The API session's tab-shared half: the Supabase access token, its expiry, the e-mail and the user id the server-backed record store calls the API as (Issue #81). Never carried a legacy name. */
 export const API_SESSION_STORAGE_KEY = "waste.api-session.v1"
 
@@ -93,7 +90,6 @@ export const LEGACY_STORAGE_KEYS: Readonly<
   [SETTINGS_STORAGE_KEY]: ["wastehero.settings.v1"],
   [ORGANIZATION_STORAGE_KEY]: ["wastehero.organization.v1"],
   [ASSET_MANAGEMENT_STORAGE_KEY]: ["wastehero.asset-management.v1"],
-  [COMMERCIAL_REGISTRIES_STORAGE_KEY]: ["wastehero.commercial-registries.v1"],
   [APP_THEME_SELECTION_STORAGE_KEY]: ["wastehero.theme.selection.v1"],
   [CUSTOM_THEME_STORAGE_KEY]: ["wastehero.theme.custom.v1"],
 }

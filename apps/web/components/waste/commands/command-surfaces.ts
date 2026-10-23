@@ -9,10 +9,12 @@
 // The workspace consults this registry in four places — the primary action,
 // the details' actions, `whileShown`, mounted beside the module's table
 // while the module is shown on the Pilot, for what a module does on its own
-// while a person watches it (the Live board's re-read), and `list`, how the
-// module's rows are filtered: the toolbar's categories read off a row for
-// the person looking, and the filters the module opens with (#147: tickets
-// open on the open ones) — and only while the adapter is configured and the
+// while a person watches it (the Live board's re-read), and `list`, which of
+// the module's records are its rows and how they are filtered: the shape a
+// module of two shapes lists (#185: the price rows, never their lists), the
+// toolbar's categories read off a row for the person looking, and the filters
+// the module opens with (#147: tickets open on the open ones) — and only
+// while the adapter is configured and the
 // module is switched (`commandSurfaceFor`): fixture mode never reaches it,
 // and the fixture forms and filters stand exactly as before. A later slice
 // adds its module here rather than another branch in business-workspace.tsx;
@@ -29,8 +31,11 @@ import { TICKET_LIST_INITIAL, ticketListReaders } from "@/lib/data/tickets"
 import { emptyBusinessFilters, type BusinessFilters, type FilterValueReaders } from "@waste/domain/business-filters"
 
 import { AllocateSurface, AllocationCommandsSurface } from "./allocation-surfaces"
+import { AddManualEventSurface, BillingRunSurface, EventCommandsSurface, InvoiceSurface, RunBillingSurface } from "./billing-surfaces"
+import { BILLING_LIST, EVENTS_LIST, INVOICES_LIST, PRICE_ROWS_LIST } from "./commercial-lists"
 import { AddContainerSurface, ContainerCommandsSurface } from "./container-surfaces"
 import { AddPropertyGroupSurface, AddPropertySurface, AddSharedPointSurface, PropertyCommandsSurface, PropertyGroupCommandsSurface, SharedPointCommandsSurface } from "./place-surfaces"
+import { PriceRowCommandsSurface, PriceRowsPrimarySurface, ProductCommandsSurface, ProductsPrimarySurface } from "./pricing-surfaces"
 import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface } from "./route-surfaces"
 
 /** What a primary surface is handed: the label the module's primary action carries. */
@@ -53,7 +58,7 @@ export type CommandSurface = {
   rowActions?: ComponentType<RowSurfaceProps>
   /** Mounted beside the module's table while the module is shown, rendering nothing itself: the Live board's re-read. */
   whileShown?: ComponentType
-  /** How the module's rows are filtered on the Pilot, in place of the workspace's own per-module matching. */
+  /** Which of the module's records are its rows on the Pilot, and how they are filtered, in place of the workspace's own per-module matching. */
   list?: ModuleList
 }
 
@@ -66,11 +71,22 @@ export type ListViewer = { accountId: string | null }
  * the popover offers them and the rows are matched through them, so the two
  * never disagree. `initial` is what the module opens with, applied when it
  * becomes the active module and never again while it stays so: a filter the
- * person changed is theirs, whatever loads after.
+ * person changed is theirs, whatever loads after. `shows` scopes the
+ * module's rows: where a module holds records of two shapes, the one it
+ * lists — the price rows, never the price lists they are filed under (#185)
+ * — before any filter, so the count, the filter values and the column
+ * options are that shape's alone; one column set over two shapes reads
+ * neither.
  */
 export type ModuleList = {
   readers: (viewer: ListViewer) => FilterValueReaders
   initial: Partial<BusinessFilters>
+  shows?: (record: BusinessRecord) => boolean
+}
+
+/** Whether a record is one of a module's rows on the Pilot: every record, unless its list says which (`shows`); the workspace scopes the module by it before any filter. */
+export function listShows(list: ModuleList | undefined, record: BusinessRecord): boolean {
+  return list?.shows?.(record) ?? true
 }
 
 /** The filters a module opens with: its list's `initial` over no filter, or no filter for a module without one (every module in fixture mode). */
@@ -101,6 +117,15 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   // opening on what still needs attention.
   "operate.tickets": { primary: NewTicketSurface, list: { readers: ({ accountId }) => ticketListReaders(accountId), initial: TICKET_LIST_INITIAL } },
   "operate.exceptions": { primary: RaiseAlertSurface, rowActions: AlertCommandsSurface, list: { readers: alertListReaders, initial: ALERT_LIST_INITIAL } },
+  // Slice 10 (#185): a product is made in Settings, so both pricing modules'
+  // primary is Add price, the price rows' with Explain price beside it; an
+  // event moves by its two commands; a run is previewed before it runs; an
+  // invoice is read and credited, never edited.
+  "commercial.products": { primary: ProductsPrimarySurface, rowActions: ProductCommandsSurface },
+  "commercial.price-rows": { primary: PriceRowsPrimarySurface, rowActions: PriceRowCommandsSurface, list: PRICE_ROWS_LIST },
+  "commercial.events": { primary: AddManualEventSurface, rowActions: EventCommandsSurface, list: EVENTS_LIST },
+  "commercial.billing": { primary: RunBillingSurface, rowActions: BillingRunSurface, list: BILLING_LIST },
+  "commercial.invoices": { primary: null, rowActions: InvoiceSurface, list: INVOICES_LIST },
 }
 
 /** The module's surface while the adapter is configured and the module switched; undefined otherwise, and always in fixture mode. */
