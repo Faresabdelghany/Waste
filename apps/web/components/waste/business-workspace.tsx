@@ -2158,11 +2158,6 @@ export function BusinessWorkspace({
     )
   }
 
-  const updateRecord = (nextRecord: BusinessRecord) => {
-    upsertRecord(workspace.id, activeModule.id, nextRecord)
-    setSelectedRecord(nextRecord)
-  }
-
   const requestRecordAction = (action: string) => {
     if (!selectedRecord) return
     const requiresDeleteGrant = action.toLowerCase().includes("delete")
@@ -2259,12 +2254,14 @@ export function BusinessWorkspace({
         : "Company and project scope validated",
     }
 
-    setAuditEvents((current) => ({
-      ...current,
-      [record.id]: [event, ...(current[record.id] ?? [])],
-    }))
+    const recordAuditEvent = () =>
+      setAuditEvents((current) => ({
+        ...current,
+        [record.id]: [event, ...(current[record.id] ?? [])],
+      }))
 
     if (action.toLowerCase().includes("delete")) {
+      recordAuditEvent()
       const deletion = { reason, actorName, deletionLogId: event.id }
       let deletionMessage =
         "The structured reason and actor were written to the deletion log."
@@ -2392,23 +2389,29 @@ export function BusinessWorkspace({
         ],
       }
 
-      upsertRecord(workspace.id, activeModule.id, companion)
-      setAuditEvents((current) => ({
-        ...current,
-        [companion.id]: [
-          {
-            ...event,
-            id: `audit-companion-${Date.now()}`,
-            before: "Absent",
-            after: companion.status,
-            evidence: `Created from ${record.id} · ${event.evidence}`,
-          },
-        ],
-      }))
-      toast.success(`${companion.name} created`, {
-        description: isCorrection
-          ? "The issued source record was preserved."
-          : "A separate governed record and audit event were added.",
+      // On a module the API holds, the action has happened once the API has
+      // answered (#210): its audit row and its word wait for the write's
+      // outcome, and a refusal is the store's toast alone. In fixture mode
+      // there is nothing to wait for, and both run at once.
+      whenSaved(upsertRecord(workspace.id, activeModule.id, companion), () => {
+        recordAuditEvent()
+        setAuditEvents((current) => ({
+          ...current,
+          [companion.id]: [
+            {
+              ...event,
+              id: `audit-companion-${Date.now()}`,
+              before: "Absent",
+              after: companion.status,
+              evidence: `Created from ${record.id} · ${event.evidence}`,
+            },
+          ],
+        }))
+        toast.success(`${companion.name} created`, {
+          description: isCorrection
+            ? "The issued source record was preserved."
+            : "A separate governed record and audit event were added.",
+        })
       })
     } else {
       const nextRecord: BusinessRecord = {
@@ -2428,12 +2431,18 @@ export function BusinessWorkspace({
             ? record.allowedTransitions
             : nextAllowedTransitions(activeModule, nextStatus),
       }
-      updateRecord(nextRecord)
-      toast.success(`${action} recorded`, {
-        description:
-          nextStatus === record.status
-            ? "The action and evidence were appended without bypassing the lifecycle."
-            : `${record.status} → ${nextStatus} · audit history updated`,
+      // As above (#210): the details show the moved row, the audit gains its
+      // row and the person is told only once the write has landed — the
+      // details only where they still show this row.
+      whenSaved(upsertRecord(workspace.id, activeModule.id, nextRecord), () => {
+        recordAuditEvent()
+        setSelectedRecord((current) => (current?.id === record.id ? nextRecord : current))
+        toast.success(`${action} recorded`, {
+          description:
+            nextStatus === record.status
+              ? "The action and evidence were appended without bypassing the lifecycle."
+              : `${record.status} → ${nextStatus} · audit history updated`,
+        })
       })
     }
 

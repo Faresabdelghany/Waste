@@ -187,6 +187,8 @@ test("Contacts & Companies: created in the browser with Location, read back, mov
   expect(patched.status()).toBe(200)
   expect(await patched.json()).toMatchObject({ id: body.id, status: "inactive" })
   expect((await (await api.get(location)).json()) as Customer).toMatchObject({ status: "inactive" })
+  // Said once the API has taken it, and only then (#210).
+  await expect(page.getByText("Inactive recorded")).toBeVisible()
 
   // A registration number somebody else takes after this page loaded: refused by the API, said in its sentence, and not in the list.
   await openLoaded(page, "/customers?module=contacts", "/customers")
