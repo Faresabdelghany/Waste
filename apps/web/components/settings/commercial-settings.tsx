@@ -5,11 +5,17 @@
 // management (AssetPanelShell + toolbar + records table + dialogs).
 //
 // - Products stay business records ("commercial.products") so Price Engine
-//   reads the same catalogue; the form here carries no price/VAT/invoice
-//   fields — pricing happens in Price Engine via Add price.
-// - Zones, Service levels, Customer types and Price lists are real CRUD
-//   entities in the commercial-registries store; Price Engine consumes them
-//   as form options. A price list's name is the tag stored on price rows.
+//   reads the same catalogue; in fixture mode the form here carries no
+//   price/VAT/invoice fields — pricing happens in Price Engine via Add price.
+//   On the Pilot the products are the API's, created and edited with their
+//   invoice fields (commercial-catalogue-panes.tsx).
+// - Price lists are records of both modes' own source: on the Pilot the kind
+//   of `commercial.price-rows` the API holds them under, in fixture mode a
+//   browser bucket seeded with the prototype's lists (#185). A fixture row's
+//   price-list tag is a list's name. The zones, service levels, customer types
+//   and surcharge rules the prototype kept in a browser store are gone (#127):
+//   a zone is a planning area, a customer type a customer's kind, and a
+//   service level and a surcharge have no home on the wire.
 //
 // `CommercialDefaultsExtras` and `CommercialSectionPane` are the two names
 // SettingsDialog renders; keep their exported shape stable.
@@ -21,34 +27,14 @@ import {
   ArrowSquareOut,
   PencilSimple,
   Plus,
-  Trash,
 } from "@phosphor-icons/react/dist/ssr"
 
 import { cn } from "@/lib/utils"
 import { businessWorkspaces, type BusinessRecord } from "@/lib/data/business-modules"
 import { getBusinessFormSchema } from "@/lib/data/business-form-schemas"
-import type {
-  BusinessFormOption,
-  BusinessFormValues,
-} from "@/lib/data/business-form-types"
+import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -61,28 +47,20 @@ import {
   TablePagination,
   useTablePagination,
 } from "@/components/ui/table-pagination"
-import { Textarea } from "@/components/ui/textarea"
 import { statusClasses } from "@/components/waste/business-record-views"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
+import { useApiConfigured } from "@/components/waste/api-session-store"
 import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import {
   AssetPanelShell,
   AssetToolbar,
-  DialogSection,
   EmptyRow,
-  Field,
   RecordsSection,
-  StatusBadge,
   defaultAssetView,
   sortByView,
   type AssetView,
 } from "@/components/settings/asset-management-settings"
-import {
-  registryEntityId,
-  useCommercialRegistriesStore,
-  type RegistryStatus,
-} from "@/components/settings/commercial-registries-store"
-import { SURCHARGE_RULES } from "@/lib/commercial/price-resolution"
+import { PriceListsPane, ProductsOnApiPane } from "@/components/settings/commercial-catalogue-panes"
 import {
   SERVICE_PROVIDER_PERFORMANCE,
   PRICING_REFERENCE_DATE,
@@ -106,18 +84,6 @@ function splitList(value?: string): string[] {
 
 function text(values: BusinessFormValues, id: string): string {
   return typeof values[id] === "string" ? (values[id] as string).trim() : ""
-}
-
-function nowIso() {
-  return new Date().toISOString()
-}
-
-function slug(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "")
 }
 
 // Reads the store the same way for the defaults extras and the section
@@ -243,50 +209,12 @@ export function CommercialDefaultsExtras() {
           ))}
         </div>
         <p className="text-xs leading-5 text-muted-foreground">
-          Zones, service levels, customer types and price lists are managed in
-          the Commercial section. Container types and waste fractions are
-          Operations-owned registries — price rows can condition on them, but
-          they are managed under Operations setup.
+          Price lists are managed in the Commercial section. A price row&apos;s
+          zone is a planning area and its customer type a customer&apos;s kind;
+          container types and waste fractions are Operations-owned registries —
+          price rows can condition on them, but they are managed under
+          Operations setup.
         </p>
-      </div>
-
-      {/* 2. Surcharge rules */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Surcharge rules</h3>
-        <section className="overflow-hidden rounded-xl border border-border/60">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead>Rule</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Recurrence</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {SURCHARGE_RULES.map((rule) => (
-                  <TableRow key={rule.id} className="hover:bg-transparent">
-                    <TableCell className="min-w-[200px] text-sm font-medium text-foreground">
-                      {rule.name}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                      {rule.kind === "percent" ? `+${rule.value}%` : `+${money(rule.value)}`}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {rule.recurrence}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          <div className="border-t border-border px-4 py-2">
-            <p className="text-xs text-muted-foreground">
-              Highest wins when rules overlap. Applied automatically to affected pickup
-              dates.
-            </p>
-          </div>
-        </section>
       </div>
 
       {/* 3. Service provider performance — read-only card (spec §6 cut: no editor) */}
@@ -322,12 +250,14 @@ export function CommercialDefaultsExtras() {
 }
 
 export function CommercialSectionPane({ paneId }: { paneId: string }) {
-  if (paneId === "commercial-products") return <ProductsPane />
+  if (paneId === "commercial-products") return <ProductsByModePane />
   if (paneId === "commercial-price-lists") return <PriceListsPane />
-  if (paneId === "commercial-zones") return <ZonesPane />
-  if (paneId === "commercial-service") return <ServicePane />
-  if (paneId === "commercial-customer-types") return <CustomerTypesPane />
   return null
+}
+
+/** The products' pane: the API's on the Pilot, the fixtures' and the browser's in fixture mode. */
+function ProductsByModePane() {
+  return useApiConfigured() ? <ProductsOnApiPane /> : <ProductsPane />
 }
 
 // ---------------------------------------------------------------------------
@@ -351,13 +281,11 @@ function productRecordToFormValues(record: BusinessRecord): BusinessFormValues {
     container: record.facts[PRODUCT_FACTS.container] || "",
     containerType: record.facts[PRODUCT_FACTS.containerType] || "",
     wasteFraction: record.facts[PRODUCT_FACTS.wasteFraction] || "",
-    serviceLevels: splitList(record.facts[PRODUCT_FACTS.serviceLevels]).join(", "),
   }
 }
 
 function ProductsPane() {
   const { productRecords, rows, upsertRecord } = useCommercialCatalogue()
-  const { serviceLevels } = useCommercialRegistriesStore()
   const [query, setQuery] = useState("")
   const [statuses, setStatuses] = useState<string[]>([])
   const [typeFilters, setTypeFilters] = useState<string[]>([])
@@ -365,24 +293,7 @@ function ProductsPane() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<BusinessRecord | null>(null)
 
-  // Same injection Price Engine applies: the Service levels field offers
-  // whatever the Settings → Service registry currently holds.
-  const productSchema = useMemo(() => {
-    const schema = getBusinessFormSchema("commercial", "products")
-    if (!schema) return undefined
-    const options: BusinessFormOption[] = serviceLevels
-      .filter((level) => level.status === "Active")
-      .map((level) => ({ value: level.name, label: level.name }))
-    return {
-      ...schema,
-      sections: schema.sections.map((section) => ({
-        ...section,
-        fields: section.fields.map((field) =>
-          field.id === "serviceLevels" ? { ...field, options } : field,
-        ),
-      })),
-    }
-  }, [serviceLevels])
+  const productSchema = getBusinessFormSchema("commercial", "products")
   const editFormSchema = useMemo(
     () =>
       productSchema
@@ -405,7 +316,6 @@ function ProductsPane() {
           record.facts[PRODUCT_FACTS.container],
           record.facts[PRODUCT_FACTS.containerType],
           record.facts[PRODUCT_FACTS.wasteFraction],
-          record.facts[PRODUCT_FACTS.serviceLevels],
         ]
           .join(" ")
           .toLowerCase()
@@ -440,8 +350,6 @@ function ProductsPane() {
     if (text(values, "container")) facts[PRODUCT_FACTS.container] = text(values, "container")
     if (text(values, "containerType")) facts[PRODUCT_FACTS.containerType] = text(values, "containerType")
     if (text(values, "wasteFraction")) facts[PRODUCT_FACTS.wasteFraction] = text(values, "wasteFraction")
-    const levels = splitList(text(values, "serviceLevels")).join(", ")
-    if (levels) facts[PRODUCT_FACTS.serviceLevels] = levels
     return facts
   }
 
@@ -496,9 +404,6 @@ function ProductsPane() {
     else delete nextFacts[PRODUCT_FACTS.containerType]
     if (text(values, "wasteFraction")) nextFacts[PRODUCT_FACTS.wasteFraction] = text(values, "wasteFraction")
     else delete nextFacts[PRODUCT_FACTS.wasteFraction]
-    const levels = splitList(text(values, "serviceLevels")).join(", ")
-    if (levels) nextFacts[PRODUCT_FACTS.serviceLevels] = levels
-    else delete nextFacts[PRODUCT_FACTS.serviceLevels]
 
     const updatedProduct: BusinessRecord = {
       ...editingProduct,
@@ -571,7 +476,6 @@ function ProductsPane() {
                 <TableHead>Container</TableHead>
                 <TableHead>Container type</TableHead>
                 <TableHead>Waste fraction</TableHead>
-                <TableHead>Service levels</TableHead>
                 <TableHead className="text-right">Price</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-16" />
@@ -579,11 +483,10 @@ function ProductsPane() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <EmptyRow colSpan={9} message="No products match this search." />
+                <EmptyRow colSpan={8} message="No products match this search." />
               ) : (
                 productsPageRows.map((product) => {
                   const defaultRow = defaultRowOf(rows, product.id)
-                  const levels = splitList(product.facts[PRODUCT_FACTS.serviceLevels])
                   return (
                     <TableRow key={product.id}>
                       <TableCell className="min-w-[220px]">
@@ -605,11 +508,6 @@ function ProductsPane() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                         {product.facts[PRODUCT_FACTS.wasteFraction] ?? "—"}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                        {levels.length > 0
-                          ? `${levels[0]}${levels.length > 1 ? ` +${levels.length - 1}` : ""}`
-                          : "—"}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right text-sm font-medium tabular-nums">
                         {defaultRow ? (
@@ -682,494 +580,5 @@ function ProductsPane() {
         />
       )}
     </AssetPanelShell>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Zones / Service levels / Customer types — CRUD registry pages sharing one
-// panel + dialog, differing only in the store slice and usage derivation.
-// ---------------------------------------------------------------------------
-
-type RegistryItem = {
-  id: string
-  name: string
-  code?: string
-  description: string
-  effectiveFrom?: string
-  status: RegistryStatus
-  createdAt: string
-  updatedAt: string
-}
-
-function blankRegistryItem(): RegistryItem {
-  const createdAt = nowIso()
-  return {
-    id: "",
-    name: "",
-    code: "",
-    description: "",
-    effectiveFrom: PRICING_REFERENCE_DATE,
-    status: "Active",
-    createdAt,
-    updatedAt: createdAt,
-  }
-}
-
-function RegistryDialog({
-  value,
-  entityLabel,
-  dialogDescription,
-  withCode,
-  withEffectiveFrom,
-  onSave,
-  onClose,
-}: {
-  value: RegistryItem | null
-  entityLabel: string
-  dialogDescription: string
-  withCode?: boolean
-  withEffectiveFrom?: boolean
-  onSave: (item: RegistryItem) => void
-  onClose: () => void
-}) {
-  const [draft, setDraft] = useState<RegistryItem>(value ?? blankRegistryItem())
-  if (!value) return null
-  const isEditing = Boolean(value.id)
-  const update = <K extends keyof RegistryItem>(key: K, next: RegistryItem[K]) =>
-    setDraft((current) => ({ ...current, [key]: next }))
-  const save = () => {
-    if (!draft.name.trim()) return toast.error(`${entityLabel} name is required.`)
-    if (withEffectiveFrom && !draft.effectiveFrom)
-      return toast.error(`${entityLabel} needs an effective-from date.`)
-    onSave({
-      ...draft,
-      name: draft.name.trim(),
-      code: draft.code?.trim() ?? "",
-      description: draft.description.trim(),
-    })
-    onClose()
-    toast.success(isEditing ? `${entityLabel} updated` : `${entityLabel} created`)
-  }
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
-        <DialogHeader className="border-b px-6 py-5 pr-12">
-          <DialogTitle>
-            {isEditing ? `Edit ${entityLabel.toLowerCase()}` : `New ${entityLabel.toLowerCase()}`}
-          </DialogTitle>
-          <DialogDescription>{dialogDescription}</DialogDescription>
-        </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-          <DialogSection title="Details">
-            <Field label="Name" required>
-              <Input
-                value={draft.name}
-                onChange={(event) => update("name", event.target.value)}
-              />
-            </Field>
-            {withCode && (
-              <Field label="Code" description="Short reference used on invoices and imports.">
-                <Input
-                  value={draft.code ?? ""}
-                  onChange={(event) => update("code", event.target.value)}
-                />
-              </Field>
-            )}
-            {withEffectiveFrom && (
-              <Field
-                label="Effective from"
-                required
-                description="Lists starting after today show as Scheduled."
-              >
-                <Input
-                  type="date"
-                  value={draft.effectiveFrom ?? ""}
-                  onChange={(event) => update("effectiveFrom", event.target.value)}
-                />
-              </Field>
-            )}
-            <Field label="Status">
-              <Select
-                value={draft.status}
-                onValueChange={(next: RegistryStatus) => update("status", next)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="Inactive">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Description" wide>
-              <Textarea
-                rows={3}
-                value={draft.description}
-                onChange={(event) => update("description", event.target.value)}
-              />
-            </Field>
-          </DialogSection>
-        </div>
-        <DialogFooter className="border-t px-6 py-4">
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={save}>Save {entityLabel.toLowerCase()}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function RegistryPane({
-  title,
-  description,
-  entityLabel,
-  dialogDescription,
-  searchPlaceholder,
-  newLabel,
-  idPrefix,
-  withCode,
-  withEffectiveFrom,
-  items,
-  usage,
-  usageNoun,
-  inUseHint,
-  statusLabelOf,
-  onSave,
-  onDelete,
-}: {
-  title: string
-  description: string
-  entityLabel: string
-  dialogDescription: string
-  searchPlaceholder: string
-  newLabel: string
-  idPrefix: string
-  withCode?: boolean
-  withEffectiveFrom?: boolean
-  items: readonly RegistryItem[]
-  usage: (item: RegistryItem) => number
-  usageNoun: string
-  inUseHint: string
-  // Overrides the plain Active/Inactive badge with a derived label
-  // (e.g. price lists show Scheduled while their effective-from is ahead).
-  statusLabelOf?: (item: RegistryItem) => string
-  onSave: (item: RegistryItem) => void
-  onDelete: (id: string) => void
-}) {
-  const [query, setQuery] = useState("")
-  const [statuses, setStatuses] = useState<string[]>([])
-  const [view, setView] = useState<AssetView>(defaultAssetView)
-  const [editing, setEditing] = useState<RegistryItem | null>(null)
-
-  const filtered = sortByView(
-    items
-      .filter((item) =>
-        [item.name, item.code ?? "", item.description]
-          .join(" ")
-          .toLowerCase()
-          .includes(query.trim().toLowerCase()),
-      )
-      .filter((item) => statuses.length === 0 || statuses.includes(item.status)),
-    view,
-    (item) => item.name,
-    (item) => item.updatedAt,
-  )
-
-  const {
-    page: itemsPage,
-    setPage: setItemsPage,
-    pageCount: itemsPageCount,
-    pageRows: itemsPageRows,
-    totalCount: itemsTotalCount,
-  } = useTablePagination(filtered)
-
-  const handleDelete = (item: RegistryItem) => {
-    const count = usage(item)
-    if (count > 0) {
-      toast.error(`${item.name} is in use`, {
-        description: `${usageLabel(count, usageNoun)} ${inUseHint} — set it Inactive instead of deleting.`,
-      })
-      return
-    }
-    onDelete(item.id)
-    toast.success(`${entityLabel} deleted`)
-  }
-
-  return (
-    <AssetPanelShell
-      heading="Commercial"
-      title={title}
-      description={description}
-      action={
-        <Button size="sm" onClick={() => setEditing(blankRegistryItem())}>
-          <Plus className="h-4 w-4" weight="bold" />
-          {newLabel}
-        </Button>
-      }
-      toolbar={
-        <AssetToolbar
-          searchPlaceholder={searchPlaceholder}
-          query={query}
-          onQueryChange={setQuery}
-          statuses={statuses}
-          onStatusesChange={setStatuses}
-          view={view}
-          onViewChange={setView}
-        />
-      }
-    >
-      <RecordsSection shown={filtered.length} total={items.length}>
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <TableHead>Name</TableHead>
-              {withCode && <TableHead>Code</TableHead>}
-              <TableHead>Used by</TableHead>
-              {withEffectiveFrom && <TableHead>Effective from</TableHead>}
-              <TableHead>Status</TableHead>
-              <TableHead className="w-24" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.length === 0 ? (
-              <EmptyRow
-                colSpan={(withCode ? 5 : 4) + (withEffectiveFrom ? 1 : 0)}
-                message={`No ${entityLabel.toLowerCase()}s match this search.`}
-              />
-            ) : (
-              itemsPageRows.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="min-w-[200px]">
-                    <p className="text-sm font-medium text-foreground">{item.name}</p>
-                    {view.showDetails && (
-                      <p className="line-clamp-1 text-xs text-muted-foreground">
-                        {item.description || "No description"}
-                      </p>
-                    )}
-                  </TableCell>
-                  {withCode && (
-                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                      {item.code || "—"}
-                    </TableCell>
-                  )}
-                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                    {usageLabel(usage(item), usageNoun)}
-                  </TableCell>
-                  {withEffectiveFrom && (
-                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                      {item.effectiveFrom || "—"}
-                    </TableCell>
-                  )}
-                  <TableCell>
-                    {statusLabelOf ? (
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                          statusClasses(statusLabelOf(item)),
-                        )}
-                      >
-                        {statusLabelOf(item)}
-                      </Badge>
-                    ) : (
-                      <StatusBadge active={item.status === "Active"} />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex justify-end">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => setEditing(item)}
-                        aria-label={`Edit ${item.name}`}
-                      >
-                        <PencilSimple className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => handleDelete(item)}
-                        aria-label={`Delete ${item.name}`}
-                      >
-                        <Trash className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-        <TablePagination
-          page={itemsPage}
-          pageCount={itemsPageCount}
-          totalCount={itemsTotalCount}
-          onPageChange={setItemsPage}
-        />
-      </RecordsSection>
-      <RegistryDialog
-        key={editing ? editing.id || "new" : "closed"}
-        value={editing}
-        entityLabel={entityLabel}
-        dialogDescription={dialogDescription}
-        withCode={withCode}
-        withEffectiveFrom={withEffectiveFrom}
-        onSave={(item) =>
-          onSave({
-            ...item,
-            id: item.id || registryEntityId(`${idPrefix}-${slug(item.name)}`),
-            createdAt: item.createdAt || nowIso(),
-            updatedAt: nowIso(),
-          })
-        }
-        onClose={() => setEditing(null)}
-      />
-    </AssetPanelShell>
-  )
-}
-
-function PriceListsPane() {
-  const registries = useCommercialRegistriesStore()
-  const { rows } = useCommercialCatalogue()
-  return (
-    <RegistryPane
-      title="Price lists"
-      description="Annual tariffs and negotiated deals. Price rows carry a list as their tag; Price Engine's Add price form offers the active lists."
-      entityLabel="Price list"
-      dialogDescription="Price rows carry the list as their tag — Add price offers the active lists."
-      searchPlaceholder="Search price lists"
-      newLabel="New price list"
-      idPrefix="price-list"
-      withEffectiveFrom
-      items={registries.priceLists}
-      usage={(item) => rows.filter((row) => row.tag === item.name).length}
-      usageNoun="price row"
-      inUseHint="tagged with it"
-      statusLabelOf={(item) =>
-        item.status === "Inactive"
-          ? "Inactive"
-          : item.effectiveFrom && item.effectiveFrom > PRICING_REFERENCE_DATE
-            ? "Scheduled"
-            : "Active"
-      }
-      onSave={(item) =>
-        registries.savePriceList({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          effectiveFrom: item.effectiveFrom || PRICING_REFERENCE_DATE,
-          status: item.status,
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
-        })
-      }
-      onDelete={registries.deletePriceList}
-    />
-  )
-}
-
-function ZonesPane() {
-  const registries = useCommercialRegistriesStore()
-  const { rows } = useCommercialCatalogue()
-  return (
-    <RegistryPane
-      title="Zones"
-      description="Pricing zones that price rows can condition on. Price Engine's Add price form offers the active zones."
-      entityLabel="Zone"
-      dialogDescription="Zones narrow who pays a price — Add price offers them as a condition."
-      searchPlaceholder="Search zones"
-      newLabel="New zone"
-      idPrefix="zone"
-      items={registries.zones}
-      usage={(item) => rows.filter((row) => row.conditions.zone === item.name).length}
-      usageNoun="price row"
-      inUseHint="condition on it"
-      onSave={(item) =>
-        registries.saveZone({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          status: item.status,
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
-        })
-      }
-      onDelete={registries.deleteZone}
-    />
-  )
-}
-
-function ServicePane() {
-  const registries = useCommercialRegistriesStore()
-  const { productRecords } = useCommercialCatalogue()
-  return (
-    <RegistryPane
-      title="Service"
-      description="Service levels offered on products — collection tiers like backdoor or crane emptying. Products pick from the active levels."
-      entityLabel="Service level"
-      dialogDescription="Service levels are offered per product; the product form picks from the active ones."
-      searchPlaceholder="Search service levels"
-      newLabel="New service level"
-      idPrefix="service"
-      withCode
-      items={registries.serviceLevels}
-      usage={(item) =>
-        productRecords.filter((product) =>
-          splitList(product.facts[PRODUCT_FACTS.serviceLevels]).includes(item.name),
-        ).length
-      }
-      usageNoun="product"
-      inUseHint="offer it"
-      onSave={(item) =>
-        registries.saveServiceLevel({
-          id: item.id,
-          name: item.name,
-          code: item.code ?? "",
-          description: item.description,
-          status: item.status,
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
-        })
-      }
-      onDelete={registries.deleteServiceLevel}
-    />
-  )
-}
-
-function CustomerTypesPane() {
-  const registries = useCommercialRegistriesStore()
-  const { rows } = useCommercialCatalogue()
-  return (
-    <RegistryPane
-      title="Customer types"
-      description="Customer segments that price rows can condition on. Price Engine's Add price form offers the active types."
-      entityLabel="Customer type"
-      dialogDescription="Customer types narrow who pays a price — Add price offers them as a condition."
-      searchPlaceholder="Search customer types"
-      newLabel="New customer type"
-      idPrefix="customer-type"
-      items={registries.customerTypes}
-      usage={(item) =>
-        rows.filter((row) => row.conditions.customerType === item.name).length
-      }
-      usageNoun="price row"
-      inUseHint="condition on it"
-      onSave={(item) =>
-        registries.saveCustomerType({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          status: item.status,
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
-        })
-      }
-      onDelete={registries.deleteCustomerType}
-    />
   )
 }

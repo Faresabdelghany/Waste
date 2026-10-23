@@ -477,7 +477,7 @@ describe("the forms write under the model's fact keys", () => {
     container: "container",
     containerType: "containerType",
     wasteFraction: "wasteFraction",
-    serviceLevels: "serviceLevels",
+    // No service levels: the field left the form with the browser registry it read (#185).
   }
   const rowFields: Record<string, keyof typeof ROW_FACTS> = {
     amount: "amount",

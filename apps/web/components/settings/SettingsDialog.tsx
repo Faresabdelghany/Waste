@@ -12,8 +12,6 @@ import {
   CreditCard,
   Database,
   Gear,
-  IdentificationBadge,
-  Lightning,
   LinkSimple,
   MagnifyingGlass,
   MapTrifold,
@@ -162,13 +160,6 @@ const settingsSections: Array<{
     items: [
       { id: "commercial-products", label: "Products", icon: Package },
       { id: "commercial-price-lists", label: "Price lists", icon: Receipt },
-      { id: "commercial-zones", label: "Zones", icon: MapTrifold },
-      { id: "commercial-service", label: "Service", icon: Lightning },
-      {
-        id: "commercial-customer-types",
-        label: "Customer types",
-        icon: IdentificationBadge,
-      },
     ],
   },
 ]
@@ -1341,7 +1332,7 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   pricing: {
     title: "Commercial defaults",
     description:
-      "One-time commercial setup: company defaults, registries, and surcharge rules. Price lists are managed in the Commercial section; day-to-day pricing lives in Price Engine.",
+      "One-time commercial setup: company defaults and registries. Price lists are managed in the Commercial section; day-to-day pricing lives in Price Engine.",
     groups: [
       {
         title: "Company defaults",
@@ -1386,25 +1377,7 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   "commercial-price-lists": {
     title: "Price lists",
     description:
-      "Annual tariffs and negotiated deals that price rows are tagged with — created, edited and retired here.",
-    groups: [],
-  },
-  "commercial-zones": {
-    title: "Zones",
-    description:
-      "Pricing zones that price rows can condition on — created, edited and retired here.",
-    groups: [],
-  },
-  "commercial-service": {
-    title: "Service",
-    description:
-      "Service levels offered on products — collection tiers like same-week, backdoor or crane emptying.",
-    groups: [],
-  },
-  "commercial-customer-types": {
-    title: "Customer types",
-    description:
-      "Customer segments that price rows can condition on — created, edited and retired here.",
+      "Each project's tariff and the named lists an agreement is priced under — created and edited here, ended on their last day in force.",
     groups: [],
   },
   integrations: paneDefinitions.integrations,

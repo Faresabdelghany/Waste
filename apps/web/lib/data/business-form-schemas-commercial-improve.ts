@@ -106,19 +106,6 @@ export const commercialImproveBusinessFormSchemas = [
               label: definition.name,
             })),
           },
-          {
-            id: "serviceLevels",
-            label: "Service levels",
-            type: "multiselect",
-            description: "Collection tiers offered on this product — managed in Settings → Commercial → Service.",
-            options: [
-              { value: "Standard kerbside", label: "Standard kerbside" },
-              { value: "Backdoor service", label: "Backdoor service" },
-              { value: "Crane emptying", label: "Crane emptying" },
-              { value: "Same-week", label: "Same-week" },
-              { value: "Next-day", label: "Next-day" },
-            ],
-          },
         ],
       },
     ],
@@ -154,9 +141,9 @@ export const commercialImproveBusinessFormSchemas = [
             id: "tag",
             label: "Price list",
             type: "select",
-            description: "Managed in Settings → Commercial → Price lists; the active lists are offered here.",
-            // Fallback only — business-workspace.tsx replaces these with the
-            // active lists from the commercial-registries store.
+            description: "Managed in Settings → Commercial → Price lists; the lists in force or scheduled are offered here.",
+            // Fallback only — business-workspace.tsx replaces these with fixture
+            // mode's price lists (lib/data/commercial.ts, FIXTURE_PRICE_LISTS).
             options: [
               { value: "PL-Copenhagen-2026", label: "PL-Copenhagen-2026" },
               { value: "PL-Harbor-2026", label: "PL-Harbor-2026" },

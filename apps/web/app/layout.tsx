@@ -12,7 +12,6 @@ import { ApiSessionProvider } from "@/components/waste/api-session-store"
 import { ActiveRoutesStoreProvider } from "@/components/waste/active-routes-store"
 import { OrganizationStoreProvider } from "@/components/settings/organization-store"
 import { AssetManagementStoreProvider } from "@/components/settings/asset-management-store"
-import { CommercialRegistriesStoreProvider } from "@/components/settings/commercial-registries-store"
 import "./globals.css"
 
 // @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
@@ -60,15 +59,13 @@ export default function RootLayout({
             <ApiSessionProvider>
               <OrganizationStoreProvider>
                 <AssetManagementStoreProvider>
-                  <CommercialRegistriesStoreProvider>
-                    <BusinessRecordStoreProvider>
-                      <ActiveRoutesStoreProvider>
-                        <SignInGate>{children}</SignInGate>
-                        <Analytics />
-                        <Toaster richColors closeButton />
-                      </ActiveRoutesStoreProvider>
-                    </BusinessRecordStoreProvider>
-                  </CommercialRegistriesStoreProvider>
+                  <BusinessRecordStoreProvider>
+                    <ActiveRoutesStoreProvider>
+                      <SignInGate>{children}</SignInGate>
+                      <Analytics />
+                      <Toaster richColors closeButton />
+                    </ActiveRoutesStoreProvider>
+                  </BusinessRecordStoreProvider>
                 </AssetManagementStoreProvider>
               </OrganizationStoreProvider>
             </ApiSessionProvider>
