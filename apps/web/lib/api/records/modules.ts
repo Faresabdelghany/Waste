@@ -29,7 +29,9 @@ import { collectionCalendarsModule, planningAreasModule } from "./planning"
 import { priceRowsModule, productsModule } from "./pricing"
 import { propertiesModule, propertyGroupsModule, sharedPointsModule } from "./properties"
 import { customersModule } from "./registry"
+import { providerPricesModule, settlementsModule } from "./provider-money"
 import { routeSchemesModule } from "./route-schemes"
+import { serviceAreasModule } from "./service-areas"
 import { routesModule } from "./routes"
 import { ticketsModule } from "./tickets"
 
@@ -85,6 +87,8 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   vehiclePlanningModule,
   productsModule,
   priceRowsModule,
+  serviceAreasModule,
+  providerPricesModule,
   routeSchemesModule,
   liveModule,
   routesModule,
@@ -94,6 +98,7 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   eventsModule,
   billingModule,
   invoicesModule,
+  settlementsModule,
 ]
 
 const byKey = new Map(SERVER_MODULES.map((module) => [moduleKeyOf(module.workspaceId, module.moduleId), module]))
