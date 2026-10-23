@@ -101,8 +101,13 @@ export type OutboxJob = RelayedEvent
 /** A pickup's event as the applier emits it: the `Pickup`, with the proof the command made where the door wrote one (the office's cancellation writes none). */
 const PickupPayload = Pickup.extend({ proofs: z.array(ProofOfService).optional() })
 
-/** A problem reported on the route alone: the `Route` with the problem proof beside it (`readRouteWithProofs`, the applier's). */
-const RoutePayload = z.object({ ...routeFields, proofs: z.array(ProofOfService) })
+/**
+ * A problem reported on the route alone: the `Route` with the problem proof
+ * beside it (`readRouteWithProofs`, the applier's). The hold arrived on the
+ * wire with #209, so a payload the outbox took before then carries no
+ * `heldAt` and reads as a route the scheme's, never a dead letter.
+ */
+const RoutePayload = z.object({ ...routeFields, heldAt: routeFields.heldAt.default(null), proofs: z.array(ProofOfService) })
 
 /** The two partial unique indexes that are the consumer's idempotency keys; a 23505 on either is an event handled before. */
 const TICKET_SOURCE_INDEX = tableObjectName(ticket, "source_event_id_idx", "openTickets")

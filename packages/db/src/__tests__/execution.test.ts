@@ -531,6 +531,19 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
       assert.equal(completed.status, "completed")
     }))
 
+  test("a hold is a planned route's (23514 route_hold_shape): leaving planned without clearing it is refused, and a planned route holds one", () =>
+    seeded(async (tx) => {
+      const refuse = (values: Partial<typeof route.$inferInsert>, why: string) =>
+        assert.rejects(tx.transaction((savepoint) => savepoint.insert(route).values(planned({ heldAt: at(4), ...values }))), refusedWith("23514", /route_hold_shape/), why)
+      await refuse({ status: "ready", dispatchedAt: at(5) }, "a dispatched route still held")
+      await refuse({ status: "cancelled", cancelledAt: at(7) }, "a cancelled route still held")
+      const [held] = await tx.insert(route).values(planned({ id: a.spare, number: 1100, heldAt: at(4) })).returning({ heldAt: route.heldAt })
+      assert.deepEqual(held.heldAt, at(4))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.update(route).set({ status: "ready", dispatchedAt: at(5) }).where(eq(route.id, a.spare))), refusedWith("23514", /route_hold_shape/), "dispatch clears the hold in the same write")
+      const [dispatched] = await tx.update(route).set({ status: "ready", dispatchedAt: at(5), heldAt: null }).where(eq(route.id, a.spare)).returning({ status: route.status })
+      assert.equal(dispatched.status, "ready")
+    }))
+
   test("the actual assignment goes with a start and not without (23514 route_actual_shape), and a trailer only with a driver", () =>
     seeded(async (tx) => {
       const refuse = (values: Partial<typeof route.$inferInsert>, why: string) =>

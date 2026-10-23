@@ -38,6 +38,7 @@ export function route(overrides: Partial<Route> = {}): Route {
     generationRunId: null,
     plannedStartTime: "06:00",
     planned: { vehicleId: VEHICLE_ID, driverId: DRIVER_ID, trailerId: null, serviceProviderId: null, depotId: null, unloadingStationId: null },
+    heldAt: null,
     actual: { vehicleId: null, driverId: null, trailerId: null },
     dispatchedAt: "2027-01-15T05:00:00.000Z",
     startedAt: null,

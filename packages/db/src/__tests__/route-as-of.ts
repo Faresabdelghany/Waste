@@ -1,9 +1,10 @@
 // The `route` table as an earlier migration left it, for the rendering tests
 // that diff an applied file's ALTER TABLEs from one era's spelling to the
 // next: 0008 bare (Issue #104), 0012 with the run that last wrote it (Issue
-// #97 part B), today's with the active Plan too (#169, migration 0013 —
-// that one is src/schema/execution.ts itself). One spelling here, so
-// generation-rendering.test.ts and routing-rendering.test.ts cannot drift on
+// #97 part B), 0013 with the active Plan too (#169), and today's with the
+// hold too (#209, migration 0015 — that one is src/schema/execution.ts
+// itself). One spelling here, so generation-rendering.test.ts,
+// routing-rendering.test.ts and route-hold-rendering.test.ts cannot drift on
 // what an era said. Another table object of the same name is fine, since
 // nothing connects to a database. Not a suite of its own: only ever imported.
 import { sql } from "drizzle-orm"
@@ -24,12 +25,15 @@ import { wms } from "../schema/wms"
 
 const instant = () => timestamp({ withTimezone: true })
 
-// The conditional spread makes `generationRunId` an optional column to TypeScript, which `PgTable`'s
+/** The eras an applied file left the route in. */
+type Era = "0008" | "0012" | "0013"
+
+// The conditional spreads make `generationRunId` and `activePlanId` optional columns to TypeScript, which `PgTable`'s
 // config cannot carry; the value is a perfectly ordinary table, so the one cast is here.
-export const routeAsOf = (asOf: "0008" | "0012"): PgTable =>
+export const routeAsOf = (asOf: Era): PgTable =>
   routeTableAsOf(asOf) as unknown as PgTable
 
-const routeTableAsOf = (asOf: "0008" | "0012") =>
+const routeTableAsOf = (asOf: Era) =>
   wms.table(
     "route",
     {
@@ -43,7 +47,8 @@ const routeTableAsOf = (asOf: "0008" | "0012") =>
       status: text().notNull().default("planned"),
       cancelledByGeneration: boolean().notNull().default(false),
       note: text(),
-      ...(asOf === "0012" ? { generationRunId: uuid() } : {}),
+      ...(asOf === "0008" ? {} : { generationRunId: uuid() }),
+      ...(asOf === "0013" ? { activePlanId: uuid() } : {}),
       number: integer().notNull(),
       plannedStartTime: time(),
       plannedVehicleId: uuid(),
@@ -86,7 +91,7 @@ const routeTableAsOf = (asOf: "0008" | "0012") =>
         tableObjectName(t.id.table, "stamps_shape", "route"),
         sql`case ${t.status} when 'planned' then ${t.dispatchedAt} is null and ${t.startedAt} is null and ${t.completedAt} is null and ${t.cancelledAt} is null when 'ready' then ${t.dispatchedAt} is not null and ${t.startedAt} is null and ${t.completedAt} is null and ${t.cancelledAt} is null when 'active' then ${t.dispatchedAt} is not null and ${t.startedAt} is not null and ${t.completedAt} is null and ${t.cancelledAt} is null when 'completed' then ${t.dispatchedAt} is not null and ${t.startedAt} is not null and ${t.completedAt} is not null and ${t.cancelledAt} is null when 'cancelled' then ${t.cancelledAt} is not null and ${t.completedAt} is null and (${t.startedAt} is null or ${t.dispatchedAt} is not null) else false end`,
       ),
-      ...(asOf === "0012" ? [projectReference(t, [t.generationRunId as (typeof t)["id"]], generationRun)] : []),
+      ...(asOf === "0008" ? [] : [projectReference(t, [t.generationRunId as (typeof t)["id"]], generationRun)]),
       tenantIndex(t, t.collectionGroupId),
       tenantIndex(t, t.projectId, t.operatingDate),
       tenantIndex(t, t.plannedDriverId, t.status),
@@ -98,6 +103,7 @@ const routeTableAsOf = (asOf: "0008" | "0012") =>
       tenantIndex(t, t.unloadingStationId),
       tenantIndex(t, t.actualVehicleId),
       tenantIndex(t, t.actualTrailerId),
-      ...(asOf === "0012" ? [tenantIndex(t, t.generationRunId as (typeof t)["id"])] : []),
+      ...(asOf === "0008" ? [] : [tenantIndex(t, t.generationRunId as (typeof t)["id"])]),
+      ...(asOf === "0013" ? [tenantIndex(t, t.activePlanId as (typeof t)["id"])] : []),
     ],
   )

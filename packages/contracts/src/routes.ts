@@ -88,6 +88,8 @@ export const routeFields = {
     depotId: Id.nullable(),
     unloadingStationId: Id.nullable(),
   }),
+  /** The hold (#209): when the office last moved this planned route's day, start or Planned Assignment by hand, which the next generation run keeps; null while the route is the scheme's, and always once it leaves `planned`. */
+  heldAt: IsoDateTime.nullable(),
   /** The Actual Assignment: what the session that started the route went out with; every field null until then. */
   actual: RouteAssignment,
   dispatchedAt: IsoDateTime.nullable(),

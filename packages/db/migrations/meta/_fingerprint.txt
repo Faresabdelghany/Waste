@@ -1544,6 +1544,7 @@ column wms.route 26 completed_at timestamp with time zone
 column wms.route 27 cancelled_at timestamp with time zone
 column wms.route 28 generation_run_id uuid
 column wms.route 29 active_plan_id uuid
+column wms.route 30 held_at timestamp with time zone
 constraint wms.route route_active_plan_id_fk FOREIGN KEY (company_id, project_id, id, active_plan_id) REFERENCES wms.plan(company_id, project_id, route_id, id) ON DELETE SET NULL (active_plan_id)
 constraint wms.route route_actual_driver_id_fk FOREIGN KEY (company_id, project_id, actual_driver_id) REFERENCES wms.driver(company_id, project_id, id)
 constraint wms.route route_actual_shape CHECK ((((actual_driver_id IS NOT NULL) = (started_at IS NOT NULL)) AND ((actual_vehicle_id IS NOT NULL) = (started_at IS NOT NULL)) AND ((actual_trailer_id IS NULL) OR (started_at IS NOT NULL))))
@@ -1554,6 +1555,7 @@ constraint wms.route route_company_id_fk FOREIGN KEY (company_id) REFERENCES wms
 constraint wms.route route_depot_id_fk FOREIGN KEY (company_id, project_id, depot_id) REFERENCES wms.depot(company_id, project_id, id)
 constraint wms.route route_generation_key UNIQUE (company_id, route_scheme_id, collection_group_id, service_date)
 constraint wms.route route_generation_run_id_fk FOREIGN KEY (company_id, project_id, generation_run_id) REFERENCES wms.generation_run(company_id, project_id, id)
+constraint wms.route route_hold_shape CHECK (((held_at IS NULL) OR (status = 'planned'::text)))
 constraint wms.route route_number_key UNIQUE (company_id, number)
 constraint wms.route route_pkey PRIMARY KEY (id)
 constraint wms.route route_planned_driver_id_fk FOREIGN KEY (company_id, project_id, planned_driver_id) REFERENCES wms.driver(company_id, project_id, id)
@@ -2677,4 +2679,5 @@ journal 1790370729141 17fe7f428e6ec8d22c32e9385147ce5b532614e30f8d0a16654ec56495
 journal 1790383636636 c40e0a4b47bf76a6cb1e76f9e7750ecc36ffef0e5c4bbc19ceb469061f73f03e
 journal 1790711684369 f812e571a1ed7f0eb48027fee7d2c718fb759ac55cd11d3c4e68a6fa6a281f51
 journal 1790724616960 9cd2e4ce4f8e9009bff67362f1eb73d4bcab599e52beb22311fee0e415774f05
+journal 1792792624765 fda36e0c49140a7ed394dbfec44684ac30c511a2b5f6a82bd8e5ae7ac2c0e5af
 pgboss-version 42

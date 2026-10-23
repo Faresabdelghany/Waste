@@ -38,7 +38,9 @@
 // changed group's sets whole, as the two PUTs do. The name the database
 // holds unique is checked row by row and is not deferrable, so the groups
 // that shift or trade names step aside first, all at once, under a name no
-// group can hold, and then take their own.
+// group can hold, and then take their own. An entry that moves its group's
+// vehicle, driver, provider or days, and a running group the list parks,
+// release the holds on that group's routes (#209, `groupsMovingHeld`).
 import type { CollectionGroup, CollectionGroupEntry } from "@waste/contracts/route-schemes"
 import { OUTSIDE_SERVICE_DAYS, withinServiceDays } from "@waste/contracts/route-schemes"
 import { LABEL_MAX } from "@waste/contracts/text"
@@ -51,6 +53,7 @@ import { newId } from "../ids"
 import { invalidRequest, problem } from "../problem"
 import type { Today } from "./fleet-lookups"
 import type { Scope } from "./references"
+import { groupMovesHeld } from "./route-holds"
 import {
   clearGroupSets,
   groupNameTaken,
@@ -153,6 +156,17 @@ const rowOf = (entry: CollectionGroupEntry) => ({
   vehicleId: entry.vehicleId ?? null,
   driverId: entry.driverId ?? null,
 })
+
+/**
+ * The stored groups whose held routes the edit releases (#209,
+ * routes/route-holds.ts): a restated group whose vehicle, driver, provider or
+ * days the entry moves, and a group the list leaves out that ran, which
+ * parking moves off its days. A group the edit adds has no routes yet.
+ */
+export function groupsMovingHeld({ entries, leftOut }: GroupEdit): string[] {
+  const restated = entries.flatMap(({ entry, group }) => (group !== undefined && groupMovesHeld(group, rowOf(entry)) ? [group.id] : []))
+  return [...restated, ...leftOut.filter(groupRuns).map((group) => group.id)]
+}
 
 /** Two lists of ids alike, in the same order: a stop order, or a rule's set as it was written and is read. */
 const sameIds = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((id, n) => id === b[n])

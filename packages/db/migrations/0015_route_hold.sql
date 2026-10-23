@@ -1,0 +1,2 @@
+ALTER TABLE "wms"."route" ADD COLUMN "held_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "wms"."route" ADD CONSTRAINT "route_hold_shape" CHECK ("wms"."route"."held_at" is null or "wms"."route"."status" = 'planned');

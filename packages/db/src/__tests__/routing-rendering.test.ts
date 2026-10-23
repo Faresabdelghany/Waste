@@ -3,9 +3,10 @@
 // provenance, and the two result ledgers, the stops and the legs — the legs'
 // `path` the system's first `geometry(LineString, 4326)` column — and the two
 // statements that give Execution's `route` its active Plan: the column and its
-// index, diffed from 0012's spelling (route-as-of.ts) since an applied file is
-// never edited; execution-rendering.test.ts maps today's route back
-// (`CHANGED_IN_0013`, `ADDED_IN_0013`). Then migration 0013, which has to
+// index, diffed from 0012's spelling to 0013's (route-as-of.ts) since an
+// applied file is never edited and 0015 gave the route its hold since (#209);
+// execution-rendering.test.ts maps today's route back (`CHANGED_IN_0015`,
+// `CHANGED_IN_0013`, `ADDED_IN_0013`). Then migration 0013, which has to
 // begin with exactly those statements and to carry below them what the
 // helpers write — the fence for all three, the trigger for the plan, the
 // revoke for the two ledgers — and, last, the one statement drizzle-kit
@@ -106,8 +107,8 @@ const altered = ['ALTER TABLE "wms"."route" ADD COLUMN "active_plan_id" uuid;', 
 /** What the three tables owe their migration file: the fence for each, the trigger for the plan, the revoke for the two ledgers. */
 const handWritten = Object.values(tables).flatMap((table) => handWrittenStatements(table))
 
-/** The ALTER TABLEs as drizzle-kit wrote them: the route from 0012's spelling to today's. */
-const generatedAlterations = (): Promise<string[]> => statementsBetween({ route: routeAsOf("0012") }, { route })
+/** The ALTER TABLEs as drizzle-kit wrote them: the route from 0012's spelling to 0013's. */
+const generatedAlterations = (): Promise<string[]> => statementsBetween({ route: routeAsOf("0012") }, { route: routeAsOf("0013") })
 
 /** Everything drizzle-kit wrote at the head of 0013: the three tables and the altered route. */
 const generatedHead = async (): Promise<string[]> => [...(await statementsFor(tables)), ...(await generatedAlterations())]

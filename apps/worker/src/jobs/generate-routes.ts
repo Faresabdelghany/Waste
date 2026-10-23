@@ -44,6 +44,15 @@
 // wrote names it (`generation_run_id`), and one it left alone keeps the run
 // that last wrote it.
 //
+// A route the office held (#209: `held_at`, which `assign` and `reschedule`
+// stamp in apps/api) is refreshed like any other — its pickups and its note
+// are the run's — but keeps the operating date, the planned start and the
+// Planned Assignment it stands on, the office's by hand; its ends are among
+// them, so a hold alone never reshapes its Plan. A `cancel` still cancels it,
+// since the scheme no longer runs that collection, and clears the hold with
+// the status (`route_hold_shape`: a hold is a planned route's), so a route a
+// later run brings back returns to the scheme.
+//
 // The clock in what is written is the run's stamps, a cancellation's and a
 // skip's instant (which the table's checks demand beside the status), and
 // nothing else, so identical inputs give identical rows (ADR-0002).
@@ -286,6 +295,16 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
     }
   }
 
+  // What a held route keeps (#209): the start and the Planned Assignment it stands on, which the office moved by hand.
+  const keptAssignmentOf = (row: (typeof existingRoutes)[number]): ReturnType<typeof assignmentOf> => ({
+    plannedStartTime: row.plannedStartTime,
+    plannedVehicleId: row.plannedVehicleId,
+    plannedDriverId: row.plannedDriverId,
+    plannedServiceProviderId: row.plannedServiceProviderId,
+    depotId: row.depotId,
+    unloadingStationId: row.unloadingStationId,
+  })
+
   const numbers = { next: await takeNumbers(tx, companyId, plan.decisions.filter((decision) => decision.kind === "create").length) }
 
   for (const decision of plan.decisions) {
@@ -294,7 +313,7 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
     if (decision.kind === "cancel") {
       await tx
         .update(route)
-        .set({ status: "cancelled", cancelledAt: at, cancelledByGeneration: true, note: decision.note, generationRunId: run.id })
+        .set({ status: "cancelled", cancelledAt: at, cancelledByGeneration: true, note: decision.note, generationRunId: run.id, heldAt: null })
         .where(and(eq(route.companyId, companyId), eq(route.id, decision.routeId)))
       const open = pickupsOf(decision.routeId).filter((row) => row.status === "planned").map((row) => row.id)
       if (open.length > 0) {
@@ -334,31 +353,34 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
       continue
     }
 
-    // A refresh: what differs is written, and only that.
+    // A refresh: what differs is written, and only that. A held route (#209) keeps its day and its Planned Assignment, ends included, as the office left them.
     const current = existingRouteOf.get(decision.routeId)!
+    const held = current.heldAt !== null
+    const operatingDate = held ? current.operatingDate : decision.operatingDate
+    const refreshed = held ? keptAssignmentOf(current) : assignment
     const changes = pickupChanges(pickupsOf(decision.routeId), stops)
-    const endsMoved = current.depotId !== assignment.depotId || current.unloadingStationId !== assignment.unloadingStationId
+    const endsMoved = current.depotId !== refreshed.depotId || current.unloadingStationId !== refreshed.unloadingStationId
     const routeMoved =
       decision.resurrect ||
       endsMoved ||
-      current.operatingDate !== decision.operatingDate ||
+      current.operatingDate !== operatingDate ||
       current.note !== decision.note ||
-      current.plannedStartTime !== assignment.plannedStartTime ||
-      current.plannedVehicleId !== assignment.plannedVehicleId ||
-      current.plannedDriverId !== assignment.plannedDriverId ||
-      current.plannedServiceProviderId !== assignment.plannedServiceProviderId
+      current.plannedStartTime !== refreshed.plannedStartTime ||
+      current.plannedVehicleId !== refreshed.plannedVehicleId ||
+      current.plannedDriverId !== refreshed.plannedDriverId ||
+      current.plannedServiceProviderId !== refreshed.plannedServiceProviderId
     const pickupsMoved = changes.insert.length + changes.update.length + changes.skip.length > 0
     if (!routeMoved && !pickupsMoved) continue
     // Reshaped: a stop inserted, moved, brought back or skipped — a route brought back brings its stops back — or an end changed: what a Plan is over (#124 §2). A new note, day or crew is not.
-    if (pickupsMoved || endsMoved) reshaped.push({ id: decision.routeId, operatingDate: decision.operatingDate })
+    if (pickupsMoved || endsMoved) reshaped.push({ id: decision.routeId, operatingDate })
 
     await tx
       .update(route)
       .set({
-        operatingDate: decision.operatingDate,
+        operatingDate,
         note: decision.note,
         generationRunId: run.id,
-        ...assignment,
+        ...refreshed,
         ...(decision.resurrect ? { status: "planned", cancelledAt: null, cancelledByGeneration: false } : {}),
       })
       .where(and(eq(route.companyId, companyId), eq(route.id, decision.routeId)))

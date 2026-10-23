@@ -183,6 +183,16 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
       "on the route alone: no stop, so no container and no place",
     )
     assert.equal(routeTicket.description, "The driver reported a problem. Reason: safety. Note: Road closed at the harbour")
+
+    // A payload the outbox took before the route had its hold (#209) carries no `heldAt`, and is still a ticket rather than a dead letter.
+    const { heldAt: _heldAt, ...before209 } = routePayload(tenant, seeded)
+    const older = outboxJob(tenant, {
+      kind: "pickup-problem-reported",
+      aggregateKind: "route",
+      aggregateId: seeded.id,
+      payload: { ...before209, proofs: [proofPayload(tenant, seeded.id, null, "problem", { reason: "safety", note: "Bridge closed", recordedBy: testId() })] },
+    })
+    assert.equal((await openTicketFor(older, context())).outcome, "opened")
   })
 
   test("a command-rejected opens a low rejected-command ticket of the driver's naming the receipt's route and pickup; one for a route the driver does not reach names no route", async () => {
