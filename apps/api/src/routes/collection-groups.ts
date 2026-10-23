@@ -347,6 +347,8 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
           vehicleId: patch.vehicleId === undefined ? current.vehicleId : patch.vehicleId,
           driverId: patch.driverId === undefined ? current.driverId : patch.driverId,
         }
+        // And what else its routes copy or run on: the rules below read the fleet and the days, the holds (#209) the provider too.
+        const left = { ...fleet, serviceProviderId: patch.serviceProviderId === undefined ? current.serviceProviderId : patch.serviceProviderId, days: patch.days ?? current.days }
         // What the body names is a new reference, and so is the fleet a group
         // un-parked here is left with: a parked group counted for nothing
         // toward a retirement (`groupsInForceNaming`), so the truck may have
@@ -365,7 +367,7 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
             throw invalidRequest("body", [{ path: "days", message: OUTSIDE_SERVICE_DAYS }])
           }
           const groups = (await groupsOf(tx, principal.companyId, [current.routeSchemeId])).get(current.routeSchemeId) ?? []
-          const moved = groups.map((group) => (group.id === id ? { ...group, ...fleet, days: patch.days ?? group.days } : group))
+          const moved = groups.map((group) => (group.id === id ? { ...group, ...left } : group))
           const mine = moved.find((group) => group.id === id)
           if (patch.days !== undefined && mine !== undefined) {
             const found = containerPickedTwice(moved.filter((group) => group.id !== id).map(pickOf), pickOf(mine))
@@ -386,8 +388,7 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
         )
         if (row === undefined) throw noSuchGroup(id)
         // A move of what the group's routes copy or run on releases their holds (#209, routes/route-holds.ts).
-        const after = { ...fleet, serviceProviderId: patch.serviceProviderId === undefined ? current.serviceProviderId : patch.serviceProviderId, days: patch.days ?? current.days }
-        if (groupMovesHeld(current, after)) await releaseHolds(tx, within, { collectionGroupIds: [id] })
+        if (groupMovesHeld(current, left)) await releaseHolds(tx, principal, current.projectId, { collectionGroupIds: [id] })
         return c.json(await groupWithSets(tx, principal.companyId, row))
       },
     )

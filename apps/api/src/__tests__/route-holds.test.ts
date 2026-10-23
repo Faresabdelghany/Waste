@@ -36,9 +36,10 @@ import { signingKeys, type SigningKeys } from "./tokens"
 const database = databaseUnderTest()
 const RoutePage = Page(RouteListItem)
 
-/** The request's clock, pinned, so a hold's instant is known. */
+/** The request's clock, pinned, so a hold's instant is known; one test moves it on an hour and back. */
 const NOON = new Date("2026-10-05T12:00:00Z")
 const HELD = NOON.toISOString()
+let clock = NOON
 
 /** Four Mondays, one route of a group each. */
 const MONDAYS = ["2026-10-12", "2026-10-19", "2026-10-26", "2026-11-02"] as const
@@ -57,7 +58,7 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
     keys = await signingKeys()
     a = await seedTenant(pool)
     fleet = await seedFleet(pool, a, await seedPlanning(pool, a))
-    app = createApp({ probe: pool, pool, verifier: keys.verifier, now: () => NOON })
+    app = createApp({ probe: pool, pool, verifier: keys.verifier, now: () => clock })
     olivia = callingAs(app, keys, a.users.olivia, a.companyId)
     const response = await olivia("/waste-fractions", { method: "POST", body: { key: "residual", name: "Residual waste" } })
     assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
@@ -77,9 +78,12 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
   const commanded = async (id: string, action: string, values?: unknown): Promise<RouteDetail> => RouteDetail.parse(await ok(await olivia(`/routes/${id}/${action}`, { method: "POST", body: values })))
   const patchScheme = async (id: string, values: unknown): Promise<RouteScheme> => RouteScheme.parse(await ok(await olivia(`/route-schemes/${id}`, { method: "PATCH", body: values })))
   const patchGroup = async (id: string, values: unknown): Promise<CollectionGroup> => CollectionGroup.parse(await ok(await olivia(`/collection-groups/${id}`, { method: "PATCH", body: values })))
+  /** A start no route has had yet, a minute later each time: a command that changes nothing holds nothing. */
+  let minute = 0
+  const nextStart = (): string => `05:${String((minute += 1)).padStart(2, "0")}`
   /** Holds each route again by moving its start: what the office's "This collection only" does. */
   const hold = async (...ids: string[]) => {
-    for (const id of ids) assert.equal((await commanded(id, "reschedule", { plannedStartTime: "05:45" })).heldAt, HELD)
+    for (const id of ids) assert.equal((await commanded(id, "reschedule", { plannedStartTime: nextStart() })).heldAt, HELD)
   }
   /** Which of the routes are held, by id, as the list reads them. */
   const holds = async (schemeId: string): Promise<Record<string, boolean>> => {
@@ -173,6 +177,21 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
     assert.equal(retired.status, 409)
     assert.match((await readProblem(retired)).detail ?? "", /retired/)
     assert.equal(await heldAt(refusedOne), null, "a refused command writes nothing, the hold included")
+  })
+
+  test("a command that changes nothing holds nothing, and leaves an earlier hold as it stood; one that moves something again stamps the later instant", async () => {
+    const { scheme, groups: [group] } = await schemeWith("Same Mondays", ["Round 1"])
+    const id = await routeOn(scheme, group, MONDAYS[0])
+    assert.equal((await commanded(id, "reschedule", { operatingDate: MONDAYS[0], plannedStartTime: "06:00" })).heldAt, null, "the day and the start it already has, the start as the wire spells it")
+    assert.equal((await commanded(id, "assign", { depotId: scheme.depotId, unloadingStationId: scheme.unloadingStationId, vehicleId: null })).heldAt, null, "the ends and the crew it already has")
+    assert.equal((await commanded(id, "assign", { trailerId: fleet.vehicles.trailer.id })).heldAt, HELD, "a trailer is the Planned Assignment's too")
+    clock = new Date(NOON.getTime() + 60 * 60 * 1000)
+    try {
+      assert.equal((await commanded(id, "assign", { trailerId: fleet.vehicles.trailer.id })).heldAt, HELD, "the same trailer again: the hold stands as it was")
+      assert.equal((await commanded(id, "reschedule", { plannedStartTime: "06:30" })).heldAt, clock.toISOString(), "a move stamps when the office last moved it")
+    } finally {
+      clock = NOON
+    }
   })
 
   test("dispatch and cancel clear the hold in the same write: a hold is a planned route's", async () => {

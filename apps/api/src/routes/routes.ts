@@ -37,13 +37,14 @@
 // the row, since the id is right and the row is there. A stored row the body
 // did not move is not asked its status (#79's rule).
 //
-// The hold (#209, routes/route-holds.ts): `assign` and `reschedule` on a
-// `planned` route stamp `heldAt` with the command's instant, so the next
-// generation run keeps the day, the start and the Planned Assignment the
-// office gave it rather than copying the scheme's back; on a `ready` route
-// they hold nothing, since a dispatched route is frozen against regeneration
-// already. `dispatch` and `cancel` clear it in the same write: a hold is a
-// planned route's (`route_hold_shape`).
+// The hold (#209, routes/route-holds.ts): `assign` and `reschedule` that
+// change a `planned` route stamp `heldAt` with the command's instant, so the
+// next generation run keeps the day, the start and the Planned Assignment the
+// office gave it rather than copying the scheme's back; one that changes
+// nothing holds nothing, and on a `ready` route they hold nothing, since a
+// dispatched route is frozen against regeneration already. `dispatch` and
+// `cancel` clear it in the same write: a hold is a planned route's
+// (`route_hold_shape`).
 //
 // Every command runs under the route's row lock, taken before the read, so
 // two commands on one route take turns; and every command that changes what
@@ -80,7 +81,7 @@ import { activePlansByRoute, ensurePlan } from "./plan-shapes"
 import type { JobSender } from "@waste/db/jobs"
 import { NOT_AN_UNLOADING_STATION, requireDepot, type Scope } from "./references"
 import type { ClockOptions } from "./scheme-groups"
-import { describeJson, IdParam, lockRow, stamp } from "./shared"
+import { describeJson, IdParam, lockRow, stamp, timeOf } from "./shared"
 import { refuseUnavailableDriver } from "./statuses"
 
 const MODULE = "route-studio.routes"
@@ -214,14 +215,16 @@ async function requireStationAccepting(tx: Tx, companyId: string, routeId: strin
 /**
  * The hold an office command puts on the route it moves (#209): a `planned`
  * route, which the next generation run would otherwise refresh, is held from
- * the command's instant; a `ready` one is frozen against regeneration
- * already and holds nothing, which `route_hold_shape` demands besides.
+ * the command's instant when the command changed something; one that changed
+ * nothing leaves the route as it was, held or not. A `ready` route is frozen
+ * against regeneration already and holds nothing, which `route_hold_shape`
+ * demands besides.
  */
-const holdOf = (current: RouteRow, at: Date): { heldAt?: Date } => (current.status === "planned" ? { heldAt: at } : {})
+const holdOf = (current: RouteRow, moved: boolean, at: Date): { heldAt?: Date } => (current.status === "planned" && moved ? { heldAt: at } : {})
 
 /** What a hold says on the wire, spelled once for `assign` and `reschedule`. */
 const HOLDS =
-  "On a `planned` route the command stamps `heldAt` with its instant: the route is held, and the next generation run keeps its operating date, its planned start and its Planned Assignment — vehicle, driver, provider, trailer, depot and unloading station — as the office left them, still refreshing its pickups and its note, until `dispatch` clears the hold or an edit of the scheme or of the route's collection group that moves what the hold covers releases it; on a `ready` route, frozen against regeneration already, it holds nothing."
+  "On a `planned` route a command that changes something stamps `heldAt` with its instant: the route is held, and the next generation run keeps its operating date, its planned start and its Planned Assignment — vehicle, driver, provider, trailer, depot and unloading station — as the office left them, still refreshing its pickups and its note, until `dispatch` clears the hold or an edit of the scheme or of the route's collection group that moves what the hold covers releases it. A command that changes nothing holds nothing, and on a `ready` route, frozen against regeneration already, the command holds nothing either."
 
 /** The Planned Assignment as a write leaves it: the body's fields over the stored ones, a null given clearing. */
 type Assignment = Pick<RouteRow, "plannedVehicleId" | "plannedDriverId" | "plannedTrailerId" | "depotId" | "unloadingStationId">
@@ -390,9 +393,10 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         if (driver !== null) refuseUnavailableDriver(driver.status, driver.name, "a route")
 
         const at = now()
+        const changed = (Object.keys(after) as Array<keyof Assignment>).some((key) => after[key] !== current[key])
         const [row] = await tx
           .update(route)
-          .set({ ...after, ...holdOf(current, at) })
+          .set({ ...after, ...holdOf(current, changed, at) })
           .where(and(routeScope(principal), eq(route.id, id)))
           .returning(routeColumns)
         if (row === undefined) throw noSuchRoute(id)
@@ -475,9 +479,11 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const scope: Scope = { companyId: principal.companyId, projectId: current.projectId }
         const operatingDate = body.operatingDate ?? current.operatingDate
         if (body.operatingDate !== undefined) await requireLicenceOn(tx, scope, current, operatingDate, "operatingDate")
+        // The stored start is Postgres's `HH:MM:SS`, the body's the wire's `HH:MM`.
+        const startMoved = body.plannedStartTime !== undefined && body.plannedStartTime !== (current.plannedStartTime === null ? null : timeOf(current.plannedStartTime))
         const [row] = await tx
           .update(route)
-          .set({ operatingDate, plannedStartTime: body.plannedStartTime === undefined ? current.plannedStartTime : body.plannedStartTime, ...holdOf(current, now()) })
+          .set({ operatingDate, plannedStartTime: body.plannedStartTime === undefined ? current.plannedStartTime : body.plannedStartTime, ...holdOf(current, operatingDate !== current.operatingDate || startMoved, now()) })
           .where(and(routeScope(principal), eq(route.id, id)))
           .returning(routeColumns)
         if (row === undefined) throw noSuchRoute(id)
