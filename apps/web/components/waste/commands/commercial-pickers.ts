@@ -12,13 +12,13 @@
 // the store's — Explain price's question.
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
-import { planningAreaAdapter } from "@/lib/api/records/planning"
 import { resolverOver, type ModuleState } from "@/lib/api/records/server-records"
 import type { Resolver } from "@/lib/api/records/adapter"
-import { AGREEMENTS_MODULE, isAgreementRecord } from "@/lib/data/agreements"
+import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import { getModuleDefinition, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
-import { isPriceListRecord, PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "@/lib/data/commercial"
+import { PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "@/lib/data/commercial"
+import { commercialRowsFor } from "@/lib/data/commercial-pickers"
 import { ORGANISATION_MODULE } from "@/lib/data/containers"
 import { MASTER_DATA_MODULE } from "@/lib/data/master-data"
 import { keptOptions, keptValue, rowOptions } from "@/lib/data/place-pickers"
@@ -46,22 +46,9 @@ export function useCommercialPickers(): RelationPickers {
     [keyOf(PLANNING_AREAS_MODULE), areas],
     [keyOf(AGREEMENTS_MODULE), agreements],
   ])
-  const own = (field: BusinessFormField): readonly BusinessRecord[] | undefined => {
-    switch (field.id) {
-      case "priceListId":
-        return live(priceRows.records).filter(isPriceListRecord)
-      case "productId":
-        return live(products.records)
-      case "planningAreaId":
-        return live(areas.records).filter(planningAreaAdapter.owns)
-      case "agreementId":
-        return live(agreements.records).filter(isAgreementRecord)
-      default:
-        return undefined
-    }
-  }
+  const held = { products: live(products.records), priceRows: live(priceRows.records), areas: live(areas.records), agreements: live(agreements.records) }
   const options = (field: BusinessFormField, values: BusinessFormValues, projectId?: string, opened?: BusinessFormValues): readonly BusinessFormOption[] => {
-    const rows = own(field)
+    const rows = commercialRowsFor(field.id, values, held, projectId)
     const offered = rows === undefined ? base.options(field, values, projectId, opened) : keptOptions(field, rowOptions(rows), keptValue(field.id, values, opened))
     // An optional pick can be taken back only by picking None.
     return field.type === "select" && !field.required && !offered.some((option) => option.value === NO_ONE) ? [{ value: NO_ONE, label: "None" }, ...offered] : offered
