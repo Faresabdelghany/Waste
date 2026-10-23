@@ -790,7 +790,7 @@ const primaryModuleIdsByWorkspace: Partial<Record<WorkspaceId, readonly string[]
   resources: ["containers", "inventory", "warehouses", "depots"],
   fleet: ["vehicles", "drivers", "vehicle-planning"],
   "service-providers": ["service-providers", "service-areas", "activities"],
-  commercial: ["products", "price-rows", "service-provider-prices", "settlements", "events"],
+  commercial: ["products", "price-rows", "events", "billing", "invoices"],
   improve: ["intelligence", "analytics", "autopilot", "performance"],
   configure: ["organization", "access", "master", "finance"],
 }
