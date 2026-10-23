@@ -83,3 +83,17 @@ describe("the Resolution lists' categories (#147)", () => {
     assert.ok(matchesBusinessFilters(record, filters({ severities: ["High"] }), readers), "no severity reader on this surface")
   })
 })
+
+describe("the Finance lists' categories (#185)", () => {
+  test("a row's price list, product, customer, agreement, block reason and billing run are categories of their own, chipped under their own labels", () => {
+    const finance = filters({ priceLists: ["PL-Copenhagen-2026"], products: ["Bulky waste pickup"], customers: ["Østerbro Housing"], agreements: ["AGR-2408"], blockReasons: ["No price row"], billingRuns: ["Run of 2026-09-01 to 2026-09-30"] })
+    assert.deepEqual(businessFilterChips(finance), [
+      { key: "priceLists", label: "Price list", value: "PL-Copenhagen-2026" },
+      { key: "products", label: "Product", value: "Bulky waste pickup" },
+      { key: "customers", label: "Customer", value: "Østerbro Housing" },
+      { key: "agreements", label: "Agreement", value: "AGR-2408" },
+      { key: "blockReasons", label: "Block reason", value: "No price row" },
+      { key: "billingRuns", label: "Billing run", value: "Run of 2026-09-01 to 2026-09-30" },
+    ])
+  })
+})

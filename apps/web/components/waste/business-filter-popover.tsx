@@ -9,10 +9,13 @@ import {
   Database,
   Flag,
   Funnel,
+  Handshake,
   IdentificationBadge,
   MapPin,
   MapTrifold,
+  Package,
   Path,
+  Receipt,
   Speedometer,
   Spinner,
   SteeringWheel,
@@ -96,6 +99,12 @@ const CATEGORY_ICONS: Readonly<Record<BusinessFilterKey, typeof Spinner>> = {
   kinds: Tag,
   severities: Warning,
   assignees: UserCircle,
+  priceLists: Tag,
+  products: Package,
+  customers: UsersThree,
+  agreements: Handshake,
+  blockReasons: Warning,
+  billingRuns: Receipt,
 }
 
 /**
