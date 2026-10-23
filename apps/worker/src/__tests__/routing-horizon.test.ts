@@ -716,6 +716,32 @@ describe("the horizon: generation's routing jobs and routing.sweep-horizon", { s
     for (const row of generated) assert.equal((await plansOf(row.id)).length, plansBefore.get(row.id), `the ${row.operatingDate} route: fresh, or beyond the horizon`)
   })
 
+  test("the sweep reads a baseline Plan's order in order (#212): two stops at one address that trade places key alike, and the route is asked a new baseline Plan rather than read fresh", async () => {
+    const atParkvej = (bin: string) => ({ containerId: bin, propertyId: a.parkvej, fractionId: a.residual })
+    // Two bins at Parkvej 18 on a route naming no depot: the sweep asks a baseline over the generated order.
+    const shared = await handMade(a, { operatingDate: "2026-10-06", stops: [atParkvej(a.bin1), atParkvej(a.bin2)] })
+    assert.ok((await sweepHorizon(contextOf())).asked.includes(shared.id))
+    const [measured] = await plansOf(shared.id)
+    assert.deepEqual([measured.solver, await activeOf(shared.id), await stopsOf(measured.id)], ["baseline", measured.id, shared.pickupIds])
+    // Its measurement lands, and the next night reads it fresh.
+    await owner.db.update(plan).set({ status: "ready", distanceMetres: 0, durationSeconds: 0 }).where(eq(plan.id, measured.id))
+    assert.ok(!(await sweepHorizon(contextOf())).asked.includes(shared.id), "it names the open stops in their order")
+    // The two bins trade places in the generated order; the fingerprint keys Parkvej twice either way.
+    const [first, second] = shared.pickupIds
+    await owner.db.update(pickup).set({ position: 2 }).where(eq(pickup.id, first))
+    await owner.db.update(pickup).set({ position: 1 }).where(eq(pickup.id, second))
+    assert.ok((await sweepHorizon(contextOf())).asked.includes(shared.id), "the order it measured is not the route's")
+    const [, swapped, ...more] = await plansOf(shared.id)
+    assert.deepEqual(more, [], "one Plan more")
+    assert.deepEqual([swapped.solver, swapped.status, swapped.fingerprint, await activeOf(shared.id)], ["baseline", "calculating", measured.fingerprint, swapped.id])
+    assert.deepEqual(await stopsOf(swapped.id), [second, first])
+    assert.deepEqual(
+      (await jobsOf([swapped.id])).map((job) => [job.name, job.data.class, job.priority]),
+      [[ROUTING_MEASURE_QUEUE, "batch", batchPriority["2026-10-06"]]],
+    )
+    assert.ok(!(await sweepHorizon(contextOf())).asked.includes(shared.id), "and the night after reads the new order fresh")
+  })
+
   test("the sweep re-sends the job of a calculating Plan more than a day old whose job is gone, to its solver's queue, and leaves one whose job is live and one younger than a day", async () => {
     const [, , nextMonday, nextThursday] = await routesOf(a.residualScheme)
     const [, nextTuesday] = await routesOf(a.plainScheme)
