@@ -123,20 +123,28 @@ describe("the pickup endpoints", { skip: database.skip || owner.skip }, () => {
     test("each pickup carries its sequence, the place its route's detail gives it: the active Plan's order, the baseline's until the route has one, counted over the whole route (#219)", async () => {
       const planned = await fresh()
       const unplanned = await fresh()
-      const order = [planned.pickupIds[2], planned.pickupIds[0], planned.pickupIds[1]]
-      // A dispatcher's order, written as the reorder writes it: a manual Plan naming its stops, made the route's active one.
+      const [p1, p2, p3] = planned.pickupIds
+      // A dispatcher's order, written as the reorder writes it: a manual Plan, made the route's active one, naming two of
+      // the three stops — the third joined the day after it, say, and appends in baseline order.
       await withCompany(pool.db, a.companyId, async (tx: Tx) => {
-        const planId = await createPlan(tx, { companyId: a.companyId, projectId: planned.projectId, routeId: planned.id, solver: "manual", trip: "stops-only", provider: "fake", fingerprint: "pickups-test", stops: order })
+        const planId = await createPlan(tx, { companyId: a.companyId, projectId: planned.projectId, routeId: planned.id, solver: "manual", trip: "stops-only", provider: "fake", fingerprint: "pickups-test", stops: [p2, p1] })
         await activatePlan(tx, { companyId: a.companyId, routeId: planned.id, planId })
       })
       const sequences = async (query: string) => (await page(olivia, query)).items.map((stop) => [stop.id, stop.sequence] as const)
-      assert.deepEqual(await sequences(`?routeId=${planned.id}`), [[planned.pickupIds[0], 2], [planned.pickupIds[1], 3], [planned.pickupIds[2], 1]], "in id order, each at its place in the Plan")
+      assert.deepEqual(
+        await sequences(`?routeId=${planned.id}`),
+        [
+          [p1, 2],
+          [p2, 1],
+          [p3, 3],
+        ],
+        "in id order, each at its place in the Plan, the stop it does not name after them",
+      )
       assert.deepEqual(await sequences(`?routeId=${unplanned.id}`), unplanned.pickupIds.map((id, index) => [id, index + 1]), "the baseline stands until the route has a Plan")
-      assert.deepEqual(await sequences(`?routeId=${planned.id}&limit=1`), [[planned.pickupIds[0], 2]], "counted over the route, not the page")
+      assert.deepEqual(await sequences(`?routeId=${planned.id}&limit=1`), [[p1, 2]], "counted over the route, not the page")
       // One container's stops across routes, in one page: each stop at its own route's place.
-      const across = new Map(await sequences(`?limit=200&containerId=${ex.containers.bin3.id}`))
-      assert.equal(across.get(planned.pickupIds[2]), 1)
-      assert.equal(across.get(unplanned.pickupIds[2]), 3)
+      const across = new Map(await sequences(`?limit=200&containerId=${ex.containers.bin1.id}`))
+      assert.deepEqual([across.get(p1), across.get(unplanned.pickupIds[0])], [2, 1])
       const detail = RouteDetail.parse(await (await olivia(`/routes/${planned.id}`)).json())
       const listed = new Map(await sequences(`?routeId=${planned.id}`))
       assert.deepEqual(
@@ -144,6 +152,11 @@ describe("the pickup endpoints", { skip: database.skip || owner.skip }, () => {
         detail.pickups.map((stop) => [stop.id, listed.get(stop.id)]),
         "the list and the route's detail agree",
       )
+      // The stop's own read and a command's answer carry it too, so a row a command replaces keeps its number.
+      assert.equal((await read(p1)).sequence, 2)
+      const removed = await commanded(p1, "remove", { reason: "Bin not out" })
+      assert.deepEqual([removed.status, removed.sequence], ["skipped", 2], "a removed stop keeps its place: the order still counts it")
+      assert.equal(new Map(await sequences(`?routeId=${planned.id}`)).get(p3), 3)
     })
 
     test("refuses a route out of reach on the query, a backwards window, a project out of reach and a role without view", async () => {

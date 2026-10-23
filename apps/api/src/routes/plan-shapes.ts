@@ -15,7 +15,7 @@ import type { ActivePlan, Plan, PlanLeg } from "@waste/contracts/plans"
 import type { Tx } from "@waste/db/client"
 import { ensurePlan as ensureCompanyPlan, planStopIds, type EnsuredPlan } from "@waste/db/commands/plans"
 import { QueueMissing, type JobSender } from "@waste/db/jobs"
-import { pickup } from "@waste/db/schema/execution"
+import { pickup, route } from "@waste/db/schema/execution"
 import { plan, planLeg, planStop } from "@waste/db/schema/routing"
 import type { PlanSolver, PlanStatus, PlanTrip } from "@waste/domain/routing/vocabulary"
 import { executionOrder, planIsStale } from "@waste/domain/routing/plans"
@@ -118,8 +118,9 @@ export type PlanContext = {
   sequence: Map<string, number>
 }
 
+/** By position, ties by id in Postgres's order (`pickupsOfRoute`'s `position, id`): a lowercase id compares by its bytes, as pagination.ts says, and never by the locale's collation. */
 const baselineIds = (stops: readonly Pick<SequencedStop, "id" | "position">[]): string[] =>
-  [...stops].sort((a, b) => a.position - b.position || a.id.localeCompare(b.id)).map((stop) => stop.id)
+  [...stops].sort((a, b) => a.position - b.position || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).map((stop) => stop.id)
 
 const sequenceOver = (ordered: readonly string[]): Map<string, number> => new Map(ordered.map((id, index) => [id, index + 1]))
 
@@ -143,45 +144,44 @@ export async function planContextOf(tx: Tx, companyId: string, routeRef: { activ
 }
 
 /**
- * Each stop's `sequence` by pickup id, for every stop of the routes asked for
+ * Each stop's `sequence` by pickup id, for every stop of the routes named
  * (#219): the ordinal a route's detail gives it (`planContextOf`), read in
  * two statements over the routes rather than one per route — every stop of
  * each, since the ordinal counts through the whole route and not only the
- * stops a page holds, and the stops each active Plan names, in its order.
+ * stops a page holds, and the stops the route's active Plan names, in its
+ * order, through the route's own `active_plan_id` in the same statement. A
+ * route without a Plan, or whose Plan names nothing, keeps its baseline.
  */
-export async function sequencesOfRoutes(tx: Tx, companyId: string, routes: readonly { id: string; activePlanId: string | null }[]): Promise<Map<string, number>> {
+export async function sequencesOfRoutes(tx: Tx, principal: Principal, routeIds: readonly string[]): Promise<Map<string, number>> {
   const sequences = new Map<string, number>()
-  if (routes.length === 0) return sequences
-  const planIds = routes.flatMap((row) => (row.activePlanId === null ? [] : [row.activePlanId]))
+  const ids = [...new Set(routeIds)]
+  if (ids.length === 0) return sequences
   const [stops, named] = await Promise.all([
     tx
       .select({ id: pickup.id, routeId: pickup.routeId, position: pickup.position })
       .from(pickup)
-      .where(
-        and(
-          eq(pickup.companyId, companyId),
-          inArray(
-            pickup.routeId,
-            routes.map((row) => row.id),
-          ),
-        ),
-      ),
-    planIds.length === 0
-      ? []
-      : tx
-          .select({ planId: planStop.planId, pickupId: planStop.pickupId })
-          .from(planStop)
-          .where(and(eq(planStop.companyId, companyId), inArray(planStop.planId, planIds)))
-          .orderBy(asc(planStop.position)),
+      .where(and(eq(pickup.companyId, principal.companyId), inProjects(pickup.projectId, principal), inArray(pickup.routeId, ids))),
+    tx
+      .select({ routeId: planStop.routeId, pickupId: planStop.pickupId })
+      .from(planStop)
+      .innerJoin(route, and(eq(route.companyId, planStop.companyId), eq(route.activePlanId, planStop.planId)))
+      .where(and(eq(planStop.companyId, principal.companyId), inProjects(planStop.projectId, principal), inArray(route.id, ids)))
+      .orderBy(asc(planStop.position)),
   ])
   const stopsByRoute = Map.groupBy(stops, (stop) => stop.routeId)
-  const namedByPlan = Map.groupBy(named, (stop) => stop.planId)
-  for (const row of routes) {
-    // A Plan that names nothing leaves the baseline standing, as on the route's detail.
-    const order = row.activePlanId === null ? null : (namedByPlan.get(row.activePlanId) ?? []).map((stop) => stop.pickupId)
-    for (const [id, ordinal] of sequenceOver(executionOrder(baselineIds(stopsByRoute.get(row.id) ?? []), order))) sequences.set(id, ordinal)
+  const namedByRoute = Map.groupBy(named, (stop) => stop.routeId)
+  for (const routeId of ids) {
+    const order = (namedByRoute.get(routeId) ?? []).map((stop) => stop.pickupId)
+    for (const [id, ordinal] of sequenceOver(executionOrder(baselineIds(stopsByRoute.get(routeId) ?? []), order))) sequences.set(id, ordinal)
   }
   return sequences
+}
+
+/** A stop's ordinal out of `sequencesOfRoutes`, which read every stop of its route: one missing is a bug, never an answer without it. */
+export function sequenceIn(sequences: ReadonlyMap<string, number>, stop: { id: string; routeId: string }): number {
+  const sequence = sequences.get(stop.id)
+  if (sequence === undefined) throw new Error(`pickup ${stop.id} has no place in route ${stop.routeId}'s order`)
+  return sequence
 }
 
 /** The `ActivePlan` of every route asked for, by route, in three statements over the page's ids: what the live list carries beside each row. */

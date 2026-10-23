@@ -40,8 +40,9 @@ export const Pickup = z.object({
    * The stop's place in the current execution order (#170): the active Plan's
    * where there is one, the baseline's otherwise. Computed on read, never
    * stored. On every route read that carries the stop (`RouteDetail`,
-   * `DriverRouteDetail`) and on the list's (`PickupListItem`, #219); absent
-   * on one stop's read, a command's answer and an event payload.
+   * `DriverRouteDetail`), on the list's (`PickupListItem`, #219) and on the
+   * stop's own read and its commands' answers (`PickupDetail`); absent where
+   * a route's command or an event recorded before it names the stop.
    */
   sequence: PositiveInt.optional(),
   status: PickupStatus,
@@ -71,7 +72,12 @@ export const PickupListItem = Pickup.extend({
 })
 export type PickupListItem = z.infer<typeof PickupListItem>
 
-/** A pickup with its proofs in recording order. */
+/**
+ * A pickup with its proofs in recording order. The API's answers carry its
+ * `sequence` (#219); it stays optional here because the outbox's consumers
+ * read this shape off `pickup-skipped` and `pickup-corrected` events
+ * recorded before it did.
+ */
 export const PickupDetail = Pickup.extend({
   proofs: z.array(ProofOfService),
 })
