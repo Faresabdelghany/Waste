@@ -37,6 +37,14 @@
 // the row, since the id is right and the row is there. A stored row the body
 // did not move is not asked its status (#79's rule).
 //
+// The hold (#209, routes/route-holds.ts): `assign` and `reschedule` on a
+// `planned` route stamp `heldAt` with the command's instant, so the next
+// generation run keeps the day, the start and the Planned Assignment the
+// office gave it rather than copying the scheme's back; on a `ready` route
+// they hold nothing, since a dispatched route is frozen against regeneration
+// already. `dispatch` and `cancel` clear it in the same write: a hold is a
+// planned route's (`route_hold_shape`).
+//
 // Every command runs under the route's row lock, taken before the read, so
 // two commands on one route take turns; and every command that changes what
 // another context hears about writes its outbox event in the same
@@ -203,6 +211,18 @@ async function requireStationAccepting(tx: Tx, companyId: string, routeId: strin
   if (accepts === undefined) throw invalidRequest("body", [{ path: "unloadingStationId", message: acceptsNone(station.name) }])
 }
 
+/**
+ * The hold an office command puts on the route it moves (#209): a `planned`
+ * route, which the next generation run would otherwise refresh, is held from
+ * the command's instant; a `ready` one is frozen against regeneration
+ * already and holds nothing, which `route_hold_shape` demands besides.
+ */
+const holdOf = (current: RouteRow, at: Date): { heldAt?: Date } => (current.status === "planned" ? { heldAt: at } : {})
+
+/** What a hold says on the wire, spelled once for `assign` and `reschedule`. */
+const HOLDS =
+  "On a `planned` route the command stamps `heldAt` with its instant: the route is held, and the next generation run keeps its operating date, its planned start and its Planned Assignment — vehicle, driver, provider, trailer, depot and unloading station — as the office left them, still refreshing its pickups and its note, until `dispatch` clears the hold or an edit of the scheme or of the route's collection group that moves what the hold covers releases it; on a `ready` route, frozen against regeneration already, it holds nothing."
+
 /** The Planned Assignment as a write leaves it: the body's fields over the stored ones, a null given clearing. */
 type Assignment = Pick<RouteRow, "plannedVehicleId" | "plannedDriverId" | "plannedTrailerId" | "depotId" | "unloadingStationId">
 
@@ -319,6 +339,8 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         description:
           "The `assign` command: moves the planned vehicle, driver, trailer, depot or unloading station of a route that has not started, any of them cleared with null; at least one field must be given. Under the route's row lock. A `planned` route stays `planned` and a `ready` one stays `ready` — a route already running is refused (409): the session's driver and vehicle are its actual assignment, and a swap mid-route is a Ticket's outcome later; a completed or cancelled route does not change. A `ready` route keeps a driver: it was dispatched to one, and a dispatched route without a driver would reach no device, so clearing `driverId` on it is refused (409, `Route RC-1042 is dispatched; assign another driver or cancel it`) where moving it to another driver is not. " +
           ASSIGN_RULES +
+          " " +
+          HOLDS +
           " The `route-reassigned` event is written in the same transaction when the driver or the vehicle moved, carrying the route as answered here.",
         security: BEARER_SECURITY,
         responses: {
@@ -367,16 +389,17 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         if (trailer !== null) refuseVehicleNotActive(trailer.status, vehicleLabel(trailer), "trailer")
         if (driver !== null) refuseUnavailableDriver(driver.status, driver.name, "a route")
 
+        const at = now()
         const [row] = await tx
           .update(route)
-          .set(after)
+          .set({ ...after, ...holdOf(current, at) })
           .where(and(routeScope(principal), eq(route.id, id)))
           .returning(routeColumns)
         if (row === undefined) throw noSuchRoute(id)
         const detail = await detailOf(tx, principal.companyId, row)
         if (row.plannedDriverId !== current.plannedDriverId || row.plannedVehicleId !== current.plannedVehicleId) {
           const { pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, ...answered } = detail
-          await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-reassigned", payload: answered, projectId: row.projectId, occurredAt: now() })
+          await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-reassigned", payload: answered, projectId: row.projectId, occurredAt: at })
         }
         return c.json(detail)
       },
@@ -387,7 +410,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "dispatchRoute",
         summary: "Dispatch a route to its driver",
         description:
-          "The `dispatch` command: `planned` becomes `ready`, `dispatchedAt` is stamped, and the route is frozen against regeneration (#97's rule) and reaches its driver's device. A route without a planned driver is refused (409): the driver door's scope is the assignment, so a route without one reaches nobody — assign one first. A route already `ready` answers 200 as it stands, without a write; an active one is refused, and a completed or cancelled one does not change. Takes no body. Under the route's row lock; the `route-dispatched` event is written in the same transaction, carrying the route as answered here.",
+          "The `dispatch` command: `planned` becomes `ready`, `dispatchedAt` is stamped, and the route is frozen against regeneration (#97's rule) and reaches its driver's device; a hold `assign` or `reschedule` put on it (`heldAt`) is cleared, since the route is now frozen whole. A route without a planned driver is refused (409): the driver door's scope is the assignment, so a route without one reaches nobody — assign one first. A route already `ready` answers 200 as it stands, without a write; an active one is refused, and a completed or cancelled one does not change. Takes no body. Under the route's row lock; the `route-dispatched` event is written in the same transaction, carrying the route as answered here.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The route, dispatched.", RouteDetail),
@@ -411,7 +434,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const at = now()
         const [row] = await tx
           .update(route)
-          .set({ status: transition.to, dispatchedAt: at })
+          .set({ status: transition.to, dispatchedAt: at, heldAt: null })
           .where(and(routeScope(principal), eq(route.id, id)))
           .returning(routeColumns)
         if (row === undefined) throw noSuchRoute(id)
@@ -427,7 +450,9 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "rescheduleRoute",
         summary: "Move the day a route runs, or its start",
         description:
-          "The `reschedule` command: moves `operatingDate`, the day the route runs, or `plannedStartTime`, a time on the project's clock (null clears it); at least one must be given. The `serviceDate` never moves: with the scheme and the group it is the route's identity (ADR-0002). A route that has started is refused (409): the day it runs is fixed; a completed or cancelled one does not change. Where the route names both a planned driver and a planned vehicle, moving the day judges the driver's licence again on the new operating date, refused at `operatingDate` with the reason. Under the route's row lock.",
+          "The `reschedule` command: moves `operatingDate`, the day the route runs, or `plannedStartTime`, a time on the project's clock (null clears it); at least one must be given. The `serviceDate` never moves: with the scheme and the group it is the route's identity (ADR-0002). A route that has started is refused (409): the day it runs is fixed; a completed or cancelled one does not change. Where the route names both a planned driver and a planned vehicle, moving the day judges the driver's licence again on the new operating date, refused at `operatingDate` with the reason. " +
+          HOLDS +
+          " Under the route's row lock.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The route as it now stands.", RouteDetail),
@@ -452,7 +477,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         if (body.operatingDate !== undefined) await requireLicenceOn(tx, scope, current, operatingDate, "operatingDate")
         const [row] = await tx
           .update(route)
-          .set({ operatingDate, plannedStartTime: body.plannedStartTime === undefined ? current.plannedStartTime : body.plannedStartTime })
+          .set({ operatingDate, plannedStartTime: body.plannedStartTime === undefined ? current.plannedStartTime : body.plannedStartTime, ...holdOf(current, now()) })
           .where(and(routeScope(principal), eq(route.id, id)))
           .returning(routeColumns)
         if (row === undefined) throw noSuchRoute(id)
@@ -465,7 +490,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "cancelRoute",
         summary: "Cancel a route",
         description:
-          "The `cancel` command: a `planned`, `ready` or `active` route becomes `cancelled` with the reason as its `note` and `cancelledAt` stamped; every `planned` pickup of it is closed as `skipped` with the reason `route-cancelled` and its `outcomeAt`, since nobody will attempt it, and an open session is ended, since the route is no longer being driven. A pickup with an outcome already keeps it. A completed route does not change (409); one already cancelled answers 200 as it stands, without a write. Under the route's row lock; the `route-cancelled` event and one `pickup-skipped` per pickup closed are written in the same transaction.",
+          "The `cancel` command: a `planned`, `ready` or `active` route becomes `cancelled` with the reason as its `note` and `cancelledAt` stamped; every `planned` pickup of it is closed as `skipped` with the reason `route-cancelled` and its `outcomeAt`, since nobody will attempt it, and an open session is ended, since the route is no longer being driven. A pickup with an outcome already keeps it. A hold on the route (`heldAt`) is cleared, since a hold is a planned route's; generation's own cancel of a route the scheme no longer runs clears it the same way, so a route generation cancelled and later brings back returns to its scheme's day, start and Planned Assignment, not to what the office had held. A completed route does not change (409); one already cancelled answers 200 as it stands, without a write. Under the route's row lock; the `route-cancelled` event and one `pickup-skipped` per pickup closed are written in the same transaction.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The route, cancelled, with its pickups as the cancellation left them.", RouteDetail),
@@ -490,7 +515,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const at = now()
         const [row] = await tx
           .update(route)
-          .set({ status: transition.to, note: reason, cancelledAt: at })
+          .set({ status: transition.to, note: reason, cancelledAt: at, heldAt: null })
           .where(and(routeScope(principal), eq(route.id, id)))
           .returning(routeColumns)
         if (row === undefined) throw noSuchRoute(id)

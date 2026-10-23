@@ -24,7 +24,10 @@
 // and nothing written; the sweep finds exactly the eligible schemes across
 // companies, writes each a run as `wms_api` and sends its job in the same
 // transaction, and a scheme mid-generation is not queued twice; the API role
-// sees its company's runs and stamps and nothing of another's.
+// sees its company's runs and stamps and nothing of another's; a route the
+// office held (#209) keeps its day, start and Planned Assignment through a
+// run that still refreshes its pickups and its note, the hold alone writing
+// nothing, and a cancel still cancels it and clears the hold.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
@@ -38,8 +41,11 @@ import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { customer, property } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
+import { driver, vehicle } from "@waste/db/schema/fleet"
+import { vehicleType } from "@waste/db/schema/fleet-types"
 import { generationMatch, generationRun } from "@waste/db/schema/generation"
-import { company, project } from "@waste/db/schema/organisation"
+import { company, project, serviceProvider } from "@waste/db/schema/organisation"
+import { depot, unloadingStation } from "@waste/db/schema/places"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
 import { collectionGroup, collectionGroupContainer, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
@@ -105,6 +111,13 @@ const ids = (n: "a" | "b") => ({
   /** A second, draft scheme the sweep must not find. */
   draftScheme: `018f7c36-${n}000-7000-8000-000000000044`,
   draftGroup: `018f7c36-${n}000-7000-8000-000000000045`,
+  /** The office's crew and ends for a held route (#209), none of which the scheme or its groups name; written by that test alone. */
+  vehicleType: `018f7c36-${n}000-7000-8000-000000000051`,
+  vehicle: `018f7c36-${n}000-7000-8000-000000000052`,
+  driver: `018f7c36-${n}000-7000-8000-000000000053`,
+  depot: `018f7c36-${n}000-7000-8000-000000000054`,
+  station: `018f7c36-${n}000-7000-8000-000000000055`,
+  provider: `018f7c36-${n}000-7000-8000-000000000056`,
 })
 const a = ids("a")
 const b = ids("b")
@@ -380,6 +393,70 @@ describe("generation against a migrated database", { skip }, () => {
       [a.bin1, "planned", null],
       [a.bin3, "skipped", "regeneration"],
     ], "bin 3 is still outside the western half")
+  })
+
+  test("a held route (#209) keeps its day, its start and its Planned Assignment, its ends among them, while its pickups and its note are the run's; the hold alone writes nothing and asks no Plan; a cancel still cancels it, clearing the hold, and the route brought back is the scheme's", async () => {
+    const scoped = { companyId: a.company, projectId: a.project }
+    await ownerPool.db.insert(vehicleType).values({ id: a.vehicleType, companyId: a.company, key: "rear-loader", name: "Rear loader" })
+    await ownerPool.db.insert(depot).values({ id: a.depot, ...scoped, code: "DEP-NORD", name: "Nordhavn depot", address: "Sundkrogsgade 21", location: PARKVEJ, ownership: "company", status: "active" })
+    await ownerPool.db.insert(unloadingStation).values({ id: a.station, companyId: a.company, code: "ARC-AMAGER", name: "ARC Amager Bakke", address: "Vindmøllevej 6", location: AMAGER, ownership: "external", status: "active" })
+    await ownerPool.db.insert(vehicle).values({ id: a.vehicle, ...scoped, registration: "CN 42 018", callsign: "WH-24", kind: "powered-vehicle", vehicleTypeId: a.vehicleType, ownership: "company", status: "active", requiredLicenceClass: "c" })
+    await ownerPool.db.insert(driver).values({ id: a.driver, ...scoped, name: "Mads Jensen", employment: "employee", licenceClass: "ce", licenceExpiry: "2030-12-31", status: "active" })
+    await ownerPool.db.insert(serviceProvider).values({ id: a.provider, companyId: a.company, legalName: "NordRen ApS", registrationNumber: "40000001", country: "DK", contactName: "Lars Mikkelsen", contactEmail: "lars@nordren.example" })
+    /** What a hold covers, as a route row carries it. */
+    const covered = (row: typeof route.$inferSelect) => ({
+      operatingDate: row.operatingDate,
+      plannedStartTime: row.plannedStartTime,
+      plannedVehicleId: row.plannedVehicleId,
+      plannedDriverId: row.plannedDriverId,
+      plannedServiceProviderId: row.plannedServiceProviderId,
+      depotId: row.depotId,
+      unloadingStationId: row.unloadingStationId,
+      heldAt: row.heldAt,
+    })
+    const rowOf = async (id: string) => (await ownerPool.db.select().from(route).where(eq(route.id, id)))[0]
+
+    // The office moved Monday's route to the Tuesday, earlier, with its own crew and ends: `reschedule` and `assign`, as apps/api writes them.
+    const [monday] = await routesOfA()
+    assert.deepEqual([monday.serviceDate, monday.status, monday.collectionGroupId], ["2026-10-05", "planned", a.residualGroup])
+    const office = { operatingDate: "2026-10-06", plannedStartTime: "05:15:00", plannedVehicleId: a.vehicle, plannedDriverId: a.driver, plannedServiceProviderId: a.provider, depotId: a.depot, unloadingStationId: a.station, heldAt: NOW }
+    await ownerPool.db.update(route).set(office).where(eq(route.id, monday.id))
+    const held = await rowOf(monday.id)
+
+    // The hold alone: nothing differs but what the office moved, so the run writes nothing and reshapes nothing.
+    const quiet = await generateA()
+    assert.deepEqual([quiet.run.status, quiet.run.routesRefreshed, quiet.run.routesCancelled], ["succeeded", 0, 0])
+    assert.deepEqual(await rowOf(monday.id), held, "the same row, updated_at included")
+    assert.ok(quiet.outcome.kind === "succeeded" && !quiet.outcome.horizon.asked.includes(monday.id), "no Plan asked for")
+
+    // A stop out of order and a stale note: the run's to bring back, and what the office held stands.
+    const [first] = await pickupsOf(monday.id)
+    await ownerPool.db.update(pickup).set({ position: 7 }).where(eq(pickup.id, first.id))
+    await ownerPool.db.update(route).set({ note: "Moved by hand" }).where(eq(route.id, monday.id))
+    const refreshed = await generateA()
+    assert.deepEqual([refreshed.run.routesRefreshed, refreshed.run.routesCancelled], [1, 0])
+    const kept = await rowOf(monday.id)
+    assert.deepEqual(covered(kept), office, "the day, the start and the Planned Assignment the office gave it")
+    assert.deepEqual([kept.note, kept.generationRunId, kept.status], [null, refreshed.runId, "planned"], "the note is the run's")
+    assert.deepEqual((await pickupsOf(monday.id)).map((row) => [row.position, row.containerId]), [[1, a.bin1], [2, a.bin2], [3, a.bin3]], "the stops are the run's")
+    assert.ok(refreshed.outcome.kind === "succeeded" && refreshed.outcome.horizon.asked.includes(monday.id), "a stop moved reshapes it, asked a Plan on the day the office holds it to")
+
+    // The scheme stops serving Mondays: the held route is cancelled like any other, and the hold goes with `planned`.
+    await ownerPool.db.update(routeScheme).set({ serviceDays: ["thursday"] }).where(eq(routeScheme.id, a.scheme))
+    await ownerPool.db.update(collectionGroup).set({ days: ["thursday"] }).where(eq(collectionGroup.id, a.residualGroup))
+    const shrunk = await generateA()
+    assert.equal(shrunk.run.routesCancelled, 1)
+    const cancelled = await rowOf(monday.id)
+    assert.deepEqual([cancelled.status, cancelled.cancelledByGeneration, cancelled.note, cancelled.heldAt], ["cancelled", true, NO_LONGER_SERVES_DATE, null])
+
+    // Mondays again: the route brought back is the scheme's, not what the office had held.
+    await ownerPool.db.update(routeScheme).set({ serviceDays: ["monday", "thursday"] }).where(eq(routeScheme.id, a.scheme))
+    await ownerPool.db.update(collectionGroup).set({ days: ["monday", "thursday"] }).where(eq(collectionGroup.id, a.residualGroup))
+    const back = await generateA()
+    assert.deepEqual([back.run.routesRefreshed, back.run.routesCancelled], [1, 0])
+    const resurrected = await rowOf(monday.id)
+    assert.equal(resurrected.status, "planned")
+    assert.deepEqual(covered(resurrected), { operatingDate: "2026-10-05", plannedStartTime: "06:30:00", plannedVehicleId: null, plannedDriverId: null, plannedServiceProviderId: null, depotId: null, unloadingStationId: null, heldAt: null })
   })
 
   test("a draft scheme generates nothing and says so on the run; a run already succeeded is not run again; a validated scheme with a rule group and no planning area warns", async () => {

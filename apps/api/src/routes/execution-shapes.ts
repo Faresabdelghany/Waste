@@ -20,7 +20,9 @@
 // `RC-1042`, and every sentence of the four modules names a route by it.
 // `generationRunId` is the column since migration 0012 (#97 part B): the run
 // that last wrote the route, null on one no run has — every route of part A's
-// fixtures, and any the office will one day make by hand.
+// fixtures, and any the office will one day make by hand. `heldAt` is the
+// column since 0015 (#209): the hold `assign` and `reschedule` put on a
+// planned route, which generation's refresh keeps (routes/route-holds.ts).
 import type { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import { routeLabel } from "@waste/contracts/execution"
 import type { WeightReviewState } from "@waste/contracts/finance"
@@ -72,6 +74,7 @@ export const routeColumns = {
   depotId: route.depotId,
   plannedServiceProviderId: route.plannedServiceProviderId,
   unloadingStationId: route.unloadingStationId,
+  heldAt: route.heldAt,
   actualVehicleId: route.actualVehicleId,
   actualDriverId: route.actualDriverId,
   actualTrailerId: route.actualTrailerId,
@@ -112,6 +115,7 @@ export function routeOf(row: RouteRow, progress: RouteProgress): Route {
       depotId: row.depotId,
       unloadingStationId: row.unloadingStationId,
     },
+    heldAt: instantOf(row.heldAt),
     actual: { vehicleId: row.actualVehicleId, driverId: row.actualDriverId, trailerId: row.actualTrailerId },
     dispatchedAt: instantOf(row.dispatchedAt),
     startedAt: instantOf(row.startedAt),

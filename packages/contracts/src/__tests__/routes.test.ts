@@ -27,6 +27,7 @@ const route = {
   generationRunId: null,
   plannedStartTime: "06:30",
   planned: { vehicleId: OTHER, driverId: THIRD, trailerId: null, serviceProviderId: null, depotId: ID, unloadingStationId: OTHER },
+  heldAt: null,
   actual: { vehicleId: OTHER, driverId: THIRD, trailerId: null },
   dispatchedAt: "2026-10-04T22:00:00.000Z",
   startedAt: "2026-10-05T06:00:00.000Z",
@@ -74,6 +75,11 @@ describe("Route", () => {
     assert.deepEqual(Route.parse(route), route)
     const planned = { ...route, status: "planned", actual: { vehicleId: null, driverId: null, trailerId: null }, dispatchedAt: null, startedAt: null, progress: { ...progress, planned: 40, completed: 0, skipped: 0, failed: 0, fraction: 0 } }
     assert.deepEqual(Route.parse(planned), planned)
+    const held = { ...planned, heldAt: "2026-10-04T09:15:00.000Z" }
+    assert.deepEqual(Route.parse(held), held, "a planned route the office moved by hand carries its hold (#209)")
+    assert.equal(Route.safeParse({ ...planned, heldAt: "2026-10-04" }).success, false, "the hold is an instant, not a day")
+    const { heldAt: _heldAt, ...unsaid } = route
+    assert.equal(Route.safeParse(unsaid).success, false, "the hold is always said, null while the route is the scheme's")
     assert.equal(Object.keys(RouteProgress.shape).length, 6)
     assert.equal(RouteProgress.safeParse({ ...progress, fraction: 1.2 }).success, false)
     assert.equal(RouteProgress.safeParse({ ...progress, planned: -1 }).success, false)

@@ -38,6 +38,7 @@ const route: Route = {
   generationRunId: null,
   plannedStartTime: "06:30",
   planned: { vehicleId: "01a0d2a4-a280-7013-8000-000000000001", driverId: "01a0d2a4-a280-7014-8000-000000000001", trailerId: null, serviceProviderId: null, depotId: null, unloadingStationId: null },
+  heldAt: null,
   actual: { vehicleId: null, driverId: null, trailerId: null },
   dispatchedAt: null,
   startedAt: null,

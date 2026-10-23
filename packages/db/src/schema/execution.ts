@@ -27,7 +27,10 @@
 // vehicle and, where one went out, the trailer that started it, and one that
 // did not has none. `generation_run_id` arrived with `generation_run` in #97
 // B's file, migration 0012, with its key: the run that last wrote the route,
-// null on a route no run has written.
+// null on a route no run has written. `held_at` arrived in 0015 (#209): the
+// instant the office last moved a planned route's day, start or Planned
+// Assignment by hand, which generation's refresh keeps; `route_hold_shape`
+// holds it to a planned route, so leaving `planned` clears it.
 //
 // `pickup` carries the place and the fraction on the service date as keys
 // (#104 §7.11): a placement that moves next month must not move a pickup
@@ -151,6 +154,8 @@ export const route = wms.table(
     depotId: uuid(),
     plannedServiceProviderId: uuid(),
     unloadingStationId: uuid(),
+    /** The hold (#209, migration 0015): when the office last moved the day, the start or the Planned Assignment of a planned route by hand, which generation's refresh then keeps; null while the route is the scheme's. A planned route's alone (`route_hold_shape`). */
+    heldAt: instant(),
     /** The Actual Assignment: what the session that started the route went out with, written once and never by a form. */
     actualVehicleId: uuid(),
     actualDriverId: uuid(),
@@ -195,6 +200,8 @@ export const route = wms.table(
       tableObjectName(t.id.table, "stamps_shape", "route"),
       sql`case ${t.status} when 'planned' then ${t.dispatchedAt} is null and ${t.startedAt} is null and ${t.completedAt} is null and ${t.cancelledAt} is null when 'ready' then ${t.dispatchedAt} is not null and ${t.startedAt} is null and ${t.completedAt} is null and ${t.cancelledAt} is null when 'active' then ${t.dispatchedAt} is not null and ${t.startedAt} is not null and ${t.completedAt} is null and ${t.cancelledAt} is null when 'completed' then ${t.dispatchedAt} is not null and ${t.startedAt} is not null and ${t.completedAt} is not null and ${t.cancelledAt} is null when 'cancelled' then ${t.cancelledAt} is not null and ${t.completedAt} is null and (${t.startedAt} is null or ${t.dispatchedAt} is not null) else false end`,
     ),
+    // A hold is a planned route's (#209): generation refreshes only a planned route, so every way out of `planned` — dispatch, either cancel — clears it in the same write.
+    check(tableObjectName(t.id.table, "hold_shape", "route"), sql`${t.heldAt} is null or ${t.status} = 'planned'`),
     tenantIndex(t, t.collectionGroupId),
     // The dispatcher's day, and the driver door's two reads.
     tenantIndex(t, t.projectId, t.operatingDate),

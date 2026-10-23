@@ -264,6 +264,7 @@ export function routePayload(tenant: ConsumerTenant, seeded: SeededRoute, status
     generationRunId: null,
     plannedStartTime: null,
     planned: { vehicleId: tenant.vehicleId, driverId: tenant.driverId, trailerId: null, serviceProviderId: null, depotId: null, unloadingStationId: null },
+    heldAt: null,
     actual: { vehicleId: tenant.vehicleId, driverId: tenant.driverId, trailerId: null },
     dispatchedAt: at("05:30").toISOString(),
     startedAt: at("06:00").toISOString(),

@@ -271,6 +271,7 @@ describe("what the door answers and stores", () => {
       generationRunId: null,
       plannedStartTime: "06:30",
       planned: { vehicleId: OTHER, driverId: THIRD, trailerId: null, serviceProviderId: null, depotId: ID, unloadingStationId: OTHER },
+      heldAt: null,
       actual: { vehicleId: null, driverId: null, trailerId: null },
       dispatchedAt: WHEN,
       startedAt: null,
