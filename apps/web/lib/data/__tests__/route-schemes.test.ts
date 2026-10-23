@@ -13,7 +13,7 @@ import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { statusLabel } from "../../api/records/adapter"
 import { IDLE, type ModuleState, type ModuleStatus } from "../../api/records/server-records"
 import type { BusinessRecord } from "../business-modules"
-import { containersPlaced, licenceDayOf, ONE_OFF_NOT_KEPT, PREVIEW_UNPLACED, projectToday, ROUTES_NOT_READ, schemeEditOnApi, schemeEditStatusOnApi, STORED_ONE_OFF, validationWhenUnplaced } from "../route-schemes"
+import { containersPlaced, licenceDayOf, ONE_OFF_NO_ROUTE, ONE_OFF_ONLY, PREVIEW_UNPLACED, projectToday, ROUTES_NOT_READ, schemeEditOnApi, schemeEditStatusOnApi, schemeOneOffOnApi, STORED_ONE_OFF, validationWhenUnplaced } from "../route-schemes"
 
 describe("the status a scheme edit asks the API for", () => {
   test("a Validated scheme stays Validated, whatever the web's own validation says: the API's 409 speaks for the rules it holds", () => {
@@ -185,17 +185,22 @@ describe("a scheme edit on the Pilot", () => {
     if (decided.kind !== "ask") return
     const { question } = decided
     assert.equal(question.futureRoutes, 2, "tomorrow's and Monday's; not today's, not a dispatched one, not a cancelled one, not another scheme's")
-    assert.equal(question.nextCollectionDate, "2026-10-02")
+    assert.equal(question.nextCollectionDate, TODAY, "the collection the one-off moves: today's planned route can still take it (#209)")
     assert.equal(question.options.future.label, "Apply to future collections")
     assert.equal(question.options.single.label, "This collection only")
-    assert.equal(question.options.single.unavailable, ONE_OFF_NOT_KEPT)
+    assert.equal(question.options.single.unavailable, undefined, "a planned start one collection's routes can carry")
     assert.equal(question.options.future.unavailable, undefined)
   })
 
-  test("the answer future saves, counting the routes that follow; the one-off, shown disabled, is refused", () => {
+  test("the answer future saves, counting the routes that follow; the one-off moves the next collection's routes", () => {
     const before = scheme()
     assert.deepEqual(schemeEditOnApi(before, shaped(before), routes, TODAY, "future"), { kind: "save", following: 2 })
-    assert.deepEqual(schemeEditOnApi(before, shaped(before), routes, TODAY, "single"), { kind: "refuse", message: ONE_OFF_NOT_KEPT })
+    assert.deepEqual(schemeEditOnApi(before, shaped(before), routes, TODAY, "single"), {
+      kind: "one-off",
+      date: TODAY,
+      moves: [{ routeId: "route-today", command: "reschedule", input: { operatingDate: TODAY, plannedStartTime: "08:15" } }],
+      scheme: null,
+    })
   })
 
   test("the stored policy decides: switching off Ask each time in the same save still asks, and a stored future saves without asking", () => {
@@ -207,9 +212,12 @@ describe("a scheme edit on the Pilot", () => {
     assert.deepEqual(schemeEditOnApi(stored, shaped(stored), null, TODAY), { kind: "save", following: 0 }, "future needs no routes to decide")
   })
 
-  test("a stored one-off policy refuses a shaping edit rather than applying it to every future collection", () => {
+  test("a stored one-off policy moves the next collection where its routes can carry the edit, and refuses it rather than applying it to every future collection where they cannot", () => {
     const stored = scheme({}, { editPolicy: "single" })
-    assert.deepEqual(schemeEditOnApi(stored, shaped(stored), routes, TODAY), { kind: "refuse", message: STORED_ONE_OFF })
+    assert.equal(schemeEditOnApi(stored, shaped(stored), routes, TODAY).kind, "one-off")
+    const days = { ...stored, submittedValues: { ...stored.submittedValues, serviceDays: "tuesday" } }
+    assert.deepEqual(schemeEditOnApi(stored, days, routes, TODAY), { kind: "refuse", message: STORED_ONE_OFF })
+    assert.deepEqual(schemeEditOnApi(stored, shaped(stored), null, TODAY), { kind: "refuse", message: ROUTES_NOT_READ }, "the one-off is asked over the routes")
     assert.deepEqual(schemeEditOnApi(stored, renamed(stored), routes, TODAY), { kind: "save", following: 0 }, "a rename shapes no collection")
   })
 
@@ -241,5 +249,170 @@ describe("a scheme edit on the Pilot", () => {
     assert.deepEqual(schemeEditOnApi(before, after, routes, TODAY), { kind: "save", following: 0 })
     const moved = { ...before, submittedValues: { ...before.submittedValues, collectionGroups: JSON.stringify([{ ...groups[0], vehicleId: "vehicle-wh31" }]) } }
     assert.equal(schemeEditOnApi(before, moved, routes, TODAY).kind, "ask", "a group's vehicle moved shapes its collections")
+  })
+})
+
+// "This collection only" on the Pilot (#209): the next collection's routes moved by the office's own commands — a
+// reschedule for the planned start, an assign for the depot, the unloading station and a group's vehicle or driver —
+// which hold them from later generation runs; the scheme keeps its configuration. Anything else an edit shapes cannot
+// be carried by one collection's routes, so the answer is shown disabled with the reason.
+describe("This collection only on the Pilot", () => {
+  const TODAY = "2026-10-01" // a Thursday
+  const groups = [
+    { id: "group-north", name: "North", days: ["monday"], fractions: ["Residual"], stopSource: "rule", vehicleId: "vehicle-wh24", driverId: "driver-mads", containerIds: [] },
+    { id: "group-south", name: "South", days: ["thursday"], fractions: ["Residual"], stopSource: "rule", vehicleId: "vehicle-wh31", driverId: "driver-lars", containerIds: [] },
+  ]
+  const scheme = (values: BusinessRecord["submittedValues"] = {}): BusinessRecord => ({
+    id: "scheme-01a0d2a4-a280-7016-8000-000000000001",
+    name: "RS-Central · Week A",
+    context: "",
+    status: "Validated",
+    owner: "",
+    value: "",
+    updated: "",
+    description: "",
+    facts: {},
+    related: [],
+    source: "Waste API",
+    freshness: "",
+    recordKind: "Route Scheme",
+    submittedValues: {
+      editPolicy: "ask",
+      lastGeneratedAt: "2026-09-30T02:00:00.000Z",
+      frequency: "weekly",
+      serviceDays: "monday, thursday",
+      plannedStartTime: "06:30",
+      depotId: "depot-nordhavn",
+      unloadingStationId: "station-arc",
+      sameAllDays: false,
+      collectionGroups: JSON.stringify(groups),
+      ...values,
+    },
+  })
+  const edited = (before: BusinessRecord, values: BusinessRecord["submittedValues"], name = before.name): BusinessRecord => ({ ...before, name, submittedValues: { ...before.submittedValues, ...values } })
+  const withGroup = (id: string, over: Record<string, unknown>) => JSON.stringify(groups.map((group) => (group.id === id ? { ...group, ...over } : group)))
+  // A route as the routes adapter files it: its group by web id, its day and start, its Planned Assignment by web id.
+  const route = (id: string, group: string, serviceDate: string, status = "planned", over: Record<string, string> = {}): BusinessRecord => ({
+    ...scheme(),
+    id,
+    name: id,
+    status: statusLabel(status),
+    recordKind: "Route",
+    submittedValues: {
+      schemeId: scheme().id,
+      collectionGroupId: group,
+      serviceDate,
+      operatingDate: serviceDate,
+      plannedStartTime: "06:30",
+      vehicleId: group === "group-north" ? "vehicle-wh24" : "vehicle-wh31",
+      driverId: group === "group-north" ? "driver-mads" : "driver-lars",
+      trailerId: "",
+      depotId: "depot-nordhavn",
+      unloadingStationId: "station-arc",
+      status,
+      ...over,
+    },
+  })
+  const routes = [
+    route("route-south-today", "group-south", TODAY),
+    route("route-north-1", "group-north", "2026-10-05"),
+    route("route-south-2", "group-south", "2026-10-08"),
+    route("route-north-2", "group-north", "2026-10-12"),
+    route("route-north-past", "group-north", "2026-09-28"),
+    route("route-other-scheme", "group-north", "2026-10-05", "planned", { schemeId: "scheme-01a0d2a4-a280-7016-8000-000000000002" }),
+  ]
+  const assignment = (row: BusinessRecord) => {
+    const values = row.submittedValues ?? {}
+    return { vehicleId: values.vehicleId, driverId: values.driverId, trailerId: values.trailerId, depotId: values.depotId, unloadingStationId: values.unloadingStationId }
+  }
+  const byId = (id: string) => routes.find((row) => row.id === id) as BusinessRecord
+
+  test("the planned start moves every group's routes of the next collection, today's planned one included", () => {
+    const before = scheme()
+    assert.deepEqual(schemeOneOffOnApi(before, edited(before, { plannedStartTime: "08:15" }), routes, TODAY), {
+      kind: "one-off",
+      date: TODAY,
+      moves: [{ routeId: "route-south-today", command: "reschedule", input: { operatingDate: TODAY, plannedStartTime: "08:15" } }],
+      scheme: null,
+    })
+  })
+
+  test("a group's driver moves that group's next route alone, by an assign restating the rest of its Planned Assignment", () => {
+    const before = scheme()
+    const after = edited(before, { collectionGroups: withGroup("group-north", { driverId: "driver-jonas", driverName: "Jonas Lind" }) })
+    assert.deepEqual(schemeOneOffOnApi(before, after, routes, TODAY), {
+      kind: "one-off",
+      date: "2026-10-05",
+      moves: [{ routeId: "route-north-1", command: "assign", input: { ...assignment(byId("route-north-1")), driverId: "driver-jonas" } }],
+      scheme: null,
+    })
+  })
+
+  test("the depot and a group's vehicle on the same route are one assign; a dispatched route is not the next collection", () => {
+    const before = scheme()
+    const after = edited(before, { depotId: "depot-amager", collectionGroups: withGroup("group-south", { vehicleId: "vehicle-wh40" }) })
+    const ready = routes.map((row) => (row.id === "route-south-today" ? route("route-south-today", "group-south", TODAY, "ready") : row))
+    const decided = schemeOneOffOnApi(before, after, ready, TODAY)
+    assert.equal(decided.kind, "one-off")
+    if (decided.kind !== "one-off") return
+    assert.equal(decided.date, "2026-10-05", "the next planned route either change reaches")
+    assert.deepEqual(decided.moves, [{ routeId: "route-north-1", command: "assign", input: { ...assignment(byId("route-north-1")), depotId: "depot-amager" } }])
+    const onToday = schemeOneOffOnApi(before, after, routes, TODAY)
+    assert.deepEqual(onToday.kind === "one-off" ? onToday.moves : null, [{ routeId: "route-south-today", command: "assign", input: { ...assignment(byId("route-south-today")), depotId: "depot-amager", vehicleId: "vehicle-wh40" } }])
+  })
+
+  test("a start and a station on one route are a reschedule and an assign, in that order", () => {
+    const before = scheme()
+    const decided = schemeOneOffOnApi(before, edited(before, { plannedStartTime: "07:00", unloadingStationId: "station-amager" }), routes, TODAY)
+    assert.deepEqual(decided.kind === "one-off" ? decided.moves.map((move) => move.command) : null, ["reschedule", "assign"])
+  })
+
+  test("the legacy shape's one group: its vehicle moves the scheme's next route", () => {
+    const before = scheme({ sameAllDays: true, collectionGroups: "", plannedVehicleId: "vehicle-wh24", plannedDriverId: "driver-mads", serviceDays: "thursday" })
+    const legacy = [route("route-today", "default", TODAY, "planned", { collectionGroupId: "group-01a0d2a4-a280-7018-8000-000000000001" })]
+    const decided = schemeOneOffOnApi(before, edited(before, { plannedVehicleId: "vehicle-wh40" }), legacy, TODAY)
+    assert.deepEqual(decided.kind === "one-off" ? decided.moves : null, [{ routeId: "route-today", command: "assign", input: { ...assignment(legacy[0]), vehicleId: "vehicle-wh40" } }])
+  })
+
+  test("a rename or a policy change in the same save lands on the scheme, which keeps its shaping configuration", () => {
+    const before = scheme()
+    const decided = schemeOneOffOnApi(before, edited(before, { plannedStartTime: "08:15", editPolicy: "single" }, "RS-Central · Week A (renamed)"), routes, TODAY)
+    assert.equal(decided.kind, "one-off")
+    if (decided.kind !== "one-off") return
+    assert.equal(decided.scheme?.name, "RS-Central · Week A (renamed)")
+    assert.equal(decided.scheme?.submittedValues?.editPolicy, "single")
+    assert.equal(decided.scheme?.submittedValues?.plannedStartTime, "06:30")
+  })
+
+  test("anything else an edit shapes cannot be carried by one collection's routes: the service days, a rule, a provider, a group added", () => {
+    const before = scheme()
+    for (const [what, values] of [
+      ["the days", { serviceDays: "monday, friday", collectionGroups: withGroup("group-south", { days: ["friday"] }) }],
+      ["a rule", { collectionGroups: withGroup("group-north", { fractions: ["Glass"] }) }],
+      ["a provider", { collectionGroups: withGroup("group-north", { serviceProviderId: "service-provider-nord" }) }],
+      ["a group added", { collectionGroups: JSON.stringify([...groups, { ...groups[0], id: "group-east", name: "East" }]) }],
+      ["the period", { effectiveTo: "2026-12-31" }],
+      ["a start beside the days", { plannedStartTime: "08:15", serviceDays: "monday" }],
+    ] as const) {
+      assert.deepEqual(schemeOneOffOnApi(before, edited(before, values), routes, TODAY), { kind: "unavailable", message: ONE_OFF_ONLY }, what)
+    }
+  })
+
+  test("with no planned route from today on that the change reaches, there is nothing to move", () => {
+    const before = scheme()
+    const north = edited(before, { collectionGroups: withGroup("group-north", { driverId: "driver-jonas" }) })
+    assert.deepEqual(schemeOneOffOnApi(before, north, routes.filter((row) => !row.id.startsWith("route-north-") || row.id === "route-north-past"), TODAY), { kind: "unavailable", message: ONE_OFF_NO_ROUTE })
+  })
+
+  test("the question offers the one-off where it can move a collection, naming the date it moves, and shows it disabled with the reason where it cannot", () => {
+    const before = scheme()
+    const north = schemeEditOnApi(before, edited(before, { collectionGroups: withGroup("group-north", { driverId: "driver-jonas" }) }), routes, TODAY)
+    assert.equal(north.kind, "ask")
+    if (north.kind !== "ask") return
+    assert.equal(north.question.nextCollectionDate, "2026-10-05", "North's next route, not the scheme's next day")
+    assert.equal(north.question.options.single.unavailable, undefined)
+    const days = schemeEditOnApi(before, edited(before, { serviceDays: "monday, friday", collectionGroups: withGroup("group-south", { days: ["friday"] }) }), routes, TODAY)
+    assert.equal(days.kind === "ask" ? days.question.options.single.unavailable : null, ONE_OFF_ONLY)
+    assert.equal(days.kind === "ask" ? days.question.nextCollectionDate : null, "2026-10-05", "the scheme's next route after today")
   })
 })

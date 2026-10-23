@@ -36,19 +36,19 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from "react"
 import { toast } from "sonner"
 
-import { useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
-import { projectToday, schemeEditOnApi, schemeEditStatusOnApi, timezoneOfProject, validationWhenUnplaced } from "@/lib/data/route-schemes"
+import { projectToday, schemeEditOnApi, schemeEditStatusOnApi, timezoneOfProject, validationWhenUnplaced, type SchemeOneOff } from "@/lib/data/route-schemes"
 import {
   planSchemeEditReconciliation,
   type SchemeEditApplication,
   type SchemeEditQuestion,
 } from "@waste/domain/route-schemes/edit"
 import { schemeLiveValidation } from "@waste/domain/route-schemes/lifecycle"
-import { todayIso } from "@waste/domain/route-schemes/recurrence"
+import { formatServiceDate, todayIso } from "@waste/domain/route-schemes/recurrence"
 import { count } from "@waste/domain/text"
 
 /** What the save writes to the scheme's audit trail besides what the planner decides: the event's id, action and reason, and the evidence line read off the saved scheme. */
@@ -110,6 +110,47 @@ export function useSchemeEditCommit({
   const routesState = useServerModuleState("route-studio", "routes")
   const apiRoutes = routesState?.status === "ready" ? routesState.records : null
   const containersPlaced = useContainersPlaced()
+  const { sendCommand } = useBusinessRecordStore()
+
+  /**
+   * "This collection only" on the Pilot (#209): the scheme's rename or policy
+   * first, then each route's command in turn, the API holding every route it
+   * moves against later generation runs. A refusal stops the run, the store
+   * having told it in the API's words; what moved before it stays moved.
+   */
+  const moveOneOff = useCallback(
+    async (before: BusinessRecord, oneOff: SchemeOneOff, audit: SchemeEditAudit, onSaved: (scheme: BusinessRecord) => void) => {
+      const scheme = oneOff.scheme ?? before
+      if (oneOff.scheme !== null && (await upsertRecord("route-studio", "schemes", oneOff.scheme))?.kind === "refused") return
+      const routes = new Set(oneOff.moves.map((move) => move.routeId))
+      const moved = new Set<string>()
+      for (const move of oneOff.moves) {
+        if ((await sendCommand("route-studio", "routes", move.routeId, move.command, move.input)).kind === "refused") break
+        moved.add(move.routeId)
+      }
+      if (oneOff.scheme === null && moved.size === 0) return
+      setAuditEvents((current) => ({
+        ...current,
+        [scheme.id]: [
+          { id: audit.id, action: audit.action, actor: actorName, at: "Now", reason: audit.reason, before: before.status, after: scheme.status, evidence: audit.evidence(scheme) },
+          ...(current[scheme.id] ?? []),
+        ],
+      }))
+      setSelectedRecord((current) => (current?.id === scheme.id ? scheme : current))
+      onSaved(scheme)
+      const on = formatServiceDate(oneOff.date)
+      if (moved.size === routes.size) {
+        toast.success(`${scheme.name} — this collection only`, {
+          description: `${count(moved.size, "route")} on ${on} moved; later generation runs keep ${moved.size === 1 ? "it" : "them"} as moved. The scheme itself is unchanged.`,
+        })
+      } else {
+        toast.warning(`${scheme.name} — this collection only, in part`, {
+          description: `${moved.size} of ${count(routes.size, "route")} on ${on} moved, and later generation runs keep ${moved.size === 1 ? "it" : "them"} as moved; the rest stay as they were. The scheme itself is unchanged.`,
+        })
+      }
+    },
+    [actorName, sendCommand, setAuditEvents, setSelectedRecord, upsertRecord],
+  )
 
   const commitSchemeEdit = useCallback(
     (
@@ -129,6 +170,10 @@ export function useSchemeEditCommit({
         }
         if (decided.kind === "refuse") {
           toast.error(`${after.name} not saved`, { description: decided.message })
+          return
+        }
+        if (decided.kind === "one-off") {
+          void moveOneOff(before, decided, audit, onSaved)
           return
         }
         const own = schemeLiveValidation(after, {
@@ -220,7 +265,7 @@ export function useSchemeEditCommit({
         toast.success(`${scheme.name} updated`, { description: schemeEdit.message })
       }
     },
-    [actorName, apiRoutes, containersPlaced, moduleRecords, schemesOnApi, setAuditEvents, setSelectedRecord, upsertRecord],
+    [actorName, apiRoutes, containersPlaced, moduleRecords, moveOneOff, schemesOnApi, setAuditEvents, setSelectedRecord, upsertRecord],
   )
 
   /** The dialog's answer: the pending edit is planned again, with `apply`, by the commit of this render. */
