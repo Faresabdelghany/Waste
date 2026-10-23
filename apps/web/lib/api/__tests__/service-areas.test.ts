@@ -193,10 +193,12 @@ describe("the service areas module", () => {
     const record = loadedState.get("service-providers.service-areas")!.records[2]
     assert.equal(record.name, "CA-Ø-2 · NordRen ApS")
     assert.equal(record.status, "Active")
-    const made_ = made("service-areas-assignment-1", "Service area assignment", { serviceAreaId: `service-area-${area.id}`, serviceProviderId: `service-provider-${CITYHAUL}`, notes: "Interim", validFrom: "2029-01-01", validTo: "" })
+    const made_ = made("service-areas-assignment-1", "Service area assignment", { serviceAreaId: `service-area-${area.id}`, serviceProviderId: `service-provider-${CITYHAUL}`, notes: "Interim", validFrom: "2028-06-01", validTo: "" })
     const body = assignmentAdapter.toCreateBody!(made_, context(loadedState)) as { serviceAreaId: string; body: unknown }
     assert.equal(body.serviceAreaId, area.id)
-    assert.deepEqual(body.body, { serviceProviderId: CITYHAUL, notes: "Interim", validFrom: "2029-01-01" })
+    assert.deepEqual(body.body, { serviceProviderId: CITYHAUL, notes: "Interim", validFrom: "2028-06-01", validTo: "2029-01-01" }, "left open, it ends with its award, as the form's hint says")
+    const given = assignmentAdapter.toCreateBody!({ ...made_, submittedValues: { ...made_.submittedValues, validTo: "2028-09-30" } }, context(loadedState)) as { body: { validTo?: string } }
+    assert.equal(given.body.validTo, "2028-10-01", "an end given is the assignment's own")
     assert.ok(ServiceAreaAssignmentCreate.safeParse(body.body).success)
     const ended = assignmentAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, validTo: "2028-12-31" } }, context(loadedState))
     assert.deepEqual(ended, { validTo: "2029-01-01" })

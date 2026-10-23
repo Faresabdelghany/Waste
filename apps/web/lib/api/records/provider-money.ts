@@ -204,7 +204,8 @@ export const providerPriceAdapter: ResourceAdapter<ServiceProviderPrice> = {
     if (Number.isNaN(unitPriceMinor)) return refusal("fee", `An amount in ${currency}, such as ${majorOf(1850, currency)}`)
     const validFrom = typed(record, "validFrom")
     if (validFrom === undefined) return refusal("validFrom", "A price needs the first day it holds")
-    const lastDay = typed(record, "validTo")
+    // Left open, it ends with its assignment, as the form's hint says: the API refuses an open end under a bounded assignment.
+    const lastDay = typed(record, "validTo") ?? typed(assignment.record, "validTo")
     const notes = typed(record, "notes")
     return {
       serviceAreaAssignmentId: assignment.serverId,

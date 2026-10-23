@@ -289,7 +289,9 @@ export const assignmentAdapter: ResourceAdapter<ServiceAreaAssignment> = {
     if (serviceProviderId === undefined) return refusal("serviceProviderId", "Pick a service provider the API holds")
     const validFrom = typed(record, "validFrom")
     if (validFrom === undefined) return refusal("validFrom", "An assignment needs the first day it holds the area")
-    const lastDay = typed(record, "validTo")
+    // Left open, it ends with its award, as the form's hint says: the API refuses an open end under a bounded award.
+    const area = context.resolve.find((candidate) => candidate.id === areaWebId)
+    const lastDay = typed(record, "validTo") ?? (area === undefined ? undefined : typed(area, "validTo"))
     const notes = typed(record, "notes")
     const write: AssignmentWrite = {
       serviceAreaId,

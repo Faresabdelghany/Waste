@@ -115,6 +115,14 @@ describe("the service provider prices module", () => {
     assert.deepEqual(refusalOf({ bid: "11.205" }), { path: "bid", message: "An amount in DKK, such as 18.50" })
   })
 
+  test("ends a price left open with its assignment, as the form's hint says: the API refuses an open end under a bounded one", () => {
+    const bounded = { ...assignmentRecord, submittedValues: { ...assignmentRecord.submittedValues, validTo: "2026-12-31" } }
+    const at = new Map([...state, ["service-providers.service-areas", moduleOf([bounded], [ASSIGNMENT])]])
+    const record = made("service-provider-prices-service-provider-price-1", "Service provider price", { serviceAreaAssignmentId: bounded.id, productId: productRecord.id, bid: "11.20", validFrom: "2026-01-01", validTo: "" })
+    assert.equal((providerPriceAdapter.toCreateBody!(record, context(priceFixtures, at)) as { validTo?: string }).validTo, "2027-01-01")
+    assert.equal((providerPriceAdapter.toCreateBody!({ ...record, submittedValues: { ...record.submittedValues, validTo: "2026-06-30" } }, context(priceFixtures, at)) as { validTo?: string }).validTo, "2026-07-01", "an end given is the price's own")
+  })
+
   test("Apply index is a create of the chain's next row, posted under the row it indexes, the change in basis points", async () => {
     assert.deepEqual(["5", "2.5", "-1.25", "0.05"].map(basisPointsOf), [500, 250, -125, 5])
     for (const text of ["", "5%", "1.234", "x"]) assert.ok(Number.isNaN(basisPointsOf(text)), text)
