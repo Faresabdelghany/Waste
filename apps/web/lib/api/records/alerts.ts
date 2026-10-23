@@ -111,7 +111,6 @@ export function toAlertRecord(alert: Alert, context: MappingContext): BusinessRe
   }
 }
 
-
 /** A closed-list token a form typed under `key`, or a refusal naming the list. */
 function required(record: BusinessRecord, key: string, tokens: readonly string[], noun: string): string | LocalRefusal {
   const text = typed(record, key)

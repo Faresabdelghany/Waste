@@ -173,7 +173,6 @@ function instantIn(record: BusinessRecord, key: string, timezone: string | undef
   return instantOn(text, timezone) ?? refusal(key, sentence)
 }
 
-
 /** The link a form names under `key`, as a server id held to its module's kind; undefined for blank or the picker's None; a refusal for a row the API does not hold. */
 function linkOf(record: BusinessRecord, key: string, prefix: string, fact: string, owns: (record: BusinessRecord) => boolean, context: MappingContext): string | undefined | LocalRefusal {
   const webId = typed(record, key)
