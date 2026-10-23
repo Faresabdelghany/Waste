@@ -15,9 +15,11 @@
 //                ready route of an active project operating inside the
 //                window with an open stop, Plan Ahead on or not, nearest date
 //                first, of which it asks for each whose active Plan is
-//                missing or no longer answers it: stale (`planIsStale`), or
-//                keyed on ends or places that have moved since (`planKey`),
-//                so a generation whose ask failed is asked again; then every
+//                missing or no longer answers it: stale (`planIsStale`), not
+//                naming the stops the request would — a manual or baseline
+//                Plan in their order (`answersRequest`, #212) — or keyed on
+//                ends or places that have moved since (`planKey`), so a
+//                generation whose ask failed is asked again; then every
 //                calculating Plan more than a day old whose job pg-boss no
 //                longer holds — its retries spent, or lost across an outage
 //                — has its job re-sent under its key.
@@ -50,8 +52,8 @@ import { withCompany } from "@waste/db/tenant"
 import { orderIsOpen } from "@waste/domain/execution/transitions"
 import type { RouteStatus } from "@waste/domain/execution/vocabulary"
 import { PLAN_AHEAD_DAYS, planAheadWindow } from "@waste/domain/route-schemes/plan-ahead"
-import { horizonRequest, planIsStale } from "@waste/domain/routing/plans"
-import type { PlanSolver } from "@waste/domain/routing/vocabulary"
+import { answersRequest, horizonRequest, planIsStale } from "@waste/domain/routing/plans"
+import type { PlanSolver, PlanStatus } from "@waste/domain/routing/vocabulary"
 import { DEFAULT_PROFILE } from "@waste/routing/provider"
 import { and, asc, eq, gt, sql } from "drizzle-orm"
 
@@ -80,14 +82,14 @@ type Turn = "asked" | "fresh" | "waiting" | "outside"
 /** When a route is asked for: generation's reshaped route whatever its Plan reads; the sweep's only when its active Plan is missing or no longer answers it. */
 type Occasion = "reshaped" | "unanswered"
 
-/** The active Plan as the horizon reads it: its solver, its fingerprint and the stops it names; null when its row is gone. */
-async function activePlanOf(tx: Tx, companyId: string, planId: string): Promise<{ id: string; solver: PlanSolver; fingerprint: string; named: string[] } | null> {
+/** The active Plan as the horizon reads it: its solver, its status, its fingerprint and the stops it names; null when its row is gone. */
+async function activePlanOf(tx: Tx, companyId: string, planId: string): Promise<{ id: string; solver: PlanSolver; status: PlanStatus; fingerprint: string; named: string[] } | null> {
   const [row] = await tx
-    .select({ solver: plan.solver, fingerprint: plan.fingerprint })
+    .select({ solver: plan.solver, status: plan.status, fingerprint: plan.fingerprint })
     .from(plan)
     .where(and(eq(plan.companyId, companyId), eq(plan.id, planId)))
   if (row === undefined) return null
-  return { id: planId, solver: row.solver as PlanSolver, fingerprint: row.fingerprint, named: await planStopIds(tx, { companyId, planId }) }
+  return { id: planId, solver: row.solver as PlanSolver, status: row.status as PlanStatus, fingerprint: row.fingerprint, named: await planStopIds(tx, { companyId, planId }) }
 }
 
 /** Whether an optimiser Plan asked after `planId` is still calculating on the route — Plan ids are UUIDv7, so asked later is a greater id: a dispatcher's Optimise after their reorder. */
@@ -105,7 +107,8 @@ async function optimisationAskedAfter(tx: Tx, companyId: string, routeId: string
  * ready route of an active project, operating inside the horizon with an
  * open stop, is asked a Plan through the office's door, `batch`. The sweep
  * leaves one whose active Plan still answers it — names its stops as they
- * stand and keys the request it would make now, its ends and places too — and
+ * stand, a manual or baseline Plan in their order, and keys the request it
+ * would make now, its ends and places too — and
  * either leaves a route whose dispatcher asked to optimise after reordering.
  */
 async function planRoute(context: JobContext, companyId: string, routeId: string, horizon: Horizon, occasion: Occasion): Promise<Turn> {
@@ -137,7 +140,9 @@ async function planRoute(context: JobContext, companyId: string, routeId: string
     const routing = { name: context.routing.name, profile: DEFAULT_PROFILE }
     if (occasion === "unanswered" && active !== null) {
       const removed = stops.filter((stop) => stop.status === "skipped" && stop.reason === "regeneration").map((stop) => stop.id)
-      if (!planIsStale({ named: active.named, open, removed }) && (await planKey(tx, companyId, row, request, routing)).fingerprint === active.fingerprint) return "fresh"
+      const keysRequest = !planIsStale({ named: active.named, open, removed }) && (await planKey(tx, companyId, row, request, routing)).fingerprint === active.fingerprint
+      // The fingerprint keys places, so two stops at one address that trade places key alike (#212): a Plan that keys the request, of its solver, must name its very stops too.
+      if (keysRequest && answersRequest({ solver: request.solver, status: active.status, named: active.named, asked: request.orderedPickupIds })) return "fresh"
     }
     await ensurePlan(tx, companyId, row, { ...request, class: "batch" }, { routing, send: context.send })
     return "asked"
