@@ -4450,7 +4450,7 @@ const commercial: WorkspaceDefinition = {
       entityLabel: "Billing run",
       contextLabel: "Scope · period",
       valueLabel: "Result",
-      primaryAction: "Start billing run",
+      primaryAction: "Run billing",
       metrics: [
         { label: "Next scheduled", value: "1 Aug", helper: "Monthly municipal run" },
         { label: "Ready events", value: "1,842", helper: "DKK 3.8m" },
