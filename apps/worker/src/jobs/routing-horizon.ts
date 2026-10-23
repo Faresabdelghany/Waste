@@ -140,9 +140,9 @@ async function planRoute(context: JobContext, companyId: string, routeId: string
     const routing = { name: context.routing.name, profile: DEFAULT_PROFILE }
     if (occasion === "unanswered" && active !== null) {
       const removed = stops.filter((stop) => stop.status === "skipped" && stop.reason === "regeneration").map((stop) => stop.id)
-      // The fingerprint keys places, so two stops at one address that trade places key alike (#212): the Plan must name the request's very stops too.
-      const answers = answersRequest({ solver: request.solver, status: active.status, named: active.named, asked: request.orderedPickupIds })
-      if (answers && !planIsStale({ named: active.named, open, removed }) && (await planKey(tx, companyId, row, request, routing)).fingerprint === active.fingerprint) return "fresh"
+      const keysRequest = !planIsStale({ named: active.named, open, removed }) && (await planKey(tx, companyId, row, request, routing)).fingerprint === active.fingerprint
+      // The fingerprint keys places, so two stops at one address that trade places key alike (#212): a Plan that keys the request, of its solver, must name its very stops too.
+      if (keysRequest && answersRequest({ solver: request.solver, status: active.status, named: active.named, asked: request.orderedPickupIds })) return "fresh"
     }
     await ensurePlan(tx, companyId, row, { ...request, class: "batch" }, { routing, send: context.send })
     return "asked"
