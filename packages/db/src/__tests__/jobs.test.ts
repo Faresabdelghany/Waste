@@ -118,7 +118,8 @@ describe("the shared send, as the API role", { skip: database.skip }, () => {
       return fetched.id
     }
     const complete: Complete = (name, id, options) => boss.complete(name, id, undefined, options)
-    const at = new Date("2026-10-01T03:00:30.000Z")
+    // A successor due tomorrow, in whole seconds: a fixed instant falls into the past and a later test's fetch would take the successor instead of its own job.
+    const at = new Date(Math.ceil(Date.now() / 1000) * 1000 + 86_400_000)
 
     test("the running job holds its key, so a plain send is refused; completing it first in the transaction lets the successor in, due at the reset", async () => {
       const key = `defer-${randomBytes(3).toString("hex")}`
