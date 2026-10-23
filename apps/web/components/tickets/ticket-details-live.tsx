@@ -326,7 +326,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                     <span className="flex items-center justify-end gap-2">
                       <span className="truncate">{live.owner}</span>
                       {offersTicketCommand(status, ASSIGN_TICKET, label) && (
-                        <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" disabled={!offered || !pickers.readyFor(TICKET_COMMAND_FORMS.assign)} onClick={() => command(ASSIGN_TICKET)}>
+                        <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" aria-label="Change Assignee" disabled={!offered || !pickers.readyFor(TICKET_COMMAND_FORMS.assign)} onClick={() => command(ASSIGN_TICKET)}>
                           Change
                         </Button>
                       )}

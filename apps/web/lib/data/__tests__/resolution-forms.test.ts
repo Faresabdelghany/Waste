@@ -44,7 +44,8 @@ const rows: Array<[string, BusinessRecord, string]> = [
   ["configure.access", row(`user-${ids.user}`, "User"), ids.user],
   ["route-studio.routes", row(`route-${ids.route}`, "Route"), ids.route],
   ["resources.containers", row(`asset-${ids.container}`, "Container"), ids.container],
-  ["customers.contacts", row(`customer-${ids.customer}`, "Customer"), ids.customer],
+  // An organisation is `company-<uuid>` as the registry's adapter makes it, and no tenant company.
+  ["customers.contacts", row(`company-${ids.customer}`, "Contact or Customer Organization"), ids.customer],
   ["customers.properties", row(`property-${ids.property}`, "Property"), ids.property],
   ["customers.shared", row(`shared-point-${ids.point}`, "Shared collection point"), ids.point],
   ["customers.agreements", row(`agreement-${ids.agreement}`, "Agreement"), ids.agreement],

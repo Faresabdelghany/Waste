@@ -23,12 +23,14 @@ import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/
 import { NO_ONE } from "@/lib/data/properties"
 
 import { command, create, get, listAll } from "../client"
-import { hasPrefix, inheritedPresentation, isLocalRefusal, ofKind, said, stampFacts, statusLabel, statusToken, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { inheritedPresentation, isLocalRefusal, ofKind, said, stampFacts, statusLabel, statusToken, typed, webIdOf, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, shownOn, wallClockIn } from "./clock"
+import { containerAdapter } from "./containers"
+import { driverAdapter, vehicleAdapter } from "./fleet"
 import { projectServerIdOf, referenced, refusal } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"
-import { callsignOf } from "./routes"
-import { TICKET_PREFIX } from "./tickets"
+import { callsignOf, routeAdapter } from "./routes"
+import { isTicketRecord, TICKET_PREFIX } from "./tickets"
 
 /** The workspace module the alerts are the rows of: Operate's Exceptions & Alerts. */
 export const ALERTS_MODULE: ModuleLocation = { workspaceId: "operate", moduleId: "exceptions" }
@@ -40,12 +42,12 @@ export const ACKNOWLEDGE_ALERT = "acknowledge"
 export const RESOLVE_ALERT = "resolve"
 export const LINK_ALERT_TICKET = "link-ticket"
 
-/** What an alert is about, subject by subject: the body's key, the id prefix of the module that holds its rows, the fact it is shown under. */
-export const ALERT_SUBJECTS: ReadonlyArray<readonly ["routeId" | "vehicleId" | "driverId" | "containerId", string, string]> = [
-  ["routeId", "route", "Route"],
-  ["vehicleId", "vehicle", "Vehicle"],
-  ["driverId", "driver", "Driver"],
-  ["containerId", "asset", "Container"],
+/** What an alert is about, subject by subject: the body's key, the id chip's prefix, the fact it is shown under, and the rule a loaded row is held to — its module adapter's own. */
+export const ALERT_SUBJECTS: ReadonlyArray<readonly ["routeId" | "vehicleId" | "driverId" | "containerId", string, string, (record: BusinessRecord) => boolean]> = [
+  ["routeId", "route", "Route", routeAdapter.owns],
+  ["vehicleId", "vehicle", "Vehicle", vehicleAdapter.owns],
+  ["driverId", "driver", "Driver", driverAdapter.owns],
+  ["containerId", "asset", "Container", containerAdapter.owns],
 ]
 
 /** What an alert about nothing is told (`@waste/contracts/alerts`, `NAMES_A_SUBJECT`); the test holds the two equal. */
@@ -126,7 +128,7 @@ function required(record: BusinessRecord, key: string, tokens: readonly string[]
 }
 
 /** The ticket a web id names, as a server id: a ticket the tickets module holds, or its id chip. */
-const ticketServerIdOf = (webId: string, context: MappingContext) => referencedServerId(webId, TICKET_PREFIX, context, { owns: hasPrefix(TICKET_PREFIX) })
+const ticketServerIdOf = (webId: string, context: MappingContext) => referencedServerId(webId, TICKET_PREFIX, context, { owns: isTicketRecord })
 
 /**
  * `POST /alerts` from the office's form: the project, the title and the
@@ -148,11 +150,11 @@ export function toAlertCreateBody(record: BusinessRecord, context: MappingContex
   const detectedAt = seen === undefined ? undefined : instantOn(seen, timezoneOf(record, context))
   if (seen !== undefined && detectedAt === undefined) return refusal("detectedAt", "Give the time as a date and a time")
   const subjects: Record<string, string> = {}
-  for (const [key, prefix, fact] of ALERT_SUBJECTS) {
+  for (const [key, prefix, fact, owns] of ALERT_SUBJECTS) {
     const webId = typed(record, key)
     // Blank, or the picker's None: the alert is not about this one.
     if (webId === undefined || webId === NO_ONE) continue
-    const serverId = referencedServerId(webId, prefix, context, { owns: hasPrefix(prefix) })
+    const serverId = referencedServerId(webId, prefix, context, { owns })
     if (serverId === undefined) return refusal(key, `Pick a ${fact.toLowerCase()} the API holds`)
     subjects[key] = serverId
   }

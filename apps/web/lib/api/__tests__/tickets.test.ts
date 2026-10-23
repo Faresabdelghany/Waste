@@ -51,7 +51,8 @@ const olivia = row(`user-${oliviaId}`, "Olivia Larsen", "User")
 const rc1042 = row(`route-${routeId}`, "RC-1042", "Route")
 const rc1040 = row(`route-${endedRouteId}`, "RC-1040", "Route")
 const bin = row(`asset-${containerId}`, "BIN-82014", "Container")
-const housing = row(`customer-${customerId}`, "Østerbro Housing", "Customer")
+// An organisation is `company-<uuid>`, as the registry's adapter makes it.
+const housing = row(`company-${customerId}`, "Østerbro Housing", "Contact or Customer Organization")
 const serverIdsOf = (records: readonly BusinessRecord[], ids: readonly string[]) => new Map(records.map((record, index) => [record.id, ids[index]]))
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [projectRecord], serverIds: serverIdsOf([projectRecord], [copenhagen.id]) }, 1)],
@@ -231,6 +232,21 @@ describe("the office's create", () => {
     const none = ticketAdapter.toCreateBody?.(minted({ ...typedValues, routeId: "none", customerId: "none", assigneeUserAccountId: "none" }), context()) as Record<string, unknown>
     assert.deepEqual(none.links, { containerId }, "a picker's None is no link")
     assert.equal(none.assigneeUserAccountId, undefined)
+  })
+
+  test("names a row made this session by its minted id, held to its kind: an alert raised a moment ago, a container just added", () => {
+    // withCreated keeps the minted id for the session (server-records.ts): the alert's Open ticket names it so.
+    const raised = row("operate-alert-1700000000000", "Stale position", "Alert")
+    const added = row("resources-container-1700000000000", "BIN-90001", "Container")
+    const withMinted: ServerRecordsState = new Map([
+      ...state,
+      ["operate.exceptions", loaded({ records: [raised], serverIds: new Map([[raised.id, alertId]]) }, 1)],
+      ["resources.containers", loaded({ records: [bin, added], serverIds: new Map([[bin.id, containerId], [added.id, "01a0d2a4-a280-7020-8000-000000000002"]]) }, 1)],
+    ])
+    const body = ticketAdapter.toCreateBody?.(minted({ subject: "Stale position", description: "x", kind: "other", alertId: raised.id, containerId: added.id }), context(resolverOver(withMinted))) as Record<string, unknown>
+    assert.equal(body.alertId, alertId)
+    assert.deepEqual(body.links, { containerId: "01a0d2a4-a280-7020-8000-000000000002" })
+    assert.deepEqual(ticketAdapter.toCreateBody?.(minted({ subject: "x", description: "x", kind: "other", alertId: added.id }), context(resolverOver(withMinted))), { path: "alertId", message: "Pick an alert the API holds" }, "a container's row is no alert")
   })
 
   test("is refused here, naming the field, before the API sees a body it would refuse", () => {

@@ -29,14 +29,21 @@ import type { Ticket, TicketDetail, TicketEvent, TicketLinks } from "@waste/cont
 import { ticketTransition, TICKET_COMMANDS, type TicketCommand } from "@waste/domain/resolution/transitions"
 import { OPEN_TICKET_STATUSES, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_VISIBILITIES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 
+import { isAgreementRecord } from "@/lib/data/agreements"
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
-import { NO_ONE } from "@/lib/data/properties"
+import { isPropertyRecord, isSharedPointRecord, NO_ONE } from "@/lib/data/properties"
 
 import { command, create, get, listAll, patch } from "../client"
-import { hasPrefix, inheritedPresentation, isLocalRefusal, ofKind, patchOf, said, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { inheritedPresentation, isLocalRefusal, ofKind, patchOf, said, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, shownOn, wallClockIn } from "./clock"
+import { containerAdapter } from "./containers"
+import { driverAdapter } from "./fleet"
+import { isCompanyRecord, userAdapter } from "./organisation"
+import { pickupAdapter } from "./pickups"
 import { projectServerIdOf, referenced, refusal } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"
+import { customerAdapter } from "./registry"
+import { routeAdapter } from "./routes"
 import type { ActionOutcome, SendAction } from "./server-records"
 
 /** The workspace module the tickets are the rows of. */
@@ -57,17 +64,23 @@ export const COMMENT_ON_TICKET = "comment"
 /** The sources an office opens a ticket from: every one but the consumer's two (`TicketCreate.source`). */
 export const OFFICE_TICKET_SOURCES = TICKET_SOURCES.filter((source) => source !== "driver-app" && source !== "dispatch")
 
-/** What a ticket is about, link by link: the body's key, the id prefix of the module that holds its rows, the fact it is shown under. */
-export const TICKET_LINKS: ReadonlyArray<readonly [keyof TicketLinks, string, string]> = [
-  ["routeId", "route", "Route"],
-  ["pickupId", "pickup", "Pickup"],
-  ["containerId", "asset", "Container"],
-  ["propertyId", "property", "Property"],
-  ["sharedCollectionPointId", "shared-point", "Shared point"],
-  ["customerId", "customer", "Customer"],
-  ["agreementId", "agreement", "Agreement"],
-  ["driverId", "driver", "Driver"],
-  ["parentTicketId", TICKET_PREFIX, "Parent ticket"],
+/** Whether a loaded row is a ticket: its id, or — a row made this session, under its minted id — its kind. */
+export const isTicketRecord = ofKind(TICKET_PREFIX, ["Ticket"])
+
+/** A customer of the contacts module, a person or an organisation, never the tenant's own company. */
+const isCustomer = (record: BusinessRecord) => customerAdapter.owns(record) && !isCompanyRecord(record)
+
+/** What a ticket is about, link by link: the body's key, the id chip's prefix, the fact it is shown under, and the rule a loaded row is held to — its module adapter's own. */
+export const TICKET_LINKS: ReadonlyArray<readonly [keyof TicketLinks, string, string, (record: BusinessRecord) => boolean]> = [
+  ["routeId", "route", "Route", routeAdapter.owns],
+  ["pickupId", "pickup", "Pickup", pickupAdapter.owns],
+  ["containerId", "asset", "Container", containerAdapter.owns],
+  ["propertyId", "property", "Property", isPropertyRecord],
+  ["sharedCollectionPointId", "shared-point", "Shared point", isSharedPointRecord],
+  ["customerId", "customer", "Customer", isCustomer],
+  ["agreementId", "agreement", "Agreement", isAgreementRecord],
+  ["driverId", "driver", "Driver", driverAdapter.owns],
+  ["parentTicketId", TICKET_PREFIX, "Parent ticket", isTicketRecord],
 ]
 
 /** The links an office's form names, each by a picker: the pickup comes with its route from the consumer alone, and the parent is set by nobody here. */
@@ -172,16 +185,20 @@ function timezoneOf(record: BusinessRecord, context: MappingContext): string | u
 }
 
 /** The link a form names under `key`, as a server id held to its module's kind; undefined for blank or the picker's None; a refusal for a row the API does not hold. */
-function linkOf(record: BusinessRecord, key: string, prefix: string, fact: string, context: MappingContext): string | undefined | LocalRefusal {
+function linkOf(record: BusinessRecord, key: string, prefix: string, fact: string, owns: (record: BusinessRecord) => boolean, context: MappingContext): string | undefined | LocalRefusal {
   const webId = typed(record, key)
   if (webId === undefined || webId === NO_ONE) return undefined
-  return referencedServerId(webId, prefix, context, { owns: hasPrefix(prefix) }) ?? refusal(key, `Pick a ${fact.toLowerCase()} the API holds`)
+  const noun = fact.toLowerCase()
+  return referencedServerId(webId, prefix, context, { owns }) ?? refusal(key, `Pick ${/^[aeiou]/.test(noun) ? "an" : "a"} ${noun} the API holds`)
 }
+
+/** Whether a loaded row is an alert — the alerts' own rule, spelled here since their adapter is built on this one's. */
+const isAlertRecord = ofKind("alert", ["Alert"])
 
 /** The assignee a form names, as a User Account's server id; null for nobody — blank, or the picker's None; a refusal for anyone the API does not hold. */
 function assigneeOf(webId: string | undefined, key: string, context: MappingContext): string | null | LocalRefusal {
   if (webId === undefined || webId === NO_ONE) return null
-  return referencedServerId(webId, "user", context, { owns: ofKind("user", ["User"]) }) ?? refusal(key, "Pick an account the API holds")
+  return referencedServerId(webId, "user", context, { owns: userAdapter.owns }) ?? refusal(key, "Pick an account the API holds")
 }
 
 const KIND_SENTENCE = `Pick a kind the API knows: ${TICKET_KINDS.join(", ")}`
@@ -217,12 +234,12 @@ export function toTicketCreateBody(record: BusinessRecord, context: MappingConte
   const assignee = assigneeOf(typed(record, "assigneeUserAccountId"), "assigneeUserAccountId", context)
   if (isLocalRefusal(assignee)) return assignee
   const links: Record<string, string> = {}
-  for (const [key, prefix, fact] of OFFICE_TICKET_LINKS) {
-    const serverId = linkOf(record, key, prefix, fact, context)
+  for (const [key, prefix, fact, owns] of OFFICE_TICKET_LINKS) {
+    const serverId = linkOf(record, key, prefix, fact, owns, context)
     if (isLocalRefusal(serverId)) return serverId
     if (serverId !== undefined) links[key] = serverId
   }
-  const alertId = linkOf(record, "alertId", "alert", "Alert", context)
+  const alertId = linkOf(record, "alertId", "alert", "Alert", isAlertRecord, context)
   if (isLocalRefusal(alertId)) return alertId
   return {
     projectId,
@@ -309,7 +326,7 @@ export const TICKET_COMMANDS_BY_NAME = {
     // A re-collection rides on a real Route, picked from the Routes module: never a typed label (#126).
     const routeWebId = said(input, "recollectionRouteId")
     if (routeWebId === undefined) return refusal("recollectionRouteId", "Pick the route the re-collection rides on")
-    const recollectionRouteId = referencedServerId(routeWebId, "route", context, { owns: hasPrefix("route") })
+    const recollectionRouteId = referencedServerId(routeWebId, "route", context, { owns: routeAdapter.owns })
     if (recollectionRouteId === undefined) return refusal("recollectionRouteId", "Pick a route the API holds")
     return { resolution, note, recollectionRouteId }
   }),
@@ -355,7 +372,7 @@ export function ticketDetail(client: Client, serverId: string): Promise<TicketDe
 
 export const ticketAdapter: ResourceAdapter<Ticket> = {
   prefix: TICKET_PREFIX,
-  owns: ofKind(TICKET_PREFIX, ["Ticket"]),
+  owns: isTicketRecord,
   // Open, in progress, pending, on hold, completed and rejected move by the commands alone.
   statuses: undefined,
   list: (client) => listAll<Ticket>(client, "/tickets"),
