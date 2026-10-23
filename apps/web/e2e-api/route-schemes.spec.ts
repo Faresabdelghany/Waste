@@ -185,9 +185,11 @@ test("a service day added to a validated scheme is one PATCH of the days and the
   await dialog.getByRole("combobox", { name: /^Service days/ }).click()
   await page.getByRole("option", { name: "Saturday", exact: true }).click()
   await page.keyboard.press("Escape")
+  // The writes a scheme edit could be made of: the scheme's and its groups' own routes.
   const patches: string[] = []
   page.on("request", (request) => {
-    if (request.method() !== "GET" && new URL(request.url()).pathname.startsWith("/waste-api/")) patches.push(`${request.method()} ${new URL(request.url()).pathname}`)
+    const path = new URL(request.url()).pathname
+    if (request.method() !== "GET" && /^\/waste-api\/(route-schemes|collection-groups)\//.test(path)) patches.push(`${request.method()} ${path}`)
   })
   const [patched] = await Promise.all([answerOf(page, "PATCH", `/route-schemes/${scheme.id}`), dialog.getByRole("button", { name: "Save changes" }).click()])
   expect(patched.status(), await patched.text()).toBe(200)

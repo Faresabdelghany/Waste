@@ -616,6 +616,50 @@ describe("an edit of a scheme", () => {
     assert.deepEqual(one(types.calls), { collectionGroups: [entryOf(centralGroup, { rule: { wasteFractionIds: [residual.id], containerTypeIds: [bin240.id], vehicleTypeId: rearLoader.id } })] })
   })
 
+  test("the legacy shape's one group split in two keeps the name the server holds, unless the edit renames it", async () => {
+    // The server's group has a name of its own; the legacy shape shows the scheme's in its place.
+    const named = { ...central, collectionGroups: [{ ...centralGroup, name: "Indre By crew" }] }
+    const split = withGroups((current) => [{ ...current[0], days: ["monday", "tuesday", "wednesday", "thursday"] }, { id: "group-2", name: "Friday", days: ["friday"], fractions: ["Residual"], stopSource: "rule", ruleVehicleType: "Rear loader", containerIds: [] }])
+    const kept = await edited(named, split, [schemeAnswer()])
+    const [first] = (one(kept.calls) as { collectionGroups: Array<{ name: string }> }).collectionGroups
+    assert.equal(first.name, "Indre By crew", "not renamed to the scheme's name the legacy shape showed")
+    const renamed = await edited(named, withGroups((current) => [{ ...current[0], name: "Mon–Thu", days: ["monday", "tuesday", "wednesday", "thursday"] }, { id: "group-2", name: "Friday", days: ["friday"], fractions: ["Residual"], stopSource: "rule", ruleVehicleType: "Rear loader", containerIds: [] }]), [schemeAnswer()])
+    assert.equal((one(renamed.calls) as { collectionGroups: Array<{ name: string }> }).collectionGroups[0].name, "Mon–Thu", "a name the edit gives is sent")
+  })
+
+  test("a rule the edit leaves alone is restated by the ids it was read with, even where another row now has its name", async () => {
+    // Residual (as read) renamed Residual waste, and a new row named Residual: the untouched group still names the row it was read with.
+    const fresh = { id: "01a0d2a4-a280-7007-8000-0000000000ff", ...STAMPS, key: "residual-2", name: "Residual" }
+    const shifted = new Map(state).set(
+      "configure.master",
+      loaded({
+        records: [...masterRecords.map(([record]) => (record.name === "Residual" ? { ...record, name: "Residual waste" } : record)), wasteFractionAdapter.toRecord(fresh, masterContext)],
+        serverIds: new Map([...masterRecords.map(([record, id]) => [record.id, id] as const), [wasteFractionAdapter.toRecord(fresh, masterContext).id, fresh.id]]),
+      }, 1),
+    )
+    const north = groupOf({ id: "01a0d2a4-a280-701b-8000-0000000000a1", routeSchemeId: CENTRAL_ID, name: "North", days: ["monday", "tuesday", "wednesday"] })
+    const south = groupOf({ id: "01a0d2a4-a280-701b-8000-0000000000a2", routeSchemeId: CENTRAL_ID, name: "South", position: 2, days: ["thursday", "friday"] })
+    const { calls } = await edited({ ...central, collectionGroups: [north, south] }, withGroups((current) => [current[0], { ...current[1], name: "South side" }]), [schemeAnswer()], shifted)
+    const [restated] = (one(calls) as { collectionGroups: Array<{ rule: { wasteFractionIds: string[] } }> }).collectionGroups
+    assert.deepEqual(restated.rule.wasteFractionIds, [residual.id], "the row it was read with, not the new one of that name")
+  })
+
+  test("an edit of the scheme alone resolves no group: a group whose names the store cannot read blocks nothing it does not send", async () => {
+    const unread = new Map(state).set("configure.master", loaded({ records: [], serverIds: new Map() }, 1))
+    const record = { ...recordOf(central), submittedValues: { ...recordOf(central).submittedValues, ruleMasterIds: "{}" } }
+    const { fetch, calls } = scripted([schemeAnswer()])
+    const module = loaded({ records: [record], serverIds: new Map([[record.id, central.id]]) }, 1)
+    const outcome = await writeRecord(clientOver(fetch), routeSchemesModule, module, withValues({ plannedStartTime: "07:00" })(record), { fixtures: schemeFixtures, state: unread, now: NOW })
+    assert.equal(outcome.kind, "updated")
+    assert.deepEqual(one(calls), { plannedStartTime: "07:00" })
+  })
+
+  test("a group that picks containers picks one at least, added or restated, refused before the API", async () => {
+    const empty = await edited(central, withGroups((current) => [current[0], { id: "group-2", name: "Picks", days: ["friday"], fractions: [], stopSource: "manual", containerIds: [] }]), [])
+    assert.equal(empty.calls.length, 0)
+    assert.equal(empty.outcome.kind === "refused" ? problemSentence(empty.outcome.problem) : "", "The request body is invalid — containerIds: A group that picks containers picks one at least")
+  })
+
   test("is refused before the API where the wire cannot follow: a group changing how it finds its stops, a scheme changing project", async () => {
     const moved = await edited(central, withValues({ stopSelection: "manual", containerIds: `asset-${PICKS[0]}` }), [])
     assert.equal(moved.outcome.kind, "refused")

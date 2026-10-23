@@ -150,16 +150,19 @@ function masterId(context: MappingContext, kind: MasterDataKind, name: string, p
   return id ?? refusal(path, `The API holds no ${MASTER_WORDS[kind]} named ${JSON.stringify(name)}`)
 }
 
-function ruleMasterIdsOf(record: BusinessRecord): RuleMasterIds {
-  const raw = record.submittedValues?.[RULE_MASTER_IDS_KEY]
-  if (typeof raw !== "string" || raw === "") return {}
+/** A JSON object a record keeps under one of its typed keys, or {} where it keeps none or something else. */
+function jsonObjectOf<T extends object>(record: BusinessRecord, key: string): T {
+  const raw = record.submittedValues?.[key]
+  if (typeof raw !== "string" || raw === "") return {} as T
   try {
     const parsed: unknown = JSON.parse(raw)
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as RuleMasterIds) : {}
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as T) : ({} as T)
   } catch {
-    return {}
+    return {} as T
   }
 }
+
+const ruleMasterIdsOf = (record: BusinessRecord): RuleMasterIds => jsonObjectOf<RuleMasterIds>(record, RULE_MASTER_IDS_KEY)
 
 /** Every item mapped, or the first refusal. */
 function allOf<T>(items: readonly string[], each: (item: string) => T | LocalRefusal): T[] | LocalRefusal {
@@ -176,7 +179,6 @@ function allOf<T>(items: readonly string[], each: (item: string) => T | LocalRef
 const lastDayIn = (firstDayOut: string) => addDays(firstDayOut, -1)
 const firstDayOut = (lastDayIn: string) => addDays(lastDayIn, 1)
 
-const sameDays = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((day, index) => day === b[index])
 
 const isServiceType = (value: string): value is ServiceType => (SERVICE_TYPES as readonly string[]).includes(value)
 
@@ -310,7 +312,24 @@ function groupCreateOf(group: SchemeGroup, context: MappingContext, known: RuleM
   }
   const containerIds = containerIdsOf(group, context)
   if (isRefusal(containerIds)) return containerIds
+  if (containerIds.length === 0) return refusal("containerIds", "A group that picks containers picks one at least")
   return { name: group.name, days: group.days, stopSource: "manual", rule: null, containerIds, ...fleet }
+}
+
+/**
+ * The rule a group was read with, by the ids the record keeps under the names
+ * it spells them by (`RULE_MASTER_IDS_KEY`): what a rule the edit leaves
+ * alone is restated as, so a master data row renamed since the load — or a new
+ * row given an old name — moves nothing. Undefined where a name was not read
+ * with an id; the caller then reads the rule by name.
+ */
+function ruleAsRead(group: SchemeGroup, known: RuleMasterIds): StopMatchingRule | undefined {
+  const idsOf = (kind: MasterDataKind, names: readonly string[]) => names.map((name) => known[kind]?.[name])
+  const wasteFractionIds = idsOf("waste-fraction", group.fractions)
+  const containerTypeIds = idsOf("container-type", group.containerTypes ?? [])
+  const [vehicleTypeId] = group.ruleVehicleType === undefined ? [null] : idsOf("vehicle-type", [group.ruleVehicleType])
+  if (group.fractions.length === 0 || [...wasteFractionIds, ...containerTypeIds, vehicleTypeId].some((id) => id === undefined)) return undefined
+  return { wasteFractionIds: wasteFractionIds as string[], containerTypeIds: containerTypeIds as string[], vehicleTypeId: vehicleTypeId ?? null }
 }
 
 /** Whether two groups' rules name the same fractions, container types and vehicle type, in the names the record spells them by. */
@@ -318,42 +337,42 @@ const sameRule = (a: SchemeGroup, b: SchemeGroup) =>
   JSON.stringify([a.fractions, a.containerTypes ?? [], a.ruleVehicleType ?? null]) === JSON.stringify([b.fractions, b.containerTypes ?? [], b.ruleVehicleType ?? null])
 
 /** The web group id to server id map a record carries. */
-function serverGroupIdsOf(record: BusinessRecord): Record<string, string> {
-  const raw = record.submittedValues?.[SERVER_GROUP_IDS_KEY]
-  if (typeof raw !== "string" || raw === "") return {}
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, string>) : {}
-  } catch {
-    return {}
-  }
-}
+const serverGroupIdsOf = (record: BusinessRecord) => jsonObjectOf<Record<string, string>>(record, SERVER_GROUP_IDS_KEY)
 
 /** The server's names of a record's groups, by server id. */
-function serverGroupNamesOf(record: BusinessRecord): Record<string, string> {
-  const raw = record.submittedValues?.[SERVER_GROUP_NAMES_KEY]
-  if (typeof raw !== "string" || raw === "") return {}
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, string>) : {}
-  } catch {
-    return {}
-  }
-}
+const serverGroupNamesOf = (record: BusinessRecord) => jsonObjectOf<Record<string, string>>(record, SERVER_GROUP_NAMES_KEY)
 
 /** The groups of a record, with the day list the legacy shape reads them against. */
 const groupsOf = (record: BusinessRecord): ResolvedCollectionGroup[] => collectionGroupsOfRecord(record)
 
 /**
+ * What of a group an edit can move, in the record's own terms — its days, how
+ * it finds its stops and what it finds them by, its fleet — compared as one
+ * value, so a field added here is compared without another clause. The name
+ * is weighed apart, since the legacy shape shows the scheme's in its place.
+ */
+const movable = (group: SchemeGroup) =>
+  JSON.stringify([
+    group.days,
+    group.stopSource,
+    group.stopSource === "rule" ? [group.fractions, group.containerTypes ?? [], group.ruleVehicleType ?? null] : group.containerIds,
+    group.serviceProviderId ?? null,
+    group.vehicleId ?? null,
+    group.driverId ?? null,
+  ])
+
+/**
  * The edit's `collectionGroups`, or null when no group moved, or a refusal.
  * A group is the server's when the record's id map names it; the one group of
  * the legacy shape (`default`) that the map does not name — explicit groups
- * merged back into one — is the scheme's first group. Every group of `after`
- * is restated whole once any group moved, since the API takes the list as
- * the groups the edit leaves; a group the map names and `after` lacks is left
- * out, which parks it. A rule the edit leaves alone is restated by the ids it
- * was read with (`RULE_MASTER_IDS_KEY`), so a master data row renamed since
- * the load blocks nothing.
+ * merged back into one — is the scheme's first group. Whether a group moved is
+ * decided first, in the record's terms, so an edit of the scheme alone
+ * resolves nothing of its groups; once one moved, every group of `after` is
+ * restated whole, since the API takes the list as the groups the edit leaves,
+ * and a group the map names and `after` lacks is left out, which parks it.
+ * A restated group keeps the name the server holds unless the edit gave it
+ * another — the legacy shape shows the scheme's name for its one group — and
+ * a rule the edit leaves alone is restated by the ids it was read with.
  */
 function groupEntriesOf(before: BusinessRecord, after: BusinessRecord, context: MappingContext): CollectionGroupEntry[] | null | LocalRefusal {
   const ids = serverGroupIdsOf(before)
@@ -364,39 +383,36 @@ function groupEntriesOf(before: BusinessRecord, after: BusinessRecord, context: 
   const wasByServerId = new Map(was.flatMap((group) => (ids[group.id] === undefined ? [] : [[ids[group.id], group] as const])))
   const firstServerId = was.map((group) => ids[group.id]).find((id) => id !== undefined)
   const serverIdOf = (group: ResolvedCollectionGroup) => ids[group.id] ?? (group.id === IMPLICIT_GROUP_ID && is.length === 1 ? firstServerId : undefined)
-  const entries: CollectionGroupEntry[] = []
-  const kept = new Set<string>()
-  let moved = false
-  for (const group of is) {
+  const pairs = is.map((group) => {
     const serverId = serverIdOf(group)
-    const prior = serverId === undefined ? undefined : wasByServerId.get(serverId)
-    const whole = groupCreateOf(group, context, known)
-    if (isRefusal(whole)) return whole
+    return { group, serverId, prior: serverId === undefined ? undefined : wasByServerId.get(serverId) }
+  })
+  for (const { group, prior } of pairs) {
+    if (prior !== undefined && prior.stopSource !== group.stopSource) return refusal("stopSelection", STOP_SOURCE_KEPT)
+  }
+  // A name the legacy shape showed in the group's place — the scheme's, before or after the edit — is no name the edit gave.
+  const renamed = (group: ResolvedCollectionGroup, prior: ResolvedCollectionGroup) => !group.implicit && group.name !== prior.name
+  const restated = new Set(pairs.flatMap(({ serverId, prior }) => (serverId === undefined || prior === undefined ? [] : [serverId])))
+  const moved =
+    pairs.some(({ group, prior }) => prior === undefined || renamed(group, prior) || movable(group) !== movable(prior)) ||
+    [...wasByServerId].some(([serverId, group]) => !restated.has(serverId) && group.days.length > 0)
+  if (!moved) return null
+  const entries: CollectionGroupEntry[] = []
+  for (const { group, serverId, prior } of pairs) {
     if (serverId === undefined || prior === undefined) {
       // Added after the scheme's groups, as the editor adds one: no group is renumbered.
+      const whole = groupCreateOf(group, context, known)
+      if (isRefusal(whole)) return whole
       entries.push(whole)
-      moved = true
       continue
     }
-    kept.add(serverId)
-    if (prior.stopSource !== group.stopSource) return refusal("stopSelection", STOP_SOURCE_KEPT)
-    if (whole.stopSource === "manual" && (whole.containerIds?.length ?? 0) === 0) return refusal("containerIds", "A group that picks containers picks one at least")
-    // The legacy shape's one group carries the scheme's name, not its own: it is restated under the name the server has.
-    const name = group.implicit ? (names[serverId] ?? prior.name) : group.name
-    entries.push({ id: serverId, ...whole, name })
-    const fleetBefore = fleetOf(prior, context)
-    const containersBefore = prior.stopSource === "manual" ? containerIdsOf(prior, context) : []
-    moved ||=
-      (!group.implicit && group.name !== prior.name) ||
-      !sameDays(group.days, prior.days) ||
-      isRefusal(fleetBefore) ||
-      JSON.stringify([fleetBefore.serviceProviderId, fleetBefore.vehicleId, fleetBefore.driverId]) !== JSON.stringify([whole.serviceProviderId, whole.vehicleId, whole.driverId]) ||
-      (group.stopSource === "rule" ? !sameRule(prior, group) : isRefusal(containersBefore) || JSON.stringify(containersBefore) !== JSON.stringify(whole.containerIds))
+    const kept = group.stopSource === "rule" && sameRule(prior, group) ? ruleAsRead(group, known) : undefined
+    const whole = groupCreateOf(group, context, known)
+    if (isRefusal(whole)) return whole
+    const name = renamed(group, prior) ? group.name : (names[serverId] ?? prior.name)
+    entries.push({ id: serverId, ...whole, ...(kept === undefined ? {} : { rule: kept }), name })
   }
-  for (const [serverId, group] of wasByServerId) {
-    if (!kept.has(serverId) && group.days.length > 0) moved = true
-  }
-  return moved ? entries : null
+  return entries
 }
 
 const nonEmpty = <T extends object>(body: T): T | undefined => (Object.keys(body).length === 0 ? undefined : body)
