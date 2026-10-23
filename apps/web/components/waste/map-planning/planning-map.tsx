@@ -727,20 +727,27 @@ function ShapesOverlay({
       })}
 
       {serviceAreas.map((area) => {
-        const outline = area.polygon.map(project).filter((point): point is ScreenPoint => point !== null)
-        if (outline.length < 3) return null
-        const label = project(polygonCentroid(area.polygon))
+        // Each part — the drawn polygon, or one planning area of the award — in the area's dashed style, the label once, on the largest part.
+        const parts = area.polygons
+          .map((polygon) => polygon.map(project).filter((point): point is ScreenPoint => point !== null))
+          .filter((outline) => outline.length >= 3)
+        if (parts.length === 0) return null
+        const largest = area.polygons.reduce((widest, polygon) => (polygon.length > widest.length ? polygon : widest), area.polygons[0])
+        const label = project(polygonCentroid(largest))
         return (
           <g key={area.id} data-service-area-outline={area.id}>
-            <polygon
-              points={toPoints(outline)}
-              fill={area.color}
-              fillOpacity={0.06}
-              stroke={area.color}
-              strokeWidth={2.5}
-              strokeDasharray="10 5"
-              strokeLinejoin="round"
-            />
+            {parts.map((outline, index) => (
+              <polygon
+                key={index}
+                points={toPoints(outline)}
+                fill={area.color}
+                fillOpacity={0.06}
+                stroke={area.color}
+                strokeWidth={2.5}
+                strokeDasharray="10 5"
+                strokeLinejoin="round"
+              />
+            ))}
             {label && (
               <text
                 x={label.x}

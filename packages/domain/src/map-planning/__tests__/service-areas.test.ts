@@ -3,6 +3,7 @@ import { describe, test } from "node:test"
 
 import type { BusinessRecord } from "../../prototype-record"
 import { REGISTRY_VISIBILITY_FACT, SOFT_DELETED } from "../../record-visibility"
+import { PLANNING_AREA_GEOMETRY_KEY } from "../areas"
 import {
   SERVICE_AREA_POLYGON_KEY,
   serviceAreaLayers,
@@ -140,6 +141,25 @@ describe("serviceAreaLayers", () => {
     assert.equal(layers[0].serviceProvider, "NordRen ApS")
     assert.equal(layers[1].serviceProvider, "Unassigned")
     assert.notEqual(layers[0].color, layers[1].color)
+    assert.deepEqual(layers[0].polygons, [square])
+    assert.deepEqual(layers[0].bounds, { west: 12.5, south: 55.6, east: 12.6, north: 55.7 })
+  })
+
+  test("an area with no drawn polygon is drawn as its planning areas' stored boundaries — the union of them, one part each — never their container outlines (#186)", () => {
+    const ring = (west: number, south: number, east: number, north: number) => [[west, south], [east, south], [east, north], [west, north], [west, south]]
+    const stored = (id: string, coordinates: number[][]) => record(id, {}, { name: id, submittedValues: { [PLANNING_AREA_GEOMETRY_KEY]: JSON.stringify({ type: "Polygon", coordinates: [coordinates] }) } })
+    const planningAreas = [stored("area-1", ring(12.5, 55.6, 12.55, 55.65)), stored("area-2", ring(12.55, 55.6, 12.6, 55.7)), record("area-fixture", {}, { name: "Fixture area" })]
+    const areas = [
+      record("sa-api", { "Service provider": "NordRen ApS" }, { name: "CA-Ø-2", submittedValues: { zoneIds: "area-1,area-2" } }),
+      record("sa-fixture", {}, { name: "CA-F", submittedValues: { zoneIds: "area-fixture" } }),
+      record("sa-none", {}, { name: "CA-N" }),
+    ]
+    const layers = serviceAreaLayers(areas, planningAreas)
+    assert.deepEqual(layers.map((layer) => layer.id), ["sa-api"], "a planning area with no stored boundary draws nothing: fixture mode is as it was")
+    assert.deepEqual(layers[0].polygons, [
+      [{ lng: 12.5, lat: 55.6 }, { lng: 12.55, lat: 55.6 }, { lng: 12.55, lat: 55.65 }, { lng: 12.5, lat: 55.65 }],
+      [{ lng: 12.55, lat: 55.6 }, { lng: 12.6, lat: 55.6 }, { lng: 12.6, lat: 55.7 }, { lng: 12.55, lat: 55.7 }],
+    ])
     assert.deepEqual(layers[0].bounds, { west: 12.5, south: 55.6, east: 12.6, north: 55.7 })
   })
 })

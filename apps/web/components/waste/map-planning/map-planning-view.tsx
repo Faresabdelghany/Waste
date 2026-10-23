@@ -231,8 +231,8 @@ export function MapPlanningView({
     () => areaLayers.filter((area) => area.bounds !== null && enabledAreaIds.has(area.id)),
     [areaLayers, enabledAreaIds],
   )
-  // Service areas drawn on the map — only the ones created here carry a polygon.
-  const drawnServiceAreas = useMemo(() => serviceAreaLayers(serviceAreas), [serviceAreas])
+  // Service areas drawn on the map: a polygon drawn here in fixture mode, else the stored boundaries of the planning areas an award is (#186).
+  const drawnServiceAreas = useMemo(() => serviceAreaLayers(serviceAreas, planningAreas), [planningAreas, serviceAreas])
   const visibleServiceAreas = useMemo(
     () => drawnServiceAreas.filter((area) => enabledServiceAreaIds.has(area.id)),
     [drawnServiceAreas, enabledServiceAreaIds],
