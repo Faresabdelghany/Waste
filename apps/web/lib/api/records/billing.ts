@@ -307,6 +307,11 @@ export function billingRunDetail(client: Client, serverId: string): Promise<Bill
   return get<BillingRunDetail>(client, `/billing-runs/${serverId}`)
 }
 
+/** `GET /invoices?billingRunId=`: the invoices one run issued, each in its own currency, for the run's totals per currency. */
+export function billingRunInvoices(client: Client, serverId: string): Promise<Invoice[]> {
+  return listAll<Invoice>(client, "/invoices", { billingRunId: serverId })
+}
+
 export const billingRunAdapter: ResourceAdapter<BillingRun> = {
   prefix: BILLING_RUN_PREFIX,
   owns: isBillingRunRecord,

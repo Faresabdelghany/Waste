@@ -29,8 +29,11 @@ import { TICKET_LIST_INITIAL, ticketListReaders } from "@/lib/data/tickets"
 import { emptyBusinessFilters, type BusinessFilters, type FilterValueReaders } from "@waste/domain/business-filters"
 
 import { AllocateSurface, AllocationCommandsSurface } from "./allocation-surfaces"
+import { AddManualEventSurface, BillingRunSurface, EventCommandsSurface, InvoiceSurface, RunBillingSurface } from "./billing-surfaces"
+import { BILLING_LIST, EVENTS_LIST, INVOICES_LIST, PRICE_ROWS_LIST } from "./commercial-lists"
 import { AddContainerSurface, ContainerCommandsSurface } from "./container-surfaces"
 import { AddPropertyGroupSurface, AddPropertySurface, AddSharedPointSurface, PropertyCommandsSurface, PropertyGroupCommandsSurface, SharedPointCommandsSurface } from "./place-surfaces"
+import { PriceRowCommandsSurface, PriceRowsPrimarySurface, ProductCommandsSurface, ProductsPrimarySurface } from "./pricing-surfaces"
 import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface } from "./route-surfaces"
 
 /** What a primary surface is handed: the label the module's primary action carries. */
@@ -110,6 +113,15 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   // opening on what still needs attention.
   "operate.tickets": { primary: NewTicketSurface, list: { readers: ({ accountId }) => ticketListReaders(accountId), initial: TICKET_LIST_INITIAL } },
   "operate.exceptions": { primary: RaiseAlertSurface, rowActions: AlertCommandsSurface, list: { readers: alertListReaders, initial: ALERT_LIST_INITIAL } },
+  // Slice 10 (#185): a product is made in Settings, so both pricing modules'
+  // primary is Add price, the price rows' with Explain price beside it; an
+  // event moves by its two commands; a run is previewed before it runs; an
+  // invoice is read and credited, never edited.
+  "commercial.products": { primary: ProductsPrimarySurface, rowActions: ProductCommandsSurface },
+  "commercial.price-rows": { primary: PriceRowsPrimarySurface, rowActions: PriceRowCommandsSurface, list: PRICE_ROWS_LIST },
+  "commercial.events": { primary: AddManualEventSurface, rowActions: EventCommandsSurface, list: EVENTS_LIST },
+  "commercial.billing": { primary: RunBillingSurface, rowActions: BillingRunSurface, list: BILLING_LIST },
+  "commercial.invoices": { primary: null, rowActions: InvoiceSurface, list: INVOICES_LIST },
 }
 
 /** The module's surface while the adapter is configured and the module switched; undefined otherwise, and always in fixture mode. */

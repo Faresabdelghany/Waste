@@ -60,6 +60,17 @@ describe("a module's list on the Pilot (#147)", () => {
     assert.equal(listShows(rowsOnly, list), false)
   })
 
+  test("the Price Engine's: the price rows' table lists the rows and never the lists, the events open on the blocked and the ready (#185)", () => {
+    const priceRows = COMMAND_SURFACES["commercial.price-rows"].list
+    assert.equal(listShows(priceRows, { id: "price-row-0190", recordKind: "Price row" } as BusinessRecord), true)
+    assert.equal(listShows(priceRows, { id: "price-list-0190", recordKind: "Price list" } as BusinessRecord), false)
+    assert.equal(listShows(priceRows, { id: "price-rows-price-list-1700000000000", recordKind: "Price list" } as BusinessRecord), false, "a list made this session, under its minted id")
+    assert.deepEqual(initialFiltersOf(COMMAND_SURFACES["commercial.events"]), { ...emptyBusinessFilters, statuses: ["Blocked", "Ready"] })
+    const event = { status: "Blocked", facts: { Kind: "Ticket", "Block reason": "No product", Agreement: "AGR-2408", Customer: "Østerbro Housing", Route: "RC-1042", "Service date": "2026-09-29" } } as unknown as BusinessRecord
+    const readers = COMMAND_SURFACES["commercial.events"].list!.readers({ accountId: null })
+    assert.deepEqual([readers.blockReasons!(event), readers.agreements!(event), readers.products!(event)], [["No product"], ["AGR-2408"], []])
+  })
+
   test("opens only on categories its readers read, so no chip filters on nothing", () => {
     for (const [key, entry] of Object.entries(COMMAND_SURFACES)) {
       if (entry.list === undefined) continue
