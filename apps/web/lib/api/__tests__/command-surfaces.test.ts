@@ -6,7 +6,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { COMMAND_SURFACES, commandSurfaceFor, initialFiltersOf, listShows, type CommandSurface, type ModuleList } from "@/components/waste/commands/command-surfaces"
+import { COMMAND_SURFACES, commandSurfaceFor, initialFiltersOf, listShows, primaryOf, type CommandSurface, type ModuleList } from "@/components/waste/commands/command-surfaces"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { emptyBusinessFilters } from "@waste/domain/business-filters"
 
@@ -81,6 +81,16 @@ describe("a module's list on the Pilot (#147)", () => {
     assert.deepEqual(areas!.readers({ accountId: null }).planningAreas!(award), ["Østerbro Zone 2", "Nordhavn"])
     assert.deepEqual(initialFiltersOf(COMMAND_SURFACES["route-studio.weights"]), { ...emptyBusinessFilters, statuses: ["Needs review"] })
     assert.equal(COMMAND_SURFACES["route-studio.weights"].primary, null, "an unload is the Driver App's, never the office's")
+  })
+
+  test("offers a surface's own primary with the create grant alone, whatever the fixture form; the module's form only where it has one (#186)", () => {
+    const own = COMMAND_SURFACES["commercial.settlements"]
+    assert.equal(primaryOf(own, true, false), "surface", "Settlements' fixture form is disabled, and Open settlement stands")
+    assert.equal(primaryOf(own, false, true), null, "never without the create grant")
+    assert.equal(primaryOf({ primary: null }, true, true), null, "a module the wire only reads offers none")
+    assert.equal(primaryOf({ primary: "form" }, true, true), "form")
+    assert.equal(primaryOf(undefined, true, true), "form", "fixture mode: the module's form")
+    assert.equal(primaryOf(undefined, true, false), null)
   })
 
   test("opens only on categories its readers read, so no chip filters on nothing", () => {

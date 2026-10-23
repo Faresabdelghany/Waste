@@ -51,9 +51,9 @@ export type CommandSurface = {
    * What stands in for the module's primary action on the Pilot: its own
    * create form (`"form"`, the create going through the adapter as ever), a
    * dialog of the module's own, or nothing, for a module the wire only reads.
-   * It is offered where the module's fixture form offered its primary action
-   * (the workspace's own guard: a create grant and a form schema), so a
-   * module with no fixture form offers no primary surface either.
+   * A dialog of the module's own is offered with the create grant alone,
+   * whatever the fixture form (#186: Settlements' is disabled); the form,
+   * where the module's fixture form offers one (`primaryOf`).
    */
   primary: "form" | ComponentType<PrimarySurfaceProps> | null
   /** The row's commands, and what they read (a ledger, a history), in its details. */
@@ -89,6 +89,13 @@ export type ModuleList = {
 /** Whether a record is one of a module's rows on the Pilot: every record, unless its list says which (`shows`); the workspace scopes the module by it before any filter. */
 export function listShows(list: ModuleList | undefined, record: BusinessRecord): boolean {
   return list?.shows?.(record) ?? true
+}
+
+/** Which primary action a module offers: its surface's own dialog with the create grant alone, its form where the fixture form offers one (`formOffered`), or none. */
+export function primaryOf(surface: CommandSurface | undefined, granted: boolean, formOffered: boolean): "surface" | "form" | null {
+  if (!granted) return null
+  if (surface !== undefined && surface.primary !== "form") return surface.primary === null ? null : "surface"
+  return formOffered ? "form" : null
 }
 
 /** The filters a module opens with: its list's `initial` over no filter, or no filter for a module without one (every module in fixture mode). */

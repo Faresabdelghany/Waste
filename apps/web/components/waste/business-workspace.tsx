@@ -272,7 +272,7 @@ import { SchemeDetailsPage } from "@/components/waste/scheme-details-page"
 import { SchemePlanAheadRunner } from "@/components/waste/scheme-plan-ahead"
 import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
-import { commandSurfaceFor, initialFiltersOf, listShows } from "@/components/waste/commands/command-surfaces"
+import { commandSurfaceFor, initialFiltersOf, listShows, primaryOf } from "@/components/waste/commands/command-surfaces"
 import { offersRowsOf } from "@/components/waste/pickable-records"
 import { projectScopeOfMe } from "@/lib/api/records/me-projects"
 import { isServerBacked, serverModuleOf } from "@/lib/api/records/modules"
@@ -1726,6 +1726,8 @@ export function BusinessWorkspace({
     ? viewOptions.viewType
     : "table"
   const effectiveShowPrimaryAction = showPrimaryAction && hasGrant("create")
+  // A surface's own dialog stands with the create grant alone, whatever the fixture form (#186: Settlements').
+  const primary = primaryOf(commandSurface, effectiveShowPrimaryAction, canOpenBusinessForm && Boolean(formSchema))
   const canCreateFromView =
     effectiveShowPrimaryAction &&
     formIsPrimary &&
@@ -4905,7 +4907,7 @@ export function BusinessWorkspace({
           </div>
           {(isContainersAssetsView ||
             showExportAction ||
-            (effectiveShowPrimaryAction && canOpenBusinessForm)) && (
+            primary !== null) && (
             <div className="flex items-center gap-2">
               {isContainersAssetsView && (
                 <Button variant="outline" size="sm" asChild>
@@ -4929,10 +4931,9 @@ export function BusinessWorkspace({
                   <span className="hidden sm:inline">Export</span>
                 </Button>
               )}
-              {effectiveShowPrimaryAction && canOpenBusinessForm && formSchema && (
-                !formIsPrimary ? (
-                  PrimarySurface ? <PrimarySurface label={activeModule.primaryAction} /> : null
-                ) : isPriceEngineProducts ? (
+              {primary === "surface" && PrimarySurface && <PrimarySurface label={activeModule.primaryAction} />}
+              {primary === "form" && formSchema && (
+                isPriceEngineProducts ? (
                   <Button
                     size="sm"
                     onClick={() =>
