@@ -17,8 +17,11 @@ import {
   Spinner,
   SteeringWheel,
   Tag,
+  ToggleLeft,
   Truck,
+  UserCircle,
   UsersThree,
+  Warning,
   WifiHigh,
 } from "@phosphor-icons/react/dist/ssr"
 
@@ -89,6 +92,10 @@ const CATEGORY_ICONS: Readonly<Record<BusinessFilterKey, typeof Spinner>> = {
   ticketTypes: Tag,
   priorities: Flag,
   teams: UsersThree,
+  openness: ToggleLeft,
+  kinds: Tag,
+  severities: Warning,
+  assignees: UserCircle,
 }
 
 /**

@@ -6,7 +6,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { COMMAND_SURFACES, commandSurfaceFor } from "@/components/waste/commands/command-surfaces"
+import { COMMAND_SURFACES, commandSurfaceFor, initialFiltersOf, type CommandSurface } from "@/components/waste/commands/command-surfaces"
+import { emptyBusinessFilters } from "@waste/domain/business-filters"
 
 import { moduleKeyOf } from "../records/adapter"
 import { SERVER_MODULE_KEYS } from "../records/modules"
@@ -23,5 +24,36 @@ describe("the command surfaces", () => {
       assert.equal(commandSurfaceFor(workspaceId, moduleId, true), COMMAND_SURFACES[key])
     }
     assert.equal(commandSurfaceFor("improve", "insights", true), undefined)
+  })
+})
+
+describe("a module's list on the Pilot (#147)", () => {
+  const surface: CommandSurface = {
+    primary: null,
+    list: {
+      readers: ({ accountId }) => ({ openness: () => ["Open"], assignees: () => (accountId === null ? [] : ["Mine"]) }),
+      initial: { openness: ["Open"] },
+    },
+  }
+
+  test("opens the module on its initial filters, over no filter", () => {
+    assert.deepEqual(initialFiltersOf(surface), { ...emptyBusinessFilters, openness: ["Open"] })
+    assert.deepEqual(initialFiltersOf({ primary: null }), emptyBusinessFilters, "a surface without a list opens unfiltered")
+    assert.deepEqual(initialFiltersOf(undefined), emptyBusinessFilters)
+  })
+
+  test("is never consulted in fixture mode: every module opens unfiltered there", () => {
+    for (const key of Object.keys(COMMAND_SURFACES)) {
+      const [workspaceId, moduleId] = key.split(".") as [Parameters<typeof moduleKeyOf>[0], string]
+      assert.deepEqual(initialFiltersOf(commandSurfaceFor(workspaceId, moduleId, false)), emptyBusinessFilters, key)
+    }
+  })
+
+  test("opens only on categories its readers read, so no chip filters on nothing", () => {
+    for (const [key, entry] of Object.entries(COMMAND_SURFACES)) {
+      if (entry.list === undefined) continue
+      const read = Object.keys(entry.list.readers({ accountId: null }))
+      for (const category of Object.keys(entry.list.initial)) assert.ok(read.includes(category), `${key} opens on ${category}, which it does not read`)
+    }
   })
 })

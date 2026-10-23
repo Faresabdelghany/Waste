@@ -96,9 +96,12 @@ export const RICH_MODULE_TABLES: Readonly<Record<string, RichModuleTable>> = {
   // Tickets render as the rich record table for every persona — the
   // operator's queue list was retired so /tickets matches the service
   // provider workspace. They are worked through lifecycle transitions and
-  // the ticket details view, so no generic row Edit/Delete.
+  // the ticket details view, so no generic row Edit/Delete. A column shows
+  // only where a row carries its fact, so the fixtures' Type and Team and
+  // the API's label, kind, assignee, source and time (#147) are seeded side
+  // by side, each mode showing its own.
   tickets: {
-    seededFactColumns: ["Type", "Priority", "Team"],
+    seededFactColumns: ["Ticket", "Type", "Kind", "Priority", "Team", "Assignee", "Opened via", "Occurred"],
     // Form fields that duplicate the title/description cell or hold long
     // free text.
     excludedColumnFacts: new Set([

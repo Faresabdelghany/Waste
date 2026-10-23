@@ -15,6 +15,7 @@ import type { WorkspaceId } from "@/lib/data/business-modules"
 
 import { moduleKeyOf, type ServerModule } from "./adapter"
 import { agreementsModule } from "./agreements"
+import { alertsModule } from "./alerts"
 import { vehiclePlanningModule } from "./allocations"
 import { containersModule, inventoryModule } from "./containers"
 import { fleetDriversModule, fleetVehiclesModule } from "./fleet"
@@ -28,6 +29,7 @@ import { propertiesModule, propertyGroupsModule, sharedPointsModule } from "./pr
 import { customersModule } from "./registry"
 import { routeSchemesModule } from "./route-schemes"
 import { routesModule } from "./routes"
+import { ticketsModule } from "./tickets"
 
 /**
  * The switched modules, in load order: a module another module resolves
@@ -49,7 +51,10 @@ import { routesModule } from "./routes"
  * of it is left an id chip on a scheme (#177); then the Live board, today's
  * routes, the short read ahead of the two windowed ones: the routes, which
  * name their scheme and the fleet and the places of their Planned Assignment,
- * and the pickups after the routes and the containers they name (#179).
+ * and the pickups after the routes and the containers they name (#179); then
+ * the tickets, after every module a ticket's links and its assignee name —
+ * its parent among the tickets themselves — and the alerts after the
+ * tickets they are linked to (#182).
  */
 export const SERVER_MODULES: readonly ServerModule[] = [
   organisationModule,
@@ -74,6 +79,8 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   liveModule,
   routesModule,
   pickupsModule,
+  ticketsModule,
+  alertsModule,
 ]
 
 const byKey = new Map(SERVER_MODULES.map((module) => [moduleKeyOf(module.workspaceId, module.moduleId), module]))

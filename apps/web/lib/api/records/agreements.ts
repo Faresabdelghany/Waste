@@ -39,10 +39,10 @@
 // fixture end date reads and as the planning adapter has it; a day is added
 // on the way out and taken on the way in.
 //
-// Ids. A seeded agreement keeps its fixture's id (`agreement-2408`), matched
-// by the number it quotes — the one stable key the wire has (#81's review,
-// answer 4) — since the tickets' fixtures name agreements by id; every other
-// agreement is `agreement-<uuid>` and every subscription `subscription-<uuid>`.
+// Ids. Every agreement is `agreement-<uuid>` and every subscription
+// `subscription-<uuid>` from the start: no fixture lends its id, since the
+// tickets that named agreements by the fixtures' ids read the API's now
+// (#182, the plan on #81, fixture ids (b)).
 import type { Agreement, AgreementStatus, Subscription } from "@waste/contracts/agreements"
 import { AGREEMENT_STATUSES as WIRE_AGREEMENT_STATUSES, BILLING_CADENCES } from "@waste/domain/registry/vocabulary"
 
@@ -64,7 +64,7 @@ import {
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
 
 import { create, listAll, patch } from "../client"
-import { hasPrefix, inheritedPresentation, patchOf, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { inheritedPresentation, patchOf, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { dayIn, firstDayOut, lastDayIn } from "./planning"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
@@ -109,11 +109,6 @@ const chipServerId = (value: string | undefined, prefix: string, context: Mappin
 // Agreements
 // ---------------------------------------------------------------------------
 
-/** The fixture agreement quoting the number: its typed number, or the number its name starts with (`AGR-2408 · Østerbro Housing`). */
-function fixtureNumbered(fixtures: readonly BusinessRecord[], number: string): BusinessRecord | undefined {
-  return fixtures.filter(hasPrefix(AGREEMENT_PREFIX)).find((record) => typed(record, "agreementNumber") === number || record.name === number || record.name.startsWith(`${number} · `))
-}
-
 /** The customer a party field names, as the server's id: the store's row, else the chip an unresolved row was shown as. */
 const partyServerId = (record: BusinessRecord, key: string, context: MappingContext) => chipServerId(typed(record, key), "customer", context)
 
@@ -140,7 +135,6 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
   statuses: AGREEMENT_STATUSES,
   list: (client) => listAll<Agreement>(client, "/agreements"),
   toRecord: (agreement, context) => {
-    const fixture = fixtureNumbered(context.fixtures, agreement.number)
     const customer = referenced(context, agreement.customerId, "customer")
     const payer = referenced(context, agreement.payerCustomerId, "customer")
     const samePayer = agreement.payerCustomerId === agreement.customerId
@@ -149,14 +143,14 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
     const period = periodLabel(agreement.validFrom, agreement.validTo)
     const lastDay = agreement.validTo === null ? undefined : lastDayIn(agreement.validTo)
     return {
-      id: fixture?.id ?? webIdOf(AGREEMENT_PREFIX, agreement.id),
+      id: webIdOf(AGREEMENT_PREFIX, agreement.id),
       name: `${agreement.number} · ${customer.name}`,
       context: `${customer.name} · ${samePayer ? "same payer" : `payer ${payer.name}`}`,
       status: statusLabel(agreement.status),
-      ...inheritedPresentation(fixture),
+      ...inheritedPresentation(undefined),
       ...stampFacts(agreement, context.now),
       value: period,
-      description: fixture?.description || `Agreement of ${customer.name}${samePayer ? "" : `, billed to ${payer.name}`}.`,
+      description: `Agreement of ${customer.name}${samePayer ? "" : `, billed to ${payer.name}`}.`,
       facts: {
         Kind: AGREEMENT_RECORD_KIND,
         Number: agreement.number,

@@ -34,6 +34,12 @@ export type BusinessFilters = {
   ticketTypes: string[]
   priorities: string[]
   teams: string[]
+  /** Whether a case is still open or closed: a reading of its status, the switch a ticket list opens on (#147). */
+  openness: string[]
+  kinds: string[]
+  severities: string[]
+  /** Who works a case, "Mine" among the values for the viewer's own. */
+  assignees: string[]
 }
 
 export type BusinessFilterKey = keyof BusinessFilters
@@ -67,6 +73,10 @@ export const BUSINESS_FILTER_CHIP_LABELS: Readonly<Record<BusinessFilterKey, str
   ticketTypes: "Type",
   priorities: "Priority",
   teams: "Assigned team",
+  openness: "Open or closed",
+  kinds: "Kind",
+  severities: "Severity",
+  assignees: "Assignee",
 }
 
 export const BUSINESS_FILTER_KEYS = Object.keys(

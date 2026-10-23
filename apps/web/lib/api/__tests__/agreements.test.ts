@@ -113,7 +113,7 @@ function madeSubscription(values: Record<string, string>): BusinessRecord {
 }
 
 const SUBSCRIPTION_FORM = {
-  agreementId: "agreement-2408",
+  agreementId: `agreement-${agr2408.id}`,
   productId: `product-${PRODUCT}`,
   propertyId: `property-${PROPERTY}`,
   sharedPointId: "",
@@ -130,7 +130,7 @@ describe("the agreements module", () => {
     assert.deepEqual(agreementsModule.resources, [agreementAdapter, subscriptionAdapter], "the agreements before the subscriptions that name them")
   })
 
-  test("loads the agreements and the subscriptions across them in two lists, files each under its own prefix, and lends a fixture's id to the agreement of its number", async () => {
+  test("loads the agreements and the subscriptions across them in two lists, files each under its own prefix, the agreements `agreement-<uuid>` from the start: no fixture lends its id (#182)", async () => {
     const { fetch, calls } = scripted([() => pageOf([agr2408, agr2512, agr2188]), () => pageOf([sub1, sub2])])
     const result = await loadModule(clientOver(fetch), agreementsModule, { fixtures: agreementFixtures, state, now: NOW })
     assert.deepEqual(
@@ -139,22 +139,22 @@ describe("the agreements module", () => {
     )
     assert.deepEqual(
       result.records.map((record) => record.id),
-      ["agreement-2408", "agreement-2512", `agreement-${agr2188.id}`, `subscription-${sub1.id}`, `subscription-${sub2.id}`],
+      [`agreement-${agr2408.id}`, `agreement-${agr2512.id}`, `agreement-${agr2188.id}`, `subscription-${sub1.id}`, `subscription-${sub2.id}`],
     )
-    assert.equal(result.serverIds.get("agreement-2408"), agr2408.id)
+    assert.equal(result.serverIds.get(`agreement-${agr2408.id}`), agr2408.id)
     assert.equal(result.serverIds.get(`subscription-${sub1.id}`), sub1.id)
     const subscription = result.records.find((record) => record.id === `subscription-${sub1.id}`)
     assert.equal(subscription?.facts.Agreement, "AGR-2408", "a subscription names its agreement through the rows loaded before it")
-    assert.equal(subscription?.submittedValues?.agreementId, "agreement-2408", "by the web id the store knows the agreement under")
-    const harbor = result.records.find((record) => record.id === "agreement-2512")
+    assert.equal(subscription?.submittedValues?.agreementId, `agreement-${agr2408.id}`, "by the web id the store knows the agreement under")
+    const harbor = result.records.find((record) => record.id === `agreement-${agr2512.id}`)
     assert.deepEqual(harbor?.projectIds, [`project-${HARBOR}`], "a project the store has not loaded is named by its id")
   })
 })
 
 describe("an agreement", () => {
-  test("is the fixture of its number, the wire's fields over it and none of the fixture's facts, scoped to its project", () => {
+  test("is the wire's fields alone — no fixture lends its id or its presentation — scoped to its project", () => {
     const record = agreementAdapter.toRecord(agr2408, context())
-    assert.equal(record.id, "agreement-2408")
+    assert.equal(record.id, `agreement-${agr2408.id}`)
     assert.equal(record.name, "AGR-2408 · Østerbro Housing")
     assert.equal(record.context, "Østerbro Housing · same payer")
     assert.equal(record.status, "Active")
@@ -162,7 +162,7 @@ describe("an agreement", () => {
     assert.equal(record.recordKind, "Agreement")
     assert.deepEqual(record.projectIds, [FIXTURE_PROJECT_IDS.copenhagen])
     assert.equal(record.companyId, FIXTURE_COMPANY_ID)
-    assert.equal(record.owner, "Contract Team", "the fixture's presentation is inherited")
+    assert.equal(record.owner, "", "no fixture's presentation is inherited")
     assert.equal(record.facts.Template, undefined, "a fact the wire does not carry is not shown as the API's")
     assert.deepEqual(record.facts, {
       Kind: "Agreement",
@@ -192,7 +192,7 @@ describe("an agreement", () => {
     assert.ok(!subscriptionAdapter.owns(record))
   })
 
-  test("an agreement no fixture numbers is `agreement-<uuid>`; its payer is named when another customer pays, and its period runs open", () => {
+  test("another agreement: its payer is named when another customer pays, and its period runs open", () => {
     const record = agreementAdapter.toRecord(agr2188, context())
     assert.equal(record.id, `agreement-${agr2188.id}`)
     assert.equal(record.name, "AGR-2188 · Mikkel Sørensen")
@@ -352,7 +352,7 @@ describe("a subscription", () => {
     })
     assert.deepEqual(record.related, ["AGR-2408 · Østerbro Housing", `product-${PRODUCT}`, `property-${PROPERTY}`])
     assert.deepEqual(record.submittedValues, {
-      agreementId: "agreement-2408",
+      agreementId: `agreement-${agr2408.id}`,
       productId: `product-${PRODUCT}`,
       placeKind: "property",
       propertyId: `property-${PROPERTY}`,

@@ -6,9 +6,11 @@ import {
   BUSINESS_FILTER_KEYS,
   businessFilterChips,
   emptyBusinessFilters,
+  matchesBusinessFilters,
   removeBusinessFilterValue,
   type BusinessFilters,
 } from "../business-filters"
+import type { BusinessRecord } from "../prototype-record"
 
 function filters(picks: Partial<BusinessFilters>): BusinessFilters {
   return { ...emptyBusinessFilters, ...picks }
@@ -59,5 +61,25 @@ describe("removeBusinessFilterValue", () => {
       current = removeBusinessFilterValue(current, chip.key, chip.value)
     }
     assert.deepEqual(current, emptyBusinessFilters)
+  })
+})
+
+describe("the Resolution lists' categories (#147)", () => {
+  test("a ticket's openness, kind and assignee and an alert's severity are categories of their own, chipped under their own labels", () => {
+    const resolution = filters({ openness: ["Open"], kinds: ["Missed collection"], severities: ["High"], assignees: ["Mine"] })
+    assert.deepEqual(businessFilterChips(resolution), [
+      { key: "openness", label: "Open or closed", value: "Open" },
+      { key: "kinds", label: "Kind", value: "Missed collection" },
+      { key: "severities", label: "Severity", value: "High" },
+      { key: "assignees", label: "Assignee", value: "Mine" },
+    ])
+  })
+
+  test("match through a surface's readers alone: a category the surface reads nothing for is ignored", () => {
+    const record = { facts: { Kind: "Overflow" }, status: "Open" } as unknown as BusinessRecord
+    const readers = { openness: () => ["Open"], kinds: (row: BusinessRecord) => [row.facts.Kind ?? ""] }
+    assert.ok(matchesBusinessFilters(record, filters({ openness: ["Open"], kinds: ["Overflow"] }), readers))
+    assert.ok(!matchesBusinessFilters(record, filters({ openness: ["Closed"] }), readers))
+    assert.ok(matchesBusinessFilters(record, filters({ severities: ["High"] }), readers), "no severity reader on this surface")
   })
 })
