@@ -60,6 +60,26 @@ export const CONTAINER_VEHICLE_COMPATIBILITY: Readonly<
  */
 export const ELIGIBLE_CONTAINER_STATUSES = new Set(["Available"])
 
+/**
+ * Where a container the API holds says whether it is in service today (#207):
+ * `"yes"` while a placement serves it under a subscription and an agreement
+ * in force on its project's day — the worker's eligibility (apps/worker's
+ * stop-matching) — `"no"` otherwise. A record that says it is held to that
+ * and not to its status, which is its asset state there (every seeded
+ * container has no movement yet). The fixtures' containers say nothing here
+ * and keep their status as the gate.
+ */
+export const SERVES_TODAY_KEY = "servesToday"
+
+/**
+ * Where a container the API holds lists every planning area whose boundary in
+ * force contains its point, comma-separated (#207): areas overlap, and the
+ * worker holds the point to each scheme's own area, so a container counts in
+ * each that contains it. A record without the list is read by its one
+ * `planningAreaId`, as the fixtures' are.
+ */
+export const PLANNING_AREA_IDS_KEY = "planningAreaIds"
+
 /** The container form's enum ids mapped onto the fixture display vocabulary. */
 const FORM_FRACTION_LABELS: Readonly<Record<string, string>> = {
   residual: "Residual",
@@ -259,8 +279,10 @@ export type ContainerMatchProfile = {
   id: string
   name: string
   status: string
-  /** configure.areas record id; absent = never matches an area-scoped rule. */
-  areaId?: string
+  /** Whether it can be planned today: its placement's serving today where the record says so (`SERVES_TODAY_KEY`), its status otherwise. */
+  inService: boolean
+  /** The configure.areas record ids it lies in; none = never matches an area-scoped rule. */
+  areaIds: string[]
   /** Display-vocabulary fractions ("Residual · Mixed" splits into both). */
   fractions: string[]
   /** Display-vocabulary container type; absent = no compatibility profile. */
@@ -289,25 +311,34 @@ export function containerMatchProfile(
       }
     }
   }
-  const primary = stringValue(values, "wasteFraction")
-  const secondary = stringValue(values, "secondaryWasteFraction")
+  // A typed value is read where it is a form token; anything else — the API's
+  // master data by web id (#207) — is no name a rule matches, and the record's
+  // display facts say the names instead.
+  const token = (key: string, labels: Readonly<Record<string, string>>) => {
+    const value = stringValue(values, key)
+    return value !== undefined && labels[value] !== undefined ? labels[value] : undefined
+  }
+  const primary = token("wasteFraction", FORM_FRACTION_LABELS)
+  const secondary = token("secondaryWasteFraction", FORM_FRACTION_LABELS)
   if (primary || secondary) {
-    pushFraction(primary ? (FORM_FRACTION_LABELS[primary] ?? primary) : undefined)
-    pushFraction(secondary ? (FORM_FRACTION_LABELS[secondary] ?? secondary) : undefined)
+    pushFraction(primary)
+    pushFraction(secondary)
   } else {
     pushFraction(facts["Waste fractions"])
   }
 
-  const typedType = stringValue(values, "containerType")
-  const containerType = typedType
-    ? (FORM_CONTAINER_TYPE_LABELS[typedType] ?? typedType)
-    : facts["Container type"]?.trim() || undefined
+  const containerType = token("containerType", FORM_CONTAINER_TYPE_LABELS) ?? (facts["Container type"]?.trim() || undefined)
+
+  const servesToday = stringValue(values, SERVES_TODAY_KEY)
+  const areaList = stringValue(values, PLANNING_AREA_IDS_KEY)
+  const areaId = stringValue(values, "planningAreaId")
 
   return {
     id: record.id,
     name: record.name,
     status: record.status,
-    areaId: stringValue(values, "planningAreaId"),
+    inService: servesToday === undefined ? ELIGIBLE_CONTAINER_STATUSES.has(record.status) : servesToday === "yes",
+    areaIds: areaList !== undefined ? splitList(areaList) : areaId !== undefined ? [areaId] : [],
     fractions,
     ...(containerType ? { containerType } : {}),
     projectIds: record.projectIds,
@@ -378,7 +409,7 @@ export function resolveStopMatches(input: {
 
   for (const record of input.containers) {
     const profile = containerMatchProfile(record)
-    if (profile.areaId !== input.areaId) continue
+    if (!profile.areaIds.includes(input.areaId)) continue
     if (!projectsOverlap(profile.projectIds, input.projectIds)) continue
     scopeTotal += 1
 
@@ -395,11 +426,12 @@ export function resolveStopMatches(input: {
       continue
     }
 
-    if (!ELIGIBLE_CONTAINER_STATUSES.has(profile.status)) {
+    if (!profile.inService) {
+      const heldToPlacement = stringValue(record.submittedValues ?? {}, SERVES_TODAY_KEY) !== undefined
       excluded.push({
         id: profile.id,
         name: profile.name,
-        reason: `${profile.status} — not in service`,
+        reason: `${heldToPlacement ? "No placement serves it today" : profile.status} — not in service`,
       })
       continue
     }

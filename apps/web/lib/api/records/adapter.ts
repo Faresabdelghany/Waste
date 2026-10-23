@@ -53,10 +53,12 @@ export type Resolver = {
    * word the domain matches containers by. A miss is the caller's refusal.
    */
   find: (predicate: (record: BusinessRecord) => boolean) => BusinessRecord | undefined
+  /** Every loaded record the predicate holds for, in load order: for a reading that counts each — a container's planning areas, where areas overlap (#207). */
+  filter: (predicate: (record: BusinessRecord) => boolean) => BusinessRecord[]
 }
 
 /** A resolver over nothing: every lookup misses. What a mapping gets when the store has nothing else to offer. */
-export const NOTHING_RESOLVED: Resolver = { byServerId: () => undefined, serverIdOf: () => undefined, find: () => undefined }
+export const NOTHING_RESOLVED: Resolver = { byServerId: () => undefined, serverIdOf: () => undefined, find: () => undefined, filter: () => [] }
 
 /** What a mapping may look at beside the resource itself. */
 export type MappingContext = {

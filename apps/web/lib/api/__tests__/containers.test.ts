@@ -200,6 +200,8 @@ describe("a container", () => {
       serviceFrequencyId: "",
       placementFrom: "2026-01-01",
       placementTo: "",
+      // Its subscription is not loaded here, so nothing says it serves today (container-places.test.ts reads the place).
+      servesToday: "no",
     })
     assert.equal(stocked.submittedValues?.assetStatus, "in-warehouse")
     assert.equal(stocked.submittedValues?.warehouseId, `warehouse-${warehouseId}`)

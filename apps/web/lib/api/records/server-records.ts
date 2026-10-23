@@ -185,6 +185,7 @@ export function resolverOver(state: ServerRecordsState, extra?: { records: reado
       }
       return undefined
     },
+    filter: (predicate) => sources.flatMap((source) => source.records.filter(predicate)),
   }
 }
 
