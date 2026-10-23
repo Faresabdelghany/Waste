@@ -40,6 +40,9 @@ export const BILLING_RUN_PREFIX = "billing-run"
 export const INVOICE_PREFIX = "invoice"
 export const CREDIT_NOTE_PREFIX = "credit-note"
 
+/** The prefix of the fields a partial credit note's dialog names a line's quantity under: `line:<uuid>`; the adapter reads the body's lines from them. */
+export const CREDIT_LINE_KEY = "line:"
+
 export const PRODUCT_RECORD_KIND = "Product"
 export const PRICE_LIST_RECORD_KIND = "Price list"
 export const PRICE_ROW_RECORD_KIND = "Price row"

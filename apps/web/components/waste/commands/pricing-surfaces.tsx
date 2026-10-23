@@ -42,9 +42,10 @@ import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { isPriceListRecord, PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { blankNone, createPriceRowRecord, editedRecord, EXPLAIN_PRICE_FORM, formValuesOf, PRICE_ROW_FORM, priceRowEditForm } from "@/lib/data/commercial-forms"
+import { COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID } from "@/lib/data/settings-panes"
 
 /** Settings › Commercial › Products, where a product is added and edited. */
-export const PRODUCTS_SETTINGS_HREF = "/settings?pane=commercial-products"
+export const PRODUCTS_SETTINGS_HREF = `/settings?pane=${COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID}`
 
 /** The products' default prices are their default rows': a row added or moved reads the products again. */
 function useProductsReread(): () => void {

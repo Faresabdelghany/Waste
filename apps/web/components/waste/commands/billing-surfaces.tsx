@@ -117,7 +117,7 @@ export function EventCommandsSurface({ record }: RowSurfaceProps) {
         ))}
       </div>
       {open !== null && (
-        <BusinessRecordFormDialog schema={EVENT_COMMAND_FORMS[open]} open onOpenChange={(isOpen) => !isOpen && setOpen(null)} onSubmit={(values) => send(open, values)} relationOptions={(field, values) => pickers.options(field, values, undefined, {})} />
+        <BusinessRecordFormDialog schema={EVENT_COMMAND_FORMS[open]} open onOpenChange={(isOpen) => !isOpen && setOpen(null)} onSubmit={(values) => send(open, values)} relationOptions={(field, values) => pickers.options(field, values, record.projectIds?.[0], {})} />
       )}
     </section>
   )

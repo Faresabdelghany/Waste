@@ -170,11 +170,24 @@ describe("the products module", () => {
     const { fetch, calls } = scripted([() => pageOf([res240, bulky]), () => pageOf([plCph]), () => pageOf([rowDefault, rowOrganisation, rowOsterbro])])
     const result = await loadModule(clientOver(fetch), productsModule, { fixtures: productFixtures, state, now: NOW })
     assert.equal(calls[0].url, "http://api.test/products?limit=200")
-    assert.equal(calls[1].url, "http://api.test/price-lists?limit=200&isDefault=true")
+    assert.match(calls[1].url, /^http:\/\/api\.test\/price-lists\?limit=200&isDefault=true&validOn=\d{4}-\d{2}-\d{2}$/, "the default list in force today")
     assert.match(calls[2].url, new RegExp(`^http://api\\.test/price-lists/${plCph.id}/rows\\?limit=200&validOn=\\d{4}-\\d{2}-\\d{2}$`))
     assert.deepEqual(
       result.records.map((record) => record.value),
       ["DKK 18.50/pickup", "Unpriced"],
+    )
+  })
+
+  test("loads the products for a role that does not view the price lists, the default price then read from the rows the store holds", async () => {
+    // `/price-lists` is granted under commercial.price-rows: its refusal must not take the catalogue with it.
+    const { fetch } = scripted([() => pageOf([res240, bulky]), () => problem(403, "Your role does not allow view on commercial.price-rows")])
+    const result = await loadModule(clientOver(fetch), productsModule, { fixtures: productFixtures, state: pricedState, now: NOW })
+    assert.deepEqual(
+      result.records.map((record) => [record.name, record.value]),
+      [
+        ["Residual waste · 240L bin", "DKK 18.50/pickup"],
+        ["Bulky waste pickup", "Unpriced"],
+      ],
     )
   })
 

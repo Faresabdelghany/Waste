@@ -30,6 +30,7 @@ import type { BusinessRecord } from "./business-modules"
 import {
   BILLING_RUN_RECORD_KIND,
   CANCEL_REASON_LABELS,
+  CREDIT_LINE_KEY,
   CREDIT_NOTE_RECORD_KIND,
   CREDIT_REASON_OPTIONS,
   CUSTOMER_KIND_OPTIONS,
@@ -389,7 +390,7 @@ export function createBillingRunRecord(values: BusinessFormValues, now: number):
 // ---------------------------------------------------------------------------
 
 /** The field a line's credited quantity is typed under. */
-export const creditLineField = (lineId: string) => `line:${lineId}`
+export const creditLineField = (lineId: string) => `${CREDIT_LINE_KEY}${lineId}`
 
 /** What remains to credit of each line of an invoice: its quantity less what its credit notes credited, none of a reversal's line. */
 export function remainingByLine(detail: Pick<InvoiceDetail, "lines">, creditNotes: readonly Pick<InvoiceDetail, "lines">[]): Map<string, number> {

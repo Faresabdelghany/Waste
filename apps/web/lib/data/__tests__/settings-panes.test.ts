@@ -25,6 +25,9 @@ describe("the Settings panes offered", () => {
     assert.equal(settingsPaneOffered(FINANCE_SETTINGS_PANE_ID, false), true)
     assert.equal(settingsPaneOffered("commercial-price-lists", true), true, "Settings › Commercial keeps its price lists in both modes")
     assert.equal(settingsPaneOffered("commercial-products", true), true)
+    // A link to it — Configure's Finance module, `/settings?pane=finance` — opens Settings › Commercial on the Pilot, never the browser-only pane.
+    assert.equal(settingsPaneOpened(FINANCE_SETTINGS_PANE_ID, true), "commercial-products")
+    assert.equal(settingsPaneOpened(FINANCE_SETTINGS_PANE_ID, false), FINANCE_SETTINGS_PANE_ID)
   })
 
   test("a link to Asset management opens Master data on the Pilot, and itself in fixture mode", () => {

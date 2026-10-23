@@ -3640,7 +3640,6 @@ const commercial: WorkspaceDefinition = {
               "Invoice code": "RES-240",
               Materials: "240L bin (rental)",
               "Included services": "Bin cleaning · monthly",
-              "Service levels": "Standard kerbside, Backdoor service",
               // Derived from the typed reference below (issue #20): the
               // catalogue side of the frequency promise, as the real product
               // links products to the same reusable frequency record.
@@ -3679,7 +3678,6 @@ const commercial: WorkspaceDefinition = {
               "Invoice name": "Cardboard collection 660L",
               "Invoice code": "CRD-660",
               Materials: "660L container (rental)",
-              "Service levels": "Standard kerbside",
             },
             [
               "History · 2025-11-02 · Jonas Friis · Product created (Quick create)",
@@ -3709,7 +3707,6 @@ const commercial: WorkspaceDefinition = {
               Unit: "pickup",
               "Invoice name": "Glass igloo emptying",
               "Invoice code": "GLS-IGL",
-              "Service levels": "Crane emptying",
             },
             [
               "History · 2025-12-10 · Mette Holm · Product created (Guided setup)",
@@ -3765,7 +3762,6 @@ const commercial: WorkspaceDefinition = {
               Unit: "job",
               "Invoice name": "Bulky waste pickup",
               "Invoice code": "SRV-BLK",
-              "Service levels": "Same-week, Next-day",
             },
             [
               "History · 2026-04-08 · Mette Holm · Negotiated deal added for Nørrebro CoWork ApS",

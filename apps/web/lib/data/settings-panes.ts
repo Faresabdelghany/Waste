@@ -14,6 +14,8 @@ import { MASTER_DATA_SETTINGS_PANE_ID } from "./business-links"
 
 export const ASSET_MANAGEMENT_SETTINGS_PANE_ID = "asset-management"
 export const FINANCE_SETTINGS_PANE_ID = "finance"
+/** Settings › Commercial › Products, where a link to the Pilot's hidden Finance pane lands. */
+export const COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID = "commercial-products"
 
 /** Whether the Settings nav offers a pane, with the adapter configured or not. */
 export function settingsPaneOffered(paneId: string, configured: boolean): boolean {
@@ -22,7 +24,10 @@ export function settingsPaneOffered(paneId: string, configured: boolean): boolea
   return true
 }
 
-/** The pane a link to one opens: on the Pilot, Asset management's is Master data's. */
+/** The pane a link to one opens: on the Pilot, Asset management's is Master data's, and Finance & invoicing's is Settings › Commercial's products. */
 export function settingsPaneOpened(paneId: string, configured: boolean): string {
-  return configured && paneId === ASSET_MANAGEMENT_SETTINGS_PANE_ID ? MASTER_DATA_SETTINGS_PANE_ID : paneId
+  if (!configured) return paneId
+  if (paneId === ASSET_MANAGEMENT_SETTINGS_PANE_ID) return MASTER_DATA_SETTINGS_PANE_ID
+  if (paneId === FINANCE_SETTINGS_PANE_ID) return COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID
+  return paneId
 }

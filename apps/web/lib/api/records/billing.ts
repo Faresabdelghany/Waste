@@ -54,6 +54,7 @@ import {
   BILLING_RUN_RECORD_KIND,
   BLOCK_REASON_LABELS,
   CANCEL_REASON_LABELS,
+  CREDIT_LINE_KEY,
   CREDIT_NOTE_PREFIX,
   CREDIT_NOTE_RECORD_KIND,
   CREDIT_REASON_LABELS,
@@ -391,9 +392,6 @@ function creditStandingOf(document: InvoiceResource): { status: "Issued" | "Part
 export function invoiceDetail(client: Client, serverId: string): Promise<InvoiceDetail> {
   return get<InvoiceDetail>(client, `/invoices/${serverId}`)
 }
-
-/** The prefix of the line keys a partial credit's form names a quantity under: `line:<uuid>`. */
-export const CREDIT_LINE_KEY = "line:"
 
 export const invoiceAdapter: ResourceAdapter<InvoiceResource> = {
   prefix: INVOICE_PREFIX,

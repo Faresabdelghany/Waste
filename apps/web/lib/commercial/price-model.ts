@@ -88,7 +88,6 @@ export const PRODUCT_FACTS = {
   invoiceCode: "Invoice code", container: "Container", containerType: "Container type",
   wasteFraction: "Waste fraction", customer: "Customer", variations: "Variations",
   priceList: "Price list", materials: "Materials", services: "Included services",
-  serviceLevels: "Service levels",
 } as const
 export const RATE_FACTS = {
   serviceProvider: "Service provider", product: "Product", serviceArea: "Service area",

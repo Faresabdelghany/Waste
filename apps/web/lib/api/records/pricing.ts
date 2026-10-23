@@ -184,10 +184,17 @@ export type ProductResource = Product & { defaultPrice?: { unitPriceMinor: numbe
 const unconditioned = (row: Pick<PriceListRow, "planningAreaId" | "customerKind" | "containerTypeId" | "wasteFractionId" | "customerId">) =>
   row.planningAreaId === null && row.customerKind === null && row.containerTypeId === null && row.wasteFractionId === null && row.customerId === null
 
-/** Each project's products' default prices, by `project|product`: the default lists' rows with no condition, in force on the browser's day. */
-async function defaultPrices(client: Client): Promise<Map<string, { unitPriceMinor: number; currency: string }>> {
+/**
+ * Each project's products' default prices, by `project|product`: the rows
+ * with no condition of the default list in force on the browser's day — one
+ * per project, the database's partial unique — or undefined when the lists
+ * cannot be read: `/price-lists` is granted under `commercial.price-rows`, and
+ * a role that views the catalogue without it still reads its products.
+ */
+async function defaultPrices(client: Client): Promise<Map<string, { unitPriceMinor: number; currency: string }> | undefined> {
   const today = dayIn(new Date(), undefined)
-  const lists = await listAll<PriceList>(client, "/price-lists", { isDefault: "true" })
+  const lists = await listAll<PriceList>(client, "/price-lists", { isDefault: "true", validOn: today }).catch(() => undefined)
+  if (lists === undefined) return undefined
   const prices = new Map<string, { unitPriceMinor: number; currency: string }>()
   const rows = await Promise.all(lists.map((list) => listAll<PriceListRow>(client, `/price-lists/${list.id}/rows`, { validOn: today })))
   lists.forEach((list, index) => {
@@ -218,7 +225,8 @@ export const productAdapter: ResourceAdapter<ProductResource> = {
   statuses: PRODUCT_STATUSES,
   list: async (client) => {
     const [products, prices] = await Promise.all([listAll<Product>(client, "/products"), defaultPrices(client)])
-    return products.map((product) => ({ ...product, defaultPrice: prices.get(`${product.projectId}|${product.id}`) ?? null }))
+    // Without the lists, a product reads its default price from the rows the store holds, as after a write.
+    return products.map((product) => (prices === undefined ? product : { ...product, defaultPrice: prices.get(`${product.projectId}|${product.id}`) ?? null }))
   },
   read: (client, serverId) => get<Product>(client, `/products/${serverId}`),
   toRecord: (product, context) => {
