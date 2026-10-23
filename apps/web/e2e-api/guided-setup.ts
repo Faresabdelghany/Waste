@@ -20,10 +20,12 @@ export const toasts = (page: Page) => page.getByRole("region", { name: "Notifica
  * A day `days` from today on the local clock, as the date inputs take it:
  * the wizard's and the Generate dialog's own day (`todayIso`), which the
  * browser reads in the runner's timezone — not the UTC day, which differs
- * past midnight east of Greenwich.
+ * past midnight east of Greenwich. Counted in calendar days, so a
+ * daylight-saving change inside the span cannot land it a day short.
  */
 export function dayFromToday(days: number): string {
-  const day = new Date(Date.now() + days * 86_400_000)
+  const day = new Date()
+  day.setDate(day.getDate() + days)
   return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`
 }
 
