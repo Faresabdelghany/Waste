@@ -40,15 +40,22 @@ import { problemOfError } from "@/lib/api/records/server-records"
 import { formatMinor } from "@/lib/commercial/money"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord } from "@/lib/data/business-modules"
-import { isPriceListRecord, PRICE_ROWS_MODULE } from "@/lib/data/commercial"
+import { isPriceListRecord, PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { blankNone, createPriceRowRecord, editedRecord, EXPLAIN_PRICE_FORM, formValuesOf, PRICE_ROW_FORM, priceRowEditForm } from "@/lib/data/commercial-forms"
 
 /** Settings › Commercial › Products, where a product is added and edited. */
 export const PRODUCTS_SETTINGS_HREF = "/settings?pane=commercial-products"
 
+/** The products' default prices are their default rows': a row added or moved reads the products again. */
+function useProductsReread(): () => void {
+  const { refreshModule } = useBusinessRecordStore()
+  return () => void refreshModule(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId)
+}
+
 /** Add price: a row of a price list, made from either module's header. */
 function AddPrice({ label }: PrimarySurfaceProps) {
   const pickers = useCommercialPickers()
+  const rereadProducts = useProductsReread()
   return (
     <CreateSurface
       label={label}
@@ -57,6 +64,7 @@ function AddPrice({ label }: PrimarySurfaceProps) {
       pickers={pickers}
       make={(values, now) => createPriceRowRecord(values, now)}
       created={() => ({ title: "Price added", description: "The row is in its list, and prices what it matches from the day it starts." })}
+      onCreated={rereadProducts}
     />
   )
 }
@@ -203,6 +211,7 @@ export function PriceRowCommandsSurface({ record }: RowSurfaceProps) {
   const { upsertRecord } = useBusinessRecordStore()
   const pickers = useCommercialPickers()
   const moduleReady = useModuleReady(PRICE_ROWS_MODULE)
+  const rereadProducts = useProductsReread()
   const [opened, setOpened] = useState<BusinessFormValues | null>(null)
   const [busy, setBusy] = useState(false)
   const schema = priceRowEditForm(record)
@@ -218,8 +227,10 @@ export function PriceRowCommandsSurface({ record }: RowSurfaceProps) {
       () => setBusy(false),
     )
     void outcome?.then((result) => {
-      if (result.kind === "updated") toast.success("Price updated", { description: `${record.context}: ${result.record.value}.` })
-      else if (result.kind === "unchanged") toast.info("Nothing to change", { description: "The row is as the API holds it." })
+      if (result.kind === "updated") {
+        rereadProducts()
+        toast.success("Price updated", { description: `${record.context}: ${result.record.value}.` })
+      } else if (result.kind === "unchanged") toast.info("Nothing to change", { description: "The row is as the API holds it." })
     })
   }
 

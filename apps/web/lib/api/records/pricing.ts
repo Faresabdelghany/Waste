@@ -171,11 +171,55 @@ function productWire(record: BusinessRecord, context: MappingContext): ProductWi
   }
 }
 
-export const productAdapter: ResourceAdapter<Product> = {
+/**
+ * A product as the module reads it: the wire's, and on the list read its
+ * default price — the row with no condition of its project's default list,
+ * in force today — which the Products table shows as the catalogue's price
+ * (`null` where it has none). A product a write answers carries none, and
+ * reads it from the price rows the store holds instead.
+ */
+export type ProductResource = Product & { defaultPrice?: { unitPriceMinor: number; currency: string } | null }
+
+/** A row with no condition: the price everyone pays. */
+const unconditioned = (row: Pick<PriceListRow, "planningAreaId" | "customerKind" | "containerTypeId" | "wasteFractionId" | "customerId">) =>
+  row.planningAreaId === null && row.customerKind === null && row.containerTypeId === null && row.wasteFractionId === null && row.customerId === null
+
+/** Each project's products' default prices, by `project|product`: the default lists' rows with no condition, in force on the browser's day. */
+async function defaultPrices(client: Client): Promise<Map<string, { unitPriceMinor: number; currency: string }>> {
+  const today = dayIn(new Date(), undefined)
+  const lists = await listAll<PriceList>(client, "/price-lists", { isDefault: "true" })
+  const prices = new Map<string, { unitPriceMinor: number; currency: string }>()
+  const rows = await Promise.all(lists.map((list) => listAll<PriceListRow>(client, `/price-lists/${list.id}/rows`, { validOn: today })))
+  lists.forEach((list, index) => {
+    // The newest start wins where two rows overlap the day, as the resolver's tie-break has it.
+    for (const row of rows[index].filter(unconditioned).sort((a, b) => a.validFrom.localeCompare(b.validFrom))) prices.set(`${list.projectId}|${row.productId}`, { unitPriceMinor: row.unitPriceMinor, currency: list.currency })
+  })
+  return prices
+}
+
+/** The Products table's price: the list read's default price, or — on a product a write answered — its default row among the price rows the store holds. */
+function defaultPriceOf(product: ProductResource, productWebId: string, projectWebId: string, context: MappingContext): string {
+  if (product.defaultPrice !== undefined) return product.defaultPrice === null ? "Unpriced" : `${formatMinor(product.defaultPrice.unitPriceMinor, product.defaultPrice.currency)}${UNIT_SUFFIX[product.unit]}`
+  const isDefaultList = (webId: string | undefined) => {
+    const serverId = webId === undefined ? undefined : context.resolve.serverIdOf(webId)
+    const list = serverId === undefined ? undefined : context.resolve.byServerId(serverId)
+    return list !== undefined && list.submittedValues?.isDefault === true && (list.projectIds ?? []).includes(projectWebId)
+  }
+  const conditionKeys = ["planningAreaId", "customerKind", "containerType", "wasteFraction", "customerId"]
+  const row = context.resolve.find(
+    (record) => isPriceRowRecord(record) && record.status === "Active" && typed(record, "productId") === productWebId && conditionKeys.every((key) => typed(record, key) === undefined) && isDefaultList(typed(record, "priceListId")),
+  )
+  return row?.value ?? "Unpriced"
+}
+
+export const productAdapter: ResourceAdapter<ProductResource> = {
   prefix: PRODUCT_PREFIX,
   owns: isProductRecord,
   statuses: PRODUCT_STATUSES,
-  list: (client) => listAll<Product>(client, "/products"),
+  list: async (client) => {
+    const [products, prices] = await Promise.all([listAll<Product>(client, "/products"), defaultPrices(client)])
+    return products.map((product) => ({ ...product, defaultPrice: prices.get(`${product.projectId}|${product.id}`) ?? null }))
+  },
   read: (client, serverId) => get<Product>(client, `/products/${serverId}`),
   toRecord: (product, context) => {
     const project = referenced(context, "project", product.projectId)
@@ -184,13 +228,15 @@ export const productAdapter: ResourceAdapter<Product> = {
     const fraction = master("waste-fraction", product.wasteFractionId)
     const frequency = master("service-frequency", product.serviceFrequencyId)
     const kindLabel = PRODUCT_KIND_LABELS[product.kind]
+    const id = webIdOf(PRODUCT_PREFIX, product.id)
     return {
-      id: webIdOf(PRODUCT_PREFIX, product.id),
+      id,
       name: product.name,
       context: `${kindLabel} · ${UNIT_SUFFIX[product.unit]}`,
       status: statusLabel(product.status),
       ...inheritedPresentation(undefined),
       ...stampFacts(product, context.now),
+      value: defaultPriceOf(product, id, project.webId, context),
       description: product.invoiceName === null ? "No invoice name yet: an invoice line reads the product's own name." : `Invoiced as ${product.invoiceName}${product.invoiceCode === null ? "" : ` (${product.invoiceCode})`}.`,
       facts: {
         Type: kindLabel,

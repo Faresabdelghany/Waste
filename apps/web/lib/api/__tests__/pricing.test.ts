@@ -166,6 +166,23 @@ describe("the products module", () => {
     })
   })
 
+  test("lists each product with its default price — its project's default list's row with no condition, in force today — or Unpriced", async () => {
+    const { fetch, calls } = scripted([() => pageOf([res240, bulky]), () => pageOf([plCph]), () => pageOf([rowDefault, rowOrganisation, rowOsterbro])])
+    const result = await loadModule(clientOver(fetch), productsModule, { fixtures: productFixtures, state, now: NOW })
+    assert.equal(calls[0].url, "http://api.test/products?limit=200")
+    assert.equal(calls[1].url, "http://api.test/price-lists?limit=200&isDefault=true")
+    assert.match(calls[2].url, new RegExp(`^http://api\\.test/price-lists/${plCph.id}/rows\\?limit=200&validOn=\\d{4}-\\d{2}-\\d{2}$`))
+    assert.deepEqual(
+      result.records.map((record) => record.value),
+      ["DKK 18.50/pickup", "Unpriced"],
+    )
+  })
+
+  test("reads a product written later at its default price from the rows the store holds", () => {
+    assert.equal(productAdapter.toRecord(res240, context(productFixtures, pricedState)).value, "DKK 18.50/pickup")
+    assert.equal(productAdapter.toRecord(bulky, context(productFixtures, pricedState)).value, "Unpriced")
+  })
+
   test("says a product without a VAT rate has none, since its events block on it, and names an unloaded master row by its id chip", () => {
     const record = productAdapter.toRecord(xmas, context(productFixtures))
     assert.equal(record.facts.VAT, "Not set: its events block until it has one")

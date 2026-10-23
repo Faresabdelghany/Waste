@@ -166,7 +166,7 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
       status: statusLabel(event.status),
       ...inheritedPresentation(undefined),
       ...stampFacts(event, context.now),
-      value: net ?? block ?? "",
+      value: net ?? (event.status === "blocked" ? block : undefined) ?? "",
       description: block === undefined ? `A ${EVENT_KIND_LABELS[event.kind].toLowerCase()} event of ${event.serviceDate}.` : `Blocked: ${block}. ${event.status === "blocked" ? "Reprice it once what blocks it is put right, or cancel it." : ""}`.trim(),
       facts: {
         Kind: EVENT_KIND_LABELS[event.kind],

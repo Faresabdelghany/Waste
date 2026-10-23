@@ -24,6 +24,7 @@ export function CreateSurface({
   make,
   created,
   pickers: given,
+  onCreated,
 }: {
   label: string
   module: ModuleLocation
@@ -32,6 +33,8 @@ export function CreateSurface({
   make: (values: BusinessFormValues, now: number) => BusinessRecord
   /** What the person is told once the API has taken it. */
   created: (record: BusinessRecord) => { title: string; description: string }
+  /** What else follows once the API has taken it: a module whose rows the new one changes, read again (the Products table's default price, #185). */
+  onCreated?: (record: BusinessRecord) => void
   /** The pickers its relation fields read, where a form names rows the command surfaces' own pickers do not offer (the Price Engine's, #185). */
   pickers?: RelationPickers
 }) {
@@ -54,6 +57,7 @@ export function CreateSurface({
         openRecord(record.id)
         const said = created(record)
         toast.success(said.title, { description: said.description })
+        onCreated?.(record)
       },
       () => setSaving(false),
     )

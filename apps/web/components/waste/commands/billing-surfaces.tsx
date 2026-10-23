@@ -75,13 +75,22 @@ export function AddManualEventSurface({ label }: PrimarySurfaceProps) {
       schema={EVENT_FORM}
       pickers={pickers}
       make={(values, now) => createEventRecord(values, now)}
-      created={(record) => ({ title: "Event added", description: `${record.name} is ${record.status.toLowerCase()}.` })}
+      created={() => ({ title: "Event added", description: "It is priced by the agreement's list, or blocked with what to put right: its status says which." })}
     />
   )
 }
 
 /** What each command is told once the API has taken it. */
 const EVENT_DONE: Readonly<Record<EventCommand, string>> = { reprice: "Event repriced", cancel: "Event cancelled" }
+
+/** What a command the API took is told: a reprice that leaves the event blocked says what still blocks it. */
+function eventDone(name: EventCommand, record: { name: string; status: string; value: string }): void {
+  if (name === "reprice" && record.status === "Blocked") {
+    toast.info("Still blocked", { description: `${record.name}: ${record.value}. Put it right, then reprice it again.` })
+    return
+  }
+  toast.success(EVENT_DONE[name], { description: `${record.name} is now ${record.status.toLowerCase()}${record.value === "" ? "" : `: ${record.value}`}.` })
+}
 
 /** An event's two commands, in its details. */
 export function EventCommandsSurface({ record }: RowSurfaceProps) {
@@ -93,7 +102,7 @@ export function EventCommandsSurface({ record }: RowSurfaceProps) {
   const send = (name: EventCommand, values: BusinessFormValues) =>
     run(name, blankNone(values), (outcome) => {
       setOpen(null)
-      toast.success(EVENT_DONE[name], { description: `${outcome.record.name} is now ${outcome.record.status.toLowerCase()}${outcome.record.value === "" ? "" : `: ${outcome.record.value}`}.` })
+      eventDone(name, outcome.record)
     })
 
   return (

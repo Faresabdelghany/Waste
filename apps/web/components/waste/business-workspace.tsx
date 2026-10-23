@@ -1526,12 +1526,13 @@ export function BusinessWorkspace({
     () => activeRecords.filter((record) => isInProjectScope(record, projectScope)),
     [activeRecords, projectScope],
   )
+  // A module holding two shapes lists one on the Pilot (the list's `shows`): the count, the filter values and the columns are that one's.
   const visibleScopedRecords = useMemo(
     () =>
       scopedRecords.filter(
-        (record) => record.facts["Registry visibility"] !== "Soft deleted",
+        (record) => record.facts["Registry visibility"] !== "Soft deleted" && listShows(commandSurface?.list, record),
       ),
-    [scopedRecords],
+    [commandSurface?.list, scopedRecords],
   )
   // Map Planning reads other modules' records: every container in the
   // registry (the map is geographic — each planning area shows the
@@ -1561,7 +1562,7 @@ export function BusinessWorkspace({
   const filteredRecords = useMemo(() => {
     const matchingRecords = visibleScopedRecords.filter((record) => {
       // A module with a list on the Pilot is matched through its readers alone.
-      if (listReaders) return listShows(commandSurface?.list, record) && matchesBusinessFilters(record, businessFilters, listReaders) && matchesBusinessQuery(record, query)
+      if (listReaders) return matchesBusinessFilters(record, businessFilters, listReaders) && matchesBusinessQuery(record, query)
       const matchesStatus =
         businessFilters.statuses.length === 0 ||
         businessFilters.statuses.includes(record.status)
@@ -1689,7 +1690,7 @@ export function BusinessWorkspace({
       )
     }
     return matchingRecords
-  }, [businessFilters, commandSurface?.list, listReaders, query, viewOptions.ordering, visibleScopedRecords])
+  }, [businessFilters, listReaders, query, viewOptions.ordering, visibleScopedRecords])
   const activeFilterChips = useMemo(
     () => businessFilterChips(businessFilters),
     [businessFilters],

@@ -9,10 +9,12 @@
 // The workspace consults this registry in four places — the primary action,
 // the details' actions, `whileShown`, mounted beside the module's table
 // while the module is shown on the Pilot, for what a module does on its own
-// while a person watches it (the Live board's re-read), and `list`, how the
-// module's rows are filtered: the toolbar's categories read off a row for
-// the person looking, and the filters the module opens with (#147: tickets
-// open on the open ones) — and only while the adapter is configured and the
+// while a person watches it (the Live board's re-read), and `list`, which of
+// the module's records are its rows and how they are filtered: the shape a
+// module of two shapes lists (#185: the price rows, never their lists), the
+// toolbar's categories read off a row for the person looking, and the filters
+// the module opens with (#147: tickets open on the open ones) — and only
+// while the adapter is configured and the
 // module is switched (`commandSurfaceFor`): fixture mode never reaches it,
 // and the fixture forms and filters stand exactly as before. A later slice
 // adds its module here rather than another branch in business-workspace.tsx;
@@ -56,7 +58,7 @@ export type CommandSurface = {
   rowActions?: ComponentType<RowSurfaceProps>
   /** Mounted beside the module's table while the module is shown, rendering nothing itself: the Live board's re-read. */
   whileShown?: ComponentType
-  /** How the module's rows are filtered on the Pilot, in place of the workspace's own per-module matching. */
+  /** Which of the module's records are its rows on the Pilot, and how they are filtered, in place of the workspace's own per-module matching. */
   list?: ModuleList
 }
 
@@ -69,10 +71,12 @@ export type ListViewer = { accountId: string | null }
  * the popover offers them and the rows are matched through them, so the two
  * never disagree. `initial` is what the module opens with, applied when it
  * becomes the active module and never again while it stays so: a filter the
- * person changed is theirs, whatever loads after. `shows`, where a module
- * holds rows of two shapes, is the one its table lists — the price rows,
- * never the price lists they are filed under (#185) — whatever the filters
- * say, since one column set over two shapes reads neither.
+ * person changed is theirs, whatever loads after. `shows` scopes the
+ * module's rows: where a module holds records of two shapes, the one it
+ * lists — the price rows, never the price lists they are filed under (#185)
+ * — before any filter, so the count, the filter values and the column
+ * options are that shape's alone; one column set over two shapes reads
+ * neither.
  */
 export type ModuleList = {
   readers: (viewer: ListViewer) => FilterValueReaders
@@ -80,7 +84,7 @@ export type ModuleList = {
   shows?: (record: BusinessRecord) => boolean
 }
 
-/** Whether a module's list shows a row on the Pilot: every row, unless the list says which (`shows`). */
+/** Whether a record is one of a module's rows on the Pilot: every record, unless its list says which (`shows`); the workspace scopes the module by it before any filter. */
 export function listShows(list: ModuleList | undefined, record: BusinessRecord): boolean {
   return list?.shows?.(record) ?? true
 }
