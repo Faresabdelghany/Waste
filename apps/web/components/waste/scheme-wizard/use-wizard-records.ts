@@ -21,6 +21,7 @@ import { useAssetManagementStore } from "@/components/settings/asset-management-
 import { useApiConfigured } from "@/components/waste/api-session-store"
 import { useModuleRecords as useStoreModuleRecords } from "@/components/waste/business-record-store"
 import { usePickableRecords } from "@/components/waste/pickable-records"
+import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import { getModuleDefinition, type BusinessRecord, type WorkspaceId } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { MASTER_DATA_MODULE } from "@/lib/data/master-data"
@@ -51,6 +52,8 @@ export type WizardRecords = {
   vehicles: BusinessRecord[]
   drivers: BusinessRecord[]
   containers: BusinessRecord[]
+  /** Whether the preview had the API's containers placed (`useContainersPlaced`), so a zero match is evidence: always in fixture mode. */
+  containersPlaced: boolean
   /** On the Pilot, the master data's container types, which a rule names; null in fixture mode, where they are the ones the containers carry. */
   containerTypeNames: string[] | null
   schemes: BusinessRecord[]
@@ -83,6 +86,7 @@ function useModuleRecords(workspaceId: WorkspaceId, moduleId: string): BusinessR
 
 export function useWizardRecords(): WizardRecords {
   const onApi = useApiConfigured()
+  const containersPlaced = useContainersPlaced()
   const projects = useModuleRecords("configure", "organization")
   const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId)
   const calendars = useModuleRecords(
@@ -157,6 +161,7 @@ export function useWizardRecords(): WizardRecords {
     vehicles,
     drivers,
     containers,
+    containersPlaced,
     containerTypeNames,
     schemes,
     allocations,

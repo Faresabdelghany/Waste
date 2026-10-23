@@ -11,8 +11,10 @@ import { collectionGroupsToValues, type CollectionGroup } from "@waste/domain/ro
 import { schemeGenerationRecorded } from "@waste/domain/route-schemes/lifecycle"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { isIsoDate } from "@waste/domain/route-schemes/recurrence"
+import { isNoMatchIssue, type SchemeValidationResult } from "@waste/domain/route-schemes/validation"
 
 import { typed } from "@/lib/api/records/adapter"
+import type { ModuleState } from "@/lib/api/records/server-records"
 
 import type { BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
@@ -100,6 +102,36 @@ export function projectToday(timezone: string | undefined, now: Date = new Date(
 export function licenceDayOf(effectiveFrom: string, timezone: string | undefined, now: Date = new Date()): JudgedDay {
   const today = projectToday(timezone, now)
   return schemeLicenceDay(isIsoDate(effectiveFrom) ? effectiveFrom : today, today)
+}
+
+/** What stands in for the zero-match sentence where the API's containers are not placed. */
+export const PREVIEW_UNPLACED = "The containers' places are not read, so this preview cannot count them; the API matches containers when it generates routes."
+
+/**
+ * Whether the preview had the API's containers placed (#207). On the
+ * browser's own path, or with the containers still on fixtures, it always
+ * has. On the Pilot, once the containers and every module their records are
+ * read through (`CONTAINER_PLACE_MODULES`) are ready: one loading, failed or
+ * not granted to the person's role leaves the preview with the fixtures'
+ * containers, or with the API's standing nowhere because their place is
+ * unread.
+ */
+export function containersPlaced(apiConfigured: boolean, containers: ModuleState | null, through: readonly (ModuleState | null)[]): boolean {
+  if (!apiConfigured || containers === null) return true
+  return [containers, ...through].every((state) => state === null || state.status === "ready")
+}
+
+/**
+ * A scheme's validation where its containers may not be placed (#207): with
+ * them placed, the web's own, the zero-match sentence blocking as in fixture
+ * mode; without, the web's own less that one issue, which is no evidence
+ * then, a notice standing in its place. Every other issue still blocks, and
+ * the status is the web's rule over what is left.
+ */
+export function validationWhenUnplaced(result: SchemeValidationResult, placed: boolean): SchemeValidationResult & { notice: string | null } {
+  if (placed || !result.issues.some(isNoMatchIssue)) return { ...result, notice: null }
+  const issues = result.issues.filter((issue) => !isNoMatchIssue(issue))
+  return { ...result, status: issues.length === 0 ? "Validated" : "Draft", issues, notice: PREVIEW_UNPLACED }
 }
 
 /** Why the Pilot's question offers "This collection only" disabled, until the API keeps a one-off (#209). */

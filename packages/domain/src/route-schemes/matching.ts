@@ -66,8 +66,9 @@ export const ELIGIBLE_CONTAINER_STATUSES = new Set(["Available"])
  * in force on its project's day — the worker's eligibility (apps/worker's
  * stop-matching) — `"no"` otherwise. A record that says it is held to that
  * and not to its status, which is its asset state there (every seeded
- * container has no movement yet). The fixtures' containers say nothing here
- * and keep their status as the gate.
+ * container has no movement yet), and named by its facts, since its typed
+ * fraction and type are master-data web ids. The fixtures' containers say
+ * nothing here and keep their status as the gate and their typed tokens.
  */
 export const SERVES_TODAY_KEY = "servesToday"
 
@@ -295,6 +296,11 @@ type ContainerRecordLike = Pick<
   "id" | "name" | "status" | "facts" | "submittedValues" | "projectIds"
 >
 
+/** Whether a container is one the API holds: held to its placement (`SERVES_TODAY_KEY`) rather than its status, and named by its facts. */
+function heldToPlacement(record: ContainerRecordLike): boolean {
+  return stringValue(record.submittedValues ?? {}, SERVES_TODAY_KEY) !== undefined
+}
+
 export function containerMatchProfile(
   record: ContainerRecordLike,
 ): ContainerMatchProfile {
@@ -311,15 +317,15 @@ export function containerMatchProfile(
       }
     }
   }
-  // A typed value is read where it is a form token; anything else — the API's
-  // master data by web id (#207) — is no name a rule matches, and the record's
-  // display facts say the names instead.
-  const token = (key: string, labels: Readonly<Record<string, string>>) => {
-    const value = stringValue(values, key)
-    return value !== undefined && labels[value] !== undefined ? labels[value] : undefined
+  // A container the API holds types its master data by web id (#207), which
+  // is no name a rule matches: its display facts say the names instead.
+  const fromApi = heldToPlacement(record)
+  const typedName = (key: string, labels: Readonly<Record<string, string>>) => {
+    const value = fromApi ? undefined : stringValue(values, key)
+    return value === undefined ? undefined : (labels[value] ?? value)
   }
-  const primary = token("wasteFraction", FORM_FRACTION_LABELS)
-  const secondary = token("secondaryWasteFraction", FORM_FRACTION_LABELS)
+  const primary = typedName("wasteFraction", FORM_FRACTION_LABELS)
+  const secondary = typedName("secondaryWasteFraction", FORM_FRACTION_LABELS)
   if (primary || secondary) {
     pushFraction(primary)
     pushFraction(secondary)
@@ -327,9 +333,8 @@ export function containerMatchProfile(
     pushFraction(facts["Waste fractions"])
   }
 
-  const containerType = token("containerType", FORM_CONTAINER_TYPE_LABELS) ?? (facts["Container type"]?.trim() || undefined)
+  const containerType = typedName("containerType", FORM_CONTAINER_TYPE_LABELS) ?? (facts["Container type"]?.trim() || undefined)
 
-  const servesToday = stringValue(values, SERVES_TODAY_KEY)
   const areaList = stringValue(values, PLANNING_AREA_IDS_KEY)
   const areaId = stringValue(values, "planningAreaId")
 
@@ -337,7 +342,7 @@ export function containerMatchProfile(
     id: record.id,
     name: record.name,
     status: record.status,
-    inService: servesToday === undefined ? ELIGIBLE_CONTAINER_STATUSES.has(record.status) : servesToday === "yes",
+    inService: fromApi ? values[SERVES_TODAY_KEY] === "yes" : ELIGIBLE_CONTAINER_STATUSES.has(record.status),
     areaIds: areaList !== undefined ? splitList(areaList) : areaId !== undefined ? [areaId] : [],
     fractions,
     ...(containerType ? { containerType } : {}),
@@ -427,11 +432,10 @@ export function resolveStopMatches(input: {
     }
 
     if (!profile.inService) {
-      const heldToPlacement = stringValue(record.submittedValues ?? {}, SERVES_TODAY_KEY) !== undefined
       excluded.push({
         id: profile.id,
         name: profile.name,
-        reason: `${heldToPlacement ? "No placement serves it today" : profile.status} — not in service`,
+        reason: `${heldToPlacement(record) ? "No placement serves it today" : profile.status} — not in service`,
       })
       continue
     }

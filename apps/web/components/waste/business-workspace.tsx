@@ -42,7 +42,7 @@ import {
 } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
-import { ROUTE_SCHEMES_MODULE, schemeValuesOfDraft } from "@/lib/data/route-schemes"
+import { ROUTE_SCHEMES_MODULE, schemeValuesOfDraft, validationWhenUnplaced } from "@/lib/data/route-schemes"
 import {
   clearedFactKeys,
   deriveFormRecord,
@@ -253,6 +253,7 @@ import {
 } from "@/components/waste/business-record-views"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { SchemeEditPolicyDialog } from "@/components/waste/scheme-edit-policy-dialog"
+import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import { useSchemeEditCommit } from "@/components/waste/use-scheme-edit-commit"
 import {
   RouteCreateEntry,
@@ -1074,6 +1075,8 @@ export function BusinessWorkspace({
   // The API's routes and stops reach the map once they are read, and nothing before (#179): a fixture route drawn over the Pilot's containers is a route that does not exist.
   const routesOnApi = useServerModuleState("route-studio", "routes")
   const pickupsOnApi = useServerModuleState("route-studio", "pickups")
+  // Whether a guided scheme's zero match is evidence: the API's containers placed (#207).
+  const containersPlaced = useContainersPlaced()
   // Whether the adapter is on (Issue #81): what the switched modules' own surfaces show, and fixture mode does not.
   const apiConfigured = useApiConfigured()
   // On the API a customer field names a Customer in the glossary's sense — a
@@ -4367,14 +4370,18 @@ export function BusinessWorkspace({
     const allocationModule = businessWorkspaces.fleet.modules.find(
       (candidate) => candidate.id === "vehicle-planning",
     )
-    const validation = validateGuidedScheme(
-      data,
-      getRecords(workspace.id, activeModule.id, activeModule.records),
-      allocationModule
-        ? getRecords("fleet", allocationModule.id, allocationModule.records)
-        : [],
-      containerRecords,
-      vehicleRecords,
+    // With the API's containers not placed the zero-match sentence is no evidence and does not make the scheme a Draft (#207).
+    const validation = validationWhenUnplaced(
+      validateGuidedScheme(
+        data,
+        getRecords(workspace.id, activeModule.id, activeModule.records),
+        allocationModule
+          ? getRecords("fleet", allocationModule.id, allocationModule.records)
+          : [],
+        containerRecords,
+        vehicleRecords,
+      ),
+      containersPlaced,
     )
 
     const submittedValues: NonNullable<BusinessRecord["submittedValues"]> = schemeValuesOfDraft(data, groups, origin.extraValues)

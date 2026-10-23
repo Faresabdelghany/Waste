@@ -51,8 +51,9 @@ import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 import { command, create, get, listAll, patch } from "../client"
 import { inheritedPresentation, isLocalRefusal, moduleKeyOf, ofKind, patchOf, said, stampFacts, statusLabel, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, projectTimezoneOf, shownOn } from "./clock"
-import { containerPlace } from "./container-places"
+import { containerPlace, servesOn } from "./container-places"
 import { projectMoved, projectServerIdOf, refusal, warehouseAdapter } from "./places"
+import { dayIn } from "./planning"
 import { nameVia, referencedServerId, typedReference, webIdVia, type ReferenceRule } from "./references"
 
 /** The workspace module the containers are the rows of. */
@@ -86,14 +87,15 @@ const firstDayOut = (lastDayIn: string) => addDays(lastDayIn, 1)
 
 const isOwnership = (value: string): value is ContainerOwnership => (CONTAINER_OWNERSHIPS as readonly string[]).includes(value)
 
-/** The placement a record shows: the one the ledger has the container in service at, else the latest by start. */
-function placementShown(resource: ContainerResource): ContainerServicePlacement | undefined {
+/** The placement a record shows: the one the ledger has the container in service at, else the one serving on the project's day, else the latest by start. */
+function placementShown(resource: ContainerResource, day: string): ContainerServicePlacement | undefined {
   const serving = resource.assetState?.placementId
   if (serving) {
     const found = resource.placements.find((placement) => placement.id === serving)
     if (found) return found
   }
-  return [...resource.placements].sort((a, b) => b.validFrom.localeCompare(a.validFrom) || b.id.localeCompare(a.id))[0]
+  const latestFirst = [...resource.placements].sort((a, b) => b.validFrom.localeCompare(a.validFrom) || b.id.localeCompare(a.id))
+  return latestFirst.find((placement) => servesOn(placement, day)) ?? latestFirst[0]
 }
 
 /** A placement's period as a person reads it: its first day, and its last or "open". */
@@ -322,7 +324,8 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
     const typeName = nameVia(context, CONTAINER_TYPE_PREFIX, resource.containerTypeId)
     const state = resource.assetState
     const status = state === null ? NO_STOCK_RECORD : statusLabel(state.status)
-    const placement = placementShown(resource)
+    const timezone = project === undefined ? undefined : typed(project, "timezone")
+    const placement = placementShown(resource, dayIn(context.now ?? new Date(), timezone))
     const facts: Record<string, string> = {
       "Container ID": resource.label,
       Barcode: resource.barcode ?? "Not recorded",
@@ -335,7 +338,7 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
     }
     if (state !== null) {
       if (state.warehouseId !== null) facts.Warehouse = nameVia(context, "warehouse", state.warehouseId)
-      facts["State since"] = shownOn(state.since, project === undefined ? undefined : typed(project, "timezone"))
+      facts["State since"] = shownOn(state.since, timezone)
     }
     if (placement !== undefined) {
       facts["Waste fractions"] = nameVia(context, "fraction", placement.wasteFractionId)
@@ -344,7 +347,7 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
       if (placement.effectiveServiceFrequencyId !== null) facts["Service frequency"] = nameVia(context, "frequency", placement.effectiveServiceFrequencyId)
     }
     if (resource.notes !== null) facts.Notes = resource.notes
-    const place = containerPlace(placement, projectWebId, project === undefined ? undefined : typed(project, "timezone"), context)
+    const place = containerPlace(placement, projectWebId, timezone, context)
     Object.assign(facts, place.facts)
     return {
       id: webIdOf(CONTAINER_PREFIX, resource.id),

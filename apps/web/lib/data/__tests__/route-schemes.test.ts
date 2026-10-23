@@ -11,8 +11,9 @@ import { PLANNING_AREA_IDS_KEY, SERVES_TODAY_KEY } from "@waste/domain/route-sch
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 
 import { statusLabel } from "../../api/records/adapter"
+import { IDLE, type ModuleState, type ModuleStatus } from "../../api/records/server-records"
 import type { BusinessRecord } from "../business-modules"
-import { licenceDayOf, ONE_OFF_NOT_KEPT, projectToday, ROUTES_NOT_READ, schemeEditOnApi, schemeEditStatusOnApi, STORED_ONE_OFF } from "../route-schemes"
+import { containersPlaced, licenceDayOf, ONE_OFF_NOT_KEPT, PREVIEW_UNPLACED, projectToday, ROUTES_NOT_READ, schemeEditOnApi, schemeEditStatusOnApi, STORED_ONE_OFF, validationWhenUnplaced } from "../route-schemes"
 
 describe("the status a scheme edit asks the API for", () => {
   test("a Validated scheme stays Validated, whatever the web's own validation says: the API's 409 speaks for the rules it holds", () => {
@@ -75,6 +76,44 @@ describe("the wizard's validation over the API's containers", () => {
       assert.equal(result.status, "Draft")
       assert.deepEqual(result.issues, ["No containers currently match the stop rule"], `${containers.length} container(s)`)
     }
+  })
+
+  // The zero match is evidence only where the preview had the API's containers placed: the containers and every module
+  // their records are read through ready. One not read — loading, failed, or not granted to the role — leaves the
+  // preview counting the fixtures' containers, or the API's standing nowhere.
+  const state = (status: ModuleStatus): ModuleState => ({ ...IDLE, status })
+  const ready = state("ready")
+  const throughReady = [ready, ready, ready, ready, ready]
+
+  test("placed: in fixture mode, with the containers not switched, or with every module read", () => {
+    assert.equal(containersPlaced(false, state("not-granted"), throughReady), true, "fixture mode")
+    assert.equal(containersPlaced(true, null, throughReady), true, "the containers on fixtures")
+    assert.equal(containersPlaced(true, ready, throughReady), true)
+    assert.equal(containersPlaced(true, ready, [ready, null, ready, ready, ready]), true, "a module still on fixtures says nothing")
+  })
+
+  test("not placed: a role granted none of them, or any one not read", () => {
+    const grantedNothing = state("not-granted")
+    assert.equal(containersPlaced(true, grantedNothing, [grantedNothing, grantedNothing, grantedNothing, grantedNothing, grantedNothing]), false, "a role granted nothing")
+    assert.equal(containersPlaced(true, ready, [grantedNothing, ready, ready, ready, ready]), false, "the agreements not granted: no container's place is read")
+    for (const status of ["idle", "loading", "failed"] as const) {
+      assert.equal(containersPlaced(true, state(status), throughReady), false, `the containers ${status}`)
+      assert.equal(containersPlaced(true, ready, [ready, ready, ready, state(status), ready]), false, `the areas ${status}`)
+    }
+  })
+
+  test("placed, the zero-match sentence blocks as in fixture mode, and no notice is said", () => {
+    const own = validated([])
+    assert.deepEqual(validationWhenUnplaced(own, true), { ...own, notice: null })
+  })
+
+  test("not placed, it is no evidence: dropped, the notice standing in its place, and every other issue still blocks", () => {
+    const unplaced = validationWhenUnplaced(validated([]), false)
+    assert.deepEqual([unplaced.status, unplaced.issues, unplaced.notice], ["Validated", [], PREVIEW_UNPLACED])
+    const withoutDriver = validationWhenUnplaced(validateGuidedScheme(draft({ groups: [{ ...draft().groups[0], driverId: undefined }] }), [], [], [], [vehicle as never]), false)
+    assert.deepEqual([withoutDriver.status, withoutDriver.issues, withoutDriver.notice], ["Draft", ["Pick a driver"], PREVIEW_UNPLACED])
+    const matched = validationWhenUnplaced(validated([held("yes")]), false)
+    assert.equal(matched.notice, null, "nothing to stand in for where the rule matched")
   })
 })
 

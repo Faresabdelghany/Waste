@@ -37,10 +37,11 @@ import { useCallback, useState, type Dispatch, type SetStateAction } from "react
 import { toast } from "sonner"
 
 import { useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
+import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
-import { projectToday, schemeEditOnApi, schemeEditStatusOnApi, timezoneOfProject } from "@/lib/data/route-schemes"
+import { projectToday, schemeEditOnApi, schemeEditStatusOnApi, timezoneOfProject, validationWhenUnplaced } from "@/lib/data/route-schemes"
 import {
   planSchemeEditReconciliation,
   type SchemeEditApplication,
@@ -108,6 +109,7 @@ export function useSchemeEditCommit({
   // The API's routes, once the routes module has read them; null before, or when the read failed.
   const routesState = useServerModuleState("route-studio", "routes")
   const apiRoutes = routesState?.status === "ready" ? routesState.records : null
+  const containersPlaced = useContainersPlaced()
 
   const commitSchemeEdit = useCallback(
     (
@@ -129,12 +131,14 @@ export function useSchemeEditCommit({
           toast.error(`${after.name} not saved`, { description: decided.message })
           return
         }
-        const validation = schemeLiveValidation(after, {
+        const own = schemeLiveValidation(after, {
           schemes: moduleRecords("route-studio", "schemes"),
           allocations: moduleRecords("fleet", "vehicle-planning"),
           containers: moduleRecords("resources", "containers"),
           vehicles: moduleRecords("fleet", "vehicles"),
         })
+        // With the API's containers not placed the zero-match sentence is no evidence, so it keeps no Draft a Draft (#207).
+        const validation = own === null ? null : validationWhenUnplaced(own, containersPlaced)
         const scheme: BusinessRecord = { ...after, status: schemeEditStatusOnApi(before.status, validation?.issues ?? null) }
         whenSaved(upsertRecord("route-studio", "schemes", scheme), () => {
           setAuditEvents((current) => ({
@@ -216,7 +220,7 @@ export function useSchemeEditCommit({
         toast.success(`${scheme.name} updated`, { description: schemeEdit.message })
       }
     },
-    [actorName, apiRoutes, moduleRecords, schemesOnApi, setAuditEvents, setSelectedRecord, upsertRecord],
+    [actorName, apiRoutes, containersPlaced, moduleRecords, schemesOnApi, setAuditEvents, setSelectedRecord, upsertRecord],
   )
 
   /** The dialog's answer: the pending edit is planned again, with `apply`, by the commit of this render. */

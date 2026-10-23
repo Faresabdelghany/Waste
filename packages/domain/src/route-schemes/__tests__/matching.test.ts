@@ -185,7 +185,7 @@ describe("a container the API holds (#207)", () => {
     assert.equal(resolveStopMatches({ rule: { fractions: ["Residual"] }, areaId: "area-amager", containers: [both] }).scopeTotal, 0)
   })
 
-  test("served by no placement today is in scope and excluded with the reason, never matched", () => {
+  test("held to a placement that serves it nowhere today, it is excluded with the reason where it is in scope, never matched", () => {
     const idle = server("asset-3", { areas: "area-indreby", serves: "no" })
     const result = resolveStopMatches({ rule: { fractions: ["Residual"] }, areaId: "area-indreby", containers: [idle] })
     assert.deepEqual(result.matched, [])
@@ -197,5 +197,7 @@ describe("a container the API holds (#207)", () => {
     const profile = containerMatchProfile(fixture)
     assert.deepEqual([profile.inService, profile.areaIds, profile.fractions, profile.containerType], [true, ["area-indreby"], ["Glass"], "Two-wheel bin · 240 L"])
     assert.equal(containerMatchProfile({ ...fixture, status: "Defect" }).inService, false)
+    // A typed value the form labels do not know is read as it is typed, as the asset catalogue's tokens are.
+    assert.deepEqual(containerMatchProfile({ ...fixture, submittedValues: { ...fixture.submittedValues, wasteFraction: "paper", secondaryWasteFraction: "glass" } }).fractions, ["paper", "Glass"])
   })
 })

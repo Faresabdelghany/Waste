@@ -32,8 +32,10 @@ import {
 } from "@/components/ui/select"
 import { usePickableRecords } from "@/components/waste/pickable-records"
 import { useModuleRecords } from "@/components/waste/scheme-route-map"
+import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
+import { validationWhenUnplaced } from "@/lib/data/route-schemes"
 import {
   collectionGroupCoverage,
   collectionGroupsOfRecord,
@@ -962,21 +964,22 @@ function CollectionGroupsEditorDialogBody({
   )
 
   // Validation runs over the record as it WOULD be saved — the groups
-  // serialized the way the save path serializes them.
-  const preview = useMemo(
-    () =>
-      schemeLiveValidation(
-        {
-          ...scheme,
-          submittedValues: {
-            ...scheme.submittedValues,
-            ...collectionGroupsToValues(groups, serviceDays),
-          },
+  // serialized the way the save path serializes them. With the API's
+  // containers not placed the zero-match sentence is no evidence (#207).
+  const containersPlaced = useContainersPlaced()
+  const preview = useMemo(() => {
+    const own = schemeLiveValidation(
+      {
+        ...scheme,
+        submittedValues: {
+          ...scheme.submittedValues,
+          ...collectionGroupsToValues(groups, serviceDays),
         },
-        { schemes, allocations, containers, vehicles },
-      ),
-    [allocations, containers, groups, scheme, schemes, serviceDays, vehicles],
-  )
+      },
+      { schemes, allocations, containers, vehicles },
+    )
+    return own === null ? null : validationWhenUnplaced(own, containersPlaced)
+  }, [allocations, containers, containersPlaced, groups, scheme, schemes, serviceDays, vehicles])
 
   const planningAreaId =
     typeof values.planningAreaId === "string" && values.planningAreaId
