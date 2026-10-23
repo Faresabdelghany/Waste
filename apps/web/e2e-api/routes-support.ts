@@ -16,7 +16,7 @@ type Named = { id: string; name: string }
 
 /** A route and a stop as these specs read them: dispatched-route.ts's shapes, with what the office's surfaces show. */
 export type ApiPickup = Pickup & { containerId: string; reason: string | null; note: string | null }
-export type ApiRoute = Route & { routeSchemeId: string; note: string | null; plannedStartTime: string | null; cancelledAt: string | null; progress: { planned: number; total: number } }
+export type ApiRoute = Route & { routeSchemeId: string; note: string | null; plannedStartTime: string | null; cancelledAt: string | null; heldAt: string | null; progress: { planned: number; total: number } }
 export type ApiRouteDetail = ApiRoute & { pickups: ApiPickup[]; activePlan: { solver: string } | null; session: { startedAt: string } | null; sessions: { startedAt: string; endedAt: string | null }[] }
 
 /** An instant on Copenhagen's clock as the office's surfaces show it: "2026-10-01 06:31". */
