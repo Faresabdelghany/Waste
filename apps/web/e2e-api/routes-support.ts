@@ -5,8 +5,12 @@
 // with one rule group, Residual inside Indre By Operations on weekdays, in
 // force from tomorrow on Copenhagen's clock, and names neither a vehicle nor
 // a driver: a route it generates is planned and unassigned, with the seeded
-// containers the rule matches as its stops.
+// containers the rule matches as its stops. It names a depot only where a
+// spec asks for one, and a route of one inside the horizon with fifty open
+// stops or fewer is ordered by the optimiser rather than measured in the
+// generated order (#172).
 import type { APIRequestContext, Locator, Page } from "@playwright/test"
+import type { ActivePlan } from "@waste/contracts/plans"
 
 import { addDays, dayIn, generate, type Pickup, type Route } from "./dispatched-route"
 import { chainLanded, expect } from "./fixtures"
@@ -16,8 +20,9 @@ type Named = { id: string; name: string }
 
 /** A route and a stop as these specs read them: dispatched-route.ts's shapes, with what the office's surfaces show. */
 export type ApiPickup = Pickup & { containerId: string; reason: string | null; note: string | null }
-export type ApiRoute = Route & { routeSchemeId: string; note: string | null; plannedStartTime: string | null; cancelledAt: string | null; progress: { planned: number; total: number } }
-export type ApiRouteDetail = ApiRoute & { pickups: ApiPickup[]; activePlan: { solver: string } | null; session: { startedAt: string } | null; sessions: { startedAt: string; endedAt: string | null }[] }
+/** `activePlan` is the list's and the route's read's (#173), null while the generated order stands unmeasured; a command's answer leaves it out. */
+export type ApiRoute = Route & { routeSchemeId: string; note: string | null; plannedStartTime: string | null; cancelledAt: string | null; progress: { planned: number; total: number }; activePlan?: ActivePlan | null }
+export type ApiRouteDetail = ApiRoute & { pickups: ApiPickup[]; session: { startedAt: string } | null; sessions: { startedAt: string; endedAt: string | null }[] }
 
 /** An instant on Copenhagen's clock as the office's surfaces show it: "2026-10-01 06:31". */
 export const onCopenhagenClock = (instant: string) =>
@@ -26,12 +31,19 @@ export type Scheme = { id: string; name: string; projectId: string; editPolicy: 
 
 const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday"] as const
 
-/** A validated scheme made through the API for the run, uniquely named and never cleaned up: one rule group, Residual inside Indre By Operations, on `serviceDays` from `validFrom`. */
-export async function createScheme(api: APIRequestContext, name: string, { serviceDays, validFrom }: { serviceDays: readonly string[]; validFrom: string }): Promise<Scheme> {
-  const project = await projectNamed(api, "Copenhagen Central")
-  const area = (await listAll<Named>(api, "/planning-areas")).find((row) => row.name === "Indre By Operations")
-  const residual = (await listAll<Named>(api, "/waste-fractions")).find((row) => row.name === "Residual")
+/** A validated scheme made through the API for the run, uniquely named and never cleaned up: one rule group, Residual inside Indre By Operations, on `serviceDays` from `validFrom`, from the depot named `depot` where one is. */
+export async function createScheme(api: APIRequestContext, name: string, { serviceDays, validFrom, depot }: { serviceDays: readonly string[]; validFrom: string; depot?: string }): Promise<Scheme> {
+  const [project, areas, fractions, depots] = await Promise.all([
+    projectNamed(api, "Copenhagen Central"),
+    listAll<Named>(api, "/planning-areas"),
+    listAll<Named>(api, "/waste-fractions"),
+    depot === undefined ? Promise.resolve<Named[]>([]) : listAll<Named>(api, "/depots"),
+  ])
+  const area = areas.find((row) => row.name === "Indre By Operations")
+  const residual = fractions.find((row) => row.name === "Residual")
   expect(area && residual, "the seed holds Indre By Operations and Residual").toBeTruthy()
+  const depotId = depots.find((row) => row.name === depot)?.id
+  if (depot !== undefined) expect(depotId, `the seed holds ${depot}`).toBeTruthy()
   const created = await api.post("/route-schemes", {
     data: {
       projectId: project.id,
@@ -43,6 +55,7 @@ export async function createScheme(api: APIRequestContext, name: string, { servi
       plannedStartTime: "06:30",
       status: "validated",
       validFrom,
+      ...(depotId === undefined ? {} : { depotId }),
       collectionGroups: [{ name, days: serviceDays, stopSource: "rule", rule: { wasteFractionIds: [residual?.id], containerTypeIds: [], vehicleTypeId: null } }],
     },
   })
@@ -51,9 +64,9 @@ export async function createScheme(api: APIRequestContext, name: string, { servi
 }
 
 /** A scheme made for the run and its routes, generated over `days` from tomorrow, in the order they run: every one planned, unassigned, the scheme's own. */
-export async function schemeWithRoutes(api: APIRequestContext, name: string, days = 14): Promise<{ scheme: Scheme; routes: ApiRoute[] }> {
+export async function schemeWithRoutes(api: APIRequestContext, name: string, days = 14, { depot }: { depot?: string } = {}): Promise<{ scheme: Scheme; routes: ApiRoute[] }> {
   const from = addDays(dayIn("Europe/Copenhagen"), 1)
-  const scheme = await createScheme(api, name, { serviceDays: WEEKDAYS, validFrom: from })
+  const scheme = await createScheme(api, name, { serviceDays: WEEKDAYS, validFrom: from, depot })
   await generate(api, scheme.id, { from, to: addDays(from, days - 1) })
   const routes = (await listAll<ApiRoute>(api, "/routes", { routeSchemeId: scheme.id })).sort((a, b) => a.operatingDate.localeCompare(b.operatingDate) || a.number - b.number)
   expect(routes.length, `${name} generated routes`).toBeGreaterThan(0)

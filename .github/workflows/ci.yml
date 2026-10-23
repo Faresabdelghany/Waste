@@ -371,6 +371,11 @@ jobs:
       E2E_LOGIN_EMAIL: fares.abdelghany@kystbyen.example
       E2E_TESTER_EMAIL: e2e-tester@waste-e2e.example
       PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+      # The deterministic fake routing provider (@waste/routing/select), named
+      # rather than left to the default: the generation scenario
+      # (apps/web/e2e-api/map-routes.spec.ts) asserts the legs it measured,
+      # and no OpenRouteService credential exists on the public repository.
+      ROUTING_PROVIDER: fake
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
