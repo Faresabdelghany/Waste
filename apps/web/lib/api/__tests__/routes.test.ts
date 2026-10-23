@@ -254,6 +254,18 @@ describe("a route", () => {
     assert.equal(record.submittedValues?.trailerId, trailerRecord.id)
   })
 
+  test("held by the office's move, says so on its row and in its details, and what ends the hold (#209)", () => {
+    const held = routeAdapter.toRecord({ ...planned, heldAt: "2026-09-30T08:15:00.000Z" }, context())
+    assert.equal(held.facts.Hold, "Moved by the office 2026-09-30 10:15", "on the project's clock")
+    assert.equal(held.context, "Copenhagen Central · Held by the office")
+    assert.match(held.description, /Held by the office's move: generation runs keep its day, its start and its Planned Assignment/)
+    assert.match(held.description, /an edit of the scheme's start, depot, unloading station or days, or of its group's vehicle, driver, provider or days, releases it; a dispatch or a cancel ends it\.$/)
+    const free = routeAdapter.toRecord(planned, context())
+    assert.equal(free.facts.Hold, undefined)
+    assert.equal(free.context, "Copenhagen Central")
+    assert.doesNotMatch(free.description, /Held/)
+  })
+
   test("carries the active Plan the read gives it, as JSON under the key the map reads, and nothing when the read says nothing", () => {
     assert.equal(routeAdapter.toRecord(planned, context()).submittedValues?.[ROUTE_ACTIVE_PLAN_KEY], undefined, "GET /routes carries no activePlan yet (#173 adds it)")
     assert.equal(routeAdapter.toRecord(detailOf(planned), context()).submittedValues?.[ROUTE_ACTIVE_PLAN_KEY], "null")

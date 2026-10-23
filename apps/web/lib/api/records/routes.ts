@@ -103,6 +103,10 @@ function projectOf(route: Route, context: MappingContext): { webId: string; name
   return { webId, name, timezone: record === undefined ? undefined : typed(record, "timezone") }
 }
 
+/** What a held route's details say of the hold: what the API keeps, and what ends it (#209, the API's `route-holds.ts`). */
+const HELD =
+  "Held by the office's move: generation runs keep its day, its start and its Planned Assignment, and still refresh its stops; an edit of the scheme's start, depot, unloading station or days, or of its group's vehicle, driver, provider or days, releases it; a dispatch or a cancel ends it."
+
 export function toRouteRecord(route: RouteRead, context: MappingContext): BusinessRecord {
   const project = projectOf(route, context)
   const at = (instant: string | null) => (instant === null ? undefined : shownOn(instant, project.timezone))
@@ -127,6 +131,9 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
   if (route.planned.depotId !== null) facts.Depot = nameVia(context, "depot", route.planned.depotId)
   if (route.planned.unloadingStationId !== null) facts.Unloading = nameVia(context, "station", route.planned.unloadingStationId)
   facts.Deviation = route.note ?? "None"
+  // A route the office moved by hand is held (#209): generation keeps what the office moved until an edit of the same releases it.
+  const held = at(route.heldAt)
+  if (held !== undefined) facts.Hold = `Moved by the office ${held}`
   const stamps: Array<[string, string | undefined]> = [
     ["Dispatched at", at(route.dispatchedAt)],
     ["Started at", at(route.startedAt)],
@@ -140,13 +147,13 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
   return {
     id: webIdOf(ROUTE_PREFIX, route.id),
     name: route.label,
-    context: [project.name ?? project.webId, area].filter(Boolean).join(" · "),
+    context: [project.name ?? project.webId, area, held === undefined ? undefined : "Held by the office"].filter(Boolean).join(" · "),
     status: statusLabel(route.status),
     ...inheritedPresentation(undefined),
     ...stampFacts(route, context.now),
     owner: driver ?? "Unassigned",
     value: stopsValue(route.progress),
-    description: `Generated from ${scheme?.name ?? "its route scheme"} for ${route.serviceDate}${route.operatingDate === route.serviceDate ? "" : `, running ${route.operatingDate}`}.`,
+    description: `Generated from ${scheme?.name ?? "its route scheme"} for ${route.serviceDate}${route.operatingDate === route.serviceDate ? "" : `, running ${route.operatingDate}`}.${held === undefined ? "" : ` ${HELD}`}`,
     facts,
     companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [project.webId],
