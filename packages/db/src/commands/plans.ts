@@ -281,11 +281,18 @@ export async function ensurePlan(
   // A match is reusable only when its stops are the request's very pickups: the
   // fingerprint keys coordinates, and regeneration re-mints ids at the same
   // places — replaying such a Plan would answer the baseline while claiming the
-  // order. An optimiser Plan still calculating has no stops to compare and its
+  // order. A `manual` or `baseline` request is an order, so the match must name
+  // the stops in that order too: two stops at one address key alike, and a swap
+  // of them would otherwise re-activate the old order (#212). An `optimiser`
+  // request is a set, answered in the solver's order, so its match is compared
+  // as one. An optimiser Plan still calculating has no stops to compare and its
   // solver reads the route's stops when it runs, so it is reused as it stands.
   const sameStops = async (matchId: string): Promise<boolean> => {
     const named = await planStopIds(tx, { companyId, planId: matchId })
-    return named.length === request.orderedPickupIds.length && new Set(named).size === new Set([...named, ...request.orderedPickupIds]).size
+    const asked = request.orderedPickupIds
+    if (named.length !== asked.length) return false
+    if (request.solver !== "optimiser") return named.every((id, index) => id === asked[index])
+    return new Set(named).size === new Set([...named, ...asked]).size
   }
   const queue = routingQueueOf(request.solver)
   const send = async (planId: string) => {

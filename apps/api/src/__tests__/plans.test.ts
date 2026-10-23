@@ -23,7 +23,7 @@ import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
 import { withCompany } from "@waste/db/tenant"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { FakeProvider } from "@waste/routing/fake"
-import { eq, sql } from "drizzle-orm"
+import { eq, inArray, sql } from "drizzle-orm"
 import { PgBoss } from "pg-boss"
 
 import { createApp } from "../app"
@@ -156,6 +156,74 @@ describe("the Plan endpoints and the manual reorder", { skip: database.skip || o
     assert.equal(plans.items.length, 2, "a re-order is a new Plan; the previous row stays")
     const detail = await detailOf(seeded.id)
     assert.deepEqual(detail.pickups.map((stop) => stop.id), swapped)
+  })
+
+  describe("two stops at one address (#212): the fingerprint keys them alike, so the cache tells two orders apart by the stops themselves", () => {
+    /** Two bins at one property, the route's only stops: either order keys the same fingerprint. */
+    const sameAddress = () =>
+      seedRoute(pool, a, fleet, ex, {
+        depotId: fleet.depots.nordhavn.id,
+        pickups: [
+          { containerId: ex.containers.bin1.id, propertyId: ex.properties.havnegade.id },
+          { containerId: ex.containers.bin2.id, propertyId: ex.properties.havnegade.id },
+        ],
+      })
+    const fingerprintsOf = async (ids: readonly string[]) => (await ownerPool.db.select({ fingerprint: plan.fingerprint }).from(plan).where(inArray(plan.id, [...ids]))).map((row) => row.fingerprint)
+    const reorder = async (routeId: string, pickupIds: readonly string[]) => {
+      const response = await olivia(`/routes/${routeId}/pickup-order`, { method: "PUT", body: { pickupIds } })
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+      return RouteDetail.parse(await response.json())
+    }
+
+    test("swapping them after the first order was measured is a new manual Plan, active and measuring, and the route's sequence follows it", async () => {
+      const seeded = await sameAddress()
+      const [first, second] = seeded.pickupIds
+      const measured = (await reorder(seeded.id, [first, second])).activePlan
+      assert.ok(measured)
+      await ownerPool.db.update(plan).set({ status: "ready", distanceMetres: 1_200, durationSeconds: 240 }).where(eq(plan.id, measured.id))
+      const detail = await reorder(seeded.id, [second, first])
+      assert.ok(detail.activePlan)
+      assert.notEqual(detail.activePlan.id, measured.id, "the ready Plan holds the other order; re-activating it would drop the dispatcher's")
+      assert.deepEqual([detail.activePlan.solver, detail.activePlan.status], ["manual", "calculating"])
+      assert.deepEqual(detail.pickups.map((stop) => stop.id), [second, first], "the sequence the driver reads is the new order")
+      assert.deepEqual(detail.pickups.map((stop) => stop.sequence), [1, 2])
+      assert.equal(new Set(await fingerprintsOf([measured.id, detail.activePlan.id])).size, 1, "one fingerprint: only the order tells the two apart")
+      assert.equal((await plansOf(seeded.id)).items.length, 2)
+      assert.equal((await jobsFor(ROUTING_MEASURE_QUEUE, detail.activePlan.id)).length, 1, "the new order is measured")
+      const again = await reorder(seeded.id, [first, second])
+      assert.equal(again.activePlan?.id, measured.id, "the first order again is its ready Plan, re-activated")
+      assert.deepEqual(again.pickups.map((stop) => stop.id), [first, second])
+      assert.equal((await plansOf(seeded.id)).items.length, 2, "and no third Plan")
+    })
+
+    test("swapping them while the first order still measures is a new manual Plan too, not the calculating one re-activated", async () => {
+      const seeded = await sameAddress()
+      const [first, second] = seeded.pickupIds
+      const measuring = (await reorder(seeded.id, [first, second])).activePlan
+      assert.ok(measuring)
+      const detail = await reorder(seeded.id, [second, first])
+      assert.notEqual(detail.activePlan?.id, measuring.id)
+      assert.deepEqual(detail.pickups.map((stop) => stop.id), [second, first])
+      assert.equal((await plansOf(seeded.id)).items.length, 2)
+    })
+
+    test("an optimiser match is still reused over the same pair, whatever order its solver wrote: its request is a set", async () => {
+      const seeded = await sameAddress()
+      const [first, second] = seeded.pickupIds
+      const asked = await olivia(`/routes/${seeded.id}/optimise`, { method: "POST" })
+      assert.equal(asked.status, 202, JSON.stringify(await asked.clone().json()))
+      const created = OptimiseAnswer.parse(await asked.json())
+      assert.equal(created.solver, "optimiser")
+      // The solver's part, by hand: the pair in the other order than the request named them, ready.
+      await ownerPool.db
+        .insert(planStop)
+        .values([second, first].map((pickupId, index) => ({ companyId: a.companyId, projectId: created.projectId, routeId: seeded.id, planId: created.id, pickupId, position: index + 1 })))
+      await ownerPool.db.update(plan).set({ status: "ready", distanceMetres: 1_200, durationSeconds: 240 }).where(eq(plan.id, created.id))
+      const again = await olivia(`/routes/${seeded.id}/optimise`, { method: "POST" })
+      assert.equal(again.status, 200, "the cache answers; no new Plan")
+      assert.equal(OptimiseAnswer.parse(await again.json()).id, created.id)
+      assert.deepEqual((await detailOf(seeded.id)).pickups.map((stop) => stop.id), [second, first], "in the solver's order")
+    })
   })
 
   test("optimise queues an optimiser Plan that is not yet active, 202; a second click answers the same Plan, 200, and one job waits", async () => {
