@@ -45,6 +45,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { useOrganizationStore } from "@/components/settings/organization-store"
+import { useApiConfigured } from "@/components/waste/api-session-store"
+import { isServerBacked } from "@/lib/api/records/modules"
+import { TICKETS_MODULE } from "@/lib/api/records/tickets"
+
+import { LiveTicketDetailsDialog } from "./ticket-details-live"
 
 type TicketComment = {
   id: string
@@ -261,7 +266,19 @@ function withCurrentOption(
   return [{ value: currentValue, label: currentValue }, ...options]
 }
 
-export function TicketDetailsDialog({
+/**
+ * A ticket's details (Issue #182, for #147): on the Pilot the case as the API
+ * holds it — its history, its commands, its comments (ticket-details-live.tsx)
+ * — and in fixture mode the prototype's dialog below, exactly as before. The
+ * workspace opens this one for a ticket either way.
+ */
+export function TicketDetailsDialog({ record, onClose }: TicketDetailsDialogProps) {
+  const onApi = useApiConfigured() && isServerBacked(TICKETS_MODULE.workspaceId, TICKETS_MODULE.moduleId)
+  return onApi ? <LiveTicketDetailsDialog record={record} onClose={onClose} /> : <FixtureTicketDetailsDialog record={record} onClose={onClose} />
+}
+
+/** The prototype's ticket details: fixture mode's. */
+function FixtureTicketDetailsDialog({
   record,
   onClose,
 }: TicketDetailsDialogProps) {

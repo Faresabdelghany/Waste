@@ -43,13 +43,15 @@ import {
 } from "@phosphor-icons/react/dist/ssr"
 import { AccountMenu } from "@/components/auth/account-menu"
 import { useApiConfigured } from "@/components/waste/api-session-store"
-import { useBusinessRecordStore } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore, useServerModuleState } from "@/components/waste/business-record-store"
 import {
   resolveActiveRouteSummaries,
   routeDayFixtures,
   useActiveRoutes,
 } from "@/components/waste/active-routes-store"
-import { footerItems, navItems, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
+import { TICKETS_MODULE } from "@/lib/api/records/tickets"
+import { footerItems, navItems, type NavItem, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
+import { opennessOf } from "@/lib/data/tickets"
 
 const navItemIcons: Record<NavItemId, React.ComponentType<{ className?: string }>> = {
   operate: Tray,
@@ -75,6 +77,10 @@ export function AppSidebar() {
   const apiConfigured = useApiConfigured()
   const { starredRouteIds } = useActiveRoutes("operator")
   const { getRecords } = useBusinessRecordStore()
+  // On the Pilot the Tickets badge is the open tickets the store has loaded, and none until it has (#147); fixture mode keeps the registry's number.
+  const ticketsOnApi = useServerModuleState(TICKETS_MODULE.workspaceId, TICKETS_MODULE.moduleId)
+  const badgeOf = (item: NavItem): number | undefined =>
+    item.id === "operate" && apiConfigured && ticketsOnApi !== null ? (ticketsOnApi.status === "ready" ? ticketsOnApi.records.filter((record) => opennessOf(record) === "Open").length : undefined) : item.badge
 
   const activeRouteItems = useMemo(
     () =>
@@ -150,6 +156,7 @@ export function AppSidebar() {
             <SidebarMenu className="gap-0.5">
               {navItems.map((item) => {
                 const active = isItemActive(item.id)
+                const badge = badgeOf(item)
 
                 return (
                   <SidebarMenuItem key={item.label}>
@@ -166,11 +173,11 @@ export function AppSidebar() {
                         <span>{item.label}</span>
                       </Link>
                     </SidebarMenuButton>
-                    {item.badge && (
+                    {badge ? (
                       <SidebarMenuBadge className="rounded-full bg-sidebar-accent px-2 text-sidebar-foreground/65">
-                        {item.badge}
+                        {badge}
                       </SidebarMenuBadge>
-                    )}
+                    ) : null}
                   </SidebarMenuItem>
                 )
               })}
