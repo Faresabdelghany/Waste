@@ -2,8 +2,10 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { Page } from "@waste/contracts/pagination"
-import { Pickup, PickupDetail, REASON_WITH_A_MISS } from "@waste/contracts/pickups"
+import { PickupDetail, PickupListItem, REASON_WITH_A_MISS } from "@waste/contracts/pickups"
+import { RouteDetail } from "@waste/contracts/routes"
 import { createDb, type Database, type Tx } from "@waste/db/client"
+import { activatePlan, createPlan } from "@waste/db/commands/plans"
 import { outboxEvent } from "@waste/db/schema/execution"
 import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq } from "drizzle-orm"
@@ -20,7 +22,8 @@ import { signingKeys, type SigningKeys } from "./tokens"
 const database = databaseUnderTest()
 /** The owner sweeps the proofs the fixtures and the corrections append, which `wms_api` may not delete. */
 const owner = ownerUnderTest()
-const PickupPage = Page(Pickup)
+/** Every listed pickup carries its sequence (#219), so each page the suite reads holds the list to it. */
+const PickupPage = Page(PickupListItem)
 
 const MODULE = "route-studio.pickups"
 const NOON = new Date("2026-10-05T12:00:00Z")
@@ -115,6 +118,32 @@ describe("the pickup endpoints", { skip: database.skip || owner.skip }, () => {
       assert.deepEqual((await page(olivia, "?limit=2")).items.map((stop) => stop.id), ex.routes.ready.pickupIds.slice(0, 2))
       assert.ok(!(await filtered("", viewer)).includes(harbors.pickupIds[0]), "the viewer works in Copenhagen only")
       assert.deepEqual(await page(lars), { items: [], nextCursor: null }, "a provider's foreman lists nothing")
+    })
+
+    test("each pickup carries its sequence, the place its route's detail gives it: the active Plan's order, the baseline's until the route has one, counted over the whole route (#219)", async () => {
+      const planned = await fresh()
+      const unplanned = await fresh()
+      const order = [planned.pickupIds[2], planned.pickupIds[0], planned.pickupIds[1]]
+      // A dispatcher's order, written as the reorder writes it: a manual Plan naming its stops, made the route's active one.
+      await withCompany(pool.db, a.companyId, async (tx: Tx) => {
+        const planId = await createPlan(tx, { companyId: a.companyId, projectId: planned.projectId, routeId: planned.id, solver: "manual", trip: "stops-only", provider: "fake", fingerprint: "pickups-test", stops: order })
+        await activatePlan(tx, { companyId: a.companyId, routeId: planned.id, planId })
+      })
+      const sequences = async (query: string) => (await page(olivia, query)).items.map((stop) => [stop.id, stop.sequence] as const)
+      assert.deepEqual(await sequences(`?routeId=${planned.id}`), [[planned.pickupIds[0], 2], [planned.pickupIds[1], 3], [planned.pickupIds[2], 1]], "in id order, each at its place in the Plan")
+      assert.deepEqual(await sequences(`?routeId=${unplanned.id}`), unplanned.pickupIds.map((id, index) => [id, index + 1]), "the baseline stands until the route has a Plan")
+      assert.deepEqual(await sequences(`?routeId=${planned.id}&limit=1`), [[planned.pickupIds[0], 2]], "counted over the route, not the page")
+      // One container's stops across routes, in one page: each stop at its own route's place.
+      const across = new Map(await sequences(`?limit=200&containerId=${ex.containers.bin3.id}`))
+      assert.equal(across.get(planned.pickupIds[2]), 1)
+      assert.equal(across.get(unplanned.pickupIds[2]), 3)
+      const detail = RouteDetail.parse(await (await olivia(`/routes/${planned.id}`)).json())
+      const listed = new Map(await sequences(`?routeId=${planned.id}`))
+      assert.deepEqual(
+        detail.pickups.map((stop) => [stop.id, stop.sequence]),
+        detail.pickups.map((stop) => [stop.id, listed.get(stop.id)]),
+        "the list and the route's detail agree",
+      )
     })
 
     test("refuses a route out of reach on the query, a backwards window, a project out of reach and a role without view", async () => {

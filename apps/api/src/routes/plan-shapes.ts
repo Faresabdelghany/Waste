@@ -118,7 +118,7 @@ export type PlanContext = {
   sequence: Map<string, number>
 }
 
-const baselineIds = (stops: readonly SequencedStop[]): string[] =>
+const baselineIds = (stops: readonly Pick<SequencedStop, "id" | "position">[]): string[] =>
   [...stops].sort((a, b) => a.position - b.position || a.id.localeCompare(b.id)).map((stop) => stop.id)
 
 const sequenceOver = (ordered: readonly string[]): Map<string, number> => new Map(ordered.map((id, index) => [id, index + 1]))
@@ -140,6 +140,48 @@ export async function planContextOf(tx: Tx, companyId: string, routeRef: { activ
   if (row === undefined) return { activePlan: null, sequence: sequenceOver(baseline) }
   const named = await planStopIds(tx, { companyId, planId: row.id })
   return { activePlan: activePlanOf(row, stops, named), sequence: sequenceOver(executionOrder(baseline, named)) }
+}
+
+/**
+ * Each stop's `sequence` by pickup id, for every stop of the routes asked for
+ * (#219): the ordinal a route's detail gives it (`planContextOf`), read in
+ * two statements over the routes rather than one per route — every stop of
+ * each, since the ordinal counts through the whole route and not only the
+ * stops a page holds, and the stops each active Plan names, in its order.
+ */
+export async function sequencesOfRoutes(tx: Tx, companyId: string, routes: readonly { id: string; activePlanId: string | null }[]): Promise<Map<string, number>> {
+  const sequences = new Map<string, number>()
+  if (routes.length === 0) return sequences
+  const planIds = routes.flatMap((row) => (row.activePlanId === null ? [] : [row.activePlanId]))
+  const [stops, named] = await Promise.all([
+    tx
+      .select({ id: pickup.id, routeId: pickup.routeId, position: pickup.position })
+      .from(pickup)
+      .where(
+        and(
+          eq(pickup.companyId, companyId),
+          inArray(
+            pickup.routeId,
+            routes.map((row) => row.id),
+          ),
+        ),
+      ),
+    planIds.length === 0
+      ? []
+      : tx
+          .select({ planId: planStop.planId, pickupId: planStop.pickupId })
+          .from(planStop)
+          .where(and(eq(planStop.companyId, companyId), inArray(planStop.planId, planIds)))
+          .orderBy(asc(planStop.position)),
+  ])
+  const stopsByRoute = Map.groupBy(stops, (stop) => stop.routeId)
+  const namedByPlan = Map.groupBy(named, (stop) => stop.planId)
+  for (const row of routes) {
+    // A Plan that names nothing leaves the baseline standing, as on the route's detail.
+    const order = row.activePlanId === null ? null : (namedByPlan.get(row.activePlanId) ?? []).map((stop) => stop.pickupId)
+    for (const [id, ordinal] of sequenceOver(executionOrder(baselineIds(stopsByRoute.get(row.id) ?? []), order))) sequences.set(id, ordinal)
+  }
+  return sequences
 }
 
 /** The `ActivePlan` of every route asked for, by route, in three statements over the page's ids: what the live list carries beside each row. */

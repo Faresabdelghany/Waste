@@ -3,7 +3,7 @@ import { describe, test } from "node:test"
 
 import { PICKUP_OUTCOMES } from "@waste/domain/execution/vocabulary"
 
-import { Pickup, PickupCorrection, PickupDetail, PickupListQuery, PickupOutcome, PickupRemove, REASON_WITH_A_MISS, reasonWithOutcome } from "../pickups"
+import { Pickup, PickupCorrection, PickupDetail, PickupListItem, PickupListQuery, PickupOutcome, PickupRemove, REASON_WITH_A_MISS, reasonWithOutcome } from "../pickups"
 import { DAY_WINDOW_ORDERED } from "../queries"
 import { refusal } from "./expect"
 
@@ -63,6 +63,15 @@ describe("Pickup", () => {
     assert.equal(Pickup.safeParse({ ...pickup, status: "rescheduled" }).success, false, "a Ticket's outcome")
     const detail = { ...pickup, proofs: [proof] }
     assert.deepEqual(PickupDetail.parse(detail), detail)
+  })
+
+  test("a listed pickup carries its sequence, the place in its route's execution order, beside the baseline position (#219)", () => {
+    const listed = { ...pickup, sequence: 3 }
+    assert.deepEqual(PickupListItem.parse(listed), listed)
+    assert.deepEqual(refusal(PickupListItem.safeParse(pickup)).map((issue) => issue.path), ["sequence"], "always there on the list")
+    assert.equal(PickupListItem.safeParse({ ...pickup, sequence: 0 }).success, false, "an ordinal, from 1")
+    assert.equal(PickupListItem.safeParse({ ...pickup, sequence: null }).success, false)
+    assert.deepEqual(Pickup.parse(pickup), pickup, "while one stop's read and an event payload go without")
   })
 })
 

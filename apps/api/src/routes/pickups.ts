@@ -1,5 +1,7 @@
 // The Pickup as the dispatcher reads and corrects it (Issue #104, slice 3):
-// `GET /pickups` lists them across routes, `GET /pickups/:id` reads one with
+// `GET /pickups` lists them across routes, each with its `sequence` in its
+// route's execution order (#219, read per page through plan-shapes.ts's
+// `sequencesOfRoutes`), `GET /pickups/:id` reads one with
 // its proofs in recording order, and two commands move one — `remove`, a stop
 // taken off a route that has not started, and `correct-outcome`, the audited
 // change of an outcome the driver recorded. A pickup is written by
@@ -29,7 +31,7 @@
 // `inProjects`; the grant is `route-studio.pickups`, `view` to read and
 // `edit` to command.
 import { Page } from "@waste/contracts/pagination"
-import { Pickup, PickupCorrection, PickupDetail, PickupListQuery, PickupRemove } from "@waste/contracts/pickups"
+import { PickupCorrection, PickupDetail, PickupListItem, PickupListQuery, PickupRemove } from "@waste/contracts/pickups"
 import type { Tx } from "@waste/db/client"
 import { pickup, proofOfService, route } from "@waste/db/schema/execution"
 import { pickupCorrection, pickupTransition } from "@waste/domain/execution/transitions"
@@ -46,6 +48,7 @@ import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { findRoute, noSuchPickup, pickupColumns, pickupOf, pickupScope, proofOf, proofsOfPickup, type PickupRow, type RouteRow } from "./execution-shapes"
+import { sequencesOfRoutes } from "./plan-shapes"
 import { requireRoute } from "./references"
 import { requireNotStarted, requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
@@ -53,7 +56,7 @@ import { describeJson, IdParam, lockRow } from "./shared"
 
 const MODULE = "route-studio.pickups"
 
-const PickupPage = Page(Pickup)
+const PickupPage = Page(PickupListItem)
 
 /** What removing a stop from a route that runs is told (the domain's `activeAnd`): the stop is the driver's now. */
 const A_STOP_IS_THE_DRIVERS = "a stop is skipped by the driver"
@@ -106,7 +109,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "listPickups",
         summary: "The pickups of the caller's projects",
         description:
-          "One page of pickups, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `routeId` is one route's stops, and must be a route of a project this account works in (400 on the query); `containerId` a container's history of stops, `status` one of the four, `propertyId` the stops at one service address, and `from` and `to` the stops of routes operating over a window of days (both inclusive, `to` on or after `from`). Each pickup's proofs are `GET /pickups/{id}`. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of pickups, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `routeId` is one route's stops, and must be a route of a project this account works in (400 on the query); `containerId` a container's history of stops, `status` one of the four, `propertyId` the stops at one service address, and `from` and `to` the stops of routes operating over a window of days (both inclusive, `to` on or after `from`). Each pickup carries its `sequence` (#219), its place in its route's current execution order, the one `GET /routes/{id}` gives it: the active Plan's order where the route has one, the generated baseline's otherwise, counted over the whole route whatever the page holds; `position` stays the baseline. Each pickup's proofs are `GET /pickups/{id}`. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of pickups.", PickupPage),
@@ -127,7 +130,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         // The route asked about is one the caller may see: the project named, or any the caller works in — the containers list's rule for its warehouse.
         if (routeId !== undefined) await requireRoute(tx, { companyId: principal.companyId, projectId: projectId ?? projectIdsOf(principal) }, routeId, "routeId", "query")
         const rows = await tx
-          .select(pickupColumns)
+          .select({ ...pickupColumns, activePlanId: route.activePlanId })
           .from(pickup)
           .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
           .where(
@@ -145,7 +148,12 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           )
           .orderBy(asc(pickup.id))
           .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(pickupOf), limit))
+        // Paged first, so the row that only proves there is a next page brings no route of its own to read.
+        const { items, nextCursor } = pageOf(rows, limit)
+        const routes = new Map(items.map((row) => [row.routeId, { id: row.routeId, activePlanId: row.activePlanId }] as const))
+        const sequences = await sequencesOfRoutes(tx, principal.companyId, [...routes.values()])
+        const page: PickupListItem[] = items.map((row) => ({ ...pickupOf(row), sequence: sequences.get(row.id) as number }))
+        return c.json({ items: page, nextCursor })
       },
     )
     .get(
