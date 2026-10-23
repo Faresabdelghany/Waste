@@ -8,7 +8,7 @@
 // step fetched for it (Issue #39) — the estimate's basis says which it got.
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
-import { licenceDayOf, timezoneOfProject, validationOnApi } from "@/lib/data/route-schemes"
+import { licenceDayOf, timezoneOfProject, validationWhenUnplaced } from "@/lib/data/route-schemes"
 import { FIXTURE_GAZETTEER } from "@/lib/data/street-gazetteer"
 import { routePreview, type RoutePreview } from "@waste/domain/map-planning/route-preview"
 import {
@@ -118,7 +118,7 @@ export type WizardModel = {
   routesOn: (day: ServiceDay, roads?: RouteRoads) => WizardRoute[]
   issues: WizardIssue[]
   validation: SchemeValidationResult
-  /** What stands in for an issue that is no evidence where the containers are the API's (lib/data/route-schemes.ts `validationOnApi`); null otherwise. */
+  /** What stands in for the zero-match sentence where the API's containers are not placed (lib/data/route-schemes.ts `validationWhenUnplaced`); null otherwise. */
   notice: string | null
   totalContainers: number
   routesPerWeek: number
@@ -269,10 +269,10 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
       })
 
   const licenceDay = records.onApi ? licenceDayOf(data.effectiveFrom, timezoneOfProject(records.projects, data.projectId)) : null
-  // With the API's containers the zero-match sentence is no evidence and does not block (#178; retires with #207).
-  const { notice, ...validation } = validationOnApi(
+  // With the API's containers not placed the zero-match sentence is no evidence and does not block (#207).
+  const { notice, ...validation } = validationWhenUnplaced(
     validateGuidedScheme(data, records.schemes, records.allocations, records.containers, records.vehicles),
-    records.containersOnApi,
+    records.containersPlaced,
   )
   const engineIssues = withoutDuplicatedEngineIssues(validation.issues)
   const attributed = issuesByGroup(data.groups, engineIssues)

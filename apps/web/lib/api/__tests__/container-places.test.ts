@@ -2,11 +2,12 @@
 // placement names its subscription, the subscription its property or shared
 // collection point, and the place its point. A container whose placement is
 // in force on its project's day carries that place — its point as typed
-// coordinates, its name and address as facts — and the planning area whose
+// coordinates, its name and address as facts — and every planning area whose
 // boundary in force contains the point, so the map places it and the
 // collection groups' rule preview scopes it as the fixtures' containers are.
 // A container serving nowhere today, or at a place not yet located, has no
-// place on the map.
+// place on the map; one serving nowhere today is out of service to the
+// preview (#207).
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
@@ -18,7 +19,7 @@ import type { Project } from "@waste/contracts/organisation"
 import type { PlanningArea, PlanningAreaBoundary } from "@waste/contracts/planning-areas"
 import { FIXTURE_GAZETTEER } from "@waste/domain/fixtures/gazetteer"
 import { containerLocation } from "@waste/domain/map-planning/positions"
-import { resolveStopMatches } from "@waste/domain/route-schemes/matching"
+import { PLANNING_AREA_IDS_KEY, resolveStopMatches, SERVES_TODAY_KEY } from "@waste/domain/route-schemes/matching"
 
 import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, type MappingContext, type ResourceAdapter, type Resource } from "../records/adapter"
@@ -51,7 +52,9 @@ const square = (west: number, south: number, east: number, north: number): Plann
 // Another project's area first: its outline covers Parkvej too, and a container of Copenhagen Central is no stop of it.
 const harborArea: PlanningArea = { id: "01a0d2a4-a280-7016-8000-000000000004", ...STAMPS, projectId: HARBOR, code: "OP-HAR-01", name: "Nordhavn Harbor Area", purpose: "route-planning" }
 const osterbroArea: PlanningArea = { ...harborArea, id: "01a0d2a4-a280-7016-8000-000000000002", projectId: copenhagen.id, code: "OP-OST-02", name: "Østerbro Zone 2" }
-const boundaryOf = (area: PlanningArea, id: string): PlanningAreaBoundary => ({ id, ...STAMPS, projectId: area.projectId, planningAreaId: area.id, boundary: square(12.56, 55.69, 12.58, 55.71), validFrom: "2026-01-01", validTo: null })
+const boundaryOf = (area: PlanningArea, id: string, boundary = square(12.56, 55.69, 12.58, 55.71)): PlanningAreaBoundary => ({ id, ...STAMPS, projectId: area.projectId, planningAreaId: area.id, boundary, validFrom: "2026-01-01", validTo: null })
+// A second area of Copenhagen Central over Parkvej alone, inside Østerbro Zone 2: areas of one project overlap.
+const parkvejBlock: PlanningArea = { ...osterbroArea, id: "01a0d2a4-a280-7016-8000-000000000003", code: "OP-OST-03", name: "Parkvej Block" }
 
 const residual: WasteFraction = { id: "01a0d2a4-a280-7007-8000-000000000001", ...STAMPS, key: "residual", name: "Residual" }
 const bin240: ContainerType = { id: "01a0d2a4-a280-7008-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240 }
@@ -82,6 +85,7 @@ load("configure.organization", projectAdapter, [copenhagen], getModuleDefinition
 load("configure.areas", planningAreaAdapter, [
   { ...harborArea, boundaries: [boundaryOf(harborArea, "01a0d2a4-a280-7017-8000-000000000004")] },
   { ...osterbroArea, boundaries: [boundaryOf(osterbroArea, "01a0d2a4-a280-7017-8000-000000000002")] },
+  { ...parkvejBlock, boundaries: [boundaryOf(parkvejBlock, "01a0d2a4-a280-7017-8000-000000000003", square(12.565, 55.698, 12.575, 55.705))] },
 ])
 const masterRecords = [wasteFractionAdapter.toRecord(residual, bare), containerTypeAdapter.toRecord(bin240, bare)]
 state = new Map([...state, ["configure.master", loaded({ records: masterRecords, serverIds: new Map([[masterRecords[0].id, residual.id], [masterRecords[1].id, bin240.id]]) }, 1)]])
@@ -115,19 +119,29 @@ function placed(label: string, index: number, subscription: Subscription, validF
 }
 
 const areaId = `area-${osterbroArea.id}`
+const blockId = `area-${parkvejBlock.id}`
 
 describe("a container placed today", () => {
-  test("at a located property carries the property's point, its name and address, and the planning area whose boundary in force contains it", () => {
+  test("at a located property carries the property's point, its name and address, and every planning area whose boundary in force contains it", () => {
     const record = placed("BIN-91001", 1, atParkvej, "2026-01-01")
     assert.equal(record.facts.Property, "Parkvej 18")
     assert.equal(record.facts.Address, "Parkvej 18, 2100 København Ø")
-    assert.equal(record.facts["Planning area"], "Østerbro Zone 2", "the area of the container's own project, not another project's that covers the same street")
+    assert.equal(record.submittedValues?.[PLANNING_AREA_IDS_KEY], `${areaId},${blockId}`, "the areas of the container's own project, not another project's that covers the same street")
+    assert.equal(record.facts["Planning area"], "Østerbro Zone 2", "the first, the one area the map's readers take")
+    assert.equal(record.submittedValues?.planningAreaId, areaId)
     assert.equal(record.submittedValues?.latitude, "55.7012")
     assert.equal(record.submittedValues?.longitude, "12.5709")
-    assert.equal(record.submittedValues?.planningAreaId, areaId)
+    assert.equal(record.submittedValues?.[SERVES_TODAY_KEY], "yes")
     assert.deepEqual(containerLocation(record, FIXTURE_GAZETTEER), { lng: 12.5709, lat: 55.7012 }, "the map places it at the property's point")
-    const preview = resolveStopMatches({ rule: { fractions: ["Residual"] }, areaId, projectIds: [FIXTURE_PROJECT_IDS.copenhagen], containers: [record] })
-    assert.equal(preview.scopeTotal, 1, "the rule preview counts it in the area's scope")
+  })
+
+  test("is a stop the rule preview matches in each area that contains it, by its fraction's and its type's names, whatever its asset state (#207)", () => {
+    const record = placed("BIN-91008", 8, atParkvej, "2026-01-01")
+    assert.equal(record.status, "No stock record", "no movement yet, as every seeded container")
+    for (const area of [areaId, blockId]) {
+      const preview = resolveStopMatches({ rule: { fractions: ["Residual"], containerTypes: ["Two-wheel bin · 240 L"], vehicleType: "Rear loader" }, areaId: area, projectIds: [FIXTURE_PROJECT_IDS.copenhagen], containers: [record] })
+      assert.deepEqual([preview.scopeTotal, preview.matched.map((profile) => profile.name), preview.excluded], [1, ["BIN-91008"], []], area)
+    }
   })
 
   test("carries what the map's statistics and filters read of a place: the property's type and the agreement it serves under", () => {
@@ -146,6 +160,8 @@ describe("a container placed today", () => {
     assert.equal(record.facts.Address, "Kongens Nytorv, 1050 København K")
     assert.equal(record.facts["Planning area"], undefined)
     assert.equal(record.submittedValues?.planningAreaId, undefined)
+    assert.equal(record.submittedValues?.[PLANNING_AREA_IDS_KEY], undefined)
+    assert.equal(record.submittedValues?.[SERVES_TODAY_KEY], "yes")
     assert.deepEqual(containerLocation(record, FIXTURE_GAZETTEER), { lng: 12.5855, lat: 55.6805 })
   })
 
@@ -155,7 +171,19 @@ describe("a container placed today", () => {
     assert.equal(record.facts.Property, undefined)
     assert.equal(record.facts.Address, undefined)
     assert.equal(record.submittedValues?.latitude, undefined)
+    assert.equal(record.submittedValues?.[SERVES_TODAY_KEY], "yes", "it serves today, at a place no area can contain yet")
     assert.equal(containerLocation(record, FIXTURE_GAZETTEER), null)
+  })
+
+  test("with no movement yet and a next placement scheduled, shows the placement serving today, as the worker matches it (#207)", () => {
+    const container = containerOf("01a0d2a4-a280-7014-8000-000000000014", "BIN-91014")
+    const today = placementOf("01a0d2a4-a280-7015-8000-000000000014", container, atParkvej, "2026-01-01", "2026-11-01")
+    const next = placementOf("01a0d2a4-a280-7015-8000-000000000015", container, atKongens, "2026-11-01", null)
+    const record = containerAdapter.toRecord({ ...container, placements: [today, next] }, context)
+    assert.equal(record.facts.Placement, "From 2026-01-01 to 2026-10-31")
+    assert.equal(record.facts.Property, "Parkvej 18")
+    assert.equal(record.submittedValues?.[SERVES_TODAY_KEY], "yes")
+    assert.equal(record.submittedValues?.[PLANNING_AREA_IDS_KEY], `${areaId},${blockId}`)
   })
 })
 
@@ -164,20 +192,23 @@ describe("a container serving nowhere today", () => {
     for (const record of [placed("BIN-91004", 4, atParkvej, "2026-01-01", "2026-09-01"), placed("BIN-91005", 5, atParkvej, "2026-10-01")]) {
       assert.equal(record.facts.Property, undefined, record.name)
       assert.equal(record.facts.Address, undefined, record.name)
-      assert.equal(record.submittedValues?.planningAreaId, undefined, record.name)
+      assert.equal(record.submittedValues?.[PLANNING_AREA_IDS_KEY], undefined, record.name)
+      assert.equal(record.submittedValues?.[SERVES_TODAY_KEY], "no", record.name)
       assert.equal(containerLocation(record, FIXTURE_GAZETTEER), null, record.name)
     }
   })
 
   test("nor one with no placement at all", () => {
     const record = containerAdapter.toRecord({ ...containerOf("01a0d2a4-a280-7014-8000-000000000009", "BIN-91009"), placements: [] }, context)
+    assert.equal(record.submittedValues?.[SERVES_TODAY_KEY], "no")
     assert.equal(containerLocation(record, FIXTURE_GAZETTEER), null)
   })
 
   test("nor one whose open placement outlived its subscription, or whose subscription's agreement has ended: the period three times over, as the worker reads eligibility", () => {
     for (const record of [placed("BIN-91010", 10, endedSubscription, "2025-06-01"), placed("BIN-91011", 11, underEnded, "2025-06-01")]) {
       assert.equal(record.facts.Property, undefined, record.name)
-      assert.equal(record.submittedValues?.planningAreaId, undefined, record.name)
+      assert.equal(record.submittedValues?.[PLANNING_AREA_IDS_KEY], undefined, record.name)
+      assert.equal(record.submittedValues?.[SERVES_TODAY_KEY], "no", record.name)
       assert.equal(containerLocation(record, FIXTURE_GAZETTEER), null, record.name)
     }
   })

@@ -30,13 +30,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useApiConfigured } from "@/components/waste/api-session-store"
 import { usePickableRecords } from "@/components/waste/pickable-records"
 import { useModuleRecords } from "@/components/waste/scheme-route-map"
-import { isServerBacked } from "@/lib/api/records/modules"
+import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import type { BusinessRecord } from "@/lib/data/business-modules"
-import { validationOnApi } from "@/lib/data/route-schemes"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
+import { validationWhenUnplaced } from "@/lib/data/route-schemes"
 import {
   collectionGroupCoverage,
   collectionGroupsOfRecord,
@@ -966,8 +965,8 @@ function CollectionGroupsEditorDialogBody({
 
   // Validation runs over the record as it WOULD be saved — the groups
   // serialized the way the save path serializes them. With the API's
-  // containers the zero-match sentence is no evidence (#178; retires with #207).
-  const containersOnApi = useApiConfigured() && isServerBacked("resources", "containers")
+  // containers not placed the zero-match sentence is no evidence (#207).
+  const containersPlaced = useContainersPlaced()
   const preview = useMemo(() => {
     const own = schemeLiveValidation(
       {
@@ -979,8 +978,8 @@ function CollectionGroupsEditorDialogBody({
       },
       { schemes, allocations, containers, vehicles },
     )
-    return own === null ? null : validationOnApi(own, containersOnApi)
-  }, [allocations, containers, containersOnApi, groups, scheme, schemes, serviceDays, vehicles])
+    return own === null ? null : validationWhenUnplaced(own, containersPlaced)
+  }, [allocations, containers, containersPlaced, groups, scheme, schemes, serviceDays, vehicles])
 
   const planningAreaId =
     typeof values.planningAreaId === "string" && values.planningAreaId

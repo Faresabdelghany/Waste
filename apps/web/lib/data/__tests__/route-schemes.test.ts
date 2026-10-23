@@ -7,11 +7,13 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { validateGuidedScheme } from "@waste/domain/route-schemes/draft"
+import { PLANNING_AREA_IDS_KEY, SERVES_TODAY_KEY } from "@waste/domain/route-schemes/matching"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 
 import { statusLabel } from "../../api/records/adapter"
+import { IDLE, type ModuleState, type ModuleStatus } from "../../api/records/server-records"
 import type { BusinessRecord } from "../business-modules"
-import { licenceDayOf, ONE_OFF_NOT_KEPT, PREVIEW_CANNOT_PLACE, projectToday, ROUTES_NOT_READ, schemeEditOnApi, schemeEditStatusOnApi, STORED_ONE_OFF, validationOnApi } from "../route-schemes"
+import { containersPlaced, licenceDayOf, ONE_OFF_NOT_KEPT, PREVIEW_UNPLACED, projectToday, ROUTES_NOT_READ, schemeEditOnApi, schemeEditStatusOnApi, STORED_ONE_OFF, validationWhenUnplaced } from "../route-schemes"
 
 describe("the status a scheme edit asks the API for", () => {
   test("a Validated scheme stays Validated, whatever the web's own validation says: the API's 409 speaks for the rules it holds", () => {
@@ -26,11 +28,12 @@ describe("the status a scheme edit asks the API for", () => {
   })
 })
 
-// The wizard's validation on the Pilot (#178): the preview's matcher places
-// no container the API holds (#207), so its zero-match sentence says nothing
-// about what generation will find; with the API's containers it does not
-// block, a notice standing in its place, and every other issue still does.
-describe("the wizard's validation where the containers are the API's", () => {
+// The wizard's validation on the Pilot (#207): a container the API holds
+// carries what the preview's matcher reads — its fraction's and its type's
+// names, every planning area containing it, whether a placement serves it
+// today (lib/api/records/container-places.ts) — so the zero-match sentence is
+// evidence there and blocks as it does in fixture mode.
+describe("the wizard's validation over the API's containers", () => {
   const vehicle = { id: "vehicle-wh24", name: "WH-24 · CN 42 018", context: "Rear loader 18 t", facts: {}, submittedValues: { requiredLicenceClass: "C" } }
   const draft = (over: Partial<GuidedSchemeData> = {}): GuidedSchemeData => ({
     schemeName: "Guided · Residual",
@@ -50,44 +53,67 @@ describe("the wizard's validation where the containers are the API's", () => {
     groups: [{ id: "group-a", name: "Residual · bins", days: ["monday", "thursday"], fractions: ["Residual"], stopSource: "rule", containerTypes: ["Two-wheel bin · 240 L"], containerIds: [], vehicleId: vehicle.id, driverId: "driver-mads" }],
     ...over,
   })
-  // No container matches: the web cannot place the API's, and the draft is otherwise whole.
-  const validated = (over?: Partial<GuidedSchemeData>) => validateGuidedScheme(draft(over), [], [], [], [vehicle as never])
+  // As the containers adapter carries one: master data by web id, the names as facts, no movement yet, its place read from its placement.
+  const held = (servesToday: "yes" | "no") => ({
+    id: "container-01a0d2a4-a280-7014-8000-000000000001",
+    name: "BIN-91001",
+    status: "No stock record",
+    facts: { "Waste fractions": "Residual", "Container type": "Two-wheel bin · 240 L" },
+    submittedValues: { wasteFraction: "fraction-01a0d2a4-a280-7007-8000-000000000001", containerType: "container-type-01a0d2a4-a280-7008-8000-000000000002", [PLANNING_AREA_IDS_KEY]: "area-osterbro,area-indre-by", [SERVES_TODAY_KEY]: servesToday },
+    projectIds: ["project-copenhagen"],
+  })
+  const validated = (containers: ReturnType<typeof held>[]) => validateGuidedScheme(draft(), [], [], containers as never, [vehicle as never])
 
-  test("the zero-match sentence blocks the web's own validation, as it does in fixture mode", () => {
-    const own = validated()
-    assert.equal(own.status, "Draft")
-    assert.equal(own.issues.length, 1, own.issues.join(" · "))
-    assert.deepEqual(validationOnApi(own, false), { ...own, notice: null })
+  test("a container a placement serves today inside the area is a stop of the rule, and the draft is Validated", () => {
+    const result = validated([held("yes")])
+    assert.deepEqual(result.issues, [])
+    assert.equal(result.status, "Validated")
   })
 
-  test("with the API's containers it does not block: the scheme is Validated and a notice stands in its place", () => {
-    const onApi = validationOnApi(validated(), true)
-    assert.deepEqual(onApi.issues, [])
-    assert.equal(onApi.status, "Validated")
-    assert.equal(onApi.notice, PREVIEW_CANNOT_PLACE)
+  test("with none the rule matches, the zero-match sentence blocks: the draft stays a Draft", () => {
+    for (const containers of [[], [held("no")]]) {
+      const result = validated(containers)
+      assert.equal(result.status, "Draft")
+      assert.deepEqual(result.issues, ["No containers currently match the stop rule"], `${containers.length} container(s)`)
+    }
   })
 
-  test("the named sentence of several groups goes the same way", () => {
-    const two = draft({
-      groups: [
-        { ...draft().groups[0], id: "group-a", name: "North", days: ["monday"] },
-        { ...draft().groups[0], id: "group-b", name: "South", days: ["thursday"], vehicleId: vehicle.id, driverId: "driver-lars" },
-      ],
-    })
-    const own = validateGuidedScheme(two, [], [], [], [vehicle as never])
-    assert.ok(own.issues.some((issue) => issue.includes("North")), own.issues.join(" · "))
-    assert.deepEqual(validationOnApi(own, true).issues, [])
+  // The zero match is evidence only where the preview had the API's containers placed: the containers and every module
+  // their records are read through ready. One not read — loading, failed, or not granted to the role — leaves the
+  // preview counting the fixtures' containers, or the API's standing nowhere.
+  const state = (status: ModuleStatus): ModuleState => ({ ...IDLE, status })
+  const ready = state("ready")
+  const throughReady = [ready, ready, ready, ready, ready]
+
+  test("placed: in fixture mode, with the containers not switched, or with every module read", () => {
+    assert.equal(containersPlaced(false, state("not-granted"), throughReady), true, "fixture mode")
+    assert.equal(containersPlaced(true, null, throughReady), true, "the containers on fixtures")
+    assert.equal(containersPlaced(true, ready, throughReady), true)
+    assert.equal(containersPlaced(true, ready, [ready, null, ready, ready, ready]), true, "a module still on fixtures says nothing")
   })
 
-  test("every other issue still blocks, and the notice is said only when the zero-match sentence was there", () => {
-    const withoutDriver = validationOnApi(validated({ groups: [{ ...draft().groups[0], driverId: undefined }] }), true)
-    assert.equal(withoutDriver.status, "Draft")
-    assert.deepEqual(withoutDriver.issues, ["Pick a driver"])
-    assert.equal(withoutDriver.notice, PREVIEW_CANNOT_PLACE)
-    const withoutArea = validationOnApi(validated({ planningAreaId: undefined }), true)
-    assert.equal(withoutArea.status, "Draft")
-    assert.ok(withoutArea.issues.length > 0, "a rule without a planning area to match inside blocks on the Pilot too")
-    assert.equal(withoutArea.notice, null, "with no area the matcher never ran, so there is nothing to stand in for")
+  test("not placed: a role granted none of them, or any one not read", () => {
+    const grantedNothing = state("not-granted")
+    assert.equal(containersPlaced(true, grantedNothing, [grantedNothing, grantedNothing, grantedNothing, grantedNothing, grantedNothing]), false, "a role granted nothing")
+    assert.equal(containersPlaced(true, ready, [grantedNothing, ready, ready, ready, ready]), false, "the agreements not granted: no container's place is read")
+    for (const status of ["idle", "loading", "failed"] as const) {
+      assert.equal(containersPlaced(true, state(status), throughReady), false, `the containers ${status}`)
+      assert.equal(containersPlaced(true, ready, [ready, ready, ready, state(status), ready]), false, `the areas ${status}`)
+    }
+  })
+
+  test("placed, the zero-match sentence blocks as in fixture mode, and no notice is said", () => {
+    const own = validated([])
+    assert.deepEqual(validationWhenUnplaced(own, true), { ...own, notice: null })
+  })
+
+  test("not placed, it is no evidence: dropped, the notice standing in its place, and every other issue still blocks", () => {
+    const unplaced = validationWhenUnplaced(validated([]), false)
+    assert.deepEqual([unplaced.status, unplaced.issues, unplaced.notice], ["Validated", [], PREVIEW_UNPLACED])
+    const withoutDriver = validationWhenUnplaced(validateGuidedScheme(draft({ groups: [{ ...draft().groups[0], driverId: undefined }] }), [], [], [], [vehicle as never]), false)
+    assert.deepEqual([withoutDriver.status, withoutDriver.issues, withoutDriver.notice], ["Draft", ["Pick a driver"], PREVIEW_UNPLACED])
+    const matched = validationWhenUnplaced(validated([held("yes")]), false)
+    assert.equal(matched.notice, null, "nothing to stand in for where the rule matched")
   })
 })
 

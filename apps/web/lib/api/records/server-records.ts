@@ -185,6 +185,19 @@ export function resolverOver(state: ServerRecordsState, extra?: { records: reado
       }
       return undefined
     },
+    filter: (predicate) => {
+      // A module read again while ready is both in the state and the extra: each record once, the loaded first, as `find` prefers it.
+      const seen = new Set<string>()
+      const found: BusinessRecord[] = []
+      for (const source of sources) {
+        for (const record of source.records) {
+          if (seen.has(record.id)) continue
+          seen.add(record.id)
+          if (predicate(record)) found.push(record)
+        }
+      }
+      return found
+    },
   }
 }
 

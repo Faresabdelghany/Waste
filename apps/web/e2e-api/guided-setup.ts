@@ -65,19 +65,19 @@ export async function optionTexts(page: Page, within: Locator, label: string): P
 }
 
 /** Step 1 on the seeded project and area, Residual, kerbside collection. */
-export async function fillScope(page: Page, name: string) {
+export async function fillScope(page: Page, name: string, fraction = "Residual") {
   const root = wizard(page)
   await root.getByLabel("Route scheme name").fill(name)
   await pick(page, root, "Project", "Copenhagen Central")
   await pick(page, root, "Operational planning area", "Indre By Operations")
-  await pick(page, root, "Waste fraction", "Residual")
+  await pick(page, root, "Waste fraction", fraction)
   await pick(page, root, "Service type", "Kerbside collection")
 }
 
 /** Steps 1 and 2: the scope, then Mondays from a week today; resolves on step 3. */
-export async function toGroups(page: Page, name: string) {
+export async function toGroups(page: Page, name: string, fraction?: string) {
   await startGuided(page)
-  await fillScope(page, name)
+  await fillScope(page, name, fraction)
   await nextButton(page).click()
   await expect(stepHeading(page)).toHaveText("When does this scheme collect?")
   await wizard(page).getByLabel("Effective from").fill(dayFromToday(7))

@@ -372,6 +372,17 @@ describe("the resolver", () => {
     assert.equal(resolve.byServerId("missing"), undefined)
   })
 
+  test("lists every record a predicate holds for once, in load order, the loaded row before the one being mapped again (#207)", () => {
+    const state: ServerRecordsState = new Map([
+      ["a", loaded({ records: [record("x-1", "X"), record("x-2", "X2")], serverIds: new Map() }, 1)],
+      ["b", loaded({ records: [record("z-3", "Z")], serverIds: new Map() }, 1)],
+    ])
+    const extra = { records: [record("x-1", "X again"), record("x-4", "X4")], serverIds: new Map(), byServerId: new Map() }
+    const names = resolverOver(state, extra).filter((candidate) => candidate.id.startsWith("x-")).map((candidate) => candidate.name)
+    assert.deepEqual(names, ["X", "X2", "X4"])
+    assert.deepEqual(NOTHING_RESOLVED.filter(() => true), [])
+  })
+
   test("the company record's id is read off the organisation module once it is ready, by kind and not by the prefix a customer organisation shares", () => {
     const tenant = record("company-kystbyen-dk", "K", { recordKind: "Company" })
     const state: ServerRecordsState = new Map([[

@@ -328,8 +328,8 @@ const NO_CONTAINERS_MATCH_FOR = "No containers match the stop rule for "
 
 /**
  * Whether an issue is the zero-match one: the matcher's evidence, which a
- * caller that cannot place the containers it reads — the Pilot's, until the
- * API's containers carry their places (apps/web, #178) — does not have.
+ * caller whose containers are not placed — the Pilot's, until the modules
+ * their places are read through are (apps/web, #207) — does not have.
  */
 export function isNoMatchIssue(issue: string): boolean {
   return issue === NO_CONTAINERS_MATCH || issue.startsWith(NO_CONTAINERS_MATCH_FOR)
