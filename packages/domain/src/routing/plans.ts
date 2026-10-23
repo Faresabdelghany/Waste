@@ -1,7 +1,7 @@
 // The pure rules of a Plan's life (#124 §2–3). The tables, the jobs and the
 // API are I/O around these two readings; anything that needs a row lock or a
 // clock lives with the writer, not here.
-import type { OptimiseFallback, PlanSolver, PlanTrip } from "./vocabulary"
+import type { OptimiseFallback, PlanSolver, PlanStatus, PlanTrip } from "./vocabulary"
 
 /**
  * Whether a Plan of this solver is the Route's active Plan from the moment it
@@ -74,6 +74,25 @@ export function executionOrder(baseline: readonly string[], planOrder: readonly 
   const named = planOrder.filter((id) => present.has(id))
   const namedSet = new Set(named)
   return [...named, ...baseline.filter((id) => !namedSet.has(id))]
+}
+
+/**
+ * Whether a `ready` or `calculating` Plan that keys a request's fingerprint
+ * answers that request (#124 §4, #212): the cache's reuse rule. The
+ * fingerprint keys each stop by its place, so it cannot tell two orders of
+ * stops at one address apart, nor a Plan over pickups regeneration replaced
+ * at the same places; the Plan must name the request's very stops. A
+ * `manual` or `baseline` request is an order, so in that order. An
+ * `optimiser` request is a set, answered in the solver's order, so as a set;
+ * and an optimiser Plan still calculating names no stops yet, its solver
+ * reading the route's when it runs, so it answers as it stands.
+ */
+export function answersRequest({ solver, status, named, asked }: { solver: PlanSolver; status: PlanStatus; named: readonly string[]; asked: readonly string[] }): boolean {
+  if (solver === "optimiser" && status === "calculating") return true
+  if (named.length !== asked.length) return false
+  if (solver !== "optimiser") return named.every((id, index) => id === asked[index])
+  const namedSet = new Set(named)
+  return new Set(asked).size === asked.length && asked.every((id) => namedSet.has(id))
 }
 
 /**

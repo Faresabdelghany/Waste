@@ -24,7 +24,7 @@
 import type { Point } from "@waste/contracts/geojson"
 import { planFingerprint, type FingerprintPosition } from "@waste/domain/routing/fingerprint"
 import { routingJobPriority } from "@waste/domain/routing/jobs"
-import { activeOnCreation, tripOf } from "@waste/domain/routing/plans"
+import { activeOnCreation, answersRequest, tripOf } from "@waste/domain/routing/plans"
 import { SUPERSEDED, type PlanSolver, type PlanTrip, type RoutingJobClass } from "@waste/domain/routing/vocabulary"
 import { asc, eq, and, desc, inArray, lt, ne, sql } from "drizzle-orm"
 
@@ -278,15 +278,6 @@ export async function ensurePlan(
   { routing, send: sendJob }: { routing: { name: string; profile: string }; send: Send },
 ): Promise<EnsuredPlan> {
   const { trip, fingerprint } = await planKey(tx, companyId, routeRow, request, routing)
-  // A match is reusable only when its stops are the request's very pickups: the
-  // fingerprint keys coordinates, and regeneration re-mints ids at the same
-  // places — replaying such a Plan would answer the baseline while claiming the
-  // order. An optimiser Plan still calculating has no stops to compare and its
-  // solver reads the route's stops when it runs, so it is reused as it stands.
-  const sameStops = async (matchId: string): Promise<boolean> => {
-    const named = await planStopIds(tx, { companyId, planId: matchId })
-    return named.length === request.orderedPickupIds.length && new Set(named).size === new Set([...named, ...request.orderedPickupIds]).size
-  }
   const queue = routingQueueOf(request.solver)
   const send = async (planId: string) => {
     // The Plan's id keys the singleton: one live job per Plan, and Plans of one (route, fingerprint) are already
@@ -294,13 +285,27 @@ export async function ensurePlan(
     await sendRoutingJob(sendJob, tx, queue, { planId, companyId, class: request.class }, routeRow)
   }
   const matches = await plansMatching(tx, { companyId, routeId: routeRow.id, fingerprint })
-  const ready = matches.find((match) => match.status === "ready")
-  if (ready !== undefined && (await sameStops(ready.id))) {
+  // A match is reusable only when it names the request's very pickups
+  // (`answersRequest`): the fingerprint keys places, so regeneration's re-minted
+  // ids at the same places, and two orders of stops at one address (#212), key
+  // alike — replaying such a Plan would answer another order while claiming
+  // this one. Every match of a status is asked, newest first, since two orders
+  // of one fingerprint may each have a Plan of their own.
+  const answering = async (status: "ready" | "calculating") => {
+    for (const match of matches) {
+      if (match.status !== status) continue
+      const named = await planStopIds(tx, { companyId, planId: match.id })
+      if (answersRequest({ solver: request.solver, status, named, asked: request.orderedPickupIds })) return match
+    }
+    return undefined
+  }
+  const ready = await answering("ready")
+  if (ready !== undefined) {
     await activatePlan(tx, { companyId, routeId: routeRow.id, planId: ready.id })
     return { planId: ready.id, created: false }
   }
-  const calculating = matches.find((match) => match.status === "calculating")
-  if (calculating !== undefined && (request.solver === "optimiser" || (await sameStops(calculating.id)))) {
+  const calculating = await answering("calculating")
+  if (calculating !== undefined) {
     // The order is applied, not merely acknowledged: a manual or baseline match becomes the active Plan again.
     if (activeOnCreation(request.solver)) await activatePlan(tx, { companyId, routeId: routeRow.id, planId: calculating.id })
     // And its job may be gone (retries exhausted, the row archived): re-send under the same key, #187's hardening.

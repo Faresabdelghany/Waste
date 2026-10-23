@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { activeOnCreation, executionOrder, horizonRequest, isSuperseded, OPTIMISER_MAX_STOPS, optimiseSolver, planIsStale, tripOf } from "../plans"
+import { activeOnCreation, answersRequest, executionOrder, horizonRequest, isSuperseded, OPTIMISER_MAX_STOPS, optimiseSolver, planIsStale, tripOf } from "../plans"
 import { FINGERPRINT_DECIMALS, planFingerprint, roundCoordinate } from "../fingerprint"
 import { routingJobPriority } from "../jobs"
 import { OPTIMISE_FALLBACKS, PLAN_SOLVERS, PLAN_STATUSES, PLAN_TRIPS, ROUTING_JOB_CLASSES, ROUTING_QUOTA_FAMILIES, ROUTING_VOCABULARIES, SUPERSEDED } from "../vocabulary"
@@ -104,6 +104,34 @@ describe("the execution order (#170: sequence is computed on read, never stored)
 
   test("the optimiser's ceiling is fifty stops, the provider's own limit (#118)", () => {
     assert.equal(OPTIMISER_MAX_STOPS, 50)
+  })
+})
+
+describe("the cache's reuse rule (#124 §4, #212): a match answers a request only when it names the request's very stops", () => {
+  test("a manual or baseline match answers in the request's order: the same stops swapped are another request, though they key one fingerprint at one address", () => {
+    for (const solver of ["manual", "baseline"] as const) {
+      for (const status of ["ready", "calculating"] as const) {
+        assert.equal(answersRequest({ solver, status, named: ["a", "b", "c"], asked: ["a", "b", "c"] }), true, `${solver} ${status}`)
+        assert.equal(answersRequest({ solver, status, named: ["a", "b", "c"], asked: ["b", "a", "c"] }), false, `${solver} ${status}`)
+      }
+    }
+  })
+
+  test("an optimiser match answers as a set, in whatever order its solver wrote; one still calculating names no stops yet and answers as it stands", () => {
+    assert.equal(answersRequest({ solver: "optimiser", status: "ready", named: ["c", "a", "b"], asked: ["a", "b", "c"] }), true)
+    assert.equal(answersRequest({ solver: "optimiser", status: "calculating", named: [], asked: ["a", "b", "c"] }), true)
+  })
+
+  test("a stop missing, added or replaced is another request, whatever the solver: regeneration re-mints pickups at the same places", () => {
+    for (const solver of ["optimiser", "manual", "baseline"] as const) {
+      assert.equal(answersRequest({ solver, status: "ready", named: ["a", "b"], asked: ["a", "b", "c"] }), false, solver)
+      assert.equal(answersRequest({ solver, status: "ready", named: ["a", "b", "c"], asked: ["a", "b"] }), false, solver)
+      assert.equal(answersRequest({ solver, status: "ready", named: ["a", "b", "c"], asked: ["a", "b", "d"] }), false, solver)
+    }
+  })
+
+  test("a request naming one stop twice is not the set of a Plan that names another in its place", () => {
+    assert.equal(answersRequest({ solver: "optimiser", status: "ready", named: ["a", "b"], asked: ["a", "a"] }), false)
   })
 })
 
