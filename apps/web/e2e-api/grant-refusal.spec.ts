@@ -59,8 +59,13 @@ test("a role without the grant is refused in the API's words and stays signed in
     const toasts = await toastsOf(page)
     expect(toasts).toContainEqual(expect.stringContaining("This account's role does not allow edit on customers.contacts"))
     expect(toasts?.filter((toast) => toast.includes("configure.organization"))).toEqual([])
-    // The refusal is the only word on it: nothing said the change was recorded before the API answered (#210), and the sheet shows the customer as it still is — Active, so Inactive is still offered.
+    // The refusal is the only word on it: nothing said the change was recorded before the API answered (#210). The governed
+    // dialog waited for the answer and stays, holding the reason typed, its confirm free again; behind it the customer is still Active.
     expect(toasts?.filter((toast) => toast.includes("recorded"))).toEqual([])
+    await expect(governed.getByLabel("Decision or action reason")).toHaveValue("E2E: a planner may not change a customer")
+    await expect(governed.getByRole("button", { name: "Confirm inactive" })).toBeEnabled()
+    await governed.getByRole("button", { name: "Cancel" }).click()
+    await expect(governed).toBeHidden()
     await expect(sheet.getByRole("button", { name: "Inactive" })).toBeVisible()
 
     // Still here, still signed in: the page was not sent to /login, and the token the browser holds is still taken.
