@@ -38,6 +38,21 @@ describe("the Price Engine's pickers", () => {
     assert.deepEqual(ids(commercialRowsFor("productId", {}, rows, "project-harbor")), ["product-2"], "the surface's own project, a row's")
   })
 
+  test("offer the provider-money chain's rows: providers, an award's planning areas and fractions, the areas and their assignments of the service areas module (#186)", () => {
+    const more = {
+      ...rows,
+      providers: [row("service-provider-1", "NordRen ApS", "project-copenhagen")],
+      master: [row("fraction-1", "Residual", "project-copenhagen", { recordKind: "Waste fraction" }), row("container-type-1", "Two-wheel bin", "project-copenhagen", { recordKind: "Container type" })],
+      serviceAreas: [row("service-area-1", "Østerbro award", "project-copenhagen", { recordKind: "Service area" }), row("assignment-1", "CA-Ø-2 · NordRen ApS", "project-copenhagen", { recordKind: "Service area assignment" }), row("assignment-2", "CA-H-1 · CityHaul", "project-harbor", { recordKind: "Service area assignment" })],
+    }
+    assert.deepEqual(ids(commercialRowsFor("serviceProviderId", {}, more)), ["service-provider-1"])
+    assert.deepEqual(ids(commercialRowsFor("wasteFractionIds", {}, more)), ["fraction-1"])
+    assert.deepEqual(ids(commercialRowsFor("zoneIds", { projectId: "project-copenhagen" }, more)), ["area-1"], "an award's planning areas are its project's")
+    assert.deepEqual(ids(commercialRowsFor("serviceAreaId", {}, more)), ["service-area-1"])
+    assert.deepEqual(ids(commercialRowsFor("serviceAreaAssignmentId", {}, more)), ["assignment-1", "assignment-2"])
+    assert.deepEqual(ids(commercialRowsFor("serviceAreaAssignmentId", {}, more, "project-harbor")), ["assignment-2"])
+  })
+
   test("leave every other field to the command surfaces' own pickers", () => {
     assert.equal(commercialRowsFor("customerId", {}, rows), undefined)
     assert.equal(commercialRowsFor("projectId", {}, rows), undefined)
