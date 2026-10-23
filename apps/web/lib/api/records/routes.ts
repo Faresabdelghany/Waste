@@ -103,9 +103,8 @@ function projectOf(route: Route, context: MappingContext): { webId: string; name
   return { webId, name, timezone: record === undefined ? undefined : typed(record, "timezone") }
 }
 
-/** What a held route's details say of the hold: what the API keeps, and what ends it (#209, the API's `route-holds.ts`). */
-const HELD =
-  "Held by the office's move: generation runs keep its day, its start and its Planned Assignment, and still refresh its stops; an edit of the scheme's start, depot, unloading station or days, or of its group's vehicle, driver, provider or days, releases it; a dispatch or a cancel ends it."
+/** What ends a route's hold (#209, the API's `route-holds.ts`). */
+const HOLD_RELEASED_BY = "An edit of its scheme's start, depot, unloading station or days, or of its group's vehicle, driver, provider or days; a dispatch or a cancel ends it"
 
 export function toRouteRecord(route: RouteRead, context: MappingContext): BusinessRecord {
   const project = projectOf(route, context)
@@ -133,7 +132,10 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
   facts.Deviation = route.note ?? "None"
   // A route the office moved by hand is held (#209): generation keeps what the office moved until an edit of the same releases it.
   const held = at(route.heldAt)
-  if (held !== undefined) facts.Hold = `Moved by the office ${held}`
+  if (held !== undefined) {
+    facts.Hold = `Moved by the office ${held}: generation runs keep its day, its start and its Planned Assignment, and still refresh its stops`
+    facts["Hold released by"] = HOLD_RELEASED_BY
+  }
   const stamps: Array<[string, string | undefined]> = [
     ["Dispatched at", at(route.dispatchedAt)],
     ["Started at", at(route.startedAt)],
@@ -147,13 +149,13 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
   return {
     id: webIdOf(ROUTE_PREFIX, route.id),
     name: route.label,
-    context: [project.name ?? project.webId, area, held === undefined ? undefined : "Held by the office"].filter(Boolean).join(" · "),
+    context: [project.name ?? project.webId, area].filter(Boolean).join(" · "),
     status: statusLabel(route.status),
     ...inheritedPresentation(undefined),
     ...stampFacts(route, context.now),
     owner: driver ?? "Unassigned",
     value: stopsValue(route.progress),
-    description: `Generated from ${scheme?.name ?? "its route scheme"} for ${route.serviceDate}${route.operatingDate === route.serviceDate ? "" : `, running ${route.operatingDate}`}.${held === undefined ? "" : ` ${HELD}`}`,
+    description: `Generated from ${scheme?.name ?? "its route scheme"} for ${route.serviceDate}${route.operatingDate === route.serviceDate ? "" : `, running ${route.operatingDate}`}.${held === undefined ? "" : ` Held by the office since ${held}.`}`,
     facts,
     companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [project.webId],
@@ -189,6 +191,9 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
 // through the resolver or the id chip a row of a module not loaded shows. An
 // assign and a reschedule send only what moved: the API checks every field
 // a body names again (a licence, a status), so an unchanged one is left out.
+// A field the input does not name at all is left as the route stands when the
+// command is sent, so a scheme's one-off names only what it moves (#209); the
+// dialogs name every field, a cleared one as "".
 
 /** What an assign may move — the field, the id chip's prefix, the sentence a miss is refused in, the kind a loaded row is held to: the fleet's and the depot's chips as the allocations name them (allocations.ts), and the unloading station. */
 const ASSIGNED: ReadonlyArray<readonly [string, string, string, ReferenceRule]> = [
@@ -213,6 +218,7 @@ export const ROUTE_COMMANDS = {
   [ASSIGN_ROUTE]: onRoute("assign", "assigned", (input, record, context) => {
     const body: Record<string, string | null> = {}
     for (const [field, prefix, sentence, rule] of ASSIGNED) {
+      if (!(field in input)) continue
       const was = typed(record, field)
       const is = said(input, field)
       if (is === was) continue
@@ -230,8 +236,8 @@ export const ROUTE_COMMANDS = {
   }),
   [DISPATCH_ROUTE]: onRoute("dispatch", "dispatched"),
   [RESCHEDULE_ROUTE]: onRoute("reschedule", "rescheduled", (input, record) => {
-    const day = said(input, "operatingDate")
-    const start = said(input, "plannedStartTime")
+    const day = "operatingDate" in input ? said(input, "operatingDate") : typed(record, "operatingDate")
+    const start = "plannedStartTime" in input ? said(input, "plannedStartTime") : typed(record, "plannedStartTime")
     if (day === undefined) return refusal("operatingDate", "A route runs on a day: give its operating date")
     if (!ISO_DAY.test(day)) return refusal("operatingDate", "Give the day it runs as a date")
     if (start !== undefined && !CLOCK_TIME.test(start)) return refusal("plannedStartTime", "Give the planned start as HH:MM")

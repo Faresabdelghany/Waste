@@ -138,8 +138,14 @@ export function validationWhenUnplaced(result: SchemeValidationResult, placed: b
 export const ONE_OFF_ONLY = "Only the planned start, the depot, the unloading station and a group's vehicle or driver can change for one collection; this edit changes more, so it applies to future collections."
 /** Why it is disabled where no planned route the change reaches is left from today on. */
 export const ONE_OFF_NO_ROUTE = "No planned route of the scheme from today on can take this change for one collection."
-/** Why a scheme whose stored policy is the one-off refuses a shaping edit its next collection's routes cannot carry (#209). */
-export const STORED_ONE_OFF = "This scheme applies a change to its next collection only, and on the Pilot only the planned start, the depot, the unloading station and a group's vehicle or driver change so: set its changes to apply to future collections, or to ask each time, to save this one."
+/** Why it is disabled where the groups a change reaches collect next on different days: one collection is one service date. */
+export const ONE_OFF_SPLIT = "This change reaches groups whose next collections fall on different days: apply it to future collections, or change one group at a time."
+/** Why it is disabled where the next collection's routes already stand as the edit has them. */
+export const ONE_OFF_ALREADY = "The next collection's routes already stand as this edit has them."
+/** Why a scheme whose stored policy is the one-off cannot work one out while the routes are not read. */
+export const ONE_OFF_UNREAD = "Its next collection's routes are not read from the API."
+/** What a scheme whose stored policy is the one-off says after the reason a shaping edit cannot apply so (#209). */
+export const STORED_ONE_OFF = "This scheme applies a change to its next collection only: set its changes to apply to future collections, or to ask each time, to save this one."
 /** What "This collection only" says it does on the Pilot. */
 const ONE_OFF_DESCRIPTION = "Only the next collection's routes follow the edit: they are moved as the office moves a route, and later generation runs keep them as moved. The scheme itself keeps its current configuration."
 /** Why a shaping edit that would ask is refused while the API's routes are not read. */
@@ -168,7 +174,12 @@ function shapesCollections(before: BusinessRecord, after: BusinessRecord): boole
   return editChangesGeneration({ ...before, submittedValues: values(before) }, { ...after, facts: before.facts, submittedValues: values(after) })
 }
 
-/** A command a one-off sends to one route (`ROUTE_COMMANDS`, lib/api/records/routes.ts): the route, the command, its input as the route's dialogs give it. */
+/**
+ * A command a one-off sends to one route (`ROUTE_COMMANDS`,
+ * lib/api/records/routes.ts): the route, the command, and in its input the
+ * fields the one-off moves alone — a field the input does not name the
+ * command leaves as the route stands when it is sent.
+ */
 export type OneOffMove = { routeId: string; command: "assign" | "reschedule"; input: Record<string, string> }
 
 /**
@@ -187,15 +198,10 @@ const ONE_OFF_SCHEME_KEYS = ["plannedStartTime", "depotId", "unloadingStationId"
 /** A group's fleet, by id and by the names saved beside them: in the legacy shape the scheme's own keys. */
 const ONE_OFF_GROUP_KEYS = ["vehicleId", "driverId", "vehicleName", "driverName"] as const
 const ONE_OFF_LEGACY_KEYS = ["plannedVehicleId", "plannedDriverId"] as const
-/** A route's Planned Assignment as its assign dialog restates it: what an assign leaves out it clears. */
-const ROUTE_ASSIGNMENT_KEYS = ["vehicleId", "driverId", "trailerId", "depotId", "unloadingStationId"] as const
+/** A value as a record carries it, "" for none. */
+const valueOf = (record: Pick<BusinessRecord, "submittedValues">, key: string): string => typed(record, key) ?? ""
 
-const textOf = (values: Readonly<Record<string, string | boolean | undefined>>, key: string): string => {
-  const value = values[key]
-  return typeof value === "string" ? value.trim() : ""
-}
-
-/** A scheme's `collectionGroups` JSON as stored, or null for the legacy shape. */
+/** A scheme's `collectionGroups` JSON as stored, every member kept (the domain's reader keeps only the ones it knows), or null for the legacy shape. */
 function storedGroups(values: Readonly<Record<string, string | boolean | undefined>>): Record<string, unknown>[] | null {
   const raw = values.collectionGroups
   if (typeof raw !== "string" || raw.trim() === "") return null
@@ -251,19 +257,22 @@ function sameValues(a: BusinessRecord, b: BusinessRecord): boolean {
  * keeps its shaping configuration, as the fixture path's one-off does
  * (`schemeAfterOneOff`). An edit that shapes anything else is `unavailable`
  * with `ONE_OFF_ONLY`: a route has no command for its days, its stops or its
- * provider. The next collection is the earliest service date on or after
- * `today`, the project's day, among the scheme's routes still `planned` that
- * the change reaches — every group's for a scheme value, a group's own for its
- * fleet — and the moves are the reached routes on it; none left is
- * `ONE_OFF_NO_ROUTE`. A legacy-shaped scheme's one group holds every route.
+ * provider. The next collection is the earliest service date among the scheme's
+ * routes still `planned` and running on or after `today`, the project's day
+ * (a collection shifted past a holiday runs after its service date), that the
+ * change reaches — every group's for a scheme value, a group's own for its
+ * fleet — and the moves are the reached routes on it, each naming only what
+ * it changes on that route. None left is `ONE_OFF_NO_ROUTE`; a group's fleet
+ * whose next collection is another day is `ONE_OFF_SPLIT`, since one
+ * collection is one date and the change would be lost; routes that already
+ * stand as edited are `ONE_OFF_ALREADY`. A legacy-shaped scheme's one group
+ * holds every route.
  */
 export function schemeOneOffOnApi(before: BusinessRecord, after: BusinessRecord, routes: readonly BusinessRecord[], today: string): SchemeOneOff | { kind: "unavailable"; message: string } {
   if (shapesCollections(before, withOneOffPutBack(before, after))) return { kind: "unavailable", message: ONE_OFF_ONLY }
-  const was = before.submittedValues ?? {}
-  const is = after.submittedValues ?? {}
-  const schemeMoved = ONE_OFF_SCHEME_KEYS.filter((key) => textOf(was, key) !== textOf(is, key))
-  const priorGroups = new Map(collectionGroupsOfRecord(before, serviceDaysFromValues(was)).map((group) => [group.id, group]))
-  const groups = collectionGroupsOfRecord(after, serviceDaysFromValues(is))
+  const schemeMoved = ONE_OFF_SCHEME_KEYS.filter((key) => valueOf(before, key) !== valueOf(after, key))
+  const priorGroups = new Map(collectionGroupsOfRecord(before, serviceDaysFromValues(before.submittedValues)).map((group) => [group.id, group]))
+  const groups = collectionGroupsOfRecord(after, serviceDaysFromValues(after.submittedValues))
   const fleetMoved = new Map<string, Record<string, string>>()
   for (const group of groups) {
     const prior = priorGroups.get(group.id)
@@ -275,28 +284,32 @@ export function schemeOneOffOnApi(before: BusinessRecord, after: BusinessRecord,
   }
   // An explicit group's web id is its routes' `collectionGroupId`; the legacy shape's one group holds them all.
   const legacy = groups.length === 1 && groups[0].implicit
-  const fleetOf = (route: BusinessRecord) => fleetMoved.get(legacy ? groups[0].id : (typed(route, "collectionGroupId") ?? ""))
+  const groupOf = (route: BusinessRecord) => (legacy ? groups[0].id : valueOf(route, "collectionGroupId"))
   const reached = routes.filter(
     (route) =>
       typed(route, "schemeId") === before.id &&
       typed(route, "status") === "planned" &&
-      (typed(route, "serviceDate") ?? "") >= today &&
-      (schemeMoved.length > 0 || fleetOf(route) !== undefined),
+      (typed(route, "operatingDate") ?? valueOf(route, "serviceDate")) >= today &&
+      (schemeMoved.length > 0 || fleetMoved.has(groupOf(route))),
   )
   if (reached.length === 0) return { kind: "unavailable", message: ONE_OFF_NO_ROUTE }
-  const date = reached.map((route) => typed(route, "serviceDate") ?? "").sort()[0]
-  const moves: OneOffMove[] = []
-  for (const route of reached.filter((candidate) => typed(candidate, "serviceDate") === date).sort((a, b) => a.id.localeCompare(b.id))) {
-    if (schemeMoved.includes("plannedStartTime")) {
-      moves.push({ routeId: route.id, command: "reschedule", input: { operatingDate: typed(route, "operatingDate") ?? date, plannedStartTime: textOf(is, "plannedStartTime") } })
-    }
-    const assigned: Record<string, string> = { ...fleetOf(route) }
-    for (const key of ["depotId", "unloadingStationId"] as const) if (schemeMoved.includes(key)) assigned[key] = textOf(is, key)
-    if (Object.keys(assigned).length > 0) {
-      const restated = Object.fromEntries(ROUTE_ASSIGNMENT_KEYS.map((key) => [key, typed(route, key) ?? ""]))
-      moves.push({ routeId: route.id, command: "assign", input: { ...restated, ...assigned } })
-    }
+  const date = reached.map((route) => valueOf(route, "serviceDate")).sort()[0]
+  const onDate = reached.filter((route) => valueOf(route, "serviceDate") === date).sort((a, b) => a.id.localeCompare(b.id))
+  for (const groupId of fleetMoved.keys()) {
+    if (onDate.some((route) => groupOf(route) === groupId)) continue
+    return { kind: "unavailable", message: reached.some((route) => groupOf(route) === groupId) ? ONE_OFF_SPLIT : ONE_OFF_NO_ROUTE }
   }
+  // Each route is told only what it changes there: a field it already has is no move, which the command would refuse.
+  const changed = (route: BusinessRecord, wanted: Readonly<Record<string, string>>) => Object.fromEntries(Object.entries(wanted).filter(([key, value]) => valueOf(route, key) !== value))
+  const moves: OneOffMove[] = []
+  for (const route of onDate) {
+    const start = schemeMoved.includes("plannedStartTime") ? changed(route, { plannedStartTime: valueOf(after, "plannedStartTime") }) : {}
+    if (Object.keys(start).length > 0) moves.push({ routeId: route.id, command: "reschedule", input: start })
+    const places = Object.fromEntries((["depotId", "unloadingStationId"] as const).filter((key) => schemeMoved.includes(key)).map((key) => [key, valueOf(after, key)]))
+    const assigned = changed(route, { ...places, ...fleetMoved.get(groupOf(route)) })
+    if (Object.keys(assigned).length > 0) moves.push({ routeId: route.id, command: "assign", input: assigned })
+  }
+  if (moves.length === 0) return { kind: "unavailable", message: ONE_OFF_ALREADY }
   const scheme = schemeAfterOneOff(before, after)
   return { kind: "one-off", date, moves, scheme: scheme.name === before.name && sameValues(scheme, before) ? null : scheme }
 }
@@ -328,11 +341,13 @@ export function schemeEditOnApi(before: BusinessRecord, after: BusinessRecord, r
   if (before.status === "Draft" || !schemeGenerationRecorded(before) || !shapesCollections(before, after)) return { kind: "save", following: 0 }
   const policy = apply ?? schemeEditPolicy(before.submittedValues)
   if (policy === "future") return { kind: "save", following: following().length }
-  if (routes === null) return { kind: "refuse", message: ROUTES_NOT_READ }
+  // A stored one-off says why this edit cannot apply so, then how to save it.
+  const stored = apply === undefined
+  if (routes === null) return { kind: "refuse", message: policy === "single" && stored ? `${ONE_OFF_UNREAD} ${STORED_ONE_OFF}` : ROUTES_NOT_READ }
   const oneOff = schemeOneOffOnApi(before, after, routes, today)
   if (policy === "single") {
     if (oneOff.kind === "one-off") return oneOff
-    return { kind: "refuse", message: apply === "single" || oneOff.message !== ONE_OFF_ONLY ? oneOff.message : STORED_ONE_OFF }
+    return { kind: "refuse", message: stored ? `${oneOff.message} ${STORED_ONE_OFF}` : oneOff.message }
   }
   const dates = following()
   if (dates.length === 0) return { kind: "save", following: 0 }

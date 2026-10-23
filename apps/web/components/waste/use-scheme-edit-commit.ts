@@ -19,21 +19,24 @@
 // on the refusal.
 //
 // On the Pilot (`schemesOnApi`, slice 3 of #81) the API holds the scheme and
-// generates its routes, so none of that runs: the edit is the scheme's alone,
+// generates its routes, so most of that does not run: the edit is the scheme's,
 // under the status the wire has — the web's validation never lowers a
 // validated scheme, the API's 409 speaking for one the edit breaks, and a
 // Draft the edit leaves without a blocking issue asks to be validated, the
 // browser path's rule (`schemeEditStatusOnApi`) — and the next generation
 // run reconciles its routes. The dialog closes once the API has taken the
 // edit. The question returns there with the routes on the API (#179): the
-// same rule over the routes the API holds (`schemeEditOnApi`), with "This
-// collection only" shown and not offered, since the API keeps no one-off yet
-// (#209), and a stored one-off refused; "Apply to future collections" saves
-// the scheme, and its planned routes follow it when its routes are next
-// generated. Until the routes module has read the API's routes, an edit that
-// would ask is refused, since how it applies cannot be asked.
+// same rule over the routes the API holds (`schemeEditOnApi`). "Apply to
+// future collections" saves the scheme, and its planned routes follow it when
+// its routes are next generated. "This collection only" (#209) moves the next
+// collection's routes by their own commands, which the API holds against
+// later runs, the scheme keeping its configuration (`schemeOneOffOnApi`); an
+// edit those commands cannot carry shows it disabled with the reason, and a
+// stored one-off refuses it. Until the routes module has read the API's
+// routes, an edit that would ask is refused, since how it applies cannot be
+// asked.
 
-import { useCallback, useState, type Dispatch, type SetStateAction } from "react"
+import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from "react"
 import { toast } from "sonner"
 
 import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
@@ -110,44 +113,65 @@ export function useSchemeEditCommit({
   const routesState = useServerModuleState("route-studio", "routes")
   const apiRoutes = routesState?.status === "ready" ? routesState.records : null
   const containersPlaced = useContainersPlaced()
+  // The route commands come from the store as the routes' state does: the workspace that supplies the deps is fenced (#209).
   const { sendCommand } = useBusinessRecordStore()
+  // One one-off at a time: a second save while one runs would send its commands again.
+  const oneOffRunning = useRef(false)
 
   /**
    * "This collection only" on the Pilot (#209): the scheme's rename or policy
-   * first, then each route's command in turn, the API holding every route it
-   * moves against later generation runs. A refusal stops the run, the store
-   * having told it in the API's words; what moved before it stays moved.
+   * first, through `whenSaved`, then each route's commands in turn, the API
+   * holding every route it moves against later generation runs. A refusal
+   * stops the run, the store having told it in the API's words; what moved
+   * before it stays moved and is said, a route counted moved once all its
+   * commands are in. With nothing moved the edit dialog stays open on it.
    */
   const moveOneOff = useCallback(
-    async (before: BusinessRecord, oneOff: SchemeOneOff, audit: SchemeEditAudit, onSaved: (scheme: BusinessRecord) => void) => {
+    (before: BusinessRecord, oneOff: SchemeOneOff, audit: SchemeEditAudit, onSaved: (scheme: BusinessRecord) => void) => {
+      if (oneOffRunning.current) return
       const scheme = oneOff.scheme ?? before
-      if (oneOff.scheme !== null && (await upsertRecord("route-studio", "schemes", oneOff.scheme))?.kind === "refused") return
-      const routes = new Set(oneOff.moves.map((move) => move.routeId))
-      const moved = new Set<string>()
-      for (const move of oneOff.moves) {
-        if ((await sendCommand("route-studio", "routes", move.routeId, move.command, move.input)).kind === "refused") break
-        moved.add(move.routeId)
+      const commandsOf = new Map<string, number>()
+      for (const move of oneOff.moves) commandsOf.set(move.routeId, (commandsOf.get(move.routeId) ?? 0) + 1)
+      const run = async () => {
+        const done = new Map<string, number>()
+        for (const move of oneOff.moves) {
+          if ((await sendCommand("route-studio", "routes", move.routeId, move.command, move.input)).kind === "refused") break
+          done.set(move.routeId, (done.get(move.routeId) ?? 0) + 1)
+        }
+        const on = formatServiceDate(oneOff.date)
+        if (done.size === 0) {
+          if (oneOff.scheme !== null) toast.warning(`${scheme.name} saved; its next collection is not moved`, { description: `Its name and policy are saved. No route on ${on} was moved.` })
+          return
+        }
+        setAuditEvents((current) => ({
+          ...current,
+          [scheme.id]: [
+            { id: audit.id, action: audit.action, actor: actorName, at: "Now", reason: audit.reason, before: before.status, after: scheme.status, evidence: audit.evidence(scheme) },
+            ...(current[scheme.id] ?? []),
+          ],
+        }))
+        setSelectedRecord((current) => (current?.id === scheme.id ? scheme : current))
+        onSaved(scheme)
+        const moved = [...commandsOf].filter(([routeId, commands]) => done.get(routeId) === commands).length
+        const them = (n: number) => (n === 1 ? "it" : "them")
+        if (moved === commandsOf.size) {
+          toast.success(`${scheme.name} — this collection only`, {
+            description: `${count(moved, "route")} on ${on} moved; later generation runs keep ${them(moved)} as moved. The scheme keeps its configuration.`,
+          })
+        } else {
+          toast.warning(`${scheme.name} — this collection only, in part`, {
+            description: `${count(done.size, "route")} of ${commandsOf.size} on ${on} moved${moved < done.size ? `, ${done.size - moved} of them in part` : ""}; later generation runs keep ${them(done.size)} as moved, and the rest stay as they were. The scheme keeps its configuration.`,
+          })
+        }
       }
-      if (oneOff.scheme === null && moved.size === 0) return
-      setAuditEvents((current) => ({
-        ...current,
-        [scheme.id]: [
-          { id: audit.id, action: audit.action, actor: actorName, at: "Now", reason: audit.reason, before: before.status, after: scheme.status, evidence: audit.evidence(scheme) },
-          ...(current[scheme.id] ?? []),
-        ],
-      }))
-      setSelectedRecord((current) => (current?.id === scheme.id ? scheme : current))
-      onSaved(scheme)
-      const on = formatServiceDate(oneOff.date)
-      if (moved.size === routes.size) {
-        toast.success(`${scheme.name} — this collection only`, {
-          description: `${count(moved.size, "route")} on ${on} moved; later generation runs keep ${moved.size === 1 ? "it" : "them"} as moved. The scheme itself is unchanged.`,
-        })
-      } else {
-        toast.warning(`${scheme.name} — this collection only, in part`, {
-          description: `${moved.size} of ${count(routes.size, "route")} on ${on} moved, and later generation runs keep ${moved.size === 1 ? "it" : "them"} as moved; the rest stay as they were. The scheme itself is unchanged.`,
+      const start = () => {
+        oneOffRunning.current = true
+        void run().finally(() => {
+          oneOffRunning.current = false
         })
       }
+      if (oneOff.scheme === null) start()
+      else whenSaved(upsertRecord("route-studio", "schemes", oneOff.scheme), start)
     },
     [actorName, sendCommand, setAuditEvents, setSelectedRecord, upsertRecord],
   )
@@ -173,7 +197,7 @@ export function useSchemeEditCommit({
           return
         }
         if (decided.kind === "one-off") {
-          void moveOneOff(before, decided, audit, onSaved)
+          moveOneOff(before, decided, audit, onSaved)
           return
         }
         const own = schemeLiveValidation(after, {

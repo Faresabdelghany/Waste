@@ -83,6 +83,8 @@ test("This collection only moves the next collection's routes by their reschedul
   }
   await expect(dialog).toBeHidden()
   await expect(toasts(page)).toContainText(`${scheme.name} — this collection only`)
+  await expect(toasts(page)).toContainText(`${next.length === 1 ? "1 route" : `${next.length} routes`} on`)
+  await expect(toasts(page)).not.toContainText("in part")
   expect(patched, "the scheme keeps its configuration").toBe(false)
 
   const read = (await (await api.get(`/route-schemes/${scheme.id}`)).json()) as Scheme
