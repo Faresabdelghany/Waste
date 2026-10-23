@@ -6,7 +6,8 @@ import { chainLanded, expect, test } from "./fixtures"
 // server's containers where their placements in force today are delivered
 // at — the seeded tenant's placed containers at their properties' points —
 // so the fixture suite's Containers list test (e2e/tests/map-planning.spec.ts)
-// lives here now, against the seeded registry. Tile requests are aborted: the
+// lives here now, against the seeded registry, and since #186 its Create
+// service area test too. Tile requests are aborted: the
 // base map reports itself unavailable and the markers still stand.
 const MARKERS = '[data-testid="planning-map-markers"]'
 const DRAW = '[data-testid="planning-map-draw"]'
@@ -25,20 +26,21 @@ async function openMapPlanning(page: Page): Promise<void> {
   await expect(page.locator("[data-marker]").first()).toBeVisible()
 }
 
-/**
- * Drags a rectangle over the middle and the east of the initial view with
- * the rectangle tool: the seeded placed containers of central Copenhagen, and
- * clear of the Selected area panel, which opens over the map's west.
- */
-async function selectRectangle(page: Page): Promise<void> {
+/** The middle and the east of the initial view: the seeded placed containers of central Copenhagen, and clear of the Selected area panel, which opens over the map's west. */
+const CENTRAL = { from: { x: 0.3, y: 0.15 }, to: { x: 0.9, y: 0.9 } }
+/** Its south: Copenhagen Central's containers alone, clear of Nordhavn's, which are Harbor Commercial's, to the north-east. */
+const COPENHAGEN_SOUTH = { from: { x: 0.3, y: 0.45 }, to: { x: 0.95, y: 0.95 } }
+
+/** Drags a rectangle over `area` of the initial view, as fractions of it, with the rectangle tool. */
+async function selectRectangle(page: Page, area = CENTRAL): Promise<void> {
   await page.getByRole("button", { name: "Select with a rectangle" }).click()
   const overlay = page.locator(DRAW)
   await expect(overlay).toBeVisible()
   const box = await overlay.boundingBox()
   if (!box) throw new Error("draw overlay has no box")
-  await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.15)
+  await page.mouse.move(box.x + box.width * area.from.x, box.y + box.height * area.from.y)
   await page.mouse.down()
-  await page.mouse.move(box.x + box.width * 0.9, box.y + box.height * 0.9, { steps: 8 })
+  await page.mouse.move(box.x + box.width * area.to.x, box.y + box.height * area.to.y, { steps: 8 })
   await page.mouse.up()
   await expect(overlay).toHaveCount(0)
 }
@@ -86,4 +88,74 @@ test("the Containers list mirrors the selection of the server's placed container
   const label = await firstRow.locator("span.font-medium").innerText()
   await firstRow.click()
   await expect(page.getByRole("dialog")).toContainText(label)
+})
+
+type ServiceAreaCreated = { id: string; name: string; code: string; planningAreaIds: string[]; wasteFractionIds: string[]; validFrom: string; validTo: string | null; assignment: { serviceProviderId: string } | null }
+
+/** A day of this run's own, decades ahead: a planning area is awarded once at a time (#186), and the tenant keeps every earlier run's awards. */
+function dayOfItsOwn(): { first: string; firstOut: string } {
+  const at = Date.UTC(2100, 0, 1) + (Math.floor(Date.now() / 1000) % 25_000) * 4 * 86_400_000
+  return { first: new Date(at).toISOString().slice(0, 10), firstOut: new Date(at + 86_400_000).toISOString().slice(0, 10) }
+}
+
+// Ported from the fixture suite (#186): on the API the award is the planning
+// areas the selection touches — the drawn polygon is never persisted (#127)
+// — and the map draws it as their stored boundaries.
+test("Create service area opens the Pilot's award form on the selection's planning areas; the award is drawn as them and covers the selection", async ({ page }) => {
+  await openMapPlanning(page)
+  // Awards made before this visit — earlier runs' — load switched off.
+  await expect(page.locator("[data-service-area-outline]")).toHaveCount(0)
+  // One project's containers: an award is made in one project.
+  await selectRectangle(page, COPENHAGEN_SOUTH)
+  const panel = page.getByRole("region", { name: "Selected area" })
+  const rowCount = await panel.getByTestId("selected-containers").locator("[data-container-row]").count()
+  await panel.getByRole("button", { name: "Create service area" }).click()
+
+  const dialog = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Create service area", exact: true }) })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole("combobox", { name: /^Project/ })).toContainText("Copenhagen Central")
+  await expect(dialog.getByLabel("Geographic boundary")).toHaveValue(new RegExp(`^Drawn on Map Planning · ${rowCount} containers across \\d+ propert`))
+  const planningAreas = dialog.getByRole("combobox", { name: /^Planning areas/ })
+  await expect(planningAreas).not.toContainText(/^Select/)
+  await expect(planningAreas).not.toHaveAttribute("aria-invalid", "true")
+
+  const name = `E2E award ${Date.now().toString(36)}`
+  const code = `E2E-${Date.now().toString(36)}`.toUpperCase()
+  const { first, firstOut } = dayOfItsOwn()
+  await dialog.getByLabel("Service area name").fill(name)
+  await dialog.getByLabel("Area code").fill(code)
+  await dialog.getByRole("combobox", { name: /^Service provider/ }).click()
+  await page.getByRole("option", { name: /^NordRen/ }).click()
+  await dialog.getByRole("combobox", { name: /^Waste fractions/ }).click()
+  await page.getByRole("option", { name: "Residual" }).click()
+  await page.keyboard.press("Escape")
+  await expect(dialog).toBeVisible()
+  await dialog.getByLabel(/^Starts/).fill(first)
+  await dialog.getByLabel(/^Ends/).fill(first)
+  const [created] = await Promise.all([
+    page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/waste-api/service-areas"),
+    dialog.getByRole("button", { name: "Create service area" }).click(),
+  ])
+  expect(created.status()).toBe(201)
+  // The award and its first assignment: no polygon among the fields.
+  expect(Object.keys(created.request().postDataJSON() as object).sort()).toEqual(["assignment", "boundaryText", "code", "name", "planningAreaIds", "projectId", "validFrom", "validTo", "wasteFractionIds"])
+  const award = (await created.json()) as ServiceAreaCreated
+  expect(award).toMatchObject({ name, code, validFrom: first, validTo: firstOut })
+  expect(award.planningAreaIds.length).toBeGreaterThan(0)
+  expect(award.wasteFractionIds).toHaveLength(1)
+  expect(award.assignment).not.toBeNull()
+  await expect(dialog).toHaveCount(0)
+
+  // Drawn as its planning areas' stored boundaries, switched on by itself, and covering every selected container.
+  const outline = page.locator("[data-service-area-outline]").filter({ hasText: name })
+  await expect(outline).toHaveCount(1)
+  await expect(page.locator("[data-service-area-outline]")).toHaveCount(1)
+  await expect(panel.locator("li", { hasText: name })).toContainText(`${rowCount} containers`)
+
+  await page.getByRole("button", { name: /^Layers/ }).click()
+  const layers = page.getByRole("dialog", { name: "Layers" })
+  const toggle = layers.getByTestId("service-areas-layer").getByRole("checkbox", { name: new RegExp(name) })
+  await expect(toggle).toBeChecked()
+  await toggle.click()
+  await expect(outline).toHaveCount(0)
 })
