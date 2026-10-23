@@ -11,7 +11,6 @@ import { collectionGroupsToValues, type CollectionGroup } from "@waste/domain/ro
 import { schemeGenerationRecorded } from "@waste/domain/route-schemes/lifecycle"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { isIsoDate } from "@waste/domain/route-schemes/recurrence"
-import { isNoMatchIssue, type SchemeValidationResult } from "@waste/domain/route-schemes/validation"
 
 import { typed } from "@/lib/api/records/adapter"
 
@@ -101,26 +100,6 @@ export function projectToday(timezone: string | undefined, now: Date = new Date(
 export function licenceDayOf(effectiveFrom: string, timezone: string | undefined, now: Date = new Date()): JudgedDay {
   const today = projectToday(timezone, now)
   return schemeLicenceDay(isIsoDate(effectiveFrom) ? effectiveFrom : today, today)
-}
-
-/** What the wizard says where the preview's matcher cannot place the API's containers. */
-export const PREVIEW_CANNOT_PLACE = "The API matches containers when it generates routes; this preview cannot place them yet."
-
-/**
- * A scheme's validation where the containers it was judged against are the
- * API's (#178): the web's own, less the one issue that is no evidence there.
- * The preview's matcher places no container the API holds (#207 — no
- * planning area on them yet, the fixture words the matcher reads), so its
- * "No containers match the stop rule" says nothing about what generation
- * will find, and the API holds no such rule; a notice stands in its place.
- * Every other issue still blocks, and the status is the web's rule over
- * what is left. With the fixtures' containers the validation is the web's
- * own and there is no notice. Retires with #207.
- */
-export function validationOnApi(result: SchemeValidationResult, containersOnApi: boolean): SchemeValidationResult & { notice: string | null } {
-  if (!containersOnApi || !result.issues.some(isNoMatchIssue)) return { ...result, notice: null }
-  const issues = result.issues.filter((issue) => !isNoMatchIssue(issue))
-  return { ...result, status: issues.length === 0 ? "Validated" : "Draft", issues, notice: PREVIEW_CANNOT_PLACE }
 }
 
 /** Why the Pilot's question offers "This collection only" disabled, until the API keeps a one-off (#209). */

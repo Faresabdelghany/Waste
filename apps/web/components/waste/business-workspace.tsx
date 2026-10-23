@@ -42,7 +42,7 @@ import {
 } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
-import { ROUTE_SCHEMES_MODULE, schemeValuesOfDraft, validationOnApi } from "@/lib/data/route-schemes"
+import { ROUTE_SCHEMES_MODULE, schemeValuesOfDraft } from "@/lib/data/route-schemes"
 import {
   clearedFactKeys,
   deriveFormRecord,
@@ -4367,18 +4367,14 @@ export function BusinessWorkspace({
     const allocationModule = businessWorkspaces.fleet.modules.find(
       (candidate) => candidate.id === "vehicle-planning",
     )
-    // With the API's containers the zero-match sentence is no evidence and does not make the scheme a Draft (#178; retires with #207).
-    const validation = validationOnApi(
-      validateGuidedScheme(
-        data,
-        getRecords(workspace.id, activeModule.id, activeModule.records),
-        allocationModule
-          ? getRecords("fleet", allocationModule.id, allocationModule.records)
-          : [],
-        containerRecords,
-        vehicleRecords,
-      ),
-      apiConfigured && isServerBacked("resources", "containers"),
+    const validation = validateGuidedScheme(
+      data,
+      getRecords(workspace.id, activeModule.id, activeModule.records),
+      allocationModule
+        ? getRecords("fleet", allocationModule.id, allocationModule.records)
+        : [],
+      containerRecords,
+      vehicleRecords,
     )
 
     const submittedValues: NonNullable<BusinessRecord["submittedValues"]> = schemeValuesOfDraft(data, groups, origin.extraValues)

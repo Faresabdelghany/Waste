@@ -326,15 +326,6 @@ function allocationWindowTouchesScheme(
 const NO_CONTAINERS_MATCH = "No containers currently match the stop rule"
 const NO_CONTAINERS_MATCH_FOR = "No containers match the stop rule for "
 
-/**
- * Whether an issue is the zero-match one: the matcher's evidence, which a
- * caller that cannot place the containers it reads — the Pilot's, until the
- * API's containers carry their places (apps/web, #178) — does not have.
- */
-export function isNoMatchIssue(issue: string): boolean {
-  return issue === NO_CONTAINERS_MATCH || issue.startsWith(NO_CONTAINERS_MATCH_FOR)
-}
-
 const namesOf = (groups: ReadonlyArray<{ name: string }>): string =>
   groups.map((group) => group.name).join(", ")
 

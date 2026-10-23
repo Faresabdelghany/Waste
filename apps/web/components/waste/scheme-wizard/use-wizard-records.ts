@@ -21,7 +21,6 @@ import { useAssetManagementStore } from "@/components/settings/asset-management-
 import { useApiConfigured } from "@/components/waste/api-session-store"
 import { useModuleRecords as useStoreModuleRecords } from "@/components/waste/business-record-store"
 import { usePickableRecords } from "@/components/waste/pickable-records"
-import { isServerBacked } from "@/lib/api/records/modules"
 import { getModuleDefinition, type BusinessRecord, type WorkspaceId } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { MASTER_DATA_MODULE } from "@/lib/data/master-data"
@@ -52,8 +51,6 @@ export type WizardRecords = {
   vehicles: BusinessRecord[]
   drivers: BusinessRecord[]
   containers: BusinessRecord[]
-  /** Whether the containers are the API's (the Pilot), which the preview's matcher cannot place yet (lib/data/route-schemes.ts `validationOnApi`). */
-  containersOnApi: boolean
   /** On the Pilot, the master data's container types, which a rule names; null in fixture mode, where they are the ones the containers carry. */
   containerTypeNames: string[] | null
   schemes: BusinessRecord[]
@@ -160,7 +157,6 @@ export function useWizardRecords(): WizardRecords {
     vehicles,
     drivers,
     containers,
-    containersOnApi: onApi && isServerBacked("resources", "containers"),
     containerTypeNames,
     schemes,
     allocations,
