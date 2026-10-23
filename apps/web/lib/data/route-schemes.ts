@@ -26,9 +26,9 @@ export const ROUTE_SCHEMES_MODULE = { workspaceId: "route-studio", moduleId: "sc
  * own validation never lowers a Validated scheme, the API's 409 speaks for
  * what it refuses — and Validated for a Draft the edit leaves without a
  * blocking issue (`issues` from the live validation; null where there is no
- * recurrence to judge), the browser path's rule (D31). So a scheme an edit
- * refused midway left a Draft (PartialWrite) is validated again by the save
- * that fixes it.
+ * recurrence to judge), the browser path's rule (D31). So a Draft — one a
+ * person drafted, or one an edit left a Draft before an edit became one
+ * request (#205) — is validated again by the save that leaves it sound.
  */
 export function schemeEditStatusOnApi(stored: string, issues: readonly string[] | null): string {
   return stored === "Draft" && issues !== null && issues.length === 0 ? "Validated" : stored

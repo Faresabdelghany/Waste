@@ -36,22 +36,16 @@
 // badge read (container-drift.ts). The runs are where those are stored; the
 // web never stamps them on the Pilot.
 //
-// Writes. A create is one POST with its groups. An edit is the scheme's
-// PATCH when only the scheme moved; when groups moved too it is several
-// requests, in the order the API can take them: the scheme first (serving
-// the union of the old and new days, so a group may move onto a new day and
-// off an old one), then the groups — parked, patched, their rule or their
-// list replaced whole, created — then the scheme again (the new days alone).
-// A validated scheme is held to the structural rules on every one of those
-// requests, and some edits pass through a state the rules refuse (a day
-// added to a validated scheme: the scheme without a group on it is a 409,
-// the group on a day the scheme does not serve a 400), so such an edit goes
-// draft first and validated last, and the last request is the API's verdict
-// on the whole. A request refused after another landed leaves part of the
-// edit written; the adapter asks for the validation again where it
-// suspended it, reads the scheme back and throws `PartialWrite`, so the row
-// shows what the server holds — a draft, if the verdict was a refusal —
-// under the API's sentence.
+// Writes. A create is one POST with its groups. An edit is one request too,
+// the scheme's PATCH (#205): the scheme's fields that moved, and — where any
+// group moved — `collectionGroups`, the groups as the edit leaves them,
+// whole: a group the scheme holds restated under its server id, its rule or
+// its list in full; a group the edit adds with none; a group left out is
+// parked by the API, since there is no delete. The API holds the structural
+// rules once, on the state the edit leaves behind, and writes it in one
+// transaction or not at all, so a validated scheme stays validated through
+// an edit that adds a day, splits a group or trades containers, and a
+// refusal leaves the row as it was under the API's sentence.
 //
 // Generation (#178). The scheme's one action is `generate`: a run over the
 // window the office asks for, `POST /route-schemes/:id/generate`, answering
@@ -62,22 +56,21 @@
 // it (./generation.ts) and then reads the scheme back through `read`, since
 // its `generation` reading is the runs'.
 import type { GenerationRequest, GenerationRun } from "@waste/contracts/generation"
-import type { CollectionGroup as WireGroup, CollectionGroupCreate, CollectionGroupPatch, Occurrence, OccurrenceQuery, RouteScheme, RouteSchemeCreate, RouteSchemePatch, StopMatchingRule } from "@waste/contracts/route-schemes"
+import type { CollectionGroup as WireGroup, CollectionGroupCreate, CollectionGroupEntry, CollectionGroupPatch, Occurrence, OccurrenceQuery, RouteScheme, RouteSchemeCreate, RouteSchemePatch, StopMatchingRule } from "@waste/contracts/route-schemes"
 import { LAST_GENERATION_MATCHES_KEY, PREVIOUS_GENERATION_MATCHES_KEY, serializeGenerationMatches, type GenerationMatches } from "@waste/domain/route-schemes/container-drift"
 import { collectionGroupsOfRecord, collectionGroupsToValues, hasExplicitCollectionGroups, IMPLICIT_GROUP_ID, sharedServiceProvider, type CollectionGroup as SchemeGroup, type ResolvedCollectionGroup } from "@waste/domain/route-schemes/groups"
-import { addDays, parseServiceDays, sortServiceDays, type ServiceDay } from "@waste/domain/route-schemes/recurrence"
+import { addDays, parseServiceDays, sortServiceDays } from "@waste/domain/route-schemes/recurrence"
 import { SERVICE_TYPES, type ServiceType } from "@waste/domain/planning/vocabulary"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf, type MasterDataKind } from "@/lib/data/master-data-kinds"
 import { ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
 
-import { create, get, listAll, patch, post, put, withQuery } from "../client"
+import { create, get, listAll, patch, post, withQuery } from "../client"
 import {
   inheritedPresentation,
   isLocalRefusal,
   ofKind,
-  PartialWrite,
   stampFacts,
   statusLabel,
   statusToken,
@@ -94,6 +87,13 @@ import type { ActionOutcome, SendAction } from "./server-records"
 
 /** Where a scheme keeps its groups' server ids: JSON, the web's group id to the server's. */
 export const SERVER_GROUP_IDS_KEY = "serverGroupIds"
+
+/**
+ * Where a scheme keeps its groups' names as the server holds them: JSON, the
+ * server's group id to its name. The legacy shape names its one group after
+ * the scheme, so an edit restating that group says the name the server has.
+ */
+export const SERVER_GROUP_NAMES_KEY = "serverGroupNames"
 
 /**
  * Where a scheme keeps the master data ids its rules were read with, by the
@@ -150,16 +150,19 @@ function masterId(context: MappingContext, kind: MasterDataKind, name: string, p
   return id ?? refusal(path, `The API holds no ${MASTER_WORDS[kind]} named ${JSON.stringify(name)}`)
 }
 
-function ruleMasterIdsOf(record: BusinessRecord): RuleMasterIds {
-  const raw = record.submittedValues?.[RULE_MASTER_IDS_KEY]
-  if (typeof raw !== "string" || raw === "") return {}
+/** A JSON object a record keeps under one of its typed keys, or {} where it keeps none or something else. */
+function jsonObjectOf<T extends object>(record: BusinessRecord, key: string): T {
+  const raw = record.submittedValues?.[key]
+  if (typeof raw !== "string" || raw === "") return {} as T
   try {
     const parsed: unknown = JSON.parse(raw)
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as RuleMasterIds) : {}
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as T) : ({} as T)
   } catch {
-    return {}
+    return {} as T
   }
 }
+
+const ruleMasterIdsOf = (record: BusinessRecord): RuleMasterIds => jsonObjectOf<RuleMasterIds>(record, RULE_MASTER_IDS_KEY)
 
 /** Every item mapped, or the first refusal. */
 function allOf<T>(items: readonly string[], each: (item: string) => T | LocalRefusal): T[] | LocalRefusal {
@@ -176,7 +179,6 @@ function allOf<T>(items: readonly string[], each: (item: string) => T | LocalRef
 const lastDayIn = (firstDayOut: string) => addDays(firstDayOut, -1)
 const firstDayOut = (lastDayIn: string) => addDays(lastDayIn, 1)
 
-const sameDays = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((day, index) => day === b[index])
 
 const isServiceType = (value: string): value is ServiceType => (SERVICE_TYPES as readonly string[]).includes(value)
 
@@ -310,114 +312,108 @@ function groupCreateOf(group: SchemeGroup, context: MappingContext, known: RuleM
   }
   const containerIds = containerIdsOf(group, context)
   if (isRefusal(containerIds)) return containerIds
+  if (containerIds.length === 0) return refusal("containerIds", "A group that picks containers picks one at least")
   return { name: group.name, days: group.days, stopSource: "manual", rule: null, containerIds, ...fleet }
 }
 
 /**
- * One group request of an edit. `phase` is its place in the order `update`
- * sends them: the API holds each request to "no container on two groups a
- * shared day" (and a validated scheme to the rest), so what gives something
- * up goes before what takes it — parks first, then the writes that only
- * shrink (fewer days, a shorter list) or change nothing picked (a rule, a
- * name, the fleet), then the ones that grow, then the new groups.
+ * The rule a group was read with, by the ids the record keeps under the names
+ * it spells them by (`RULE_MASTER_IDS_KEY`): what a rule the edit leaves
+ * alone is restated as, so a master data row renamed since the load — or a new
+ * row given an old name — moves nothing. Undefined where a name was not read
+ * with an id; the caller then reads the rule by name.
  */
-type GroupWrite = { phase: 0 | 1 | 2 | 3 } & (
-  | { kind: "park"; id: string }
-  | { kind: "patch"; id: string; body: CollectionGroupPatch }
-  | { kind: "rule"; id: string; body: StopMatchingRule }
-  | { kind: "containers"; id: string; body: { containerIds: string[] } }
-  | { kind: "create"; body: CollectionGroupCreate }
-)
-
-/** Whether `after` holds something `before` did not: a day, a container. */
-const grows = (before: readonly string[], after: readonly string[]) => after.some((item) => !before.includes(item))
+function ruleAsRead(group: SchemeGroup, known: RuleMasterIds): StopMatchingRule | undefined {
+  const idsOf = (kind: MasterDataKind, names: readonly string[]) => names.map((name) => known[kind]?.[name])
+  const wasteFractionIds = idsOf("waste-fraction", group.fractions)
+  const containerTypeIds = idsOf("container-type", group.containerTypes ?? [])
+  const [vehicleTypeId] = group.ruleVehicleType === undefined ? [null] : idsOf("vehicle-type", [group.ruleVehicleType])
+  if (group.fractions.length === 0 || [...wasteFractionIds, ...containerTypeIds, vehicleTypeId].some((id) => id === undefined)) return undefined
+  return { wasteFractionIds: wasteFractionIds as string[], containerTypeIds: containerTypeIds as string[], vehicleTypeId: vehicleTypeId ?? null }
+}
 
 /** Whether two groups' rules name the same fractions, container types and vehicle type, in the names the record spells them by. */
 const sameRule = (a: SchemeGroup, b: SchemeGroup) =>
   JSON.stringify([a.fractions, a.containerTypes ?? [], a.ruleVehicleType ?? null]) === JSON.stringify([b.fractions, b.containerTypes ?? [], b.ruleVehicleType ?? null])
 
 /** The web group id to server id map a record carries. */
-function serverGroupIdsOf(record: BusinessRecord): Record<string, string> {
-  const raw = record.submittedValues?.[SERVER_GROUP_IDS_KEY]
-  if (typeof raw !== "string" || raw === "") return {}
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, string>) : {}
-  } catch {
-    return {}
-  }
-}
+const serverGroupIdsOf = (record: BusinessRecord) => jsonObjectOf<Record<string, string>>(record, SERVER_GROUP_IDS_KEY)
+
+/** The server's names of a record's groups, by server id. */
+const serverGroupNamesOf = (record: BusinessRecord) => jsonObjectOf<Record<string, string>>(record, SERVER_GROUP_NAMES_KEY)
 
 /** The groups of a record, with the day list the legacy shape reads them against. */
 const groupsOf = (record: BusinessRecord): ResolvedCollectionGroup[] => collectionGroupsOfRecord(record)
 
 /**
- * What the groups' change between two records asks of the API, in order, or
- * a refusal. A group is the server's when the record's id map names it; the
- * one group of the legacy shape (`default`) that the map does not name —
- * explicit groups merged back into one — is the scheme's first group. A
- * group the map names and `after` lacks is parked.
+ * What of a group an edit can move, in the record's own terms — its days, how
+ * it finds its stops and what it finds them by, its fleet — compared as one
+ * value, so a field added here is compared without another clause. The name
+ * is weighed apart, since the legacy shape shows the scheme's in its place.
  */
-function groupWritesOf(before: BusinessRecord, after: BusinessRecord, context: MappingContext): GroupWrite[] | LocalRefusal {
+const movable = (group: SchemeGroup) =>
+  JSON.stringify([
+    group.days,
+    group.stopSource,
+    group.stopSource === "rule" ? [group.fractions, group.containerTypes ?? [], group.ruleVehicleType ?? null] : group.containerIds,
+    group.serviceProviderId ?? null,
+    group.vehicleId ?? null,
+    group.driverId ?? null,
+  ])
+
+/**
+ * The edit's `collectionGroups`, or null when no group moved, or a refusal.
+ * A group is the server's when the record's id map names it; the one group of
+ * the legacy shape (`default`) that the map does not name — explicit groups
+ * merged back into one — is the scheme's first group. Whether a group moved is
+ * decided first, in the record's terms, so an edit of the scheme alone
+ * resolves nothing of its groups; once one moved, every group of `after` is
+ * restated whole, since the API takes the list as the groups the edit leaves,
+ * and a group the map names and `after` lacks is left out, which parks it.
+ * A restated group keeps the name the server holds unless the edit gave it
+ * another — the legacy shape shows the scheme's name for its one group — and
+ * a rule the edit leaves alone is restated by the ids it was read with.
+ */
+function groupEntriesOf(before: BusinessRecord, after: BusinessRecord, context: MappingContext): CollectionGroupEntry[] | null | LocalRefusal {
   const ids = serverGroupIdsOf(before)
+  const names = serverGroupNamesOf(before)
   const known = ruleMasterIdsOf(before)
   const was = groupsOf(before)
   const is = groupsOf(after)
   const wasByServerId = new Map(was.flatMap((group) => (ids[group.id] === undefined ? [] : [[ids[group.id], group] as const])))
   const firstServerId = was.map((group) => ids[group.id]).find((id) => id !== undefined)
   const serverIdOf = (group: ResolvedCollectionGroup) => ids[group.id] ?? (group.id === IMPLICIT_GROUP_ID && is.length === 1 ? firstServerId : undefined)
-  const writes: GroupWrite[] = []
-  const kept = new Set<string>()
-  for (const group of is) {
+  const pairs = is.map((group) => {
     const serverId = serverIdOf(group)
-    const prior = serverId === undefined ? undefined : wasByServerId.get(serverId)
+    return { group, serverId, prior: serverId === undefined ? undefined : wasByServerId.get(serverId) }
+  })
+  for (const { group, prior } of pairs) {
+    if (prior !== undefined && prior.stopSource !== group.stopSource) return refusal("stopSelection", STOP_SOURCE_KEPT)
+  }
+  // A name the legacy shape showed in the group's place — the scheme's, before or after the edit — is no name the edit gave.
+  const renamed = (group: ResolvedCollectionGroup, prior: ResolvedCollectionGroup) => !group.implicit && group.name !== prior.name
+  const restated = new Set(pairs.flatMap(({ serverId, prior }) => (serverId === undefined || prior === undefined ? [] : [serverId])))
+  const moved =
+    pairs.some(({ group, prior }) => prior === undefined || renamed(group, prior) || movable(group) !== movable(prior)) ||
+    [...wasByServerId].some(([serverId, group]) => !restated.has(serverId) && group.days.length > 0)
+  if (!moved) return null
+  const entries: CollectionGroupEntry[] = []
+  for (const { group, serverId, prior } of pairs) {
     if (serverId === undefined || prior === undefined) {
-      // Appended after the scheme's groups, as the editor adds one: no group is renumbered.
-      const body = groupCreateOf(group, context, known)
-      if (isRefusal(body)) return body
-      writes.push({ phase: 3, kind: "create", body })
+      // Added after the scheme's groups, as the editor adds one: no group is renumbered.
+      const whole = groupCreateOf(group, context, known)
+      if (isRefusal(whole)) return whole
+      entries.push(whole)
       continue
     }
-    kept.add(serverId)
-    if (prior.stopSource !== group.stopSource) return refusal("stopSelection", STOP_SOURCE_KEPT)
-    const fleetBefore = fleetOf(prior, context)
-    const fleetAfter = fleetOf(group, context)
-    if (isRefusal(fleetAfter)) return fleetAfter
-    const body: CollectionGroupPatch = {
-      // The legacy shape's one group carries the scheme's name, not its own, so it renames nothing.
-      ...(group.implicit || group.name === prior.name ? {} : { name: group.name }),
-      ...(sameDays(group.days, prior.days) ? {} : { days: group.days }),
-      ...Object.fromEntries(Object.entries(fleetAfter).filter(([key, value]) => isRefusal(fleetBefore) || fleetBefore[key as keyof GroupFleet] !== value)),
-    }
-    if (Object.keys(body).length > 0) writes.push({ phase: grows(prior.days, group.days) ? 2 : 1, kind: "patch", id: serverId, body })
-    if (group.stopSource === "rule") {
-      // A rule the edit leaves alone is not resolved again, so a master data row renamed since the load blocks nothing.
-      if (sameRule(prior, group)) continue
-      const rule = ruleOf(group, context, known)
-      if (isRefusal(rule)) return rule
-      writes.push({ phase: 1, kind: "rule", id: serverId, body: rule })
-    } else {
-      const containerIds = containerIdsOf(group, context)
-      if (isRefusal(containerIds)) return containerIds
-      if (containerIds.length === 0) return refusal("containerIds", "A group that picks containers picks one at least")
-      const priorIds = containerIdsOf(prior, context)
-      if (isRefusal(priorIds) || JSON.stringify(containerIds) !== JSON.stringify(priorIds)) {
-        writes.push({ phase: isRefusal(priorIds) || grows(priorIds, containerIds) ? 2 : 1, kind: "containers", id: serverId, body: { containerIds } })
-      }
-    }
+    const kept = group.stopSource === "rule" && sameRule(prior, group) ? ruleAsRead(group, known) : undefined
+    const whole = groupCreateOf(group, context, known)
+    if (isRefusal(whole)) return whole
+    const name = renamed(group, prior) ? group.name : (names[serverId] ?? prior.name)
+    entries.push({ id: serverId, ...whole, ...(kept === undefined ? {} : { rule: kept }), name })
   }
-  for (const [serverId, group] of wasByServerId) {
-    if (!kept.has(serverId) && group.days.length > 0) writes.push({ phase: 0, kind: "park", id: serverId })
-  }
-  return writes.sort((a, b) => a.phase - b.phase)
+  return entries
 }
-
-/**
- * An edit as the API takes it: the scheme's patch before the groups, the
- * groups, the scheme's patch after them. `wrap` says the first moved a
- * validated scheme to draft and the last validates it again.
- */
-type SchemeWrite = { first?: RouteSchemePatch; groups: GroupWrite[]; last?: RouteSchemePatch; wrap: boolean }
 
 const nonEmpty = <T extends object>(body: T): T | undefined => (Object.keys(body).length === 0 ? undefined : body)
 
@@ -430,26 +426,6 @@ function changedFields(before: SchemeFields, after: SchemeFields): SchemeFields 
 // ---------------------------------------------------------------------------
 // The adapter
 // ---------------------------------------------------------------------------
-
-async function sendGroupWrite(client: Client, schemeId: string, write: GroupWrite): Promise<void> {
-  switch (write.kind) {
-    case "park":
-      await patch<WireGroup>(client, `/collection-groups/${write.id}`, { days: [] })
-      return
-    case "patch":
-      await patch<WireGroup>(client, `/collection-groups/${write.id}`, write.body)
-      return
-    case "rule":
-      await put<WireGroup>(client, `/collection-groups/${write.id}/stop-matching-rule`, write.body)
-      return
-    case "containers":
-      await put<WireGroup>(client, `/collection-groups/${write.id}/containers`, write.body)
-      return
-    case "create":
-      await create<WireGroup>(client, `/route-schemes/${schemeId}/collection-groups`, write.body)
-      return
-  }
-}
 
 /** A scheme's generate, by the name the adapter's `actions` holds it under. */
 export const GENERATE_ROUTES = "generate"
@@ -558,6 +534,7 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
         unloadingStationId: scheme.unloadingStationId === null ? "" : webIdFor(context, CHIP.station, scheme.unloadingStationId),
         ...groupValues,
         [SERVER_GROUP_IDS_KEY]: JSON.stringify(Object.fromEntries(running.map((group) => [webGroupIdOf.get(group.id), group.id]))),
+        [SERVER_GROUP_NAMES_KEY]: JSON.stringify(Object.fromEntries(running.map((group) => [group.id, group.name]))),
         [RULE_MASTER_IDS_KEY]: JSON.stringify(ruleIds),
         ...(scheme.generation.lastGeneratedAt === null ? {} : { lastGeneratedAt: scheme.generation.lastGeneratedAt }),
         [LAST_GENERATION_MATCHES_KEY]: serializeGenerationMatches(last),
@@ -613,66 +590,20 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
     if (isRefusal(fieldsAfter)) return fieldsAfter
     const fieldsBefore = schemeFieldsOf(before, context)
     const scheme = changedFields(isRefusal(fieldsBefore) ? {} : fieldsBefore, fieldsAfter)
-    const groups = groupWritesOf(before, after, context)
+    const groups = groupEntriesOf(before, after, context)
     if (isRefusal(groups)) return groups
     const statusBefore = statusOf(before)
     const statusAfter = statusOf(after)
-    const statusMove = statusAfter === statusBefore ? undefined : (statusAfter as RouteSchemePatch["status"])
-    if (groups.length === 0) {
-      const only = nonEmpty({ ...scheme, ...(statusMove === undefined ? {} : { status: statusMove }) })
-      return only === undefined ? null : ({ first: only, groups, wrap: false } satisfies SchemeWrite)
-    }
-    const { serviceDays, ...fields } = scheme
-    const daysBefore = parseServiceDays(typed(before, "serviceDays") ?? "")
-    const daysAfter = serviceDays ?? daysBefore
-    const union = sortServiceDays([...new Set<ServiceDay>([...daysBefore, ...daysAfter])])
-    const structural = serviceDays !== undefined || groups.length > 1 || groups.some((write) => write.kind === "create" || write.kind === "park" || (write.kind === "patch" && write.body.days !== undefined))
-    const wrap = statusBefore === "validated" && statusAfter === "validated" && structural
-    const write: SchemeWrite = {
-      first: nonEmpty({
-        ...fields,
-        ...(sameDays(union, daysBefore) ? {} : { serviceDays: union }),
-        ...(wrap || statusMove === "draft" ? { status: "draft" as const } : {}),
-      }),
-      groups,
-      last: nonEmpty({
-        ...(sameDays(union, daysAfter) ? {} : { serviceDays: daysAfter }),
-        ...(wrap || statusMove === "validated" ? { status: "validated" as const } : {}),
-      }),
-      wrap,
-    }
-    return write
+    const body: RouteSchemePatch | undefined = nonEmpty({
+      ...scheme,
+      ...(statusAfter === statusBefore ? {} : { status: statusAfter as RouteSchemePatch["status"] }),
+      ...(groups === null ? {} : { collectionGroups: groups }),
+    })
+    return body ?? null
   },
   create: (client, body) => create<RouteScheme>(client, "/route-schemes", body).then((created) => created.body),
-  update: async (client, serverId, body) => {
-    const write = body as SchemeWrite
-    const path = `/route-schemes/${serverId}`
-    let landed = false
-    let step: "first" | "groups" | "last" = "first"
-    try {
-      let answer: RouteScheme | undefined
-      if (write.first !== undefined) {
-        answer = await patch<RouteScheme>(client, path, write.first)
-        landed = true
-      }
-      step = "groups"
-      for (const group of write.groups) {
-        await sendGroupWrite(client, serverId, group)
-        landed = true
-        answer = undefined
-      }
-      step = "last"
-      if (write.last !== undefined) answer = await patch<RouteScheme>(client, path, write.last)
-      return answer ?? (await get<RouteScheme>(client, path))
-    } catch (error) {
-      if (!landed) throw error
-      // The validation the first request suspended, asked for again unless it was the verdict that failed.
-      if (write.wrap && step !== "last") await patch<RouteScheme>(client, path, { status: "validated" }).catch(() => undefined)
-      const standing = await get<RouteScheme>(client, path).catch(() => undefined)
-      if (standing === undefined) throw error
-      throw new PartialWrite(error, standing)
-    }
-  },
+  // One request, the API's verdict on the whole edit: it writes all of it or none (#205).
+  update: (client, serverId, body) => patch<RouteScheme>(client, `/route-schemes/${serverId}`, body),
   read: (client, serverId) => get<RouteScheme>(client, `/route-schemes/${serverId}`),
   actions: { [GENERATE_ROUTES]: generateRoutes },
 }

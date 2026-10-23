@@ -5,9 +5,9 @@
 // reading the stamps the lifecycle and the drift badge read; the records the
 // workspace writes become the bodies the API's contracts accept, held here
 // against the contracts' own zod schemas; and a write goes out through the
-// store's seam over a scripted `fetch`, as one request or as the scheme's
-// and its groups' in the order the API can take them, the API's refusals
-// coming back as its sentences.
+// store's seam over a scripted `fetch`, every edit one request — the
+// scheme's PATCH, with its groups whole where they moved (#205) — the API's
+// refusals coming back as its sentences.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
@@ -15,12 +15,8 @@ import type { WasteFraction, ContainerType } from "@waste/contracts/catalogue"
 import type { Project, ServiceProvider } from "@waste/contracts/organisation"
 import type { PlanningArea, PlanningAreaBoundary } from "@waste/contracts/planning-areas"
 import {
-  CollectionGroupCreate,
-  CollectionGroupPatch,
-  CollectionGroupContainersSet,
   RouteSchemeCreate,
   RouteSchemePatch,
-  StopMatchingRuleSet,
   type CollectionGroup,
   type Occurrence,
   type RouteScheme,
@@ -497,7 +493,6 @@ describe("a scheme the guided setup makes (#178)", () => {
 
 describe("an edit of a scheme", () => {
   const schemeAnswer = (over: Partial<RouteScheme> = {}) => () => json({ ...central, ...over })
-  const groupAnswer = (over: Partial<CollectionGroup> = {}) => () => json({ ...central.collectionGroups[0], ...over })
 
   test("a rename is one PATCH of the name, and the answer is the record under its own web id", async () => {
     const { outcome, calls, record } = await edited(central, (row) => ({ ...withValues({ schemeName: "RS-Central · Week B" })(row), name: "RS-Central · Week B" }), [schemeAnswer({ name: "RS-Central · Week B" })])
@@ -525,101 +520,144 @@ describe("an edit of a scheme", () => {
     assert.deepEqual(routeSchemeAdapter.statuses, ["draft", "validated"])
   })
 
-  test("the group's own fields are its PATCH, then the scheme is read back whole", async () => {
-    const { calls, outcome } = await edited(central, withValues({ plannedDriverId: "" }), [groupAnswer({ driverId: null }), schemeAnswer()])
-    assert.deepEqual(calls.map(request), [`PATCH /collection-groups/${CENTRAL_GROUP_ID}`, `GET /route-schemes/${CENTRAL_ID}`])
-    assert.deepEqual(bodyOf(calls[0]), { driverId: null })
-    assert.ok(CollectionGroupPatch.safeParse(bodyOf(calls[0])).success)
+  /** A group as one entry of the scheme's `collectionGroups` restates it: whole, under the server's id. */
+  const entryOf = (group: CollectionGroup, over: Record<string, unknown> = {}) => ({
+    id: group.id,
+    name: group.name,
+    days: group.days,
+    stopSource: group.stopSource,
+    rule: group.rule,
+    containerIds: group.stopSource === "manual" ? group.containerIds : null,
+    serviceProviderId: group.serviceProviderId,
+    vehicleId: group.vehicleId,
+    driverId: group.driverId,
+    ...over,
+  })
+  const centralGroup = central.collectionGroups[0]
+  const osterbroGroup = osterbro.collectionGroups[0]
+  const one = (calls: Call[]) => {
+    assert.deepEqual(calls.map(request), [`PATCH /route-schemes/${calls[0]?.url.split("/route-schemes/")[1] ?? ""}`], "one request for the whole edit")
+    const body = bodyOf(calls[0])
+    assert.ok(RouteSchemePatch.safeParse(body).success, JSON.stringify(body))
+    return body
+  }
+
+  test("a group's own fields are the scheme's one PATCH, its groups restated whole", async () => {
+    const { calls, outcome } = await edited(central, withValues({ plannedDriverId: "" }), [schemeAnswer()])
+    assert.deepEqual(one(calls), { collectionGroups: [entryOf(centralGroup, { driverId: null })] })
     assert.equal(outcome.kind, "updated")
   })
 
-  test("a changed rule is the whole rule, PUT: the fractions, the container types and the vehicle type by id", async () => {
-    const { calls } = await edited(central, withValues({ matchFractions: "Organic", wasteFraction: "Organic", matchContainerTypes: "Two-wheel bin · 240 L" }), [groupAnswer(), schemeAnswer()])
-    assert.deepEqual(calls.map(request), [`PUT /collection-groups/${CENTRAL_GROUP_ID}/stop-matching-rule`, `GET /route-schemes/${CENTRAL_ID}`])
-    assert.deepEqual(bodyOf(calls[0]), { wasteFractionIds: [organic.id], containerTypeIds: [bin240.id], vehicleTypeId: rearLoader.id })
-    assert.ok(StopMatchingRuleSet.safeParse(bodyOf(calls[0])).success)
+  test("a changed rule is the group's whole rule in the one PATCH: the fractions, the container types and the vehicle type by id", async () => {
+    const { calls } = await edited(central, withValues({ matchFractions: "Organic", wasteFraction: "Organic", matchContainerTypes: "Two-wheel bin · 240 L" }), [schemeAnswer()])
+    assert.deepEqual(one(calls), { collectionGroups: [entryOf(centralGroup, { rule: { wasteFractionIds: [organic.id], containerTypeIds: [bin240.id], vehicleTypeId: rearLoader.id } })] })
   })
 
-  test("a manual group's picks, reordered, are the whole list, PUT", async () => {
+  test("a manual group's picks, reordered, are its whole list in the one PATCH", async () => {
     const reordered = [PICKS[3], PICKS[0], PICKS[1], PICKS[2]].map((id) => `asset-${id}`).join(",")
-    const { calls } = await edited(osterbro, withValues({ containerIds: reordered }), [groupAnswer(), schemeAnswer()])
-    assert.deepEqual(calls.map(request), [`PUT /collection-groups/${OSTERBRO_GROUP_ID}/containers`, `GET /route-schemes/${OSTERBRO_ID}`])
-    assert.deepEqual(bodyOf(calls[0]), { containerIds: [PICKS[3], PICKS[0], PICKS[1], PICKS[2]] })
-    assert.ok(CollectionGroupContainersSet.safeParse(bodyOf(calls[0])).success)
+    const { calls } = await edited(osterbro, withValues({ containerIds: reordered }), [schemeAnswer()])
+    assert.deepEqual(one(calls), { collectionGroups: [entryOf(osterbroGroup, { containerIds: [PICKS[3], PICKS[0], PICKS[1], PICKS[2]] })] })
   })
 
-  test("a service day added to a validated scheme goes draft, moves the group, then validates again: the API holds each request to the structural rules", async () => {
+  test("a service day added to a validated scheme is one PATCH of the days and the group that serves them: no draft, no second request (#205)", async () => {
     const withSaturday = [...WEEKDAYS, "saturday"]
-    const { calls } = await edited(central, withValues({ serviceDays: withSaturday.join(", ") }), [schemeAnswer({ status: "draft", serviceDays: withSaturday as RouteScheme["serviceDays"] }), groupAnswer(), schemeAnswer({ serviceDays: withSaturday as RouteScheme["serviceDays"] })])
-    assert.deepEqual(calls.map(request), [`PATCH /route-schemes/${CENTRAL_ID}`, `PATCH /collection-groups/${CENTRAL_GROUP_ID}`, `PATCH /route-schemes/${CENTRAL_ID}`])
-    assert.deepEqual(bodyOf(calls[0]), { serviceDays: withSaturday, status: "draft" })
-    assert.deepEqual(bodyOf(calls[1]), { days: withSaturday })
-    assert.deepEqual(bodyOf(calls[2]), { status: "validated" })
-    for (const call of [calls[0], calls[2]]) assert.ok(RouteSchemePatch.safeParse(bodyOf(call)).success)
+    const { calls, outcome } = await edited(central, withValues({ serviceDays: withSaturday.join(", ") }), [schemeAnswer({ serviceDays: withSaturday as RouteScheme["serviceDays"] })])
+    assert.deepEqual(one(calls), { serviceDays: withSaturday, collectionGroups: [entryOf(centralGroup, { days: withSaturday })] })
+    assert.equal(outcome.kind === "updated" ? outcome.record.status : undefined, "Validated", "validated throughout")
   })
 
-  test("days swapped go through their union: the scheme serves both, the group moves, the scheme drops the old day", async () => {
+  test("days swapped are the new days and the group on them, in the one PATCH: no union first", async () => {
     const swapped = ["tuesday", "wednesday", "thursday", "friday", "saturday"]
-    const { calls } = await edited({ ...central, status: "draft" }, (row) => ({ ...withValues({ serviceDays: swapped.join(", ") })(row), status: "Draft" }), [schemeAnswer(), groupAnswer(), schemeAnswer()])
-    assert.deepEqual(bodyOf(calls[0]), { serviceDays: [...WEEKDAYS, "saturday"] }, "a draft needs no status move")
-    assert.deepEqual(bodyOf(calls[1]), { days: swapped })
-    assert.deepEqual(bodyOf(calls[2]), { serviceDays: swapped })
+    const { calls } = await edited({ ...central, status: "draft" }, (row) => ({ ...withValues({ serviceDays: swapped.join(", ") })(row), status: "Draft" }), [schemeAnswer()])
+    assert.deepEqual(one(calls), { serviceDays: swapped, collectionGroups: [entryOf(centralGroup, { days: swapped })] })
   })
 
-  test("a group split in two: the new group is created after the old one moved, and a removed group is parked first", async () => {
-    const created = groupOf({ id: "019995e0-0000-7000-8000-0000000000d1", routeSchemeId: CENTRAL_ID, name: "Friday", days: ["friday"] })
+  test("a group split in two: the group restated with its new days and the new one without an id; merged back, the one left out is parked", async () => {
     const split = withGroups((current) => [{ ...current[0], days: ["monday", "tuesday", "wednesday", "thursday"] }, { id: "group-2", name: "Friday", days: ["friday"], fractions: ["Residual"], stopSource: "rule", ruleVehicleType: "Rear loader", containerIds: [] }])
-    const { calls } = await edited(central, split, [schemeAnswer({ status: "draft" }), groupAnswer(), () => json(created, 201, { location: `/collection-groups/${created.id}` }), schemeAnswer()])
-    assert.deepEqual(calls.map(request), [`PATCH /route-schemes/${CENTRAL_ID}`, `PATCH /collection-groups/${CENTRAL_GROUP_ID}`, `POST /route-schemes/${CENTRAL_ID}/collection-groups`, `PATCH /route-schemes/${CENTRAL_ID}`])
-    assert.deepEqual(bodyOf(calls[0]), { status: "draft" })
-    assert.deepEqual(bodyOf(calls[1]), { days: ["monday", "tuesday", "wednesday", "thursday"] })
-    assert.deepEqual(bodyOf(calls[2]), { name: "Friday", days: ["friday"], stopSource: "rule", rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: rearLoader.id }, containerIds: null, serviceProviderId: null, vehicleId: null, driverId: null })
-    assert.ok(CollectionGroupCreate.safeParse(bodyOf(calls[2])).success)
-    assert.deepEqual(bodyOf(calls[3]), { status: "validated" })
+    const { calls } = await edited(central, split, [schemeAnswer()])
+    assert.deepEqual(one(calls), {
+      collectionGroups: [
+        entryOf(centralGroup, { days: ["monday", "tuesday", "wednesday", "thursday"] }),
+        { name: "Friday", days: ["friday"], stopSource: "rule", rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: rearLoader.id }, containerIds: null, serviceProviderId: null, vehicleId: null, driverId: null },
+      ],
+    })
 
     const north = groupOf({ id: "01a0d2a4-a280-701b-8000-0000000000a1", routeSchemeId: CENTRAL_ID, name: "North", days: ["monday", "tuesday", "wednesday"] })
     const south = groupOf({ id: "01a0d2a4-a280-701b-8000-0000000000a2", routeSchemeId: CENTRAL_ID, name: "South", position: 2, days: ["thursday", "friday"] })
-    const merged = await edited({ ...central, collectionGroups: [north, south] }, withGroups((current) => [{ ...current[0], days: [...WEEKDAYS] }]), [schemeAnswer(), groupAnswer(), groupAnswer(), schemeAnswer()])
-    assert.deepEqual(merged.calls.map(request), [`PATCH /route-schemes/${CENTRAL_ID}`, `PATCH /collection-groups/${south.id}`, `PATCH /collection-groups/${north.id}`, `PATCH /route-schemes/${CENTRAL_ID}`])
-    assert.deepEqual(bodyOf(merged.calls[1]), { days: [] }, "no delete: a group that no longer runs is parked")
-    assert.deepEqual(bodyOf(merged.calls[2]), { days: [...WEEKDAYS] }, "the one group of the legacy shape keeps its own name")
+    const merged = await edited({ ...central, collectionGroups: [north, south] }, withGroups((current) => [{ ...current[0], days: [...WEEKDAYS] }]), [schemeAnswer()])
+    assert.deepEqual(one(merged.calls), { collectionGroups: [entryOf(north, { days: [...WEEKDAYS] })] }, "no delete: South, left out, is parked; the one group of the legacy shape keeps its own name, North")
   })
 
-  test("a group removed from the front is parked, and the others keep their positions: nothing is renumbered", async () => {
+  test("a group removed from the front is left out of the list, and the others are restated as they stand: nothing is renumbered", async () => {
     const [a, b, c] = ["a1", "a2", "a3"].map((n, index) => groupOf({ id: `01a0d2a4-a280-701b-8000-0000000000${n}`, routeSchemeId: CENTRAL_ID, name: `Group ${index + 1}`, position: index + 1, days: index === 2 ? ["friday"] : index === 1 ? ["wednesday", "thursday"] : ["monday", "tuesday"] }))
-    const { calls } = await edited({ ...central, status: "draft", collectionGroups: [a, b, c] }, (row) => ({ ...withGroups((current) => current.slice(1))(row), status: "Draft" }), [groupAnswer(), schemeAnswer()])
-    assert.deepEqual(calls.map(request), [`PATCH /collection-groups/${a.id}`, `GET /route-schemes/${CENTRAL_ID}`])
-    assert.deepEqual(bodyOf(calls[0]), { days: [] })
+    const { calls } = await edited({ ...central, status: "draft", collectionGroups: [a, b, c] }, (row) => ({ ...withGroups((current) => current.slice(1))(row), status: "Draft" }), [schemeAnswer()])
+    assert.deepEqual(one(calls), { collectionGroups: [entryOf(b), entryOf(c)] })
   })
 
-  test("a container moved between two manual groups on a shared day: the group that gives it up is written before the one that takes it", async () => {
+  test("a container moved between two manual groups on a shared day is both lists in the one PATCH: no order to get wrong", async () => {
     const giver = groupOf({ id: "01a0d2a4-a280-701b-8000-0000000000b2", routeSchemeId: OSTERBRO_ID, name: "Later", position: 2, days: ["tuesday"], stopSource: "manual", rule: null, containerIds: [PICKS[1], PICKS[2]] })
     const taker = groupOf({ id: "01a0d2a4-a280-701b-8000-0000000000b1", routeSchemeId: OSTERBRO_ID, name: "Earlier", position: 1, days: ["tuesday", "thursday"], stopSource: "manual", rule: null, containerIds: [PICKS[0]] })
     const moved = withGroups((current) => [
       { ...current[0], containerIds: [`asset-${PICKS[0]}`, `asset-${PICKS[2]}`] },
       { ...current[1], containerIds: [`asset-${PICKS[1]}`] },
     ])
-    const { calls } = await edited({ ...osterbro, collectionGroups: [taker, giver] }, moved, [schemeAnswer({ status: "draft" }), groupAnswer(), groupAnswer(), schemeAnswer()])
-    assert.deepEqual(calls.map(request), [
-      `PATCH /route-schemes/${OSTERBRO_ID}`,
-      `PUT /collection-groups/${giver.id}/containers`,
-      `PUT /collection-groups/${taker.id}/containers`,
-      `PATCH /route-schemes/${OSTERBRO_ID}`,
-    ])
-    assert.deepEqual(bodyOf(calls[1]), { containerIds: [PICKS[1]] })
-    assert.deepEqual(bodyOf(calls[2]), { containerIds: [PICKS[0], PICKS[2]] })
+    const { calls } = await edited({ ...osterbro, collectionGroups: [taker, giver] }, moved, [schemeAnswer()])
+    assert.deepEqual(one(calls), { collectionGroups: [entryOf(taker, { containerIds: [PICKS[0], PICKS[2]] }), entryOf(giver, { containerIds: [PICKS[1]] })] })
   })
 
-  test("a waste fraction renamed on the API since the schemes loaded: an edit that leaves the rule alone is not refused, and one that changes it names the fraction by the id it was read with", async () => {
+  test("a waste fraction renamed on the API since the schemes loaded: an edit that leaves the groups alone sends none, and one that moves a group names the fraction by the id it was read with", async () => {
     const renamed = new Map(state).set(
       "configure.master",
       loaded({ records: masterRecords.map(([record]) => (record.name === "Residual" ? { ...record, name: "Residual waste" } : record)), serverIds: new Map(masterRecords.map(([record, id]) => [record.id, id])) }, 1),
     )
     const start = await edited(central, withValues({ plannedStartTime: "07:00" }), [schemeAnswer()], renamed)
-    assert.deepEqual(start.calls.map(request), [`PATCH /route-schemes/${CENTRAL_ID}`])
-    assert.deepEqual(bodyOf(start.calls[0]), { plannedStartTime: "07:00" })
-    const types = await edited(central, withValues({ matchContainerTypes: "Two-wheel bin · 240 L" }), [groupAnswer(), schemeAnswer()], renamed)
-    assert.deepEqual(bodyOf(types.calls[0]), { wasteFractionIds: [residual.id], containerTypeIds: [bin240.id], vehicleTypeId: rearLoader.id })
+    assert.deepEqual(one(start.calls), { plannedStartTime: "07:00" })
+    const types = await edited(central, withValues({ matchContainerTypes: "Two-wheel bin · 240 L" }), [schemeAnswer()], renamed)
+    assert.deepEqual(one(types.calls), { collectionGroups: [entryOf(centralGroup, { rule: { wasteFractionIds: [residual.id], containerTypeIds: [bin240.id], vehicleTypeId: rearLoader.id } })] })
+  })
+
+  test("the legacy shape's one group split in two keeps the name the server holds, unless the edit renames it", async () => {
+    // The server's group has a name of its own; the legacy shape shows the scheme's in its place.
+    const named = { ...central, collectionGroups: [{ ...centralGroup, name: "Indre By crew" }] }
+    const split = withGroups((current) => [{ ...current[0], days: ["monday", "tuesday", "wednesday", "thursday"] }, { id: "group-2", name: "Friday", days: ["friday"], fractions: ["Residual"], stopSource: "rule", ruleVehicleType: "Rear loader", containerIds: [] }])
+    const kept = await edited(named, split, [schemeAnswer()])
+    const [first] = (one(kept.calls) as { collectionGroups: Array<{ name: string }> }).collectionGroups
+    assert.equal(first.name, "Indre By crew", "not renamed to the scheme's name the legacy shape showed")
+    const renamed = await edited(named, withGroups((current) => [{ ...current[0], name: "Mon–Thu", days: ["monday", "tuesday", "wednesday", "thursday"] }, { id: "group-2", name: "Friday", days: ["friday"], fractions: ["Residual"], stopSource: "rule", ruleVehicleType: "Rear loader", containerIds: [] }]), [schemeAnswer()])
+    assert.equal((one(renamed.calls) as { collectionGroups: Array<{ name: string }> }).collectionGroups[0].name, "Mon–Thu", "a name the edit gives is sent")
+  })
+
+  test("a rule the edit leaves alone is restated by the ids it was read with, even where another row now has its name", async () => {
+    // Residual (as read) renamed Residual waste, and a new row named Residual: the untouched group still names the row it was read with.
+    const fresh = { id: "01a0d2a4-a280-7007-8000-0000000000ff", ...STAMPS, key: "residual-2", name: "Residual" }
+    const shifted = new Map(state).set(
+      "configure.master",
+      loaded({
+        records: [...masterRecords.map(([record]) => (record.name === "Residual" ? { ...record, name: "Residual waste" } : record)), wasteFractionAdapter.toRecord(fresh, masterContext)],
+        serverIds: new Map([...masterRecords.map(([record, id]) => [record.id, id] as const), [wasteFractionAdapter.toRecord(fresh, masterContext).id, fresh.id]]),
+      }, 1),
+    )
+    const north = groupOf({ id: "01a0d2a4-a280-701b-8000-0000000000a1", routeSchemeId: CENTRAL_ID, name: "North", days: ["monday", "tuesday", "wednesday"] })
+    const south = groupOf({ id: "01a0d2a4-a280-701b-8000-0000000000a2", routeSchemeId: CENTRAL_ID, name: "South", position: 2, days: ["thursday", "friday"] })
+    const { calls } = await edited({ ...central, collectionGroups: [north, south] }, withGroups((current) => [current[0], { ...current[1], name: "South side" }]), [schemeAnswer()], shifted)
+    const [restated] = (one(calls) as { collectionGroups: Array<{ rule: { wasteFractionIds: string[] } }> }).collectionGroups
+    assert.deepEqual(restated.rule.wasteFractionIds, [residual.id], "the row it was read with, not the new one of that name")
+  })
+
+  test("an edit of the scheme alone resolves no group: a group whose names the store cannot read blocks nothing it does not send", async () => {
+    const unread = new Map(state).set("configure.master", loaded({ records: [], serverIds: new Map() }, 1))
+    const record = { ...recordOf(central), submittedValues: { ...recordOf(central).submittedValues, ruleMasterIds: "{}" } }
+    const { fetch, calls } = scripted([schemeAnswer()])
+    const module = loaded({ records: [record], serverIds: new Map([[record.id, central.id]]) }, 1)
+    const outcome = await writeRecord(clientOver(fetch), routeSchemesModule, module, withValues({ plannedStartTime: "07:00" })(record), { fixtures: schemeFixtures, state: unread, now: NOW })
+    assert.equal(outcome.kind, "updated")
+    assert.deepEqual(one(calls), { plannedStartTime: "07:00" })
+  })
+
+  test("a group that picks containers picks one at least, added or restated, refused before the API", async () => {
+    const empty = await edited(central, withGroups((current) => [current[0], { id: "group-2", name: "Picks", days: ["friday"], fractions: [], stopSource: "manual", containerIds: [] }]), [])
+    assert.equal(empty.calls.length, 0)
+    assert.equal(empty.outcome.kind === "refused" ? problemSentence(empty.outcome.problem) : "", "The request body is invalid — containerIds: A group that picks containers picks one at least")
   })
 
   test("is refused before the API where the wire cannot follow: a group changing how it finds its stops, a scheme changing project", async () => {
@@ -631,21 +669,13 @@ describe("an edit of a scheme", () => {
     assert.equal(elsewhere.outcome.kind === "refused" ? problemSentence(elsewhere.outcome.problem) : "", "The request body is invalid — projectId: A scheme stays in its project")
   })
 
-  test("a request refused midway: the scheme is validated again where it can be, read back, and the row shows what the server holds under the API's sentence", async () => {
-    const draftNow = { ...central, status: "draft" as const, serviceDays: [...WEEKDAYS, "saturday"] as RouteScheme["serviceDays"] }
-    const { outcome, calls } = await edited(central, withValues({ serviceDays: [...WEEKDAYS, "saturday"].join(", ") }), [
-      () => json(draftNow),
-      () => problem(409, "Vehicle WH-24 is on two collection groups that run on saturday: North, South"),
-      () => problem(409, "Service days without a collection group: saturday"),
-      () => json(draftNow),
-    ])
-    assert.deepEqual(calls.map(request), [`PATCH /route-schemes/${CENTRAL_ID}`, `PATCH /collection-groups/${CENTRAL_GROUP_ID}`, `PATCH /route-schemes/${CENTRAL_ID}`, `GET /route-schemes/${CENTRAL_ID}`])
-    assert.deepEqual(bodyOf(calls[2]), { status: "validated" }, "the validation the draft step suspended is asked for again")
+  test("a refusal writes nothing: the one request's 409 is the API's sentence, and the row stays as it was", async () => {
+    const { outcome, calls } = await edited(central, withValues({ serviceDays: [...WEEKDAYS, "saturday"].join(", ") }), [() => problem(409, "Vehicle WH-24 is on two collection groups that run on saturday: North, South")])
+    assert.equal(calls.length, 1)
     assert.equal(outcome.kind, "refused")
     if (outcome.kind !== "refused") return
-    assert.equal(problemSentence(outcome.problem), "Vehicle WH-24 is on two collection groups that run on saturday: North, South", "the request that failed is the one the person is told of")
-    assert.equal(outcome.record?.status, "Draft", "the row shows the draft the server now holds, not the row as it was")
-    assert.equal(outcome.record?.id, `scheme-${CENTRAL_ID}`)
+    assert.equal(problemSentence(outcome.problem), "Vehicle WH-24 is on two collection groups that run on saturday: North, South")
+    assert.equal(outcome.record, undefined, "no part of the edit landed, so there is no other row to show")
   })
 })
 
