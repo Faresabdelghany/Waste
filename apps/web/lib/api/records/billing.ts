@@ -322,8 +322,8 @@ export const billingRunAdapter: ResourceAdapter<BillingRun> = {
   toRecord: (run, context) => {
     const project = projectOf(context, run.projectId)
     const period = `${run.periodFrom} – ${run.periodTo}`
-    // The totals as completed, over every currency the run touched; the project's is the Pilot's one currency, and the run's details read the invoices for a figure per currency.
-    const money = (minor: number) => (project.currency === undefined ? majorOf(minor, "DKK") : formatMinor(minor, project.currency))
+    // The totals as completed, over every currency the run touched, shown in the project's — the Pilot's one currency — and not at all where the store cannot say it: the run's details read its invoices for a figure per currency.
+    const totals: Record<string, string> = project.currency === undefined ? {} : { Net: formatMinor(run.netMinor, project.currency), VAT: formatMinor(run.vatMinor, project.currency) }
     return {
       id: webIdOf(BILLING_RUN_PREFIX, run.id),
       name: `Billing run ${period}`,
@@ -339,8 +339,7 @@ export const billingRunAdapter: ResourceAdapter<BillingRun> = {
         Events: String(run.eventCount),
         Invoices: String(run.invoiceCount),
         "Excluded customers": String(run.excludedCustomerCount),
-        Net: money(run.netMinor),
-        VAT: money(run.vatMinor),
+        ...totals,
         "Requested by": run.requestedBy === null ? "The monthly schedule" : nameVia(context, "user", run.requestedBy),
         ...(run.completedAt === null ? {} : { Completed: shownOn(run.completedAt, project.timezone) }),
         ...(run.note === null ? {} : { Note: run.note }),
