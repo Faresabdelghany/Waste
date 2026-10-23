@@ -489,6 +489,8 @@ describe("the horizon: generation's routing jobs and routing.sweep-horizon", { s
     await owner.db.insert(routingQuota).values({ companyId: a.company, provider: "fake", family: "directions", remaining: 500, limit: 2000, resetAt: new Date(RESET) })
     await drain(ROUTING_MEASURE_QUEUE, contextOf())
     await owner.db.delete(routingQuota).where(eq(routingQuota.companyId, a.company))
+    // pg-boss compares a job's start_after with the database's own clock, not the test's, so the waiting jobs are held a day past the real now: only the one the test brings due runs.
+    await owner.sql.unsafe(`update ${PGBOSS_SCHEMA}.job set start_after = now() + interval '1 day' where name = $1 and state = 'created'`, [ROUTING_MEASURE_QUEUE])
     const [tuesday] = await routesOf(a.plainScheme)
     const [waiting] = await plansOf(tuesday.id)
     assert.deepEqual([waiting.status, waiting.deferredUntil?.toISOString()], ["calculating", DEFERRED.toISOString()])
