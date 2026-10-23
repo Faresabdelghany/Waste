@@ -289,6 +289,8 @@ import { ServiceProviderDetailsPage } from "@/components/waste/service-provider-
 import { ContainerDetailsSheet } from "@/components/waste/containers-assets-register"
 import { MapPlanningView } from "@/components/waste/map-planning/map-planning-view"
 import { SERVICE_AREAS_MODULE, serviceAreaFormValues } from "@/lib/data/service-areas"
+import { serviceAreaKindForField, serviceAreaKindOf } from "@/lib/data/provider-money"
+import { pilotProviderCreate, pilotServiceAreaCreate } from "@/lib/data/provider-money-forms"
 import {
   isInProjectScope,
   isProjectRecordId,
@@ -2566,6 +2568,17 @@ export function BusinessWorkspace({
           ) {
             return false
           }
+          // A picker at the service areas module offers the kind its field
+          // names (slice 11 of #81): on the API the module holds the awards
+          // and their assignments, and a price names an assignment, never an award.
+          if (
+            apiConfigured &&
+            resolved.workspaceId === SERVICE_AREAS_MODULE.workspaceId &&
+            resolved.module.id === SERVICE_AREAS_MODULE.moduleId
+          ) {
+            const kind = serviceAreaKindForField(field.id)
+            if (kind !== null && serviceAreaKindOf(record) !== kind) return false
+          }
           if (field.id === "projectId") {
             if (!isProjectRecordId(record.id)) return false
             const pinned = pinnedProjectId(projectScope)
@@ -4660,6 +4673,13 @@ export function BusinessWorkspace({
     if (!selectedRecord) return
     const serviceProviderId = selectedRecord.id
 
+    // On the Pilot an award and a price are the API's forms (slice 11 of #81):
+    // an award to this provider, a price under one of its assignments.
+    if (apiConfigured && (target === "service-area" || target === "service-provider-price")) {
+      setRelatedCreateTarget(pilotProviderCreate(target, serviceProviderId, localDateInputValue()))
+      return
+    }
+
     if (target === "user") {
       setRelatedCreateTarget({
         workspaceId: "service-providers",
@@ -5102,13 +5122,20 @@ export function BusinessWorkspace({
           containersModule={containersModuleDefinition}
           canCreateScheme={hasGrant("create")}
           canCreateServiceArea={hasGrantOn(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId, "create")}
-          onCreateServiceArea={(seed) =>
+          onCreateServiceArea={(seed) => {
+            // On the Pilot the award is the planning areas the selection
+            // touches, the drawn polygon never persisted (slice 11 of #81).
+            const opened = apiConfigured ? pilotServiceAreaCreate(seed) : serviceAreaFormValues(seed)
+            if ("refused" in opened) {
+              toast.error("No service area to create", { description: opened.refused })
+              return
+            }
             setRelatedCreateTarget({
               workspaceId: SERVICE_AREAS_MODULE.workspaceId,
               moduleId: SERVICE_AREAS_MODULE.moduleId,
-              ...serviceAreaFormValues(seed),
+              ...opened,
             })
-          }
+          }}
           onCreateScheme={handleGuidedSchemeCreate}
         />
       ) : (
