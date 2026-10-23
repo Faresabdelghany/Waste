@@ -8,12 +8,13 @@
 // id's prefix first, then the kind a form stamped: adapter.ts, `ofKind`).
 //
 // The assignments are the second kind of `service-providers.service-areas`,
-// the module the API grants `/service-area-assignments` under; its table
-// lists the areas alone (the command surface's `shows`), and an area's
-// details list its assignments, which the provider prices and the settlements
-// pick from. An indexed provider price is a create of the prices module that
+// the module the API grants `/service-area-assignments` under; which kind a
+// record is, is `serviceAreaKindOf` — the rule the adapters own by and the
+// pickers pointing at the module filter by. Its table lists the areas alone
+// (the command surface's `shows`), and an area's details list its
+// assignments, which the provider prices and the settlements pick from. An indexed provider price is a create of the prices module that
 // names the row it indexes: the next row of the chain.
-import { ofKind } from "@/lib/api/records/adapter"
+import { hasPrefix, ofKind } from "@/lib/api/records/adapter"
 
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
 import { SERVICE_AREAS_MODULE } from "./service-areas"
@@ -39,11 +40,36 @@ export const INDEXED_PRICE_RECORD_KIND = "Indexed service provider price"
 export const SETTLEMENT_RECORD_KIND = "Settlement"
 export const UNLOAD_RECORD_KIND = "Weight record"
 
-export const isServiceAreaRecord = ofKind(SERVICE_AREA_PREFIX, [SERVICE_AREA_RECORD_KIND])
-export const isAssignmentRecord = ofKind(ASSIGNMENT_PREFIX, [ASSIGNMENT_RECORD_KIND])
+/** The two kinds of `service-providers.service-areas`. */
+export type ServiceAreaKind = "service-area" | "assignment"
+
+/** Which kind a record of the service areas module is: its id's prefix, then the kind its form stamped; null for neither. */
+export function serviceAreaKindOf(record: Pick<BusinessRecord, "id" | "recordKind">): ServiceAreaKind | null {
+  if (hasPrefix(SERVICE_AREA_PREFIX)(record)) return "service-area"
+  if (hasPrefix(ASSIGNMENT_PREFIX)(record)) return "assignment"
+  if (record.recordKind === SERVICE_AREA_RECORD_KIND) return "service-area"
+  if (record.recordKind === ASSIGNMENT_RECORD_KIND) return "assignment"
+  return null
+}
+
+/** Which kind a field pointing at the module picks, by its id; null for a field that names neither. */
+export function serviceAreaKindForField(fieldId: string): ServiceAreaKind | null {
+  if (fieldId === "serviceAreaId") return "service-area"
+  if (fieldId === "serviceAreaAssignmentId") return "assignment"
+  return null
+}
+
+export const isServiceAreaRecord = (record: Pick<BusinessRecord, "id" | "recordKind">) => serviceAreaKindOf(record) === "service-area"
+export const isAssignmentRecord = (record: Pick<BusinessRecord, "id" | "recordKind">) => serviceAreaKindOf(record) === "assignment"
 export const isProviderPriceRecord = (record: Pick<BusinessRecord, "id" | "recordKind">) => ofKind(PROVIDER_PRICE_PREFIX, [PROVIDER_PRICE_RECORD_KIND, INDEXED_PRICE_RECORD_KIND])(record)
 export const isSettlementRecord = ofKind(SETTLEMENT_PREFIX, [SETTLEMENT_RECORD_KIND])
 export const isUnloadRecord = ofKind(UNLOAD_PREFIX, [UNLOAD_RECORD_KIND])
+
+/** An award's assignments among the module's records, the first holder first: its details list them. */
+export function assignmentsOf(records: readonly BusinessRecord[], areaWebId: string): BusinessRecord[] {
+  const startOf = (record: BusinessRecord) => String(record.submittedValues?.validFrom ?? "")
+  return records.filter((record) => isAssignmentRecord(record) && record.submittedValues?.serviceAreaId === areaWebId).sort((a, b) => startOf(a).localeCompare(startOf(b)))
+}
 
 /** A period as a reading of a day: not yet in force, in force, or ended (ADR-0005: `validTo` is the first day out). */
 export function periodReading(validFrom: string, validTo: string | null, day: string): "Upcoming" | "Active" | "Expired" {

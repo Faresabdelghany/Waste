@@ -36,6 +36,8 @@ import { BILLING_LIST, EVENTS_LIST, INVOICES_LIST, PRICE_ROWS_LIST } from "./com
 import { AddContainerSurface, ContainerCommandsSurface } from "./container-surfaces"
 import { AddPropertyGroupSurface, AddPropertySurface, AddSharedPointSurface, PropertyCommandsSurface, PropertyGroupCommandsSurface, SharedPointCommandsSurface } from "./place-surfaces"
 import { PriceRowCommandsSurface, PriceRowsPrimarySurface, ProductCommandsSurface, ProductsPrimarySurface } from "./pricing-surfaces"
+import { PROVIDER_PRICES_LIST, SERVICE_AREAS_LIST, SETTLEMENTS_LIST, WEIGHTS_LIST } from "./provider-money-lists"
+import { AddProviderPriceSurface, CreateServiceAreaSurface, OpenSettlementSurface, ProviderPriceCommandsSurface, ServiceAreaCommandsSurface, SettlementSurface, WeightReviewSurface } from "./provider-money-surfaces"
 import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface } from "./route-surfaces"
 
 /** What a primary surface is handed: the label the module's primary action carries. */
@@ -126,6 +128,14 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "commercial.events": { primary: AddManualEventSurface, rowActions: EventCommandsSurface, list: EVENTS_LIST },
   "commercial.billing": { primary: RunBillingSurface, rowActions: BillingRunSurface, list: BILLING_LIST },
   "commercial.invoices": { primary: null, rowActions: InvoiceSurface, list: INVOICES_LIST },
+  // Slice 11 (#186): an award by its own form, its assignments in its
+  // details; a price's fee moved by Apply index alone; a settlement by the
+  // commands its status moves by; an unload by its reviews, the desk's queue
+  // first. Weights are written by the Driver App, never the office.
+  "service-providers.service-areas": { primary: CreateServiceAreaSurface, rowActions: ServiceAreaCommandsSurface, list: SERVICE_AREAS_LIST },
+  "commercial.service-provider-prices": { primary: AddProviderPriceSurface, rowActions: ProviderPriceCommandsSurface, list: PROVIDER_PRICES_LIST },
+  "commercial.settlements": { primary: OpenSettlementSurface, rowActions: SettlementSurface, list: SETTLEMENTS_LIST },
+  "route-studio.weights": { primary: null, rowActions: WeightReviewSurface, list: WEIGHTS_LIST },
 }
 
 /** The module's surface while the adapter is configured and the module switched; undefined otherwise, and always in fixture mode. */

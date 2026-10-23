@@ -16,7 +16,7 @@ import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { commandRecord, loaded, resolverOver, spellsStatus, type ServerRecordsState } from "../records/server-records"
-import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE, REVIEW_LABELS, unloadAdapter, weightsModule } from "../records/weights"
+import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE, REVIEW_LABELS, unloadAdapter, weightReviewsOffered, weightsModule } from "../records/weights"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
@@ -84,6 +84,14 @@ describe("the weights module", () => {
     assert.deepEqual(REVIEW_LABELS, { captured: "Needs review", approved: "Approved", rejected: "Rejected", corrected: "Corrected" })
     assert.equal(unloadAdapter.toRecord({ ...unload, grossKg: null, tareKg: null, weighbridgeTicket: null }, context).name, "Residual at ARC Amager")
     assert.ok(!spellsStatus(weightsModule, record, "Approved"), "a review is a command, never a patch")
+  })
+
+  test("offers the reviews the machine moves an unload by, never the decision it holds, and none once it was corrected", () => {
+    const offered = (status: Unload["weightReview"]["status"]) => weightReviewsOffered(unloadAdapter.toRecord({ ...unload, weightReview: { ...unload.weightReview, status } }, context))
+    assert.deepEqual(offered("captured"), ["approve", "reject", "correct"])
+    assert.deepEqual(offered("approved"), ["reject", "correct"])
+    assert.deepEqual(offered("rejected"), ["approve", "correct"])
+    assert.deepEqual(offered("corrected"), [], "the correction is the row to review")
   })
 
   test("approves, rejects with its note and corrects with the new weights, reading the unload back after each review", async () => {

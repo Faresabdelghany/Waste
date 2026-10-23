@@ -71,6 +71,18 @@ describe("a module's list on the Pilot (#147)", () => {
     assert.deepEqual([readers.blockReasons!(event), readers.agreements!(event), readers.products!(event)], [["No product"], ["AGR-2408"], []])
   })
 
+  test("the provider-money chain's: the service areas' table lists the awards and never their assignments, the weights open on the desk's queue (#186)", () => {
+    const areas = COMMAND_SURFACES["service-providers.service-areas"].list
+    assert.equal(listShows(areas, { id: "service-area-0190", recordKind: "Service area" } as BusinessRecord), true)
+    assert.equal(listShows(areas, { id: "service-areas-service-area-1700000000000", recordKind: "Service area" } as BusinessRecord), true, "an award made this session, under its minted id")
+    assert.equal(listShows(areas, { id: "assignment-0190", recordKind: "Service area assignment" } as BusinessRecord), false)
+    assert.equal(listShows(areas, { id: "service-areas-assignment-1700000000000", recordKind: "Service area assignment" } as BusinessRecord), false)
+    const award = { status: "Active", facts: { "Planning areas": "Østerbro Zone 2 · Nordhavn" } } as unknown as BusinessRecord
+    assert.deepEqual(areas!.readers({ accountId: null }).planningAreas!(award), ["Østerbro Zone 2", "Nordhavn"])
+    assert.deepEqual(initialFiltersOf(COMMAND_SURFACES["route-studio.weights"]), { ...emptyBusinessFilters, statuses: ["Needs review"] })
+    assert.equal(COMMAND_SURFACES["route-studio.weights"].primary, null, "an unload is the Driver App's, never the office's")
+  })
+
   test("opens only on categories its readers read, so no chip filters on nothing", () => {
     for (const [key, entry] of Object.entries(COMMAND_SURFACES)) {
       if (entry.list === undefined) continue

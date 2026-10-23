@@ -75,15 +75,16 @@ const fractionsOf = (record: BusinessRecord, context: MappingContext) => setOf(r
 
 const sameSet = (a: readonly string[], b: readonly string[]) => [...a].sort().join(",") === [...b].sort().join(",")
 
-/** The provider holding the area on the day: from the assignments the resource carries, else from the ones the store holds. */
-function holderOf(area: ServiceAreaResource, areaWebId: string, day: string, context: MappingContext): string | undefined {
+/** The provider holding the area on the day, by name and web id: from the assignments the resource carries, else from the ones the store holds. */
+function holderOf(area: ServiceAreaResource, areaWebId: string, day: string, context: MappingContext): { name: string; webId?: string } | undefined {
   const carried = area.assignments ?? ("assignment" in area && area.assignment !== null ? [area.assignment] : undefined)
   if (carried !== undefined) {
     const current = carried.find((assignment) => periodReading(assignment.validFrom, assignment.validTo, day) === "Active")
-    return current === undefined ? undefined : nameVia(context, PROVIDER_PREFIX, current.serviceProviderId)
+    return current === undefined ? undefined : { name: nameVia(context, PROVIDER_PREFIX, current.serviceProviderId), webId: webIdVia(context, PROVIDER_PREFIX, current.serviceProviderId) }
   }
   const held = context.resolve.find((record) => isAssignmentRecord(record) && record.status === "Active" && typed(record, "serviceAreaId") === areaWebId)
-  return held?.facts["Service provider"]
+  const name = held?.facts["Service provider"]
+  return name === undefined ? undefined : { name, webId: held === undefined ? undefined : typed(held, "serviceProviderId") }
 }
 
 /** What the record says the area's patchable fields are, as the wire spells them. */
@@ -132,7 +133,7 @@ export const serviceAreaAdapter: ResourceAdapter<ServiceAreaResource> = {
       facts: {
         Code: area.code,
         Project: project.name ?? project.webId,
-        ...(holder === undefined ? {} : { "Service provider": holder }),
+        ...(holder === undefined ? {} : { "Service provider": holder.name }),
         "Planning areas": zones.map((zone) => zone.name).join(" · "),
         ...(fractionNames === "" ? {} : { "Waste fractions": fractionNames }),
         Boundary: area.boundaryText,
@@ -140,7 +141,9 @@ export const serviceAreaAdapter: ResourceAdapter<ServiceAreaResource> = {
         "Valid from": area.validFrom,
         ...(lastDay === undefined ? {} : { "Valid to": lastDay }),
       },
-      related: [...(holder === undefined ? [] : [holder]), ...zones.map((zone) => zone.name)],
+      related: [...(holder === undefined ? [] : [holder.name]), ...zones.map((zone) => zone.name)],
+      // The holder in force: the provider page lists the areas it holds by it.
+      ...(holder?.webId === undefined ? {} : { serviceProviderId: holder.webId }),
       allowedTransitions: [],
       companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],

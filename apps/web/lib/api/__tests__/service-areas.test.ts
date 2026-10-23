@@ -22,7 +22,7 @@ import {
 } from "@waste/contracts/service-areas"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
-import { SERVICE_AREAS_MODULE } from "../../data/provider-money"
+import { assignmentsOf, SERVICE_AREAS_MODULE } from "../../data/provider-money"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import { wasteFractionAdapter } from "../records/master-data"
@@ -127,6 +127,8 @@ describe("the service areas module", () => {
     assert.equal(record.status, "Active")
     assert.equal(record.recordKind, "Service area")
     assert.equal(record.facts["Planning areas"], "Østerbro Zone 2 · Nordhavn")
+    assert.equal(record.facts["Service provider"], "NordRen ApS")
+    assert.equal(record.serviceProviderId, `service-provider-${NORDREN}`, "the holder in force, as the provider page lists its areas by")
     assert.equal(record.facts["Valid to"], "2028-12-31")
     assert.equal(record.submittedValues?.zoneIds, `area-${OSTERBRO},area-${NORDHAVN}`, "the planning areas coverage reads (map-planning/coverage.ts)")
     assert.equal(record.submittedValues?.wasteFractionIds, `fraction-${organic.id},fraction-${paper.id}`)
@@ -206,5 +208,13 @@ describe("the service areas module", () => {
     assert.equal(calls[0].url, `http://api.test/service-areas/${area.id}/assignments`)
     assert.equal(outcome.kind, "created")
     assert.ok(bodyOf(calls[0]))
+  })
+
+  test("lists an area's assignments, the first holder first, for its details", () => {
+    const records = loadedState.get("service-providers.service-areas")?.records ?? []
+    const areaRecord = records.find((record) => record.recordKind === "Service area")!
+    assert.deepEqual(assignmentsOf(records, areaRecord.id).map((record) => record.id), [`assignment-${before.id}`, `assignment-${held.id}`])
+    assert.deepEqual(assignmentsOf([...records].reverse(), areaRecord.id).map((record) => record.id), [`assignment-${before.id}`, `assignment-${held.id}`], "by the day each starts, whatever the order read")
+    assert.deepEqual(assignmentsOf(records, "service-area-other"), [])
   })
 })

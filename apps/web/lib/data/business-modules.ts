@@ -4927,8 +4927,8 @@ const commercial: WorkspaceDefinition = {
     },
     {
       id: "settlements",
-      label: "Prices & Settlement",
-      title: "Service Provider Prices and Settlement",
+      label: "Settlements",
+      title: "Settlements",
       description: "Confidential service provider compensation, period calculation, provisional inputs, and frozen closeout.",
       entityLabel: "Settlement",
       contextLabel: "Service provider · period",

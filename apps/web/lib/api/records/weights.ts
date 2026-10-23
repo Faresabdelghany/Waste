@@ -16,7 +16,8 @@
 //
 // Ids, rule (b) of #81's plan: `unload-<uuid>`; no fixture lends its id.
 import type { Unload } from "@waste/contracts/unloads"
-import type { WeightReviewStatus } from "@waste/domain/finance/vocabulary"
+import { weightReviewTransition } from "@waste/domain/finance/transitions"
+import { WEIGHT_REVIEW_STATUSES, type WeightReviewDecision, type WeightReviewStatus } from "@waste/domain/finance/vocabulary"
 
 import { FIXTURE_COMPANY_ID } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
@@ -35,6 +36,18 @@ export const BOTH_GROSS_AND_TARE = "Give grossKg and tareKg together or neither"
 /** What a correction whose net is not gross less tare is told (`NET_IS_GROSS_LESS_TARE`). */
 export const NET_IS_GROSS_LESS_TARE = "netKg is grossKg less tareKg where both are given"
 const KILOGRAMS = "A weight is a whole number of kilograms, 1 or more"
+
+/** The reviews, by the command each is sent as, and the decision each records. */
+export const WEIGHT_REVIEW_COMMANDS = ["approve", "reject", "correct"] as const
+export type WeightReviewCommand = (typeof WEIGHT_REVIEW_COMMANDS)[number]
+const DECISION: Readonly<Record<WeightReviewCommand, WeightReviewDecision>> = { approve: "approved", reject: "rejected", correct: "corrected" }
+
+/** The reviews an unload's details offer: those the machine moves it by from its status, never the decision it holds; a corrected one none, its correction being the row to review. */
+export function weightReviewsOffered(record: { submittedValues?: Record<string, unknown> }): WeightReviewCommand[] {
+  const status = WEIGHT_REVIEW_STATUSES.find((candidate) => candidate === record.submittedValues?.reviewStatus)
+  if (status === undefined) return []
+  return WEIGHT_REVIEW_COMMANDS.filter((name) => weightReviewTransition(status, DECISION[name], null).kind === "move")
+}
 
 /** An unload as a resource: a ledger row stamped with its `recordedAt` as both of a resource's stamps. */
 export type UnloadResource = Unload & { createdAt: string; updatedAt: string }
@@ -96,7 +109,7 @@ export const unloadAdapter: ResourceAdapter<UnloadResource> = {
       companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       recordKind: UNLOAD_RECORD_KIND,
-      submittedValues: { routeId: webIdOf("route", unload.routeId), netKg: String(unload.netKg), ...(unload.grossKg === null ? {} : { grossKg: String(unload.grossKg) }), ...(unload.tareKg === null ? {} : { tareKg: String(unload.tareKg) }) },
+      submittedValues: { routeId: webIdOf("route", unload.routeId), reviewStatus: unload.weightReview.status, netKg: String(unload.netKg), ...(unload.grossKg === null ? {} : { grossKg: String(unload.grossKg) }), ...(unload.tareKg === null ? {} : { tareKg: String(unload.tareKg) }) },
     }
   },
   toPatchBody: () => refusal("status", "An unload is reviewed, never edited: approve it, reject it, or correct it"),

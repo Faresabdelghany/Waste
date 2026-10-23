@@ -82,8 +82,6 @@ function projectDay(projectServerId: string, context: MappingContext): string {
   return dayIn(context.now ?? new Date(), project === undefined ? undefined : typed(project, "timezone"))
 }
 
-const periodLabel = (validFrom: string, validTo: string | null) => `${validFrom} – ${validTo === null ? "open" : lastDayIn(validTo)}`
-
 /** The assignment's name and provider as a row names them: "CA-Ø-2 · NordRen ApS", "NordRen ApS"; the id chip where the store holds none. */
 function assignmentNames(serverId: string, context: MappingContext): { name: string; provider: string; area?: string } {
   const record = context.resolve.byServerId(serverId)
@@ -248,6 +246,11 @@ export function settlementCommandsOffered(status: SettlementStatus): SettlementC
   return SETTLEMENT_COMMANDS.filter((name) => settlementTransition(status, name, "").kind === "move")
 }
 
+/** `GET /settlements/:id`: the settlement with its lines, by event. */
+export function settlementDetail(client: Client, serverId: string): Promise<SettlementDetail> {
+  return get<SettlementDetail>(client, `/settlements/${serverId}`)
+}
+
 /** `GET /settlements/:id/events`: the settlement's history, oldest first. */
 export function settlementHistory(client: Client, serverId: string): Promise<SettlementEvent[]> {
   return listAll<SettlementEvent>(client, `/settlements/${serverId}/events`)
@@ -264,7 +267,7 @@ export const settlementAdapter: ResourceAdapter<Settlement | SettlementDetail> =
   // Its status moves by command alone.
   statuses: undefined,
   list: (client) => listAll<SettlementDetail>(client, "/settlements"),
-  read: (client, serverId) => get<SettlementDetail>(client, `/settlements/${serverId}`),
+  read: (client, serverId) => settlementDetail(client, serverId),
   toRecord: (settlement, context) => {
     const assignment = assignmentNames(settlement.serviceAreaAssignmentId, context)
     const assignmentWebId = context.resolve.byServerId(settlement.serviceAreaAssignmentId)?.id ?? webIdOf(ASSIGNMENT_PREFIX, settlement.serviceAreaAssignmentId)
