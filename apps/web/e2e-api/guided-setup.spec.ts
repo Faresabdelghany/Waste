@@ -23,6 +23,10 @@ type Named = { id: string; name: string }
 type Scheme = { id: string; name: string; status: string; collectionGroups: { name: string; rule: { wasteFractionIds: string[]; containerTypeIds: string[] } | null; vehicleId: string | null; driverId: string | null }[] }
 type GenerationRun = { id: string; status: string; routeSchemeId: string; trigger: string; windowFrom: string; windowTo: string; routesCreated: number }
 
+const NO_MATCH = "No containers currently match the stop rule"
+/** Step 3's Containers cell of a group: its stop count, then its fractions and container types. */
+const groupContainers = (page: Page, group: string) => wizard(page).getByRole("row").filter({ hasText: group }).getByRole("cell").nth(4)
+
 /** A validated scheme with one rule group, made through the API: Residual inside Indre By Operations on Mondays and Thursdays, from tomorrow. */
 async function schemeThroughApi(api: APIRequestContext, name: string): Promise<Scheme> {
   const project = await projectNamed(api, "Copenhagen Central")
@@ -121,8 +125,9 @@ test("the scheme is created at step 5 in one POST the API takes, a validated sch
   await openSchemes(page)
   await toGroups(page, name)
   await addGroup(page, fleet)
-  // The preview's matcher cannot place the API's containers yet: said, and not an issue that blocks.
-  await expect(wizard(page).getByText("The API matches containers when it generates routes; this preview cannot place them yet.")).toBeVisible()
+  // The preview's matcher places the API's containers (#207): the seed's Residual two-wheel bins served today inside Indre By are the group's stops.
+  await expect(groupContainers(page, "Residual · bins")).toHaveText(/^[1-9]\d*Residual/)
+  await expect(wizard(page).getByText(NO_MATCH)).toHaveCount(0)
   await nextButton(page).click()
   await expect(stepHeading(page)).toHaveText("How do the generated routes look?")
   await nextButton(page).click()
@@ -143,6 +148,22 @@ test("the scheme is created at step 5 in one POST the API takes, a validated sch
   expect(stored.collectionGroups.map((group) => ({ name: group.name, rule: group.rule, vehicleId: group.vehicleId, driverId: group.driverId }))).toEqual([
     { name, rule: { wasteFractionIds: [residual?.id], containerTypeIds: [bin240?.id], vehicleTypeId: null }, vehicleId: fleet.vehicle.id, driverId: fleet.driver.id },
   ])
+})
+
+test("a rule no container the API holds matches blocks at step 3, as in fixture mode (#207)", async ({ api, page }) => {
+  const fleet = await fleetOfItsOwn(api)
+  await openSchemes(page)
+  // No seeded container serves Organic inside Indre By.
+  await toGroups(page, uniqueName("E2E No match"), "Organic")
+  await addGroup(page, fleet)
+  await expect(groupContainers(page, "Residual · bins")).toHaveText(/^0Organic/)
+  await expect(wizard(page).getByText(NO_MATCH)).toBeVisible()
+  await nextButton(page).click()
+  const blocked = page.getByRole("dialog", { name: "1 issue blocks route generation" })
+  await expect(blocked).toContainText(NO_MATCH)
+  await page.keyboard.press("Escape")
+  await expect(blocked).toBeHidden()
+  await expect(stepHeading(page)).toHaveText("Who collects what on which service days?")
 })
 
 test("Generate on the scheme's page asks the API for a run, and the page watches it until the worker has finished it", async ({ api, page }) => {
