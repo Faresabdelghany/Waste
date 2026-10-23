@@ -205,6 +205,33 @@ describe("a pickup", () => {
     assert.equal(drawn.date, "2026-10-01")
   })
 
+  test("a listed stop is named by its sequence, the order its route's Plan visits it in (#219), beside the baseline position; the map draws the route in that order", () => {
+    // The Plan visits the third bin first: `GET /pickups` carries each stop's sequence beside its position.
+    const listed = [{ ...first, sequence: 2 }, { ...second, sequence: 3 }, { ...third, sequence: 1 }]
+    const records = listed.map((pickup) => pickupAdapter.toRecord(pickup, context()))
+    assert.deepEqual(
+      records.map((record) => record.name),
+      ["Stop 2 · BIN-82014", "Stop 3 · BIN-66420", "Stop 1 · BIN-44831"],
+    )
+    assert.deepEqual(
+      records.map((record) => [record.facts.Stop, record.submittedValues?.position, record.submittedValues?.sequence]),
+      [
+        ["2", "1", "2"],
+        ["3", "2", "3"],
+        ["1", "3", "1"],
+      ],
+    )
+    const [drawn] = routesInWindow([routeRecord], records, fixturesOf("resources", "containers"), null, FIXTURE_GAZETTEER)
+    assert.deepEqual(
+      drawn.stops.map((stop) => [stop.index, stop.label]),
+      [
+        [1, "BIN-44831"],
+        [2, "BIN-82014"],
+        [3, "BIN-66420"],
+      ],
+    )
+  })
+
   test("is never created or edited here", async () => {
     assert.equal(pickupAdapter.toCreateBody, undefined)
     assert.equal(pickupAdapter.statuses, undefined)

@@ -284,9 +284,10 @@ describe("the route's commands", () => {
   const cancel = routeAdapter.commands?.[CANCEL_ROUTE]
   const reorder = routeAdapter.commands?.[REORDER_ROUTE]
 
-  test("each names the modules whose rows it changes too (`touches`): the Live board reads the routes' rows, and a cancel closes the route's open stops", () => {
-    for (const name of [ASSIGN_ROUTE, DISPATCH_ROUTE, RESCHEDULE_ROUTE, REORDER_ROUTE]) assert.deepEqual(routeAdapter.commands?.[name]?.touches, ["route-studio.live"], name)
+  test("each names the modules whose rows it changes too (`touches`): the Live board reads the routes' rows, a cancel closes the route's open stops, and a reorder moves each stop's sequence (#219)", () => {
+    for (const name of [ASSIGN_ROUTE, DISPATCH_ROUTE, RESCHEDULE_ROUTE]) assert.deepEqual(routeAdapter.commands?.[name]?.touches, ["route-studio.live"], name)
     assert.deepEqual(cancel?.touches, ["route-studio.pickups", "route-studio.live"])
+    assert.deepEqual(routeAdapter.commands?.[REORDER_ROUTE]?.touches, ["route-studio.pickups", "route-studio.live"])
   })
 
   test("assign sends only what moved, by server id, a cleared field as null", () => {

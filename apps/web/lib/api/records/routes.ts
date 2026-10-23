@@ -253,7 +253,8 @@ export const ROUTE_COMMANDS = {
     },
     run: (client, serverId, body) => put<RouteDetail>(client, `/routes/${serverId}/pickup-order`, body),
     refused: (record) => `The stops of ${record.name} were not reordered`,
-    touches: [LIVE_KEY],
+    // The stops list each one's sequence (#219), which the new order moves.
+    touches: [PICKUPS_KEY, LIVE_KEY],
   },
 } satisfies Record<string, RecordCommand<Route>>
 

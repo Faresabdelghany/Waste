@@ -25,11 +25,15 @@
 //
 // A command answers the pickup with its proofs, the resource the read
 // answers, and writes its outbox event in the same transaction with that
-// same shape as payload (outbox.ts). Every statement carries the tenant and
-// `inProjects`; the grant is `route-studio.pickups`, `view` to read and
-// `edit` to command.
+// same shape as payload (outbox.ts). Every answer, the list's included,
+// carries the stop's `sequence` (#219): its place in its route's execution
+// order, the one the route's detail gives it, read through plan-shapes.ts's
+// `sequencesOfRoutes` — for a page, over the page's routes at once — so a
+// stop a command answers keeps the number the list gave it. Every statement
+// carries the tenant and `inProjects`; the grant is `route-studio.pickups`,
+// `view` to read and `edit` to command.
 import { Page } from "@waste/contracts/pagination"
-import { Pickup, PickupCorrection, PickupDetail, PickupListQuery, PickupRemove } from "@waste/contracts/pickups"
+import { PickupCorrection, PickupDetail, PickupListItem, PickupListQuery, PickupRemove } from "@waste/contracts/pickups"
 import type { Tx } from "@waste/db/client"
 import { pickup, proofOfService, route } from "@waste/db/schema/execution"
 import { pickupCorrection, pickupTransition } from "@waste/domain/execution/transitions"
@@ -46,6 +50,7 @@ import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { findRoute, noSuchPickup, pickupColumns, pickupOf, pickupScope, proofOf, proofsOfPickup, type PickupRow, type RouteRow } from "./execution-shapes"
+import { sequenceIn, sequencesOfRoutes } from "./plan-shapes"
 import { requireRoute } from "./references"
 import { requireNotStarted, requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
@@ -53,7 +58,7 @@ import { describeJson, IdParam, lockRow } from "./shared"
 
 const MODULE = "route-studio.pickups"
 
-const PickupPage = Page(Pickup)
+const PickupPage = Page(PickupListItem)
 
 /** What removing a stop from a route that runs is told (the domain's `activeAnd`): the stop is the driver's now. */
 const A_STOP_IS_THE_DRIVERS = "a stop is skipped by the driver"
@@ -68,9 +73,10 @@ async function findPickup(tx: Tx, principal: Principal, id: string): Promise<Pic
   return row
 }
 
-/** The pickup with its proofs in recording order: what the read and both commands answer. */
-async function detailOf(tx: Tx, companyId: string, row: PickupRow): Promise<PickupDetail> {
-  return { ...pickupOf(row), proofs: (await proofsOfPickup(tx, companyId, row.id)).map(proofOf) }
+/** The pickup with its `sequence`, as the list carries it (#219), and its proofs in recording order: what the read and both commands answer. */
+async function detailOf(tx: Tx, principal: Principal, row: PickupRow): Promise<PickupDetail> {
+  const [sequences, proofs] = await Promise.all([sequencesOfRoutes(tx, principal, [row.routeId]), proofsOfPickup(tx, principal.companyId, row.id)])
+  return { ...pickupOf(row), sequence: sequenceIn(sequences, row), proofs: proofs.map(proofOf) }
 }
 
 /**
@@ -106,7 +112,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "listPickups",
         summary: "The pickups of the caller's projects",
         description:
-          "One page of pickups, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `routeId` is one route's stops, and must be a route of a project this account works in (400 on the query); `containerId` a container's history of stops, `status` one of the four, `propertyId` the stops at one service address, and `from` and `to` the stops of routes operating over a window of days (both inclusive, `to` on or after `from`). Each pickup's proofs are `GET /pickups/{id}`. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of pickups, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `routeId` is one route's stops, and must be a route of a project this account works in (400 on the query); `containerId` a container's history of stops, `status` one of the four, `propertyId` the stops at one service address, and `from` and `to` the stops of routes operating over a window of days (both inclusive, `to` on or after `from`). Each pickup carries its `sequence` (#219), its place in its route's current execution order, the one `GET /routes/{id}` gives it: the active Plan's order where the route has one, the generated baseline's otherwise, counted over the whole route whatever the page holds; `position` stays the baseline. Each pickup's proofs are `GET /pickups/{id}`. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of pickups.", PickupPage),
@@ -145,7 +151,15 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           )
           .orderBy(asc(pickup.id))
           .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(pickupOf), limit))
+        // Paged first, so the row that only proves there is a next page brings no route of its own to read.
+        const { items, nextCursor } = pageOf(rows, limit)
+        const sequences = await sequencesOfRoutes(
+          tx,
+          principal,
+          items.map((row) => row.routeId),
+        )
+        const page: PickupListItem[] = items.map((row) => ({ ...pickupOf(row), sequence: sequenceIn(sequences, row) }))
+        return c.json({ items: page, nextCursor })
       },
     )
     .get(
@@ -154,7 +168,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "getPickup",
         summary: "One pickup with its proofs",
         description:
-          "One pickup of a project the caller works in, with its Proofs of Service in recording order — the driver's events and evidence, and any correction the office appended. A pickup of another company, or of a project this account does not work in, is a pickup that does not exist here.",
+          "One pickup of a project the caller works in, with its `sequence` as `GET /pickups` carries it and its Proofs of Service in recording order — the driver's events and evidence, and any correction the office appended. A pickup of another company, or of a project this account does not work in, is a pickup that does not exist here.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The pickup with its proofs.", PickupDetail),
@@ -171,7 +185,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const principal = c.get("principal")
         const row = await findPickup(tx, principal, id)
         if (row === undefined) throw noSuchPickup(id)
-        return c.json(await detailOf(tx, principal.companyId, row))
+        return c.json(await detailOf(tx, principal, row))
       },
     )
     .post(
@@ -211,7 +225,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           .where(and(pickupScope(principal), eq(pickup.id, id)))
           .returning(pickupColumns)
         if (row === undefined) throw noSuchPickup(id)
-        const detail = await detailOf(tx, principal.companyId, row)
+        const detail = await detailOf(tx, principal, row)
         await emit(tx, principal, { aggregate: "pickup", aggregateId: row.id, kind: "pickup-skipped", payload: detail, projectId: row.projectId, occurredAt: at })
         return c.json(detail)
       },
@@ -267,7 +281,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           note,
           outcome,
         })
-        const detail = await detailOf(tx, principal.companyId, row)
+        const detail = await detailOf(tx, principal, row)
         await emit(tx, principal, { aggregate: "pickup", aggregateId: row.id, kind: "pickup-corrected", payload: detail, projectId: row.projectId, occurredAt: at })
         return c.json(detail)
       },
