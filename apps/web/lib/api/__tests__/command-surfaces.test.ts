@@ -6,7 +6,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { COMMAND_SURFACES, commandSurfaceFor, initialFiltersOf, type CommandSurface } from "@/components/waste/commands/command-surfaces"
+import { COMMAND_SURFACES, commandSurfaceFor, initialFiltersOf, listShows, type CommandSurface, type ModuleList } from "@/components/waste/commands/command-surfaces"
+import type { BusinessRecord } from "@/lib/data/business-modules"
 import { emptyBusinessFilters } from "@waste/domain/business-filters"
 
 import { moduleKeyOf } from "../records/adapter"
@@ -47,6 +48,16 @@ describe("a module's list on the Pilot (#147)", () => {
       const [workspaceId, moduleId] = key.split(".") as [Parameters<typeof moduleKeyOf>[0], string]
       assert.deepEqual(initialFiltersOf(commandSurfaceFor(workspaceId, moduleId, false)), emptyBusinessFilters, key)
     }
+  })
+
+  test("shows every row, unless it says which: the rows of one shape where a module holds two (#185)", () => {
+    const row = { id: "price-row-1", recordKind: "Price row" } as BusinessRecord
+    const list = { id: "price-list-1", recordKind: "Price list" } as BusinessRecord
+    assert.equal(listShows(surface.list, list), true, "a list without `shows` shows every row")
+    assert.equal(listShows(undefined, list), true, "so does a module without a list")
+    const rowsOnly: ModuleList = { ...surface.list!, shows: (record) => record.recordKind === "Price row" }
+    assert.equal(listShows(rowsOnly, row), true)
+    assert.equal(listShows(rowsOnly, list), false)
   })
 
   test("opens only on categories its readers read, so no chip filters on nothing", () => {

@@ -66,11 +66,20 @@ export type ListViewer = { accountId: string | null }
  * the popover offers them and the rows are matched through them, so the two
  * never disagree. `initial` is what the module opens with, applied when it
  * becomes the active module and never again while it stays so: a filter the
- * person changed is theirs, whatever loads after.
+ * person changed is theirs, whatever loads after. `shows`, where a module
+ * holds rows of two shapes, is the one its table lists — the price rows,
+ * never the price lists they are filed under (#185) — whatever the filters
+ * say, since one column set over two shapes reads neither.
  */
 export type ModuleList = {
   readers: (viewer: ListViewer) => FilterValueReaders
   initial: Partial<BusinessFilters>
+  shows?: (record: BusinessRecord) => boolean
+}
+
+/** Whether a module's list shows a row on the Pilot: every row, unless the list says which (`shows`). */
+export function listShows(list: ModuleList | undefined, record: BusinessRecord): boolean {
+  return list?.shows?.(record) ?? true
 }
 
 /** The filters a module opens with: its list's `initial` over no filter, or no filter for a module without one (every module in fixture mode). */

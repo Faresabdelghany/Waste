@@ -271,7 +271,7 @@ import { SchemeDetailsPage } from "@/components/waste/scheme-details-page"
 import { SchemePlanAheadRunner } from "@/components/waste/scheme-plan-ahead"
 import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
-import { commandSurfaceFor, initialFiltersOf } from "@/components/waste/commands/command-surfaces"
+import { commandSurfaceFor, initialFiltersOf, listShows } from "@/components/waste/commands/command-surfaces"
 import { offersRowsOf } from "@/components/waste/pickable-records"
 import { projectScopeOfMe } from "@/lib/api/records/me-projects"
 import { isServerBacked, serverModuleOf } from "@/lib/api/records/modules"
@@ -1596,7 +1596,7 @@ export function BusinessWorkspace({
   const filteredRecords = useMemo(() => {
     const matchingRecords = visibleScopedRecords.filter((record) => {
       // A module with a list on the Pilot is matched through its readers alone.
-      if (listReaders) return matchesBusinessFilters(record, businessFilters, listReaders) && matchesBusinessQuery(record, query)
+      if (listReaders) return listShows(commandSurface?.list, record) && matchesBusinessFilters(record, businessFilters, listReaders) && matchesBusinessQuery(record, query)
       const matchesStatus =
         businessFilters.statuses.length === 0 ||
         businessFilters.statuses.includes(record.status)
@@ -1724,7 +1724,7 @@ export function BusinessWorkspace({
       )
     }
     return matchingRecords
-  }, [businessFilters, listReaders, query, viewOptions.ordering, visibleScopedRecords])
+  }, [businessFilters, commandSurface?.list, listReaders, query, viewOptions.ordering, visibleScopedRecords])
   const activeFilterChips = useMemo(
     () => businessFilterChips(businessFilters),
     [businessFilters],
