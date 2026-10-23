@@ -21,7 +21,8 @@ type Scheme = {
   status: string
   editPolicy: string
   plannedStartTime: string | null
-  collectionGroups: { rule: { wasteFractionIds: string[] } | null }[]
+  serviceDays: string[]
+  collectionGroups: { id: string; name: string; days: string[]; rule: { wasteFractionIds: string[] } | null }[]
 }
 type Named = { id: string; name: string }
 
@@ -171,6 +172,34 @@ test("an edit is the scheme's PATCH: the stored policy and a shaping change land
   expect(renamed.status()).toBe(200)
   expect(renamed.request().postDataJSON()).toEqual({ name: `${name} renamed` })
   await expect(toasts(page)).toContainText(`${name} renamed updated`)
+})
+
+test("a service day added to a validated scheme is one PATCH of the days and the group that serves them, and the scheme stays validated (#205)", async ({ api, page }) => {
+  const name = uniqueName("E2E Saturday")
+  const scheme = await schemeThroughApi(api, name)
+  const [group] = ((await (await api.get(`/route-schemes/${scheme.id}`)).json()) as Scheme).collectionGroups
+  await openSchemes(page)
+  await openScheme(page, name)
+
+  const dialog = await openEdit(page)
+  await dialog.getByRole("combobox", { name: /^Service days/ }).click()
+  await page.getByRole("option", { name: "Saturday", exact: true }).click()
+  await page.keyboard.press("Escape")
+  const patches: string[] = []
+  page.on("request", (request) => {
+    if (request.method() !== "GET" && new URL(request.url()).pathname.startsWith("/waste-api/")) patches.push(`${request.method()} ${new URL(request.url()).pathname}`)
+  })
+  const [patched] = await Promise.all([answerOf(page, "PATCH", `/route-schemes/${scheme.id}`), dialog.getByRole("button", { name: "Save changes" }).click()])
+  expect(patched.status(), await patched.text()).toBe(200)
+  expect(patched.request().postDataJSON()).toEqual({
+    serviceDays: ["monday", "thursday", "saturday"],
+    collectionGroups: [{ id: group.id, name: group.name, days: ["monday", "thursday", "saturday"], stopSource: "rule", rule: group.rule, containerIds: null, serviceProviderId: null, vehicleId: null, driverId: null }],
+  })
+  await expect(dialog).toBeHidden()
+  // One request for the whole edit: no draft first, no group of its own, no second patch.
+  expect(patches).toEqual([`PATCH /waste-api/route-schemes/${scheme.id}`])
+  const read = (await (await api.get(`/route-schemes/${scheme.id}`)).json()) as Scheme
+  expect({ status: read.status, serviceDays: read.serviceDays, groupDays: read.collectionGroups.map((row) => row.days) }).toEqual({ status: "validated", serviceDays: ["monday", "thursday", "saturday"], groupDays: [["monday", "thursday", "saturday"]] })
 })
 
 test("a rename the API refuses is its sentence over the dialog, which keeps what was typed", async ({ api, page }) => {
