@@ -160,9 +160,9 @@ describe("the Plan endpoints and the manual reorder", { skip: database.skip || o
 
   describe("two stops at one address (#212): the fingerprint keys them alike, so the cache tells two orders apart by the stops themselves", () => {
     /** Two bins at one property, the route's only stops: either order keys the same fingerprint. */
-    const sameAddress = () =>
+    const sameAddress = (depotId: string | null = fleet.depots.nordhavn.id) =>
       seedRoute(pool, a, fleet, ex, {
-        depotId: fleet.depots.nordhavn.id,
+        depotId,
         pickups: [
           { containerId: ex.containers.bin1.id, propertyId: ex.properties.havnegade.id },
           { containerId: ex.containers.bin2.id, propertyId: ex.properties.havnegade.id },
@@ -190,21 +190,51 @@ describe("the Plan endpoints and the manual reorder", { skip: database.skip || o
       assert.equal(new Set(await fingerprintsOf([measured.id, detail.activePlan.id])).size, 1, "one fingerprint: only the order tells the two apart")
       assert.equal((await plansOf(seeded.id)).items.length, 2)
       assert.equal((await jobsFor(ROUTING_MEASURE_QUEUE, detail.activePlan.id)).length, 1, "the new order is measured")
-      const again = await reorder(seeded.id, [first, second])
-      assert.equal(again.activePlan?.id, measured.id, "the first order again is its ready Plan, re-activated")
-      assert.deepEqual(again.pickups.map((stop) => stop.id), [first, second])
+      // Both orders measured: going back and forth re-activates each one's own Plan, never the newest of the fingerprint for both.
+      await ownerPool.db.update(plan).set({ status: "ready", distanceMetres: 1_200, durationSeconds: 240 }).where(eq(plan.id, detail.activePlan.id))
+      const back = await reorder(seeded.id, [first, second])
+      assert.equal(back.activePlan?.id, measured.id, "the first order again is its ready Plan, re-activated")
+      assert.deepEqual(back.pickups.map((stop) => stop.id), [first, second])
+      const forth = await reorder(seeded.id, [second, first])
+      assert.equal(forth.activePlan?.id, detail.activePlan.id, "and the second its own")
+      assert.deepEqual(forth.pickups.map((stop) => stop.id), [second, first])
       assert.equal((await plansOf(seeded.id)).items.length, 2, "and no third Plan")
     })
 
-    test("swapping them while the first order still measures is a new manual Plan too, not the calculating one re-activated", async () => {
+    test("swapping them while the first order still measures is a new manual Plan too, and swapping back finds the first while both measure", async () => {
       const seeded = await sameAddress()
       const [first, second] = seeded.pickupIds
       const measuring = (await reorder(seeded.id, [first, second])).activePlan
       assert.ok(measuring)
       const detail = await reorder(seeded.id, [second, first])
-      assert.notEqual(detail.activePlan?.id, measuring.id)
+      assert.notEqual(detail.activePlan?.id, measuring.id, "not the calculating Plan of the other order re-activated")
       assert.deepEqual(detail.pickups.map((stop) => stop.id), [second, first])
+      const back = await reorder(seeded.id, [first, second])
+      assert.equal(back.activePlan?.id, measuring.id, "the older calculating Plan is the one that answers")
+      assert.deepEqual(back.pickups.map((stop) => stop.id), [first, second])
       assert.equal((await plansOf(seeded.id)).items.length, 2)
+    })
+
+    test("a baseline over them follows the generated order: positions that swap are a new baseline Plan, not the old one re-activated", async () => {
+      // No depot, so Optimise is a baseline measurement of the generated order.
+      const seeded = await sameAddress(null)
+      const [first, second] = seeded.pickupIds
+      const optimise = async (status: number) => {
+        const response = await olivia(`/routes/${seeded.id}/optimise`, { method: "POST" })
+        assert.equal(response.status, status, JSON.stringify(await response.clone().json()))
+        return OptimiseAnswer.parse(await response.json())
+      }
+      const measured = await optimise(202)
+      assert.deepEqual([measured.solver, measured.fallback], ["baseline", "no-depot"])
+      await ownerPool.db.update(plan).set({ status: "ready", distanceMetres: 1_200, durationSeconds: 240 }).where(eq(plan.id, measured.id))
+      // Regeneration's reshaping, by hand: the second stop now comes first in the generated order.
+      await ownerPool.db.execute(sql`update wms.pickup set position = 3 where id = ${first}`)
+      const reshaped = await optimise(202)
+      assert.notEqual(reshaped.id, measured.id, "the ready baseline measured the other order")
+      const detail = await detailOf(seeded.id)
+      assert.equal(detail.activePlan?.id, reshaped.id)
+      assert.deepEqual(detail.pickups.map((stop) => stop.id), [second, first])
+      assert.equal(new Set(await fingerprintsOf([measured.id, reshaped.id])).size, 1)
     })
 
     test("an optimiser match is still reused over the same pair, whatever order its solver wrote: its request is a set", async () => {

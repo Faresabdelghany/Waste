@@ -14,7 +14,11 @@
 // decimals, and the stops sorted for `optimiser` (whose input is a set) and
 // kept in order for `manual` and `baseline` (whose input is the order). A
 // caller that wants something shorter may hash it; two fingerprints are equal
-// exactly when the requests are.
+// exactly when the requests' inputs are, so when their answers are. It keys
+// places, not pickups: two stops at one address, or a stop regeneration
+// re-minted at the same place, key alike, so an equal fingerprint does not
+// say a Plan names the request's stops — the cache asks that too
+// (`answersRequest`, ./plans.ts; #212).
 import type { PlanSolver } from "./vocabulary"
 
 /** Five decimals ≈ 1.1 m at Danish latitudes: the "about a metre" #124 meant, pinned. */
