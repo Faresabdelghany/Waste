@@ -34,6 +34,7 @@ import { routeSchemesModule } from "./route-schemes"
 import { serviceAreasModule } from "./service-areas"
 import { routesModule } from "./routes"
 import { ticketsModule } from "./tickets"
+import { weightsModule } from "./weights"
 
 /**
  * The switched modules, in load order: a module another module resolves
@@ -99,6 +100,7 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   billingModule,
   invoicesModule,
   settlementsModule,
+  weightsModule,
 ]
 
 const byKey = new Map(SERVER_MODULES.map((module) => [moduleKeyOf(module.workspaceId, module.moduleId), module]))
