@@ -1212,6 +1212,8 @@ export function BusinessWorkspace({
   const [selectedRecord, setSelectedRecord] = useState<BusinessRecord | null>(null)
   const [editingRecord, setEditingRecord] = useState<BusinessRecord | null>(null)
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
+  // A governed action's write out to the API: its dialog's confirm waits (#210).
+  const [actionSaving, setActionSaving] = useState(false)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [generateSchemeRecord, setGenerateSchemeRecord] =
     useState<BusinessRecord | null>(null)
@@ -1232,6 +1234,8 @@ export function BusinessWorkspace({
 
   const activeModule =
     workspace.modules.find((module) => module.id === activeModuleId) ?? workspace.modules[0]
+  // The active module's load on the Pilot (null for a module on fixtures): a governed action waits for it (#210).
+  const activeModuleOnApi = useServerModuleState(workspace.id, activeModule.id)
   // Agreements and subscriptions on the API (slice 9a of #81): the module
   // holds two kinds, its form is the registry's trimmed to what the wire
   // takes, and a standard view offers no row Edit, so the sheet's actions
@@ -2165,11 +2169,6 @@ export function BusinessWorkspace({
     )
   }
 
-  const updateRecord = (nextRecord: BusinessRecord) => {
-    upsertRecord(workspace.id, activeModule.id, nextRecord)
-    setSelectedRecord(nextRecord)
-  }
-
   const requestRecordAction = (action: string) => {
     if (!selectedRecord) return
     const requiresDeleteGrant = action.toLowerCase().includes("delete")
@@ -2251,6 +2250,16 @@ export function BusinessWorkspace({
     if (!pendingAction) return
 
     const { record, action } = pendingAction
+    // On the Pilot a module the API has not answered for — still loading, or
+    // its load failed — has nowhere to send the change: the store would keep
+    // it in the browser, which a switched module never shows. Say so and keep
+    // the dialog, rather than report an action that went nowhere (#210).
+    if (apiConfigured && activeModuleOnApi !== null && activeModuleOnApi.status !== "ready") {
+      toast.error(`${record.name} was not changed`, {
+        description: `${activeModule.label} are not read from the API yet; the action can be confirmed once they are.`,
+      })
+      return
+    }
     const nextStatus = actionOutcome(activeModule, action, record.status)
     const createsCompanion = createsImmutableCompanion(activeModule, action)
     const event: AuditEvent = {
@@ -2266,12 +2275,14 @@ export function BusinessWorkspace({
         : "Company and project scope validated",
     }
 
-    setAuditEvents((current) => ({
-      ...current,
-      [record.id]: [event, ...(current[record.id] ?? [])],
-    }))
+    const recordAuditEvent = () =>
+      setAuditEvents((current) => ({
+        ...current,
+        [record.id]: [event, ...(current[record.id] ?? [])],
+      }))
 
     if (action.toLowerCase().includes("delete")) {
+      recordAuditEvent()
       const deletion = { reason, actorName, deletionLogId: event.id }
       let deletionMessage =
         "The structured reason and actor were written to the deletion log."
@@ -2399,24 +2410,34 @@ export function BusinessWorkspace({
         ],
       }
 
-      upsertRecord(workspace.id, activeModule.id, companion)
-      setAuditEvents((current) => ({
-        ...current,
-        [companion.id]: [
-          {
-            ...event,
-            id: `audit-companion-${Date.now()}`,
-            before: "Absent",
-            after: companion.status,
-            evidence: `Created from ${record.id} · ${event.evidence}`,
-          },
-        ],
-      }))
-      toast.success(`${companion.name} created`, {
-        description: isCorrection
-          ? "The issued source record was preserved."
-          : "A separate governed record and audit event were added.",
-      })
+      // On a module the API holds, the action has happened once the API has
+      // answered (#210): the dialog stays open, its confirm held, its audit
+      // row and its word wait for the write's outcome, and a refusal is the
+      // store's toast alone over the dialog still holding what was typed. In
+      // fixture mode there is nothing to wait for, and all of it runs at once.
+      setActionSaving(true)
+      whenSaved(upsertRecord(workspace.id, activeModule.id, companion), () => {
+        // This action's dialog, unless another has been opened since.
+        setPendingAction((current) => (current === pendingAction ? null : current))
+        recordAuditEvent()
+        setAuditEvents((current) => ({
+          ...current,
+          [companion.id]: [
+            {
+              ...event,
+              id: `audit-companion-${Date.now()}`,
+              before: "Absent",
+              after: companion.status,
+              evidence: `Created from ${record.id} · ${event.evidence}`,
+            },
+          ],
+        }))
+        toast.success(`${companion.name} created`, {
+          description: isCorrection
+            ? "The issued source record was preserved."
+            : "A separate governed record and audit event were added.",
+        })
+      }, () => setActionSaving(false))
     } else {
       const nextRecord: BusinessRecord = {
         ...record,
@@ -2435,16 +2456,25 @@ export function BusinessWorkspace({
             ? record.allowedTransitions
             : nextAllowedTransitions(activeModule, nextStatus),
       }
-      updateRecord(nextRecord)
-      toast.success(`${action} recorded`, {
-        description:
-          nextStatus === record.status
-            ? "The action and evidence were appended without bypassing the lifecycle."
-            : `${record.status} → ${nextStatus} · audit history updated`,
-      })
+      // As above (#210): the dialog closes, the audit gains its row, the
+      // details move to the new row — where they still show this one and
+      // read the selected row; a module with a row surface reads the store's
+      // live row, which moves at once and back on a refusal — and the person
+      // is told, all once the write has landed.
+      setActionSaving(true)
+      whenSaved(upsertRecord(workspace.id, activeModule.id, nextRecord), () => {
+        // This action's dialog, unless another has been opened since.
+        setPendingAction((current) => (current === pendingAction ? null : current))
+        recordAuditEvent()
+        setSelectedRecord((current) => (current?.id === record.id ? nextRecord : current))
+        toast.success(`${action} recorded`, {
+          description:
+            nextStatus === record.status
+              ? "The action and evidence were appended without bypassing the lifecycle."
+              : `${record.status} → ${nextStatus} · audit history updated`,
+        })
+      }, () => setActionSaving(false))
     }
-
-    setPendingAction(null)
   }
 
   /** The agreement form on the API (slice 9a of #81): the API holds the number's rule, so the workspace's uniqueness check stands aside. */
@@ -5764,9 +5794,12 @@ export function BusinessWorkspace({
         onClose={dismissPendingSchemeEdit}
         onChoose={answerPendingSchemeEdit}
       />
+      {/* One dialog per action, so what was typed for one never opens another; it is kept while the action's write is out and after its refusal (#210). */}
       <ActionDecisionDialog
+        key={pendingAction ? `${pendingAction.record.id}:${pendingAction.action}` : "none"}
         module={activeModule}
         pendingAction={pendingAction}
+        saving={actionSaving}
         onOpenChange={(open) => !open && setPendingAction(null)}
         onConfirm={commitRecordAction}
       />
@@ -6039,11 +6072,14 @@ function RecordDetailsDialog({
 function ActionDecisionDialog({
   module,
   pendingAction,
+  saving = false,
   onOpenChange,
   onConfirm,
 }: {
   module: ModuleDefinition
   pendingAction: PendingAction | null
+  /** The action's write is out to the API: confirm waits, and the form keeps what was typed for a refusal (#210). */
+  saving?: boolean
   onOpenChange: (open: boolean) => void
   onConfirm: (decision: { reason: string; effectiveDate: string }) => void
 }) {
@@ -6066,6 +6102,8 @@ function ActionDecisionDialog({
     onOpenChange(false)
   }
 
+  // The form is not cleared here: it is one dialog per action (the parent's
+  // key), closed once the action has landed and kept on a refusal (#210).
   const confirm = () => {
     onConfirm({
       reason: isDeleteAction
@@ -6073,9 +6111,6 @@ function ActionDecisionDialog({
         : reason.trim(),
       effectiveDate,
     })
-    setReason("")
-    setEffectiveDate("")
-    setDeletionCategory("")
   }
 
   return (
@@ -6178,7 +6213,7 @@ function ActionDecisionDialog({
               </Button>
               <Button
                 onClick={confirm}
-                disabled={!reason.trim() || (isDeleteAction && !deletionCategory)}
+                disabled={saving || !reason.trim() || (isDeleteAction && !deletionCategory)}
               >
                 Confirm {action.toLowerCase()}
               </Button>
