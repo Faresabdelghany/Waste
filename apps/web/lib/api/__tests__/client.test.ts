@@ -6,9 +6,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { CHANGE_REASON_HEADER as CONTRACTS_CHANGE_REASON_HEADER } from "@waste/contracts/audit"
 import { PAGE_LIMIT_MAX as CONTRACTS_PAGE_LIMIT_MAX } from "@waste/contracts/pagination"
 
-import { command, create, get, listAll, listPage, patch, PAGE_LIMIT_MAX, put, UNREACHABLE_STATUS, withQuery, type ApiClient } from "../client"
+import { CHANGE_REASON_HEADER, command, create, get, listAll, listPage, patch, PAGE_LIMIT_MAX, put, UNREACHABLE_STATUS, withQuery, type ApiClient } from "../client"
 import { ApiProblem, genericProblem, isApiProblem, PROBLEM_MEDIA_TYPE, problemOf, problemSentence } from "../problem"
 
 type Call = { url: string; init: RequestInit }
@@ -60,6 +61,16 @@ describe("the client", () => {
     assert.equal(headers.accept, "application/json")
     assert.equal(headers["content-type"], undefined)
     assert.equal(calls[0].init.signal, undefined, "no signal unless the client carries one")
+  })
+
+  test("a client carrying a reason gives it in the change-reason header, percent-encoded, held to the contracts' name; one without gives no header (#291)", async () => {
+    assert.equal(CHANGE_REASON_HEADER, CONTRACTS_CHANGE_REASON_HEADER)
+    const reason = "Flyttet til boligselskabet – ny betaler"
+    const { fetch, calls } = scripted([() => json({ id: "x" }), () => json({ id: "x" })])
+    await patch({ ...clientOver(fetch), reason }, "/customers/x", { name: "Østerbro" })
+    assert.equal((calls[0].init.headers as Record<string, string>)[CHANGE_REASON_HEADER], encodeURIComponent(reason))
+    await patch(clientOver(fetch), "/customers/x", { name: "Østerbro" })
+    assert.equal((calls[1].init.headers as Record<string, string>)[CHANGE_REASON_HEADER], undefined)
   })
 
   test("a client's signal reaches every fetch, and an aborted one is a problem of status 0 like any failed fetch", async () => {

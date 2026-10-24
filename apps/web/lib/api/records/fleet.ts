@@ -178,6 +178,7 @@ type VehicleWrite = {
 
 export const vehicleAdapter: ResourceAdapter<Vehicle> = {
   prefix: "vehicle",
+  auditTable: "vehicle",
   // A fixture trailer's id carries `trailer-`; a server row is `vehicle-<uuid>` whatever its kind, its kind on the typed `resourceKind`.
   owns: (record) => ofKind("vehicle", ["Vehicle or trailer"])(record) || hasPrefix("trailer")(record),
   statuses: VEHICLE_STATUSES,
@@ -396,6 +397,7 @@ function expiryOf(record: BusinessRecord): string | null | LocalRefusal {
 
 export const driverAdapter: ResourceAdapter<Driver> = {
   prefix: "driver",
+  auditTable: "driver",
   owns: ofKind("driver", ["Driver workforce profile"]),
   statuses: DRIVER_STATUSES,
   list: (client) => listAll<Driver>(client, "/drivers"),

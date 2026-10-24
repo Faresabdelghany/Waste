@@ -83,6 +83,8 @@ test("the office publishes a project's sorting guide from Settings, a visitor wi
 
     await page.getByRole("button", { name: "Unpublish" }).click()
     await expect(page.getByRole("button", { name: "Publish" })).toBeVisible()
+    // The button reads the store's row, which moves before the API answers; the toast waits for the answer, and the visitor reads after it.
+    await expect(page.getByText("Guide unpublished", { exact: true })).toBeVisible()
     await reader.goto(publicPath)
     await expect(reader.getByText("This page could not be found.")).toBeVisible()
     await expect(reader.getByRole("heading", { name: "Sorting guide" })).toHaveCount(0)

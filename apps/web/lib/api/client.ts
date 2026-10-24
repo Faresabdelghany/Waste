@@ -41,7 +41,16 @@ export type ApiClient = {
   signal?: AbortSignal
   /** Told of every refusal the API answers, just before it is thrown; a request that never reached the API is not the API's refusal and is not told. */
   onRefused?: (problem: Problem) => void
+  /** The office's reason for the writes this client sends, which the API's audit log keeps beside them (#291): given in `CHANGE_REASON_HEADER`, percent-encoded. */
+  reason?: string
 }
+
+/**
+ * The header a write's reason travels in, as `@waste/contracts/audit` names
+ * it: re-spelled here, since the contracts reach the bundle as types alone,
+ * and held equal by a test.
+ */
+export const CHANGE_REASON_HEADER = "waste-change-reason"
 
 export type Page<Item> = { items: Item[]; nextCursor: string | null }
 
@@ -92,6 +101,8 @@ async function request(client: ApiClient, method: string, path: string, body?: u
         authorization: `Bearer ${client.token}`,
         accept: "application/json",
         ...(body === undefined ? {} : { "content-type": "application/json" }),
+        // A header carries bytes and a reason may be in any script, so it travels percent-encoded.
+        ...(client.reason === undefined ? {} : { [CHANGE_REASON_HEADER]: encodeURIComponent(client.reason) }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       ...(client.signal === undefined ? {} : { signal: client.signal }),

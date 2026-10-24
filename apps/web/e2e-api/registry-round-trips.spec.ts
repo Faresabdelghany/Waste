@@ -354,16 +354,30 @@ test("Agreements: created in the browser with Location, signed, its subscription
   await expect(sheet.getByRole("heading", { name: new RegExp(`^${number}`) })).toBeVisible()
   await sheet.getByRole("button", { name: "Active", exact: true }).click()
   const governed = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Active" }) })
-  // The status is all the wire takes (#251): no reason, no effective date, no audit row promised — the move, now.
+  // The status is all the body takes (#251), and no effective date is offered; a reason, not required, rides in the change-reason header for the API's audit log (#291), and the browser promises no audit row of its own.
   await expect(governed.getByLabel("Decision or action reason")).toHaveCount(0)
   await expect(governed.getByLabel("Effective date")).toHaveCount(0)
-  await expect(governed).toContainText("The status changes now, as the API holds it.")
+  await expect(governed).toContainText("The status changes now, as the API holds it, and its audit log keeps who changed it and the reason given.")
   await expect(governed).not.toContainText("audit history")
+  const reason = "E2E: signed by the board – Østerbro"
+  await governed.getByLabel("Reason (optional)").fill(reason)
   const [signed] = await Promise.all([answerOf(page, "PATCH", location), governed.getByRole("button", { name: "Confirm active" }).click()])
   expect(signed.status()).toBe(200)
   expect(signed.request().postDataJSON()).toEqual({ status: "active" })
+  expect(signed.request().headers()["waste-change-reason"]).toBe(encodeURIComponent(reason))
   expect(await signed.json()).toMatchObject({ id: agreement.id, status: "active" })
-  await expect(page.getByText("Draft → Active", { exact: true })).toBeVisible()
+  // The toast's sentence, which the History below says too.
+  await expect(page.getByRole("region", { name: /^Notifications/ }).getByText("Draft → Active", { exact: true })).toBeVisible()
+
+  // The sheet's History reads the audit log once the move has landed (#291): the move by the tester, with the reason, above the agreement's create.
+  const history = page.getByRole("dialog").getByRole("region", { name: "History" })
+  const moved = history.getByRole("listitem").filter({ hasText: `Reason: ${reason}` })
+  await expect(moved).toBeVisible()
+  await expect(moved.getByRole("definition")).toHaveText(["Draft → Active"])
+  await expect(history.getByRole("listitem").last()).toContainText("Created")
+  const trail = await api.get("/audit-events", { params: { table: "agreement", rowId: agreement.id } })
+  expect(trail.status()).toBe(200)
+  expect(((await trail.json()) as { items: { action: string; reason: string | null; changed: Record<string, unknown> }[] }).items[0]).toMatchObject({ action: "update", reason, changed: { status: ["draft", "active"] } })
 
   // Its edit moves it onto a named list of the project in its currency, picked by name (#291), and the sheet names the list.
   await page.getByRole("dialog").getByRole("button", { name: "Edit agreement" }).click()

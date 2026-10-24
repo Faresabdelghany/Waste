@@ -222,6 +222,7 @@ function defaultPriceOf(product: ProductResource, productWebId: string, projectW
 
 export const productAdapter: ResourceAdapter<ProductResource> = {
   prefix: PRODUCT_PREFIX,
+  auditTable: "product",
   owns: isProductRecord,
   statuses: PRODUCT_STATUSES,
   list: async (client) => {
@@ -332,6 +333,7 @@ function listFields(record: BusinessRecord) {
 
 export const priceListAdapter: ResourceAdapter<PriceList> = {
   prefix: PRICE_LIST_PREFIX,
+  auditTable: "price_list",
   owns: isPriceListRecord,
   // No status on the wire: the record's is a reading of its period, and every move is refused.
   statuses: undefined,
@@ -444,6 +446,7 @@ const amountRefusal = (currency: string) => refusal("amount", `An amount in ${cu
 
 export const priceRowAdapter: ResourceAdapter<PriceListRow> = {
   prefix: PRICE_ROW_PREFIX,
+  auditTable: "price_list_row",
   owns: isPriceRowRecord,
   statuses: undefined,
   // Every list's rows, list by list: the pilot's fan-out (#127). The lists are read again here, since the two adapters list at once.

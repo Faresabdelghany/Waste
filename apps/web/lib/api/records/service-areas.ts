@@ -121,6 +121,7 @@ type AreaWrite = { patch?: object; planningAreaIds?: { ids: string[] }; wasteFra
 
 export const serviceAreaAdapter: ResourceAdapter<ServiceAreaResource> = {
   prefix: SERVICE_AREA_PREFIX,
+  auditTable: "service_area",
   owns: isServiceAreaRecord,
   // No status on the wire: the record's is a reading of its period.
   statuses: undefined,
@@ -255,6 +256,7 @@ type AssignmentWrite = { serviceAreaId: string; body: unknown }
 
 export const assignmentAdapter: ResourceAdapter<ServiceAreaAssignment> = {
   prefix: ASSIGNMENT_PREFIX,
+  auditTable: "service_area_assignment",
   owns: isAssignmentRecord,
   statuses: undefined,
   list: (client) => assignmentsOnce(client),

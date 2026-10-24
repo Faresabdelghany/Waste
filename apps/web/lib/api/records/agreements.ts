@@ -145,6 +145,7 @@ function agreementFields(record: BusinessRecord, context: MappingContext) {
 
 export const agreementAdapter: ResourceAdapter<Agreement> = {
   prefix: AGREEMENT_PREFIX,
+  auditTable: "agreement",
   owns: isAgreementRecord,
   statuses: AGREEMENT_STATUSES,
   list: (client) => listAll<Agreement>(client, "/agreements"),
@@ -256,6 +257,7 @@ function periodStatus(subscription: Subscription, day: string): "Pending" | "Act
 
 export const subscriptionAdapter: ResourceAdapter<Subscription> = {
   prefix: SUBSCRIPTION_PREFIX,
+  auditTable: "subscription",
   owns: isSubscriptionRecord,
   // No status on the wire: the record's is a reading of its period, and every move the lifecycle offers is refused.
   statuses: undefined,

@@ -61,6 +61,7 @@ const refusal = (path: string, message: string): LocalRefusal => ({ path, messag
 /** The company is one row with no collection: read at `/company`, changed there, created by nobody here. */
 export const companyAdapter: ResourceAdapter<Company> = {
   prefix: "company",
+  auditTable: "company",
   owns: hasPrefix("company"),
   // `CompanyPatch` (`@waste/contracts/organisation`) has no status member: the API states the company's status, so every move is refused by the store and the workspace offers none.
   statuses: undefined,
@@ -126,6 +127,7 @@ const PROJECT_STATUSES: readonly Project["status"][] = ["active", "onboarding"]
 
 export const projectAdapter: ResourceAdapter<Project> = {
   prefix: "project",
+  auditTable: "project",
   // A fixture's or a `webIdOf`, or a row the workspace just made under the organisation module's form (`recordKind: "Project"`).
   owns: ofKind("project", ["Project"]),
   statuses: PROJECT_STATUSES,
@@ -253,6 +255,7 @@ const PROVIDER_CHILD_PREFIXES = ["service-provider-access-", "service-provider-a
 
 export const serviceProviderAdapter: ResourceAdapter<ServiceProvider> = {
   prefix: "service-provider",
+  auditTable: "service_provider",
   // Other modules' records carry the prefix too (`service-provider-access-…`); here the prefix is the provider row's own, and a new row is the form's `recordKind`.
   owns: (record) => (hasPrefix("service-provider")(record) && !PROVIDER_CHILD_PREFIXES.some((prefix) => record.id.startsWith(prefix))) || record.recordKind === "Service provider company",
   // A provider has no status on the wire; the record's is the fixture's and moves nowhere.
@@ -352,6 +355,7 @@ export function grantsOfRecord(record: Pick<BusinessRecord, "submittedValues">):
 
 export const roleAdapter: ResourceAdapter<Role> = {
   prefix: "role",
+  auditTable: "role",
   owns: ofKind("role", ["Role"]),
   // A role has no status on the wire.
   statuses: undefined,
@@ -439,6 +443,7 @@ export const REACTIVATE_USER = "reactivate"
 
 export const userAdapter: ResourceAdapter<User> = {
   prefix: "user",
+  auditTable: "user_account",
   owns: ofKind("user", ["User", "Service provider user"]),
   // A user's status is derived on the wire (`invited`, `active`, `deactivated`) and `UserPatch` has no member for it: it moves through the two commands below, never a patch.
   statuses: undefined,

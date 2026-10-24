@@ -24,7 +24,7 @@ import {
 } from "@/lib/data/legacy-ids"
 import { UNREACHABLE_STATUS, type ApiClient } from "@/lib/api/client"
 import { genericProblem, isAccountRefusal, problemSentence, type Problem } from "@/lib/api/problem"
-import { moduleKeyOf, type CommandInput, type ServerModule } from "@/lib/api/records/adapter"
+import { moduleKeyOf, type CommandInput, type Resolver, type ServerModule } from "@/lib/api/records/adapter"
 import { ME_PROJECTS, withMeProjects } from "@/lib/api/records/me-projects"
 import { SERVER_MODULES, serverModuleOf, viewableModules } from "@/lib/api/records/modules"
 import { organisationModule } from "@/lib/api/records/organisation"
@@ -43,6 +43,7 @@ import {
   recordsOf,
   rereadRecord,
   rereadsOf,
+  resolverOver,
   sameSources,
   untilDayTurns,
   withNotGranted,
@@ -94,7 +95,9 @@ type BusinessRecordStoreValue = {
    * has answered — a caller that needs to know (a dialog that stays open on
    * a refusal) awaits it, and may say `report: false` to tell the person
    * itself instead of the store's toast; the rest of the workspace ignores
-   * it. A write the API took whose answer could not be shown is `landed`,
+   * it. A `reason` travels with the write in the change-reason header, for
+   * the API's audit log to keep beside it (#291); fixture mode has no log and
+   * drops it. A write the API took whose answer could not be shown is `landed`,
    * told as saved whatever `report` says, and its module is read again. A
    * switched module the API has not read — or a session that has ended —
    * refuses the write at once (`writeRouteOf`), never keeping it in the
@@ -105,7 +108,7 @@ type BusinessRecordStoreValue = {
     workspaceId: WorkspaceId,
     moduleId: string,
     record: BusinessRecord,
-    options?: { report?: boolean },
+    options?: { report?: boolean; reason?: string },
   ) => Promise<WriteOutcome> | undefined
   /**
    * Sends one of a row's commands (`deactivate`, `reactivate`, …: the
@@ -636,7 +639,7 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
   )
 
   const upsertRecord = useCallback(
-    (workspaceId: WorkspaceId, moduleId: string, record: BusinessRecord, options?: { report?: boolean }) => {
+    (workspaceId: WorkspaceId, moduleId: string, record: BusinessRecord, options?: { report?: boolean; reason?: string }) => {
       const key = moduleKey(workspaceId, moduleId)
       const module = serverModuleOf(workspaceId, moduleId)
       const serverStore = stores.server
@@ -682,7 +685,9 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
           // save moved.
           const latest = serverStore.getSnapshot().get(key) ?? current
           const turn = stores.client.getSnapshot() ?? client
-          const outcome = await writeRecord(turn, module, { ...current, serverIds: latest.serverIds }, record, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
+          // The reason rides on the write's requests alone, never on the reads after it.
+          const writer = options?.reason === undefined ? turn : { ...turn, reason: options.reason }
+          const outcome = await writeRecord(writer, module, { ...current, serverIds: latest.serverIds }, record, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
           if (outlived()) return outcome
           serverStore.set((state) => {
             const settled = state.get(key) ?? current
@@ -895,6 +900,20 @@ export function useServerModuleState(workspaceId: WorkspaceId, moduleId: string)
   )
   if (serverModuleOf(workspaceId, moduleId) === undefined) return null
   return serverModules.get(moduleKey(workspaceId, moduleId)) ?? IDLE
+}
+
+/**
+ * A resolver over every switched module as the store holds it now, for a
+ * pane that names rows of any module by server id: a record's history, whose
+ * changes point at rows of other modules (#291).
+ */
+export function useServerResolver(): Resolver {
+  const stores = useContext(BusinessRecordStoreContext)
+  if (!stores) {
+    throw new Error("useServerResolver must be used within BusinessRecordStoreProvider")
+  }
+  const serverModules = useSyncExternalStore(stores.server.subscribe, stores.server.getSnapshot, stores.server.getServerSnapshot)
+  return useMemo(() => resolverOver(serverModules), [serverModules])
 }
 
 /**
