@@ -231,7 +231,8 @@ export function PriceRowCommandsSurface({ record }: RowSurfaceProps) {
       if (result.kind === "updated") {
         rereadProducts()
         toast.success("Price updated", { description: `${record.context}: ${result.record.value}.` })
-      } else if (result.kind === "unchanged") toast.info("Nothing to change", { description: "The row is as the API holds it." })
+      } else if (result.kind === "landed") rereadProducts()
+      else if (result.kind === "unchanged") toast.info("Nothing to change", { description: "The row is as the API holds it." })
     })
   }
 

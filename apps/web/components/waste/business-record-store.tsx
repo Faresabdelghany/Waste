@@ -44,8 +44,8 @@ import {
   rereadsOf,
   sameSources,
   untilDayTurns,
-  withCreated,
   withNotGranted,
+  withOutcome,
   withRecord,
   writeRecord,
   type ActionOutcome,
@@ -57,6 +57,7 @@ import {
   type ServerRecordsState,
   type WriteOutcome,
 } from "@/lib/api/records/server-records"
+import { sessionEnded, writeRouteOf } from "@/lib/api/records/write-gate"
 import {
   BUSINESS_RECORDS_STORAGE_KEY,
   readPersisted,
@@ -88,12 +89,16 @@ type BusinessRecordStoreValue = {
     fixtureRecords: readonly BusinessRecord[],
   ) => BusinessRecord[]
   /**
-   * Saves a record. On a switched module that is ready, the write's outcome
-   * once the API has answered — a caller that needs to know (a dialog that
-   * stays open on a refusal) awaits it, and may say `report: false` to tell
-   * the person itself instead of the store's toast; the rest of the
-   * workspace ignores it. On every other module the record goes to the
-   * browser's bucket, and there is nothing to await.
+   * Saves a record. On a switched module, the write's outcome once the API
+   * has answered — a caller that needs to know (a dialog that stays open on
+   * a refusal) awaits it, and may say `report: false` to tell the person
+   * itself instead of the store's toast; the rest of the workspace ignores
+   * it. A write the API took whose answer could not be shown is `landed`,
+   * told as saved whatever `report` says, and its module is read again. A
+   * switched module the API has not read — or a session that has ended —
+   * refuses the write at once (`writeRouteOf`), never keeping it in the
+   * browser. In fixture mode and on a module on fixtures the record goes to
+   * the browser's bucket, and there is nothing to await.
    */
   upsertRecord: (
     workspaceId: WorkspaceId,
@@ -164,8 +169,8 @@ type BusinessRecordStores = {
    * browser's own path then. Until a module is `ready` — the load pending,
    * failed, or not granted — `getRecords` answers its fixtures alone: the
    * browser's own bucket for that module is not shown in that window, and a
-   * write made in it goes to that bucket, which the module stops reading
-   * once the server has answered. Never a mixture.
+   * write made in it is refused (`writeRouteOf`, #243), never kept there.
+   * Never a mixture.
    */
   server: ExternalStore<ServerRecordsState>
   /**
@@ -237,6 +242,16 @@ function isStoredRecords(value: unknown): value is StoredRecords {
 /** A refusal is told to the person in the API's words: the toast for a write or a read the API refused. */
 function reportProblem(what: string, problem: Problem) {
   toast.error(what, { description: problemSentence(problem) })
+}
+
+/** A write the API took whose answer could not be shown (#243): said as saved, never as a refusal, so nobody sends it again. Why it could not be shown is the outcome's, for a caller that wants it. */
+function reportLanded(name: string) {
+  toast.warning(`${name} was saved`, { description: "The API took it, but its answer could not be shown here; it is read again from the API." })
+}
+
+/** A write refused before it was sent, its module not read (#243): one toast for the module, which a sync of many of its rows replaces rather than stacks. */
+function reportUnsent(key: string, name: string, problem: Problem) {
+  toast.error(`${name} was not saved`, { id: `unsent-${key}`, description: problemSentence(problem) })
 }
 
 /** The fixtures of a module, the seed's origin, which every mapping matches by name. */
@@ -557,6 +572,7 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
     stores.server.getSnapshot,
     stores.server.getServerSnapshot,
   )
+  const apiConfigured = useApiConfigured()
   /** The switched module's state, or null for a module still on the browser's own path. */
   const serverModuleState = useCallback(
     (workspaceId: WorkspaceId, moduleId: string): ModuleState | null =>
@@ -598,8 +614,23 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
       const current = module === undefined ? undefined : serverStore.getSnapshot().get(key)
       const client = stores.client.getSnapshot()
       const report = options?.report ?? true
+      const route = writeRouteOf({
+        apiConfigured,
+        switched: module !== undefined,
+        target: current,
+        signedIn: client !== null,
+        // Asked for only where it can be said: a fixture-mode run writes hundreds of rows.
+        label: apiConfigured && module !== undefined ? (getModuleDefinition({ workspaceId, moduleId })?.label ?? key) : key,
+      })
+      const refused = (problem: Problem, said: boolean): Promise<WriteOutcome> => {
+        if (report && said) reportUnsent(key, record.name, problem)
+        return Promise.resolve({ kind: "refused", recordId: record.id, problem })
+      }
 
-      if (module !== undefined && current !== undefined && current.status === "ready" && client !== null) {
+      if (route.kind === "refused") return refused(route.problem, route.said)
+      if (route.kind === "api") {
+        // What the route was read from; never otherwise once it says "api".
+        if (module === undefined || current === undefined || client === null) return refused(sessionEnded(), true)
         // Optimistic and reconciled: the row shows what was saved at once,
         // the API's answer replaces it, a refusal puts the row back and
         // tells the person why in the API's words.
@@ -611,7 +642,7 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
         // API gave it, but the store — the next person's by then — does not.
         const generation = stores.generation.getSnapshot()
         const outlived = () => stores.generation.getSnapshot() !== generation
-        const ended = (): WriteOutcome => ({ kind: "refused", recordId: record.id, problem: genericProblem(UNREACHABLE_STATUS, "The session ended before the record was saved") })
+        const ended = (): WriteOutcome => ({ kind: "refused", recordId: record.id, problem: sessionEnded() })
         const run = async (): Promise<WriteOutcome> => {
           if (outlived()) return ended()
           // The server ids and the client as they stand when this write's
@@ -626,32 +657,23 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
           if (outlived()) return outcome
           serverStore.set((state) => {
             const settled = state.get(key) ?? current
-            switch (outcome.kind) {
-              case "created":
-                return new Map(state).set(key, withCreated(settled, outcome.optimisticId, outcome.record, outcome.serverId))
-              case "updated":
-                return new Map(state).set(key, withRecord(settled, outcome.record, outcome.serverId))
-              case "unchanged":
-                return state
-              case "refused": {
-                // Part of a write that is several requests may stand: the row is then as the server holds it.
-                const restored =
-                  outcome.record !== undefined
-                    ? withRecord(settled, outcome.record)
-                    : before === undefined
-                      ? { ...settled, records: settled.records.filter((candidate) => candidate.id !== outcome.recordId) }
-                      : withRecord(settled, before)
-                return new Map(state).set(key, { ...restored, problem: outcome.problem })
-              }
-            }
+            const next = withOutcome(settled, outcome, record, before)
+            return next === settled ? state : new Map(state).set(key, next)
           })
           // The account's own refusal has ended the session; /login says why.
           if (outcome.kind === "refused" && report && !isAccountRefusal(outcome.problem)) reportProblem(`${record.name} was not saved`, outcome.problem)
+          if (outcome.kind === "landed") {
+            reportLanded(record.name)
+            // Once the writes now out have answered — this one's among them — so the read never lands between a create's POST and its answer.
+            const inFlight = [...stores.pendingWrites.values()]
+            void Promise.allSettled(inFlight).then(() => rereadModule(stores, module, outlived, turn))
+          }
           return outcome
         }
         return enqueue(stores.pendingWrites, record.id, run)
       }
 
+      // The browser's own path: fixture mode, or a module on fixtures.
       store.set((current) => {
         const existing = current[key] ?? []
         const hasRecord = existing.some((candidate) => candidate.id === record.id)
@@ -666,7 +688,7 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
       })
       return undefined
     },
-    [store, stores],
+    [apiConfigured, store, stores],
   )
 
   const sendCommand = useCallback(

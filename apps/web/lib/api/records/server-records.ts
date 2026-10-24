@@ -492,6 +492,14 @@ export type WriteOutcome =
   | { kind: "unchanged"; record: BusinessRecord }
   /** `record`, when part of a write landed before the refusal: the row as the server now holds it, which the store shows instead of the row as it was. */
   | { kind: "refused"; problem: Problem; recordId: string; record?: BusinessRecord }
+  /**
+   * The API took the write — a create's 201, a patch's 200 — but its answer
+   * could not be mapped into a record (#243): saved, so never asked for
+   * again. `serverId` is the row it was written to — undefined for a create
+   * whose answer named none, whose row only the module's read again finds;
+   * `problem`, why it could not be shown.
+   */
+  | { kind: "landed"; recordId: string; serverId?: string; problem: Problem }
 
 /** The 400 a local refusal stands for, in the API's own shape, so a caller reads one. */
 export function refusalProblem(refusal: { path: string; message: string }): Problem {
@@ -542,8 +550,10 @@ export async function writeRecord(client: ApiClient, module: ServerModule, curre
       }
       const body = adapter.toCreateBody(record, context)
       if (isLocalRefusal(body)) return { kind: "refused", recordId: record.id, problem: refusalProblem(body) }
-      const resource = await adapter.create(client, body)
-      return { kind: "created", record: adapter.toRecord(resource, context), serverId: resource.id, optimisticId: record.id }
+      const resource = (await adapter.create(client, body)) as Resource | undefined
+      // The API said 201 whatever its answer holds: one that names no row has landed, and only the module's read again finds it.
+      if (typeof resource?.id !== "string") return { kind: "landed", recordId: record.id, problem: genericProblem(0, "The API's answer named no row") }
+      return mappedAnswer(record, resource.id, () => ({ kind: "created", record: adapter.toRecord(resource, context), serverId: resource.id, optimisticId: record.id }))
     }
     const before = current.records.find((candidate) => candidate.id === record.id) ?? record
     if (before.status !== record.status && !spellsStatus(module, record, record.status)) {
@@ -556,12 +566,60 @@ export async function writeRecord(client: ApiClient, module: ServerModule, curre
     // Under the row's own web id, whatever the mapping would now derive — a
     // fixture matched by a name the write just changed — so one server row
     // stays one row here, as `withCreated` keeps a minted id.
-    return { kind: "updated", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId: resource.id }
+    return mappedAnswer(record, serverId, () => ({ kind: "updated", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId }))
   } catch (error) {
     if (error instanceof PartialWrite) {
-      return { kind: "refused", recordId: record.id, problem: problemOfError(error.refusal), record: { ...adapter.toRecord(error.resource, context), id: record.id } }
+      // The part that landed, as the server holds it — unless it cannot be mapped either, when the refusal stands alone.
+      let landed: BusinessRecord | undefined
+      try {
+        landed = { ...adapter.toRecord(error.resource, context), id: record.id }
+      } catch {
+        landed = undefined
+      }
+      return { kind: "refused", recordId: record.id, problem: problemOfError(error.refusal), ...(landed === undefined ? {} : { record: landed }) }
     }
     return { kind: "refused", recordId: record.id, problem: problemOfError(error) }
+  }
+}
+
+/** The outcome of a write the API has answered, written to `serverId`: `outcome` as mapped, or `landed` when mapping the answer throws (#243) — never a refusal, which would invite the person to send it again. */
+function mappedAnswer(record: BusinessRecord, serverId: string, outcome: () => WriteOutcome): WriteOutcome {
+  try {
+    return outcome()
+  } catch (error) {
+    return { kind: "landed", recordId: record.id, serverId, problem: problemOfError(error) }
+  }
+}
+
+/**
+ * The module once a write's outcome is in (#243): a create under the id the
+ * workspace minted, a patch in its row's place, nothing for nothing moved;
+ * a landed write as `record` was typed, under its own id with the server id
+ * behind it — the answer could not be shown, but a second save is a patch,
+ * never a second create, and the module is read again for the row (a create
+ * whose answer named no row is dropped, for that read to bring it); a
+ * refusal puts back the row as it was `before` (dropping a create), or as
+ * the server holds it where part of the write landed, and notes the problem.
+ */
+export function withOutcome(settled: ModuleState, outcome: WriteOutcome, record: BusinessRecord, before: BusinessRecord | undefined): ModuleState {
+  switch (outcome.kind) {
+    case "created":
+      return withCreated(settled, outcome.optimisticId, outcome.record, outcome.serverId)
+    case "updated":
+      return withRecord(settled, outcome.record, outcome.serverId)
+    case "unchanged":
+      return settled
+    case "landed":
+      return outcome.serverId === undefined ? withoutRecord(settled, outcome.recordId) : withCreated(settled, outcome.recordId, record, outcome.serverId)
+    case "refused": {
+      const restored =
+        outcome.record !== undefined
+          ? withRecord(settled, outcome.record)
+          : before === undefined
+            ? { ...settled, records: settled.records.filter((candidate) => candidate.id !== outcome.recordId) }
+            : withRecord(settled, before)
+      return { ...restored, problem: outcome.problem }
+    }
   }
 }
 
