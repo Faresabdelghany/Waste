@@ -219,13 +219,12 @@ test("Contacts & Companies: created in the browser with Location, read back, mov
   expect(await read.json()).toEqual(body)
 
   // The record's sheet opened on the new row; its lifecycle action is the
-  // module's edit, a status patch, behind the governed-action dialog that
-  // wants a reason before it confirms.
+  // module's edit, a status patch, behind the status dialog, which on the
+  // API asks nothing the wire does not take (#251).
   const sheet = page.getByRole("dialog")
   await expect(sheet.getByRole("heading", { name })).toBeVisible()
   await sheet.getByRole("button", { name: "Inactive" }).click()
   const governed = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Inactive" }) })
-  await governed.getByLabel("Decision or action reason").fill("E2E: the organisation is no longer served")
   const [patched] = await Promise.all([answerOf(page, "PATCH", location), governed.getByRole("button", { name: "Confirm inactive" }).click()])
   expect(patched.status()).toBe(200)
   expect(await patched.json()).toMatchObject({ id: body.id, status: "inactive" })
@@ -342,10 +341,16 @@ test("Agreements: created in the browser with Location, signed, its subscription
   await expect(sheet.getByRole("heading", { name: new RegExp(`^${number}`) })).toBeVisible()
   await sheet.getByRole("button", { name: "Active", exact: true }).click()
   const governed = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Active" }) })
-  await governed.getByLabel("Decision or action reason").fill("E2E: the agreement is signed")
+  // The status is all the wire takes (#251): no reason, no effective date, no audit row promised — the move, now.
+  await expect(governed.getByLabel("Decision or action reason")).toHaveCount(0)
+  await expect(governed.getByLabel("Effective date")).toHaveCount(0)
+  await expect(governed).toContainText("The status changes now, as the API holds it.")
+  await expect(governed).not.toContainText("audit history")
   const [signed] = await Promise.all([answerOf(page, "PATCH", location), governed.getByRole("button", { name: "Confirm active" }).click()])
   expect(signed.status()).toBe(200)
+  expect(signed.request().postDataJSON()).toEqual({ status: "active" })
   expect(await signed.json()).toMatchObject({ id: agreement.id, status: "active" })
+  await expect(page.getByText("Draft → Active", { exact: true })).toBeVisible()
 
   // A subscription under it: the product by the API's id, since its module is not switched yet, the property picked by name (#184); two of the product for the agreement's period.
   const subscribed = await addSubscription(page, agreement.id, { productId: product.id, property: property.name, quantity: "2" })
@@ -378,7 +383,6 @@ test("Agreements: created in the browser with Location, signed, its subscription
   await (await rowNamed(page, `${number} · ${customer.name}`)).click()
   await page.getByRole("dialog").getByRole("button", { name: "Cancelled", exact: true }).click()
   const cancelling = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Cancelled" }) })
-  await cancelling.getByLabel("Decision or action reason").fill("E2E: the customer withdrew")
   const [cancelled] = await Promise.all([answerOf(page, "PATCH", location), cancelling.getByRole("button", { name: "Confirm cancelled" }).click()])
   expect(cancelled.status()).toBe(200)
   expect(await cancelled.json()).toMatchObject({ id: agreement.id, status: "cancelled" })
@@ -517,7 +521,6 @@ test("Properties: created in the browser with its owner and its point, read back
   // Inactive is the lifecycle's move the wire spells, behind the governed dialog.
   await sheet.getByRole("button", { name: "Inactive", exact: true }).click()
   const governed = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Inactive" }) })
-  await governed.getByLabel("Decision or action reason").fill("E2E: the property is no longer served")
   const [deactivated] = await Promise.all([answerOf(page, "PATCH", `/properties/${property.id}`), governed.getByRole("button", { name: "Confirm inactive" }).click()])
   expect(deactivated.status()).toBe(200)
   expect(await deactivated.json()).toMatchObject({ id: property.id, status: "inactive" })
@@ -615,7 +618,6 @@ test("Shared points: planned in the browser open with its members, read back, it
   expect(subscribed.status(), "POST /agreements/:id/subscriptions").toBe(201)
   await sheet.getByRole("button", { name: "Closed", exact: true }).click()
   const governed = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Closed" }) })
-  await governed.getByLabel("Decision or action reason").fill("E2E: the point is taken away")
   const [closed] = await Promise.all([answerOf(page, "PATCH", `/shared-collection-points/${point.id}`), governed.getByRole("button", { name: "Confirm closed" }).click()])
   expect(closed.status()).toBe(200)
   expect(await closed.json()).toMatchObject({ id: point.id, status: "closed" })
