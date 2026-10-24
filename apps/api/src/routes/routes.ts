@@ -77,12 +77,13 @@ import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { detailOf, findRoute, labelOf, noSuchRoute, pickupColumns, pickupOf, pickupsOfRoute, receiptColumns, receiptOf, routeColumns, routeScope, routesOf, type RouteRow } from "./execution-shapes"
-import { findDriver, findVehicle, vehicleLabel, type DriverRow, type VehicleRow } from "./fleet-lookups"
+import { findDriver, findVehicle, projectToday, vehicleLabel, type DriverRow, type VehicleRow } from "./fleet-lookups"
 import { activePlansByRoute, ensurePlan } from "./plan-shapes"
 import { QueueMissing, type JobSender } from "@waste/db/jobs"
 import { NOT_AN_UNLOADING_STATION, requireDepot, type Scope } from "./references"
 import { findScheme, MODULE as SCHEMES_MODULE, type ClockOptions } from "./scheme-groups"
 import { askGeneration } from "./generation"
+import { handBackWindow } from "./route-holds"
 import { describeJson, IdParam, lockRow, stamp, timeOf } from "./shared"
 import { refuseUnavailableDriver } from "./statuses"
 
@@ -504,7 +505,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "releaseRouteHold",
         summary: "Hand a held route back to its scheme",
         description:
-          "The `release-hold` command (#226): clears the hold `assign` or `reschedule` put on a `planned` route (`heldAt`), so the route follows its scheme again, and in the same transaction asks a generation run of the route's scheme over the route's service date — that one day, both ends of the window — which brings back the scheme's operating date, planned start and Planned Assignment. The run is asked as the scheme's Generate asks one, under the scheme's key: where a run of the scheme is already queued or in flight, that run absorbs the request, and one that does not reach the day, or that read the route before the hand-back, leaves it to the next run — the nightly plan-ahead or the next Generate. A run of the scheme is the schemes module's to ask (`edit` on `route-studio.schemes`, as Generate): for a caller without it, for a draft scheme, which generates nothing, and where no worker has made the queue yet, no run is asked and the route is still handed back, the next run bringing it back. The answer is the route as it now stands, its hold cleared, before any run has brought it back. A planned route that is not held is refused (409), and so is a route past `planned`, which is never held. Takes no body. Under the route's row lock; no event is written, as for `reschedule`.",
+          "The `release-hold` command (#226): clears the hold `assign` or `reschedule` put on a `planned` route (`heldAt`), so the route follows its scheme again, and in the same transaction asks a generation run of the route's scheme from the project's today — or the scheme's first day, if later — through the route's service date, so the run's drift stamp is today's as any Generate's would be (a service date already past, or beyond the walk's 366 days, alone), which brings back the scheme's operating date, planned start and Planned Assignment. The run is asked as the scheme's Generate asks one, under the scheme's key: where a run of the scheme is already queued or in flight, that run absorbs the request, and one that does not reach the day, or that read the route before the hand-back, leaves it to the next run — the nightly plan-ahead or the next Generate. A run of the scheme is the schemes module's to ask (`edit` on `route-studio.schemes`, as Generate): for a caller without it, for a draft scheme, which generates nothing, and where no worker has made the queue yet, no run is asked and the route is still handed back, the next run bringing it back. The answer is the route as it now stands, its hold cleared, before any run has brought it back. A planned route that is not held is refused (409), and so is a route past `planned`, which is never held. Takes no body. Under the route's row lock; no event is written, as for `reschedule`.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The route, its hold cleared; a run of its scheme over its service date is asked.", RouteDetail),
@@ -531,7 +532,8 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const scheme = allows(principal.grants, SCHEMES_MODULE, "edit") ? await findScheme(tx, principal, row.routeSchemeId) : undefined
         if (scheme !== undefined && scheme.status === "validated") {
           try {
-            await askGeneration(tx, principal, jobs.send, scheme, { from: row.serviceDate, to: row.serviceDate })
+            const today = await projectToday(tx, { companyId: principal.companyId, projectId: row.projectId }, now)()
+            await askGeneration(tx, principal, jobs.send, scheme, handBackWindow({ today, schemeFrom: scheme.validFrom, serviceDate: row.serviceDate }))
           } catch (error) {
             // No worker has made the queue yet: the hold is cleared all the same, and the next run brings the route back.
             if (!(error instanceof QueueMissing)) throw error

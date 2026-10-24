@@ -37,6 +37,7 @@ import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
+import { handBackWindow } from "../routes/route-holds"
 import { seedFleet, seedPlanning, type FleetFixtures, type PlanningFixtures } from "./scheme-fixtures"
 import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
 import { signingKeys, type SigningKeys } from "./tokens"
@@ -329,7 +330,14 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
     }
     const runsOf = async (schemeId: string) => Page(GenerationRun).parse(await ok(await olivia(`/route-schemes/${schemeId}/generation-runs?limit=200`))).items
 
-    test("hands a held planned route back to its scheme and asks a generation run over its service date, under the scheme's key", async () => {
+    test("asks the run from the project's today, or the scheme's first day if later, through the route's service date, so its drift stamp is today's; a day already past, or beyond the walk's cap, alone", () => {
+      assert.deepEqual(handBackWindow({ today: "2026-10-05", schemeFrom: "2026-01-01", serviceDate: "2026-10-26" }), { from: "2026-10-05", to: "2026-10-26" })
+      assert.deepEqual(handBackWindow({ today: "2026-10-05", schemeFrom: "2026-10-12", serviceDate: "2026-10-26" }), { from: "2026-10-12", to: "2026-10-26" }, "the scheme's first day, later than today")
+      assert.deepEqual(handBackWindow({ today: "2026-10-05", schemeFrom: "2026-01-01", serviceDate: "2026-09-28" }), { from: "2026-09-28", to: "2026-09-28" }, "a day already past: that day alone")
+      assert.deepEqual(handBackWindow({ today: "2026-10-05", schemeFrom: "2026-01-01", serviceDate: "2027-10-26" }), { from: "2027-10-26", to: "2027-10-26" }, "beyond the walk's cap: that day alone")
+    })
+
+    test("hands a held planned route back to its scheme and asks a generation run through its service date, under the scheme's key", async () => {
       const { scheme, groups: [one] } = await schemeWith("Hand back Mondays", ["Round 1"], true)
       const id = await routeOn(scheme, one, MONDAYS[2])
       await hold(id)
@@ -340,7 +348,7 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
       assert.equal((await read(id)).heldAt, null)
       assert.deepEqual(office.sent.map((sent) => [sent.name, sent.singletonKey]), [[GENERATE_ROUTES_QUEUE, scheme.id]])
       const asked = (await runsOf(scheme.id)).filter((run) => !before.some((earlier) => earlier.id === run.id))
-      assert.deepEqual(asked.map((run) => [run.windowFrom, run.windowTo, run.trigger, run.status]), [[MONDAYS[2], MONDAYS[2], "on-demand", "queued"]])
+      assert.deepEqual(asked.map((run) => [run.windowFrom, run.windowTo, run.trigger, run.status]), [["2026-10-05", MONDAYS[2], "on-demand", "queued"]], "from the project's today")
     })
 
     test("still hands the route back where a run of the scheme already holds the queue, or no worker has made the queue yet: the next run brings it back", async () => {

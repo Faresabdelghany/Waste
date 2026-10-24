@@ -33,6 +33,8 @@
 // dispatched.
 import type { Tx } from "@waste/db/client"
 import { route } from "@waste/db/schema/execution"
+import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { WALK_CAP_DAYS } from "@waste/domain/route-schemes/generation"
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm"
 
 import type { Principal } from "../auth/principal"
@@ -47,6 +49,18 @@ type SchemeCoveredPatch = Partial<SchemeCovered>
 
 /** A group's fields a hold covers. */
 export type GroupCovered = { vehicleId: string | null; driverId: string | null; serviceProviderId: string | null; days: readonly string[] }
+
+/**
+ * The window of the run a hand-back asks (#226): from the project's today —
+ * or the scheme's first day, if later — through the route's service date, so
+ * the run's drift stamp is today's, as any Generate's would be; a service date
+ * already past, or beyond the walk's cap from that start, alone.
+ */
+export function handBackWindow({ today, schemeFrom, serviceDate }: { today: string; schemeFrom: string; serviceDate: string }): { from: string; to: string } {
+  const from = schemeFrom > today ? schemeFrom : today
+  if (serviceDate < from || serviceDate > addDays(from, WALK_CAP_DAYS)) return { from: serviceDate, to: serviceDate }
+  return { from, to: serviceDate }
+}
 
 /** A service day as Postgres's ISO day of the week counts it: Monday 1 to Sunday 7. */
 const ISO_DOW: Readonly<Record<string, number>> = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6, sunday: 7 }
