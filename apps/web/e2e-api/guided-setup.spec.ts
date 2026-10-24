@@ -91,6 +91,25 @@ test("the wizard is a labelled dialog whose first step offers the API's rows and
   await expect(root).toBeHidden()
 })
 
+test("a master-data read lost on the way is asked again, so step 1 still offers the master data's fractions", async ({ page }) => {
+  // CI's flake of step 4's quota test (run 40058616985): the proxy answered the page's service-frequencies read 500
+  // (ECONNRESET), the master data failed whole, and step 1's Waste fraction offered no Residual for the rest of the test.
+  let lost = 0
+  await page.route("**/waste-api/service-frequencies**", async (route) => {
+    if (lost === 0) {
+      lost += 1
+      await route.fulfill({ status: 500, contentType: "text/plain", body: "Internal Server Error" })
+      return
+    }
+    await route.continue()
+  })
+  await openSchemes(page)
+  await startGuided(page)
+  await pick(page, wizard(page), "Waste fraction", "Residual")
+  await expect(wizard(page).getByLabel("Waste fraction", { exact: true })).toContainText("Residual")
+  expect(lost, "the first read was lost").toBe(1)
+})
+
 test("step 2 reads the project's holiday list from the API, and the next dates apply it per policy", async ({ page }) => {
   await openSchemes(page)
   await startGuided(page)

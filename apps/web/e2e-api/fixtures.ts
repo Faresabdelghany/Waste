@@ -26,9 +26,21 @@ export async function accessTokenOf(context: BrowserContext): Promise<string | n
   return null
 }
 
+/**
+ * A request context to the API or the worker that opens a connection for each request (`Connection: close`).
+ * Playwright pools keep-alive sockets across every request context of a worker, and the API closes an idle one
+ * at its keep-alive timeout: a request that reuses it as it closes reads ECONNRESET (CI run 40063489426, on
+ * `GET /drivers`). A fresh loopback connection costs nothing measurable, and no request lands on a socket the
+ * API is closing. Every context a spec opens on the API goes through here, since one that keeps its sockets
+ * alive leaves them in the pool the others draw from.
+ */
+export function newApiRequestContext(options: NonNullable<Parameters<typeof request.newContext>[0]> = {}): Promise<APIRequestContext> {
+  return request.newContext({ ...options, extraHTTPHeaders: { ...options.extraHTTPHeaders, connection: "close" } })
+}
+
 /** A request context on the API's own origin, speaking as the holder of `token`. */
 export function apiAs(token: string): Promise<APIRequestContext> {
-  return request.newContext({
+  return newApiRequestContext({
     baseURL: E2E.apiUrl,
     extraHTTPHeaders: { authorization: `Bearer ${token}`, accept: "application/json" },
   })
