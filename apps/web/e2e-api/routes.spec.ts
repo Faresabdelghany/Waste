@@ -10,7 +10,9 @@ import { ensureTester, listAll, roleNamed } from "./tester"
 // commands go out as the contracts' bodies and a refusal is the API's own
 // sentence; a stop is removed or its outcome corrected; the Live board reads
 // what the driver's device reports, and the office's cancel ends the
-// driver's session. The routes are a scheme's made for the run
+// driver's session; a route the office moved is handed back to its scheme by
+// Release hold, the run it asks bringing back the scheme's start (#226).
+// The routes are a scheme's made for the run
 // (routes-support.ts), or the Driver App's dispatched route for today.
 
 type Container = { id: string; label: string }
@@ -112,6 +114,33 @@ test("the dispatcher's commands: an unassigned dispatch is the API's 409, assign
     vehicleId: vehicle?.id,
   })
   expect(read.pickups.every((pickup) => pickup.status === "skipped")).toBe(true)
+})
+
+test("Release hold hands a route the office moved back to its scheme, and the generation run it asks brings back the scheme's start (#226)", async ({ api, page }) => {
+  const { routes } = await schemeWithRoutes(api, uniqueName("E2E Hand back"))
+  const [route] = routes
+  const details = await openRoute(page, route)
+  const commands = details.getByTestId("route-commands")
+  await expect(commands.getByRole("button", { name: "Release hold" })).toHaveCount(0)
+
+  // The office moves the start by hand: the route is held.
+  await commands.getByRole("button", { name: "Reschedule" }).click()
+  const reschedule = page.getByRole("dialog", { name: "Reschedule" })
+  await reschedule.getByRole("textbox", { name: /^Planned start/ }).fill("07:45")
+  const [moved] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/reschedule`), reschedule.getByRole("button", { name: "Reschedule" }).click()])
+  expect(moved.status()).toBe(200)
+  await expect(details).toContainText("Held by the office since")
+
+  const [released] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/release-hold`), commands.getByRole("button", { name: "Release hold" }).click()])
+  expect(released.status()).toBe(200)
+  expect(released.request().postDataJSON()).toEqual({})
+  expect(((await released.json()) as { heldAt: string | null }).heldAt).toBeNull()
+  await expect(toasts(page)).toContainText(`${route.label} handed back to its scheme`)
+  await expect(toasts(page)).toContainText("The next generation run brings back the scheme's day, start and assignment.")
+  await expect(commands.getByRole("button", { name: "Release hold" })).toHaveCount(0)
+
+  // The run the hand-back asked over the route's service date brings back the start the scheme gave it.
+  await expect.poll(async () => (await routeRead(api, route.id)).plannedStartTime, { timeout: 30_000 }).toBe(route.plannedStartTime)
 })
 
 test("reorder stops: the open stops are PUT whole in their new order, which the route then reads as its manual Plan", async ({ api, page }) => {

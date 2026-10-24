@@ -51,9 +51,10 @@
 // @waste/domain/planning/checks are re-run over the groups as the write would
 // leave them, and every sentence that fails is listed in a 409.
 //
-// A patch that moves the group's vehicle, driver, provider or days releases
-// the holds on its routes (#209, routes/route-holds.ts), in the same
-// transaction, so the next generation run brings them back to the group.
+// A patch that moves the group's vehicle, driver or provider releases the
+// holds on its routes (#209, routes/route-holds.ts), and one that takes a day
+// away those on that day (#226), in the same transaction, so the next
+// generation run brings them back to the group.
 //
 // A group is project-scoped like its scheme, so every statement carries the
 // tenant and `inProjects` (auth/projects.ts); a group of another company, or
@@ -84,7 +85,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { projectToday } from "./fleet-lookups"
 import { requireServiceProvider, type Scope } from "./references"
-import { groupMovesHeld, releaseHolds } from "./route-holds"
+import { groupReleases, releaseHolds } from "./route-holds"
 import {
   assembleGroups,
   findScheme,
@@ -315,7 +316,7 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
         operationId: "patchCollectionGroup",
         summary: "Change a collection group",
         description:
-          "Changes the name, the position, the days, the service provider, the vehicle or the driver of one collection group; every field is optional and at least one must be given. The source, the rule and the picked list never move through a patch: the rule is `PUT /collection-groups/{id}/stop-matching-rule`, the list `PUT /collection-groups/{id}/containers`, and a group that should find its stops the other way is another group. A null clears the provider, the vehicle or the driver. A new vehicle is a powered vehicle of the scheme's project and a new driver one of its drivers; named afresh, the vehicle is not retired and the driver is active — refused (409) naming the row and its status, after every 400, since a status gates a new reference and never an existing one, so a group whose vehicle has since retired is renamed, moved and given a new driver like any other; a group left naming both names a driver who holds the licence class the vehicle requires on the day the scheme's period starts or today, whichever is later — refused at `driverId` with the reason. New days lie within the scheme's service days, and may not put one of this group's containers on a day another group already picks it — refused at `days`, naming the container, the group and the day. `days: []` is a group that no longer runs — parked, it counts for nothing toward retiring its vehicle or setting its driver inactive, so un-parking it (days from `[]` to one or more) names the vehicle and the driver it stores afresh and holds them to the same status rule: a truck that retired under the parked group is refused (409) until the group is reassigned. On a `validated` scheme a change of days, vehicle or driver re-runs the structural rules — every service day still has a group, and no vehicle or driver is on two groups that run on a shared day — and every sentence that fails is listed (409); the name, the position and the provider change nothing those rules read. A patch that changes the group's `vehicleId`, `driverId`, `serviceProviderId` or `days` releases the hold on each of the group's routes the office moved by hand (`heldAt`, set by `assign` and `reschedule`), in the patch's transaction, so the next generation run brings them back to the group; a held route is a planned one, so nothing dispatched is touched, and the routes of the scheme's other groups keep theirs.",
+          "Changes the name, the position, the days, the service provider, the vehicle or the driver of one collection group; every field is optional and at least one must be given. The source, the rule and the picked list never move through a patch: the rule is `PUT /collection-groups/{id}/stop-matching-rule`, the list `PUT /collection-groups/{id}/containers`, and a group that should find its stops the other way is another group. A null clears the provider, the vehicle or the driver. A new vehicle is a powered vehicle of the scheme's project and a new driver one of its drivers; named afresh, the vehicle is not retired and the driver is active — refused (409) naming the row and its status, after every 400, since a status gates a new reference and never an existing one, so a group whose vehicle has since retired is renamed, moved and given a new driver like any other; a group left naming both names a driver who holds the licence class the vehicle requires on the day the scheme's period starts or today, whichever is later — refused at `driverId` with the reason. New days lie within the scheme's service days, and may not put one of this group's containers on a day another group already picks it — refused at `days`, naming the container, the group and the day. `days: []` is a group that no longer runs — parked, it counts for nothing toward retiring its vehicle or setting its driver inactive, so un-parking it (days from `[]` to one or more) names the vehicle and the driver it stores afresh and holds them to the same status rule: a truck that retired under the parked group is refused (409) until the group is reassigned. On a `validated` scheme a change of days, vehicle or driver re-runs the structural rules — every service day still has a group, and no vehicle or driver is on two groups that run on a shared day — and every sentence that fails is listed (409); the name, the position and the provider change nothing those rules read. A patch that changes the group's `vehicleId`, `driverId` or `serviceProviderId` releases the hold on each of the group's routes the office moved by hand (`heldAt`, set by `assign` and `reschedule`), and one that takes a day from its `days` releases those whose own service day it was — one that only adds a day releases nothing — in the patch's transaction, so the next generation run brings them back to the group; a held route is a planned one, so nothing dispatched is touched, and the routes of the scheme's other groups keep theirs.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The collection group as it now stands.", CollectionGroup),
@@ -387,8 +388,8 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
             .returning(groupColumns),
         )
         if (row === undefined) throw noSuchGroup(id)
-        // A move of what the group's routes copy or run on releases their holds (#209, routes/route-holds.ts).
-        if (groupMovesHeld(current, left)) await releaseHolds(tx, principal, current.projectId, { collectionGroupIds: [id] })
+        // A move of what the group's routes copy releases their holds, a day taken away those on it (#209, #226, routes/route-holds.ts).
+        await releaseHolds(tx, principal, current.projectId, { collectionGroupIds: [id] }, groupReleases(current, left))
         return c.json(await groupWithSets(tx, principal.companyId, row))
       },
     )

@@ -72,6 +72,8 @@ export const DISPATCH_ROUTE = "dispatch"
 export const RESCHEDULE_ROUTE = "reschedule"
 export const CANCEL_ROUTE = "cancel"
 export const REORDER_ROUTE = "reorder"
+/** The office's hand-back of a held route to its scheme (#226). */
+export const RELEASE_HOLD = "release-hold"
 
 const ROUTE_PREFIX = "route"
 const SCHEME_PREFIX = "scheme"
@@ -104,7 +106,10 @@ function projectOf(route: Route, context: MappingContext): { webId: string; name
 }
 
 /** What ends a route's hold (#209, the API's `route-holds.ts`). */
-const HOLD_RELEASED_BY = "An edit of its scheme's start, depot, unloading station or days, or of its group's vehicle, driver, provider or days; a dispatch or a cancel ends it"
+const HOLD_RELEASED_BY = "Release hold; an edit of its scheme's start, depot or unloading station, or of its group's vehicle, driver or provider; a day taken from its collection; a dispatch or a cancel"
+
+/** Whether the office holds the route (#209): `release-hold` hands it back (#226). */
+export const isHeldRoute = (record: Pick<BusinessRecord, "submittedValues">): boolean => typeof record.submittedValues?.heldAt === "string" && record.submittedValues.heldAt !== ""
 
 export function toRouteRecord(route: RouteRead, context: MappingContext): BusinessRecord {
   const project = projectOf(route, context)
@@ -177,6 +182,7 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
       depotId: reference("depot", route.planned.depotId),
       unloadingStationId: reference("station", route.planned.unloadingStationId),
       status: route.status,
+      heldAt: route.heldAt ?? "",
       ...("activePlan" in route ? { [ROUTE_ACTIVE_PLAN_KEY]: JSON.stringify(route.activePlan ?? null) } : {}),
     },
   }
@@ -235,6 +241,8 @@ export const ROUTE_COMMANDS = {
     return Object.keys(body).length === 0 ? refusal("vehicleId", NOTHING_TO_ASSIGN) : body
   }),
   [DISPATCH_ROUTE]: onRoute("dispatch", "dispatched"),
+  // The route back on its scheme: the API asks a generation run over its service date, which brings back the scheme's day, start and assignment.
+  [RELEASE_HOLD]: onRoute("release-hold", "handed back", () => ({})),
   [RESCHEDULE_ROUTE]: onRoute("reschedule", "rescheduled", (input, record) => {
     const day = "operatingDate" in input ? said(input, "operatingDate") : typed(record, "operatingDate")
     const start = "plannedStartTime" in input ? said(input, "plannedStartTime") : typed(record, "plannedStartTime")
@@ -281,7 +289,7 @@ export function routeCommandLog(client: Client, serverId: string): Promise<Drive
   return listAll<DriverCommandReceipt>(client, `/routes/${serverId}/commands`)
 }
 
-const CHANGED_BY_COMMANDS = "A route is changed by its commands: assign, dispatch, reschedule, cancel or reorder its stops"
+const CHANGED_BY_COMMANDS = "A route is changed by its commands: assign, dispatch, reschedule, release its hold, cancel or reorder its stops"
 
 export const routeAdapter: ResourceAdapter<Route> = {
   prefix: ROUTE_PREFIX,

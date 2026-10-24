@@ -27,7 +27,8 @@
 // sees its company's runs and stamps and nothing of another's; a route the
 // office held (#209) keeps its day, start and Planned Assignment through a
 // run that still refreshes its pickups and its note, the hold alone writing
-// nothing, and a cancel still cancels it and clears the hold.
+// nothing, and a cancel still cancels it and clears the hold — but under a
+// skipped holiday a route the office held on another day stays (#226).
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
@@ -457,6 +458,32 @@ describe("generation against a migrated database", { skip }, () => {
     const resurrected = await rowOf(monday.id)
     assert.equal(resurrected.status, "planned")
     assert.deepEqual(covered(resurrected), { operatingDate: "2026-10-05", plannedStartTime: "06:30:00", plannedVehicleId: null, plannedDriverId: null, plannedServiceProviderId: null, depotId: null, unloadingStationId: null, heldAt: null })
+  })
+
+  test("under skip, a route the office held off its holiday is kept on its day, its note saying so; without the hold it goes with the holiday (#226)", async () => {
+    const rowOf = async (id: string) => (await ownerPool.db.select().from(route).where(eq(route.id, id)))[0]
+    const thursday = (await routesOfA()).find((row) => row.serviceDate === "2026-10-08")
+    assert.ok(thursday, "the holiday Thursday's route, shifted by the scheme's policy")
+    await ownerPool.db.update(routeScheme).set({ holidayPolicy: "skip" }).where(eq(routeScheme.id, a.scheme))
+    try {
+      // The office moved Thursday's collection to the Wednesday before, by hand.
+      await ownerPool.db.update(route).set({ operatingDate: "2026-10-07", heldAt: NOW }).where(eq(route.id, thursday.id))
+      const kept = await generateA()
+      assert.equal(kept.run.routesCancelled, 0)
+      const row = await rowOf(thursday.id)
+      assert.deepEqual([row.status, row.operatingDate, row.note, row.heldAt !== null], ["planned", "2026-10-07", "Kept on Wed 7 Oct by the office, off Test Day", true])
+
+      // Not held, the same route goes with the holiday the policy skips.
+      await ownerPool.db.update(route).set({ heldAt: null }).where(eq(route.id, thursday.id))
+      const skipped = await generateA()
+      assert.equal(skipped.run.routesCancelled, 1)
+      const gone = await rowOf(thursday.id)
+      assert.deepEqual([gone.status, gone.note], ["cancelled", "Skipped · Test Day"])
+    } finally {
+      // The scheme shifts holidays again: the route comes back, the scheme's, for the tests after.
+      await ownerPool.db.update(routeScheme).set({ holidayPolicy: "shift-next" }).where(eq(routeScheme.id, a.scheme))
+      await generateA()
+    }
   })
 
   test("a draft scheme generates nothing and says so on the run; a run already succeeded is not run again; a validated scheme with a rule group and no planning area warns", async () => {
