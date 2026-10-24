@@ -12,6 +12,7 @@
 
 import type { BusinessRecord } from "../prototype-record"
 import { splitList } from "../record-values"
+import { schemeLicenceDay } from "../planning/checks"
 import { addDays, isIsoDate, SERVICE_DAYS, sortServiceDays, type ServiceDay } from "./recurrence"
 import { stringValue } from "./validation"
 
@@ -61,69 +62,82 @@ export const CONTAINER_VEHICLE_COMPATIBILITY: Readonly<
 export const ELIGIBLE_CONTAINER_STATUSES = new Set(["Available"])
 
 /**
- * Where a container the API holds says when it is in service (#207, #232):
- * JSON `ServingPeriod`, the period its placement serves it in under a
- * subscription and an agreement in force — the worker's eligibility
- * (apps/worker's stop-matching), the three periods intersected — read on its
- * project's day. A record that carries it is held to it and not to its
- * status, which is its asset state there (every seeded container has no
- * movement yet), and named by its facts, since its typed fraction and type
- * are master-data web ids. The fixtures' containers say nothing here and keep
- * their status as the gate and their typed tokens.
+ * Where a container the API holds says when and where it is in service (#207,
+ * #232): JSON `ServingReading` — for each of its placements not ended by the
+ * project's day it was read on, the period that placement serves it in under
+ * its subscription and that subscription's agreement (the three intersected,
+ * the worker's eligibility in apps/worker's stop-matching) and the planning
+ * areas its place lies in. Areas overlap and the worker holds a point to each
+ * scheme's own area, so a container counts in each that contains it. A record
+ * that carries it is held to it and not to its status, which is its asset
+ * state there (every seeded container has no movement yet), and named by its
+ * facts, since its typed fraction and type are master-data web ids. The
+ * fixtures' containers say nothing here and keep their status as the gate,
+ * their one `planningAreaId` and their typed tokens.
  */
-export const SERVING_PERIOD_KEY = "servingPeriod"
+export const SERVING_KEY = "serving"
 
-/**
- * A container's serving period: `from` its first day, null where it serves
- * on no day; `until` its first day out, null while open (half-open, as the
- * wire spells periods); `asOf` the project's day the reading was made.
- */
-export type ServingPeriod = { from: string | null; until: string | null; asOf: string }
+/** One placement's serving: `from` its first day, `until` its first day out or null while open (half-open, as the wire spells periods), and the areas its place lies in. */
+export type ServingPeriod = { from: string; until: string | null; areaIds: readonly string[] }
 
-/** The serving period a container the API holds carries; undefined for a fixture's. One it cannot read serves on no day. */
-export function servingPeriodOf(record: Pick<BusinessRecord, "submittedValues">): ServingPeriod | undefined {
-  const raw = stringValue(record.submittedValues ?? {}, SERVING_PERIOD_KEY)
-  if (raw === undefined) return undefined
+/** A container's serving as read on `asOf`, the project's day. */
+export type ServingReading = { asOf: string; periods: readonly ServingPeriod[] }
+
+const readings = new WeakMap<object, ServingReading | null>()
+
+/** The serving a container the API holds carries, read once per record's values; undefined for a fixture's. One it cannot read serves nowhere. */
+export function servingReadingOf(record: Pick<BusinessRecord, "submittedValues">): ServingReading | undefined {
+  const values = record.submittedValues
+  if (values === undefined) return undefined
+  const cached = readings.get(values)
+  if (cached !== undefined) return cached ?? undefined
+  const raw = stringValue(values, SERVING_KEY)
+  const reading = raw === undefined ? null : parseReading(raw)
+  readings.set(values, reading)
+  return reading ?? undefined
+}
+
+function parseReading(raw: string): ServingReading {
+  const day = (value: unknown) => (typeof value === "string" && isIsoDate(value) ? value : null)
   try {
-    const parsed: unknown = JSON.parse(raw)
-    if (parsed !== null && typeof parsed === "object") {
-      const { from, until, asOf } = parsed as Record<string, unknown>
-      const day = (value: unknown) => (typeof value === "string" && isIsoDate(value) ? value : null)
-      const read = day(asOf)
-      if (read !== null) return { from: day(from), until: day(until), asOf: read }
+    const parsed = JSON.parse(raw) as { asOf?: unknown; periods?: unknown }
+    const asOf = day(parsed.asOf)
+    if (asOf !== null && Array.isArray(parsed.periods)) {
+      const periods = parsed.periods.flatMap((entry: { from?: unknown; until?: unknown; areaIds?: unknown }) => {
+        const from = day(entry?.from)
+        if (from === null) return []
+        const areaIds = Array.isArray(entry.areaIds) ? entry.areaIds.filter((id): id is string => typeof id === "string") : []
+        return [{ from, until: day(entry.until), areaIds }]
+      })
+      return { asOf, periods }
     }
   } catch {
     // Unreadable: below.
   }
-  return { from: null, until: null, asOf: "" }
+  return { asOf: "", periods: [] }
 }
 
 /**
  * The day a container is judged on (#232): the scheme's first day where it
- * is later than the day the reading was made — a new scheme's first
+ * is not behind the day the reading was made — a new scheme's first
  * collection — else that day, a running scheme's collections being from now
- * on. Without a first day, the day read.
+ * on (`schemeLicenceDay`, the day a group's driver is judged on).
  */
-function judgedOn(period: ServingPeriod, schemeFrom: string | undefined): string {
-  return schemeFrom !== undefined && isIsoDate(schemeFrom) && schemeFrom > period.asOf ? schemeFrom : period.asOf
+function judgedOn(reading: ServingReading, schemeFrom: string | undefined): string {
+  return schemeLicenceDay(schemeFrom !== undefined && isIsoDate(schemeFrom) ? schemeFrom : reading.asOf, reading.asOf).day
 }
 
-/** Why a container is out of service on `day`, or undefined while its period holds it. */
-function outOfService(period: ServingPeriod, day: string): string | undefined {
-  if (period.from === null) return "No placement serves it"
-  if (day < period.from) return `Serves from ${period.from}`
-  if (period.until !== null && day >= period.until) return `Served until ${addDays(period.until, -1)}`
-  return undefined
-}
+const covers = (period: ServingPeriod, day: string) => period.from <= day && (period.until === null || day < period.until)
 
-/**
- * Where a container the API holds lists every planning area whose boundary in
- * force contains its point, comma-separated (#207): areas overlap, and the
- * worker holds the point to each scheme's own area, so a container counts in
- * each that contains it. A record without the list is read by its one
- * `planningAreaId`, as the fixtures' are.
- */
-export const PLANNING_AREA_IDS_KEY = "planningAreaIds"
+/** Why a container is out of service on `day` in `areaId` — anywhere, without one — or undefined while a period there holds it. */
+function outOfService(reading: ServingReading, day: string, areaId?: string): string | undefined {
+  const here = areaId === undefined ? reading.periods : reading.periods.filter((period) => period.areaIds.includes(areaId))
+  if (here.some((period) => covers(period, day))) return undefined
+  const next = here.filter((period) => period.from > day).map((period) => period.from).sort()[0]
+  if (next !== undefined) return `Serves from ${next}`
+  const last = here.flatMap((period) => (period.until === null ? [] : [period.until])).sort().at(-1)
+  return last === undefined ? "No placement serves it" : `Served until ${addDays(last, -1)}`
+}
 
 /** The container form's enum ids mapped onto the fixture display vocabulary. */
 const FORM_FRACTION_LABELS: Readonly<Record<string, string>> = {
@@ -324,7 +338,7 @@ export type ContainerMatchProfile = {
   id: string
   name: string
   status: string
-  /** Whether it can be planned on the day judged: its serving period where the record carries one (`SERVING_PERIOD_KEY`), its status otherwise. */
+  /** Whether it can be planned on the day judged, in any area: its serving where the record carries one (`SERVING_KEY`), its status otherwise. */
   inService: boolean
   /** The configure.areas record ids it lies in; none = never matches an area-scoped rule. */
   areaIds: string[]
@@ -364,8 +378,8 @@ export function containerMatchProfile(
   }
   // A container the API holds types its master data by web id (#207), which
   // is no name a rule matches: its display facts say the names instead.
-  const period = servingPeriodOf(record)
-  const fromApi = period !== undefined
+  const reading = servingReadingOf(record)
+  const fromApi = reading !== undefined
   const typedName = (key: string, labels: Readonly<Record<string, string>>) => {
     const value = fromApi ? undefined : stringValue(values, key)
     return value === undefined ? undefined : (labels[value] ?? value)
@@ -381,15 +395,14 @@ export function containerMatchProfile(
 
   const containerType = typedName("containerType", FORM_CONTAINER_TYPE_LABELS) ?? (facts["Container type"]?.trim() || undefined)
 
-  const areaList = stringValue(values, PLANNING_AREA_IDS_KEY)
   const areaId = stringValue(values, "planningAreaId")
 
   return {
     id: record.id,
     name: record.name,
     status: record.status,
-    inService: period !== undefined ? outOfService(period, judgedOn(period, schemeFrom)) === undefined : ELIGIBLE_CONTAINER_STATUSES.has(record.status),
-    areaIds: areaList !== undefined ? splitList(areaList) : areaId !== undefined ? [areaId] : [],
+    inService: reading !== undefined ? outOfService(reading, judgedOn(reading, schemeFrom)) === undefined : ELIGIBLE_CONTAINER_STATUSES.has(record.status),
+    areaIds: reading !== undefined ? [...new Set(reading.periods.flatMap((period) => period.areaIds))] : areaId !== undefined ? [areaId] : [],
     fractions,
     ...(containerType ? { containerType } : {}),
     projectIds: record.projectIds,
@@ -437,19 +450,20 @@ const fractionsIntersect = (
     ),
   )
 
+/** Why a container is out of service for a scheme in `areaId` from `schemeFrom`: its serving there where the API holds it, its status for a fixture's; undefined while in. */
+function outOfServiceFor(record: ContainerRecordLike, profile: ContainerMatchProfile, areaId: string, schemeFrom: string | undefined): string | undefined {
+  const reading = servingReadingOf(record)
+  if (reading === undefined) return profile.inService ? undefined : profile.status
+  return outOfService(reading, judgedOn(reading, schemeFrom), areaId)
+}
+
 /**
  * Resolves one rule against the container records. Area and project bound the
- * scope; inside it, a container matches when its status is in service, a
+ * scope; inside it, a container matches when it is in service there, a
  * fraction intersects the rule, and — when the rule names a vehicle type —
  * its container type is compatible. An empty-fraction rule matches nothing
  * (the rule IS the fraction selection; validation blocks saving one).
  */
-/** Why a container the API holds is out of service on the day judged; undefined for a fixture's, whose status says it. */
-function servingReason(record: ContainerRecordLike, schemeFrom: string | undefined): string | undefined {
-  const period = servingPeriodOf(record)
-  return period === undefined ? undefined : outOfService(period, judgedOn(period, schemeFrom))
-}
-
 export function resolveStopMatches(input: {
   rule: StopMatchRule
   /** The scheme's planning area (configure.areas record id); required to match. */
@@ -485,11 +499,12 @@ export function resolveStopMatches(input: {
       continue
     }
 
-    if (!profile.inService) {
+    const outOfServiceHere = outOfServiceFor(record, profile, input.areaId, input.from)
+    if (outOfServiceHere !== undefined) {
       excluded.push({
         id: profile.id,
         name: profile.name,
-        reason: `${servingReason(record, input.from) ?? profile.status} — not in service`,
+        reason: `${outOfServiceHere} — not in service`,
       })
       continue
     }

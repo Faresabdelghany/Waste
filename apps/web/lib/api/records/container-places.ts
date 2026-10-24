@@ -40,7 +40,7 @@
 import type { ContainerServicePlacement } from "@waste/contracts/containers"
 import { planningAreaGeometry } from "@waste/domain/map-planning/areas"
 import { pointInPolygon, type LngLat } from "@waste/domain/map-planning/geo"
-import { PLANNING_AREA_IDS_KEY, SERVING_PERIOD_KEY, type ServingPeriod } from "@waste/domain/route-schemes/matching"
+import { SERVING_KEY, type ServingPeriod, type ServingReading } from "@waste/domain/route-schemes/matching"
 
 import { AGREEMENT_PREFIX, AGREEMENTS_MODULE, isAgreementRecord, isSubscriptionRecord, PROPERTY_PREFIX, SHARED_POINT_PREFIX } from "@/lib/data/agreements"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
@@ -80,18 +80,16 @@ function periodOf(record: BusinessRecord, fromKey: string, lastKey: string): Per
   return { from, until: last === undefined ? null : firstDayOut(last) }
 }
 
-/** The days every period holds, read on `asOf`: the latest start to the earliest end; serving no day where one is missing or they share none. */
-function servingPeriod(periods: readonly (Period | undefined)[], asOf: string): ServingPeriod {
+/** The days every period holds: the latest start to the earliest end; null where one is missing or they share none. */
+function shared(periods: readonly (Period | undefined)[]): Period | null {
   const known = periods.filter((period): period is Period => period !== undefined)
-  if (known.length < periods.length) return { from: null, until: null, asOf }
-  const from = known.map((period) => period.from).sort().at(-1) ?? null
+  if (known.length < periods.length) return null
+  const from = known.map((period) => period.from).sort().at(-1)
   const until = known.flatMap((period) => (period.until === null ? [] : [period.until])).sort()[0] ?? null
-  return from === null || (until !== null && until <= from) ? { from: null, until: null, asOf } : { from, until, asOf }
+  return from === undefined || (until !== null && until <= from) ? null : { from, until }
 }
 
-const holds = (period: ServingPeriod, day: string) => period.from !== null && period.from <= day && (period.until === null || day < period.until)
-const ended = (period: ServingPeriod) => period.from === null || (period.until !== null && period.until <= period.asOf)
-const serving = (period: ServingPeriod) => ({ [SERVING_PERIOD_KEY]: JSON.stringify(period) })
+const covers = (period: Period, day: string) => period.from <= day && (period.until === null || day < period.until)
 
 /** The loaded row a web id names, held to its kind. */
 function placeRecord(webId: string | undefined, prefix: string, owns: (record: BusinessRecord) => boolean, context: MappingContext): BusinessRecord | undefined {
@@ -123,43 +121,68 @@ function contains({ rings: [outer, ...holes] }: LoadedArea, at: LngLat): boolean
   return pointInPolygon(at, outer) && !holes.some((hole) => pointInPolygon(at, hole))
 }
 
-/**
- * The place a container serves at, as its record carries it: the place of
- * `placement` — the one the record shows — and the period it serves there
- * under its subscription and that subscription's agreement, read on the
- * project's day. The areas while that period has not ended; the point, the
- * map's area and the facts while it holds today, and only the name for a
- * place not yet located. `projectWebId` scopes the planning areas: an area is
- * its project's, so another project's outline over the same street is not
- * the container's.
- */
-export function containerPlace(placement: ContainerServicePlacement | undefined, projectWebId: string, timezone: string | undefined, context: MappingContext): ContainerPlace {
-  const day = dayIn(context.now ?? new Date(), timezone)
-  const nowhere: ContainerPlace = { facts: {}, values: serving({ from: null, until: null, asOf: day }) }
-  if (placement === undefined) return nowhere
+/** A placement read through: its subscription's agreement, its place, and the period the three share (null where they share none); undefined where a link is not loaded. */
+type Chain = { agreement: BusinessRecord; property: BusinessRecord | undefined; place: BusinessRecord | undefined; period: Period | null }
+
+function chainOf(placement: ContainerServicePlacement, context: MappingContext): Chain | undefined {
   const subscription = context.resolve.byServerId(placement.subscriptionId)
-  if (subscription === undefined || !isSubscriptionRecord(subscription)) return nowhere
+  if (subscription === undefined || !isSubscriptionRecord(subscription)) return undefined
   const agreement = placeRecord(typed(subscription, "agreementId"), AGREEMENT_PREFIX, isAgreementRecord, context)
-  if (agreement === undefined) return nowhere
-  const period = servingPeriod([{ from: placement.validFrom, until: placement.validTo }, periodOf(subscription, "validFrom", "validTo"), periodOf(agreement, "effectiveFrom", "effectiveTo")], day)
-  const today = holds(period, day)
+  if (agreement === undefined) return undefined
   const property = placeRecord(typed(subscription, "propertyId"), PROPERTY_PREFIX, isPropertyRecord, context)
   const point = property === undefined ? placeRecord(typed(subscription, "sharedPointId"), SHARED_POINT_PREFIX, isSharedPointRecord, context) : undefined
-  const place = property ?? point
-  if (place === undefined) return { facts: {}, values: serving(period) }
+  const period = shared([{ from: placement.validFrom, until: placement.validTo }, periodOf(subscription, "validFrom", "validTo"), periodOf(agreement, "effectiveFrom", "effectiveTo")])
+  return { agreement, property, place: property ?? point, period }
+}
+
+/** The point a place is located at, or undefined while it is not. */
+function pointOf(place: BusinessRecord): { latitude: string; longitude: string; at: LngLat } | undefined {
   const latitude = typed(place, "latitude")
   const longitude = typed(place, "longitude")
-  if (latitude === undefined || longitude === undefined) return { facts: today ? { "Serves at": `${place.name}, not located yet` } : {}, values: serving(period) }
-  const at: LngLat = { lng: Number(longitude), lat: Number(latitude) }
-  const areas = ended(period)
-    ? []
-    : loadedAreas(context.resolve)
-        .filter((loaded) => (loaded.area.projectIds?.includes(projectWebId) ?? false) && contains(loaded, at))
-        .map((loaded) => loaded.area)
-  const areaIds: Record<string, string> = areas.length === 0 ? {} : { [PLANNING_AREA_IDS_KEY]: areas.map((area) => area.id).join(",") }
-  // A placement that serves later is in its areas' scope for a scheme that starts then; the map shows today's.
-  if (!today) return { facts: {}, values: { ...serving(period), ...areaIds } }
+  return latitude === undefined || longitude === undefined ? undefined : { latitude, longitude, at: { lng: Number(longitude), lat: Number(latitude) } }
+}
+
+/** The planning areas of the project whose boundary in force contains the point, in load order. */
+function areasAt(at: LngLat, projectWebId: string, context: MappingContext): BusinessRecord[] {
+  return loadedAreas(context.resolve)
+    .filter((loaded) => (loaded.area.projectIds?.includes(projectWebId) ?? false) && contains(loaded, at))
+    .map((loaded) => loaded.area)
+}
+
+/**
+ * Where and when a container serves, as its record carries it.
+ * `SERVING_KEY`: for each of its placements not ended by the project's day,
+ * the period it serves the container in under its subscription and that
+ * subscription's agreement, with the planning areas its place lies in, read
+ * on that day — the rule preview judges a scheme on the period that holds on
+ * its first day (#232). The map's readings are the placement the record shows
+ * (`shown`) while it serves today: the point, `planningAreaId` and the facts;
+ * only the name for a place not yet located, and where and from when for one
+ * that serves later. `projectWebId` scopes the planning areas: an area is its
+ * project's, so another project's outline over the same street is not the
+ * container's.
+ */
+export function containerPlace(shown: ContainerServicePlacement | undefined, placements: readonly ContainerServicePlacement[], projectWebId: string, timezone: string | undefined, context: MappingContext): ContainerPlace {
+  const day = dayIn(context.now ?? new Date(), timezone)
+  const periods: ServingPeriod[] = placements.flatMap((placement) => {
+    const chain = chainOf(placement, context)
+    if (chain?.period == null || (chain.period.until !== null && chain.period.until <= day)) return []
+    const point = chain.place === undefined ? undefined : pointOf(chain.place)
+    return [{ ...chain.period, areaIds: point === undefined ? [] : areasAt(point.at, projectWebId, context).map((area) => area.id) }]
+  })
+  const values = { [SERVING_KEY]: JSON.stringify({ asOf: day, periods } satisfies ServingReading) }
+  const chain = shown === undefined ? undefined : chainOf(shown, context)
+  if (chain?.place === undefined || chain.period === null) return { facts: {}, values }
+  const { agreement, property, place, period } = chain
   const address = typed(place, property === undefined ? "address" : "serviceAddress")
+  if (!covers(period, day)) {
+    // Serving later: where and from when, for the preview's matched rows; the map's readings are today's.
+    return { facts: period.from > day ? { "Serves at": `${place.name}${address === undefined ? "" : `, ${address}`} — from ${period.from}` } : {}, values }
+  }
+  const point = pointOf(place)
+  if (point === undefined) return { facts: { "Serves at": `${place.name}, not located yet` }, values }
+  const { latitude, longitude } = point
+  const areas = areasAt(point.at, projectWebId, context)
   const kind = property?.facts["Property type"]
   return {
     facts: {
@@ -170,6 +193,6 @@ export function containerPlace(placement: ContainerServicePlacement | undefined,
       Agreement: `${typed(agreement, "agreementNumber") ?? agreement.name} · ${agreement.status.toLowerCase()}`,
       ...(areas.length === 0 ? {} : { "Planning area": areas[0].name }),
     },
-    values: { latitude, longitude, ...serving(period), ...(areas.length === 0 ? {} : { planningAreaId: areas[0].id }), ...areaIds },
+    values: { latitude, longitude, ...values, ...(areas.length === 0 ? {} : { planningAreaId: areas[0].id }) },
   }
 }

@@ -42,3 +42,30 @@ describe("the switched modules a person's grants let the store read", () => {
     assert.deepEqual(viewableModules([{ moduleKey: "configure.master", actions: [] }], SERVER_MODULES), [])
   })
 })
+
+// A module read through others (`derivedFrom`, #232) is read again by the store when one of them has new rows: each it
+// names is a switched module read before it, and none is itself or another such module, so a read again never asks
+// for another (no chain, no loop).
+describe("a module read through others", () => {
+  const derived = SERVER_MODULES.filter((module) => module.derivedFrom !== undefined)
+
+  test("the containers are one, read through their places' modules", () => {
+    assert.deepEqual(
+      derived.map((module) => [moduleKeyOf(module.workspaceId, module.moduleId), module.derivedFrom]),
+      [["resources.containers", ["customers.agreements", "customers.properties", "customers.shared", "configure.areas", "configure.master"]]],
+    )
+  })
+
+  test("names switched modules read before it, never itself nor another module read through others", () => {
+    const derivedKeys = new Set(derived.map((module) => moduleKeyOf(module.workspaceId, module.moduleId)))
+    for (const module of derived) {
+      const key = moduleKeyOf(module.workspaceId, module.moduleId)
+      for (const source of module.derivedFrom ?? []) {
+        assert.notEqual(source, key, `${key} names itself`)
+        assert.ok(!derivedKeys.has(source), `${key} names ${source}, itself read through others`)
+        assert.ok(SERVER_MODULE_KEYS.includes(source), `${source} is no switched module`)
+        assert.ok(SERVER_MODULE_KEYS.indexOf(source) < SERVER_MODULE_KEYS.indexOf(key), `${source} is read after ${key}`)
+      }
+    }
+  })
+})

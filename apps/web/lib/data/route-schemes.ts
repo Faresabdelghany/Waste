@@ -11,7 +11,6 @@ import { collectionGroupsOfRecord, collectionGroupsToValues, type CollectionGrou
 import { schemeGenerationRecorded } from "@waste/domain/route-schemes/lifecycle"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { isIsoDate, serviceDaysFromValues } from "@waste/domain/route-schemes/recurrence"
-import { servingPeriodOf } from "@waste/domain/route-schemes/matching"
 import { isNoMatchIssue, type SchemeValidationResult } from "@waste/domain/route-schemes/validation"
 
 import { typed } from "@/lib/api/records/adapter"
@@ -120,58 +119,6 @@ export const PREVIEW_UNPLACED = "The containers' places are not read, so this pr
 export function containersPlaced(apiConfigured: boolean, containers: ModuleState | null, through: readonly (ModuleState | null)[]): boolean {
   if (!apiConfigured || containers === null) return true
   return [containers, ...through].every((state) => state === null || state.status === "ready")
-}
-
-/**
- * What the API's containers were last read against (#232): their rows, and
- * the rows of each module their records are read through
- * (`CONTAINER_PLACE_MODULES`), null where one was not ready.
- */
-export type PlaceBasis = { containers: readonly BusinessRecord[]; through: readonly (readonly BusinessRecord[] | null)[] }
-
-const readyRows = (state: ModuleState | null): readonly BusinessRecord[] | null => (state?.status === "ready" ? state.records : null)
-
-/**
- * The basis the containers stand on: taken anew, from the modules as they
- * stand, only once the containers' rows are new — a read of their own — and
- * the previous one otherwise, a read in flight included.
- */
-export function placeBasis(previous: PlaceBasis | null, containers: ModuleState | null, through: readonly (ModuleState | null)[]): PlaceBasis | null {
-  const rows = readyRows(containers)
-  if (rows === null || previous?.containers === rows) return previous
-  return { containers: rows, through: through.map(readyRows) }
-}
-
-/**
- * Whether a module the containers' records are read through has new rows
- * since they were read (#232): a write, a read again, a module that became
- * ready after. The rows' identity says so, never a module state's, so a
- * status flip — a read still in flight, a failed one, the containers' own —
- * is no change.
- */
-export function placesChanged(basis: PlaceBasis | null, through: readonly (ModuleState | null)[]): boolean {
-  if (basis === null) return false
-  return through.some((state, index) => {
-    const rows = readyRows(state)
-    return rows !== null && rows !== basis.through[index]
-  })
-}
-
-/**
- * Whether a day has turned since the API's containers were read: one read on
- * a day before its project's `todayOf`; a fixture's never. One read stamps
- * every container of a project with one day, so one container a project
- * answers for all of it — the check runs on every render of a preview.
- */
-export function readingDayPassed(containers: readonly BusinessRecord[], todayOf: (record: BusinessRecord) => string): boolean {
-  const asked = new Set<string>()
-  return containers.some((record) => {
-    const project = record.projectIds?.[0] ?? ""
-    if (asked.has(project)) return false
-    asked.add(project)
-    const period = servingPeriodOf(record)
-    return period !== undefined && period.asOf !== "" && period.asOf < todayOf(record)
-  })
 }
 
 /**

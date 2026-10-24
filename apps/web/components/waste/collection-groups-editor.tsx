@@ -269,7 +269,7 @@ export function SchemeRuleEditor({
                     </span>
                   </p>
                   <p className="truncate text-xs text-muted-foreground">
-                    {container?.facts?.Address ?? container?.context ?? ""}
+                    {container?.facts?.Address ?? container?.facts?.["Serves at"] ?? container?.context ?? ""}
                     {profile.containerType ? ` · ${profile.containerType}` : ""}
                   </p>
                 </div>

@@ -19,7 +19,7 @@ import type { Project } from "@waste/contracts/organisation"
 import type { PlanningArea, PlanningAreaBoundary } from "@waste/contracts/planning-areas"
 import { FIXTURE_GAZETTEER } from "@waste/domain/fixtures/gazetteer"
 import { containerLocation } from "@waste/domain/map-planning/positions"
-import { PLANNING_AREA_IDS_KEY, resolveStopMatches, servingPeriodOf } from "@waste/domain/route-schemes/matching"
+import { resolveStopMatches, servingReadingOf } from "@waste/domain/route-schemes/matching"
 
 import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, type MappingContext, type ResourceAdapter, type Resource } from "../records/adapter"
@@ -121,7 +121,9 @@ function placed(label: string, index: number, subscription: Subscription, validF
 const areaId = `area-${osterbroArea.id}`
 // The day the records are read on: NOW on Copenhagen's clock.
 const ASOF = "2026-09-30"
-const periodOf = (record: BusinessRecord) => servingPeriodOf(record)
+/** A record's serving, for each placement not ended by today: its period and the areas its place lies in. */
+const readingOf = (record: BusinessRecord) => servingReadingOf(record)
+const serving = (...periods: { from: string; until: string | null; areaIds: string[] }[]) => ({ asOf: ASOF, periods })
 const blockId = `area-${parkvejBlock.id}`
 
 describe("a container placed today", () => {
@@ -129,12 +131,11 @@ describe("a container placed today", () => {
     const record = placed("BIN-91001", 1, atParkvej, "2026-01-01")
     assert.equal(record.facts.Property, "Parkvej 18")
     assert.equal(record.facts.Address, "Parkvej 18, 2100 København Ø")
-    assert.equal(record.submittedValues?.[PLANNING_AREA_IDS_KEY], `${areaId},${blockId}`, "the areas of the container's own project, not another project's that covers the same street")
+    assert.deepEqual(readingOf(record), serving({ from: "2026-01-01", until: null, areaIds: [areaId, blockId] }), "placement, subscription and agreement all from 2026-01-01, open; the areas of its own project, not another project's that covers the same street")
     assert.equal(record.facts["Planning area"], "Østerbro Zone 2", "the first, the one area the map's readers take")
     assert.equal(record.submittedValues?.planningAreaId, areaId)
     assert.equal(record.submittedValues?.latitude, "55.7012")
     assert.equal(record.submittedValues?.longitude, "12.5709")
-    assert.deepEqual(periodOf(record), { from: "2026-01-01", until: null, asOf: ASOF }, "placement, subscription and agreement all from 2026-01-01, open")
     assert.deepEqual(containerLocation(record, FIXTURE_GAZETTEER), { lng: 12.5709, lat: 55.7012 }, "the map places it at the property's point")
   })
 
@@ -163,8 +164,7 @@ describe("a container placed today", () => {
     assert.equal(record.facts.Address, "Kongens Nytorv, 1050 København K")
     assert.equal(record.facts["Planning area"], undefined)
     assert.equal(record.submittedValues?.planningAreaId, undefined)
-    assert.equal(record.submittedValues?.[PLANNING_AREA_IDS_KEY], undefined)
-    assert.deepEqual(periodOf(record), { from: "2026-06-01", until: null, asOf: ASOF })
+    assert.deepEqual(readingOf(record), serving({ from: "2026-06-01", until: null, areaIds: [] }))
     assert.deepEqual(containerLocation(record, FIXTURE_GAZETTEER), { lng: 12.5855, lat: 55.6805 })
   })
 
@@ -174,7 +174,7 @@ describe("a container placed today", () => {
     assert.equal(record.facts.Property, undefined)
     assert.equal(record.facts.Address, undefined)
     assert.equal(record.submittedValues?.latitude, undefined)
-    assert.deepEqual(periodOf(record), { from: "2026-01-01", until: null, asOf: ASOF }, "it serves today, at a place no area can contain yet")
+    assert.deepEqual(readingOf(record), serving({ from: "2026-01-01", until: null, areaIds: [] }), "it serves today, at a place no area can contain yet")
     assert.equal(containerLocation(record, FIXTURE_GAZETTEER), null)
   })
 
@@ -185,16 +185,15 @@ describe("a container placed today", () => {
     const record = containerAdapter.toRecord({ ...container, placements: [today, next] }, context)
     assert.equal(record.facts.Placement, "From 2026-01-01 to 2026-10-31")
     assert.equal(record.facts.Property, "Parkvej 18")
-    assert.deepEqual(periodOf(record), { from: "2026-01-01", until: "2026-11-01", asOf: ASOF })
-    assert.equal(record.submittedValues?.[PLANNING_AREA_IDS_KEY], `${areaId},${blockId}`)
+    assert.deepEqual(readingOf(record), serving({ from: "2026-01-01", until: "2026-11-01", areaIds: [areaId, blockId] }, { from: "2026-11-01", until: null, areaIds: [] }), "each placement's own period and areas: a scheme from November is judged on the next")
   })
 })
 
 describe("a container serving nowhere today", () => {
-  test("whose placement ended has no place and no area, and says the period it served", () => {
+  test("whose placement ended has no place, and serves in no period", () => {
     const record = placed("BIN-91004", 4, atParkvej, "2026-01-01", "2026-09-01")
-    assert.deepEqual([record.facts.Property, record.facts.Address, record.submittedValues?.[PLANNING_AREA_IDS_KEY]], [undefined, undefined, undefined])
-    assert.deepEqual(periodOf(record), { from: "2026-01-01", until: "2026-09-01", asOf: ASOF })
+    assert.deepEqual([record.facts.Property, record.facts.Address, record.facts["Serves at"]], [undefined, undefined, undefined])
+    assert.deepEqual(readingOf(record), serving())
     assert.equal(containerLocation(record, FIXTURE_GAZETTEER), null)
   })
 
@@ -202,8 +201,8 @@ describe("a container serving nowhere today", () => {
     const record = placed("BIN-91005", 5, atParkvej, "2026-10-01")
     assert.deepEqual([record.facts.Property, record.facts["Planning area"], record.submittedValues?.planningAreaId], [undefined, undefined, undefined], "the map's readings are today's")
     assert.equal(containerLocation(record, FIXTURE_GAZETTEER), null)
-    assert.equal(record.submittedValues?.[PLANNING_AREA_IDS_KEY], `${areaId},${blockId}`)
-    assert.deepEqual(periodOf(record), { from: "2026-10-01", until: null, asOf: ASOF })
+    assert.deepEqual(readingOf(record), serving({ from: "2026-10-01", until: null, areaIds: [areaId, blockId] }))
+    assert.equal(record.facts["Serves at"], "Parkvej 18, Parkvej 18, 2100 København Ø — from 2026-10-01", "where and from when, for the preview's matched rows")
     const preview = (from?: string) => resolveStopMatches({ rule: { fractions: ["Residual"] }, areaId, ...(from === undefined ? {} : { from }), containers: [record] })
     assert.deepEqual(preview("2026-10-01").matched.map((profile) => profile.name), ["BIN-91005"], "a scheme from the 1st")
     assert.deepEqual(preview().excluded.map((exclusion) => exclusion.reason), ["Serves from 2026-10-01 — not in service"], "judged today")
@@ -211,19 +210,15 @@ describe("a container serving nowhere today", () => {
 
   test("nor one with no placement at all", () => {
     const record = containerAdapter.toRecord({ ...containerOf("01a0d2a4-a280-7014-8000-000000000009", "BIN-91009"), placements: [] }, context)
-    assert.deepEqual(periodOf(record), { from: null, until: null, asOf: ASOF })
+    assert.deepEqual(readingOf(record), serving())
     assert.equal(containerLocation(record, FIXTURE_GAZETTEER), null)
   })
 
   test("nor one whose open placement outlived its subscription, or whose subscription's agreement has ended: the period three times over, as the worker reads eligibility", () => {
     // The subscription ended the day its agreement began: the three periods share no day. The other agreement ended with 2025.
-    for (const [record, period] of [
-      [placed("BIN-91010", 10, endedSubscription, "2025-06-01"), { from: null, until: null, asOf: ASOF }],
-      [placed("BIN-91011", 11, underEnded, "2025-06-01"), { from: "2025-06-01", until: "2026-01-01", asOf: ASOF }],
-    ] as const) {
+    for (const record of [placed("BIN-91010", 10, endedSubscription, "2025-06-01"), placed("BIN-91011", 11, underEnded, "2025-06-01")]) {
       assert.equal(record.facts.Property, undefined, record.name)
-      assert.equal(record.submittedValues?.[PLANNING_AREA_IDS_KEY], undefined, record.name)
-      assert.deepEqual(periodOf(record), period, record.name)
+      assert.deepEqual(readingOf(record), serving(), record.name)
       assert.equal(containerLocation(record, FIXTURE_GAZETTEER), null, record.name)
     }
   })
@@ -239,6 +234,7 @@ describe("a container serving nowhere today", () => {
     assert.equal(record.facts.Property, undefined)
     assert.equal(record.facts["Shared collection point"], undefined)
     assert.equal(containerLocation(record, FIXTURE_GAZETTEER), null)
-    assert.deepEqual(periodOf(record), { from: "2026-10-05", until: null, asOf: ASOF })
+    assert.deepEqual(readingOf(record), serving({ from: "2026-01-01", until: "2026-10-05", areaIds: [areaId, blockId] }, { from: "2026-10-05", until: null, areaIds: [] }))
+    assert.equal(record.facts["Serves at"], "Kongens Nytorv Shared Point, Kongens Nytorv, 1050 København K — from 2026-10-05")
   })
 })

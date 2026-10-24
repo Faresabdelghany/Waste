@@ -31,13 +31,19 @@ import { organisationModule } from "@/lib/api/records/organisation"
 import {
   actOnRecord,
   commandRecord,
+  dayTurned,
+  derivedFromChanged,
+  derivedSourcesNow,
   IDLE,
   paneAnswerOf,
   problemOfError,
+  projectTimezonesOf,
   readModuleInto,
   recordsOf,
   rereadRecord,
   rereadsOf,
+  sameSources,
+  untilDayTurns,
   withCreated,
   withNotGranted,
   withRecord,
@@ -422,6 +428,64 @@ export function BusinessRecordStoreProvider({
       controller.abort()
     }
   }, [identity, stores, loadMe])
+
+  // A module read through others (`derivedFrom`, #232) is read again once
+  // one of them has new rows since its read began (`derivedFromChanged`), or
+  // a project's day has turned since it was read: a burst collapses into one
+  // read a second after its last change, queued as every read is
+  // (`rereadModule`), and a read that failed is not asked for again until a
+  // source changes once more. The write, read and command paths are as they
+  // were; this only watches what they leave.
+  useEffect(() => {
+    const derived = SERVER_MODULES.filter((module) => module.derivedFrom !== undefined)
+    const due = new Map<string, ReturnType<typeof setTimeout>>()
+    const asked = new Map<string, ReturnType<typeof derivedSourcesNow>>()
+    const readAgain = (module: ServerModule) => {
+      const key = moduleKey(module.workspaceId, module.moduleId)
+      clearTimeout(due.get(key))
+      due.set(
+        key,
+        setTimeout(() => {
+          due.delete(key)
+          const client = stores.client.getSnapshot()
+          if (client === null) return
+          const generation = stores.generation.getSnapshot()
+          void rereadModule(stores, module, () => stores.generation.getSnapshot() !== generation, client)
+        }, 1_000),
+      )
+    }
+    let zones = ""
+    let midnight: ReturnType<typeof setTimeout> | undefined
+    const check = (dayToo: boolean) => {
+      const state = stores.server.getSnapshot()
+      const timezones = projectTimezonesOf(state)
+      for (const module of derived) {
+        const key = moduleKey(module.workspaceId, module.moduleId)
+        const current = state.get(key)
+        if (derivedFromChanged(current, state).length > 0) {
+          const sources = derivedSourcesNow(current, state)
+          if (sameSources(asked.get(key), sources)) continue
+          asked.set(key, sources)
+          readAgain(module)
+        } else if (dayToo && current?.status === "ready" && current.loadedAt !== null && dayTurned(current.loadedAt, Date.now(), timezones)) {
+          readAgain(module)
+        }
+      }
+      // The next turn of the projects' day, armed again whenever their clocks are first known or change.
+      if (dayToo || timezones.join() !== zones) {
+        zones = timezones.join()
+        clearTimeout(midnight)
+        midnight = setTimeout(() => check(true), untilDayTurns(Date.now(), timezones) + 1_000)
+      }
+    }
+    const unsubscribe = stores.server.subscribe(() => check(false))
+    check(true)
+    return () => {
+      unsubscribe()
+      clearTimeout(midnight)
+      for (const timer of due.values()) clearTimeout(timer)
+    }
+  }, [stores])
 
   return (
     <BusinessRecordStoreContext.Provider value={stores}>
