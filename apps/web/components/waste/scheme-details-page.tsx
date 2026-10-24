@@ -221,8 +221,6 @@ export function SchemeDetailsPage({
   const onApi = useApiConfigured()
   // On the Pilot the scheme's routes are the API's (#179): the Routes tab lists them once the routes module has read them, and nothing before, under the dates the API plans.
   const routesRead = useServerModuleState("route-studio", "routes")?.status === "ready" || !onApi
-  // On the Pilot, Generate asks the API for a run and the Routes tab lists and watches the scheme's runs (#178).
-  const generation = useSchemeGenerationRuns(record)
   const [generateOpen, setGenerateOpen] = useState(false)
   const schemes = useModuleRecords("route-studio", "schemes")
   const allRoutes = useModuleRecords("route-studio", "routes")
@@ -232,6 +230,9 @@ export function SchemeDetailsPage({
     COLLECTION_CALENDARS_MODULE.moduleId,
   )
   const projects = useModuleRecords("configure", "organization")
+  // On the Pilot, Generate asks the API for a run and the Routes tab lists and watches the scheme's runs (#178), on the project's clock (#255).
+  const schemeProject = projects.find((project) => project.id === stringValueOf(record, "projectId"))
+  const generation = useSchemeGenerationRuns(record, schemeProject === undefined ? undefined : stringValueOf(schemeProject, "timezone"))
   const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId)
   const allocations = useModuleRecords("fleet", "vehicle-planning")
   const containers = useModuleRecords("resources", "containers")

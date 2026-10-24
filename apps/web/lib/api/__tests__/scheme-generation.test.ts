@@ -20,7 +20,9 @@ import type { RouteScheme } from "@waste/contracts/route-schemes"
 
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED } from "../records/adapter"
-import { generationRunOf, runCounts, runReading, schemeGenerationRuns, watchGenerationRun, withRun, type RunTimer } from "../records/generation"
+import { generationRunOf, modulesAfterRun, runCounts, runReading, schemeGenerationRuns, watchGenerationRun, withRun, type RunTimer } from "../records/generation"
+import { PICKUPS_MODULE } from "../records/pickups"
+import { ROUTES_MODULE } from "../records/routes"
 import { GENERATE_ROUTES, routeSchemeAdapter, routeSchemesModule, type GenerationAnswer } from "../records/route-schemes"
 import { actOnRecord, loaded, rereadRecord, type ModuleState } from "../records/server-records"
 import { organisationModule, projectAdapter } from "../records/organisation"
@@ -369,6 +371,12 @@ describe("watching a run", () => {
 })
 
 describe("the scheme after its run", () => {
+  test("a run that succeeded has the routes and their stops read again, the modules it wrote, so the scheme's page counts what it made (#247); a failed run wrote nothing", () => {
+    assert.deepEqual(modulesAfterRun({ status: "succeeded" }), [ROUTES_MODULE, PICKUPS_MODULE], "the routes first: a stop is filed under its route's scheme as the routes stand when it is read")
+    assert.deepEqual(modulesAfterRun({ status: "failed" }), [], "a failed run's transaction rolled back")
+    assert.deepEqual(modulesAfterRun({ status: "running" }), [], "nothing until it has finished")
+  })
+
   test("is read back through its own route and replaces the row under the row's web id, its generation reading the server's", async () => {
     const lastGeneratedAt = "2026-09-30T12:00:22.000Z"
     const { fetch, calls } = scripted([() => json({ ...central, generation: { lastGeneratedAt, groups: [] } })])
