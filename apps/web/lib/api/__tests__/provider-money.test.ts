@@ -97,6 +97,7 @@ describe("the service provider prices module", () => {
     assert.equal(record.name, "Residual waste · 240L bin · NordRen ApS")
     assert.equal(record.context, "CA-Ø-2 · NordRen ApS")
     assert.equal(record.value, "DKK 11.76/pickup")
+    assert.equal(record.serviceProviderId, "service-provider-y", "its assignment's provider: the provider page lists its prices by it")
     assert.equal(record.status, "Active")
     assert.equal(record.facts.Bid, "DKK 11.20")
     assert.equal(record.facts.Index, "CPI +5% on the bid")

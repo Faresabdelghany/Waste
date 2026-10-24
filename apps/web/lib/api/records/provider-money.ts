@@ -123,7 +123,9 @@ export const providerPriceAdapter: ResourceAdapter<ServiceProviderPrice> = {
   read: (client, serverId) => get<ServiceProviderPrice>(client, `/service-provider-prices/${serverId}`),
   toRecord: (price, context) => {
     const assignment = assignmentNames(price.serviceAreaAssignmentId, context)
-    const assignmentWebId = context.resolve.byServerId(price.serviceAreaAssignmentId)?.id ?? webIdOf(ASSIGNMENT_PREFIX, price.serviceAreaAssignmentId)
+    const assignmentRecord = context.resolve.byServerId(price.serviceAreaAssignmentId)
+    const assignmentWebId = assignmentRecord?.id ?? webIdOf(ASSIGNMENT_PREFIX, price.serviceAreaAssignmentId)
+    const providerWebId = assignmentRecord === undefined ? undefined : typed(assignmentRecord, "serviceProviderId")
     const product = referenced(context, PRODUCT_PREFIX, price.productId)
     const productRecord = context.resolve.byServerId(price.productId)
     const unit = PRODUCT_UNITS.find((candidate) => candidate === (productRecord === undefined ? undefined : typed(productRecord, "priceUnit")))
@@ -157,6 +159,8 @@ export const providerPriceAdapter: ResourceAdapter<ServiceProviderPrice> = {
       allowedTransitions: [],
       companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
+      // Its assignment's provider: the provider page lists its prices by it.
+      ...(providerWebId === undefined ? {} : { serviceProviderId: providerWebId }),
       recordKind: PROVIDER_PRICE_RECORD_KIND,
       submittedValues: {
         serviceAreaAssignmentId: assignmentWebId,

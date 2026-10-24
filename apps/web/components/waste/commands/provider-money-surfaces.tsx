@@ -42,6 +42,7 @@ import { ReadRows } from "@/components/waste/commands/read-rows"
 import { useCommandRunner, useModuleReady, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
 import type { ApiClient } from "@/lib/api/client"
 import { statusLabel } from "@/lib/api/records/adapter"
+import { shownOn } from "@/lib/api/records/clock"
 import { settlementCommandsOffered, settlementDetail, settlementHistory } from "@/lib/api/records/provider-money"
 import { weightReviewsOffered } from "@/lib/api/records/weights"
 import { formatMinor } from "@/lib/commercial/money"
@@ -291,6 +292,7 @@ const readSettlement = (client: ApiClient, serverId: string) =>
 /** A settlement's details: the commands its status moves by, its lines by event, and its history. */
 export function SettlementSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(SETTLEMENTS_MODULE)
+  const { timezoneOf } = useCommercialPickers()
   const { busy, version, run } = useCommandRunner(SETTLEMENTS_MODULE, record.id)
   const read = useRowHistory(SETTLEMENTS_MODULE.workspaceId, SETTLEMENTS_MODULE.moduleId, record, version, readSettlement)
   const events = useServerModuleState(EVENTS_MODULE.workspaceId, EVENTS_MODULE.moduleId)
@@ -336,7 +338,7 @@ export function SettlementSurface({ record }: RowSurfaceProps) {
         ) : settlement === undefined ? (
           <p className="text-sm text-muted-foreground">Reading the settlement…</p>
         ) : settlement.detail.lines.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{status === "open" ? "Not calculated yet: Calculate prices the provider's events in the period." : "No event of the provider's in the period."}</p>
+          <p className="text-sm text-muted-foreground">{settlement.history.length === 0 ? "Not calculated yet: Calculate prices the provider's events in the period." : "No event of the provider's in the period."}</p>
         ) : (
           <div className="overflow-auto rounded-lg border border-border/60">
             <Table data-testid="settlement-lines">
@@ -374,7 +376,7 @@ export function SettlementSurface({ record }: RowSurfaceProps) {
           label="Reading the history…"
           empty="Nothing yet: it was opened."
           testId="settlement-history"
-          line={(event) => `${statusLabel(event.kind)} · ${event.recordedAt.slice(0, 10)} · ${event.lineCount} line${event.lineCount === 1 ? "" : "s"}, ${money(event.netMinor)} · ${userName(event.recordedBy)}${event.reason === null ? "" : ` — ${event.reason}`}`}
+          line={(event) => `${statusLabel(event.kind)} · ${shownOn(event.recordedAt, timezoneOf(record.projectIds?.[0]))} · ${event.lineCount} line${event.lineCount === 1 ? "" : "s"}, ${money(event.netMinor)} · ${userName(event.recordedBy)}${event.reason === null ? "" : ` — ${event.reason}`}`}
         />
       </div>
       {reopening && <BusinessRecordFormDialog schema={REOPEN_FORM} open onOpenChange={(isOpen) => !isOpen && setReopening(false)} onSubmit={(values) => send("reopen", values)} relationOptions={(field) => field.options ?? []} />}
