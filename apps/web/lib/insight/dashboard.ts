@@ -132,13 +132,30 @@ export function viewedModules(grants: readonly { moduleKey: string; actions: rea
   return new Set((grants ?? []).filter((grant) => grant.actions.includes("view")).map((grant) => grant.moduleKey))
 }
 
-/** The Dashboard's two tabs, Improve's two modules, each read under its own grant. */
+/** The weights' grant: the tonnage and the waste-data reports count the unloads under it. */
+export const WEIGHTS_MODULE = "route-studio.weights"
+
+/** The waste-data filing's Improve module (#291 slice 29). */
+export const COMPLIANCE_MODULE = "improve.compliance"
+
+/**
+ * The Dashboard's tabs, Improve's modules, each shown under its own grant;
+ * Compliance, the waste-data filing over a period of its own, only beside
+ * the weights' grant too, since every number it shows is read under both
+ * (`needs`), where the other tabs show what their role reads card by card.
+ */
 export const DASHBOARD_TABS = [
-  { id: "performance", label: "Performance", moduleKey: "improve.performance" },
-  { id: "analytics", label: "Analytics", moduleKey: "improve.analytics" },
-] as const
+  { id: "performance", label: "Performance", moduleKey: "improve.performance", needs: [] },
+  { id: "analytics", label: "Analytics", moduleKey: "improve.analytics", needs: [] },
+  { id: "compliance", label: "Compliance", moduleKey: COMPLIANCE_MODULE, needs: [WEIGHTS_MODULE] },
+] as const satisfies readonly { id: string; label: string; moduleKey: string; needs: readonly string[] }[]
 
 export type DashboardTabId = (typeof DASHBOARD_TABS)[number]["id"]
+
+/** The tabs a role is shown: its module viewed, and every module the tab needs beside it. */
+export function tabsShown(viewed: ReadonlySet<string>): (typeof DASHBOARD_TABS)[number][] {
+  return DASHBOARD_TABS.filter((tab) => viewed.has(tab.moduleKey) && tab.needs.every((moduleKey: string) => viewed.has(moduleKey)))
+}
 
 /** The revenue report's grant: the invoices', not Improve's. */
 export const REVENUE_MODULE = "commercial.invoices"

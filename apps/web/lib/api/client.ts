@@ -91,7 +91,7 @@ export async function problemOfResponse(response: Response): Promise<Problem> {
   return problemOf(body) ?? genericProblem(response.status, typeof body === "string" && body !== "" ? body : undefined)
 }
 
-async function request(client: ApiClient, method: string, path: string, body?: unknown): Promise<Response> {
+async function request(client: ApiClient, method: string, path: string, body?: unknown, accept = "application/json"): Promise<Response> {
   const doFetch = client.fetch ?? fetch
   let response: Response
   try {
@@ -99,7 +99,7 @@ async function request(client: ApiClient, method: string, path: string, body?: u
       method,
       headers: {
         authorization: `Bearer ${client.token}`,
-        accept: "application/json",
+        accept,
         ...(body === undefined ? {} : { "content-type": "application/json" }),
         // A header carries bytes and a reason may be in any script, so it travels percent-encoded.
         ...(client.reason === undefined ? {} : { [CHANGE_REASON_HEADER]: encodeURIComponent(client.reason) }),
@@ -124,6 +124,41 @@ async function request(client: ApiClient, method: string, path: string, body?: u
 export async function get<Body>(client: ApiClient, path: string): Promise<Body> {
   const response = await request(client, "GET", path)
   return (await readBody(response)) as Body
+}
+
+/** A file the API answers: its bytes as sent, and the type and the name its headers give it. */
+export type ApiFile = { bytes: ArrayBuffer; contentType: string | null; fileName: string | null }
+
+/**
+ * The name a `Content-Disposition` header gives a file
+ * (`attachment; filename="waste-data-2025-01-01-2025-12-31.csv"`): the
+ * extended `filename*=UTF-8''…` form first where both are given (RFC 6266),
+ * then the plain one, quoted or bare; null without one.
+ */
+export function fileNameOf(disposition: string | null): string | null {
+  if (disposition === null) return null
+  const extended = /filename\*=(?:UTF-8|utf-8)''([^;]+)/.exec(disposition)?.[1]
+  if (extended !== undefined) {
+    try {
+      const name = decodeURIComponent(extended.trim())
+      if (name !== "") return name
+    } catch {
+      // A malformed escape: the plain name, if any, stands.
+    }
+  }
+  const plain = (/filename="([^"]*)"/i.exec(disposition) ?? /filename=([^;*][^;]*)/i.exec(disposition))?.[1]?.trim()
+  return plain === undefined || plain === "" ? null : plain
+}
+
+/**
+ * `GET path` for a file (`/reports/waste-data.csv`), asking for `accept`: the
+ * body's bytes as they came, since `Response.text()` would drop a text
+ * file's byte-order mark, which is how a spreadsheet knows the bytes are
+ * UTF-8. A refusal is a problem as for any read.
+ */
+export async function getFile(client: ApiClient, path: string, accept: string): Promise<ApiFile> {
+  const response = await request(client, "GET", path, undefined, accept)
+  return { bytes: await response.arrayBuffer(), contentType: response.headers.get("content-type"), fileName: fileNameOf(response.headers.get("content-disposition")) }
 }
 
 /** One page of a list. */

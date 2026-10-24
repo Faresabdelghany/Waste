@@ -33,6 +33,7 @@ import {
   tonnageCsvOf,
   tonnageLines,
   weightOf,
+  WEIGHTS_MODULE,
   type TonnageGrouping,
 } from "@/lib/insight/dashboard"
 
@@ -43,7 +44,7 @@ import { TonnageChart } from "./tonnage-chart"
 import { useReport } from "./use-report"
 
 export function AnalyticsTab({ current, previous, against, viewed, projectName, fileStem }: TabProps) {
-  const weightsShown = viewed.has("route-studio.weights")
+  const weightsShown = viewed.has(WEIGHTS_MODULE)
   const revenueShown = viewed.has(REVENUE_MODULE)
   const tonnage = useReport(weightsShown ? reportKey("tonnage", current) : null, (client) => tonnageReport(client, current))
   const tonnagePrevious = useReport(weightsShown ? reportKey("tonnage", previous) : null, (client) => tonnageReport(client, previous))

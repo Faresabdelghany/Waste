@@ -62,8 +62,9 @@ export function StatTile({
   label: string
   value: string
   helper: string
-  change: Change | null
-  against: string
+  /** The change against the period before, with `against`; a tile of no comparison leaves both out. */
+  change?: Change | null
+  against?: string
   comparison?: Comparison
   loading?: boolean
   testId?: string
@@ -75,7 +76,7 @@ export function StatTile({
         {value}
       </p>
       <p className="mt-0.5 truncate text-xs text-muted-foreground">{helper}</p>
-      <ChangeChip change={change} against={against} comparison={comparison} />
+      {against !== undefined && <ChangeChip change={change ?? null} against={against} comparison={comparison} />}
     </div>
   )
 }

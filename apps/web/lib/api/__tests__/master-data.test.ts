@@ -9,12 +9,24 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { ContainerTypeCreate, ContainerTypePatch, ONE_CADENCE, ServiceFrequencyCreate, ServiceFrequencyPatch, WasteFractionCreate, WasteFractionPatch, type ContainerType, type ServiceFrequency, type WasteFraction } from "@waste/contracts/catalogue"
+import {
+  ContainerTypeCreate,
+  ContainerTypePatch,
+  ONE_CADENCE,
+  ServiceFrequencyCreate,
+  ServiceFrequencyPatch,
+  WasteCode,
+  WasteFractionCreate,
+  WasteFractionPatch,
+  type ContainerType,
+  type ServiceFrequency,
+  type WasteFraction,
+} from "@waste/contracts/catalogue"
 import type { Project } from "@waste/contracts/organisation"
 import { VehicleTypeContainerTypesSet, VehicleTypeCreate, VehicleTypePatch, type VehicleType } from "@waste/contracts/vehicle-types"
 
 import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
-import { createMasterDataRecord, MASTER_DATA_MODULE, masterDataKindOf } from "../../data/master-data"
+import { createMasterDataRecord, MASTER_DATA_MODULE, masterDataKindOf, WASTE_CODE_REFUSAL } from "../../data/master-data"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { containerTypeAdapter, masterDataModule, ONE_CADENCE as LOCAL_ONE_CADENCE, serviceFrequencyAdapter, vehicleTypeAdapter, wasteFractionAdapter } from "../records/master-data"
@@ -127,6 +139,25 @@ describe("a waste fraction", () => {
     assert.deepEqual(wasteFractionAdapter.toCreateBody?.(made({ name: "", key: "x" }), context()), { path: "name", message: "A waste fraction needs a name" })
     assert.deepEqual(wasteFractionAdapter.toCreateBody?.(made({ name: "Plast", key: "Hard Plastic" }), context()), { path: "key", message: "A key is a lowercase slug of letters, digits and single hyphens, such as hard-plastic" })
     assert.deepEqual(wasteFractionAdapter.toCreateBody?.(made({ name: "Plast", key: "" }), context()), { path: "key", message: "A key is a lowercase slug of letters, digits and single hyphens, such as hard-plastic" })
+    assert.deepEqual(wasteFractionAdapter.toCreateBody?.(made({ name: "Plast", key: "plast", wasteCode: "15 01" }), context()), { path: "wasteCode", message: WASTE_CODE_REFUSAL })
+  })
+
+  test("carries its waste code (#291 slice 29): read into the record, sent compact on a create, and patched — a cleared one as null", () => {
+    const coded = wasteFractionAdapter.toRecord({ ...residual, wasteCode: "200301" }, context())
+    assert.equal(coded.facts["Waste code"], "200301")
+    assert.deepEqual(coded.submittedValues, { kind: "waste-fraction", name: "Residual", key: "residual", wasteCode: "200301" })
+    assert.equal(record.facts["Waste code"], undefined, "a fraction nobody has coded shows none")
+    const made = createMasterDataRecord("waste-fraction", { name: "Glass packaging", key: "glass-packaging", wasteCode: "15 01 07" }, { now: 1, actorName: "Olivia Larsen", lookups: { projectName: () => undefined, containerTypeName: () => undefined } })
+    const body = wasteFractionAdapter.toCreateBody?.(made, context())
+    assert.deepEqual(body, { key: "glass-packaging", name: "Glass packaging", wasteCode: "150107" })
+    assert.ok(WasteFractionCreate.safeParse(body).success)
+    const typed = (wasteCode: string): BusinessRecord => ({ ...record, submittedValues: { ...record.submittedValues, wasteCode } })
+    assert.deepEqual(wasteFractionAdapter.toPatchBody(record, typed("20 03 01"), context()), { wasteCode: "200301" })
+    assert.deepEqual(wasteFractionAdapter.toPatchBody(coded, typed(""), context()), { wasteCode: null })
+    assert.ok(WasteFractionPatch.safeParse({ wasteCode: null }).success)
+    assert.equal(wasteFractionAdapter.toPatchBody(coded, { ...coded, submittedValues: { ...coded.submittedValues, wasteCode: "20 03 01" } }, context()), null, "the same code spelled as printed is no change")
+    assert.deepEqual(wasteFractionAdapter.toPatchBody(record, typed("2003"), context()), { path: "wasteCode", message: WASTE_CODE_REFUSAL })
+    assert.equal(WasteCode.safeParse("2003").error?.issues[0]?.message, WASTE_CODE_REFUSAL, "the pane refuses in the contract's words")
   })
 
   test("a rename is the patch; the key and the kind are set once", () => {

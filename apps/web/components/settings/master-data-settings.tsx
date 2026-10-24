@@ -168,7 +168,7 @@ export function MasterDataSettings() {
   const needle = query.trim().toLowerCase()
   const filtered = sortByView(
     shown
-      .filter(({ record, detail, scope }) => [record.name, record.context, detail, scope].join(" ").toLowerCase().includes(needle))
+      .filter(({ record, detail, scope }) => [record.name, record.context, detail, scope, record.facts["Waste code"] ?? ""].join(" ").toLowerCase().includes(needle))
       .filter(({ record }) => statuses.length === 0 || statuses.includes(record.status)),
     view,
     ({ record }) => record.name,
@@ -275,6 +275,7 @@ export function MasterDataSettings() {
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead>Name</TableHead>
                 <TableHead>{kind === "waste-fraction" ? "Key" : kind === "container-type" ? "Volume" : kind === "service-frequency" ? "Cadence" : "Container types"}</TableHead>
+                {kind === "waste-fraction" && <TableHead>Waste code</TableHead>}
                 <TableHead>Scope</TableHead>
                 <TableHead>Updated</TableHead>
                 <TableHead className="w-16" />
@@ -282,7 +283,7 @@ export function MasterDataSettings() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <EmptyRow colSpan={5} message={emptyMessage} hint={emptyHint} />
+                <EmptyRow colSpan={kind === "waste-fraction" ? 6 : 5} message={emptyMessage} hint={emptyHint} />
               ) : (
                 pageRows.map(({ record, detail, scope }) => (
                   <TableRow key={record.id}>
@@ -293,6 +294,7 @@ export function MasterDataSettings() {
                       )}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{detail}</TableCell>
+                    {kind === "waste-fraction" && <TableCell className="whitespace-nowrap font-mono text-sm text-muted-foreground">{record.facts["Waste code"] ?? "—"}</TableCell>}
                     <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{scope}</TableCell>
                     <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{record.updated}</TableCell>
                     <TableCell className="whitespace-nowrap text-right">

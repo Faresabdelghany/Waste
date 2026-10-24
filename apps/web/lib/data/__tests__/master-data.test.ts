@@ -20,6 +20,7 @@ import {
   masterDataKindOf,
   masterDataSchema,
   updateMasterDataRecord,
+  WASTE_CODE_REFUSAL,
 } from "../master-data"
 
 const lookups = { projectName: (id: string) => (id === "project-copenhagen" ? "Copenhagen Central" : undefined), containerTypeName: (id: string) => (id === "container-type-1" ? "Two-wheel bin · 240 L" : undefined) }
@@ -74,7 +75,7 @@ describe("the four forms", () => {
       assert.ok(!ids.includes("kind"), "the kind is the tab, not a field")
     }
     const fields = (kind: (typeof MASTER_DATA_KINDS)[number]) => masterDataSchema(kind).sections.flatMap((section) => section.fields.map((field) => field.id))
-    assert.deepEqual(fields("waste-fraction"), ["name", "key"])
+    assert.deepEqual(fields("waste-fraction"), ["name", "key", "wasteCode"])
     assert.deepEqual(fields("container-type"), ["name", "volumeLitres"])
     assert.deepEqual(fields("service-frequency"), ["name", "projectId", "description", "collectionsPerWeek", "weeksBetween", "daysBetween"])
     assert.deepEqual(fields("vehicle-type"), ["name", "key", "description", "containerTypeIds"])
@@ -130,6 +131,28 @@ describe("the records the pane writes", () => {
     assert.deepEqual(edited.submittedValues, { kind: "container-type", name: "Open skip" })
     assert.deepEqual(masterDataFormValues(edited), { name: "Open skip" })
     assert.deepEqual(masterDataFormValues(record), { name: "Skip", volumeLitres: "8000" })
+  })
+})
+
+describe("a waste fraction's waste code (#291 slice 29)", () => {
+  test("is typed as the list prints it, kept compact, shown as a fact, and dropped when the field is cleared", () => {
+    const record = createMasterDataRecord("waste-fraction", { name: "Residual", key: "residual", wasteCode: "20 03 01" }, write)
+    assert.equal(record.facts["Waste code"], "200301")
+    assert.equal(record.submittedValues?.wasteCode, "20 03 01", "the form's own text, as every field keeps it")
+    assert.equal(createMasterDataRecord("waste-fraction", { name: "Mixed", key: "mixed" }, write).facts["Waste code"], undefined)
+    const cleared = updateMasterDataRecord(record, { wasteCode: "" }, lookups)
+    assert.equal(cleared.facts["Waste code"], undefined)
+    assert.deepEqual(cleared.submittedValues, { kind: "waste-fraction", name: "Residual", key: "residual" })
+    const recoded = updateMasterDataRecord(record, { wasteCode: "20 01 21*" }, lookups)
+    assert.equal(recoded.facts["Waste code"], "200121*")
+  })
+
+  test("is held inline to the domain's shape, and a blank one is none", () => {
+    assert.deepEqual(masterDataFieldErrors("waste-fraction", { name: "Residual", key: "residual", wasteCode: "2003" }), { wasteCode: WASTE_CODE_REFUSAL })
+    assert.deepEqual(masterDataFieldErrors("waste-fraction", { name: "Residual", key: "residual", wasteCode: "21 01 01" }), { wasteCode: WASTE_CODE_REFUSAL }, "chapter 21 is not in the list")
+    assert.deepEqual(masterDataFieldErrors("waste-fraction", { name: "Residual", key: "residual", wasteCode: " 20 03 01 " }), {})
+    assert.deepEqual(masterDataFieldErrors("waste-fraction", { name: "Residual", key: "residual", wasteCode: "" }), {})
+    assert.equal(WASTE_CODE_REFUSAL, "A waste code is six digits of the European List of Waste, such as 200301, chapter 01 to 20, with an asterisk after a hazardous entry's")
   })
 })
 

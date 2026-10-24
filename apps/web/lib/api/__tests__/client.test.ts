@@ -9,7 +9,7 @@ import { describe, test } from "node:test"
 import { CHANGE_REASON_HEADER as CONTRACTS_CHANGE_REASON_HEADER } from "@waste/contracts/audit"
 import { PAGE_LIMIT_MAX as CONTRACTS_PAGE_LIMIT_MAX } from "@waste/contracts/pagination"
 
-import { CHANGE_REASON_HEADER, command, create, get, listAll, listPage, patch, PAGE_LIMIT_MAX, put, UNREACHABLE_STATUS, withQuery, type ApiClient } from "../client"
+import { CHANGE_REASON_HEADER, command, create, fileNameOf, get, getFile, listAll, listPage, patch, PAGE_LIMIT_MAX, put, UNREACHABLE_STATUS, withQuery, type ApiClient } from "../client"
 import { ApiProblem, genericProblem, isApiProblem, PROBLEM_MEDIA_TYPE, problemOf, problemSentence } from "../problem"
 
 type Call = { url: string; init: RequestInit }
@@ -209,5 +209,26 @@ describe("the problem reader", () => {
     assert.equal(genericProblem(403).title, "Forbidden")
     assert.equal(problemSentence({ type: "about:blank", title: "Bad Request", status: 400, errors: [{ path: "", message: "Give at least one field to change" }] }), "Bad Request — body: Give at least one field to change")
     assert.equal(new ApiProblem(genericProblem(404, "No project x")).message, "No project x")
+  })
+})
+
+describe("a file the API answers (#291 slice 29)", () => {
+  test("is named by its Content-Disposition, quoted or bare, and nothing without one", () => {
+    assert.equal(fileNameOf('attachment; filename="waste-data-2025-01-01-2025-12-31.csv"'), "waste-data-2025-01-01-2025-12-31.csv")
+    assert.equal(fileNameOf("attachment; filename=report.csv"), "report.csv")
+    assert.equal(fileNameOf("attachment"), null)
+    assert.equal(fileNameOf(null), null)
+    assert.equal(fileNameOf('attachment; filename=""'), null)
+    assert.equal(fileNameOf("attachment; filename*=UTF-8''waste-data-%C3%B8.csv"), "waste-data-ø.csv", "the extended form, RFC 6266")
+    assert.equal(fileNameOf("attachment; filename=\"plain.csv\"; filename*=UTF-8''extended.csv"), "extended.csv", "the extended form wins where both are given")
+    assert.equal(fileNameOf("attachment; filename=\"plain.csv\"; filename*=UTF-8''%E0%A4%A"), "plain.csv", "a malformed escape leaves the plain name")
+  })
+
+  test("is asked for in the type wanted, and a refusal is the problem as for any read", async () => {
+    const { fetch, calls } = scripted([() => problem(403, "Your role does not allow this")])
+    await assert.rejects(getFile(clientOver(fetch), "/reports/waste-data.csv", "text/csv"), (error: unknown) => isApiProblem(error) && error.problem.status === 403)
+    const headers = calls[0].init.headers as Record<string, string>
+    assert.equal(headers.accept, "text/csv")
+    assert.equal(headers.authorization, "Bearer t0k3n")
   })
 })
