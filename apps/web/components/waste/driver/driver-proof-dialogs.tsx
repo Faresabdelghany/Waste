@@ -17,24 +17,28 @@ import { dataUrlOf, photoOf, signatureOf } from "@/lib/driver/proof-images"
 
 type DialogProps = { open: boolean; onOpenChange: (open: boolean) => void }
 
-/** A photo to send with the form, or none: taken, then shown with Remove until the form is sent. */
-export function PhotoField({ photo, onPhoto, optional = true }: { photo: ProofBytes | null; onPhoto: (photo: ProofBytes | null) => void; optional?: boolean }) {
+/** A photo to send with the form, or none: taken, then shown with Remove until the form is sent; `onPreparing` says while it is being drawn, which the form waits for. */
+export function PhotoField({ photo, onPhoto, onPreparing, optional = true }: { photo: ProofBytes | null; onPhoto: (photo: ProofBytes | null) => void; onPreparing: (preparing: boolean) => void; optional?: boolean }) {
   const id = useId()
   const [reading, setReading] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const preview = useMemo(() => (photo === null ? null : dataUrlOf(photo)), [photo])
+  const preparing = (now: boolean) => {
+    setReading(now)
+    onPreparing(now)
+  }
   const choose = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ""
     if (file === undefined) return
-    setReading(true)
+    preparing(true)
     setProblem(null)
     try {
       onPhoto(await photoOf(file))
     } catch (error) {
       setProblem(error instanceof Error ? error.message : "This photo could not be read; take another")
     } finally {
-      setReading(false)
+      preparing(false)
     }
   }
   return (
@@ -64,34 +68,45 @@ export function PhotoField({ photo, onPhoto, optional = true }: { photo: ProofBy
 
 /** A photo of a stop on its own, where the deployment offers one at every stop. */
 export function PhotoDialog({ open, onOpenChange, title, description, onConfirm }: DialogProps & { title: string; description: string; onConfirm: (photo: ProofBytes) => void }) {
-  const [photo, setPhoto] = useState<ProofBytes | null>(null)
-  const submit = (event: FormEvent) => {
-    event.preventDefault()
-    if (photo === null) return
-    onConfirm(photo)
-    onOpenChange(false)
-    setPhoto(null)
-  }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <form onSubmit={submit} className="flex flex-col gap-4">
-          <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
-            <DialogDescription>{description}</DialogDescription>
-          </DialogHeader>
-          <PhotoField photo={photo} onPhoto={setPhoto} optional={false} />
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" className="h-11" disabled={photo === null}>
-              Send photo
-            </Button>
-          </DialogFooter>
-        </form>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        {/* Mounted with each opening, so a cancelled photo is never the next one's. */}
+        <PhotoForm
+          onCancel={() => onOpenChange(false)}
+          onPhoto={(photo) => {
+            onConfirm(photo)
+            onOpenChange(false)
+          }}
+        />
       </DialogContent>
     </Dialog>
+  )
+}
+
+function PhotoForm({ onCancel, onPhoto }: { onCancel: () => void; onPhoto: (photo: ProofBytes) => void }) {
+  const [photo, setPhoto] = useState<ProofBytes | null>(null)
+  const [preparing, setPreparing] = useState(false)
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    if (photo !== null && !preparing) onPhoto(photo)
+  }
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-4">
+      <PhotoField photo={photo} onPhoto={setPhoto} onPreparing={setPreparing} optional={false} />
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" className="h-11" disabled={photo === null || preparing}>
+          Send photo
+        </Button>
+      </DialogFooter>
+    </form>
   )
 }
 

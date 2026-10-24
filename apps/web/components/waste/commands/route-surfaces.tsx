@@ -282,13 +282,28 @@ function ProofObject({ proof, links }: { proof: ProofOfService; links: { rows: P
   )
 }
 
+/** No read of a stop's objects, for a stop whose proofs name none. */
+const NO_PROOF_OBJECTS = async (): Promise<ProofObjectLink[]> => []
+
+/** How long before its read URLs lapse a stop's objects are read again, so a details left open never offers a dead link. */
+const RENEW_BEFORE_MS = 30_000
+
 /** A stop's commands and its proofs, in its details. */
 export function PickupCommandsSurface({ record }: RowSurfaceProps) {
   const pickers = useRelationPickers()
   const moduleReady = useModuleReady(PICKUPS_MODULE)
   const { busy, version, run: send } = useCommandRunner(PICKUPS_MODULE, record.id)
   const proofs = useRowHistory(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId, record, version, pickupProofs)
-  const objects = useRowHistory(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId, record, version, pickupProofObjects)
+  // The objects' read URLs are asked for only where a proof names an object, and asked again before they lapse.
+  const withObjects = proofs.rows?.some((proof) => proof.objectKey !== null) ?? false
+  const [renewals, setRenewals] = useState(0)
+  const objects = useRowHistory(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId, record, `${version}:${withObjects}:${renewals}`, withObjects ? pickupProofObjects : NO_PROOF_OBJECTS)
+  const lapsesAt = objects.rows?.reduce<number | null>((soonest, link) => Math.min(soonest ?? Infinity, Date.parse(link.expiresAt)), null) ?? null
+  useEffect(() => {
+    if (lapsesAt === null) return
+    const renew = setTimeout(() => setRenewals((count) => count + 1), Math.max(0, lapsesAt - RENEW_BEFORE_MS - Date.now()))
+    return () => clearTimeout(renew)
+  }, [lapsesAt])
   const openRoute = useOpenRecord(ROUTES_MODULE.moduleId)
   const [open, setOpen] = useState<PickupCommandWithForm | null>(null)
   const projectId = record.projectIds?.[0]

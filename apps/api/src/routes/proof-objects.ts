@@ -7,7 +7,9 @@
 //   POST /driver/uploads           the driver door: the upload URL of one of
 //                                  the device's own commands' objects, on a
 //                                  route assigned to the driver (the door's
-//                                  fence, `findAssignedRoute`); `uploaded`
+//                                  fence, `findAssignedRoute`) and active, as
+//                                  the door applies the command only on one;
+//                                  `uploaded`
 //                                  where the bucket holds the key already, a
 //                                  retry after an upload whose answer was
 //                                  lost. The device puts the bytes, then
@@ -22,14 +24,17 @@
 // service (#124 §4): their guard is `identify`, and each handler reads the
 // fence in one short transaction of its own before it asks Storage. A
 // deployment without the key has no Storage: both answer 503 in one sentence,
-// typed `NO_PROOF_STORAGE` so a device tells it from an outage.
+// typed `NO_PROOF_STORAGE` so a device tells it from an outage, and so does
+// one whose Storage refuses the call (no bucket, a key it does not take);
+// Storage's silence is a 502 the device asks again past.
 import { NO_PROOF_STORAGE } from "@waste/contracts/problem"
 import { ProofObjectLinks, ProofUpload, ProofUploadRequest } from "@waste/contracts/proof-objects"
 import type { Database } from "@waste/db/client"
 import { pickup, proofOfService } from "@waste/db/schema/execution"
-import { StorageSilent, type ProofStorage } from "@waste/db/storage"
+import { StorageRefused, StorageSilent, type ProofStorage } from "@waste/db/storage"
 import { withCompany } from "@waste/db/tenant"
 import { objectKeyOf } from "@waste/domain/execution/commands"
+import { notActive } from "@waste/domain/execution/transitions"
 import { and, asc, eq, isNotNull } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -38,7 +43,7 @@ import { resolveDriver } from "../auth/driver"
 import { BEARER_SECURITY, type IdentifiedEnv } from "../auth/principal"
 import { requireGrant } from "../auth/require"
 import { describeProblem, loggable, problem, validate } from "../problem"
-import { findAssignedRoute, noSuchAssignedRoute, noSuchPickup, pickupScope } from "./execution-shapes"
+import { findAssignedRoute, labelOf, noSuchAssignedRoute, noSuchPickup, pickupScope } from "./execution-shapes"
 import { describeJson, IdParam } from "./shared"
 
 /** The grant a stop's proofs are read under: the stop's own read's. */
@@ -52,6 +57,9 @@ export const NO_PROOF_STORAGE_DETAIL = "Photos and signatures are not stored on 
 
 /** What Storage's silence is told: nothing was signed, and the request may be asked again. */
 export const STORAGE_SILENT = "Storage did not answer; nothing was signed, and the request may be asked again"
+
+/** What Storage's refusal is told: the deployment's bucket or key is not as its migration and settings make them, which asking again does not change. */
+export const STORAGE_REFUSED = "Storage refused the request: this deployment's proofs bucket or its key is not in order"
 
 export type ProofObjectOptions = {
   /** The request pool: each handler's one short transaction runs on it. */
@@ -70,11 +78,15 @@ export function proofObjectRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { poo
     if (storage === null) throw problem(503, { kind: NO_PROOF_STORAGE, detail: NO_PROOF_STORAGE_DETAIL })
     return storage
   }
-  /** A call to Storage, its silence a 502 and its cause in the log. */
+  /** A call to Storage: its silence a 502, its refusal the deployment's 503, and the cause of either in the log. */
   const asking = async <T>(ask: () => Promise<T>): Promise<T> => {
     try {
       return await ask()
     } catch (error) {
+      if (error instanceof StorageRefused) {
+        log(loggable(error))
+        throw problem(503, { kind: NO_PROOF_STORAGE, detail: STORAGE_REFUSED })
+      }
       if (!(error instanceof StorageSilent)) throw error
       log(loggable(error))
       throw problem(502, { detail: STORAGE_SILENT })
@@ -88,7 +100,7 @@ export function proofObjectRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { poo
         operationId: "signProofUpload",
         summary: "Where the device puts the bytes of one of its commands' photos or signatures",
         description:
-          "The driver door (O1 of #290). The object of the command `commandId` on the route `routeId`, which must be assigned to the driver, lives in the private `proofs` bucket under `<companyId>/<routeId>/<commandId>.<extension>`; the answer is that key and a signed URL to `PUT` the bytes to, straight to Storage, until `expiresAt` (`state: \"upload\"`), or that the bucket holds the key already (`state: \"uploaded\"`), a retry after an upload whose answer was lost. The device then sends the `add-photo` or `add-signature` command naming the key, which the door holds to the same three ids. Nothing is written here, and no byte passes through the API.",
+          "The driver door (O1 of #290). The object of the command `commandId` on the route `routeId`, which must be assigned to the driver and active — the door applies the command on no other — lives in the private `proofs` bucket under `<companyId>/<routeId>/<commandId>.<extension>`; the answer is that key and a signed URL to `PUT` the bytes to, straight to Storage, until `expiresAt` (`state: \"upload\"`), or that the bucket holds the key already (`state: \"uploaded\"`), a retry after an upload whose answer was lost. The device then sends the `add-photo` or `add-signature` command naming the key, which the door holds to the same three ids. Nothing is written here, and no byte passes through the API.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The key, and where to put the bytes or that they are there.", ProofUpload),
@@ -96,8 +108,9 @@ export function proofObjectRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { poo
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or no active driver profile is bound to this login."),
           404: describeProblem("The route is not assigned to this driver, or not there."),
+          409: describeProblem("The route is not active: the door would reject the command the object is for."),
           502: describeProblem(STORAGE_SILENT),
-          503: describeProblem(NO_PROOF_STORAGE_DETAIL),
+          503: describeProblem(`${NO_PROOF_STORAGE_DETAIL}; or ${STORAGE_REFUSED}`),
         },
       }),
       guard,
@@ -108,7 +121,10 @@ export function proofObjectRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { poo
         const principal = c.get("principal")
         await withCompany(pool.db, principal.companyId, async (tx) => {
           const profile = await resolveDriver(tx, principal)
-          if ((await findAssignedRoute(tx, principal, profile, routeId)) === undefined) throw noSuchAssignedRoute(routeId)
+          const assigned = await findAssignedRoute(tx, principal, profile, routeId)
+          if (assigned === undefined) throw noSuchAssignedRoute(routeId)
+          // An object no command can land for is one nothing ever names, which the purge would never find.
+          if (assigned.status !== "active") throw problem(409, { detail: notActive(labelOf(assigned)) })
         })
         const objectKey = objectKeyOf({ companyId: principal.companyId, routeId, commandId }, extension)
         const signed = await asking(() => bucket.signUpload(objectKey))
@@ -130,7 +146,7 @@ export function proofObjectRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { poo
           403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${PICKUPS}\`.`),
           404: describeProblem("No such pickup in the projects this account works in."),
           502: describeProblem(STORAGE_SILENT),
-          503: describeProblem(NO_PROOF_STORAGE_DETAIL),
+          503: describeProblem(`${NO_PROOF_STORAGE_DETAIL}; or ${STORAGE_REFUSED}`),
         },
       }),
       guard,

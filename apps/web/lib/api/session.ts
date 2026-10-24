@@ -11,8 +11,9 @@
 //
 //   signed out  — the person asked; the session is dropped at once and
 //                 revoked at Auth best-effort (auth.ts, `signOut`);
-//   refused     — the account itself was refused: an API answer of the one
-//                 problem type beyond `about:blank`, `NO_ACTIVE_ACCOUNT`, from
+//   refused     — the account itself was refused: an API answer of the
+//                 problem type `NO_ACTIVE_ACCOUNT` (the other beyond
+//                 `about:blank`, O1's `NO_PROOF_STORAGE`, ends nothing), from
 //                 `/me` or any other call (every client this hands out tells
 //                 it of a refusal before throwing it, client.ts `onRefused`),
 //                 or a refresh Auth would not honour, which is how the hook's

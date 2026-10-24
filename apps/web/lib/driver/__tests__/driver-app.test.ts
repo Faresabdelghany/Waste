@@ -621,6 +621,40 @@ describe("a photo or a signature", () => {
     assert.equal(app.store.getSnapshot().unreachable, false)
   })
 
+  test("Storage out of reach holds back the photo and what follows it, never what was tapped before: that goes, and the banner stays", async () => {
+    const { app, door, position, timers } = await onRoute()
+    let reachable = false
+    door.always("POST /driver/uploads", offline)
+    door.always("POST /driver/commands", ({ body }) => (reachable ? outcomes(commandsOf(body)) : offline()))
+    const paused = await app.tap({ kind: "pause", routeId: ROUTE_ID, body: {} })
+    await eventually(() => assert.equal(app.store.getSnapshot().unreachable, true))
+    const photoId = await app.tap({ kind: "add-photo", routeId: ROUTE_ID, body: { pickupId: pickupId(1) }, object: photo() })
+    position.answer()
+    await eventually(() => assert.equal(door.calls.filter((call) => call.path === "/driver/uploads").length, 1))
+    await settle()
+
+    reachable = true
+    timers.advance(DRAIN_RETRY_MS)
+    await eventually(() => assert.deepEqual(app.store.getSnapshot().waiting.map((entry) => entry.command.id), [photoId]))
+    const sent = door.batches().filter((batch) => batch.some((command) => command.id === paused))
+    assert.deepEqual(sent.at(-1)?.map((command) => command.id), [paused], "the pause went, the photo did not")
+    await settle()
+    assert.equal(app.store.getSnapshot().unreachable, true, "the photo still waits for Storage")
+    assert.equal(door.calls.filter((call) => call.path === "/driver/uploads").length, 2, "one try per drain, not a loop")
+    assert.deepEqual(timers.pending(), [DRAIN_RETRY_MS])
+  })
+
+  test("Storage refusing the signed URL itself — a 401 of its own — is the action's refusal, not the session's", async () => {
+    const { app, door, position } = await onRoute()
+    door.next("POST /driver/uploads", signedUpload)
+    const id = await app.tap({ kind: "add-photo", routeId: ROUTE_ID, body: { pickupId: pickupId(1) }, object: photo() })
+    door.next(`PUT ${uploadPath(id, "jpg")}`, () => json({ statusCode: "401", error: "Unauthorized", message: "Invalid signature" }, 401))
+    position.answer()
+    await eventually(() => assert.equal(app.store.getSnapshot().rejections.length, 1))
+    assert.equal(app.store.getSnapshot().rejections[0].sentence, "Storage refused the photo: Invalid signature")
+    assert.deepEqual(app.store.getSnapshot().waiting, [])
+  })
+
   test("a deployment without Storage refuses the action, not the queue: its sentence on its stop, the action dropped, and what follows sent", async () => {
     const device = await onRoute()
     const { app, door, position } = device

@@ -46,11 +46,12 @@
 // `POST /driver/uploads` names the key and signs an upload URL, the bytes go
 // to it, and the command, naming the key, goes in the batch. An object Storage
 // holds already — a put whose answer was lost — is done. Out of reach on the
-// way, nothing is sent and the queue waits as for a batch, and a 401 waits for
-// the session; any other refusal — a deployment without Storage (its 503 told
-// by its type), a route no longer the driver's, Storage refusing the bytes —
-// is the action's rejection, shown as the server's would be, and the rest
-// goes. Once Storage has the bytes the row keeps the key alone.
+// way, what was tapped before it is sent and it and what follows wait, as for
+// a batch, and the API's 401 waits for the session; any other refusal — a
+// deployment without Storage (its 503 told by its type), a route no longer
+// the driver's or no longer active, Storage refusing the bytes or its own
+// URL — is the action's rejection, shown as the server's would be, and the
+// rest goes. Once Storage has the bytes the row keeps the key alone.
 //
 // A command older than 48 h is still sent and comes back rejected, the
 // recorded answer ADR-0004 wants.
@@ -306,9 +307,10 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
    * Puts an entry's bytes to Storage under the key the API names, and answers
    * the entry as it now stands, naming the key without the bytes; `refused`
    * once a refusal is the action's rejection and the entry has left the
-   * queue; null when nothing may be sent now.
+   * queue; `unreachable` when the API or Storage could not be reached; null
+   * when nothing may be sent now.
    */
-  const upload = async (client: ApiClient, who: string, entry: QueueEntry, object: ProofBytes): Promise<QueueEntry | "refused" | null> => {
+  const upload = async (client: ApiClient, who: string, entry: QueueEntry, object: ProofBytes): Promise<QueueEntry | "refused" | "unreachable" | null> => {
     const { command } = entry
     let objectKey: string
     let atStorage = false
@@ -321,10 +323,11 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
       }
     } catch (error) {
       const problem = problemOfError(error)
-      if (problem.status === 401 || session?.who !== who) return null
+      // The API's 401 waits for the session's refresh; Storage's own refuses the URL it signed, which no new token changes.
+      if ((problem.status === 401 && !atStorage) || session?.who !== who) return null
       if (outOfReach(problem.status) && problem.type !== NO_PROOF_STORAGE_TYPE) {
         store.set((state) => ({ ...state, unreachable: true }))
-        return null
+        return "unreachable"
       }
       const sentence = atStorage ? `Storage refused the ${command.kind === "add-photo" ? "photo" : "signature"}: ${problemSentence(problem)}` : problemSentence(problem)
       const rejection: Rejection = { commandId: command.id, kind: command.kind, routeId: command.routeId, pickupId: pickupIdOf(command), sentence }
@@ -353,6 +356,7 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
     if (sendable.length === 0) return
     const batch = sendable.slice(0, BATCH_LIMIT)
     // A photo's or a signature's bytes reach Storage before the batch carrying its command is sent.
+    let heldBack = false
     for (const [index, entry] of batch.entries()) {
       if (entry.object === undefined) continue
       const uploaded = await upload(current.client, current.who, entry, entry.object)
@@ -361,8 +365,15 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
         again = true
         return
       }
+      if (uploaded === "unreachable") {
+        // What was tapped before it goes; it and what follows wait for the next try, and the banner with them.
+        batch.splice(index)
+        heldBack = true
+        break
+      }
       batch[index] = uploaded
     }
+    if (batch.length === 0) return
 
     let rows: unknown
     try {
@@ -402,9 +413,9 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
     try {
       await refresh()
     } finally {
-      store.set((state) => ({ ...state, waiting: mine() }))
+      store.set((state) => ({ ...state, waiting: mine(), ...(heldBack ? { unreachable: true } : {}) }))
     }
-    if (sendable.length > batch.length) again = true
+    if (!heldBack && sendable.length > batch.length) again = true
   }
 
   const drain = async (): Promise<void> => {

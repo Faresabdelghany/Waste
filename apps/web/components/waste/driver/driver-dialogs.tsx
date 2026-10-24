@@ -37,60 +37,68 @@ export function NativeSelect({ id, label, value, onChange, children }: { id: str
 
 type DialogProps = { open: boolean; onOpenChange: (open: boolean) => void }
 
+type ReasonProps = {
+  title: string
+  description: string
+  confirm: string
+  noteRequired: boolean
+  /** Whether the form takes a photo: a stop's exception does, which the stop's details show; the route's own problem does not, since no office surface reads a photo of a route. */
+  takesPhoto: boolean
+  onConfirm: (reason: DriverPickupReason, note: string | undefined, photo: ProofBytes | null) => void
+}
+
 /** Skip, fail or report a problem: a reason, a note that a problem must carry, and a photo of what the driver found. */
-export function ReasonDialog({
-  open,
-  onOpenChange,
-  title,
-  description,
-  confirm,
-  noteRequired,
-  onConfirm,
-}: DialogProps & { title: string; description: string; confirm: string; noteRequired: boolean; onConfirm: (reason: DriverPickupReason, note: string | undefined, photo: ProofBytes | null) => void }) {
+export function ReasonDialog({ open, onOpenChange, title, description, ...form }: DialogProps & ReasonProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        {/* Mounted with each opening: a cancelled form, or a photo still being prepared when it closed, leaves nothing for the next. */}
+        <ReasonForm {...form} onClose={() => onOpenChange(false)} />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ReasonForm({ confirm, noteRequired, takesPhoto, onConfirm, onClose }: Omit<ReasonProps, "title" | "description"> & { onClose: () => void }) {
   const id = useId()
   const [reason, setReason] = useState<DriverPickupReason>(DRIVER_PICKUP_REASONS[0])
   const [note, setNote] = useState("")
   const [photo, setPhoto] = useState<ProofBytes | null>(null)
+  const [preparing, setPreparing] = useState(false)
   const submit = (event: FormEvent) => {
     event.preventDefault()
     const text = note.trim()
-    if (noteRequired && text === "") return
+    if (preparing || (noteRequired && text === "")) return
     onConfirm(reason, text === "" ? undefined : text, photo)
-    onOpenChange(false)
-    setNote("")
-    setPhoto(null)
+    onClose()
   }
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <form onSubmit={submit} className="flex flex-col gap-4">
-          <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
-            <DialogDescription>{description}</DialogDescription>
-          </DialogHeader>
-          <NativeSelect id={`${id}-reason`} label="Reason" value={reason} onChange={(value) => setReason(value as DriverPickupReason)}>
-            {DRIVER_PICKUP_REASONS.map((candidate) => (
-              <option key={candidate} value={candidate}>
-                {DRIVER_REASON_LABELS[candidate]}
-              </option>
-            ))}
-          </NativeSelect>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor={`${id}-note`}>{noteRequired ? "What happened" : "Note (optional)"}</Label>
-            <Textarea id={`${id}-note`} value={note} required={noteRequired} maxLength={NOTE_MAX} onChange={(event) => setNote(event.target.value)} />
-          </div>
-          <PhotoField photo={photo} onPhoto={setPhoto} />
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" className="h-11">
-              {confirm}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <form onSubmit={submit} className="flex flex-col gap-4">
+      <NativeSelect id={`${id}-reason`} label="Reason" value={reason} onChange={(value) => setReason(value as DriverPickupReason)}>
+        {DRIVER_PICKUP_REASONS.map((candidate) => (
+          <option key={candidate} value={candidate}>
+            {DRIVER_REASON_LABELS[candidate]}
+          </option>
+        ))}
+      </NativeSelect>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${id}-note`}>{noteRequired ? "What happened" : "Note (optional)"}</Label>
+        <Textarea id={`${id}-note`} value={note} required={noteRequired} maxLength={NOTE_MAX} onChange={(event) => setNote(event.target.value)} />
+      </div>
+      {takesPhoto && <PhotoField photo={photo} onPhoto={setPhoto} onPreparing={setPreparing} />}
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="submit" className="h-11" disabled={preparing}>
+          {confirm}
+        </Button>
+      </DialogFooter>
+    </form>
   )
 }
 

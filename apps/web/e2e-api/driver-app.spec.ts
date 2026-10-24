@@ -171,10 +171,12 @@ test("a driver works a dispatched route on a phone, through an outage, and every
     const done = await api.get(`/routes/${route.id}`)
     const ended = (await done.json()) as RouteDetail
     expect(ended.status).toBe("completed")
-    expect(Object.fromEntries(ordered(ended).slice(0, 5).map((pickup, index) => [index, pickup.status]))).toEqual({ 0: "completed", 1: "skipped", 2: "failed", 3: "completed", 4: "completed" })
-    expect(ordered(ended)[0].arrivedAt, "the first stop's arrival").not.toBeNull()
+    // The stops as the driver worked them: the order the route reads in now, its Plan's, which can land after the first read above re-sequenced the stops.
+    const worked = ordered(ended)
+    expect(Object.fromEntries(worked.slice(0, 5).map((pickup, index) => [index, pickup.status]))).toEqual({ 0: "completed", 1: "skipped", 2: "failed", 3: "completed", 4: "completed" })
+    expect(worked[0].arrivedAt, "the first stop's arrival").not.toBeNull()
     // The first stop's proofs carry the arrival, the weight and the note, as the office's details list them.
-    const proofs = ((await (await api.get(`/pickups/${stops[0].id}`)).json()) as { proofs: { kind: string; weightKg: number | null; note: string | null }[] }).proofs
+    const proofs = ((await (await api.get(`/pickups/${worked[0].id}`)).json()) as { proofs: { kind: string; weightKg: number | null; note: string | null }[] }).proofs
     expect(proofs.map((proof) => [proof.kind, proof.weightKg, proof.note])).toEqual(expect.arrayContaining([["arrival", null, null], ["weight", 212, null], ["note", null, "Lid cracked, still closes"], ["signature", null, null]]))
 
     // The office reads the signature and the failed stop's photo back from the private bucket, through URLs the API signs.
@@ -182,7 +184,7 @@ test("a driver works a dispatched route on a phone, through an outage, and every
       [0, "image/png"],
       [2, "image/jpeg"],
     ] as const) {
-      const links = (await (await api.get(`/pickups/${stops[index].id}/proof-objects`)).json()) as ProofObjectLinks
+      const links = (await (await api.get(`/pickups/${worked[index].id}/proof-objects`)).json()) as ProofObjectLinks
       expect(links.items, `stop ${index + 1}'s objects`).toHaveLength(1)
       const url = links.items[0].url
       if (url === null) throw new Error(`Storage holds no object for stop ${index + 1}`)
@@ -199,7 +201,7 @@ test("a driver works a dispatched route on a phone, through an outage, and every
     // Resolution heard of the failed stop and the reported problem, each a ticket on its stop.
     await expect
       .poll(async () => (await listAll<Ticket>(api, "/tickets", { routeId: route.id })).map((ticket) => ticket.links.pickupId), { timeout: 30_000 })
-      .toEqual(expect.arrayContaining([stops[2].id, stops[3].id]))
+      .toEqual(expect.arrayContaining([worked[2].id, worked[3].id]))
   } finally {
     await context.close()
   }

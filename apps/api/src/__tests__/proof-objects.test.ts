@@ -5,14 +5,15 @@
 // read URLs behind the stop's own grant and project fence, a missing object a
 // null URL. Without Storage's key both are a 503, and Storage's silence a 502.
 import assert from "node:assert/strict"
-import { after, before, describe, test } from "node:test"
+import { after, afterEach, before, describe, test } from "node:test"
 
 import { CommandOutcomeRow, DriverCommandBatchOutcome } from "@waste/contracts/driver-commands"
 import { NO_PROOF_STORAGE, type ProblemKind } from "@waste/contracts/problem"
 import { ProofObjectLinks, ProofUpload } from "@waste/contracts/proof-objects"
 import { createDb, type Database } from "@waste/db/client"
-import { StorageSilent, type ProofStorage } from "@waste/db/storage"
+import { StorageRefused, StorageSilent, type ProofStorage } from "@waste/db/storage"
 import { noRouteAssigned, objectKeyOf } from "@waste/domain/execution/commands"
+import { notActive } from "@waste/domain/execution/transitions"
 import { Hono } from "hono"
 
 import type { createApp } from "../app"
@@ -20,7 +21,7 @@ import { NOT_A_DRIVERS_LOGIN } from "../auth/driver"
 import { authenticate, identify } from "../auth/principal"
 import { errorHandler } from "../problem"
 import { driverDoorRoutes } from "../routes/driver"
-import { NO_PROOF_STORAGE_DETAIL, proofObjectRoutes, READ_URL_TTL_SECONDS, STORAGE_SILENT } from "../routes/proof-objects"
+import { NO_PROOF_STORAGE_DETAIL, proofObjectRoutes, READ_URL_TTL_SECONDS, STORAGE_REFUSED, STORAGE_SILENT } from "../routes/proof-objects"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { FIXTURE_DAY, routeFor, seedDriverFixtures, type DriverFixtures } from "./execution-fixtures"
@@ -38,14 +39,16 @@ const NOW = new Date(`${FIXTURE_DAY}T14:00:00Z`)
 let tick = Date.now()
 const mint = (): string => testId((tick += 1))
 
-/** A Storage that signs what the test lets it: keys it holds, keys it does not, and silence on demand. */
+/** A Storage that signs what the test lets it: keys it holds, keys it does not, and silence or a refusal on demand. */
 function fakeStorage() {
   const held = new Set<string>()
   const asked: string[] = []
   let silent = false
+  let refusing = false
   const storage: ProofStorage = {
     async signUpload(key) {
       asked.push(`upload ${key}`)
+      if (refusing) throw new StorageRefused("Storage answered 400: the related resource does not exist")
       if (silent) throw new StorageSilent("Storage did not answer")
       if (held.has(key)) return { kind: "exists" }
       return { kind: "upload", url: `https://storage.test/upload/${key}?token=t`, expiresAt: new Date(NOW.getTime() + 7_200_000) }
@@ -59,7 +62,7 @@ function fakeStorage() {
       throw new Error("not the routes'")
     },
   }
-  return { storage, held, asked, silence: () => (silent = true), speak: () => (silent = false) }
+  return { storage, held, asked, silence: () => (silent = true), refuse: () => (refusing = true), speak: () => ((silent = false), (refusing = false)) }
 }
 
 describe("proof objects", { skip: database.skip || owner.skip }, () => {
@@ -124,8 +127,20 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
   const command = (kind: string, routeId: string, body: unknown, id = mint()) => ({ id, kind, routeId, occurredAt: `${FIXTURE_DAY}T07:00:00.000Z`, deviceId: "device-mads-01", body })
 
   describe("POST /driver/uploads", () => {
-    test("signs the upload of one of the device's commands' objects on the driver's route, under the key that command names", async () => {
+    const started: string[] = []
+    /** A route of Mads's started through the door: the door signs only for an active route, and ends it after the test, since Mads drives one at a time. */
+    const activeRoute = async () => {
       const route = await routeFor(pool, a, fleet, fixtures, { driver: fleet.drivers.mads })
+      assert.deepEqual((await send([command("start-route", route.id, { vehicleId: fleet.vehicles.wh24.id })])).map((outcome) => outcome.outcome), ["applied"])
+      started.push(route.id)
+      return route
+    }
+    afterEach(async () => {
+      for (const routeId of started.splice(0)) await send([command("end-route", routeId, {})])
+    })
+
+    test("signs the upload of one of the device's commands' objects on the driver's route, under the key that command names", async () => {
+      const route = await activeRoute()
       const commandId = mint()
       const answer = ProofUpload.parse(await ok(await mads("/driver/uploads", { method: "POST", body: { routeId: route.id, commandId, extension: "jpg" } })))
       const objectKey = objectKeyOf({ companyId: a.companyId, routeId: route.id, commandId }, "jpg")
@@ -134,7 +149,7 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
     })
 
     test("a key the bucket holds already is uploaded: a retry after a lost answer puts nothing again", async () => {
-      const route = await routeFor(pool, a, fleet, fixtures, { driver: fleet.drivers.mads })
+      const route = await activeRoute()
       const commandId = mint()
       const objectKey = objectKeyOf({ companyId: a.companyId, routeId: route.id, commandId }, "png")
       fake.held.add(objectKey)
@@ -150,20 +165,32 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
       assert.equal(fake.asked.length, before)
     })
 
+    test("a route that is not active signs nothing: the door would reject the command the object is for, and nothing would ever name it", async () => {
+      const ready = await routeFor(pool, a, fleet, fixtures, { driver: fleet.drivers.mads })
+      const ended = await activeRoute()
+      await send([command("end-route", ended.id, {})])
+      started.splice(started.indexOf(ended.id), 1)
+      const before = fake.asked.length
+      for (const route of [ready, ended]) {
+        assert.equal((await refused(await mads("/driver/uploads", { method: "POST", body: { routeId: route.id, commandId: mint(), extension: "jpg" } }), 409)).detail, notActive(route.label))
+      }
+      assert.equal(fake.asked.length, before)
+    })
+
     test("an office login is no driver's", async () => {
-      const route = await routeFor(pool, a, fleet, fixtures, { driver: fleet.drivers.mads })
+      const route = await activeRoute()
       assert.equal((await refused(await olivia("/driver/uploads", { method: "POST", body: { routeId: route.id, commandId: mint(), extension: "jpg" } }), 403)).detail, NOT_A_DRIVERS_LOGIN)
     })
 
     test("a format the bucket does not take, or a key the device names itself, is the body's 400", async () => {
-      const route = await routeFor(pool, a, fleet, fixtures, { driver: fleet.drivers.mads })
+      const route = await activeRoute()
       const gif = await refused(await mads("/driver/uploads", { method: "POST", body: { routeId: route.id, commandId: mint(), extension: "gif" } }), 400)
       assert.deepEqual(gif.errors?.map((error) => error.path), ["extension"])
       await refused(await mads("/driver/uploads", { method: "POST", body: { routeId: route.id, commandId: mint(), extension: "jpg", objectKey: "x" } }), 400)
     })
 
     test("Storage's silence is a 502 in one sentence, its cause logged", async () => {
-      const route = await routeFor(pool, a, fleet, fixtures, { driver: fleet.drivers.mads })
+      const route = await activeRoute()
       fake.silence()
       try {
         assert.equal((await refused(await mads("/driver/uploads", { method: "POST", body: { routeId: route.id, commandId: mint(), extension: "jpg" } }), 502)).detail, STORAGE_SILENT)
@@ -173,8 +200,19 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
       }
     })
 
+    test("Storage refusing the call — no bucket, a key it does not take — is the deployment's typed 503, its cause logged, never the 502 a device would wait out", async () => {
+      const route = await activeRoute()
+      fake.refuse()
+      try {
+        assert.equal((await refused(await mads("/driver/uploads", { method: "POST", body: { routeId: route.id, commandId: mint(), extension: "jpg" } }), 503, NO_PROOF_STORAGE)).detail, STORAGE_REFUSED)
+        assert.ok(logged.some((entry) => /related resource/.test(JSON.stringify(entry))))
+      } finally {
+        fake.speak()
+      }
+    })
+
     test("a deployment without Storage's key stores no photo: 503, typed so a device tells it from an outage", async () => {
-      const route = await routeFor(pool, a, fleet, fixtures, { driver: fleet.drivers.mads })
+      const route = await activeRoute()
       assert.equal((await refused(await madsWithout("/driver/uploads", { method: "POST", body: { routeId: route.id, commandId: mint(), extension: "jpg" } }), 503, NO_PROOF_STORAGE)).detail, NO_PROOF_STORAGE_DETAIL)
     })
   })

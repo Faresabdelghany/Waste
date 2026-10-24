@@ -5,7 +5,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { StorageSilent, supabaseStorage } from "../storage"
+import { StorageRefused, StorageSilent, supabaseStorage } from "../storage"
 
 const BASE = "https://project.supabase.co"
 const KEY = "01a0d2a4-a280-7000-8000-000000000001/01a0d2a4-a280-7031-8000-000000000001/01a0d2a4-a280-7099-8000-000000000001.jpg"
@@ -66,23 +66,51 @@ describe("the proofs' Storage", () => {
   test("no keys asks nothing", async () => {
     const { calls, storage } = scripted()
     assert.deepEqual([...(await storage.signReads([], 600))], [])
-    await storage.remove([])
+    assert.equal(await storage.remove([]), 0)
     assert.equal(calls.length, 0)
   })
 
-  test("removes objects by key, a key no longer there being nothing to remove", async () => {
+  test("removes objects by key and counts what Storage held, a key no longer there being nothing to remove", async () => {
     const { calls, storage } = scripted(() => json(200, [{ name: KEY }]))
-    await storage.remove([KEY, KEY.replace(/\.jpg$/, ".png")])
+    assert.equal(await storage.remove([KEY, KEY.replace(/\.jpg$/, ".png")]), 1)
     assert.equal(calls[0].method, "DELETE")
     assert.equal(calls[0].url, `${BASE}/storage/v1/object/proofs`)
     assert.deepEqual(calls[0].body, { prefixes: [KEY, KEY.replace(/\.jpg$/, ".png")] })
   })
 
-  test("Storage's refusal or silence is StorageSilent, its status kept for the log", async () => {
+  test("Storage's silence — a 5xx, no answer, none in time — is StorageSilent, its status kept for the log", async () => {
     const { storage } = scripted(() => json(500, { message: "internal" }), () => {
       throw new TypeError("fetch failed")
     })
     await assert.rejects(storage.signUpload(KEY), (error) => error instanceof StorageSilent && /500/.test(error.message))
     await assert.rejects(storage.signReads([KEY], 600), StorageSilent)
+  })
+
+  test("a call unanswered within its time is given up", async () => {
+    const storage = supabaseStorage({
+      url: BASE,
+      serviceKey: "service-role-key",
+      timeoutMs: 20,
+      fetch: ((_input: string | URL | Request, init: RequestInit = {}) =>
+        new Promise<Response>((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(init.signal?.reason)))) as typeof globalThis.fetch,
+    })
+    // The timeout's own timer does not hold the process open, as a real request's socket would.
+    const held = setTimeout(() => {}, 5_000)
+    try {
+      await assert.rejects(storage.signUpload(KEY), StorageSilent)
+    } finally {
+      clearTimeout(held)
+    }
+  })
+
+  test("Storage's refusal — a bucket not there, a key it does not take, a 400 with the real status in its body — is StorageRefused: the deployment's state, not its silence", async () => {
+    const { storage } = scripted(
+      () => json(400, { statusCode: "404", error: "InvalidRequest", message: "The related resource does not exist", code: "InvalidRequest" }),
+      () => json(400, { statusCode: "403", error: "Unauthorized", message: "Invalid Compact JWS", code: "AccessDenied" }),
+      () => json(403, { message: "forbidden" }),
+    )
+    await assert.rejects(storage.signUpload(KEY), (error) => error instanceof StorageRefused && /404/.test(error.message))
+    await assert.rejects(storage.signReads([KEY], 600), StorageRefused)
+    await assert.rejects(storage.remove([KEY]), StorageRefused)
   })
 })

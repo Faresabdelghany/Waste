@@ -1,11 +1,14 @@
 // The proofs' purge (O1 of #290): a driver's photo or signature older than
 // the retention days leaves Storage, unless an open ticket names its stop —
-// a dispute still being worked keeps its evidence, and the next night after
-// the ticket closes removes it. Nightly, across companies as the worker role,
-// over the last `PURGE_CATCH_UP_DAYS` days of the window, so a missed night
-// is caught up and a night run twice removes nothing new (a key no longer
-// there is nothing to remove). The proof's row stays — it is the ledger's —
-// and the office's read of it says the object is gone (a null URL,
+// or, for a proof of the route itself, its route — so a dispute still being
+// worked keeps its evidence, and the night after the ticket closes removes
+// it. Nightly, across companies as the worker role, over every proof older
+// than the days: a missed night, a retention lowered or the key set late is
+// caught up by the next, and a key removed before is asked again and counts
+// nothing, Storage answering only what it held. That is one call per hundred
+// expired keys a night, a handful at the Pilot's volume; a record of what was
+// purged is the step when it is not. The proof's row stays — it is the
+// ledger's — and the office's read of it says the object is gone (a null URL,
 // `GET /pickups/:id/proof-objects`). The days and Storage's key are the
 // deployment's settings (`PROOF_RETENTION_DAYS`, `SUPABASE_SERVICE_ROLE_KEY`,
 // apps/pilot/README.md), never code defaults: without either, the job
@@ -19,8 +22,6 @@ import { defineJob, type JobContext } from "./definition"
 export const PURGE_PROOF_OBJECTS_QUEUE = "execution.purge-proof-objects"
 /** 03:45 UTC every day: after Plan Ahead and the routing sweep, the quiet hour. */
 export const PURGE_PROOF_OBJECTS_SCHEDULE = "45 3 * * *"
-/** How far past the retention a night looks: a week of missed nights caught up. */
-export const PURGE_CATCH_UP_DAYS = 7
 /** Keys removed per call to Storage. */
 export const PURGE_BATCH = 100
 
@@ -35,14 +36,13 @@ export type PurgeProofObjectsData = {
 export type ExpiredObject = { companyId: string; objectKey: string }
 
 /**
- * The photos and signatures recorded in the window — more than `days` old and
- * no more than `days + PURGE_CATCH_UP_DAYS` — whose stop no open ticket names:
+ * The photos and signatures recorded more than `days` ago whose stop — or,
+ * for a proof of the route itself, whose route — no open ticket names:
  * across companies, as the worker role, oldest first. It reads and writes
  * nothing else.
  */
 export async function expiredProofObjects(worker: JobContext["worker"], at: Date, days: number): Promise<ExpiredObject[]> {
   const before = new Date(at.getTime() - days * DAY_MS).toISOString()
-  const from = new Date(at.getTime() - (days + PURGE_CATCH_UP_DAYS) * DAY_MS).toISOString()
   const open = sql.join(
     OPEN_TICKET_STATUSES.map((status) => sql`${status}`),
     sql`, `,
@@ -53,11 +53,11 @@ export async function expiredProofObjects(worker: JobContext["worker"], at: Date
      where p.object_key is not null
        and p.kind in ('photo', 'signature')
        and p.occurred_at < ${before}::timestamptz
-       and p.occurred_at >= ${from}::timestamptz
        and not exists (
          select 1 from wms.ticket t
           where t.company_id = p.company_id
-            and t.pickup_id = p.pickup_id
+            and t.route_id = p.route_id
+            and (p.pickup_id is null or t.pickup_id = p.pickup_id)
             and t.status in (${open})
        )
      order by p.occurred_at, p.id
@@ -65,7 +65,7 @@ export async function expiredProofObjects(worker: JobContext["worker"], at: Date
   return rows.map((row) => ({ companyId: row.company_id, objectKey: row.object_key }))
 }
 
-/** What a night came to: the objects removed, or why none could be. */
+/** What a night came to: the objects Storage removed, or why none could be. */
 export type PurgeOutcome = { removed: number } | { skipped: "no-storage" | "no-retention" }
 
 export async function purgeProofObjects(context: JobContext): Promise<PurgeOutcome> {
@@ -81,11 +81,12 @@ export async function purgeProofObjects(context: JobContext): Promise<PurgeOutco
   }
   const expired = await expiredProofObjects(context.worker, context.now(), days)
   // Storage is called outside any transaction (#124 §4): the read above has ended.
+  let removed = 0
   for (let start = 0; start < expired.length; start += PURGE_BATCH) {
-    await storage.remove(expired.slice(start, start + PURGE_BATCH).map((object) => object.objectKey))
+    removed += await storage.remove(expired.slice(start, start + PURGE_BATCH).map((object) => object.objectKey))
   }
-  context.log(`proofs: removed ${expired.length} photos and signatures older than ${days} days`)
-  return { removed: expired.length }
+  context.log(`proofs: removed ${removed} photos and signatures older than ${days} days, of ${expired.length} past them`)
+  return { removed }
 }
 
 export const purgeProofObjectsJob = defineJob<PurgeProofObjectsData>({
@@ -95,6 +96,6 @@ export const purgeProofObjectsJob = defineJob<PurgeProofObjectsData>({
   schedule: PURGE_PROOF_OBJECTS_SCHEDULE,
   scheduleData: { source: "schedule" },
   scheduleOptions: { tz: "UTC", missed: "once" },
-  // No retry: the next night is the retry, its window overlapping this one's by the catch-up week.
+  // No retry: the next night is the retry, asking again for every key past the days.
   queueOptions: { retryLimit: 0, deleteAfterSeconds: 604_800 },
 })

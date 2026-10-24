@@ -31,9 +31,9 @@ import type { DriverAppController, Tap } from "@/lib/driver/driver-app"
 import { STOP_PHOTOS } from "@/lib/driver/proof-images"
 import { DRIVER_REASON_LABELS, endRouteWarning, mapsHref, PICKUP_STATUS_LABELS, ROUTE_STATUS_LABELS, routeActions, routeMapsHref, stopActions, stopCollects, stopsInOrder, waitingOn } from "@/lib/driver/route-view"
 
-/** A photo taken with an exception goes first, then the exception: the queue sends in the order of the taps. */
-async function withPhoto(app: DriverAppController, photo: ProofBytes | null, routeId: string, pickupId: string | undefined, then: Tap): Promise<void> {
-  if (photo !== null) await app.tap({ kind: "add-photo", routeId, body: pickupId === undefined ? {} : { pickupId }, object: photo })
+/** A photo taken with a stop's exception goes first, then the exception: the queue sends in the order of the taps. */
+async function withPhoto(app: DriverAppController, photo: ProofBytes | null, routeId: string, pickupId: string, then: Tap): Promise<void> {
+  if (photo !== null) await app.tap({ kind: "add-photo", routeId, body: { pickupId }, object: photo })
   await app.tap(then)
 }
 
@@ -150,7 +150,8 @@ function RouteDetailView({ detail, me }: { detail: DriverRouteDetail; me: Driver
         description="The office hears of it as a ticket."
         confirm="Report problem"
         noteRequired
-        onConfirm={(reason, note, photo) => void withPhoto(app, photo, detail.id, undefined, { kind: "report-problem", routeId: detail.id, body: { reason, note: note ?? "" } })}
+        takesPhoto={false}
+        onConfirm={(reason, note) => void app.tap({ kind: "report-problem", routeId: detail.id, body: { reason, note: note ?? "" } })}
       />
       <UnloadDialog open={dialog === "unload"} onOpenChange={close} me={me} onConfirm={(body) => void app.tap({ kind: "record-unload", routeId: detail.id, body })} />
       <EndRouteDialog open={dialog === "end"} onOpenChange={close} warning={endRouteWarning(detail, state.waiting)} onConfirm={() => void app.tap({ kind: "end-route", routeId: detail.id, body: {} })} />
@@ -255,6 +256,7 @@ function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: D
         description={stop.address}
         confirm="Skip stop"
         noteRequired={false}
+        takesPhoto
         onConfirm={(reason, note, photo) => void withPhoto(app, photo, detail.id, stop.id, { kind: "skip-pickup", routeId: detail.id, body: { pickupId: stop.id, reason, ...(note === undefined ? {} : { note }) } })}
       />
       <ReasonDialog
@@ -264,6 +266,7 @@ function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: D
         description={stop.address}
         confirm="Fail stop"
         noteRequired={false}
+        takesPhoto
         onConfirm={(reason, note, photo) => void withPhoto(app, photo, detail.id, stop.id, { kind: "fail-pickup", routeId: detail.id, body: { pickupId: stop.id, reason, ...(note === undefined ? {} : { note }) } })}
       />
       <ReasonDialog
@@ -273,6 +276,7 @@ function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: D
         description={stop.address}
         confirm="Report problem"
         noteRequired
+        takesPhoto
         onConfirm={(reason, note, photo) => void withPhoto(app, photo, detail.id, stop.id, { kind: "report-problem", routeId: detail.id, body: { pickupId: stop.id, reason, note: note ?? "" } })}
       />
       <NoteDialog open={dialog === "note"} onOpenChange={close} title={`A note on stop ${number}`} description={stop.address} onConfirm={(note) => void app.tap({ kind: "add-note", routeId: detail.id, body: { pickupId: stop.id, note } })} />
