@@ -112,10 +112,10 @@ describe("the service areas module", () => {
     assert.deepEqual(serviceAreasModule.resources, [serviceAreaAdapter, assignmentAdapter])
   })
 
-  test("reads the areas with every assignment, then the assignments themselves, the area holding the provider of the one in force", async () => {
-    const { fetch, calls } = scripted([() => pageOf([area]), () => pageOf([before, held]), () => pageOf([before, held])])
+  test("reads the areas and the assignments once each, the areas holding the provider of the one in force, the assignments its second kind", async () => {
+    const { fetch, calls } = scripted([() => pageOf([area]), () => pageOf([before, held])])
     const result = await loadModule(clientOver(fetch), serviceAreasModule, { fixtures, state, now: NOW })
-    assert.deepEqual(calls.map((call) => call.url), ["http://api.test/service-areas?limit=200", "http://api.test/service-area-assignments?limit=200", "http://api.test/service-area-assignments?limit=200"])
+    assert.deepEqual(calls.map((call) => call.url), ["http://api.test/service-areas?limit=200", "http://api.test/service-area-assignments?limit=200"], "one read of the assignments serves both kinds")
     assert.deepEqual(result.records.map((record) => record.id), [`service-area-${area.id}`, `assignment-${before.id}`, `assignment-${held.id}`])
     assert.equal(result.records[0].facts["Service provider"], "NordRen ApS")
   })
@@ -123,7 +123,7 @@ describe("the service areas module", () => {
   test("read again over an award made this session, files its assignments under the award's own id, the one the read gives it", async () => {
     const minted = { ...serviceAreaAdapter.toRecord({ ...area, assignments: [held] }, context()), id: "service-areas-service-area-1700000000000" }
     const before_ = new Map([...state, ["service-providers.service-areas", moduleOf([minted], [area.id])]])
-    const { fetch } = scripted([() => pageOf([area]), () => pageOf([held]), () => pageOf([held])])
+    const { fetch } = scripted([() => pageOf([area]), () => pageOf([held])])
     const result = await loadModule(clientOver(fetch), serviceAreasModule, { fixtures, state: before_, now: NOW })
     assert.equal(result.records[0].id, `service-area-${area.id}`)
     assert.equal(result.records[1].submittedValues?.serviceAreaId, `service-area-${area.id}`, "never the session's id the read replaces")

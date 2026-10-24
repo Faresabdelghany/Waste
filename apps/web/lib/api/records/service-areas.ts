@@ -96,6 +96,22 @@ function areaFields(record: BusinessRecord) {
   }
 }
 
+/**
+ * One read of the assignments per load of the module: the areas carry them to
+ * name their holders, and they are the module's second kind. The module's
+ * lists go out together on one client (`loadModule`), so the second asks for
+ * the read the first began; it is forgotten once answered, and the next load
+ * reads again.
+ */
+const assignmentReads = new WeakMap<Client, Promise<ServiceAreaAssignment[]>>()
+function assignmentsOnce(client: Client): Promise<ServiceAreaAssignment[]> {
+  const pending = assignmentReads.get(client)
+  if (pending !== undefined) return pending
+  const read = listAll<ServiceAreaAssignment>(client, "/service-area-assignments").finally(() => assignmentReads.delete(client))
+  assignmentReads.set(client, read)
+  return read
+}
+
 /** What an area's edit carries: the patch, and each set to replace whole. */
 type AreaWrite = { patch?: object; planningAreaIds?: { ids: string[] }; wasteFractionIds?: { ids: string[] } }
 
@@ -105,7 +121,7 @@ export const serviceAreaAdapter: ResourceAdapter<ServiceAreaResource> = {
   // No status on the wire: the record's is a reading of its period.
   statuses: undefined,
   list: async (client) => {
-    const [areas, assignments] = await Promise.all([listAll<ServiceArea>(client, "/service-areas"), listAll<ServiceAreaAssignment>(client, "/service-area-assignments")])
+    const [areas, assignments] = await Promise.all([listAll<ServiceArea>(client, "/service-areas"), assignmentsOnce(client)])
     return areas.map((area) => ({ ...area, assignments: assignments.filter((assignment) => assignment.serviceAreaId === area.id) }))
   },
   read: (client, serverId) => get<ServiceAreaDetail>(client, `/service-areas/${serverId}`),
@@ -237,7 +253,7 @@ export const assignmentAdapter: ResourceAdapter<ServiceAreaAssignment> = {
   prefix: ASSIGNMENT_PREFIX,
   owns: isAssignmentRecord,
   statuses: undefined,
-  list: (client) => listAll<ServiceAreaAssignment>(client, "/service-area-assignments"),
+  list: (client) => assignmentsOnce(client),
   toRecord: (assignment, context) => {
     // The area, loaded just before this row in the module's order — by its own id first: an area lends no fixture id, and
     // read again over one made this session, the store's state still holds that one under the session's id.
