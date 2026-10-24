@@ -27,7 +27,7 @@ const long = (words: number, token: number): string[] => [Array.from({ length: w
 
 /** The row of the table whose description carries a device's note: the driver could not collect, and said so at length. */
 const failed = (note: string) =>
-  ticketFor({ kind: "pickup-failed", routeId: ROUTE, pickupId: PICKUP, containerId: null, propertyId: null, sharedCollectionPointId: null, reason: "inaccessible", note, containerLabel: "BIN-82014", address: "Parkvej 18", actualDriverId: DRIVER, plannedDriverId: DRIVER })
+  ticketFor({ kind: "pickup-failed", routeId: ROUTE, pickupId: PICKUP, containerId: null, propertyId: null, sharedCollectionPointId: null, agreementId: null, customerId: null, reason: "inaccessible", note, containerLabel: "BIN-82014", address: "Parkvej 18", actualDriverId: DRIVER, plannedDriverId: DRIVER })
 
 /** The row whose subject and description both carry the applier's detail. */
 const rejected = (detail: string) => ticketFor({ kind: "command-rejected", routeId: null, pickupId: null, driverId: DRIVER, detail })
