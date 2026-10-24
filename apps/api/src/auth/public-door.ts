@@ -18,6 +18,14 @@
 // than that, so the request did not come through them all. An IPv6 client is
 // counted by its /64, the block one host is handed, so stepping through the
 // addresses of its own network is still one client.
+//
+// An address's calendar feed has an allowance of its own (`FeedAllowance`):
+// a calendar service reads its subscribers' feeds from a few addresses of its
+// own, so one visitor's minute would have them refuse each other. The feed is
+// counted per client and address, generously, and per client across
+// addresses, low, so the feed is no faster a way to walk a project's
+// addresses than its pages — an address the door does not know counted the
+// same as one it does.
 import type { Database, Tx } from "@waste/db/client"
 import { withPublishedProject, type PublishedProject } from "@waste/db/public-door"
 import { isPublicSlug } from "@waste/domain/access/public-slug"
@@ -30,9 +38,29 @@ export type PublicEnv = { Variables: { published: PublishedProject; tx: Tx } }
 /** A public client's requests a minute unless PUBLIC_REQUESTS_PER_MINUTE says otherwise (env.ts): a resident searching types a few, a page reads a few more. */
 export const PUBLIC_REQUESTS_PER_MINUTE = 60
 
+/** One feed's requests a minute from one client: a calendar service reading it for each of its subscribers there, a resident reloading. */
+export const FEED_REQUESTS_PER_ADDRESS = 60
+/** The distinct addresses whose feeds one client reads in a minute. */
+export const FEED_ADDRESSES_PER_CLIENT = 20
+
 const WINDOW_MS = 60_000
 /** How many clients a window remembers before the oldest windows are forgotten early. */
 const REMEMBERED_CLIENTS = 10_000
+/** How much of an address the feed's allowance keeps: an id is 36 characters, and nothing longer is one. */
+const ADDRESS_KEPT = 64
+
+type Taken = { allowed: true } | { allowed: false; retryAfterSeconds: number }
+
+/** The seconds left of a window that began at `start`. */
+const secondsLeft = (start: number, at: number): number => Math.max(1, Math.ceil((start + WINDOW_MS - at) / 1000))
+
+/** Drops the windows that have ended, and the oldest half if none has. */
+function forget(windows: Map<string, { start: number }>, at: number): void {
+  for (const [key, window] of windows) if (at - window.start >= WINDOW_MS) windows.delete(key)
+  if (windows.size < REMEMBERED_CLIENTS) return
+  const oldest = [...windows.entries()].sort((a, b) => a[1].start - b[1].start).slice(0, REMEMBERED_CLIENTS / 2)
+  for (const [key] of oldest) windows.delete(key)
+}
 
 /** A fixed window per client: `take` counts a request and says whether it fits, and when the client may ask again if not. */
 export class Allowance {
@@ -43,11 +71,11 @@ export class Allowance {
     readonly now: () => Date,
   ) {}
 
-  take(client: string): { allowed: true } | { allowed: false; retryAfterSeconds: number } {
+  take(client: string): Taken {
     const at = this.now().getTime()
     const window = this.#windows.get(client)
     if (window === undefined || at - window.start >= WINDOW_MS) {
-      if (this.#windows.size >= REMEMBERED_CLIENTS) this.#forget(at)
+      if (this.#windows.size >= REMEMBERED_CLIENTS) forget(this.#windows, at)
       this.#windows.set(client, { start: at, count: 1 })
       return { allowed: true }
     }
@@ -55,15 +83,37 @@ export class Allowance {
       window.count += 1
       return { allowed: true }
     }
-    return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil((window.start + WINDOW_MS - at) / 1000)) }
+    return { allowed: false, retryAfterSeconds: secondsLeft(window.start, at) }
+  }
+}
+
+/** A feed's allowance: `perAddress` requests a minute per client and address, and `addressesPerClient` distinct addresses a minute per client. */
+export class FeedAllowance {
+  readonly #perAddress: Allowance
+  readonly #walks = new Map<string, { start: number; addresses: Set<string> }>()
+
+  constructor(
+    readonly perAddress: number,
+    readonly addressesPerClient: number,
+    readonly now: () => Date,
+  ) {
+    this.#perAddress = new Allowance(perAddress, now)
   }
 
-  /** Drops the windows that have ended, and the oldest half if none has. */
-  #forget(at: number): void {
-    for (const [client, window] of this.#windows) if (at - window.start >= WINDOW_MS) this.#windows.delete(client)
-    if (this.#windows.size < REMEMBERED_CLIENTS) return
-    const oldest = [...this.#windows.entries()].sort((a, b) => a[1].start - b[1].start).slice(0, REMEMBERED_CLIENTS / 2)
-    for (const [client] of oldest) this.#windows.delete(client)
+  take(client: string, address: string): Taken {
+    const at = this.now().getTime()
+    const kept = address.toLowerCase().slice(0, ADDRESS_KEPT)
+    let walk = this.#walks.get(client)
+    if (walk === undefined || at - walk.start >= WINDOW_MS) {
+      if (this.#walks.size >= REMEMBERED_CLIENTS) forget(this.#walks, at)
+      walk = { start: at, addresses: new Set() }
+      this.#walks.set(client, walk)
+    }
+    if (!walk.addresses.has(kept)) {
+      if (walk.addresses.size >= this.addressesPerClient) return { allowed: false, retryAfterSeconds: secondsLeft(walk.start, at) }
+      walk.addresses.add(kept)
+    }
+    return this.#perAddress.take(`${client} ${kept}`)
   }
 }
 
@@ -100,7 +150,8 @@ export function clientOf(c: Context, peer: (c: Context) => string | undefined, t
 
 export type PublicDoorOptions = {
   pool: Database
-  allowance: Allowance
+  /** Counts the request against its client's allowance: the pages' `Allowance`, or a feed's, which reads the request's address too. */
+  allowance: { take(client: string, c: Context): Taken }
   /** The socket's peer address; server.ts reads it from the Node request, a test hands a fixed one or none. */
   peer: (c: Context) => string | undefined
   /** How many proxies in front append to X-Forwarded-For: 0 ignores the header. */
@@ -115,7 +166,7 @@ class Discard {}
 /** The door itself, put before every public route's handler: the allowance first, then the published project's transaction. */
 export function publicDoor({ pool, allowance, peer, trustedProxies }: PublicDoorOptions): MiddlewareHandler<PublicEnv> {
   return async (c, next) => {
-    const taken = allowance.take(clientOf(c, peer, trustedProxies))
+    const taken = allowance.take(clientOf(c, peer, trustedProxies), c)
     if (!taken.allowed) {
       throw problem(429, {
         detail: `Too many requests from this address; ask again in ${taken.retryAfterSeconds} s`,

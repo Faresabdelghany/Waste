@@ -35,8 +35,8 @@ export type AddressSearch = z.infer<typeof AddressSearch>
 export const AddressMatch = z.object({ id: Id, address: z.string() })
 export type AddressMatch = z.infer<typeof AddressMatch>
 
-/** At most ten addresses, by address. */
-export const AddressMatches = z.object({ addresses: z.array(AddressMatch) })
+/** The project searched, so a page that searches asks once, and at most ten addresses, by address. */
+export const AddressMatches = z.object({ project: PublishedProject, addresses: z.array(AddressMatch) })
 export type AddressMatches = z.infer<typeof AddressMatches>
 
 /** `/public/:slug/addresses/:id/…`: the published project and the address. */
