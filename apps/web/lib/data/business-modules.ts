@@ -1975,9 +1975,9 @@ const plan: WorkspaceDefinition = {
       title: "Route Schemes",
       description: "Effective-dated recurring templates for generating executable routes.",
       entityLabel: "Route scheme",
-      // Rendered as the derived "area/project · service days" context (issue
-      // #30, D15) — see @waste/domain/route-schemes/scheme-list.
-      contextLabel: "Project · service days",
+      // Rendered as the derived "project · area · service days" context (issue
+      // #30, D15; #254) — see @waste/domain/route-schemes/scheme-list.
+      contextLabel: "Project · area · service days",
       valueLabel: "Demand",
       primaryAction: "New route scheme",
       metrics: [

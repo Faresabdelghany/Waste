@@ -44,17 +44,19 @@ export function schemeAreaName(
 }
 
 /**
- * The derived "Project · service days" row context: the planning-area name
- * (else the caller's project-scope label) joined with the structured service
- * days ("Mon–Fri", "Tue/Thu"). Falls back segment-by-segment so a legacy
- * record without structured days still names its scope.
+ * The derived "Project · area · service days" row context: the caller's
+ * project-scope label, then the planning-area name where the scheme has one
+ * (#254: every row starts with its project, so the column holds one kind),
+ * joined with the structured service days ("Mon–Fri", "Tue/Thu"). Falls back
+ * segment-by-segment so a legacy record without structured days still names
+ * its scope, and a record without a stored project names its area alone.
  */
 export function schemeListContext(
   record: BusinessRecord,
   areas: readonly BusinessRecord[],
   projectLabel: string,
 ): string {
-  const scope = schemeAreaName(record, areas) ?? projectLabel
+  const scope = [projectLabel, schemeAreaName(record, areas)].filter(Boolean).join(" · ")
   const days = serviceDaysFromValues(record.submittedValues ?? {})
   if (days.length === 0) return scope || EMPTY_FACT
   const daysLabel = formatWorkingDays(days)
