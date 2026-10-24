@@ -1,20 +1,21 @@
-// The Driver App's commands (Issue #145): the nine kinds the pilot sends, which
+// The Driver App's commands (Issue #145, O2 of #290): the twelve kinds the pilot sends, which
 // of them carry a position, and the ids the browser mints for them — UUIDv7
 // through @waste/domain/ids over the browser's clock and randomness, each
 // after the last so the queue's key order is the order of the taps.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { BATCH_MAX } from "@waste/contracts/driver-commands"
+import { BATCH_MAX, COMMAND_BODIES } from "@waste/contracts/driver-commands"
+import { PARAGRAPH_MAX } from "@waste/contracts/text"
 import { DRIVER_COMMAND_KINDS } from "@waste/domain/execution/vocabulary"
 
-import { BATCH_LIMIT, createCommandIds, PILOT_COMMAND_KINDS, pickupIdOf, takesLocation } from "../commands"
+import { BATCH_LIMIT, createCommandIds, NOTE_MAX, PILOT_COMMAND_KINDS, pickupIdOf, takesLocation, wholeKilograms } from "../commands"
 
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 describe("the pilot's commands", () => {
-  test("are nine of the door's fourteen, never arrive or the evidence kinds", () => {
-    assert.deepEqual([...PILOT_COMMAND_KINDS].sort(), ["complete-pickup", "end-route", "fail-pickup", "pause", "record-unload", "report-problem", "resume", "skip-pickup", "start-route"])
+  test("are twelve of the door's fourteen, never the photo or the signature, whose bytes no store holds yet", () => {
+    assert.deepEqual([...PILOT_COMMAND_KINDS].sort(), ["add-note", "add-weight", "arrive", "complete-pickup", "end-route", "fail-pickup", "pause", "record-unload", "report-problem", "resume", "skip-pickup", "start-route"])
     for (const kind of PILOT_COMMAND_KINDS) assert.ok((DRIVER_COMMAND_KINDS as readonly string[]).includes(kind), kind)
   })
 
@@ -22,11 +23,24 @@ describe("the pilot's commands", () => {
     assert.equal(BATCH_LIMIT, BATCH_MAX)
   })
 
-  test("every one carries a position but pause and resume, whose bodies take nothing", () => {
+  test("carry a note no longer than the door takes, spelled again the same way", () => {
+    assert.equal(NOTE_MAX, PARAGRAPH_MAX)
+  })
+
+  test("carry a weight in whole kilograms as typed: an exponent is its number, a fraction or a blank no weight", () => {
+    assert.equal(wholeKilograms("212"), 212)
+    assert.equal(wholeKilograms("1e3"), 1000, "a number input lets an exponent through; parseInt would read 1")
+    assert.equal(wholeKilograms("12.5"), undefined)
+    assert.equal(wholeKilograms(""), undefined)
+    assert.equal(wholeKilograms("  "), undefined)
+  })
+
+  test("a command carries a position exactly where its body takes one: never pause, resume, a note or a weight, whose strict bodies would refuse it", () => {
     assert.deepEqual(
       PILOT_COMMAND_KINDS.filter((kind) => !takesLocation(kind)),
-      ["pause", "resume"],
+      ["pause", "resume", "add-weight", "add-note"],
     )
+    for (const kind of PILOT_COMMAND_KINDS) assert.equal(takesLocation(kind), "location" in COMMAND_BODIES[kind].shape, kind)
   })
 
   test("a command names its stop by the body's pickup id, and a route-level one names none", () => {

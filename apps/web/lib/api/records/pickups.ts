@@ -29,7 +29,7 @@ import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/
 
 import { command, get, listAll } from "../client"
 import { inheritedPresentation, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
-import { wallClockIn } from "./clock"
+import { shownOn, wallClockIn } from "./clock"
 import { LIVE_MODULE } from "./live"
 import { referenced, refusal } from "./places"
 import { webIdVia } from "./references"
@@ -143,6 +143,15 @@ export const PICKUP_COMMANDS = {
 /** A stop's proofs, in recording order: its own read. */
 export async function pickupProofs(client: Client, serverId: string): Promise<ProofOfService[]> {
   return (await get<PickupDetail>(client, `/pickups/${serverId}`)).proofs
+}
+
+/** A stop's proof as one line on the project's clock: its kind and source, then the outcome a correction moved it to, a weight and a note where it has them. */
+export function proofLine(proof: ProofOfService, timezone: string | undefined): string {
+  const parts = [shownOn(proof.occurredAt, timezone), statusLabel(proof.kind), statusLabel(proof.source)]
+  if (proof.outcome) parts.push(statusLabel(proof.outcome))
+  if (proof.weightKg !== null) parts.push(`${proof.weightKg} kg`)
+  if (proof.note) parts.push(proof.note)
+  return parts.join(" · ")
 }
 
 const CHANGED_BY_COMMANDS = "A pickup is changed by its commands: remove it from a route that has not started, or correct its outcome"

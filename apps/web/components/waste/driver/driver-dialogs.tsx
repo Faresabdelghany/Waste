@@ -2,7 +2,8 @@
 
 // The Driver App's forms (Issue #145): what a skip, a failure and a problem
 // ask for — one of the driver's six reasons and a note, which a problem
-// requires — an unload's station, fraction and weights, and the end of a
+// requires — a stop's note and its weight (O2 of #290), an unload's station,
+// fraction and weights, and the end of a
 // route behind a confirm that counts the stops still to do. Native selects,
 // since a phone draws its own picker for them. The forms shape the body and
 // no more: whether it holds is the server's to say, and a rejection comes
@@ -16,7 +17,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { DriverMe } from "@waste/contracts/driver-commands"
 import { DRIVER_PICKUP_REASONS, type DriverPickupReason } from "@waste/domain/execution/vocabulary"
-import type { PilotBody } from "@/lib/driver/commands"
+import { NOTE_MAX, wholeKilograms, type PilotBody } from "@/lib/driver/commands"
 import { DRIVER_REASON_LABELS } from "@/lib/driver/route-view"
 
 const SELECT = "border-input dark:bg-input/30 h-11 w-full rounded-md border bg-transparent px-3 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
@@ -64,7 +65,7 @@ export function ReasonDialog({ open, onOpenChange, title, description, confirm, 
           </NativeSelect>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={`${id}-note`}>{noteRequired ? "What happened" : "Note (optional)"}</Label>
-            <Textarea id={`${id}-note`} value={note} required={noteRequired} onChange={(event) => setNote(event.target.value)} />
+            <Textarea id={`${id}-note`} value={note} required={noteRequired} maxLength={NOTE_MAX} onChange={(event) => setNote(event.target.value)} />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -82,11 +83,6 @@ export function ReasonDialog({ open, onOpenChange, title, description, confirm, 
 
 type UnloadBody = Omit<PilotBody<"record-unload">, "location" | "accuracyM">
 
-const kilograms = (value: string): number | undefined => {
-  const parsed = Number.parseInt(value, 10)
-  return Number.isFinite(parsed) ? parsed : undefined
-}
-
 /** Record an unload: the station, the fraction it takes, the net weight, and a gross/tare pair and a weighbridge ticket where there are ones. */
 export function UnloadDialog({ open, onOpenChange, me, onConfirm }: DialogProps & { me: DriverMe; onConfirm: (body: UnloadBody) => void }) {
   const id = useId()
@@ -102,7 +98,7 @@ export function UnloadDialog({ open, onOpenChange, me, onConfirm }: DialogProps 
   const fractions = station !== undefined && station.wasteFractionIds.length > 0 ? me.wasteFractions.filter((fraction) => station.wasteFractionIds.includes(fraction.id)) : me.wasteFractions
   const chosenFraction = fractions.some((fraction) => fraction.id === fractionId) ? fractionId : (fractions[0]?.id ?? "")
   const weighed = gross !== "" && tare !== ""
-  const netKg = weighed ? (kilograms(gross) ?? 0) - (kilograms(tare) ?? 0) : kilograms(net)
+  const netKg = weighed ? (wholeKilograms(gross) ?? 0) - (wholeKilograms(tare) ?? 0) : wholeKilograms(net)
   const pairMissing = (gross === "") !== (tare === "")
 
   const submit = (event: FormEvent) => {
@@ -113,7 +109,7 @@ export function UnloadDialog({ open, onOpenChange, me, onConfirm }: DialogProps 
       unloadingStationId: stationId,
       wasteFractionId: chosenFraction,
       netKg,
-      ...(weighed ? { grossKg: kilograms(gross), tareKg: kilograms(tare) } : {}),
+      ...(weighed ? { grossKg: wholeKilograms(gross), tareKg: wholeKilograms(tare) } : {}),
       ...(ticket.trim() === "" ? {} : { weighbridgeTicket: ticket.trim() }),
       ...(text === "" ? {} : { note: text }),
     })
@@ -176,7 +172,7 @@ export function UnloadDialog({ open, onOpenChange, me, onConfirm }: DialogProps 
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={`${id}-note`}>Note (optional)</Label>
-            <Textarea id={`${id}-note`} value={note} onChange={(event) => setNote(event.target.value)} />
+            <Textarea id={`${id}-note`} value={note} maxLength={NOTE_MAX} onChange={(event) => setNote(event.target.value)} />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -184,6 +180,85 @@ export function UnloadDialog({ open, onOpenChange, me, onConfirm }: DialogProps 
             </Button>
             <Button type="submit" className="h-11">
               Record unload
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** A note on a stop: anything the driver wants on its record, which the office reads among its proofs. */
+export function NoteDialog({ open, onOpenChange, title, description, onConfirm }: DialogProps & { title: string; description: string; onConfirm: (note: string) => void }) {
+  const id = useId()
+  const [note, setNote] = useState("")
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    const text = note.trim()
+    if (text === "") return
+    onConfirm(text)
+    onOpenChange(false)
+    setNote("")
+  }
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <form onSubmit={submit} className="flex flex-col gap-4">
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>{description}</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`${id}-note`}>Note</Label>
+            <Textarea id={`${id}-note`} value={note} required maxLength={NOTE_MAX} onChange={(event) => setNote(event.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" className="h-11">
+              Add note
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** A stop's weight above this is a slip of the finger, not a load: the form stops it, as the door would refuse what no weight column holds. */
+export const WEIGHT_MAX_KG = 99_999
+
+/** A stop's weight in whole kilograms, as an on-board scale or a reading shows it. */
+export function WeightDialog({ open, onOpenChange, title, description, onConfirm }: DialogProps & { title: string; description: string; onConfirm: (weightKg: number) => void }) {
+  const id = useId()
+  const [weight, setWeight] = useState("")
+  const weightKg = wholeKilograms(weight)
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    if (weightKg === undefined || weightKg < 1 || weightKg > WEIGHT_MAX_KG) return
+    onConfirm(weightKg)
+    onOpenChange(false)
+    setWeight("")
+  }
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <form onSubmit={submit} className="flex flex-col gap-4">
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>{description}</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`${id}-weight`}>Weight kg</Label>
+            <Input id={`${id}-weight`} inputMode="numeric" type="number" min={1} max={WEIGHT_MAX_KG} step={1} required className="h-11" value={weight} onChange={(event) => setWeight(event.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" className="h-11">
+              Record weight
             </Button>
           </DialogFooter>
         </form>

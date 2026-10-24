@@ -28,7 +28,7 @@ export const SEEDED_DRIVER = { name: "Mads Jensen", email: "mads.jensen@kystbyen
 
 export type RouteScheme = { id: string; name: string; projectId: string; status: string }
 export type Driver = { id: string; name: string; status: string }
-export type Pickup = { id: string; position: number; sequence?: number; status: string }
+export type Pickup = { id: string; position: number; sequence?: number; status: string; arrivedAt: string | null }
 export type Route = {
   id: string
   label: string

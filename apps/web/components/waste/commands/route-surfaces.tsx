@@ -27,7 +27,7 @@ import { statusLabel, webIdOf, type CommandInput } from "@/lib/api/records/adapt
 import { shownOn } from "@/lib/api/records/clock"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { LIVE_MODULE, routeSessions, whileWatched } from "@/lib/api/records/live"
-import { CORRECT_PICKUP, PICKUPS_MODULE, pickupProofs, REMOVE_PICKUP } from "@/lib/api/records/pickups"
+import { CORRECT_PICKUP, PICKUPS_MODULE, pickupProofs, proofLine, REMOVE_PICKUP } from "@/lib/api/records/pickups"
 import { ASSIGN_ROUTE, callsignOf, CANCEL_ROUTE, DISPATCH_ROUTE, isHeldRoute, RELEASE_HOLD, REORDER_ROUTE, RESCHEDULE_ROUTE, routeCommandLog, routeDetail, ROUTES_MODULE } from "@/lib/api/records/routes"
 import { DRIVERS_MODULE, VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
@@ -270,7 +270,7 @@ export function PickupCommandsSurface({ record }: RowSurfaceProps) {
           label="Reading the stop's proofs…"
           empty="No proof yet."
           testId="pickup-proofs"
-          line={(proof) => `${shownOn(proof.occurredAt, timezone)} · ${statusLabel(proof.kind)} · ${statusLabel(proof.source)}${proof.outcome ? ` · ${statusLabel(proof.outcome)}` : ""}${proof.note ? ` · ${proof.note}` : ""}`}
+          line={(proof) => proofLine(proof, timezone)}
         />
       </div>
       {open !== null && <BusinessRecordFormDialog schema={PICKUP_COMMAND_FORMS[open]} open onOpenChange={(isOpen) => !isOpen && setOpen(null)} onSubmit={(values) => run(open, values)} relationOptions={pickers.options} />}
