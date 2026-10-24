@@ -19,7 +19,9 @@
 // and finance.ts turns @waste/domain/finance/vocabulary into Finance &
 // Contracting's (Issue #112), the sixth `vocabulary` subpath and the ninth
 // domain line of the allowlist, and reports.ts turns
-// @waste/domain/insight/vocabulary into the reports' interval (#292). The
+// @waste/domain/insight/vocabulary into the reports' interval (#292), and
+// imports.ts @waste/domain/imports/vocabulary into the import's kinds and
+// outcomes (#291 slice 12). The
 // direction is sound — the innermost ring
 // depends on nothing — and listing the subpath,
 // not the package, keeps every further reach into the domain a deliberate
@@ -42,6 +44,7 @@ definePurityTests({
     "@waste/domain/execution/proof-shapes",
     "@waste/domain/execution/vocabulary",
     "@waste/domain/finance/vocabulary",
+    "@waste/domain/imports/vocabulary",
     "@waste/domain/insight/vocabulary",
     "@waste/domain/planning/vocabulary",
     "@waste/domain/registry/vocabulary",

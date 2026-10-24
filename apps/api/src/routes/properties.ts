@@ -34,19 +34,9 @@
 // customer is one row of the page and not two.
 //
 // The grant is `customers.properties`, the surface's own; a Customer is
-// `customers.contacts`'s and nothing here widens that.
-import {
-  Property,
-  PropertyCreate,
-  PropertyListQuery,
-  PropertyPartiesSet,
-  PropertyPatch,
-  type PropertyKind,
-  type PropertyParty,
-  type PropertyPartyRole,
-  type PropertyStatus,
-} from "@waste/contracts/customers"
-import type { FlatPoint } from "@waste/contracts/geojson"
+// `customers.contacts`'s and nothing here widens that. The writes are
+// property-writes.ts's, which the CSV import runs too.
+import { Property, PropertyCreate, PropertyListQuery, PropertyPartiesSet, PropertyPatch } from "@waste/contracts/customers"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { property, propertyParty } from "@waste/db/schema/customers"
@@ -54,103 +44,28 @@ import { and, asc, eq, exists, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
+import { requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, validate } from "../problem"
+import { entriesOf } from "./members"
 import {
-  entriesFor,
-  entriesOf,
-  replaceSet,
-  requirePartyCustomers,
-  writeEntries,
-  type Entry,
-  type MemberSet,
-  type Parent,
-} from "./members"
-import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+  createProperty,
+  findProperty,
+  parties,
+  patchProperty,
+  propertyColumns as columns,
+  propertyOf,
+  propertyScope as scope,
+  propertyWithParties,
+  noSuchProperty,
+  setPropertyParties,
+} from "./property-writes"
+import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.properties"
 const PropertyPage = Page(Property)
-
-const columns = {
-  id: property.id,
-  projectId: property.projectId,
-  name: property.name,
-  address: property.address,
-  registryId: property.registryId,
-  kind: property.kind,
-  location: property.location,
-  notes: property.notes,
-  status: property.status,
-  createdAt: property.createdAt,
-  updatedAt: property.updatedAt,
-}
-
-type Row = Pick<typeof property.$inferSelect, keyof typeof columns>
-
-/** The parties of a Property: a Customer of this company, and what it is to the property. */
-const parties: MemberSet<typeof propertyParty> = {
-  table: propertyParty,
-  parentId: propertyParty.propertyId,
-  entryId: propertyParty.customerId,
-  rowOf: (entry, parent) => ({
-    id: newId(),
-    companyId: parent.companyId,
-    projectId: parent.projectId,
-    propertyId: parent.id,
-    customerId: entry.id,
-    role: entry.role,
-  }),
-  require: requirePartyCustomers,
-}
-
-/** The two spellings of one party: the wire's, and the set mechanics' (routes/members.ts). */
-const partyOf = (entry: Entry): PropertyParty => ({ customerId: entry.id, role: entry.role as PropertyPartyRole })
-const entryOf = (party: PropertyParty): Entry => ({ id: party.customerId, role: party.role })
-
-/** The row on the wire, with the parties the page loaded for it. `kind` and `status` are text with a CHECK in the database and an enum here; the point is the contracts' `FlatPoint`, since the column is `geometry(Point, 4326)`, flat, and refuses a third ordinate on write, however the column's type spells the altitude as optional. */
-function propertyOf(row: Row, held: readonly Entry[]): Property {
-  return {
-    id: row.id,
-    projectId: row.projectId,
-    name: row.name,
-    address: row.address,
-    registryId: row.registryId,
-    kind: row.kind as PropertyKind,
-    location: row.location as FlatPoint | null,
-    notes: row.notes,
-    status: row.status as PropertyStatus,
-    parties: held.map(partyOf),
-    ...stampsOf(row),
-  }
-}
-
-/** One property on the wire, its parties read back the way a page reads them, so an answer equals the next read. */
-async function propertyWithParties(tx: Tx, companyId: string, row: Row): Promise<Property> {
-  return propertyOf(row, await entriesFor(tx, parties, companyId, row.id))
-}
-
-/** `unique (company_id, project_id, name)`: a name is one property's inside a project, and free in the next. */
-const NAME_TAKEN = "property_project_id_name_key"
-const nameTaken = (name: string) => `This project already has a property called ${JSON.stringify(name)}`
-
-/** The partial unique index `(company_id, registry_id) where registry_id is not null`, which Postgres names as the constraint it refused with. */
-const REGISTRY_TAKEN = "property_registry_id_idx"
-const registryTaken = (registryId: string) => `This company already has a property with the registry identifier ${registryId}`
-
-/** The sentences a write here can earn, and only for the fields the body gave. */
-const collisions = (values: { name?: string; registryId?: string | null }): Record<string, string> => ({
-  ...(values.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(values.name) }),
-  ...(values.registryId == null ? {} : { [REGISTRY_TAKEN]: registryTaken(values.registryId) }),
-})
-
-const noSuchProperty = (id: string) => problem(404, { detail: `No property ${id} in the projects this account works in` })
-
-/** The rows of this company, in the projects the caller works in: what every property statement is bounded by. */
-const scope = (principal: Principal) => and(eq(property.companyId, principal.companyId), inProjects(property.projectId, principal))
 
 /** The properties this customer is a party to, in any role: one row of the page however many roles it holds. */
 const heldBy = (tx: Tx, companyId: string, customerId: string) =>
@@ -166,16 +81,6 @@ const heldBy = (tx: Tx, companyId: string, customerId: string) =>
         ),
       ),
   )
-
-/** One property of this company by id, inside the caller's projects; undefined when it is neither. */
-async function findProperty(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(property)
-    .where(and(scope(principal), eq(property.id, id)))
-    .limit(1)
-  return row
-}
 
 export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>) {
   return new Hono<AuthEnv>()
@@ -244,23 +149,7 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>) {
       guard,
       requireGrant(MODULE, "create"),
       validate("json", PropertyCreate),
-      async (c) => {
-        const { parties: asked, ...values } = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        requireProject(principal, values.projectId)
-        const parent: Parent = { companyId: principal.companyId, projectId: values.projectId, id: newId() }
-        const entries = asked.map(entryOf)
-        await parties.require(tx, parent, entries)
-        const [row] = await refuseDuplicate(collisions(values), () =>
-          tx
-            .insert(property)
-            .values({ ...values, id: parent.id, companyId: parent.companyId })
-            .returning(columns),
-        )
-        await writeEntries(tx, parties, parent, entries)
-        return created(c, "/properties", await propertyWithParties(tx, parent.companyId, row))
-      },
+      async (c) => created(c, "/properties", await createProperty(c.get("tx"), c.get("principal"), c.req.valid("json"))),
     )
     .get(
       "/properties/:id",
@@ -313,21 +202,7 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", PropertyPatch),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const patch = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        const [row] = await refuseDuplicate(collisions(patch), () =>
-          tx
-            .update(property)
-            .set(patch)
-            .where(and(scope(principal), eq(property.id, id)))
-            .returning(columns),
-        )
-        if (row === undefined) throw noSuchProperty(id)
-        return c.json(await propertyWithParties(tx, principal.companyId, row))
-      },
+      async (c) => c.json(await patchProperty(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .put(
       "/properties/:id/parties",
@@ -351,20 +226,6 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", PropertyPartiesSet),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const { parties: asked } = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        const row = await replaceSet(tx, parties, principal.companyId, asked.map(entryOf), (stamped) =>
-          tx
-            .update(property)
-            .set(stamped)
-            .where(and(scope(principal), eq(property.id, id)))
-            .returning(columns),
-        )
-        if (row === undefined) throw noSuchProperty(id)
-        return c.json(await propertyWithParties(tx, principal.companyId, row))
-      },
+      async (c) => c.json(await setPropertyParties(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json").parties)),
     )
 }

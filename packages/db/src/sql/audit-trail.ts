@@ -21,8 +21,9 @@
 //     generation and routing are written in bulk by the driver door and the
 //     worker and have their own ledgers and outbox; a ticket's history is its
 //     ledger and an alert's its stamps; the money the work makes is the
-//     worker's and its stamps say who; the outbox is a transport; the log
-//     itself is the log.
+//     worker's and its stamps say who; the outbox is a transport; an
+//     import's run is its own log, and its rows a ledger; the log itself is
+//     the log.
 //
 // The function. `changed` is `{ column: [before, after] }` over the columns
 // whose values differ — for an insert every column the row has a value in,
@@ -75,6 +76,7 @@ import {
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "../schema/fleet"
 import { containerTypeVehicleType, vehicleType } from "../schema/fleet-types"
 import { generationMatch, generationRun } from "../schema/generation"
+import { importRun, importRunRow } from "../schema/imports"
 import { company, project, serviceProvider } from "../schema/organisation"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "../schema/places"
 import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
@@ -188,6 +190,8 @@ export const EXEMPT: readonly Exempt[] = [
   { table: billableEvent, why: "the money the work makes: recorded by the worker per pickup, its stamps saying who repriced or cancelled it" },
   { table: billingRun, why: "a run's row is the record of the run, written once" },
   { table: settlementLine, why: "a settlement's calculation, replaced whole on every calculate; the settlement's ledger says who" },
+  { table: importRun, why: "an import's own log, as a generation run is: who ran which file, and its counts, moved by the batches that wrote the rows the audit log records under the import's reason" },
+  { table: importRunRow, why: "a ledger: each row of an import's outcome, appended once by the batch that wrote it and never rewritten" },
 ]
 
 /** The trigger function, once (migration 0019). */

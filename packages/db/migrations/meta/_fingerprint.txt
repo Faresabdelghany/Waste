@@ -931,6 +931,55 @@ index wms.generation_run generation_run_project_key CREATE UNIQUE INDEX generati
 index wms.generation_run generation_run_route_scheme_id_idx CREATE INDEX generation_run_route_scheme_id_idx ON wms.generation_run USING btree (company_id, route_scheme_id)
 trigger wms.generation_run generation_run_touch_updated_at enabled=O CREATE TRIGGER generation_run_touch_updated_at BEFORE UPDATE ON wms.generation_run FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.generation_run generation_run_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.import_run kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.import_run 1 id uuid not-null default=wms.uuidv7()
+column wms.import_run 2 company_id uuid not-null
+column wms.import_run 3 created_at timestamp with time zone not-null default=now()
+column wms.import_run 4 updated_at timestamp with time zone not-null default=now()
+column wms.import_run 5 project_id uuid
+column wms.import_run 6 kind text not-null
+column wms.import_run 7 file_name text not-null
+column wms.import_run 8 row_count integer not-null
+column wms.import_run 9 created_count integer not-null default=0
+column wms.import_run 10 updated_count integer not-null default=0
+column wms.import_run 11 unchanged_count integer not-null default=0
+column wms.import_run 12 refused_count integer not-null default=0
+column wms.import_run 13 requested_by uuid not-null
+constraint wms.import_run import_run_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.import_run import_run_counts_shape CHECK (((created_count >= 0) AND (updated_count >= 0) AND (unchanged_count >= 0) AND (refused_count >= 0) AND ((((created_count + updated_count) + unchanged_count) + refused_count) <= row_count)))
+constraint wms.import_run import_run_kind_one_of CHECK ((kind = ANY (ARRAY['customers'::text, 'properties'::text, 'containers'::text, 'agreements'::text])))
+constraint wms.import_run import_run_pkey PRIMARY KEY (id)
+constraint wms.import_run import_run_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.import_run import_run_project_shape CHECK (((kind = 'customers'::text) = (project_id IS NULL)))
+constraint wms.import_run import_run_requested_by_fk FOREIGN KEY (company_id, requested_by) REFERENCES wms.user_account(company_id, id)
+constraint wms.import_run import_run_row_count_positive CHECK ((row_count > 0))
+constraint wms.import_run import_run_tenant_key UNIQUE (company_id, id)
+index wms.import_run import_run_pkey CREATE UNIQUE INDEX import_run_pkey ON wms.import_run USING btree (id)
+index wms.import_run import_run_project_id_idx CREATE INDEX import_run_project_id_idx ON wms.import_run USING btree (company_id, project_id)
+index wms.import_run import_run_requested_by_idx CREATE INDEX import_run_requested_by_idx ON wms.import_run USING btree (company_id, requested_by)
+index wms.import_run import_run_tenant_key CREATE UNIQUE INDEX import_run_tenant_key ON wms.import_run USING btree (company_id, id)
+trigger wms.import_run import_run_touch_updated_at enabled=O CREATE TRIGGER import_run_touch_updated_at BEFORE UPDATE ON wms.import_run FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.import_run import_run_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.import_run_row kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
+column wms.import_run_row 1 id uuid not-null default=wms.uuidv7()
+column wms.import_run_row 2 company_id uuid not-null
+column wms.import_run_row 3 recorded_at timestamp with time zone not-null default=now()
+column wms.import_run_row 4 import_run_id uuid not-null
+column wms.import_run_row 5 row_number integer not-null
+column wms.import_run_row 6 outcome text not-null
+column wms.import_run_row 7 key text
+column wms.import_run_row 8 resource_id uuid
+column wms.import_run_row 9 detail text
+constraint wms.import_run_row import_run_row_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.import_run_row import_run_row_import_run_id_fk FOREIGN KEY (company_id, import_run_id) REFERENCES wms.import_run(company_id, id)
+constraint wms.import_run_row import_run_row_import_run_id_row_number_key UNIQUE (company_id, import_run_id, row_number)
+constraint wms.import_run_row import_run_row_outcome_one_of CHECK ((outcome = ANY (ARRAY['created'::text, 'updated'::text, 'unchanged'::text, 'refused'::text])))
+constraint wms.import_run_row import_run_row_outcome_shape CHECK ((((outcome = 'refused'::text) = (detail IS NOT NULL)) AND ((outcome = 'refused'::text) = (resource_id IS NULL))))
+constraint wms.import_run_row import_run_row_pkey PRIMARY KEY (id)
+constraint wms.import_run_row import_run_row_row_number_shape CHECK ((row_number >= 2))
+index wms.import_run_row import_run_row_import_run_id_row_number_key CREATE UNIQUE INDEX import_run_row_import_run_id_row_number_key ON wms.import_run_row USING btree (company_id, import_run_id, row_number)
+index wms.import_run_row import_run_row_pkey CREATE UNIQUE INDEX import_run_row_pkey ON wms.import_run_row USING btree (id)
+policy wms.import_run_row import_run_row_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.invoice kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
 column wms.invoice 1 id uuid not-null default=wms.uuidv7()
 column wms.invoice 2 company_id uuid not-null
@@ -2799,4 +2848,5 @@ journal 1792829657532 2890edfac120d4acd038f3a88d82884231cd5f9467d0d529e285d3f5c8
 journal 1792833996415 43ed2744affd49a9709342b9afe4151fc09b46ea85358d6e9f98226f9d493e7a
 journal 1792835336131 c86420c3cc9a06fd3e215602bb6c79af70edbd8854f0abdc53abfc3922ba56a3
 journal 1792842805965 03e5b0cdd4ad64f14d6df90763efe8d132a29e1ee8dfa5edc4bed61351df9c7c
+journal 1792844427520 568a78e8675f7282fecf6e292fb296a798c969f76ec89a679200fabe694a0e65
 pgboss-version 42

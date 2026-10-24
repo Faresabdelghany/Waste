@@ -87,7 +87,9 @@
 // by their period and not by the status.
 //
 // The grant is `resources.containers` throughout, placements included: a
-// placement is where a container stands and not a surface of its own.
+// placement is where a container stands and not a surface of its own. A
+// container's create and patch are container-writes.ts's, which the CSV
+// import runs too.
 import {
   Container,
   ContainerCreate,
@@ -97,18 +99,15 @@ import {
   ContainerServicePlacementCreate,
   ContainerServicePlacementPatch,
   PlacementListQuery,
-  type ContainerOwnership,
 } from "@waste/contracts/containers"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
-import type { AssetState } from "@waste/contracts/stock"
-import { assetStateOf, assetStatus } from "@waste/db/query/asset-state"
+import { assetStatus } from "@waste/db/query/asset-state"
 import { validOn } from "@waste/db/query/valid-on"
 import { subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
-import type { AssetStatus } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, gt, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -119,90 +118,16 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { containerOf, containersFrom, createContainer, findContainer, patchContainer } from "./container-writes"
 import { ALREADY_PLACED, alreadyPlaced, containerScope, move, noSuchContainer, OUTSIDE_SUBSCRIPTION, type LifecycleOptions } from "./lifecycle"
 import { periodAfter, requireWithin, type Period } from "./periods"
-import { requireContainerType, requireServiceFrequency, requireWarehouse, requireWasteFraction, type Scope } from "./references"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stampsOf } from "./shared"
+import { requireServiceFrequency, requireWarehouse, requireWasteFraction, type Scope } from "./references"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
 import { refuseUnservedPlace, type Place } from "./statuses"
 
 const MODULE = "resources.containers"
 const ContainerPage = Page(Container)
 const PlacementPage = Page(ContainerServicePlacement)
-
-const columns = {
-  id: container.id,
-  projectId: container.projectId,
-  label: container.label,
-  containerTypeId: container.containerTypeId,
-  barcode: container.barcode,
-  rfid: container.rfid,
-  serialNumber: container.serialNumber,
-  ownership: container.ownership,
-  notes: container.notes,
-  createdAt: container.createdAt,
-  updatedAt: container.updatedAt,
-}
-
-/** The ledger's reading beside the container's own columns: its latest movement, nulls for a container with none. */
-const stateColumns = (state: ReturnType<typeof assetStateOf>) => ({
-  stateStatus: assetStatus(state.toKind),
-  stateWarehouseId: state.toWarehouseId,
-  statePlacementId: state.placementId,
-  stateSince: state.occurredAt,
-  stateMovementId: state.movementId,
-})
-
-/** The container's columns and the projection's, as the one statement below selects them; the projection's are null on a LATERAL left join that found no movement. */
-type Row = Pick<typeof container.$inferSelect, keyof typeof columns> & {
-  stateStatus: AssetStatus | null
-  stateWarehouseId: string | null
-  statePlacementId: string | null
-  stateSince: Date | null
-  stateMovementId: string | null
-}
-
-/**
- * The one statement every container is read through: the row with the
- * ledger's reading joined LATERAL — one probe per row for the container's
- * latest movement (`assetStateOf`) — so a page, a single read and the answer
- * to a write all say the same thing about where a container is. The
- * subquery is handed back beside the query for a filter over it.
- */
-function containersFrom(tx: Tx, companyId: string) {
-  const state = assetStateOf(tx, companyId, container.id)
-  return { state, query: tx.select({ ...columns, ...stateColumns(state) }).from(container).leftJoinLateral(state, sql`true`) }
-}
-
-/** The reading as the wire spells it: null with no movement, else where the latest one left the container. */
-function assetStateOfRow(row: Row): AssetState | null {
-  if (row.stateMovementId === null) return null
-  if (row.stateStatus === null || row.stateSince === null) {
-    // A movement is NOT NULL on `occurred_at`, and the kind check keeps every arrival at a place with a state: a null beside a movement is a broken invariant, not a client's doing.
-    throw new Error(`stock_movement ${row.stateMovementId} has no ${row.stateStatus === null ? "asset state" : "occurred_at"} to answer`)
-  }
-  return { status: row.stateStatus, warehouseId: row.stateWarehouseId, placementId: row.statePlacementId, since: row.stateSince.toISOString(), movementId: row.stateMovementId }
-}
-
-/** The reading a container has before any movement: what a create answers, since a row just made has none by construction. */
-const NO_STATE = { stateStatus: null, stateWarehouseId: null, statePlacementId: null, stateSince: null, stateMovementId: null }
-
-/** The row on the wire. `ownership` is text with a CHECK in the database and an enum here; the vocabulary holds the two in lockstep. */
-function containerOf(row: Row): Container {
-  return {
-    id: row.id,
-    projectId: row.projectId,
-    label: row.label,
-    containerTypeId: row.containerTypeId,
-    barcode: row.barcode,
-    rfid: row.rfid,
-    serialNumber: row.serialNumber,
-    ownership: row.ownership as ContainerOwnership,
-    notes: row.notes,
-    assetState: assetStateOfRow(row),
-    ...stampsOf(row),
-  }
-}
-
 
 /**
  * The placement as the wire spells it, the last field computed rather than
@@ -246,10 +171,6 @@ function placementOf(row: PlacementRow): ContainerServicePlacement {
   }
 }
 
-/** `unique (company_id, label)`: a label is read off a bin anywhere in the company, so it is the company's and not a project's. */
-const LABEL_TAKEN = "container_label_key"
-const labelTaken = (label: string) => `This company already has a container labelled ${label}`
-
 /** What a body is told when it names a subscription of another project; the composite key holds it to the same thing. */
 const NOT_A_SUBSCRIPTION = "Not a subscription of this container's project"
 
@@ -283,21 +204,6 @@ const scope = containerScope
 /** The same for a placement, which carries the project its container is in. */
 const placementScope = (principal: Principal) =>
   and(eq(containerServicePlacement.companyId, principal.companyId), inProjects(containerServicePlacement.projectId, principal))
-
-/** One container of this company by id, inside the caller's projects, with the ledger's reading; undefined when it is neither. */
-async function findContainer(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await containersFrom(tx, principal.companyId)
-    .query.where(and(scope(principal), eq(container.id, id)))
-    .limit(1)
-  return row
-}
-
-/** The row a patch just changed, read back through the one statement, so the answer carries the reading the next read will; a create needs none, since a new container has no movement. */
-async function readBack(tx: Tx, principal: Principal, id: string): Promise<Row> {
-  const row = await findContainer(tx, principal, id)
-  if (row === undefined) throw new Error(`container ${id} was written and is not there to read back`)
-  return row
-}
 
 /**
  * The one statement every placement is read through, and the three joins it
@@ -446,21 +352,7 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
       guard,
       requireGrant(MODULE, "create"),
       validate("json", ContainerCreate),
-      async (c) => {
-        const values = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        requireProject(principal, values.projectId)
-        await requireContainerType(tx, principal.companyId, values.containerTypeId)
-        const [row] = await refuseDuplicate({ [LABEL_TAKEN]: labelTaken(values.label) }, () =>
-          tx
-            .insert(container)
-            .values({ ...values, id: newId(), companyId: principal.companyId })
-            .returning(columns),
-        )
-        // A container just registered has no movement, so its state is null by construction and needs no probe.
-        return created(c, "/containers", containerOf({ ...row, ...NO_STATE }))
-      },
+      async (c) => created(c, "/containers", await createContainer(c.get("tx"), c.get("principal"), c.req.valid("json"))),
     )
     .get(
       "/containers/:id",
@@ -511,29 +403,7 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", ContainerPatch),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const patch = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-
-        // The row first, then what the patch points at: an id nobody minted
-        // is a 404 here as in every other family, and not a 400 about a type
-        // that was never going to be written.
-        if ((await findContainer(tx, principal, id)) === undefined) throw noSuchContainer(id)
-        await requireContainerType(tx, principal.companyId, patch.containerTypeId)
-
-        const sentences: Record<string, string> = patch.label === undefined ? {} : { [LABEL_TAKEN]: labelTaken(patch.label) }
-        const [row] = await refuseDuplicate(sentences, () =>
-          tx
-            .update(container)
-            .set(patch)
-            .where(and(scope(principal), eq(container.id, id)))
-            .returning({ id: container.id }),
-        )
-        if (row === undefined) throw noSuchContainer(id)
-        return c.json(containerOf(await readBack(tx, principal, row.id)))
-      },
+      async (c) => c.json(await patchContainer(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .post(
       "/containers/:id/placements",

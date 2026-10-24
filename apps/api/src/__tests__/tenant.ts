@@ -47,6 +47,7 @@ import {
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
 import { containerTypeVehicleType, vehicleType } from "@waste/db/schema/fleet-types"
 import { generationMatch, generationRun } from "@waste/db/schema/generation"
+import { importRun, importRunRow } from "@waste/db/schema/imports"
 import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
 import { sortingGuideItem } from "@waste/db/schema/sorting-guide"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "@waste/db/schema/places"
@@ -303,9 +304,12 @@ export async function grantRole(pool: Database, companyId: string, roleId: strin
  * two (Issue #97 part B) go with Execution's: `generation_match` before
  * `route` (both name a run) and `generation_run` after `route` (a route names
  * the run that wrote it) and before `route_scheme` (a run names its scheme).
+ * The CSV import's two (#291 slice 12) go first: `import_run_row`, a ledger,
+ * as the owner, then `import_run`, which names a project and an account.
  */
 export async function dropTenant(pool: Database, companyId: string, owner?: Database): Promise<void> {
   if (owner !== undefined) {
+    await owner.db.delete(importRunRow).where(eq(importRunRow.companyId, companyId))
     await owner.db.delete(invoiceLine).where(eq(invoiceLine.companyId, companyId))
     await owner.db.delete(invoice).where(eq(invoice.companyId, companyId))
     await owner.db.delete(billingRunExclusion).where(eq(billingRunExclusion.companyId, companyId))
@@ -321,6 +325,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await owner.db.delete(stockMovement).where(eq(stockMovement.companyId, companyId))
   }
   await withCompany(pool.db, companyId, async (tx: Tx) => {
+    await tx.delete(importRun).where(eq(importRun.companyId, companyId))
     await tx.delete(settlementLine).where(eq(settlementLine.companyId, companyId))
     await tx.delete(settlement).where(eq(settlement.companyId, companyId))
     await tx.delete(billingRun).where(eq(billingRun.companyId, companyId))
