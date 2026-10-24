@@ -68,6 +68,7 @@ export function pickup(n: number, overrides: Partial<DriverPickup> = {}): Driver
     arrivedAt: null,
     outcomeAt: null,
     address: `Strandvejen ${n}, 2100 København Ø`,
+    driverInstructions: null,
     location: { type: "Point", coordinates: [12.58, 55.7 + n / 1000] },
     containerLabel: `BIN-9100${n}`,
     wasteFractionName: "Residual",

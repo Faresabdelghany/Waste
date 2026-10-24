@@ -185,7 +185,7 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchProperty",
         summary: "Change a property",
         description:
-          "Changes one property of a project the caller works in; every field is optional and at least one must be given. A null clears the registry identifier, the notes or the geocode. The project is not patchable, since a record does not move between projects, and the parties are a set, so they are `PUT /properties/{id}/parties`.",
+          "Changes one property of a project the caller works in; every field is optional and at least one must be given. A null clears the registry identifier, the notes, the driver's instructions or the geocode. The project is not patchable, since a record does not move between projects, and the parties are a set, so they are `PUT /properties/{id}/parties`.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The property as it now stands.", Property),
